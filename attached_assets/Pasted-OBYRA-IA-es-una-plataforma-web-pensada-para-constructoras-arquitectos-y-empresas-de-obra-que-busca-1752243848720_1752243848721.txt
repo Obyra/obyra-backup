@@ -1,0 +1,118 @@
+OBYRA IA es una plataforma web pensada para constructoras, arquitectos y empresas de obra, que busca automatizar la gestión de proyectos, equipos, presupuestos y documentación en obra.
+
+El objetivo es desarrollar un sistema similar a Contractor Foreman, pero adaptado a las necesidades de obras en Argentina y LATAM.
+
+🧩 Módulos principales (MVP):
+📋 Gestión de Proyectos
+
+Crear y editar obras
+
+Cronograma por etapas y tareas
+
+Asignar responsables
+
+Alertas de vencimientos
+
+👷 Gestión de Equipos
+
+Alta de usuarios por rol (administrador, técnico, operario)
+
+Asignación por obra
+
+Reporte de rendimiento por persona
+
+💰 Presupuestos y Facturación
+
+Carga de tareas por etapa
+
+Estimación automática de materiales, mano de obra y equipos
+
+Generación de cotización en PDF
+
+Facturación por avance (manual al principio)
+
+📄 Documentos y Contratos
+
+Subida de archivos (PDF, Word, Excel)
+
+Asociación por obra
+
+Firma digital (opcional, dejar preparado para integración futura)
+
+🏗 Gestión de Inventario
+
+Control de stock de materiales
+
+Registro de uso por obra
+
+Alta y baja de maquinaria o herramientas
+
+📊 Reportes y Analytics
+
+Panel con KPIs de obra
+
+Reporte de costos, tiempos y desvíos
+
+Filtros por fechas, tipo de obra, etc.
+
+⏱ Control de Tiempos
+
+Registro de horas por tarea y operario
+
+Exportación simple en Excel o PDF
+
+☁️ Clima en Obra
+
+Consulta automática del clima por ubicación (puede integrarse vía API más adelante)
+
+Muestra si hay lluvia o viento fuerte en los próximos días
+
+🛡 Seguridad y Normativas
+
+Checklist de seguridad por obra
+
+Carga de normativas aplicables
+
+Validación de cumplimiento
+
+📱 App Móvil (más adelante)
+
+Versión responsive al inicio
+
+Permitir carga de tareas, fotos, firma de conformidad desde el celular
+
+🛠️ Tecnologías sugeridas
+Frontend: HTML + CSS + Bootstrap
+
+Backend: Python con Django
+
+Base de datos: SQLite (inicio) o PostgreSQL
+
+Autenticación: sistema de login y permisos por tipo de usuario
+
+Exportación: PDF (usando xhtml2pdf o WeasyPrint), Excel (pandas o openpyxl)
+
+Todo el sistema alojado y funcionando en Replit, en español
+
+🚦Estado actual
+No se cuenta con estructura cargada ni bases de datos.
+
+Se desea desarrollar desde cero.
+
+Se tiene claridad sobre los módulos, pero no sobre cada tarea dentro de cada etapa (eso se completará más adelante).
+
+Se prioriza una arquitectura modular para agregar funcionalidades por partes.
+
+📌 Prioridad en el desarrollo (sprint inicial)
+Registro/login + panel por tipo de usuario
+
+Módulo de Presupuestos (crear obra, etapas, tareas, materiales → exportar PDF)
+
+Carga de proyectos + asignación de responsables
+
+Gestión de stock e inventario básico
+
+Dashboard simple con métricas básicas
+
+📣 Aclaración para desarrolladores:
+A pesar de que pueda solicitarse esto en inglés o desde plataformas como Replit, todo el sistema debe estar desarrollado completamente en español, tanto la interfaz como los formularios y reportes.
