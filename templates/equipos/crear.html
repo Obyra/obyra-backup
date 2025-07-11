@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Miembro del Equipo - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-user-plus me-2"></i>Agregar Miembro al Equipo</h2>
+                <a href="{{ url_for('equipos.lista') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver al Equipo
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Redirección automática:</strong> 
+                Para crear nuevos miembros del equipo, utiliza el formulario de registro de usuarios.
+                <a href="{{ url_for('auth.register') }}" class="btn btn-primary ms-3">
+                    <i class="fas fa-user-plus me-1"></i>Ir a Registro de Usuario
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Información sobre roles -->
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Roles Disponibles en OBYRA IA</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="text-center">
+                                <div class="bg-danger text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                                     style="width: 50px; height: 50px;">
+                                    <i class="fas fa-crown"></i>
+                                </div>
+                                <h6 class="fw-bold">Administrador</h6>
+                                <p class="text-muted small">
+                                    Acceso completo al sistema. Puede gestionar usuarios, obras, 
+                                    presupuestos, inventario y generar todos los reportes.
+                                </p>
+                                <ul class="list-unstyled small text-start">
+                                    <li><i class="fas fa-check text-success me-1"></i>Gestión de usuarios</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Todas las obras</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Presupuestos completos</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Inventario total</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Todos los reportes</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <div class="text-center">
+                                <div class="bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                                     style="width: 50px; height: 50px;">
+                                    <i class="fas fa-hard-hat"></i>
+                                </div>
+                                <h6 class="fw-bold">Técnico</h6>
+                                <p class="text-muted small">
+                                    Profesional técnico con permisos para gestionar obras, 
+                                    crear presupuestos y administrar inventario.
+                                </p>
+                                <ul class="list-unstyled small text-start">
+                                    <li><i class="fas fa-check text-success me-1"></i>Gestión de obras</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Crear presupuestos</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Administrar inventario</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Reportes operativos</li>
+                                    <li><i class="fas fa-times text-danger me-1"></i>Gestión de usuarios</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <div class="text-center">
+                                <div class="bg-info text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                                     style="width: 50px; height: 50px;">
+                                    <i class="fas fa-tools"></i>
+                                </div>
+                                <h6 class="fw-bold">Operario</h6>
+                                <p class="text-muted small">
+                                    Personal de obra con acceso limitado para consultar 
+                                    información y registrar uso de materiales.
+                                </p>
+                                <ul class="list-unstyled small text-start">
+                                    <li><i class="fas fa-check text-success me-1"></i>Ver obras asignadas</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Consultar inventario</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Registrar uso materiales</li>
+                                    <li><i class="fas fa-times text-danger me-1"></i>Crear presupuestos</li>
+                                    <li><i class="fas fa-times text-danger me-1"></i>Gestión administrativa</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Redirección automática después de 3 segundos
+setTimeout(function() {
+    const shouldRedirect = confirm('¿Deseas ir al formulario de registro de usuario ahora?');
+    if (shouldRedirect) {
+        window.location.href = '{{ url_for("auth.register") }}';
+    }
+}, 3000);
+</script>
+{% endblock %}

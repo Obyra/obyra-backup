@@ -1,0 +1,142 @@
+# OBYRA IA - Construction Management Platform
+
+## Overview
+
+OBYRA IA is a comprehensive web platform designed for construction companies, architects, and construction firms in Argentina and Latin America. The system automates project management, team coordination, budgeting, and construction documentation. Built with Flask and SQLAlchemy, it provides a modular architecture for managing the complete construction workflow.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+- **Technology**: Flask with Jinja2 templating
+- **UI Framework**: Bootstrap 5 for responsive design
+- **JavaScript**: Vanilla JavaScript with Chart.js for data visualization
+- **Styling**: Custom CSS with construction industry theming
+- **Icons**: Font Awesome for consistent iconography
+
+### Backend Architecture
+- **Framework**: Flask (Python web framework)
+- **Database ORM**: SQLAlchemy with Flask-SQLAlchemy extension
+- **Authentication**: Flask-Login for session management
+- **Password Security**: Werkzeug password hashing
+- **Application Structure**: Blueprint-based modular architecture
+
+### Database Architecture
+- **Primary Database**: SQLite (development), configurable for PostgreSQL production
+- **ORM**: SQLAlchemy with declarative base model
+- **Connection Pooling**: Configured with pool recycling and pre-ping
+- **Models**: User management, projects (obras), budgets, inventory, time tracking
+
+## Key Components
+
+### Authentication System
+- Role-based access control (Administrator, Technician, Operator)
+- Session management with Flask-Login
+- Permission-based module access control
+- User registration restricted to administrators
+
+### Project Management (Obras)
+- Complete project lifecycle management
+- Client information and contact details
+- Project status tracking (planning, in-progress, paused, finished, cancelled)
+- Team assignment and role management
+- Timeline and milestone tracking
+
+### Budget Management (Presupuestos)
+- Detailed budget creation and item management
+- PDF generation for client proposals using ReportLab
+- VAT calculation and tax handling
+- Integration with project data
+- Status workflow (draft, sent, approved, rejected)
+
+### Team Management (Equipos)
+- User profile management
+- Performance tracking and reporting
+- Work assignment by project
+- Role-based dashboard access
+- Time tracking and productivity metrics
+
+### Inventory Control (Inventario)
+- Material, tool, and machinery tracking
+- Category-based organization
+- Stock level monitoring with low-stock alerts
+- Usage tracking by project
+- Movement history and audit trail
+
+### Reporting System (Reportes)
+- Comprehensive dashboard with KPIs
+- Date-range filtering for analytics
+- Project status summaries
+- Team performance metrics
+- Inventory status reports
+
+## Data Flow
+
+### User Authentication Flow
+1. User logs in through `/login` endpoint
+2. Credentials validated against hashed passwords
+3. Session created with Flask-Login
+4. Role-based permissions checked for module access
+5. Redirected to dashboard or requested page
+
+### Project Management Flow
+1. Projects created by administrators or technicians
+2. Team members assigned to projects
+3. Project status tracked through defined workflows
+4. Time and resource usage recorded
+5. Progress reported through dashboard analytics
+
+### Budget Creation Flow
+1. Budget linked to existing project
+2. Line items added with quantities and costs
+3. Automatic calculations including VAT
+4. PDF generation for client presentation
+5. Status tracking through approval workflow
+
+## External Dependencies
+
+### Python Packages
+- **Flask**: Web application framework
+- **Flask-SQLAlchemy**: Database ORM integration
+- **Flask-Login**: User session management
+- **Werkzeug**: WSGI utilities and security functions
+- **ReportLab**: PDF generation for budgets and reports
+
+### Frontend Libraries
+- **Bootstrap 5**: CSS framework for responsive design
+- **Font Awesome**: Icon library
+- **Chart.js**: JavaScript charting library for analytics
+
+### Development Tools
+- **SQLite**: Development database (configurable for PostgreSQL)
+- **Jinja2**: Template engine (included with Flask)
+
+## Deployment Strategy
+
+### Environment Configuration
+- Environment variables for database URL and session secrets
+- Debug mode configurable for development/production
+- WSGI application with ProxyFix middleware for reverse proxy deployment
+
+### Database Strategy
+- SQLite for local development and testing
+- PostgreSQL recommended for production deployment
+- Database migrations handled through SQLAlchemy
+- Connection pooling configured for production scalability
+
+### Security Considerations
+- Password hashing with Werkzeug security functions
+- Session management with secure secret keys
+- Role-based access control throughout the application
+- CSRF protection through Flask's built-in mechanisms
+
+### Scalability Approach
+- Modular blueprint architecture for easy feature extension
+- Database connection pooling for concurrent users
+- Static asset optimization with CDN-ready structure
+- Caching strategy ready for Redis integration
+
+The system is designed to be deployed on platforms like Replit, with easy configuration for database connections and scaling requirements.

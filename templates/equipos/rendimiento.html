@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Rendimiento del Equipo - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-chart-line me-2"></i>Rendimiento del Equipo</h2>
+                <a href="{{ url_for('equipos.lista') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver al Equipo
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Resumen general -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-users fa-2x text-primary mb-2"></i>
+                    <h4 class="text-primary">{{ estadisticas|length }}</h4>
+                    <p class="text-muted mb-0">Usuarios Activos</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-clock fa-2x text-success mb-2"></i>
+                    <h4 class="text-success">{{ (estadisticas|sum(attribute='total_horas'))|numero(1) }}</h4>
+                    <p class="text-muted mb-0">Horas Totales</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-building fa-2x text-info mb-2"></i>
+                    <h4 class="text-info">{{ (estadisticas|sum(attribute='obras_activas')) }}</h4>
+                    <p class="text-muted mb-0">Obras Activas</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-check-circle fa-2x text-warning mb-2"></i>
+                    <h4 class="text-warning">{{ (estadisticas|sum(attribute='obras_completadas')) }}</h4>
+                    <p class="text-muted mb-0">Obras Completadas</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Ranking de rendimiento -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Ranking por Horas Trabajadas</h5>
+        </div>
+        <div class="card-body">
+            {% if estadisticas %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th width="50">Pos.</th>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            <th class="text-center">Obras Activas</th>
+                            <th class="text-center">Obras Completadas</th>
+                            <th class="text-center">Tareas (Este Mes)</th>
+                            <th class="text-end">Horas Totales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for estadistica in estadisticas %}
+                        <tr>
+                            <td class="text-center">
+                                {% if loop.index == 1 %}
+                                <i class="fas fa-trophy text-warning"></i>
+                                {% elif loop.index == 2 %}
+                                <i class="fas fa-medal text-secondary"></i>
+                                {% elif loop.index == 3 %}
+                                <i class="fas fa-award text-warning"></i>
+                                {% else %}
+                                {{ loop.index }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="me-2">
+                                        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" 
+                                             style="width: 32px; height: 32px; font-size: 14px;">
+                                            {{ estadistica.usuario.nombre[0] }}{{ estadistica.usuario.apellido[0] }}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <strong>{{ estadistica.usuario.nombre_completo }}</strong><br>
+                                        <small class="text-muted">{{ estadistica.usuario.email }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ estadistica.usuario.rol.title() }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary">{{ estadistica.obras_activas }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-success">{{ estadistica.obras_completadas }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-warning">{{ estadistica.tareas_mes }}</span>
+                            </td>
+                            <td class="text-end">
+                                <strong class="text-success">{{ estadistica.total_horas|numero(1) }}h</strong>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No hay datos de rendimiento</h4>
+                <p class="text-muted">Los usuarios necesitan registrar horas de trabajo para generar estadísticas.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if estadisticas %}
+    <!-- Gráfico de rendimiento -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Distribución de Horas por Usuario</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartRendimiento" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if estadisticas %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('chartRendimiento').getContext('2d');
+    
+    const labels = [
+        {% for estadistica in estadisticas[:10] %}
+        '{{ estadistica.usuario.nombre }} {{ estadistica.usuario.apellido }}',
+        {% endfor %}
+    ];
+    
+    const data = [
+        {% for estadistica in estadisticas[:10] %}
+        {{ estadistica.total_horas }},
+        {% endfor %}
+    ];
+    
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+    ];
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return context.label + ': ' + context.parsed.toFixed(1) + 'h (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

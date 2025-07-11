@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}{{ obra.nombre }} - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h2><i class="fas fa-building me-2"></i>{{ obra.nombre }}</h2>
+                    <p class="text-muted mb-0">Cliente: {{ obra.cliente }}</p>
+                    {% if obra.direccion %}
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion }}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="text-end">
+                    <span class="badge {{ obra.estado|estado_badge }} fs-6 mb-2">
+                        {{ obra.estado.replace('_', ' ').title() }}
+                    </span>
+                    <br>
+                    <a href="{{ url_for('obras.lista') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Información general -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Información General</h5>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editarObraModal">
+                        <i class="fas fa-edit me-1"></i>Editar
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if obra.descripcion %}
+                    <p class="mb-3">{{ obra.descripcion }}</p>
+                    {% endif %}
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Contacto:</strong><br>
+                            {% if obra.telefono_cliente %}
+                            <i class="fas fa-phone me-1"></i>{{ obra.telefono_cliente }}<br>
+                            {% endif %}
+                            {% if obra.email_cliente %}
+                            <i class="fas fa-envelope me-1"></i>{{ obra.email_cliente }}<br>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Fechas:</strong><br>
+                            {% if obra.fecha_inicio %}
+                            <i class="fas fa-calendar-start me-1"></i>Inicio: {{ obra.fecha_inicio|fecha }}<br>
+                            {% endif %}
+                            {% if obra.fecha_fin_estimada %}
+                            <i class="fas fa-calendar-check me-1"></i>Fin estimado: {{ obra.fecha_fin_estimada|fecha }}<br>
+                            {% endif %}
+                            {% if obra.fecha_fin_real %}
+                            <i class="fas fa-calendar-times me-1"></i>Fin real: {{ obra.fecha_fin_real|fecha }}<br>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Progreso General</h6>
+                    <div class="progress mb-3" style="height: 10px;">
+                        <div class="progress-bar" role="progressbar" style="width: {{ obra.progreso }}%"></div>
+                    </div>
+                    <h3 class="text-primary">{{ obra.progreso }}%</h3>
+                    
+                    <hr>
+                    
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <strong class="text-success d-block">{{ obra.presupuesto_total|moneda }}</strong>
+                            <small class="text-muted">Presupuesto</small>
+                        </div>
+                        <div class="col-6">
+                            <strong class="text-danger d-block">{{ obra.costo_real|moneda }}</strong>
+                            <small class="text-muted">Costo Real</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Etapas y Tareas -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Etapas del Proyecto</h5>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#nuevaEtapaModal">
+                        <i class="fas fa-plus me-1"></i>Nueva Etapa
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if etapas %}
+                        {% for etapa in etapas %}
+                        <div class="border rounded p-3 mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <span class="badge bg-secondary me-2">{{ etapa.orden }}</span>
+                                    {{ etapa.nombre }}
+                                </h6>
+                                <span class="badge {{ etapa.estado|estado_badge }}">
+                                    {{ etapa.estado.replace('_', ' ').title() }}
+                                </span>
+                            </div>
+                            
+                            {% if etapa.descripcion %}
+                            <p class="text-muted mb-2">{{ etapa.descripcion }}</p>
+                            {% endif %}
+                            
+                            <div class="progress mb-2" style="height: 6px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ etapa.progreso }}%"></div>
+                            </div>
+                            
+                            <!-- Tareas de la etapa -->
+                            {% set tareas = etapa.tareas.all() %}
+                            {% if tareas %}
+                            <div class="mt-3">
+                                <small class="text-muted fw-bold">Tareas:</small>
+                                {% for tarea in tareas %}
+                                <div class="ms-3 mt-1">
+                                    <i class="fas fa-tasks me-1"></i>
+                                    {{ tarea.nombre }}
+                                    {% if tarea.responsable %}
+                                    <small class="text-muted">({{ tarea.responsable.nombre_completo }})</small>
+                                    {% endif %}
+                                    <span class="badge {{ tarea.estado|estado_badge }} ms-1">{{ tarea.estado }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="abrirModalTarea({{ etapa.id }}, '{{ etapa.nombre }}')">
+                                    <i class="fas fa-plus me-1"></i>Agregar Tarea
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-list-ul fa-2x text-muted mb-3"></i>
+                            <p class="text-muted">No hay etapas definidas para esta obra.</p>
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#nuevaEtapaModal">
+                                <i class="fas fa-plus me-1"></i>Crear Primera Etapa
+                            </button>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Equipo asignado -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Equipo Asignado</h5>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#asignarUsuarioModal">
+                        <i class="fas fa-user-plus me-1"></i>Asignar Usuario
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if asignaciones %}
+                    <div class="row">
+                        {% for asignacion in asignaciones %}
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <div class="border rounded p-3">
+                                <h6 class="mb-1">{{ asignacion.usuario.nombre_completo }}</h6>
+                                <p class="text-muted mb-1">{{ asignacion.rol_en_obra.replace('_', ' ').title() }}</p>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    Desde {{ asignacion.fecha_asignacion.strftime('%d/%m/%Y') }}
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3">
+                        <i class="fas fa-users fa-2x text-muted mb-3"></i>
+                        <p class="text-muted">No hay usuarios asignados a esta obra.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modales -->
+{% if current_user.rol in ['administrador', 'tecnico'] %}
+
+<!-- Modal Editar Obra -->
+<div class="modal fade" id="editarObraModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('obras.editar', id=obra.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Obra</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre</label>
+                                <input type="text" class="form-control" name="nombre" value="{{ obra.nombre }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Estado</label>
+                                <select class="form-select" name="estado">
+                                    <option value="planificacion" {{ 'selected' if obra.estado == 'planificacion' }}>Planificación</option>
+                                    <option value="en_curso" {{ 'selected' if obra.estado == 'en_curso' }}>En Curso</option>
+                                    <option value="pausada" {{ 'selected' if obra.estado == 'pausada' }}>Pausada</option>
+                                    <option value="finalizada" {{ 'selected' if obra.estado == 'finalizada' }}>Finalizada</option>
+                                    <option value="cancelada" {{ 'selected' if obra.estado == 'cancelada' }}>Cancelada</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Progreso (%)</label>
+                                <input type="number" class="form-control" name="progreso" 
+                                       value="{{ obra.progreso }}" min="0" max="100">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Presupuesto Total</label>
+                                <input type="number" class="form-control" name="presupuesto_total" 
+                                       value="{{ obra.presupuesto_total }}" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nueva Etapa -->
+<div class="modal fade" id="nuevaEtapaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('obras.agregar_etapa', id=obra.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nueva Etapa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre de la Etapa</label>
+                        <input type="text" class="form-control" name="nombre" 
+                               placeholder="Ej: Excavación y Fundaciones" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-control" name="descripcion" rows="3" 
+                                  placeholder="Descripción detallada de la etapa..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Etapa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nueva Tarea -->
+<div class="modal fade" id="nuevaTareaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="formNuevaTarea">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nueva Tarea - <span id="nombreEtapa"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre de la Tarea</label>
+                        <input type="text" class="form-control" name="nombre" 
+                               placeholder="Ej: Excavación de zanjas" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-control" name="descripcion" rows="2" 
+                                  placeholder="Descripción de la tarea..."></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Horas Estimadas</label>
+                                <input type="number" class="form-control" name="horas_estimadas" 
+                                       placeholder="0" step="0.5">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Responsable</label>
+                                <select class="form-select" name="responsable_id">
+                                    <option value="">Sin asignar</option>
+                                    {% for asignacion in asignaciones %}
+                                    <option value="{{ asignacion.usuario.id }}">{{ asignacion.usuario.nombre_completo }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Tarea</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Asignar Usuario -->
+<div class="modal fade" id="asignarUsuarioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('obras.asignar_usuario', id=obra.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Asignar Usuario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Usuario</label>
+                        <select class="form-select" name="usuario_id" required>
+                            <option value="">Seleccionar usuario...</option>
+                            {% for usuario in usuarios_disponibles %}
+                            <option value="{{ usuario.id }}">{{ usuario.nombre_completo }} ({{ usuario.rol }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Rol en la Obra</label>
+                        <select class="form-select" name="rol_en_obra" required>
+                            <option value="">Seleccionar rol...</option>
+                            <option value="jefe_obra">Jefe de Obra</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="operario">Operario</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Asignar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function abrirModalTarea(etapaId, nombreEtapa) {
+    document.getElementById('formNuevaTarea').action = `/obras/etapa/${etapaId}/tarea`;
+    document.getElementById('nombreEtapa').textContent = nombreEtapa;
+    new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
+}
+</script>
+{% endblock %}

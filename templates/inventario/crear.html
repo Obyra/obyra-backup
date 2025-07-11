@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Item de Inventario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-plus me-2"></i>Nuevo Item de Inventario</h2>
+                <a href="{{ url_for('inventario.lista') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver al Inventario
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-body">
+                    <form method="POST">
+                        <!-- Información básica -->
+                        <h5 class="border-bottom pb-2 mb-3">Información Básica</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="categoria_id" class="form-label">Categoría *</label>
+                                    <select class="form-select" id="categoria_id" name="categoria_id" required>
+                                        <option value="">Seleccionar categoría...</option>
+                                        {% for categoria in categorias %}
+                                        <option value="{{ categoria.id }}" data-tipo="{{ categoria.tipo }}">
+                                            {{ categoria.nombre }} ({{ categoria.tipo.title() }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if not categorias %}
+                                    <div class="form-text text-warning">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        No hay categorías disponibles. 
+                                        <a href="{{ url_for('inventario.categorias') }}">Crear una categoría primero</a>.
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="codigo" class="form-label">Código *</label>
+                                    <input type="text" class="form-control" id="codigo" name="codigo" 
+                                           placeholder="Ej: MAT001, HER002" required>
+                                    <div class="form-text">Código único para identificar el item</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label">Nombre del Item *</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" 
+                                   placeholder="Ej: Cemento Portland, Taladro Eléctrico" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="descripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="3" 
+                                      placeholder="Descripción detallada del item, especificaciones técnicas, marca, modelo..."></textarea>
+                        </div>
+                        
+                        <!-- Especificaciones -->
+                        <h5 class="border-bottom pb-2 mb-3 mt-4">Especificaciones</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="unidad" class="form-label">Unidad de Medida *</label>
+                                    <select class="form-select" id="unidad" name="unidad" required>
+                                        <option value="">Seleccionar unidad...</option>
+                                        <option value="unidad">Unidad</option>
+                                        <option value="metro">Metro (m)</option>
+                                        <option value="metro2">Metro cuadrado (m²)</option>
+                                        <option value="metro3">Metro cúbico (m³)</option>
+                                        <option value="kilogramo">Kilogramo (kg)</option>
+                                        <option value="tonelada">Tonelada (t)</option>
+                                        <option value="litro">Litro (l)</option>
+                                        <option value="hora">Hora</option>
+                                        <option value="dia">Día</option>
+                                        <option value="bolsa">Bolsa</option>
+                                        <option value="caja">Caja</option>
+                                        <option value="paquete">Paquete</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="stock_actual" class="form-label">Stock Inicial</label>
+                                    <input type="number" class="form-control" id="stock_actual" name="stock_actual" 
+                                           placeholder="0" step="0.001" min="0" value="0">
+                                    <div class="form-text">Cantidad disponible actualmente</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="stock_minimo" class="form-label">Stock Mínimo</label>
+                                    <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
+                                           placeholder="0" step="0.001" min="0" value="0">
+                                    <div class="form-text">Cantidad mínima para alertas</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="precio_promedio" class="form-label">Precio Promedio</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="precio_promedio" name="precio_promedio" 
+                                       placeholder="0.00" step="0.01" min="0" value="0">
+                            </div>
+                            <div class="form-text">Precio promedio de compra para cálculos de costos</div>
+                        </div>
+                        
+                        <!-- Alertas -->
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Importante:</strong> 
+                            Si ingresas un stock inicial mayor a 0, se creará automáticamente un movimiento de entrada 
+                            para registrar el inventario inicial.
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{{ url_for('inventario.lista') }}" class="btn btn-secondary me-md-2">
+                                Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary" {{ 'disabled' if not categorias }}>
+                                <i class="fas fa-save me-1"></i>Crear Item
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const codigoInput = document.getElementById('codigo');
+    const nombreInput = document.getElementById('nombre');
+    const categoriaSelect = document.getElementById('categoria_id');
+    
+    // Generar código automático basado en categoría y nombre
+    function generarCodigo() {
+        const categoria = categoriaSelect.options[categoriaSelect.selectedIndex];
+        const nombre = nombreInput.value;
+        
+        if (categoria && categoria.value && nombre) {
+            const categoriaNombre = categoria.text.split('(')[0].trim();
+            const prefijo = categoriaNombre.substring(0, 3).toUpperCase();
+            const sufijo = nombre.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
+            
+            if (sufijo) {
+                const timestamp = Date.now().toString().slice(-3);
+                codigoInput.value = prefijo + sufijo + timestamp;
+            }
+        }
+    }
+    
+    // Eventos para generar código automático
+    categoriaSelect.addEventListener('change', generarCodigo);
+    nombreInput.addEventListener('blur', function() {
+        if (!codigoInput.value) {
+            generarCodigo();
+        }
+    });
+    
+    // Validar código único
+    codigoInput.addEventListener('blur', function() {
+        const codigo = this.value;
+        if (codigo) {
+            // Aquí podrías agregar una validación AJAX para verificar unicidad
+            // Por ahora solo mostramos el formato esperado
+            if (!/^[A-Z0-9]{6,10}$/.test(codigo)) {
+                this.setCustomValidity('El código debe tener entre 6-10 caracteres alfanuméricos en mayúsculas');
+            } else {
+                this.setCustomValidity('');
+            }
+        }
+    });
+    
+    // Auto-complete sugerencias basadas en tipo
+    categoriaSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const tipo = selectedOption.getAttribute('data-tipo');
+        
+        // Mostrar ayuda contextual según el tipo
+        const descripcionInput = document.getElementById('descripcion');
+        let placeholder = '';
+        
+        switch(tipo) {
+            case 'material':
+                placeholder = 'Ej: Cemento Portland tipo I, bolsa de 50kg, marca Loma Negra...';
+                break;
+            case 'herramienta':
+                placeholder = 'Ej: Taladro eléctrico 850W, mandril 13mm, marca Bosch modelo GSB...';
+                break;
+            case 'maquinaria':
+                placeholder = 'Ej: Mezcladora de concreto 120L, motor 2HP, marca Stark...';
+                break;
+        }
+        
+        descripcionInput.placeholder = placeholder;
+    });
+});
+</script>
+{% endblock %}

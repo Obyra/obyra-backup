@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Obras - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-building me-2"></i>Gestión de Obras</h2>
+                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                <a href="{{ url_for('obras.crear') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Nueva Obra
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label for="estado" class="form-label">Estado</label>
+                    <select class="form-select" id="estado" name="estado">
+                        <option value="">Todos los estados</option>
+                        <option value="planificacion" {{ 'selected' if estado == 'planificacion' }}>Planificación</option>
+                        <option value="en_curso" {{ 'selected' if estado == 'en_curso' }}>En Curso</option>
+                        <option value="pausada" {{ 'selected' if estado == 'pausada' }}>Pausada</option>
+                        <option value="finalizada" {{ 'selected' if estado == 'finalizada' }}>Finalizada</option>
+                        <option value="cancelada" {{ 'selected' if estado == 'cancelada' }}>Cancelada</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="buscar" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                           value="{{ buscar }}" placeholder="Nombre, cliente o dirección...">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('obras.lista') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpiar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Lista de obras -->
+    <div class="row">
+        {% if obras %}
+            {% for obra in obras %}
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold">{{ obra.nombre }}</h6>
+                        <span class="badge {{ obra.estado|estado_badge }}">
+                            {{ obra.estado.replace('_', ' ').title() }}
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-user me-1"></i>{{ obra.cliente }}
+                        </p>
+                        {% if obra.direccion %}
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion[:50] }}{% if obra.direccion|length > 50 %}...{% endif %}
+                        </p>
+                        {% endif %}
+                        
+                        <div class="row text-center mb-3">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Progreso</small>
+                                <div class="progress mb-1" style="height: 6px;">
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: {{ obra.progreso }}%"></div>
+                                </div>
+                                <small class="fw-bold">{{ obra.progreso }}%</small>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Presupuesto</small>
+                                <strong class="text-success">{{ obra.presupuesto_total|moneda }}</strong>
+                            </div>
+                        </div>
+                        
+                        {% if obra.fecha_inicio %}
+                        <p class="text-muted mb-1">
+                            <i class="fas fa-calendar-start me-1"></i>
+                            <small>Inicio: {{ obra.fecha_inicio|fecha }}</small>
+                        </p>
+                        {% endif %}
+                        {% if obra.fecha_fin_estimada %}
+                        <p class="text-muted mb-3">
+                            <i class="fas fa-calendar-check me-1"></i>
+                            <small>Estimado: {{ obra.fecha_fin_estimada|fecha }}</small>
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <div class="d-grid">
+                            <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-eye me-1"></i>Ver Detalles
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No hay obras registradas</h4>
+                    <p class="text-muted">
+                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            Comienza creando tu primera obra.
+                        {% else %}
+                            No tienes obras asignadas actualmente.
+                        {% endif %}
+                    </p>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <a href="{{ url_for('obras.crear') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Crear Primera Obra
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

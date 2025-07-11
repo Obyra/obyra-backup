@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Inventario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-boxes me-2"></i>Gestión de Inventario</h2>
+                <div>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-outline-warning me-2">
+                        <i class="fas fa-tools me-1"></i>Uso en Obra
+                    </a>
+                    <a href="{{ url_for('inventario.crear') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Nuevo Item
+                    </a>
+                    {% endif %}
+                    {% if current_user.rol == 'administrador' %}
+                    <a href="{{ url_for('inventario.categorias') }}" class="btn btn-outline-secondary ms-1">
+                        <i class="fas fa-tags me-1"></i>Categorías
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-2">
+                    <label for="tipo" class="form-label">Tipo</label>
+                    <select class="form-select" id="tipo" name="tipo">
+                        <option value="">Todos</option>
+                        <option value="material" {{ 'selected' if tipo == 'material' }}>Material</option>
+                        <option value="herramienta" {{ 'selected' if tipo == 'herramienta' }}>Herramienta</option>
+                        <option value="maquinaria" {{ 'selected' if tipo == 'maquinaria' }}>Maquinaria</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="categoria" class="form-label">Categoría</label>
+                    <select class="form-select" id="categoria" name="categoria">
+                        <option value="">Todas las categorías</option>
+                        {% for categoria in categorias %}
+                        <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id|string }}>
+                            {{ categoria.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="buscar" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                           value="{{ buscar }}" placeholder="Código, nombre o descripción...">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check me-3">
+                        <input class="form-check-input" type="checkbox" id="stock_bajo" name="stock_bajo" value="1"
+                               {{ 'checked' if stock_bajo }}>
+                        <label class="form-check-label" for="stock_bajo">
+                            Solo stock bajo
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpiar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Lista de items -->
+    <div class="row">
+        {% if items %}
+            {% for item in items %}
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100 shadow-sm {{ 'border-warning' if item.necesita_reposicion }}">
+                    {% if item.necesita_reposicion %}
+                    <div class="card-header bg-warning text-dark">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold">{{ item.codigo }}</span>
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="card-header">
+                        <h6 class="mb-0 fw-bold">{{ item.codigo }}</h6>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="card-body">
+                        <h6 class="card-title">{{ item.nombre }}</h6>
+                        <p class="text-muted mb-2">
+                            <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                            <span class="badge bg-info">{{ item.categoria.tipo.title() }}</span>
+                        </p>
+                        
+                        {% if item.descripcion %}
+                        <p class="text-muted mb-3 small">
+                            {{ item.descripcion[:80] }}{% if item.descripcion|length > 80 %}...{% endif %}
+                        </p>
+                        {% endif %}
+                        
+                        <div class="row text-center mb-3">
+                            <div class="col-4">
+                                <strong class="d-block {{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">
+                                    {{ item.stock_actual|numero(2) }}
+                                </strong>
+                                <small class="text-muted">Stock Actual</small>
+                            </div>
+                            <div class="col-4">
+                                <strong class="text-warning d-block">{{ item.stock_minimo|numero(2) }}</strong>
+                                <small class="text-muted">Stock Mínimo</small>
+                            </div>
+                            <div class="col-4">
+                                <strong class="text-primary d-block">{{ item.precio_promedio|moneda }}</strong>
+                                <small class="text-muted">Precio Prom.</small>
+                            </div>
+                        </div>
+                        
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-ruler me-1"></i>Unidad: {{ item.unidad }}
+                        </p>
+                        
+                        {% if item.necesita_reposicion %}
+                        <div class="alert alert-warning mt-2 mb-0 py-2">
+                            <small><i class="fas fa-exclamation-triangle me-1"></i>Necesita reposición</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="card-footer bg-transparent">
+                        <div class="d-grid">
+                            <a href="{{ url_for('inventario.detalle', id=item.id) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-eye me-1"></i>Ver Detalles
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No hay items de inventario</h4>
+                    <p class="text-muted">
+                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            Comienza agregando items a tu inventario.
+                        {% else %}
+                            No hay items disponibles para visualizar.
+                        {% endif %}
+                    </p>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <a href="{{ url_for('inventario.crear') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Agregar Primer Item
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

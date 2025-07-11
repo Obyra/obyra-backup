@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}{{ usuario.nombre_completo }} - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h2><i class="fas fa-user me-2"></i>{{ usuario.nombre_completo }}</h2>
+                    <p class="text-muted mb-0">
+                        <span class="badge bg-info me-2">{{ usuario.rol.title() }}</span>
+                        <span class="badge {{ 'bg-success' if usuario.activo else 'bg-secondary' }}">
+                            {{ 'Activo' if usuario.activo else 'Inactivo' }}
+                        </span>
+                    </p>
+                </div>
+                <div class="text-end">
+                    <a href="{{ url_for('equipos.lista') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver al Equipo
+                    </a>
+                    {% if current_user.rol == 'administrador' %}
+                    <button class="btn btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#editarUsuarioModal">
+                        <i class="fas fa-edit me-1"></i>Editar
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Información del usuario -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Información Personal</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Email:</strong><br>
+                            <p class="mb-3">{{ usuario.email }}</p>
+                            
+                            {% if usuario.telefono %}
+                            <strong>Teléfono:</strong><br>
+                            <p class="mb-3">{{ usuario.telefono }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Fecha de Registro:</strong><br>
+                            <p class="mb-3">{{ usuario.fecha_creacion|fecha }}</p>
+                            
+                            <strong>Rol del Sistema:</strong><br>
+                            <p class="mb-3">{{ usuario.rol.replace('_', ' ').title() }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Estadísticas de Rendimiento</h6>
+                    
+                    <div class="row text-center mb-3">
+                        <div class="col-6">
+                            <strong class="text-primary d-block h4">{{ asignaciones_activas|length }}</strong>
+                            <small class="text-muted">Obras Activas</small>
+                        </div>
+                        <div class="col-6">
+                            <strong class="text-success d-block h4">{{ obras_completadas }}</strong>
+                            <small class="text-muted">Obras Completadas</small>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="text-center">
+                        <strong class="text-info d-block h4">{{ total_horas|numero(1) }}</strong>
+                        <small class="text-muted">Horas Trabajadas Total</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Obras asignadas -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Obras Asignadas Actualmente</h5>
+                </div>
+                <div class="card-body">
+                    {% if asignaciones_activas %}
+                    <div class="row">
+                        {% for asignacion in asignaciones_activas %}
+                        <div class="col-lg-6 mb-3">
+                            <div class="border rounded p-3">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-0">{{ asignacion.obra.nombre }}</h6>
+                                    <span class="badge {{ asignacion.obra.estado|estado_badge }}">
+                                        {{ asignacion.obra.estado.replace('_', ' ').title() }}
+                                    </span>
+                                </div>
+                                <p class="text-muted mb-2">
+                                    <i class="fas fa-user me-1"></i>{{ asignacion.obra.cliente }}
+                                </p>
+                                <p class="text-muted mb-2">
+                                    <strong>Rol:</strong> {{ asignacion.rol_en_obra.replace('_', ' ').title() }}
+                                </p>
+                                <p class="text-muted mb-0">
+                                    <small>
+                                        <i class="fas fa-calendar me-1"></i>
+                                        Asignado desde {{ asignacion.fecha_asignacion.strftime('%d/%m/%Y') }}
+                                    </small>
+                                </p>
+                                
+                                <div class="mt-2">
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {{ asignacion.obra.progreso }}%"></div>
+                                    </div>
+                                    <small class="text-muted">Progreso: {{ asignacion.obra.progreso }}%</small>
+                                </div>
+                                
+                                <div class="mt-2">
+                                    <a href="{{ url_for('obras.detalle', id=asignacion.obra.id) }}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i>Ver Obra
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-briefcase fa-2x text-muted mb-3"></i>
+                        <p class="text-muted">No tiene obras asignadas actualmente.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Permisos del sistema -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Permisos del Sistema</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Módulos Accesibles:</h6>
+                            <ul class="list-unstyled">
+                                {% set modulos = ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes'] %}
+                                {% for modulo in modulos %}
+                                <li class="mb-1">
+                                    {% if usuario.puede_acceder_modulo(modulo) %}
+                                    <i class="fas fa-check text-success me-2"></i>
+                                    {% else %}
+                                    <i class="fas fa-times text-danger me-2"></i>
+                                    {% endif %}
+                                    {{ modulo.title() }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Descripción del Rol:</h6>
+                            {% if usuario.rol == 'administrador' %}
+                            <p class="text-muted">
+                                Acceso completo a todos los módulos del sistema. Puede gestionar usuarios, 
+                                obras, presupuestos, inventario y generar reportes.
+                            </p>
+                            {% elif usuario.rol == 'tecnico' %}
+                            <p class="text-muted">
+                                Puede gestionar obras, crear presupuestos, administrar inventario y 
+                                generar reportes. No puede gestionar otros usuarios.
+                            </p>
+                            {% else %}
+                            <p class="text-muted">
+                                Acceso limitado a obras e inventario. Puede ver información y 
+                                registrar uso de materiales en obra.
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Usuario -->
+{% if current_user.rol == 'administrador' %}
+<div class="modal fade" id="editarUsuarioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('equipos.editar', id=usuario.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Usuario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre</label>
+                                <input type="text" class="form-control" name="nombre" 
+                                       value="{{ usuario.nombre }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Apellido</label>
+                                <input type="text" class="form-control" name="apellido" 
+                                       value="{{ usuario.apellido }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" 
+                               value="{{ usuario.email }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control" name="telefono" 
+                               value="{{ usuario.telefono or '' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Rol</label>
+                        <select class="form-select" name="rol" required>
+                            <option value="administrador" {{ 'selected' if usuario.rol == 'administrador' }}>Administrador</option>
+                            <option value="tecnico" {{ 'selected' if usuario.rol == 'tecnico' }}>Técnico</option>
+                            <option value="operario" {{ 'selected' if usuario.rol == 'operario' }}>Operario</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

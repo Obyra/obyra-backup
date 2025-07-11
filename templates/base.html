@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OBYRA IA - Gestión de Construcción{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="{{ url_for('index') }}">
+                <i class="fas fa-building me-2"></i>OBYRA IA
+            </a>
+            
+            {% if current_user.is_authenticated %}
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('reportes.dashboard') }}">
+                            <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    
+                    {% if current_user.puede_acceder_modulo('obras') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarObras" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-building me-1"></i>Obras
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('obras.lista') }}">Ver Obras</a></li>
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('obras.crear') }}">Nueva Obra</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    {% if current_user.puede_acceder_modulo('presupuestos') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarPresupuestos" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-calculator me-1"></i>Presupuestos
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('presupuestos.lista') }}">Ver Presupuestos</a></li>
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('presupuestos.crear') }}">Nuevo Presupuesto</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    {% if current_user.puede_acceder_modulo('equipos') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarEquipos" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-users me-1"></i>Equipos
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('equipos.lista') }}">Ver Equipo</a></li>
+                            {% if current_user.rol == 'administrador' %}
+                            <li><a class="dropdown-item" href="{{ url_for('auth.register') }}">Nuevo Usuario</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    {% if current_user.puede_acceder_modulo('inventario') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-boxes me-1"></i>Inventario
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">Ver Inventario</a></li>
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('inventario.crear') }}">Nuevo Item</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
+                            {% endif %}
+                            {% if current_user.rol == 'administrador' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    {% if current_user.puede_acceder_modulo('reportes') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarReportes" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-chart-bar me-1"></i>Reportes
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_obras') }}">Reporte de Obras</a></li>
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}">Reporte de Costos</a></li>
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}">Reporte de Inventario</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                </ul>
+                
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarUsuario" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user me-1"></i>{{ current_user.nombre_completo }}
+                            <span class="badge bg-light text-dark ms-1">{{ current_user.rol.title() }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                                <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Alerts -->
+    <div class="container-fluid mt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {% if category == 'success' %}
+                            <i class="fas fa-check-circle me-1"></i>
+                        {% elif category == 'danger' or category == 'error' %}
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                        {% elif category == 'warning' %}
+                            <i class="fas fa-exclamation-circle me-1"></i>
+                        {% else %}
+                            <i class="fas fa-info-circle me-1"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Main Content -->
+    <main class="container-fluid">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-bold">OBYRA IA</h6>
+                    <p class="text-muted small">
+                        Plataforma integral de gestión de construcción para Argentina y LATAM
+                    </p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-muted small mb-0">
+                        © 2025 OBYRA IA. Todos los derechos reservados.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <!-- Page-specific scripts -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

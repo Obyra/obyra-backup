@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+
+{% block title %}{{ presupuesto.numero }} - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h2><i class="fas fa-calculator me-2"></i>{{ presupuesto.numero }}</h2>
+                    <p class="text-muted mb-0">Obra: {{ presupuesto.obra.nombre }}</p>
+                    <p class="text-muted mb-0">Cliente: {{ presupuesto.obra.cliente }}</p>
+                </div>
+                <div class="text-end">
+                    <span class="badge {{ presupuesto.estado|estado_badge }} fs-6 mb-2">
+                        {{ presupuesto.estado.title() }}
+                    </span>
+                    <br>
+                    <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    {% if presupuesto.items.count() > 0 %}
+                    <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}" 
+                       class="btn btn-success" target="_blank">
+                        <i class="fas fa-file-pdf me-1"></i>PDF
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Información del presupuesto -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Fecha:</strong> {{ presupuesto.fecha|fecha }}<br>
+                            <strong>IVA:</strong> {{ presupuesto.iva_porcentaje }}%<br>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Items:</strong> {{ presupuesto.items.count() }}<br>
+                            <strong>Creado:</strong> {{ presupuesto.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}<br>
+                        </div>
+                    </div>
+                    {% if presupuesto.observaciones %}
+                    <hr>
+                    <strong>Observaciones:</strong><br>
+                    <p class="mb-0">{{ presupuesto.observaciones }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Resumen del Presupuesto</h6>
+                    
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <strong class="text-info d-block">{{ presupuesto.subtotal_materiales|moneda }}</strong>
+                            <small class="text-muted">Materiales</small>
+                        </div>
+                        <div class="col-4">
+                            <strong class="text-warning d-block">{{ presupuesto.subtotal_mano_obra|moneda }}</strong>
+                            <small class="text-muted">Mano de Obra</small>
+                        </div>
+                        <div class="col-4">
+                            <strong class="text-secondary d-block">{{ presupuesto.subtotal_equipos|moneda }}</strong>
+                            <small class="text-muted">Equipos</small>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <strong class="text-primary d-block">{{ presupuesto.total_sin_iva|moneda }}</strong>
+                            <small class="text-muted">Sin IVA</small>
+                        </div>
+                        <div class="col-6">
+                            <strong class="text-success d-block h5">{{ presupuesto.total_con_iva|moneda }}</strong>
+                            <small class="text-muted">Total</small>
+                        </div>
+                    </div>
+                    
+                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado != 'aprobado' %}
+                    <hr>
+                    <div class="d-grid">
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#cambiarEstadoModal">
+                            <i class="fas fa-edit me-1"></i>Cambiar Estado
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Materiales -->
+    {% if materiales or current_user.rol in ['administrador', 'tecnico'] %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-cubes me-2"></i>Materiales</h5>
+                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                    <button class="btn btn-sm btn-primary" onclick="abrirModalItem('material')">
+                        <i class="fas fa-plus me-1"></i>Agregar Material
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if materiales %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th>Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">P. Unitario</th>
+                                    <th class="text-end">Total</th>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <th width="50"></th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in materiales %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td>{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad|numero(2) }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end fw-bold">{{ item.total|moneda }}</td>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <td>
+                                        <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
+                                              style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-info">
+                                    <th colspan="4" class="text-end">Subtotal Materiales:</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_materiales|moneda }}</th>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <th></th>
+                                    {% endif %}
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3">
+                        <i class="fas fa-cubes fa-2x text-muted mb-2"></i>
+                        <p class="text-muted">No hay materiales agregados.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Mano de Obra -->
+    {% if mano_obra or current_user.rol in ['administrador', 'tecnico'] %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Mano de Obra</h5>
+                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                    <button class="btn btn-sm btn-primary" onclick="abrirModalItem('mano_obra')">
+                        <i class="fas fa-plus me-1"></i>Agregar Mano de Obra
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if mano_obra %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th>Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">P. Unitario</th>
+                                    <th class="text-end">Total</th>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <th width="50"></th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in mano_obra %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td>{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad|numero(2) }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end fw-bold">{{ item.total|moneda }}</td>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <td>
+                                        <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
+                                              style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-warning">
+                                    <th colspan="4" class="text-end">Subtotal Mano de Obra:</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_mano_obra|moneda }}</th>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <th></th>
+                                    {% endif %}
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3">
+                        <i class="fas fa-users fa-2x text-muted mb-2"></i>
+                        <p class="text-muted">No hay mano de obra agregada.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Equipos -->
+    {% if equipos or current_user.rol in ['administrador', 'tecnico'] %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Equipos</h5>
+                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                    <button class="btn btn-sm btn-primary" onclick="abrirModalItem('equipo')">
+                        <i class="fas fa-plus me-1"></i>Agregar Equipo
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if equipos %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th>Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">P. Unitario</th>
+                                    <th class="text-end">Total</th>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <th width="50"></th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in equipos %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td>{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad|numero(2) }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end fw-bold">{{ item.total|moneda }}</td>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <td>
+                                        <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
+                                              style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-secondary">
+                                    <th colspan="4" class="text-end">Subtotal Equipos:</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_equipos|moneda }}</th>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                                    <th></th>
+                                    {% endif %}
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3">
+                        <i class="fas fa-tools fa-2x text-muted mb-2"></i>
+                        <p class="text-muted">No hay equipos agregados.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modales -->
+{% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+
+<!-- Modal Agregar Item -->
+<div class="modal fade" id="agregarItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('presupuestos.agregar_item', id=presupuesto.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Agregar <span id="tipoItemTexto"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="tipo" id="tipoItem">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <input type="text" class="form-control" name="descripcion" 
+                               placeholder="Descripción del item" required>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Unidad</label>
+                                <select class="form-select" name="unidad" required>
+                                    <option value="">Seleccionar...</option>
+                                    <option value="unidad">Unidad</option>
+                                    <option value="metro">Metro</option>
+                                    <option value="metro2">Metro²</option>
+                                    <option value="metro3">Metro³</option>
+                                    <option value="kilogramo">Kilogramo</option>
+                                    <option value="tonelada">Tonelada</option>
+                                    <option value="litro">Litro</option>
+                                    <option value="hora">Hora</option>
+                                    <option value="dia">Día</option>
+                                    <option value="bolsa">Bolsa</option>
+                                    <option value="caja">Caja</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Cantidad</label>
+                                <input type="number" class="form-control" name="cantidad" 
+                                       placeholder="0" step="0.001" min="0" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Precio Unitario</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" name="precio_unitario" 
+                                   placeholder="0.00" step="0.01" min="0" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Agregar Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+
+{% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado != 'aprobado' %}
+
+<!-- Modal Cambiar Estado -->
+<div class="modal fade" id="cambiarEstadoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('presupuestos.cambiar_estado', id=presupuesto.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cambiar Estado del Presupuesto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nuevo Estado</label>
+                        <select class="form-select" name="estado" required>
+                            <option value="">Seleccionar estado...</option>
+                            <option value="borrador" {{ 'selected' if presupuesto.estado == 'borrador' }}>Borrador</option>
+                            <option value="enviado" {{ 'selected' if presupuesto.estado == 'enviado' }}>Enviado</option>
+                            <option value="aprobado" {{ 'selected' if presupuesto.estado == 'aprobado' }}>Aprobado</option>
+                            <option value="rechazado" {{ 'selected' if presupuesto.estado == 'rechazado' }}>Rechazado</option>
+                        </select>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Nota:</strong> Una vez aprobado, el presupuesto no podrá ser modificado.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Cambiar Estado</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function abrirModalItem(tipo) {
+    const tipos = {
+        'material': 'Material',
+        'mano_obra': 'Mano de Obra',
+        'equipo': 'Equipo'
+    };
+    
+    document.getElementById('tipoItem').value = tipo;
+    document.getElementById('tipoItemTexto').textContent = tipos[tipo];
+    new bootstrap.Modal(document.getElementById('agregarItemModal')).show();
+}
+</script>
+{% endblock %}
