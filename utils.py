@@ -1,231 +1,275 @@
+"""
+Utilidades generales para OBYRA IA
+"""
+
+import os
+import uuid
 from datetime import datetime, date
-from decimal import Decimal
-import re
+from werkzeug.utils import secure_filename
+from flask import current_app
 
-def formatear_fecha(fecha):
-    """Formatea una fecha para mostrar en español"""
-    if not fecha:
-        return ""
-    
-    if isinstance(fecha, str):
-        try:
-            fecha = datetime.strptime(fecha, '%Y-%m-%d').date()
-        except ValueError:
-            return fecha
-    
-    meses = {
-        1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
-        5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
-        9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
-    }
-    
-    return f"{fecha.day} de {meses[fecha.month]} de {fecha.year}"
 
-def formatear_moneda(valor):
-    """Formatea un valor como moneda argentina"""
-    if valor is None:
-        return "$0,00"
-    
-    if isinstance(valor, (int, float, Decimal)):
-        valor = float(valor)
-    else:
-        try:
-            valor = float(valor)
-        except (ValueError, TypeError):
-            return "$0,00"
-    
-    return f"${valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+def generar_nombre_archivo_seguro(filename):
+    """Genera un nombre de archivo seguro con timestamp"""
+    if filename:
+        filename = secure_filename(filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        name, ext = os.path.splitext(filename)
+        return f"{timestamp}_{name[:50]}{ext}"
+    return None
 
-def formatear_numero(valor, decimales=2):
-    """Formatea un número con separadores de miles y decimales"""
-    if valor is None:
-        return "0"
-    
-    if isinstance(valor, (int, float, Decimal)):
-        valor = float(valor)
-    else:
-        try:
-            valor = float(valor)
-        except (ValueError, TypeError):
-            return "0"
-    
-    if decimales == 0:
-        return f"{int(valor):,}".replace(',', '.')
-    else:
-        formato = f"{{:,.{decimales}f}}"
-        return formato.format(valor).replace(',', 'X').replace('.', ',').replace('X', '.')
 
-def validar_email(email):
-    """Valida formato de email"""
-    patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(patron, email) is not None
+def crear_directorio_si_no_existe(path):
+    """Crea un directorio si no existe"""
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+    return path
 
-def validar_telefono(telefono):
-    """Valida formato de teléfono argentino"""
-    if not telefono:
-        return True  # Teléfono es opcional
-    
-    # Eliminar espacios y guiones
-    telefono = re.sub(r'[\s\-\(\)]', '', telefono)
-    
-    # Patrones válidos para Argentina
-    patrones = [
-        r'^\+5411\d{8}$',  # +54 11 XXXX XXXX (CABA)
-        r'^\+54\d{10}$',   # +54 XXX XXX XXXX (Interior)
-        r'^11\d{8}$',      # 11 XXXX XXXX (CABA sin código país)
-        r'^\d{10}$',       # XXX XXX XXXX (Interior sin código país)
-        r'^15\d{8}$',      # 15 XXXX XXXX (Celular)
-    ]
-    
-    return any(re.match(patron, telefono) for patron in patrones)
+
+def formatear_moneda(cantidad):
+    """Formatea cantidad como moneda argentina"""
+    if cantidad is None:
+        return "$0"
+    return f"${cantidad:,.0f}".replace(",", ".")
+
 
 def calcular_progreso_obra(obra):
-    """Calcula el progreso de una obra basado en sus etapas"""
+    """Calcula el progreso de una obra basado en etapas completadas"""
     if not obra.etapas:
         return 0
     
+    etapas_completadas = sum(1 for etapa in obra.etapas if etapa.completada)
     total_etapas = obra.etapas.count()
-    etapas_completadas = obra.etapas.filter_by(estado='finalizada').count()
     
     if total_etapas == 0:
         return 0
     
     return int((etapas_completadas / total_etapas) * 100)
 
-def generar_codigo_item(categoria, nombre):
-    """Genera un código automático para un item de inventario"""
-    # Tomar las primeras 3 letras de la categoría
-    prefijo = categoria[:3].upper()
-    
-    # Tomar las primeras 3 letras del nombre (sin espacios)
-    nombre_clean = re.sub(r'[^a-zA-Z]', '', nombre)
-    sufijo = nombre_clean[:3].upper()
-    
-    # Generar número secuencial
-    from models import ItemInventario
-    ultimo_numero = ItemInventario.query.filter(
-        ItemInventario.codigo.like(f'{prefijo}{sufijo}%')
-    ).count()
-    
-    numero = f"{ultimo_numero + 1:03d}"
-    
-    return f"{prefijo}{sufijo}{numero}"
 
-def estados_obra():
-    """Retorna los estados posibles de una obra"""
-    return [
-        ('planificacion', 'Planificación'),
-        ('en_curso', 'En Curso'),
-        ('pausada', 'Pausada'),
-        ('finalizada', 'Finalizada'),
-        ('cancelada', 'Cancelada')
-    ]
+def validar_email(email):
+    """Validación básica de email"""
+    import re
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
 
-def roles_usuario():
-    """Retorna los roles posibles de usuario"""
-    return [
-        ('administrador', 'Administrador'),
-        ('tecnico', 'Técnico'),
-        ('operario', 'Operario')
-    ]
 
-def tipos_inventario():
-    """Retorna los tipos de inventario"""
-    return [
-        ('material', 'Material'),
-        ('herramienta', 'Herramienta'),
-        ('maquinaria', 'Maquinaria')
-    ]
-
-def unidades_medida():
-    """Retorna las unidades de medida comunes"""
-    return [
-        ('unidad', 'Unidad'),
-        ('metro', 'Metro'),
-        ('metro2', 'Metro²'),
-        ('metro3', 'Metro³'),
-        ('kilogramo', 'Kilogramo'),
-        ('tonelada', 'Tonelada'),
-        ('litro', 'Litro'),
-        ('hora', 'Hora'),
-        ('dia', 'Día'),
-        ('bolsa', 'Bolsa'),
-        ('caja', 'Caja'),
-        ('paquete', 'Paquete')
-    ]
-
-def calcular_dias_habiles(fecha_inicio, fecha_fin):
-    """Calcula los días hábiles entre dos fechas (excluyendo fines de semana)"""
+def calcular_dias_entre_fechas(fecha_inicio, fecha_fin):
+    """Calcula días entre dos fechas"""
     if not fecha_inicio or not fecha_fin:
         return 0
     
-    dias = 0
-    fecha_actual = fecha_inicio
+    if isinstance(fecha_inicio, str):
+        fecha_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+    if isinstance(fecha_fin, str):
+        fecha_fin = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
     
-    while fecha_actual <= fecha_fin:
-        # 0 = lunes, 6 = domingo
-        if fecha_actual.weekday() < 5:  # lunes a viernes
-            dias += 1
-        fecha_actual += timedelta(days=1)
-    
-    return dias
+    return (fecha_fin - fecha_inicio).days
 
-def validar_cuit(cuit):
-    """Valida un CUIT argentino"""
-    if not cuit:
-        return False
-    
-    # Eliminar guiones
-    cuit = re.sub(r'[\-\s]', '', cuit)
-    
-    # Verificar longitud
-    if len(cuit) != 11:
-        return False
-    
-    # Verificar que sean todos números
-    if not cuit.isdigit():
-        return False
-    
-    # Algoritmo de verificación
-    multiplicadores = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-    suma = sum(int(cuit[i]) * multiplicadores[i] for i in range(10))
-    
-    resto = suma % 11
-    digito_verificador = 11 - resto if resto >= 2 else resto
-    
-    return int(cuit[10]) == digito_verificador
 
-# Filtros personalizados para Jinja2
-def registrar_filtros(app):
-    """Registra filtros personalizados para las plantillas"""
+def obtener_estado_obra_color(estado):
+    """Obtiene el color CSS para el estado de obra"""
+    colores = {
+        'planificacion': 'secondary',
+        'en_curso': 'primary',
+        'pausada': 'warning',
+        'finalizada': 'success',
+        'cancelada': 'danger'
+    }
+    return colores.get(estado, 'secondary')
+
+
+def obtener_prioridad_color(prioridad):
+    """Obtiene el color CSS para la prioridad"""
+    colores = {
+        'baja': 'success',
+        'media': 'warning',
+        'alta': 'danger',
+        'critica': 'danger'
+    }
+    return colores.get(prioridad, 'secondary')
+
+
+def generar_numero_presupuesto(obra_id, año=None):
+    """Genera un número de presupuesto único"""
+    if año is None:
+        año = datetime.now().year
+    return f"PRES-{obra_id:04d}-{año}"
+
+
+def generar_codigo_obra(nombre_obra):
+    """Genera un código único para la obra"""
+    # Tomar las primeras 3 letras del nombre y agregar timestamp
+    codigo_base = ''.join([c for c in nombre_obra.upper() if c.isalpha()])[:3]
+    if len(codigo_base) < 3:
+        codigo_base = codigo_base.ljust(3, 'X')
     
-    @app.template_filter('fecha')
-    def filtro_fecha(fecha):
-        return formatear_fecha(fecha)
+    timestamp = datetime.now().strftime('%m%d')
+    return f"{codigo_base}-{timestamp}"
+
+
+def calcular_iva(monto, tasa=21):
+    """Calcula el IVA de un monto"""
+    return monto * (tasa / 100)
+
+
+def redondear_precio(precio):
+    """Redondea un precio a los centavos más cercanos"""
+    return round(precio, 2)
+
+
+def obtener_extension_archivo(filename):
+    """Obtiene la extensión de un archivo"""
+    return os.path.splitext(filename)[1].lower()
+
+
+def es_archivo_imagen(filename):
+    """Verifica si un archivo es una imagen"""
+    extensiones_imagen = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg']
+    return obtener_extension_archivo(filename) in extensiones_imagen
+
+
+def es_archivo_documento(filename):
+    """Verifica si un archivo es un documento"""
+    extensiones_documento = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt', '.rtf']
+    return obtener_extension_archivo(filename) in extensiones_documento
+
+
+def formatear_telefono_argentina(telefono):
+    """Formatea un número de teléfono argentino"""
+    if not telefono:
+        return ""
     
-    @app.template_filter('moneda')
-    def filtro_moneda(valor):
-        return formatear_moneda(valor)
+    # Remover caracteres no numéricos
+    numeros = ''.join([c for c in telefono if c.isdigit()])
     
-    @app.template_filter('numero')
-    def filtro_numero(valor, decimales=2):
-        return formatear_numero(valor, decimales)
+    if len(numeros) == 10:
+        # Formato: 11-1234-5678
+        return f"{numeros[:2]}-{numeros[2:6]}-{numeros[6:]}"
+    elif len(numeros) == 8:
+        # Formato: 1234-5678
+        return f"{numeros[:4]}-{numeros[4:]}"
     
-    @app.template_filter('estado_badge')
-    def filtro_estado_badge(estado):
-        """Retorna la clase CSS para badges de estado"""
-        clases = {
-            'planificacion': 'bg-info',
-            'en_curso': 'bg-primary',
-            'pausada': 'bg-warning',
-            'finalizada': 'bg-success',
-            'cancelada': 'bg-danger',
-            'borrador': 'bg-secondary',
-            'enviado': 'bg-info',
-            'aprobado': 'bg-success',
-            'rechazado': 'bg-danger',
-            'pendiente': 'bg-warning',
-            'activo': 'bg-success',
-            'inactivo': 'bg-secondary'
-        }
-        return clases.get(estado, 'bg-secondary')
+    return telefono
+
+
+def obtener_texto_estado_presupuesto(estado):
+    """Obtiene el texto descriptivo del estado de presupuesto"""
+    estados = {
+        'borrador': 'En elaboración',
+        'enviado': 'Enviado al cliente',
+        'aprobado': 'Aprobado por cliente',
+        'rechazado': 'Rechazado',
+        'vencido': 'Plazo vencido'
+    }
+    return estados.get(estado, estado.title())
+
+
+def generar_id_unico():
+    """Genera un ID único"""
+    return str(uuid.uuid4())
+
+
+def limpiar_texto(texto):
+    """Limpia un texto removiendo espacios extras y caracteres especiales"""
+    if not texto:
+        return ""
+    
+    import re
+    # Remover espacios extras
+    texto = re.sub(r'\s+', ' ', texto.strip())
+    return texto
+
+
+def truncar_texto(texto, longitud=50):
+    """Trunca un texto a una longitud específica"""
+    if not texto:
+        return ""
+    
+    if len(texto) <= longitud:
+        return texto
+    
+    return texto[:longitud-3] + "..."
+
+
+def validar_numero_telefono(telefono):
+    """Valida un número de teléfono argentino"""
+    if not telefono:
+        return False
+    
+    import re
+    # Patrón para teléfono argentino (con o sin código de área)
+    patron = r'^(\+54\s?)?(\d{2,4})[\s\-]?\d{4}[\s\-]?\d{4}$'
+    return re.match(patron, telefono) is not None
+
+
+def convertir_fecha_string(fecha_str, formato_entrada='%Y-%m-%d', formato_salida='%d/%m/%Y'):
+    """Convierte una fecha string de un formato a otro"""
+    try:
+        fecha = datetime.strptime(fecha_str, formato_entrada)
+        return fecha.strftime(formato_salida)
+    except:
+        return fecha_str
+
+
+def calcular_diferencia_porcentual(valor_actual, valor_anterior):
+    """Calcula la diferencia porcentual entre dos valores"""
+    if valor_anterior == 0:
+        return 100 if valor_actual > 0 else 0
+    
+    return ((valor_actual - valor_anterior) / valor_anterior) * 100
+
+
+def obtener_mes_nombre(numero_mes):
+    """Obtiene el nombre del mes en español"""
+    meses = {
+        1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+        5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+        9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+    }
+    return meses.get(numero_mes, '')
+
+
+def agrupar_por_fecha(items, campo_fecha='fecha_creacion'):
+    """Agrupa items por fecha"""
+    grupos = {}
+    
+    for item in items:
+        fecha = getattr(item, campo_fecha)
+        if isinstance(fecha, datetime):
+            fecha = fecha.date()
+        
+        fecha_str = fecha.strftime('%Y-%m-%d') if fecha else 'Sin fecha'
+        
+        if fecha_str not in grupos:
+            grupos[fecha_str] = []
+        
+        grupos[fecha_str].append(item)
+    
+    return grupos
+
+
+def calcular_promedio(valores):
+    """Calcula el promedio de una lista de valores"""
+    if not valores:
+        return 0
+    
+    valores_numericos = [v for v in valores if isinstance(v, (int, float))]
+    
+    if not valores_numericos:
+        return 0
+    
+    return sum(valores_numericos) / len(valores_numericos)
+
+
+def crear_backup_archivo(ruta_archivo):
+    """Crea un backup de un archivo"""
+    if os.path.exists(ruta_archivo):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        nombre_backup = f"{ruta_archivo}.backup_{timestamp}"
+        
+        import shutil
+        shutil.copy2(ruta_archivo, nombre_backup)
+        return nombre_backup
+    
+    return None

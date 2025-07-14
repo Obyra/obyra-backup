@@ -35,6 +35,31 @@
                         </a>
                     </li>
                     
+                    <!-- Asistente Inteligente -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-warning" href="#" id="navbarAsistente" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-robot me-1"></i>Asistente IA
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('asistente.dashboard') }}">
+                                <i class="fas fa-robot me-2"></i>Centro de Control IA
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asistente.configuracion_inicial') }}">
+                                <i class="fas fa-magic me-2"></i>Configuración Inteligente
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cotizacion.calculadora_inteligente') }}">
+                                <i class="fas fa-calculator me-2"></i>Calculadora Inteligente
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asistente.analisis_rendimiento') }}">
+                                <i class="fas fa-chart-line me-2"></i>Análisis de Rendimiento
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asistente.predicciones') }}">
+                                <i class="fas fa-crystal-ball me-2"></i>Predicciones IA
+                            </a></li>
+                        </ul>
+                    </li>
+                    
                     {% if current_user.puede_acceder_modulo('obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarObras" role="button" data-bs-toggle="dropdown">
@@ -109,6 +134,62 @@
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}">Reporte de Costos</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}">Reporte de Inventario</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- Documentos -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-folder me-1"></i>Documentos
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('documentos.dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>Control Center
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('documentos.biblioteca') }}">
+                                <i class="fas fa-book me-2"></i>Biblioteca Digital
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('documentos.subir_documento') }}">
+                                <i class="fas fa-upload me-2"></i>Subir Documento
+                            </a></li>
+                            {% if current_user.rol == 'administrador' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('documentos.configuracion_tipos') }}">
+                                <i class="fas fa-cog me-2"></i>Configurar Tipos
+                            </a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    
+                    <!-- Seguridad -->
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-shield-alt me-1"></i>Seguridad
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('seguridad.dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>Panel de Seguridad
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('seguridad.protocolos') }}">
+                                <i class="fas fa-clipboard-list me-2"></i>Protocolos
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('seguridad.checklists') }}">
+                                <i class="fas fa-check-square me-2"></i>Checklists
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('seguridad.incidentes') }}">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Incidentes
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('seguridad.certificaciones') }}">
+                                <i class="fas fa-certificate me-2"></i>Certificaciones
+                            </a></li>
+                            {% if current_user.rol == 'administrador' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('seguridad.auditorias') }}">
+                                <i class="fas fa-search me-2"></i>Auditorías
+                            </a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}

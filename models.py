@@ -29,9 +29,9 @@ class Usuario(UserMixin, db.Model):
     
     def puede_acceder_modulo(self, modulo):
         permisos = {
-            'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes'],
-            'tecnico': ['obras', 'presupuestos', 'inventario', 'reportes'],
-            'operario': ['obras', 'inventario']
+            'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
+            'tecnico': ['obras', 'presupuestos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
+            'operario': ['obras', 'inventario', 'asistente', 'documentos']
         }
         return modulo in permisos.get(self.rol, [])
 

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Calculadora Inteligente - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow">
+                <div class="card-header bg-gradient-info text-white">
+                    <h3 class="mb-0">
+                        <i class="fas fa-calculator me-2"></i>
+                        Calculadora Inteligente de Materiales
+                    </h3>
+                    <p class="mb-0">Cálculo automático de materiales, costos y cronograma optimizado por IA</p>
+                </div>
+                
+                <div class="card-body p-4">
+                    <form id="form-calculadora" class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-building me-1"></i>
+                                Tipo de Obra
+                            </label>
+                            <select class="form-select" name="tipo_obra" required>
+                                <option value="">Seleccionar...</option>
+                                {% for tipo in tipos_obra %}
+                                <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-ruler-combined me-1"></i>
+                                Metros Cuadrados
+                            </label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="metros_cuadrados" min="1" placeholder="120" required>
+                                <span class="input-group-text">m²</span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-star me-1"></i>
+                                Calidad
+                            </label>
+                            <select class="form-select" name="calidad" required>
+                                <option value="economica">Económica</option>
+                                <option value="estandar" selected>Estándar</option>
+                                <option value="premium">Premium</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                Ubicación
+                            </label>
+                            <select class="form-select" name="ubicacion" required>
+                                <option value="caba">CABA</option>
+                                <option value="buenos_aires">Buenos Aires</option>
+                                <option value="cordoba">Córdoba</option>
+                                <option value="santa_fe">Santa Fe</option>
+                                <option value="mendoza">Mendoza</option>
+                                <option value="otros">Otras provincias</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <div class="d-flex align-items-end h-100">
+                                <button type="button" class="btn btn-primary btn-lg w-100" onclick="calcularMateriales()">
+                                    <i class="fas fa-magic me-2"></i>
+                                    Calcular con IA
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <!-- Resultados -->
+                    <div id="resultados-calculo" class="d-none mt-4">
+                        <hr>
+                        <h4 class="mb-4">
+                            <i class="fas fa-chart-bar text-success me-2"></i>
+                            Resultados del Cálculo Inteligente
+                        </h4>
+                        
+                        <div class="row" id="resultados-content">
+                            <!-- Los resultados se cargarán aquí -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function calcularMateriales() {
+    const form = document.getElementById('form-calculadora');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    // Mostrar loading
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Calculando...';
+    btn.disabled = true;
+    
+    fetch('/cotizacion/calcular_materiales', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarResultados(data.calculo);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error al calcular materiales');
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+
+function mostrarResultados(calculo) {
+    const container = document.getElementById('resultados-content');
+    
+    container.innerHTML = `
+        <!-- Resumen de Costos -->
+        <div class="col-12 mb-4">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Resumen de Costos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Materiales</h6>
+                            <h4 class="text-primary">$${calculo.resumen.total_materiales.toLocaleString('es-AR')}</h4>
+                        </div>
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Mano de Obra</h6>
+                            <h4 class="text-warning">$${calculo.resumen.total_mano_obra.toLocaleString('es-AR')}</h4>
+                        </div>
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Subtotal</h6>
+                            <h4 class="text-info">$${calculo.resumen.subtotal.toLocaleString('es-AR')}</h4>
+                        </div>
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Total Final</h6>
+                            <h4 class="text-success fw-bold">$${calculo.resumen.total_final.toLocaleString('es-AR')}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Materiales -->
+        <div class="col-md-6 mb-4">
+            <div class="card border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Materiales Necesarios</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Material</th>
+                                    <th>Cantidad</th>
+                                    <th>Costo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${calculo.materiales.map(material => `
+                                    <tr>
+                                        <td>${material.material}</td>
+                                        <td>${material.cantidad} ${material.unidad}</td>
+                                        <td>$${material.total.toLocaleString('es-AR')}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mano de Obra -->
+        <div class="col-md-6 mb-4">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Mano de Obra</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Especialidad</th>
+                                    <th>Días</th>
+                                    <th>Costo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${calculo.mano_obra.map(mo => `
+                                    <tr>
+                                        <td>${mo.tipo}</td>
+                                        <td>${mo.dias}</td>
+                                        <td>$${mo.total.toLocaleString('es-AR')}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recomendaciones -->
+        <div class="col-12">
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Recomendaciones IA</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        ${calculo.recomendaciones.map(rec => `<li>${rec}</li>`).join('')}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('resultados-calculo').classList.remove('d-none');
+}
+</script>
+{% endblock %}

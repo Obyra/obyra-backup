@@ -48,6 +48,10 @@ from presupuestos import presupuestos_bp
 from equipos import equipos_bp
 from inventario import inventario_bp
 from reportes import reportes_bp
+from asistente_ia import asistente_bp
+from cotizacion_inteligente import cotizacion_bp
+from control_documentos import documentos_bp
+from seguridad_cumplimiento import seguridad_bp
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(obras_bp, url_prefix='/obras')
@@ -55,11 +59,15 @@ app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
 app.register_blueprint(equipos_bp, url_prefix='/equipos')
 app.register_blueprint(inventario_bp, url_prefix='/inventario')
 app.register_blueprint(reportes_bp, url_prefix='/reportes')
+app.register_blueprint(asistente_bp, url_prefix='/asistente')
+app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
+app.register_blueprint(documentos_bp, url_prefix='/documentos')
+app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for('reportes.dashboard'))
+        return redirect(url_for('asistente.dashboard'))
     return render_template('index.html')
 
 @app.context_processor
