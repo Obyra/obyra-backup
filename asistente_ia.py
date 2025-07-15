@@ -7,6 +7,7 @@ análisis de datos y recomendaciones automáticas.
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
+from decimal import Decimal
 import json
 import re
 from app import db
@@ -79,7 +80,7 @@ def configurar_proyecto():
             email_cliente=data.get('email_cliente'),
             fecha_inicio=fecha_inicio,
             fecha_fin_estimada=fecha_inicio + timedelta(days=config['duracion_estimada']),
-            presupuesto_total=config['presupuesto_ajustado'],
+            presupuesto_total=Decimal(str(config['presupuesto_ajustado'])),
             estado='planificacion'
         )
         
@@ -90,7 +91,7 @@ def configurar_proyecto():
         configuracion = ConfiguracionInteligente(
             obra_id=obra.id,
             plantilla_id=config.get('plantilla_id', 1),
-            factor_complejidad_aplicado=config.get('factor_ubicacion', 1.0),
+            factor_complejidad_aplicado=Decimal(str(config.get('factor_ubicacion', 1.0))),
             ajustes_ubicacion={'ubicacion': ubicacion, 'factor': config.get('factor_ubicacion', 1.0)},
             recomendaciones_ia=config.get('recomendaciones', []),
             configurado_por_id=current_user.id
@@ -137,14 +138,16 @@ def configurar_proyecto():
         
         # Agregar items de presupuesto automáticos
         for item_data in config['items_presupuesto']:
+            cantidad = Decimal(str(item_data['cantidad']))
+            precio_unitario = Decimal(str(item_data['precio_unitario']))
             item = ItemPresupuesto(
                 presupuesto_id=presupuesto.id,
                 tipo=item_data['tipo'],
                 descripcion=item_data['descripcion'],
                 unidad=item_data['unidad'],
-                cantidad=item_data['cantidad'],
-                precio_unitario=item_data['precio_unitario'],
-                total=item_data['cantidad'] * item_data['precio_unitario']
+                cantidad=cantidad,
+                precio_unitario=precio_unitario,
+                total=cantidad * precio_unitario
             )
             db.session.add(item)
         
