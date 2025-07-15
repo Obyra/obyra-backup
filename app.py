@@ -70,6 +70,23 @@ def index():
         return redirect(url_for('asistente.dashboard'))
     return render_template('index.html')
 
+# Jinja2 custom filters
+@app.template_filter('fecha')
+def fecha_filter(fecha):
+    """Formatea fecha para mostrar en templates"""
+    if fecha:
+        if hasattr(fecha, 'strftime'):
+            return fecha.strftime('%d/%m/%Y')
+        return str(fecha)
+    return '-'
+
+@app.template_filter('moneda')
+def moneda_filter(cantidad):
+    """Formatea cantidad como moneda argentina"""
+    if cantidad is None:
+        return "$0"
+    return f"${cantidad:,.0f}".replace(",", ".")
+
 @app.context_processor
 def inject_user():
     return dict(current_user=current_user)

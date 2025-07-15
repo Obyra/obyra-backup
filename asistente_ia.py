@@ -16,22 +16,32 @@ from utils import *
 asistente_bp = Blueprint('asistente', __name__)
 
 @asistente_bp.route('/')
+@asistente_bp.route('/dashboard')
+@asistente_bp.route('/control')
 @login_required
 def dashboard():
-    """Dashboard principal del asistente inteligente"""
-    # Datos para el asistente
-    obras_activas = Obra.query.filter_by(estado='en_curso').count()
-    presupuestos_pendientes = Presupuesto.query.filter_by(estado='borrador').count()
-    items_stock_bajo = ItemInventario.query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo).count()
-    
-    # Recomendaciones inteligentes
-    recomendaciones = generar_recomendaciones()
-    
-    return render_template('asistente/dashboard.html',
-                         obras_activas=obras_activas,
-                         presupuestos_pendientes=presupuestos_pendientes,
-                         items_stock_bajo=items_stock_bajo,
-                         recomendaciones=recomendaciones)
+    """Dashboard principal del asistente inteligente - Centro de Control IA"""
+    try:
+        # Datos para el asistente
+        obras_activas = Obra.query.filter_by(estado='en_curso').count()
+        presupuestos_pendientes = Presupuesto.query.filter_by(estado='borrador').count()
+        items_stock_bajo = ItemInventario.query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo).count()
+        
+        # Recomendaciones inteligentes
+        recomendaciones = generar_recomendaciones()
+        
+        return render_template('asistente/dashboard.html',
+                             obras_activas=obras_activas,
+                             presupuestos_pendientes=presupuestos_pendientes,
+                             items_stock_bajo=items_stock_bajo,
+                             recomendaciones=recomendaciones)
+    except Exception as e:
+        # En caso de error, mostrar dashboard básico
+        return render_template('asistente/dashboard.html',
+                             obras_activas=0,
+                             presupuestos_pendientes=0,
+                             items_stock_bajo=0,
+                             recomendaciones=[])
 
 @asistente_bp.route('/configuracion_inicial')
 @login_required

@@ -97,6 +97,7 @@
             <h3 class="mb-4">Módulos Inteligentes Disponibles</h3>
         </div>
         
+        {% if not current_user.is_authenticated %}
         <!-- 1. Ingreso del Usuario -->
         <div class="col-lg-6 col-xl-4 mb-4">
             <div class="card h-100 border-0 shadow-sm hover-card">
@@ -119,6 +120,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- 2. Formulario Inicial - Asistente Inteligente -->
         <div class="col-lg-6 col-xl-4 mb-4">

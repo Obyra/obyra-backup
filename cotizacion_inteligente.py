@@ -34,6 +34,7 @@ def dashboard():
                          cotizaciones_recientes=cotizaciones_recientes)
 
 @cotizacion_bp.route('/calculadora_inteligente')
+@cotizacion_bp.route('/calculadora')
 @login_required
 def calculadora_inteligente():
     """Calculadora inteligente de materiales y costos"""
