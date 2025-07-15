@@ -119,16 +119,13 @@
                                         <i class="fas fa-map-marker-alt me-1"></i>
                                         Ubicación
                                     </label>
-                                    <select class="form-select" name="ubicacion" required>
-                                        <option value="">Selecciona ubicación...</option>
-                                        <option value="caba">Ciudad Autónoma de Buenos Aires</option>
-                                        <option value="buenos_aires">Buenos Aires (Provincia)</option>
-                                        <option value="cordoba">Córdoba</option>
-                                        <option value="santa_fe">Santa Fe</option>
-                                        <option value="mendoza">Mendoza</option>
-                                        <option value="otros">Otras provincias</option>
-                                    </select>
-                                    <div class="form-text">Afecta costos de materiales y mano de obra</div>
+                                    <input type="text" class="form-control" name="ubicacion" id="ubicacion-input" 
+                                           placeholder="Ej: Caseros, Buenos Aires" required autocomplete="off">
+                                    <div class="form-text">
+                                        <small class="text-muted">Escribe la dirección y selecciona de las sugerencias</small>
+                                        <div id="ubicacion-provincia" class="fw-bold text-primary mt-1"></div>
+                                    </div>
+                                    <input type="hidden" name="provincia_detectada" id="provincia-detectada">
                                 </div>
                                 
                                 <div class="col-md-4 mb-3">
@@ -442,9 +439,158 @@ function confirmarConfiguracion() {
     document.getElementById('btn-ver-proyecto').href = `/obras/detalle/${proyectoCreado.obra_id}`;
 }
 
+// Autocomplete para ubicaciones argentinas
+function initLocationAutocomplete() {
+    const input = document.getElementById('ubicacion-input');
+    const provinciaDiv = document.getElementById('ubicacion-provincia');
+    const provinciaHidden = document.getElementById('provincia-detectada');
+    
+    // Localidades principales de Argentina
+    const ubicacionesArgentina = [
+        // Buenos Aires
+        { nombre: 'Ciudad Autónoma de Buenos Aires (CABA)', provincia: 'caba', factor: 1.3 },
+        { nombre: 'La Plata, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'Mar del Plata, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'Bahía Blanca, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'Tandil, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'San Nicolás, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'Pergamino, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'Caseros, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'Morón, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        { nombre: 'San Isidro, Buenos Aires', provincia: 'buenos_aires', factor: 1.1 },
+        
+        // Córdoba
+        { nombre: 'Córdoba Capital, Córdoba', provincia: 'cordoba', factor: 1.0 },
+        { nombre: 'Río Cuarto, Córdoba', provincia: 'cordoba', factor: 1.0 },
+        { nombre: 'Villa María, Córdoba', provincia: 'cordoba', factor: 1.0 },
+        { nombre: 'San Francisco, Córdoba', provincia: 'cordoba', factor: 1.0 },
+        
+        // Santa Fe
+        { nombre: 'Rosario, Santa Fe', provincia: 'santa_fe', factor: 1.0 },
+        { nombre: 'Santa Fe Capital, Santa Fe', provincia: 'santa_fe', factor: 1.0 },
+        { nombre: 'Venado Tuerto, Santa Fe', provincia: 'santa_fe', factor: 1.0 },
+        { nombre: 'Rafaela, Santa Fe', provincia: 'santa_fe', factor: 1.0 },
+        
+        // Mendoza
+        { nombre: 'Mendoza Capital, Mendoza', provincia: 'mendoza', factor: 0.95 },
+        { nombre: 'San Rafael, Mendoza', provincia: 'mendoza', factor: 0.95 },
+        { nombre: 'Godoy Cruz, Mendoza', provincia: 'mendoza', factor: 0.95 },
+        
+        // Otras provincias importantes
+        { nombre: 'Tucumán, Tucumán', provincia: 'otros', factor: 0.9 },
+        { nombre: 'Salta Capital, Salta', provincia: 'otros', factor: 0.9 },
+        { nombre: 'Resistencia, Chaco', provincia: 'otros', factor: 0.9 },
+        { nombre: 'Corrientes Capital, Corrientes', provincia: 'otros', factor: 0.9 },
+        { nombre: 'Posadas, Misiones', provincia: 'otros', factor: 0.9 },
+        { nombre: 'Paraná, Entre Ríos', provincia: 'otros', factor: 0.9 },
+        { nombre: 'San Juan Capital, San Juan', provincia: 'otros', factor: 0.9 },
+        { nombre: 'Neuquén Capital, Neuquén', provincia: 'otros', factor: 0.9 },
+        { nombre: 'San Luis Capital, San Luis', provincia: 'otros', factor: 0.9 }
+    ];
+    
+    let currentFocus = -1;
+    
+    input.addEventListener('input', function() {
+        const value = this.value.toLowerCase();
+        closeAllLists();
+        
+        if (!value) {
+            provinciaDiv.textContent = '';
+            provinciaHidden.value = '';
+            return;
+        }
+        
+        const matches = ubicacionesArgentina.filter(loc => 
+            loc.nombre.toLowerCase().includes(value)
+        ).slice(0, 8);
+        
+        if (matches.length > 0) {
+            const listDiv = document.createElement('div');
+            listDiv.className = 'autocomplete-list position-absolute bg-white border rounded shadow-sm w-100';
+            listDiv.style.zIndex = '1000';
+            listDiv.style.maxHeight = '200px';
+            listDiv.style.overflowY = 'auto';
+            
+            matches.forEach((match, index) => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item p-2 border-bottom';
+                item.style.cursor = 'pointer';
+                item.innerHTML = `<strong>${match.nombre}</strong>`;
+                
+                item.addEventListener('click', function() {
+                    selectLocation(match);
+                    closeAllLists();
+                });
+                
+                listDiv.appendChild(item);
+            });
+            
+            this.parentNode.appendChild(listDiv);
+        }
+    });
+    
+    function selectLocation(location) {
+        input.value = location.nombre;
+        provinciaDiv.textContent = `Provincia: ${getProvinciaName(location.provincia)} (Factor costo: ${location.factor})`;
+        provinciaHidden.value = location.provincia;
+    }
+    
+    function getProvinciaName(codigo) {
+        const nombres = {
+            'caba': 'Ciudad Autónoma de Buenos Aires',
+            'buenos_aires': 'Buenos Aires',
+            'cordoba': 'Córdoba',
+            'santa_fe': 'Santa Fe',
+            'mendoza': 'Mendoza',
+            'otros': 'Otras Provincias'
+        };
+        return nombres[codigo] || 'Argentina';
+    }
+    
+    function closeAllLists() {
+        const lists = document.querySelectorAll('.autocomplete-list');
+        lists.forEach(list => list.remove());
+    }
+    
+    // Cerrar lista al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target)) {
+            closeAllLists();
+        }
+    });
+    
+    // Navegación con teclado
+    input.addEventListener('keydown', function(e) {
+        const items = document.querySelectorAll('.autocomplete-item');
+        if (e.keyCode === 40) { // DOWN
+            currentFocus++;
+            addActive(items);
+        } else if (e.keyCode === 38) { // UP
+            currentFocus--;
+            addActive(items);
+        } else if (e.keyCode === 13) { // ENTER
+            e.preventDefault();
+            if (currentFocus > -1 && items[currentFocus]) {
+                items[currentFocus].click();
+            }
+        }
+    });
+    
+    function addActive(items) {
+        items.forEach(item => item.classList.remove('active'));
+        if (currentFocus >= items.length) currentFocus = 0;
+        if (currentFocus < 0) currentFocus = items.length - 1;
+        if (items[currentFocus]) {
+            items[currentFocus].classList.add('active');
+            items[currentFocus].style.backgroundColor = '#e9ecef';
+        }
+    }
+}
+
 // Inicializar
 document.addEventListener('DOMContentLoaded', function() {
     actualizarIndicadoresPasos();
+    initLocationAutocomplete();
     
     // Establecer fecha mínima como hoy
     const fechaInput = document.querySelector('input[name="fecha_inicio"]');

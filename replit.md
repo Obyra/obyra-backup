@@ -140,3 +140,19 @@ Preferred communication style: Simple, everyday language.
 - Caching strategy ready for Redis integration
 
 The system is designed to be deployed on platforms like Replit, with easy configuration for database connections and scaling requirements.
+
+## Recent Changes (July 2025)
+
+### Intelligent Project Configuration System
+- **Enhanced Building Types**: Added multi-story building options (3-5 floors, 6-10 floors, 11-15 floors, industrial warehouses, commercial centers)
+- **Location Autocomplete**: Implemented Argentine location autocomplete with province detection and cost factor calculation
+- **Database Compatibility**: Fixed PostgreSQL Decimal type conversions for monetary fields
+- **Smart Cost Calculation**: Location-based pricing adjustments (CABA +30%, Buenos Aires +10%, etc.)
+- **Automated Project Creation**: Complete project setup with stages, tasks, budgets, and AI recommendations
+- **User Experience**: Improved form validation and real-time location suggestions
+
+### Technical Improvements
+- Decimal type conversion for all monetary database fields
+- Enhanced error handling for PostgreSQL data types
+- Location-based cost factor detection from autocomplete
+- Comprehensive building type configurations with specific industrial workflows

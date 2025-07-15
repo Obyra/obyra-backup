@@ -65,7 +65,7 @@ def configurar_proyecto():
         fecha_inicio = datetime.strptime(data.get('fecha_inicio'), '%Y-%m-%d').date()
         
         # Generar configuración inteligente
-        config = generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, presupuesto_estimado)
+        config = generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, presupuesto_estimado, data)
         
         # Inicializar plantillas si no existen
         inicializar_plantillas_proyecto()
@@ -252,7 +252,7 @@ def generar_recomendaciones():
     
     return recomendaciones
 
-def generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, presupuesto_estimado):
+def generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, presupuesto_estimado, data=None):
     """Genera configuración automática inteligente para un proyecto"""
     
     # Configuraciones base por tipo de obra
@@ -366,11 +366,20 @@ def generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, pr
         'otros': 0.9
     }
     
-    factor_ubicacion = 1.0
-    for zona, factor in factores_ubicacion.items():
-        if zona in ubicacion.lower():
-            factor_ubicacion = factor
-            break
+    # Detectar provincia desde ubicación o provincia_detectada
+    provincia_detectada = ''
+    if data:
+        provincia_detectada = data.get('provincia_detectada', '')
+    
+    factor_ubicacion = factores_ubicacion.get(provincia_detectada, 1.0)
+    
+    # Si no hay provincia detectada, usar ubicación texto
+    if not provincia_detectada:
+        ubicacion_lower = ubicacion.lower()
+        for zona, factor in factores_ubicacion.items():
+            if zona in ubicacion_lower:
+                factor_ubicacion = factor
+                break
     
     presupuesto_ajustado *= factor_ubicacion
     
