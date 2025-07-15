@@ -87,6 +87,22 @@ def moneda_filter(cantidad):
         return "$0"
     return f"${cantidad:,.0f}".replace(",", ".")
 
+@app.template_filter('estado_badge')
+def estado_badge_filter(estado):
+    """Retorna clase CSS para badge según estado"""
+    clases = {
+        'borrador': 'bg-secondary',
+        'enviado': 'bg-warning',
+        'aprobado': 'bg-success',
+        'rechazado': 'bg-danger',
+        'planificacion': 'bg-info',
+        'en_curso': 'bg-primary',
+        'pausada': 'bg-warning',
+        'finalizada': 'bg-success',
+        'cancelada': 'bg-danger'
+    }
+    return clases.get(estado, 'bg-secondary')
+
 @app.context_processor
 def inject_user():
     return dict(current_user=current_user)

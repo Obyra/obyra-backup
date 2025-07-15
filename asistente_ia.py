@@ -66,6 +66,9 @@ def configurar_proyecto():
         # Generar configuración inteligente
         config = generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, presupuesto_estimado)
         
+        # Inicializar plantillas si no existen
+        inicializar_plantillas_proyecto()
+        
         # Crear obra con configuración automática
         obra = Obra(
             nombre=data.get('nombre_proyecto'),
@@ -83,6 +86,17 @@ def configurar_proyecto():
         db.session.add(obra)
         db.session.flush()
         
+        # Crear configuración inteligente
+        configuracion = ConfiguracionInteligente(
+            obra_id=obra.id,
+            plantilla_id=config.get('plantilla_id', 1),
+            factor_complejidad_aplicado=config.get('factor_ubicacion', 1.0),
+            ajustes_ubicacion={'ubicacion': ubicacion, 'factor': config.get('factor_ubicacion', 1.0)},
+            recomendaciones_ia=config.get('recomendaciones', []),
+            configurado_por_id=current_user.id
+        )
+        db.session.add(configuracion)
+        
         # Crear etapas automáticas
         for etapa_data in config['etapas']:
             etapa = EtapaObra(
@@ -94,6 +108,22 @@ def configurar_proyecto():
                 fecha_fin_estimada=etapa_data['fecha_fin']
             )
             db.session.add(etapa)
+            db.session.flush()
+            
+            # Crear tareas para cada etapa
+            if 'tareas' in etapa_data:
+                for tarea_data in etapa_data['tareas']:
+                    tarea = TareaEtapa(
+                        etapa_id=etapa.id,
+                        nombre=tarea_data['nombre'],
+                        descripcion=tarea_data['descripcion'],
+                        orden=tarea_data['orden'],
+                        horas_estimadas=tarea_data['duracion_horas'],
+                        requiere_especialista=tarea_data.get('requiere_especialista', False),
+                        tipo_especialista=tarea_data.get('tipo_especialista'),
+                        es_critica=tarea_data.get('es_critica', False)
+                    )
+                    db.session.add(tarea)
         
         # Crear presupuesto base
         presupuesto = Presupuesto(
@@ -393,6 +423,220 @@ def generar_optimizaciones_recursos():
         'compras_optimizadas': [],
         'cronograma_mejorado': []
     }
+
+def generar_tareas_etapa(etapa_plantilla, metros_cuadrados):
+    """Genera tareas específicas para una etapa según la plantilla"""
+    tareas = []
+    for tarea_plantilla in etapa_plantilla.tareas_plantilla:
+        # Ajustar duración por tamaño del proyecto
+        factor_tamaño = 1 + (metros_cuadrados / 100) * 0.1
+        duracion_ajustada = tarea_plantilla.duracion_horas * factor_tamaño
+        
+        tareas.append({
+            'nombre': tarea_plantilla.nombre,
+            'descripcion': tarea_plantilla.descripcion,
+            'orden': tarea_plantilla.orden,
+            'duracion_horas': round(duracion_ajustada, 2),
+            'requiere_especialista': tarea_plantilla.requiere_especialista,
+            'tipo_especialista': tarea_plantilla.tipo_especialista,
+            'es_critica': tarea_plantilla.es_critica
+        })
+    return tareas
+
+
+def obtener_factor_ubicacion(ubicacion):
+    """Calcula factor de ajuste por ubicación geográfica"""
+    # Factores base por región (ejemplo Argentina)
+    factores_ubicacion = {
+        'caba': 1.3,  # Capital Federal
+        'buenos_aires': 1.1,  # Gran Buenos Aires
+        'cordoba': 1.0,  # Córdoba
+        'rosario': 1.05,  # Rosario
+        'mendoza': 0.95,  # Mendoza
+        'tucuman': 0.9,  # Tucumán
+        'salta': 0.85,  # Salta
+        'default': 1.0
+    }
+    
+    ubicacion_lower = ubicacion.lower()
+    for region, factor in factores_ubicacion.items():
+        if region in ubicacion_lower:
+            return factor
+    
+    return factores_ubicacion['default']
+
+
+def generar_recomendaciones_proyecto(tipo_obra, metros_cuadrados, ubicacion, presupuesto):
+    """Genera recomendaciones inteligentes específicas del proyecto"""
+    recomendaciones = []
+    
+    # Recomendaciones por tipo de obra
+    if tipo_obra == 'edificio_5_pisos':
+        recomendaciones.extend([
+            {
+                'tipo': 'normativa',
+                'titulo': 'Código de Edificación',
+                'descripcion': 'Verificar cumplimiento del código de edificación local para edificios de más de 4 pisos',
+                'prioridad': 'alta',
+                'categoria': 'legal'
+            },
+            {
+                'tipo': 'estructura',
+                'titulo': 'Estudio de Suelos',
+                'descripcion': 'Realizar estudio geotécnico obligatorio para fundaciones profundas',
+                'prioridad': 'critica',
+                'categoria': 'tecnica'
+            }
+        ])
+    
+    # Recomendaciones por tamaño
+    if metros_cuadrados > 500:
+        recomendaciones.append({
+            'tipo': 'logistica',
+            'titulo': 'Gestión de Materiales',
+            'descripcion': 'Considerar almacén temporal en obra para gestión eficiente de materiales',
+            'prioridad': 'media',
+            'categoria': 'logistica'
+        })
+    
+    # Recomendaciones por presupuesto
+    if presupuesto > 50000000:  # $50M ARS
+        recomendaciones.append({
+            'tipo': 'financiero',
+            'titulo': 'Gestión Financiera',
+            'descripcion': 'Implementar control de flujo de caja semanal para proyecto de alta inversión',
+            'prioridad': 'alta',
+            'categoria': 'financiera'
+        })
+    
+    # Recomendaciones por ubicación
+    if 'caba' in ubicacion.lower():
+        recomendaciones.append({
+            'tipo': 'urbano',
+            'titulo': 'Permisos CABA',
+            'descripcion': 'Gestionar permisos de obra y ocupación de vía pública con antelación',
+            'prioridad': 'alta',
+            'categoria': 'administrativa'
+        })
+    
+    return recomendaciones
+
+
+def obtener_proveedores_ubicacion(ubicacion):
+    """Obtiene proveedores sugeridos según la ubicación"""
+    # Base de datos básica de proveedores por región
+    proveedores = {
+        'materiales_estructura': [
+            {'nombre': 'Loma Negra', 'categoria': 'cemento', 'cobertura': 'nacional'},
+            {'nombre': 'Acindar', 'categoria': 'hierro', 'cobertura': 'nacional'},
+            {'nombre': 'Aluar', 'categoria': 'aluminio', 'cobertura': 'nacional'}
+        ],
+        'materiales_terminacion': [
+            {'nombre': 'Cerro Negro', 'categoria': 'cerámicos', 'cobertura': 'nacional'},
+            {'nombre': 'FV', 'categoria': 'sanitarios', 'cobertura': 'nacional'},
+            {'nombre': 'Klaukol', 'categoria': 'adhesivos', 'cobertura': 'nacional'}
+        ]
+    }
+    
+    return proveedores
+
+
+def obtener_maquinaria_sugerida(tipo_obra, metros_cuadrados):
+    """Sugiere maquinaria necesaria según tipo y tamaño de obra"""
+    maquinaria = []
+    
+    if tipo_obra == 'edificio_5_pisos':
+        maquinaria.extend([
+            {'tipo': 'Grúa torre', 'capacidad': '8-12 ton', 'duracion_estimada': '8-10 meses'},
+            {'tipo': 'Hormigonera', 'capacidad': '500L', 'duracion_estimada': '6 meses'},
+            {'tipo': 'Montacargas', 'capacidad': '1000kg', 'duracion_estimada': '10 meses'}
+        ])
+    elif tipo_obra == 'casa_unifamiliar':
+        maquinaria.extend([
+            {'tipo': 'Hormigonera', 'capacidad': '350L', 'duracion_estimada': '3 meses'},
+            {'tipo': 'Andamios', 'tipo': 'tubular', 'duracion_estimada': '4 meses'}
+        ])
+    
+    if metros_cuadrados > 300:
+        maquinaria.append({
+            'tipo': 'Compresor', 'capacidad': '200L', 'duracion_estimada': '2 meses'
+        })
+    
+    return maquinaria
+
+
+def inicializar_plantillas_proyecto():
+    """Inicializa plantillas base de proyecto si no existen"""
+    try:
+        # Verificar si ya existen plantillas
+        if PlantillaProyecto.query.count() > 0:
+            return True
+        
+        # Crear plantilla para casa unifamiliar
+        plantilla_casa = PlantillaProyecto(
+            tipo_obra='casa_unifamiliar',
+            nombre='Casa Unifamiliar Estándar',
+            descripcion='Plantilla para casas unifamiliares de 80-200 m²',
+            duracion_base_dias=120,
+            metros_cuadrados_min=80,
+            metros_cuadrados_max=200,
+            costo_base_m2=85000,
+            factor_complejidad=1.0
+        )
+        db.session.add(plantilla_casa)
+        db.session.flush()
+        
+        # Etapas para casa unifamiliar
+        etapas_casa = [
+            {'nombre': 'Preparación del terreno', 'descripcion': 'Limpieza, nivelación y replanteo', 'orden': 1, 'duracion': 7, 'porcentaje': 5},
+            {'nombre': 'Fundaciones', 'descripcion': 'Excavación y fundaciones', 'orden': 2, 'duracion': 14, 'porcentaje': 15},
+            {'nombre': 'Estructura', 'descripcion': 'Muros, losas y columnas', 'orden': 3, 'duracion': 30, 'porcentaje': 30},
+            {'nombre': 'Techos', 'descripcion': 'Estructura de techo y cubierta', 'orden': 4, 'duracion': 14, 'porcentaje': 15},
+            {'nombre': 'Instalaciones', 'descripcion': 'Plomería, electricidad y gas', 'orden': 5, 'duracion': 21, 'porcentaje': 20},
+            {'nombre': 'Terminaciones', 'descripcion': 'Revoques, pisos y pintura', 'orden': 6, 'duracion': 28, 'porcentaje': 12},
+            {'nombre': 'Detalles finales', 'descripcion': 'Limpieza y entrega', 'orden': 7, 'duracion': 6, 'porcentaje': 3}
+        ]
+        
+        for etapa_data in etapas_casa:
+            etapa = EtapaPlantilla(
+                plantilla_id=plantilla_casa.id,
+                nombre=etapa_data['nombre'],
+                descripcion=etapa_data['descripcion'],
+                orden=etapa_data['orden'],
+                duracion_dias=etapa_data['duracion'],
+                porcentaje_presupuesto=etapa_data['porcentaje'],
+                es_critica=etapa_data['orden'] in [2, 3, 5]  # Fundaciones, estructura e instalaciones críticas
+            )
+            db.session.add(etapa)
+        
+        # Materiales básicos para casa unifamiliar
+        materiales_casa = [
+            {'categoria': 'estructura', 'material': 'Cemento Portland', 'unidad': 'kg', 'cantidad_m2': 45, 'precio_base': 850},
+            {'categoria': 'estructura', 'material': 'Hierro construcción', 'unidad': 'kg', 'cantidad_m2': 35, 'precio_base': 1200},
+            {'categoria': 'albañileria', 'material': 'Ladrillo común', 'unidad': 'u', 'cantidad_m2': 120, 'precio_base': 85},
+            {'categoria': 'terminaciones', 'material': 'Cerámica piso', 'unidad': 'm2', 'cantidad_m2': 1.1, 'precio_base': 2500},
+            {'categoria': 'instalaciones', 'material': 'Caño PVC sanitario', 'unidad': 'm', 'cantidad_m2': 3, 'precio_base': 450}
+        ]
+        
+        for material_data in materiales_casa:
+            material = ItemMaterialPlantilla(
+                plantilla_id=plantilla_casa.id,
+                categoria=material_data['categoria'],
+                material=material_data['material'],
+                unidad=material_data['unidad'],
+                cantidad_por_m2=material_data['cantidad_m2'],
+                precio_unitario_base=material_data['precio_base'],
+                es_critico=material_data['categoria'] in ['estructura', 'instalaciones']
+            )
+            db.session.add(material)
+        
+        db.session.commit()
+        return True
+        
+    except Exception as e:
+        db.session.rollback()
+        return False
+
 
 def procesar_consulta_ia(mensaje):
     """Procesa consultas del chat IA y genera respuestas"""
