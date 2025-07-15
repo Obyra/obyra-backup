@@ -254,24 +254,71 @@ def generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, pr
     
     # Configuraciones base por tipo de obra
     configuraciones_base = {
-        'casa_familia': {
+        'casa_unifamiliar': {
             'duracion_base': 120,  # días
-            'costo_m2': 80000,     # ARS por m²
+            'costo_m2': 85000,     # ARS por m²
             'etapas': [
-                'Preparación del terreno',
-                'Fundaciones',
-                'Estructura',
-                'Mampostería',
-                'Instalaciones',
-                'Revoques',
-                'Carpintería',
-                'Pintura',
-                'Terminaciones'
+                {'nombre': 'Preparación del terreno', 'descripcion': 'Limpieza, nivelación y replanteo', 'orden': 1, 'duracion': 7, 'fecha_inicio': date.today(), 'fecha_fin': date.today() + timedelta(days=7)},
+                {'nombre': 'Fundaciones', 'descripcion': 'Excavación y fundaciones', 'orden': 2, 'duracion': 14, 'fecha_inicio': date.today() + timedelta(days=8), 'fecha_fin': date.today() + timedelta(days=21)},
+                {'nombre': 'Estructura', 'descripcion': 'Muros, losas y columnas', 'orden': 3, 'duracion': 30, 'fecha_inicio': date.today() + timedelta(days=22), 'fecha_fin': date.today() + timedelta(days=51)},
+                {'nombre': 'Instalaciones', 'descripcion': 'Plomería, electricidad y gas', 'orden': 4, 'duracion': 21, 'fecha_inicio': date.today() + timedelta(days=52), 'fecha_fin': date.today() + timedelta(days=72)},
+                {'nombre': 'Terminaciones', 'descripcion': 'Revoques, pisos y pintura', 'orden': 5, 'duracion': 28, 'fecha_inicio': date.today() + timedelta(days=73), 'fecha_fin': date.today() + timedelta(days=100)},
+                {'nombre': 'Detalles finales', 'descripcion': 'Limpieza y entrega', 'orden': 6, 'duracion': 20, 'fecha_inicio': date.today() + timedelta(days=101), 'fecha_fin': date.today() + timedelta(days=120)}
             ]
         },
-        'edificio_departamentos': {
-            'duracion_base': 300,
+        'galpon_industrial': {
+            'duracion_base': 180,
             'costo_m2': 95000,
+            'etapas': [
+                {'nombre': 'Documentación técnica', 'descripcion': 'Planos y permisos industriales', 'orden': 1, 'duracion': 30, 'fecha_inicio': date.today(), 'fecha_fin': date.today() + timedelta(days=30)},
+                {'nombre': 'Preparación del terreno', 'descripcion': 'Nivelación y compactación', 'orden': 2, 'duracion': 15, 'fecha_inicio': date.today() + timedelta(days=31), 'fecha_fin': date.today() + timedelta(days=45)},
+                {'nombre': 'Fundaciones industriales', 'descripcion': 'Zapatas y vigas de fundación', 'orden': 3, 'duracion': 25, 'fecha_inicio': date.today() + timedelta(days=46), 'fecha_fin': date.today() + timedelta(days=70)},
+                {'nombre': 'Estructura metálica', 'descripcion': 'Columnas, vigas y cerchas', 'orden': 4, 'duracion': 40, 'fecha_inicio': date.today() + timedelta(days=71), 'fecha_fin': date.today() + timedelta(days=110)},
+                {'nombre': 'Cerramiento y cubierta', 'descripcion': 'Chapas, membrana y aislación', 'orden': 5, 'duracion': 35, 'fecha_inicio': date.today() + timedelta(days=111), 'fecha_fin': date.today() + timedelta(days=145)},
+                {'nombre': 'Instalaciones industriales', 'descripcion': 'Eléctrica industrial y servicios', 'orden': 6, 'duracion': 25, 'fecha_inicio': date.today() + timedelta(days=146), 'fecha_fin': date.today() + timedelta(days=170)},
+                {'nombre': 'Terminaciones', 'descripcion': 'Pisos industriales y acabados', 'orden': 7, 'duracion': 10, 'fecha_inicio': date.today() + timedelta(days=171), 'fecha_fin': date.today() + timedelta(days=180)}
+            ]
+        },
+        'edificio_3_5_pisos': {
+            'duracion_base': 300,
+            'costo_m2': 115000,
+            'etapas': [
+                {'nombre': 'Proyecto y permisos', 'descripcion': 'Documentación técnica y aprobaciones', 'orden': 1, 'duracion': 35, 'fecha_inicio': date.today(), 'fecha_fin': date.today() + timedelta(days=35)},
+                {'nombre': 'Excavación y fundaciones', 'descripcion': 'Movimiento de suelos y fundaciones', 'orden': 2, 'duracion': 25, 'fecha_inicio': date.today() + timedelta(days=36), 'fecha_fin': date.today() + timedelta(days=60)},
+                {'nombre': 'Estructura hormigón armado', 'descripcion': 'Columnas, vigas y losas', 'orden': 3, 'duracion': 120, 'fecha_inicio': date.today() + timedelta(days=61), 'fecha_fin': date.today() + timedelta(days=180)},
+                {'nombre': 'Mampostería', 'descripcion': 'Muros divisorios y cerramientos', 'orden': 4, 'duracion': 50, 'fecha_inicio': date.today() + timedelta(days=181), 'fecha_fin': date.today() + timedelta(days=230)},
+                {'nombre': 'Instalaciones', 'descripcion': 'Sistemas eléctricos y sanitarios', 'orden': 5, 'duracion': 35, 'fecha_inicio': date.today() + timedelta(days=231), 'fecha_fin': date.today() + timedelta(days=265)},
+                {'nombre': 'Terminaciones', 'descripcion': 'Revoques, pisos y pintura', 'orden': 6, 'duracion': 30, 'fecha_inicio': date.today() + timedelta(days=266), 'fecha_fin': date.today() + timedelta(days=295)},
+                {'nombre': 'Habilitaciones', 'descripcion': 'Inspecciones y entrega', 'orden': 7, 'duracion': 5, 'fecha_inicio': date.today() + timedelta(days=296), 'fecha_fin': date.today() + timedelta(days=300)}
+            ]
+        },
+        'edificio_6_10_pisos': {
+            'duracion_base': 450,
+            'costo_m2': 125000,
+            'etapas': [
+                {'nombre': 'Proyecto y permisos', 'descripcion': 'Documentación completa y aprobaciones', 'orden': 1, 'duracion': 60, 'fecha_inicio': date.today(), 'fecha_fin': date.today() + timedelta(days=60)},
+                {'nombre': 'Excavación profunda', 'descripcion': 'Excavación y fundaciones profundas', 'orden': 2, 'duracion': 40, 'fecha_inicio': date.today() + timedelta(days=61), 'fecha_fin': date.today() + timedelta(days=100)},
+                {'nombre': 'Estructura principal', 'descripcion': 'Estructura completa de hormigón armado', 'orden': 3, 'duracion': 200, 'fecha_inicio': date.today() + timedelta(days=101), 'fecha_fin': date.today() + timedelta(days=300)},
+                {'nombre': 'Mampostería y cerramientos', 'descripcion': 'Muros y fachadas', 'orden': 4, 'duracion': 80, 'fecha_inicio': date.today() + timedelta(days=301), 'fecha_fin': date.today() + timedelta(days=380)},
+                {'nombre': 'Instalaciones complejas', 'descripcion': 'Sistemas completos del edificio', 'orden': 5, 'duracion': 50, 'fecha_inicio': date.today() + timedelta(days=381), 'fecha_fin': date.today() + timedelta(days=430)},
+                {'nombre': 'Terminaciones y habilitación', 'descripcion': 'Acabados finales e inspecciones', 'orden': 6, 'duracion': 20, 'fecha_inicio': date.today() + timedelta(days=431), 'fecha_fin': date.today() + timedelta(days=450)}
+            ]
+        },
+        'edificio_11_15_pisos': {
+            'duracion_base': 600,
+            'costo_m2': 135000,
+            'etapas': [
+                {'nombre': 'Proyecto ejecutivo', 'descripcion': 'Documentación completa y permisos especiales', 'orden': 1, 'duracion': 90, 'fecha_inicio': date.today(), 'fecha_fin': date.today() + timedelta(days=90)},
+                {'nombre': 'Fundaciones especiales', 'descripcion': 'Excavación profunda y fundaciones especiales', 'orden': 2, 'duracion': 60, 'fecha_inicio': date.today() + timedelta(days=91), 'fecha_fin': date.today() + timedelta(days=150)},
+                {'nombre': 'Estructura en altura', 'descripcion': 'Estructura completa con grúa torre', 'orden': 3, 'duracion': 300, 'fecha_inicio': date.today() + timedelta(days=151), 'fecha_fin': date.today() + timedelta(days=450)},
+                {'nombre': 'Fachada integral', 'descripcion': 'Sistema de fachada completo', 'orden': 4, 'duracion': 80, 'fecha_inicio': date.today() + timedelta(days=451), 'fecha_fin': date.today() + timedelta(days=530)},
+                {'nombre': 'Instalaciones especiales', 'descripcion': 'Ascensores y sistemas complejos', 'orden': 5, 'duracion': 45, 'fecha_inicio': date.today() + timedelta(days=531), 'fecha_fin': date.today() + timedelta(days=575)},
+                {'nombre': 'Habilitación final', 'descripcion': 'Inspecciones y entrega de obra', 'orden': 6, 'duracion': 25, 'fecha_inicio': date.today() + timedelta(days=576), 'fecha_fin': date.today() + timedelta(days=600)}
+            ]
+        },
+        'renovacion_completa': {
+            'duracion_base': 90,
+            'costo_m2': 65000,
             'etapas': [
                 'Estudio de suelos',
                 'Excavación',
@@ -299,7 +346,7 @@ def generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, pr
         }
     }
     
-    config_base = configuraciones_base.get(tipo_obra, configuraciones_base['casa_familia'])
+    config_base = configuraciones_base.get(tipo_obra, configuraciones_base['casa_unifamiliar'])
     
     # Ajustar según metros cuadrados
     factor_superficie = 1 + (metros_cuadrados - 100) / 1000  # Factor basado en superficie
@@ -323,6 +370,42 @@ def generar_configuracion_inteligente(tipo_obra, metros_cuadrados, ubicacion, pr
             break
     
     presupuesto_ajustado *= factor_ubicacion
+    
+    # Generar items de presupuesto básicos
+    items_presupuesto = [
+        {'tipo': 'material', 'descripcion': 'Cemento Portland', 'unidad': 'kg', 'cantidad': metros_cuadrados * 45, 'precio_unitario': 850 * factor_ubicacion},
+        {'tipo': 'material', 'descripcion': 'Hierro construcción', 'unidad': 'kg', 'cantidad': metros_cuadrados * 35, 'precio_unitario': 1200 * factor_ubicacion},
+        {'tipo': 'material', 'descripcion': 'Ladrillo común', 'unidad': 'u', 'cantidad': metros_cuadrados * 120, 'precio_unitario': 85 * factor_ubicacion},
+        {'tipo': 'mano_obra', 'descripcion': 'Oficial albañil', 'unidad': 'hora', 'cantidad': metros_cuadrados * 8, 'precio_unitario': 2500 * factor_ubicacion},
+        {'tipo': 'mano_obra', 'descripcion': 'Ayudante', 'unidad': 'hora', 'cantidad': metros_cuadrados * 6, 'precio_unitario': 1800 * factor_ubicacion}
+    ]
+    
+    # Generar recomendaciones específicas
+    recomendaciones = []
+    if tipo_obra in ['edificio_6_10_pisos', 'edificio_11_15_pisos']:
+        recomendaciones.append({
+            'tipo': 'normativa',
+            'titulo': 'Estudio de suelos obligatorio',
+            'descripcion': 'Para edificios de altura se requiere estudio geotécnico',
+            'prioridad': 'critica'
+        })
+    
+    if metros_cuadrados > 500:
+        recomendaciones.append({
+            'tipo': 'logistica',
+            'titulo': 'Gestión de materiales',
+            'descripcion': 'Considerar depósito temporal en obra',
+            'prioridad': 'alta'
+        })
+    
+    return {
+        'duracion_estimada': duracion_estimada,
+        'presupuesto_ajustado': round(presupuesto_ajustado, 2),
+        'factor_ubicacion': factor_ubicacion,
+        'etapas': config_base['etapas'],
+        'items_presupuesto': items_presupuesto,
+        'recomendaciones': recomendaciones
+    }
     
     # Generar etapas con fechas
     fecha_inicio = date.today()
