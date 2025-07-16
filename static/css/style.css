@@ -54,17 +54,20 @@ html {
     padding: 0 !important;
     margin: 0 !important;
     width: 100vw !important;
-    max-width: 100vw !important;
+    max-width: none !important;
     position: relative;
-    left: 0;
-    right: 0;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw !important;
+    margin-right: -50vw !important;
 }
 
 .navbar .container-fluid {
-    max-width: 100% !important;
-    width: 100% !important;
+    max-width: none !important;
+    width: 100vw !important;
     padding-left: 1rem !important;
     padding-right: 1rem !important;
+    margin: 0 !important;
 }
 
 .navbar-brand {
