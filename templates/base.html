@@ -198,8 +198,7 @@
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarUsuario" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user me-1"></i>{{ current_user.nombre_completo }}
-                            <span class="badge bg-light text-dark ms-1">{{ current_user.rol.title() }}</span>
+                            <i class="fas fa-user me-1"></i>{{ current_user.nombre }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
