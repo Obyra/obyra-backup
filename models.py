@@ -16,6 +16,8 @@ class Usuario(UserMixin, db.Model):
     activo = db.Column(db.Boolean, default=True)
     auth_provider = db.Column(db.String(20), nullable=False, default='manual')  # manual, google
     google_id = db.Column(db.String(100), nullable=True)  # ID de Google para usuarios OAuth
+    profile_picture = db.Column(db.String(500), nullable=True)  # URL de imagen de perfil de Google
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones

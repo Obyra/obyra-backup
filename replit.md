@@ -143,6 +143,15 @@ The system is designed to be deployed on platforms like Replit, with easy config
 
 ## Recent Changes (July 2025)
 
+### Complete Authentication System Implementation
+- **Manual Registration & Login**: Full user registration with validations, password hashing, and auto-login
+- **Google OAuth Integration**: Authlib-based OAuth2 with automatic user creation and profile sync
+- **Database Schema Updates**: Added auth_provider, google_id, profile_picture, created_at fields
+- **Secure Authentication**: Flask-Login integration with role-based access control
+- **Administrative Registration**: Special route for admins to create team accounts
+- **Template System**: Responsive authentication forms with consistent UX
+- **Error Handling**: Graceful handling when Google OAuth credentials not configured
+
 ### Intelligent Project Configuration System
 - **Enhanced Building Types**: Added multi-story building options (3-5 floors, 6-10 floors, 11-15 floors, industrial warehouses, commercial centers)
 - **Location Autocomplete**: Implemented Argentine location autocomplete with province detection and cost factor calculation
@@ -152,6 +161,11 @@ The system is designed to be deployed on platforms like Replit, with easy config
 - **User Experience**: Improved form validation and real-time location suggestions
 
 ### Technical Improvements
+- **Authentication Architecture**: main_app.py with Authlib OAuth2 configuration
+- **Database Schema**: Enhanced Usuario model with OAuth support
+- **Security**: Werkzeug password hashing and session management
+- **User Experience**: Auto-detection of OAuth availability with informative messages
+- **Template Updates**: Consistent auth forms with Bootstrap styling
 - Decimal type conversion for all monetary database fields
 - Enhanced error handling for PostgreSQL data types
 - Location-based cost factor detection from autocomplete
