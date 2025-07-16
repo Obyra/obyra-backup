@@ -71,6 +71,19 @@ def index():
     return render_template('index.html')
 
 # Jinja2 custom filters
+@app.template_filter('numero')
+def numero_filter(valor, decimales=0):
+    """Formatea número con separador de miles"""
+    if valor is None:
+        return "0"
+    try:
+        if decimales == 0:
+            return f"{int(valor):,}".replace(',', '.')
+        else:
+            return f"{float(valor):,.{decimales}f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return str(valor)
+
 @app.template_filter('fecha')
 def fecha_filter(fecha):
     """Formatea fecha para mostrar en templates"""
