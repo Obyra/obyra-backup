@@ -3,61 +3,171 @@
 {% block title %}Iniciar Sesión - OBYRA IA{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row justify-content-center mt-5">
-        <div class="col-md-6 col-lg-4">
-            <div class="card shadow">
-                <div class="card-body p-4">
-                    <div class="text-center mb-4">
-                        <i class="fas fa-building fa-3x text-primary mb-3"></i>
-                        <h3 class="fw-bold">OBYRA IA</h3>
-                        <p class="text-muted">Accede a tu cuenta</p>
-                    </div>
-                    
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="fas fa-envelope"></i>
-                                </span>
-                                <input type="email" class="form-control" id="email" name="email" 
-                                       placeholder="tu@email.com" required>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Contraseña</label>
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="fas fa-lock"></i>
-                                </span>
-                                <input type="password" class="form-control" id="password" name="password" 
-                                       placeholder="Tu contraseña" required>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="remember" name="remember">
-                            <label class="form-check-label" for="remember">
-                                Recordar mi sesión
-                            </label>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-sign-in-alt me-1"></i>Iniciar Sesión
-                        </button>
-                    </form>
-                    
-                    <div class="mt-4 text-center">
-                        <small class="text-muted">
-                            Credenciales por defecto:<br>
-                            <strong>admin@obyra.com</strong> / <strong>admin123</strong>
-                        </small>
-                    </div>
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <i class="fas fa-building fa-3x text-primary mb-3"></i>
+            <h2>OBYRA IA</h2>
+            <p class="text-muted">Accede a tu cuenta</p>
+        </div>
+
+        <form method="POST" class="auth-form">
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-envelope"></i>
+                    </span>
+                    <input type="email" class="form-control" id="email" name="email" 
+                           placeholder="tu@email.com" value="{{ request.form.email or '' }}" required>
                 </div>
             </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Contraseña</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-lock"></i>
+                    </span>
+                    <input type="password" class="form-control" id="password" name="password" 
+                           placeholder="Tu contraseña" required>
+                </div>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="remember" name="remember">
+                <label class="form-check-label" for="remember">
+                    Recordar mi sesión
+                </label>
+            </div>
+
+            <div class="d-grid gap-2 mb-3">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-sign-in-alt me-2"></i>Iniciar Sesión
+                </button>
+            </div>
+
+            <div class="auth-divider">
+                <span>o</span>
+            </div>
+
+            <div class="d-grid gap-2 mb-3">
+                {% if google_available %}
+                <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-danger btn-lg">
+                    <i class="fab fa-google me-2"></i>Iniciar sesión con Google
+                </a>
+                {% else %}
+                <button type="button" class="btn btn-outline-secondary btn-lg" disabled>
+                    <i class="fab fa-google me-2"></i>Google OAuth no configurado
+                </button>
+                {% endif %}
+            </div>
+
+            <div class="text-center">
+                <p class="mb-0">¿No tienes una cuenta? 
+                    <a href="{{ url_for('auth.register') }}" class="auth-link">Registrarse</a>
+                </p>
+            </div>
+        </form>
+
+        <div class="mt-4 text-center">
+            <small class="text-muted">
+                Credenciales por defecto:<br>
+                <strong>admin@obyra.com</strong> / <strong>admin123</strong>
+            </small>
         </div>
     </div>
 </div>
+
+<style>
+.auth-container {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+.auth-card {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-header h2 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+.auth-form .form-control {
+    border-radius: 0.5rem;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.auth-form .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
+}
+
+.auth-form .input-group-text {
+    border-radius: 0.5rem 0 0 0.5rem;
+    border: 2px solid #e9ecef;
+    border-right: none;
+    background: #f8f9fa;
+}
+
+.auth-divider {
+    position: relative;
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.auth-divider::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #dee2e6;
+}
+
+.auth-divider span {
+    background: white;
+    color: #6c757d;
+    padding: 0 1rem;
+    position: relative;
+    z-index: 1;
+}
+
+.auth-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.auth-link:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+@media (max-width: 576px) {
+    .auth-card {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+}
+</style>
 {% endblock %}

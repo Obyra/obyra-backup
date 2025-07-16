@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Registro Administrativo - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-shield me-2"></i>Registro Administrativo
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Esta función permite a los administradores crear cuentas para otros usuarios del equipo.
+                    </div>
+
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="nombre" name="nombre" 
+                                       value="{{ request.form.nombre or '' }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="apellido" class="form-label">Apellido <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="apellido" name="apellido" 
+                                       value="{{ request.form.apellido or '' }}" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   value="{{ request.form.email or '' }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="telefono" class="form-label">Teléfono</label>
+                            <input type="tel" class="form-control" id="telefono" name="telefono" 
+                                   value="{{ request.form.telefono or '' }}" placeholder="Ej: +54 9 11 1234-5678">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="rol" class="form-label">Rol <span class="text-danger">*</span></label>
+                                <select class="form-select" id="rol" name="rol" required>
+                                    <option value="">Seleccionar rol...</option>
+                                    <option value="operario" {{ 'selected' if request.form.rol == 'operario' }}>Operario</option>
+                                    <option value="tecnico" {{ 'selected' if request.form.rol == 'tecnico' }}>Técnico</option>
+                                    <option value="administrador" {{ 'selected' if request.form.rol == 'administrador' }}>Administrador</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    <strong>Operario:</strong> Acceso básico a obras e inventario<br>
+                                    <strong>Técnico:</strong> Gestión de obras, presupuestos e inventario<br>
+                                    <strong>Administrador:</strong> Acceso completo al sistema
+                                </small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="password" class="form-label">Contraseña Temporal <span class="text-danger">*</span></label>
+                                <input type="password" class="form-control" id="password" name="password" 
+                                       minlength="6" required>
+                                <small class="form-text text-muted">El usuario puede cambiarla después</small>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('equipos.lista') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Volver
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-user-plus me-2"></i>Crear Usuario
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

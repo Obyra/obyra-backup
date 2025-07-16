@@ -11,9 +11,11 @@ class Usuario(UserMixin, db.Model):
     apellido = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
-    password_hash = db.Column(db.String(256), nullable=False)
-    rol = db.Column(db.String(20), nullable=False)  # administrador, tecnico, operario
+    password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
+    rol = db.Column(db.String(20), nullable=False, default='operario')  # administrador, tecnico, operario
     activo = db.Column(db.Boolean, default=True)
+    auth_provider = db.Column(db.String(20), nullable=False, default='manual')  # manual, google
+    google_id = db.Column(db.String(100), nullable=True)  # ID de Google para usuarios OAuth
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
