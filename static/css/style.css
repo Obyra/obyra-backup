@@ -40,11 +40,31 @@ html {
     padding: 0;
 }
 
+* {
+    box-sizing: border-box;
+}
+
+.container-fluid {
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
 /* Navegación */
 .navbar {
-    padding: 0;
-    margin: 0;
-    width: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    position: relative;
+    left: 0;
+    right: 0;
+}
+
+.navbar .container-fluid {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
 }
 
 .navbar-brand {
