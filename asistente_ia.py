@@ -734,31 +734,138 @@ def inicializar_plantillas_proyecto():
 
 
 def procesar_consulta_ia(mensaje):
-    """Procesa consultas del chat IA y genera respuestas"""
+    """Procesa consultas del chat IA y genera respuestas inteligentes"""
     mensaje_lower = mensaje.lower()
     
-    # Respuestas básicas de consulta
-    if 'obra' in mensaje_lower and ('estado' in mensaje_lower or 'progreso' in mensaje_lower):
-        obras_activas = Obra.query.filter_by(estado='en_curso').count()
-        return f"Actualmente tienes {obras_activas} obras en curso. ¿Te gustaría ver el detalle de alguna en particular?"
-    
-    elif 'inventario' in mensaje_lower and ('stock' in mensaje_lower or 'material' in mensaje_lower):
-        items_bajo = ItemInventario.query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo).count()
-        return f"Hay {items_bajo} items con stock bajo. Te recomiendo revisar el inventario para evitar faltantes."
-    
-    elif 'presupuesto' in mensaje_lower:
-        presupuestos_pendientes = Presupuesto.query.filter_by(estado='borrador').count()
-        return f"Tienes {presupuestos_pendientes} presupuestos en borrador. ¿Necesitas ayuda para completarlos?"
-    
-    elif 'ayuda' in mensaje_lower or 'cómo' in mensaje_lower:
-        return """Puedo ayudarte con:
-        • Estado y progreso de obras
-        • Control de inventario y stock
-        • Análisis de presupuestos
-        • Recomendaciones de optimización
-        • Configuración de nuevos proyectos
+    try:
+        # Consultas sobre obras y estado
+        if any(palabra in mensaje_lower for palabra in ['obra', 'proyecto', 'construcción']):
+            if any(palabra in mensaje_lower for palabra in ['estado', 'progreso', 'avance']):
+                obras = Obra.query.all()
+                if not obras:
+                    return "No tienes obras registradas aún. ¿Te ayudo a crear tu primer proyecto con configuración automática?"
+                
+                estados = {}
+                for obra in obras:
+                    estados[obra.estado] = estados.get(obra.estado, 0) + 1
+                
+                respuesta = f"📊 **Estado de tus obras ({len(obras)} total):**\n"
+                for estado, cantidad in estados.items():
+                    emoji = {'planificacion': '📋', 'en_curso': '🚧', 'pausada': '⏸️', 'finalizada': '✅', 'cancelada': '❌'}.get(estado, '📝')
+                    respuesta += f"• {emoji} {estado.title()}: {cantidad} obra{'s' if cantidad > 1 else ''}\n"
+                
+                obras_activas = [o for o in obras if o.estado == 'en_curso']
+                if obras_activas:
+                    respuesta += f"\n🔥 **Obras activas más importantes:**\n"
+                    for obra in obras_activas[:3]:
+                        dias_transcurridos = (datetime.now().date() - obra.fecha_inicio).days if obra.fecha_inicio else 0
+                        respuesta += f"• {obra.nombre} - {dias_transcurridos} días en curso\n"
+                
+                return respuesta
+            
+            elif any(palabra in mensaje_lower for palabra in ['crear', 'nuevo', 'empezar']):
+                return "🏗️ ¡Perfecto! Te ayudo a crear un nuevo proyecto. Usa la **Configuración Inicial Inteligente** desde el menú principal. El sistema:\n\n• Detecta automáticamente materiales necesarios\n• Calcula costos por ubicación\n• Genera cronograma optimizado\n• Crea presupuesto detallado\n\n¿Qué tipo de obra planeas? (Casa, Edificio, Galpón Industrial, etc.)"
         
-        ¿En qué específicamente te gustaría que te asista?"""
+        # Consultas sobre inventario y materiales
+        elif any(palabra in mensaje_lower for palabra in ['inventario', 'stock', 'material', 'herramienta']):
+            items = ItemInventario.query.all()
+            if not items:
+                return "No tienes items en inventario aún. Te recomiendo agregar materiales desde el módulo de Inventario para un mejor control."
+            
+            items_bajo = [item for item in items if item.stock_actual <= item.stock_minimo]
+            items_criticos = [item for item in items_bajo if item.stock_actual == 0]
+            
+            respuesta = f"📦 **Estado del Inventario ({len(items)} items total):**\n"
+            respuesta += f"• ✅ En stock normal: {len(items) - len(items_bajo)} items\n"
+            respuesta += f"• ⚠️ Stock bajo: {len(items_bajo)} items\n"
+            respuesta += f"• 🚨 Sin stock: {len(items_criticos)} items\n"
+            
+            if items_criticos:
+                respuesta += f"\n🚨 **URGENTE - Items agotados:**\n"
+                for item in items_criticos[:5]:
+                    respuesta += f"• {item.nombre} - Stock: 0 {item.unidad}\n"
+            
+            if items_bajo and not items_criticos:
+                respuesta += f"\n⚠️ **Items con stock bajo:**\n"
+                for item in items_bajo[:5]:
+                    respuesta += f"• {item.nombre} - Stock: {item.stock_actual}/{item.stock_minimo} {item.unidad}\n"
+            
+            return respuesta
+        
+        # Consultas sobre presupuestos y costos
+        elif any(palabra in mensaje_lower for palabra in ['presupuesto', 'costo', 'precio', 'cotización']):
+            presupuestos = Presupuesto.query.all()
+            if not presupuestos:
+                return "No tienes presupuestos creados. ¿Te ayudo a generar uno usando la **Calculadora Inteligente de Materiales**? Calcula automáticamente cantidades y precios actualizados."
+            
+            estados = {}
+            total_valor = 0
+            for presupuesto in presupuestos:
+                estados[presupuesto.estado] = estados.get(presupuesto.estado, 0) + 1
+                if presupuesto.total:
+                    total_valor += presupuesto.total
+            
+            respuesta = f"💰 **Estado de Presupuestos ({len(presupuestos)} total):**\n"
+            for estado, cantidad in estados.items():
+                emoji = {'borrador': '📝', 'enviado': '📤', 'aprobado': '✅', 'rechazado': '❌'}.get(estado, '📋')
+                respuesta += f"• {emoji} {estado.title()}: {cantidad}\n"
+            
+            respuesta += f"\n💵 **Valor total en presupuestos:** ${total_valor:,.0f} ARS\n"
+            
+            borradores = [p for p in presupuestos if p.estado == 'borrador']
+            if borradores:
+                respuesta += f"\n📝 **Presupuestos en borrador que puedes completar:**\n"
+                for presupuesto in borradores[:3]:
+                    respuesta += f"• {presupuesto.nombre_proyecto or 'Sin nombre'}\n"
+            
+            return respuesta
+        
+        # Consultas sobre optimización y consejos
+        elif any(palabra in mensaje_lower for palabra in ['optimizar', 'mejorar', 'ahorrar', 'reducir']):
+            return "🎯 **Sugerencias de Optimización:**\n\n• **Usa materiales alternativos:** La cotizadora sugiere opciones más económicas\n• **Compra por volumen:** Negocia descuentos para múltiples obras\n• **Planifica entregas:** Evita costos de almacenamiento innecesarios\n• **Revisa proveedores:** Compara precios en diferentes zonas\n• **Control de desperdicios:** Calcula 5-10% extra según material\n\n¿En qué proyecto específico necesitas optimizar costos?"
+        
+        # Consultas sobre rendimiento y equipos
+        elif any(palabra in mensaje_lower for palabra in ['equipo', 'rendimiento', 'productividad', 'personal']):
+            usuarios = Usuario.query.filter_by(activo=True).count()
+            return f"👥 **Gestión de Equipos:**\n\n• Personal activo: {usuarios} usuarios\n• Usa el módulo **Performance Tracking** para:\n  - Seguimiento de tareas por usuario\n  - Métricas de productividad\n  - Asignación optimizada de recursos\n  - Reportes de rendimiento\n\n¿Necesitas analizar el rendimiento de algún equipo específico?"
+        
+        # Consultas sobre ayuda y funcionalidades
+        elif any(palabra in mensaje_lower for palabra in ['ayuda', 'cómo', 'funciona', 'usar']):
+            return """🤖 **¿Cómo puedo ayudarte?**
+
+**Preguntas que puedo responder:**
+• Estado de obras y proyectos
+• Inventario y control de stock
+• Análisis de presupuestos y costos
+• Sugerencias de optimización
+• Configuración de nuevos proyectos
+• Rendimiento de equipos
+
+**Ejemplos de consultas:**
+• "¿Cuál es el estado de mis obras?"
+• "¿Qué materiales tienen stock bajo?"
+• "¿Cuánto valor tengo en presupuestos?"
+• "¿Cómo optimizar costos de mi proyecto?"
+• "¿Cómo crear un nuevo proyecto?"
+
+¡Pregúntame cualquier cosa específica sobre tu construcción!"""
+        
+        # Respuesta por defecto más inteligente
+        else:
+            # Intentar detectar palabras clave específicas
+            if any(palabra in mensaje_lower for palabra in ['cemento', 'hierro', 'ladrillo', 'arena', 'cal']):
+                return "🧱 Mencionaste materiales de construcción. ¿Necesitas:\n• Verificar stock actual?\n• Calcular cantidades para un proyecto?\n• Comparar precios de proveedores?\n• Generar orden de compra?\n\nPuedo ayudarte con cualquiera de estas tareas."
+            
+            elif any(palabra in mensaje_lower for palabra in ['tiempo', 'cronograma', 'plazo', 'duración']):
+                return "⏰ Sobre planificación temporal:\n• La configuración automática calcula duración según tipo de obra\n• Puedes ajustar cronogramas en cada proyecto\n• El sistema considera factores de complejidad\n\n¿Necesitas revisar el cronograma de algún proyecto específico?"
+            
+            else:
+                # Generar respuesta inteligente basada en el estado actual
+                obras_count = Obra.query.count()
+                items_count = ItemInventario.query.count()
+                presupuestos_count = Presupuesto.query.count()
+                
+                return f"🎯 **Estado actual de tu sistema:**\n• {obras_count} obra{'s' if obras_count != 1 else ''} registrada{'s' if obras_count != 1 else ''}\n• {items_count} item{'s' if items_count != 1 else ''} en inventario\n• {presupuestos_count} presupuesto{'s' if presupuestos_count != 1 else ''} creado{'s' if presupuestos_count != 1 else ''}\n\n¿En qué área específica necesitas ayuda? Puedo asistirte con obras, inventario, presupuestos o configurar nuevos proyectos."
     
-    else:
-        return "Entiendo tu consulta. Para brindarte la mejor asistencia, ¿podrías ser más específico sobre qué necesitas? Puedo ayudarte con obras, inventario, presupuestos o análisis de rendimiento."
+    except Exception as e:
+        return f"⚠️ Hubo un problema procesando tu consulta. Por favor, intenta reformular tu pregunta o contacta soporte técnico. Error: {str(e)[:100]}"

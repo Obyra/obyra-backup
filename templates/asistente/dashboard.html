@@ -325,6 +325,12 @@
                             <button class="btn btn-sm btn-outline-secondary" onclick="enviarConsultaRapida('Ayúdame a optimizar mi proyecto')">
                                 Optimizar proyecto
                             </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="enviarConsultaRapida('¿Cómo crear un nuevo proyecto?')">
+                                Crear proyecto
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="enviarConsultaRapida('¿Qué materiales necesito para una casa de 100m²?')">
+                                Calcular materiales
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -479,14 +485,26 @@ function agregarMensajeChat(mensaje, tipo) {
     messageDiv.className = `chat-message ${tipo}-message mb-3`;
     
     const isBot = tipo === 'bot';
+    
+    // Formatear mensaje para mejor presentación
+    let mensajeFormateado = mensaje;
+    if (isBot) {
+        // Convertir markdown básico a HTML
+        mensajeFormateado = mensajeFormateado
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **texto** -> <strong>
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *texto* -> <em>
+            .replace(/\n/g, '<br>')                             // Saltos de línea
+            .replace(/• /g, '&bull; ');                         // Bullets
+    }
+    
     messageDiv.innerHTML = `
         <div class="d-flex align-items-start ${isBot ? '' : 'flex-row-reverse'}">
             <div class="bg-${isBot ? 'primary' : 'secondary'} text-white rounded-circle p-2 ${isBot ? 'me-3' : 'ms-3'}">
                 <i class="fas fa-${isBot ? 'robot' : 'user'}"></i>
             </div>
             <div class="flex-grow-1">
-                <div class="bg-white p-3 rounded shadow-sm">
-                    <p class="mb-0">${mensaje}</p>
+                <div class="bg-white p-3 rounded shadow-sm border-start border-${isBot ? 'primary' : 'secondary'} border-3">
+                    <div class="mensaje-contenido">${mensajeFormateado}</div>
                 </div>
                 <small class="text-muted">Ahora</small>
             </div>
@@ -495,6 +513,15 @@ function agregarMensajeChat(mensaje, tipo) {
     
     container.appendChild(messageDiv);
     container.scrollTop = container.scrollHeight;
+    
+    // Añadir animación de aparición
+    messageDiv.style.opacity = '0';
+    messageDiv.style.transform = 'translateY(20px)';
+    setTimeout(() => {
+        messageDiv.style.transition = 'all 0.3s ease';
+        messageDiv.style.opacity = '1';
+        messageDiv.style.transform = 'translateY(0)';
+    }, 100);
 }
 
 function showNotification(message, type) {
