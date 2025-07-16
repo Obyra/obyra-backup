@@ -768,9 +768,13 @@ def procesar_consulta_ia(mensaje):
         
         # Consultas sobre inventario y materiales
         elif any(palabra in mensaje_lower for palabra in ['inventario', 'stock', 'material', 'herramienta']):
+            # Detectar si pide cálculo específico de materiales
+            if any(palabra in mensaje_lower for palabra in ['necesito', 'calcular', 'casa', '100m', 'cuánto', 'cuántos']):
+                return generar_calculo_materiales_basico(mensaje_lower)
+            
             items = ItemInventario.query.all()
             if not items:
-                return "No tienes items en inventario aún. Te recomiendo agregar materiales desde el módulo de Inventario para un mejor control."
+                return "No tienes items en inventario aún. Te recomiendo agregar materiales desde el módulo de Inventario para un mejor control.\n\n💡 **¿Necesitas calcular materiales?** Puedo ayudarte a calcular cantidades necesarias para cualquier tipo de construcción. Solo pregúntame algo como '¿Qué materiales necesito para una casa de 100m²?'"
             
             items_bajo = [item for item in items if item.stock_actual <= item.stock_minimo]
             items_criticos = [item for item in items_bajo if item.stock_actual == 0]
@@ -853,8 +857,12 @@ def procesar_consulta_ia(mensaje):
         # Respuesta por defecto más inteligente
         else:
             # Intentar detectar palabras clave específicas
-            if any(palabra in mensaje_lower for palabra in ['cemento', 'hierro', 'ladrillo', 'arena', 'cal']):
-                return "🧱 Mencionaste materiales de construcción. ¿Necesitas:\n• Verificar stock actual?\n• Calcular cantidades para un proyecto?\n• Comparar precios de proveedores?\n• Generar orden de compra?\n\nPuedo ayudarte con cualquiera de estas tareas."
+            if any(palabra in mensaje_lower for palabra in ['cemento', 'hierro', 'ladrillo', 'arena', 'cal', 'materiales']):
+                # Detectar si pide cálculo específico
+                if any(palabra in mensaje_lower for palabra in ['necesito', 'calcular', 'casa', '100m', 'cuánto', 'cuántos']):
+                    return generar_calculo_materiales_basico(mensaje_lower)
+                else:
+                    return "🧱 Mencionaste materiales de construcción. ¿Necesitas:\n• Verificar stock actual?\n• Calcular cantidades para un proyecto?\n• Comparar precios de proveedores?\n• Generar orden de compra?\n\nPuedo ayudarte con cualquiera de estas tareas."
             
             elif any(palabra in mensaje_lower for palabra in ['tiempo', 'cronograma', 'plazo', 'duración']):
                 return "⏰ Sobre planificación temporal:\n• La configuración automática calcula duración según tipo de obra\n• Puedes ajustar cronogramas en cada proyecto\n• El sistema considera factores de complejidad\n\n¿Necesitas revisar el cronograma de algún proyecto específico?"
@@ -869,3 +877,113 @@ def procesar_consulta_ia(mensaje):
     
     except Exception as e:
         return f"⚠️ Hubo un problema procesando tu consulta. Por favor, intenta reformular tu pregunta o contacta soporte técnico. Error: {str(e)[:100]}"
+
+
+def generar_calculo_materiales_basico(mensaje_lower=""):
+    """Genera cálculo básico de materiales para construcción"""
+    
+    # Detectar tipo de obra y superficie
+    superficie = 100  # Default
+    tipo_obra = "casa"
+    
+    # Buscar números en el mensaje para superficie
+    import re
+    numeros = re.findall(r'\d+', mensaje_lower)
+    if numeros:
+        superficie = int(numeros[0])
+    
+    # Detectar tipo de obra
+    if any(palabra in mensaje_lower for palabra in ['edificio', 'departamento']):
+        tipo_obra = "edificio"
+    elif any(palabra in mensaje_lower for palabra in ['galpón', 'galpon', 'industrial']):
+        tipo_obra = "galpon"
+    elif any(palabra in mensaje_lower for palabra in ['local', 'comercial']):
+        tipo_obra = "local"
+    
+    # Cálculos básicos por m²
+    calculos = {
+        'casa': {
+            'cemento': 7,  # bolsas por m²
+            'arena': 0.5,  # m³ por m²
+            'piedra': 0.3,  # m³ por m²
+            'hierro': 25,  # kg por m²
+            'ladrillo': 120,  # unidades por m²
+            'cal': 2,  # bolsas por m²
+            'membrana': 1.1,  # m² por m²
+            'ceramica': 1.1,  # m² por m²
+        },
+        'edificio': {
+            'cemento': 12,
+            'arena': 0.7,
+            'piedra': 0.5,
+            'hierro': 45,
+            'ladrillo': 100,
+            'cal': 3,
+            'membrana': 1.1,
+            'ceramica': 1.0,
+        },
+        'galpon': {
+            'cemento': 5,
+            'arena': 0.3,
+            'piedra': 0.2,
+            'hierro': 35,
+            'ladrillo': 0,  # Construcción seca
+            'cal': 1,
+            'membrana': 1.2,
+            'ceramica': 0,
+        }
+    }
+    
+    config = calculos.get(tipo_obra, calculos['casa'])
+    
+    # Calcular cantidades
+    materiales = {}
+    for material, factor in config.items():
+        if factor > 0:
+            materiales[material] = round(superficie * factor, 1)
+    
+    # Precios estimados (pueden variar)
+    precios_base = {
+        'cemento': 8500,    # por bolsa
+        'arena': 25000,     # por m³
+        'piedra': 30000,    # por m³
+        'hierro': 1200,     # por kg
+        'ladrillo': 450,    # por unidad
+        'cal': 3500,        # por bolsa
+        'membrana': 8500,   # por m²
+        'ceramica': 4500,   # por m²
+    }
+    
+    # Generar respuesta
+    respuesta = f"🏗️ **Cálculo de materiales para {tipo_obra} de {superficie}m²:**\n\n"
+    respuesta += "📋 **Lista de materiales principales:**\n"
+    
+    total_estimado = 0
+    
+    for material, cantidad in materiales.items():
+        if cantidad > 0:
+            precio_unit = precios_base.get(material, 0)
+            subtotal = cantidad * precio_unit
+            total_estimado += subtotal
+            
+            # Formatear unidades
+            unidad = {'cemento': 'bolsas', 'cal': 'bolsas', 'arena': 'm³', 'piedra': 'm³', 
+                     'hierro': 'kg', 'ladrillo': 'unid', 'membrana': 'm²', 'ceramica': 'm²'}.get(material, 'unid')
+            
+            respuesta += f"• **{material.title()}:** {cantidad:g} {unidad} - ${subtotal:,.0f}\n"
+    
+    respuesta += f"\n💰 **Costo estimado total:** ${total_estimado:,.0f} ARS\n"
+    respuesta += f"💡 **Costo por m²:** ${total_estimado/superficie:,.0f} ARS\n\n"
+    
+    respuesta += "⚠️ **Importante:**\n"
+    respuesta += "• Precios orientativos del mercado argentino\n"
+    respuesta += "• Agregar 10-15% para desperdicios\n"
+    respuesta += "• Verificar disponibilidad local\n"
+    respuesta += "• Considerar flete y descarga\n\n"
+    
+    respuesta += f"🎯 **¿Necesitas más detalles?**\n"
+    respuesta += "• Usa la **Calculadora Inteligente** para cotización exacta\n"
+    respuesta += "• Crea un proyecto con **Configuración Automática**\n"
+    respuesta += "• Consulta proveedores en tu zona"
+    
+    return respuesta
