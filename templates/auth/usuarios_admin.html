@@ -7,9 +7,17 @@
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-users-cog me-2"></i>Gestión de Usuarios</h2>
-                <div class="badge bg-info">
-                    <i class="fas fa-shield-alt me-1"></i>Solo Administradores
+                <div>
+                    <h2><i class="fas fa-users-cog me-2"></i>Gestión de Usuarios</h2>
+                    <small class="text-muted">{{ current_user.organizacion.nombre }}</small>
+                </div>
+                <div>
+                    <a href="{{ url_for('auth.invitar_usuario') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-user-plus me-1"></i>Invitar Usuario
+                    </a>
+                    <div class="badge bg-info">
+                        <i class="fas fa-shield-alt me-1"></i>Solo Administradores
+                    </div>
                 </div>
             </div>
         </div>

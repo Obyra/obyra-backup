@@ -155,6 +155,18 @@ The system is designed to be deployed on platforms like Replit, with easy config
 - **Error Handling**: Graceful handling when Google OAuth credentials not configured
 - **Dynamic Profile Updates**: User profile information and pictures are automatically updated on each Google login to keep data current
 
+### Organization-Based Multi-Tenancy System (Latest Update)
+- **Organization Model**: New Organizacion table with automatic token generation for invitations
+- **Multi-Tenant Architecture**: Users are grouped by organizations with complete data isolation
+- **Automatic Organization Creation**: New users automatically get their own organization and admin role
+- **Invitation System**: Administrators can invite users via email or shareable invitation links
+- **Role-Based Access Control**: Organization-scoped permissions with admin, technician, and operator roles
+- **Data Isolation**: All queries filtered by organization_id to ensure data privacy
+- **Email Conflict Prevention**: Users with existing emails must be invited to join organizations
+- **Database Migration**: Automatic migration of existing users to organization-based structure
+- **White-List Admin Assignment**: Specific emails automatically assigned administrator roles
+- **Comprehensive User Management**: Admin panel with filtering, role changes, and user activation/deactivation
+
 ### Intelligent Project Configuration System
 - **Enhanced Building Types**: Added multi-story building options (3-5 floors, 6-10 floors, 11-15 floors, industrial warehouses, commercial centers)
 - **Location Autocomplete**: Implemented Argentine location autocomplete with province detection and cost factor calculation
@@ -165,10 +177,12 @@ The system is designed to be deployed on platforms like Replit, with easy config
 
 ### Technical Improvements
 - **Authentication Architecture**: main_app.py with Authlib OAuth2 configuration
-- **Database Schema**: Enhanced Usuario model with OAuth support
+- **Database Schema**: Enhanced Usuario model with OAuth support and organization relationships
 - **Security**: Werkzeug password hashing and session management
 - **User Experience**: Auto-detection of OAuth availability with informative messages
 - **Template Updates**: Consistent auth forms with Bootstrap styling
+- **PostgreSQL Integration**: Full migration to PostgreSQL with proper foreign key relationships
+- **Multi-Tenant Database Design**: All core tables include organizacion_id for data isolation
 - Decimal type conversion for all monetary database fields
 - Enhanced error handling for PostgreSQL data types
 - Location-based cost factor detection from autocomplete

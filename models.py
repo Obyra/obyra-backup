@@ -1,6 +1,43 @@
 from datetime import datetime, date
 from flask_login import UserMixin
 from app import db
+import uuid
+
+
+class Organizacion(db.Model):
+    __tablename__ = 'organizaciones'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    token_invitacion = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    activa = db.Column(db.Boolean, default=True)
+    
+    # Relaciones
+    usuarios = db.relationship('Usuario', back_populates='organizacion', lazy='dynamic')
+    obras = db.relationship('Obra', back_populates='organizacion', lazy='dynamic')
+    inventario = db.relationship('ItemInventario', back_populates='organizacion', lazy='dynamic')
+    
+    def __repr__(self):
+        return f'<Organizacion {self.nombre}>'
+    
+    def regenerar_token(self):
+        """Regenerar token de invitación"""
+        self.token_invitacion = str(uuid.uuid4())
+        db.session.commit()
+    
+    @property
+    def total_usuarios(self):
+        return self.usuarios.count()
+    
+    @property
+    def administradores(self):
+        return self.usuarios.filter_by(rol='administrador')
+    
+    @property
+    def link_invitacion(self):
+        from flask import url_for
+        return url_for('auth.unirse_organizacion', token=self.token_invitacion, _external=True)
 
 
 class Usuario(UserMixin, db.Model):
@@ -19,8 +56,10 @@ class Usuario(UserMixin, db.Model):
     profile_picture = db.Column(db.String(500), nullable=True)  # URL de imagen de perfil de Google
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     
     # Relaciones
+    organizacion = db.relationship('Organizacion', back_populates='usuarios')
     obras_asignadas = db.relationship('AsignacionObra', back_populates='usuario', lazy='dynamic')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='usuario', lazy='dynamic')
     
@@ -58,8 +97,10 @@ class Obra(db.Model):
     costo_real = db.Column(db.Numeric(15, 2), default=0)
     progreso = db.Column(db.Integer, default=0)  # Porcentaje de avance
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     
     # Relaciones
+    organizacion = db.relationship('Organizacion', back_populates='obras')
     etapas = db.relationship('EtapaObra', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     asignaciones = db.relationship('AsignacionObra', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     presupuestos = db.relationship('Presupuesto', back_populates='obra', lazy='dynamic')
@@ -227,9 +268,11 @@ class ItemInventario(db.Model):
     precio_promedio = db.Column(db.Numeric(10, 2), default=0)
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     
     # Relaciones
     categoria = db.relationship('CategoriaInventario', back_populates='items')
+    organizacion = db.relationship('Organizacion', back_populates='inventario')
     movimientos = db.relationship('MovimientoInventario', back_populates='item', lazy='dynamic')
     usos = db.relationship('UsoInventario', back_populates='item', lazy='dynamic')
     

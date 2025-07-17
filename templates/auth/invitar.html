@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Invitar Usuario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-plus me-2"></i>Invitar Usuario a {{ current_user.organizacion.nombre }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email del Usuario</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                            <div class="form-text">El usuario recibirá un link de invitación para unirse a tu organización.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="rol" class="form-label">Rol Asignado</label>
+                            <select class="form-select" id="rol" name="rol">
+                                <option value="operario">Operario</option>
+                                <option value="tecnico">Técnico</option>
+                                <option value="administrador">Administrador</option>
+                            </select>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Link de Invitación:</strong><br>
+                            <code>{{ url_for('auth.unirse_organizacion', token=current_user.organizacion.token_invitacion, _external=True) }}</code>
+                            <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="copyToClipboard('{{ url_for('auth.unirse_organizacion', token=current_user.organizacion.token_invitacion, _external=True) }}')">
+                                <i class="fas fa-copy"></i> Copiar
+                            </button>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('auth.usuarios_admin') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>Volver
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane me-1"></i>Enviar Invitación
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Link copiado al portapapeles');
+    }).catch(function(err) {
+        console.error('Error al copiar: ', err);
+    });
+}
+</script>
+{% endblock %}

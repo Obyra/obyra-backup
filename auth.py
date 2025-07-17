@@ -3,10 +3,12 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from app import db, app
-from models import Usuario
+from models import Usuario, Organizacion
 from sqlalchemy import func
+from datetime import datetime
 import os
 import re
+import uuid
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -229,28 +231,74 @@ def google_callback():
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
                 return redirect(url_for('auth.login'))
         else:
+            # Verificar si el email ya existe en otra organización
+            usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
+            if usuario_existente:
+                flash('⚠️ Este correo ya está registrado. Debés ser invitado por un administrador de tu organización para acceder.', 'warning')
+                return redirect(url_for('auth.login'))
+            
             # Crear nuevo usuario con Google
             try:
-                # Determinar rol basado en la lista blanca
-                rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'operario'
+                # Verificar si hay una invitación pendiente en la sesión
+                token_invitacion = session.get('token_invitacion')
+                organizacion_id = session.get('organizacion_invitacion')
                 
-                nuevo_usuario = Usuario(
-                    nombre=nombre or 'Usuario',
-                    apellido=apellido or 'Google',
-                    email=email.lower(),
-                    auth_provider='google',
-                    google_id=google_id,
-                    profile_picture=profile_picture,  # Guardar foto de perfil automáticamente
-                    rol=rol_usuario,  # Asignar rol basado en lista blanca
-                    activo=True,
-                    password_hash=None  # No necesita contraseña
-                )
+                if token_invitacion and organizacion_id:
+                    # Usuario viene por invitación - se une a organización existente
+                    organizacion = Organizacion.query.get(organizacion_id)
+                    if organizacion and organizacion.token_invitacion == token_invitacion:
+                        nuevo_usuario = Usuario(
+                            nombre=nombre or 'Usuario',
+                            apellido=apellido or 'Google',
+                            email=email.lower(),
+                            auth_provider='google',
+                            google_id=google_id,
+                            profile_picture=profile_picture,
+                            rol='operario',  # Invitados son operarios por defecto
+                            activo=True,
+                            password_hash=None,
+                            organizacion_id=organizacion_id
+                        )
+                        
+                        # Limpiar sesión
+                        session.pop('token_invitacion', None)
+                        session.pop('organizacion_invitacion', None)
+                        
+                        mensaje = f'¡Bienvenido/a a {organizacion.nombre}, {nombre}!'
+                    else:
+                        flash('Token de invitación inválido.', 'danger')
+                        return redirect(url_for('auth.login'))
+                else:
+                    # Usuario nuevo - crear organización propia
+                    rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'administrador'
+                    
+                    nueva_organizacion = Organizacion(
+                        nombre=f"Organización de {nombre} {apellido}",
+                        fecha_creacion=datetime.utcnow()
+                    )
+                    db.session.add(nueva_organizacion)
+                    db.session.flush()  # Para obtener el ID
+                    
+                    nuevo_usuario = Usuario(
+                        nombre=nombre or 'Usuario',
+                        apellido=apellido or 'Google',
+                        email=email.lower(),
+                        auth_provider='google',
+                        google_id=google_id,
+                        profile_picture=profile_picture,
+                        rol=rol_usuario,
+                        activo=True,
+                        password_hash=None,
+                        organizacion_id=nueva_organizacion.id
+                    )
+                    
+                    mensaje = f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu organización ha sido creada.'
                 
                 db.session.add(nuevo_usuario)
                 db.session.commit()
                 
                 login_user(nuevo_usuario)
-                flash(f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu cuenta ha sido creada con Google.', 'success')
+                flash(mensaje, 'success')
                 return redirect(url_for('asistente.dashboard'))
                 
             except Exception as e:
@@ -305,7 +353,8 @@ def admin_register():
                 password_hash=generate_password_hash(password),
                 rol=rol,
                 auth_provider='manual',
-                activo=True
+                activo=True,
+                organizacion_id=current_user.organizacion_id
             )
             
             db.session.add(nuevo_usuario)
@@ -332,8 +381,8 @@ def usuarios_admin():
     auth_provider_filtro = request.args.get('auth_provider', '')
     buscar = request.args.get('buscar', '')
     
-    # Query base
-    query = Usuario.query
+    # Query base - solo usuarios de la misma organización
+    query = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id)
     
     # Aplicar filtros
     if rol_filtro:
@@ -353,11 +402,11 @@ def usuarios_admin():
     
     usuarios = query.order_by(Usuario.apellido, Usuario.nombre).all()
     
-    # Estadísticas
-    total_usuarios = Usuario.query.count()
-    usuarios_activos = Usuario.query.filter_by(activo=True).count()
-    admins_count = Usuario.query.filter_by(rol='administrador').count()
-    usuarios_google = Usuario.query.filter_by(auth_provider='google').count()
+    # Estadísticas - solo de la organización
+    total_usuarios = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id).count()
+    usuarios_activos = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, activo=True).count()
+    admins_count = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, rol='administrador').count()
+    usuarios_google = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, auth_provider='google').count()
     
     return render_template('auth/usuarios_admin.html', 
                          usuarios=usuarios,
@@ -428,21 +477,128 @@ def toggle_usuario():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
-        flash('No tienes permisos para activar/desactivar usuarios.', 'danger')
-        return redirect(url_for('reportes.dashboard'))
+
+# ================================
+# SISTEMA DE INVITACIONES
+# ================================
+
+@auth_bp.route('/unirse')
+def unirse_organizacion():
+    """Procesar invitación a organización"""
+    token = request.args.get('token')
     
-    usuario = Usuario.query.get_or_404(id)
-    if usuario.id == current_user.id:
-        flash('No puedes desactivar tu propia cuenta.', 'danger')
-        return redirect(url_for('auth.lista_usuarios'))
+    if not token:
+        flash('Token de invitación inválido.', 'danger')
+        return redirect(url_for('auth.login'))
     
-    usuario.activo = not usuario.activo
-    try:
-        db.session.commit()
-        estado = "activado" if usuario.activo else "desactivado"
-        flash(f'Usuario {usuario.nombre_completo} {estado} exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al cambiar el estado del usuario.', 'danger')
+    # Buscar organización por token
+    organizacion = Organizacion.query.filter_by(token_invitacion=token).first()
+    if not organizacion:
+        flash('Token de invitación inválido o expirado.', 'danger')
+        return redirect(url_for('auth.login'))
     
-    return redirect(url_for('auth.lista_usuarios'))
+    # Guardar token en sesión para usar después del login
+    session['token_invitacion'] = token
+    session['organizacion_invitacion'] = organizacion.id
+    
+    flash(f'Te han invitado a unirte a "{organizacion.nombre}". Inicia sesión para continuar.', 'info')
+    return redirect(url_for('auth.login'))
+
+@auth_bp.route('/invitar', methods=['GET', 'POST'])
+@login_required
+def invitar_usuario():
+    """Invitar usuarios a la organización"""
+    if current_user.rol != 'administrador':
+        flash('No tienes permisos para invitar usuarios.', 'danger')
+        return redirect(url_for('asistente.dashboard'))
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        rol = request.form.get('rol', 'operario')
+        
+        if not email:
+            flash('Por favor, ingresa un email válido.', 'danger')
+            return render_template('auth/invitar.html')
+        
+        # Verificar si el email ya existe
+        usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
+        if usuario_existente:
+            flash('Este email ya está registrado en el sistema.', 'danger')
+            return render_template('auth/invitar.html')
+        
+        # Crear usuario pendiente (inactivo hasta que acepte la invitación)
+        try:
+            nuevo_usuario = Usuario(
+                nombre='Usuario',
+                apellido='Invitado',
+                email=email.lower(),
+                auth_provider='manual',
+                rol=rol,
+                activo=False,  # Inactivo hasta que acepte
+                organizacion_id=current_user.organizacion_id,
+                password_hash=None  # Se establecerá cuando acepte la invitación
+            )
+            
+            db.session.add(nuevo_usuario)
+            db.session.commit()
+            
+            # Generar link de invitación
+            link_invitacion = url_for('auth.unirse_organizacion', token=current_user.organizacion.token_invitacion, _external=True)
+            
+            flash(f'Invitación enviada a {email}. Comparte este link: {link_invitacion}', 'success')
+            return redirect(url_for('auth.usuarios_admin'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al enviar la invitación. Intenta de nuevo.', 'danger')
+    
+    return render_template('auth/invitar.html')
+
+@auth_bp.route('/aceptar_invitacion', methods=['GET', 'POST'])
+def aceptar_invitacion():
+    """Aceptar invitación y completar registro"""
+    token = session.get('token_invitacion')
+    organizacion_id = session.get('organizacion_invitacion')
+    
+    if not token or not organizacion_id:
+        flash('Sesión de invitación inválida.', 'danger')
+        return redirect(url_for('auth.login'))
+    
+    organizacion = Organizacion.query.get(organizacion_id)
+    if not organizacion:
+        flash('Organización no encontrada.', 'danger')
+        return redirect(url_for('auth.login'))
+    
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        apellido = request.form.get('apellido')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        if not all([nombre, apellido, email, password]):
+            flash('Por favor, completa todos los campos.', 'danger')
+            return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
+        
+        # Verificar si el usuario ya existe y está pendiente
+        usuario = Usuario.query.filter_by(email=email.lower(), organizacion_id=organizacion_id).first()
+        
+        if usuario and not usuario.activo:
+            # Activar usuario existente
+            usuario.nombre = nombre
+            usuario.apellido = apellido
+            usuario.password_hash = generate_password_hash(password)
+            usuario.activo = True
+            
+            db.session.commit()
+            
+            # Limpiar sesión
+            session.pop('token_invitacion', None)
+            session.pop('organizacion_invitacion', None)
+            
+            login_user(usuario)
+            flash(f'¡Bienvenido/a a {organizacion.nombre}!', 'success')
+            return redirect(url_for('asistente.dashboard'))
+        else:
+            flash('Error al procesar la invitación.', 'danger')
+    
+    return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)

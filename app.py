@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import generate_password_hash
 
 
 class Base(DeclarativeBase):
@@ -64,91 +65,25 @@ app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
 app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 
-# Crear todas las tablas de la base de datos
-with app.app_context():
-    # Importar todos los modelos antes de crear las tablas
-    import models
-    db.create_all()
-    print("📊 Tablas de base de datos creadas correctamente")
-
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     return render_template('index.html')
 
-# Jinja2 custom filters
-@app.template_filter('numero')
-def numero_filter(valor, decimales=0):
-    """Formatea número con separador de miles"""
-    if valor is None:
-        return "0"
-    try:
-        if decimales == 0:
-            return f"{int(valor):,}".replace(',', '.')
-        else:
-            return f"{float(valor):,.{decimales}f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-    except (ValueError, TypeError):
-        return str(valor)
+@app.route('/dashboard')
+def dashboard():
+    if current_user.is_authenticated:
+        return redirect(url_for('reportes.dashboard'))
+    return redirect(url_for('auth.login'))
 
-@app.template_filter('fecha')
-def fecha_filter(fecha):
-    """Formatea fecha para mostrar en templates"""
-    if fecha:
-        if hasattr(fecha, 'strftime'):
-            return fecha.strftime('%d/%m/%Y')
-        return str(fecha)
-    return '-'
-
-@app.template_filter('moneda')
-def moneda_filter(cantidad):
-    """Formatea cantidad como moneda argentina"""
-    if cantidad is None:
-        return "$0"
-    return f"${cantidad:,.0f}".replace(",", ".")
-
-@app.template_filter('estado_badge')
-def estado_badge_filter(estado):
-    """Retorna clase CSS para badge según estado"""
-    clases = {
-        'borrador': 'bg-secondary',
-        'enviado': 'bg-warning',
-        'aprobado': 'bg-success',
-        'rechazado': 'bg-danger',
-        'planificacion': 'bg-info',
-        'en_curso': 'bg-primary',
-        'pausada': 'bg-warning',
-        'finalizada': 'bg-success',
-        'cancelada': 'bg-danger'
-    }
-    return clases.get(estado, 'bg-secondary')
-
-@app.context_processor
-def inject_user():
-    return dict(current_user=current_user)
-
+# Create tables and initial data
 with app.app_context():
-    import models
+    from models import Usuario, Organizacion
+    
+    # Create all tables
     db.create_all()
-    
-    # Crear usuario administrador por defecto
-    from models import Usuario
-    from werkzeug.security import generate_password_hash
-    
-    admin = Usuario.query.filter_by(email='admin@obyra.com').first()
-    if not admin:
-        admin = Usuario(
-            nombre='Administrador',
-            apellido='Sistema',
-            email='admin@obyra.com',
-            telefono='1234567890',
-            rol='administrador',
-            activo=True
-        )
-        admin.password_hash = generate_password_hash('admin123')
-        db.session.add(admin)
-        db.session.commit()
-        logging.info("Usuario administrador creado: admin@obyra.com / admin123")
+    print("📊 Database tables created successfully")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
