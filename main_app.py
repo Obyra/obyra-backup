@@ -61,6 +61,7 @@ def google_login():
     
     # URL de callback para el proceso OAuth
     redirect_uri = url_for('google_callback', _external=True)
+    print(f"🔗 Redirect URI configurado: {redirect_uri}")
     return google.authorize_redirect(redirect_uri)
 
 @app.route('/auth/google')
