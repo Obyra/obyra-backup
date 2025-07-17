@@ -198,8 +198,13 @@
                 
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarUsuario" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user me-1"></i>{{ current_user.nombre }}
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="navbarUsuario" role="button" data-bs-toggle="dropdown">
+                            {% if current_user.profile_picture %}
+                                <img src="{{ current_user.profile_picture }}" alt="Foto de perfil" class="rounded-circle me-2" width="30" height="30">
+                            {% else %}
+                                <i class="fas fa-user me-1"></i>
+                            {% endif %}
+                            <span>{{ current_user.nombre }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
@@ -208,6 +213,7 @@
                         </ul>
                     </li>
                 </ul>
+
             </div>
             {% endif %}
         </div>
