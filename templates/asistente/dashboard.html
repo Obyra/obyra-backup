@@ -497,10 +497,18 @@ function agregarMensajeChat(mensaje, tipo) {
             .replace(/• /g, '&bull; ');                         // Bullets
     }
     
+    const userAvatar = isBot ? 
+        '<div class="bg-primary text-white rounded-circle p-2"><i class="fas fa-robot"></i></div>' :
+        {% if current_user.profile_picture %}
+        `<img src="{{ current_user.profile_picture }}" alt="Tu foto de perfil" class="rounded-circle" width="40" height="40" style="object-fit: cover;">`
+        {% else %}
+        '<div class="bg-secondary text-white rounded-circle p-2"><i class="fas fa-user"></i></div>'
+        {% endif %};
+
     messageDiv.innerHTML = `
         <div class="d-flex align-items-start ${isBot ? '' : 'flex-row-reverse'}">
-            <div class="bg-${isBot ? 'primary' : 'secondary'} text-white rounded-circle p-2 ${isBot ? 'me-3' : 'ms-3'}">
-                <i class="fas fa-${isBot ? 'robot' : 'user'}"></i>
+            <div class="${isBot ? 'me-3' : 'ms-3'}">
+                ${userAvatar}
             </div>
             <div class="flex-grow-1">
                 <div class="bg-white p-3 rounded shadow-sm border-start border-${isBot ? 'primary' : 'secondary'} border-3">

@@ -8,14 +8,30 @@
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-start mb-4">
-                <div>
-                    <h2><i class="fas fa-user me-2"></i>{{ usuario.nombre_completo }}</h2>
-                    <p class="text-muted mb-0">
-                        <span class="badge bg-info me-2">{{ usuario.rol.title() }}</span>
-                        <span class="badge {{ 'bg-success' if usuario.activo else 'bg-secondary' }}">
-                            {{ 'Activo' if usuario.activo else 'Inactivo' }}
-                        </span>
-                    </p>
+                <div class="d-flex align-items-center">
+                    {% if usuario.profile_picture %}
+                        <img src="{{ usuario.profile_picture }}" alt="Foto de perfil de {{ usuario.nombre_completo }}" 
+                             class="rounded-circle me-3" width="60" height="60" style="object-fit: cover;">
+                    {% else %}
+                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" 
+                             style="width: 60px; height: 60px;">
+                            <i class="fas fa-user fa-lg"></i>
+                        </div>
+                    {% endif %}
+                    <div>
+                        <h2 class="mb-1">{{ usuario.nombre_completo }}</h2>
+                        <p class="text-muted mb-0">
+                            <span class="badge bg-info me-2">{{ usuario.rol.title() }}</span>
+                            <span class="badge {{ 'bg-success' if usuario.activo else 'bg-secondary' }}">
+                                {{ 'Activo' if usuario.activo else 'Inactivo' }}
+                            </span>
+                            {% if usuario.auth_provider == 'google' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fab fa-google me-1"></i>Google
+                                </span>
+                            {% endif %}
+                        </p>
+                    </div>
                 </div>
                 <div class="text-end">
                     <a href="{{ url_for('equipos.lista') }}" class="btn btn-secondary">

@@ -178,6 +178,7 @@ def google_callback():
         nombre = user_info.get('given_name', '')
         apellido = user_info.get('family_name', '')
         google_id = user_info.get('sub')
+        profile_picture = user_info.get('picture', '')
         
         if not email:
             flash('No se pudo obtener el email de Google.', 'danger')
@@ -192,11 +193,26 @@ def google_callback():
                 # Convertir cuenta manual a Google
                 usuario.auth_provider = 'google'
                 usuario.google_id = google_id
+                # Actualizar información del perfil con datos de Google
+                if nombre:
+                    usuario.nombre = nombre
+                if apellido:
+                    usuario.apellido = apellido
+                if profile_picture:
+                    usuario.profile_picture = profile_picture
             elif usuario.auth_provider == 'google':
-                # Actualizar google_id si cambió
+                # Actualizar datos de Google siempre para mantener información actualizada
                 usuario.google_id = google_id
+                if nombre:
+                    usuario.nombre = nombre
+                if apellido:
+                    usuario.apellido = apellido
+                if profile_picture:
+                    usuario.profile_picture = profile_picture
             
             if usuario.activo:
+                # Guardar cambios en la base de datos
+                db.session.commit()
                 login_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
                 return redirect(url_for('asistente.dashboard'))
@@ -212,6 +228,7 @@ def google_callback():
                     email=email.lower(),
                     auth_provider='google',
                     google_id=google_id,
+                    profile_picture=profile_picture,  # Guardar foto de perfil automáticamente
                     rol='operario',  # Por defecto
                     activo=True,
                     password_hash=None  # No necesita contraseña
