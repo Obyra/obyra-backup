@@ -77,6 +77,13 @@ def dashboard():
         return redirect(url_for('reportes.dashboard'))
     return redirect(url_for('auth.login'))
 
+# Filtro personalizado para fechas
+@app.template_filter('fecha')
+def fecha_filter(fecha):
+    if fecha:
+        return fecha.strftime('%d/%m/%Y')
+    return ''
+
 # Create tables and initial data
 with app.app_context():
     from models import Usuario, Organizacion
