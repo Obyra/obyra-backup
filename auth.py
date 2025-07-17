@@ -1,9 +1,10 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from app import db, app
 from models import Usuario
+from sqlalchemy import func
 import os
 import re
 
@@ -12,6 +13,14 @@ auth_bp = Blueprint('auth', __name__)
 # Configuración OAuth con Google
 oauth = OAuth(app)
 google = None
+
+# Lista blanca de emails para administradores automáticos
+ADMIN_EMAILS = [
+    'brenda@gmail.com',
+    'cliente@empresa.com',
+    'admin@obyra.com',
+    'admin@obyra.ia'
+]
 
 # Solo configurar Google OAuth si las variables están disponibles
 if os.environ.get('GOOGLE_OAUTH_CLIENT_ID') and os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'):
@@ -222,6 +231,9 @@ def google_callback():
         else:
             # Crear nuevo usuario con Google
             try:
+                # Determinar rol basado en la lista blanca
+                rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'operario'
+                
                 nuevo_usuario = Usuario(
                     nombre=nombre or 'Usuario',
                     apellido=apellido or 'Google',
@@ -229,7 +241,7 @@ def google_callback():
                     auth_provider='google',
                     google_id=google_id,
                     profile_picture=profile_picture,  # Guardar foto de perfil automáticamente
-                    rol='operario',  # Por defecto
+                    rol=rol_usuario,  # Asignar rol basado en lista blanca
                     activo=True,
                     password_hash=None  # No necesita contraseña
                 )
@@ -299,7 +311,7 @@ def admin_register():
             db.session.add(nuevo_usuario)
             db.session.commit()
             flash(f'Usuario {nombre} {apellido} registrado exitosamente.', 'success')
-            return redirect(url_for('equipos.lista'))
+            return redirect(url_for('auth.usuarios_admin'))
             
         except Exception as e:
             db.session.rollback()
@@ -309,18 +321,113 @@ def admin_register():
 
 @auth_bp.route('/usuarios')
 @login_required
-def lista_usuarios():
+def usuarios_admin():
+    """Panel de administración de usuarios - solo para administradores"""
     if current_user.rol != 'administrador':
-        flash('No tienes permisos para ver la lista de usuarios.', 'danger')
-        return redirect(url_for('reportes.dashboard'))
+        flash('No tienes permisos para acceder a la gestión de usuarios.', 'danger')
+        return redirect(url_for('asistente.dashboard'))
     
-    usuarios = Usuario.query.order_by(Usuario.apellido, Usuario.nombre).all()
-    return render_template('equipos/lista.html', usuarios=usuarios)
+    # Filtros
+    rol_filtro = request.args.get('rol', '')
+    auth_provider_filtro = request.args.get('auth_provider', '')
+    buscar = request.args.get('buscar', '')
+    
+    # Query base
+    query = Usuario.query
+    
+    # Aplicar filtros
+    if rol_filtro:
+        query = query.filter(Usuario.rol == rol_filtro)
+    
+    if auth_provider_filtro:
+        query = query.filter(Usuario.auth_provider == auth_provider_filtro)
+    
+    if buscar:
+        query = query.filter(
+            db.or_(
+                Usuario.nombre.contains(buscar),
+                Usuario.apellido.contains(buscar),
+                Usuario.email.contains(buscar)
+            )
+        )
+    
+    usuarios = query.order_by(Usuario.apellido, Usuario.nombre).all()
+    
+    # Estadísticas
+    total_usuarios = Usuario.query.count()
+    usuarios_activos = Usuario.query.filter_by(activo=True).count()
+    admins_count = Usuario.query.filter_by(rol='administrador').count()
+    usuarios_google = Usuario.query.filter_by(auth_provider='google').count()
+    
+    return render_template('auth/usuarios_admin.html', 
+                         usuarios=usuarios,
+                         total_usuarios=total_usuarios,
+                         usuarios_activos=usuarios_activos,
+                         admins_count=admins_count,
+                         usuarios_google=usuarios_google,
+                         rol_filtro=rol_filtro,
+                         auth_provider_filtro=auth_provider_filtro,
+                         buscar=buscar)
 
-@auth_bp.route('/usuario/<int:id>/toggle')
+@auth_bp.route('/usuarios/cambiar_rol', methods=['POST'])
 @login_required
-def toggle_usuario(id):
+def cambiar_rol():
+    """Cambiar el rol de un usuario"""
     if current_user.rol != 'administrador':
+        return jsonify({'success': False, 'message': 'No tienes permisos para cambiar roles'})
+    
+    usuario_id = request.form.get('usuario_id')
+    nuevo_rol = request.form.get('nuevo_rol')
+    
+    if not usuario_id or not nuevo_rol:
+        return jsonify({'success': False, 'message': 'Datos incompletos'})
+    
+    if nuevo_rol not in ['administrador', 'tecnico', 'operario']:
+        return jsonify({'success': False, 'message': 'Rol no válido'})
+    
+    # No permitir cambiar el rol del usuario actual
+    if int(usuario_id) == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol'})
+    
+    try:
+        usuario = Usuario.query.get_or_404(usuario_id)
+        usuario.rol = nuevo_rol
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': f'Rol cambiado a {nuevo_rol} exitosamente'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al cambiar el rol'})
+
+@auth_bp.route('/usuarios/toggle_usuario', methods=['POST'])
+@login_required
+def toggle_usuario():
+    """Activar/desactivar un usuario"""
+    if current_user.rol != 'administrador':
+        return jsonify({'success': False, 'message': 'No tienes permisos para gestionar usuarios'})
+    
+    usuario_id = request.form.get('usuario_id')
+    nuevo_estado = request.form.get('nuevo_estado')
+    
+    if not usuario_id or nuevo_estado is None:
+        return jsonify({'success': False, 'message': 'Datos incompletos'})
+    
+    # No permitir desactivar el usuario actual
+    if int(usuario_id) == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
+    
+    try:
+        usuario = Usuario.query.get_or_404(usuario_id)
+        usuario.activo = nuevo_estado.lower() == 'true'
+        db.session.commit()
+        
+        estado_texto = 'activado' if usuario.activo else 'desactivado'
+        return jsonify({'success': True, 'message': f'Usuario {estado_texto} exitosamente'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
         flash('No tienes permisos para activar/desactivar usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     

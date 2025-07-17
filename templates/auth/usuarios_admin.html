@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Usuarios - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-users-cog me-2"></i>Gestión de Usuarios</h2>
+                <div class="badge bg-info">
+                    <i class="fas fa-shield-alt me-1"></i>Solo Administradores
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas rápidas -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ total_usuarios }}</h4>
+                            <p class="mb-0">Total Usuarios</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ usuarios_activos }}</h4>
+                            <p class="mb-0">Usuarios Activos</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-user-check fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ admins_count }}</h4>
+                            <p class="mb-0">Administradores</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-user-shield fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ usuarios_google }}</h4>
+                            <p class="mb-0">Usuarios Google</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fab fa-google fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label for="rol" class="form-label">Filtrar por Rol</label>
+                    <select class="form-select" id="rol" name="rol">
+                        <option value="">Todos los roles</option>
+                        <option value="administrador" {{ 'selected' if rol_filtro == 'administrador' }}>Administrador</option>
+                        <option value="tecnico" {{ 'selected' if rol_filtro == 'tecnico' }}>Técnico</option>
+                        <option value="operario" {{ 'selected' if rol_filtro == 'operario' }}>Operario</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="auth_provider" class="form-label">Tipo de Autenticación</label>
+                    <select class="form-select" id="auth_provider" name="auth_provider">
+                        <option value="">Todos</option>
+                        <option value="manual" {{ 'selected' if auth_provider_filtro == 'manual' }}>Manual</option>
+                        <option value="google" {{ 'selected' if auth_provider_filtro == 'google' }}>Google</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="buscar" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                           value="{{ buscar }}" placeholder="Nombre, email...">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <a href="{{ url_for('auth.usuarios_admin') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de usuarios -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-table me-2"></i>Lista de Usuarios
+                <span class="badge bg-secondary ms-2">{{ usuarios|length }} usuarios</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Email</th>
+                            <th>Rol Actual</th>
+                            <th>Autenticación</th>
+                            <th>Estado</th>
+                            <th>Fecha Registro</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usuario in usuarios %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    {% if usuario.profile_picture %}
+                                        <img src="{{ usuario.profile_picture }}" alt="Foto de perfil" 
+                                             class="rounded-circle me-2" width="35" height="35" style="object-fit: cover;">
+                                    {% else %}
+                                        <div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center me-2" 
+                                             style="width: 35px; height: 35px;">
+                                            <i class="fas fa-user"></i>
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <strong>{{ usuario.nombre_completo }}</strong>
+                                        {% if usuario.id == current_user.id %}
+                                            <span class="badge bg-info ms-1">Tú</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ usuario.email }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'danger' if usuario.rol == 'administrador' else 'primary' if usuario.rol == 'tecnico' else 'success' }}">
+                                    {{ usuario.rol.replace('_', ' ').title() }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if usuario.auth_provider == 'google' %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fab fa-google me-1"></i>Google
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-user me-1"></i>Manual
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if usuario.activo else 'secondary' }}">
+                                    {{ 'Activo' if usuario.activo else 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td>{{ usuario.fecha_creacion.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <!-- Dropdown para cambiar rol -->
+                                    <div class="dropdown me-2">
+                                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" 
+                                                type="button" id="dropdownRol{{ usuario.id }}" 
+                                                data-bs-toggle="dropdown" 
+                                                {{ 'disabled' if usuario.id == current_user.id else '' }}>
+                                            <i class="fas fa-user-cog me-1"></i>Cambiar Rol
+                                        </button>
+                                        <ul class="dropdown-menu" aria-labelledby="dropdownRol{{ usuario.id }}">
+                                            <li><a class="dropdown-item" href="#" 
+                                                   onclick="cambiarRol({{ usuario.id }}, 'administrador')">
+                                                <i class="fas fa-user-shield me-1"></i>Administrador
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="#" 
+                                                   onclick="cambiarRol({{ usuario.id }}, 'tecnico')">
+                                                <i class="fas fa-user-cog me-1"></i>Técnico
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="#" 
+                                                   onclick="cambiarRol({{ usuario.id }}, 'operario')">
+                                                <i class="fas fa-user me-1"></i>Operario
+                                            </a></li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <!-- Botón para activar/desactivar usuario -->
+                                    <button class="btn btn-sm btn-outline-{{ 'warning' if usuario.activo else 'success' }}" 
+                                            onclick="toggleUsuario({{ usuario.id }}, {{ 'false' if usuario.activo else 'true' }})"
+                                            {{ 'disabled' if usuario.id == current_user.id else '' }}>
+                                        <i class="fas fa-{{ 'user-slash' if usuario.activo else 'user-check' }} me-1"></i>
+                                        {{ 'Desactivar' if usuario.activo else 'Activar' }}
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% if not usuarios %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No se encontraron usuarios</h5>
+            <p class="text-muted">Ajusta los filtros para encontrar usuarios específicos.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de confirmación -->
+<div class="modal fade" id="modalConfirmacion" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Acción</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmacionBody">
+                <!-- Contenido dinámico -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmar">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let accionPendiente = null;
+
+function cambiarRol(usuarioId, nuevoRol) {
+    accionPendiente = {
+        tipo: 'cambiar_rol',
+        usuario_id: usuarioId,
+        nuevo_rol: nuevoRol
+    };
+    
+    document.getElementById('modalConfirmacionBody').innerHTML = `
+        <p>¿Estás seguro de que quieres cambiar el rol de este usuario a <strong>${nuevoRol.replace('_', ' ')}</strong>?</p>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            Esta acción cambiará los permisos del usuario en el sistema.
+        </div>
+    `;
+    
+    new bootstrap.Modal(document.getElementById('modalConfirmacion')).show();
+}
+
+function toggleUsuario(usuarioId, nuevoEstado) {
+    accionPendiente = {
+        tipo: 'toggle_usuario',
+        usuario_id: usuarioId,
+        nuevo_estado: nuevoEstado
+    };
+    
+    const accion = nuevoEstado === 'true' ? 'activar' : 'desactivar';
+    
+    document.getElementById('modalConfirmacionBody').innerHTML = `
+        <p>¿Estás seguro de que quieres <strong>${accion}</strong> este usuario?</p>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-1"></i>
+            ${nuevoEstado === 'true' ? 'El usuario podrá acceder al sistema.' : 'El usuario no podrá acceder al sistema.'}
+        </div>
+    `;
+    
+    new bootstrap.Modal(document.getElementById('modalConfirmacion')).show();
+}
+
+document.getElementById('btnConfirmar').addEventListener('click', function() {
+    if (!accionPendiente) return;
+    
+    const formData = new FormData();
+    formData.append('usuario_id', accionPendiente.usuario_id);
+    
+    let url;
+    if (accionPendiente.tipo === 'cambiar_rol') {
+        url = '/usuarios/cambiar_rol';
+        formData.append('nuevo_rol', accionPendiente.nuevo_rol);
+    } else if (accionPendiente.tipo === 'toggle_usuario') {
+        url = '/usuarios/toggle_usuario';
+        formData.append('nuevo_estado', accionPendiente.nuevo_estado);
+    }
+    
+    fetch(url, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('modalConfirmacion')).hide();
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al procesar la solicitud');
+    });
+});
+
+// Función para mostrar notificaciones
+function showNotification(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto-dismiss después de 5 segundos
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}
