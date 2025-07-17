@@ -64,6 +64,13 @@ app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
 app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 
+# Crear todas las tablas de la base de datos
+with app.app_context():
+    # Importar todos los modelos antes de crear las tablas
+    import models
+    db.create_all()
+    print("📊 Tablas de base de datos creadas correctamente")
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
