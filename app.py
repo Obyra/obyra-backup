@@ -77,12 +77,30 @@ def dashboard():
         return redirect(url_for('reportes.dashboard'))
     return redirect(url_for('auth.login'))
 
-# Filtro personalizado para fechas
+# Filtros personalizados
 @app.template_filter('fecha')
 def fecha_filter(fecha):
     if fecha:
         return fecha.strftime('%d/%m/%Y')
     return ''
+
+@app.template_filter('moneda')
+def moneda_filter(valor):
+    if valor is None:
+        return '$0'
+    return f'${valor:,.2f}'
+
+@app.template_filter('porcentaje')
+def porcentaje_filter(valor):
+    if valor is None:
+        return '0%'
+    return f'{valor:.1f}%'
+
+@app.template_filter('numero')
+def numero_filter(valor, decimales=0):
+    if valor is None:
+        return '0'
+    return f'{valor:,.{decimales}f}'
 
 # Create tables and initial data
 with app.app_context():
