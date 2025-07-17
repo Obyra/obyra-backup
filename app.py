@@ -102,6 +102,23 @@ def numero_filter(valor, decimales=0):
         return '0'
     return f'{valor:,.{decimales}f}'
 
+@app.template_filter('estado_badge')
+def estado_badge_filter(estado):
+    badges = {
+        'activo': 'bg-success',
+        'inactivo': 'bg-secondary',
+        'borrador': 'bg-secondary',
+        'enviado': 'bg-warning',
+        'aprobado': 'bg-success',
+        'rechazado': 'bg-danger',
+        'planificacion': 'bg-secondary',
+        'en_progreso': 'bg-primary',
+        'pausada': 'bg-warning',
+        'finalizada': 'bg-success',
+        'cancelada': 'bg-danger'
+    }
+    return badges.get(estado, 'bg-secondary')
+
 # Create tables and initial data
 with app.app_context():
     from models import Usuario, Organizacion
