@@ -358,11 +358,7 @@ def auditoria_consultas():
     if filtro_fecha_hasta:
         consultas_query = consultas_query.filter(ConsultaAgente.fecha_consulta <= datetime.strptime(filtro_fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
     
-    # Paginación
-    page = request.args.get('page', 1, type=int)
-    consultas = consultas_query.order_by(desc(ConsultaAgente.fecha_consulta)).paginate(
-        page=page, per_page=50, error_out=False
-    )
+
     
     # Estadísticas generales
     total_consultas = db.session.query(ConsultaAgente).count()
@@ -414,9 +410,20 @@ def auditoria_consultas():
         
         consultas_por_dia.append((fecha_obj, total))
     
-    # Paginación para vista normal
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
+    # Construir consulta base para auditoría
+    query = db.session.query(ConsultaAgente).join(Usuario).join(ConsultaAgente.organizacion)
+    
+    # Aplicar filtros
+    if filtro_org:
+        query = query.filter(ConsultaAgente.organizacion_id == filtro_org)
+    if filtro_tipo:
+        query = query.filter(ConsultaAgente.tipo_consulta == filtro_tipo)
+    if filtro_estado:
+        query = query.filter(ConsultaAgente.estado == filtro_estado)
+    if filtro_fecha_desde:
+        query = query.filter(ConsultaAgente.fecha_consulta >= datetime.strptime(filtro_fecha_desde, '%Y-%m-%d'))
+    if filtro_fecha_hasta:
+        query = query.filter(ConsultaAgente.fecha_consulta <= datetime.strptime(filtro_fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
     
     # Si es exportación, obtener todos los datos
     if request.args.get('export'):
@@ -427,6 +434,9 @@ def auditoria_consultas():
         elif export_format == 'pdf':
             return exportar_pdf(consultas_export)
     
+    # Paginación para vista normal
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
     consultas = query.order_by(desc(ConsultaAgente.fecha_consulta)).paginate(
         page=page, per_page=per_page, error_out=False)
     
