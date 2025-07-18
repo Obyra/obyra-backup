@@ -382,12 +382,24 @@ def auditoria_consultas():
     
     # Consultas por fecha (últimos 7 días)
     hace_7_dias = datetime.now() - timedelta(days=7)
-    consultas_por_dia = db.session.query(
+    consultas_por_dia_query = db.session.query(
         func.date(ConsultaAgente.fecha_consulta).label('fecha'),
         func.count(ConsultaAgente.id).label('total')
     ).filter(ConsultaAgente.fecha_consulta >= hace_7_dias).group_by(
         func.date(ConsultaAgente.fecha_consulta)
     ).order_by(func.date(ConsultaAgente.fecha_consulta)).all()
+    
+    # Convertir a formato adecuado para el template
+    consultas_por_dia = []
+    for fecha_str, total in consultas_por_dia_query:
+        if isinstance(fecha_str, str):
+            try:
+                fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            except:
+                fecha_obj = datetime.now().date()
+        else:
+            fecha_obj = fecha_str
+        consultas_por_dia.append((fecha_obj, total))
     
     # Obtener todas las organizaciones para el filtro
     from models import Organizacion

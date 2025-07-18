@@ -370,7 +370,7 @@ new Chart(document.getElementById('tiposChart'), {
 
 // Gráfico de consultas por día
 const diasData = {
-    labels: [{% for fecha, total in estadisticas.consultas_por_dia %}'{{ fecha.strftime("%d/%m") }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    labels: [{% for fecha, total in estadisticas.consultas_por_dia %}'{{ fecha.strftime("%d/%m") if fecha and hasattr(fecha, "strftime") else "N/A" }}'{% if not loop.last %},{% endif %}{% endfor %}],
     datasets: [{
         label: 'Consultas',
         data: [{% for fecha, total in estadisticas.consultas_por_dia %}{{ total }}{% if not loop.last %},{% endif %}{% endfor %}],
