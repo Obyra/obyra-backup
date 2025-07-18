@@ -94,6 +94,17 @@
                                   placeholder="Ingresa una consulta para probar el agente IA...">¿Cuál es el estado actual de mis obras en construcción?</textarea>
                     </div>
                     
+                    <div class="mb-3">
+                        <label class="form-label small">Consultas de ejemplo:</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="setQuery('¿Cuál es el estado de mis obras?')">Estado de obras</button>
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="setQuery('¿Qué presupuestos tengo aprobados?')">Presupuestos</button>
+                            <button type="button" class="btn btn-outline-warning btn-sm" onclick="setQuery('¿Hay problemas de stock en mi inventario?')">Inventario</button>
+                            <button type="button" class="btn btn-outline-info btn-sm" onclick="setQuery('¿Cuántos usuarios activos tengo?')">Usuarios</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setQuery('Dame un resumen general')">Resumen</button>
+                        </div>
+                    </div>
+                    
                     <div id="responseArea" class="alert alert-light d-none">
                         <h6 class="alert-heading">Respuesta del Agente:</h6>
                         <p id="responseText"></p>
@@ -198,28 +209,44 @@ function testIA() {
         return;
     }
     
-    // Simular respuesta del agente
-    const startTime = Date.now();
-    
     // Mostrar estado de carga
-    responseText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando consulta...';
+    responseText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Consultando datos reales de tu organización...';
     responseArea.classList.remove('d-none');
     
-    // Simular procesamiento
-    setTimeout(() => {
+    const startTime = Date.now();
+    
+    // Realizar consulta real al agente
+    fetch('/api/agente-consulta', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            consulta: query
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
         const endTime = Date.now();
         const duration = endTime - startTime;
         
-        responseText.innerHTML = `Basándome en los datos actuales de tu organización, tienes <strong>3 obras activas</strong> en este momento:
-        <br><br>
-        • <strong>Casa Moderna Nordelta</strong> - 65% de progreso<br>
-        • <strong>Edificio Comercial Centro</strong> - 40% de progreso<br>
-        • <strong>Remodelación Oficinas</strong> - 85% de progreso<br>
-        <br>
-        Todas las obras están dentro del cronograma planificado. ¿Te gustaría ver detalles específicos de alguna?`;
-        
+        responseText.innerHTML = data.respuesta;
         responseTime.textContent = duration;
-    }, 1500);
+        
+        // Agregar indicador de datos reales
+        if (data.datos_reales) {
+            responseText.innerHTML += '<br><br><small class="text-success"><i class="fas fa-database me-1"></i>Datos obtenidos de tu base de datos real</small>';
+        }
+    })
+    .catch(error => {
+        responseText.innerHTML = '<span class="text-danger">Error al procesar la consulta. Por favor intenta de nuevo.</span>';
+        responseTime.textContent = 'Error';
+        console.error('Error:', error);
+    });
+}
+
+function setQuery(query) {
+    document.getElementById('testQuery').value = query;
 }
 </script>
 
