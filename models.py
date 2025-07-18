@@ -17,6 +17,7 @@ class Organizacion(db.Model):
     usuarios = db.relationship('Usuario', back_populates='organizacion', lazy='dynamic')
     obras = db.relationship('Obra', back_populates='organizacion', lazy='dynamic')
     inventario = db.relationship('ItemInventario', back_populates='organizacion', lazy='dynamic')
+    presupuestos = db.relationship('Presupuesto', lazy='dynamic')
     
     def __repr__(self):
         return f'<Organizacion {self.nombre}>'
@@ -193,6 +194,7 @@ class Presupuesto(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     numero = db.Column(db.String(50), unique=True, nullable=False)
     fecha = db.Column(db.Date, default=date.today)
     estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado
@@ -207,6 +209,7 @@ class Presupuesto(db.Model):
     
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
+    organizacion = db.relationship('Organizacion', overlaps="presupuestos")
     items = db.relationship('ItemPresupuesto', back_populates='presupuesto', cascade='all, delete-orphan', lazy='dynamic')
     
     def __repr__(self):

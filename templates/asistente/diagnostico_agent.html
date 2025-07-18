@@ -96,12 +96,49 @@
                     
                     <div class="mb-3">
                         <label class="form-label small">Consultas de ejemplo:</label>
-                        <div class="d-flex flex-wrap gap-2">
-                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="setQuery('¿Cuál es el estado de mis obras?')">Estado de obras</button>
-                            <button type="button" class="btn btn-outline-success btn-sm" onclick="setQuery('¿Qué presupuestos tengo aprobados?')">Presupuestos</button>
-                            <button type="button" class="btn btn-outline-warning btn-sm" onclick="setQuery('¿Hay problemas de stock en mi inventario?')">Inventario</button>
-                            <button type="button" class="btn btn-outline-info btn-sm" onclick="setQuery('¿Cuántos usuarios activos tengo?')">Usuarios</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setQuery('Dame un resumen general')">Resumen</button>
+                        
+                        <!-- Estado de obras -->
+                        <div class="mb-2">
+                            <small class="text-muted fw-bold">Estado de obras:</small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="setQuery('¿Cuántas obras activas tengo?')">Obras activas</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="setQuery('¿Qué obra está más avanzada?')">Obra más avanzada</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Presupuestos -->
+                        <div class="mb-2">
+                            <small class="text-muted fw-bold">Presupuestos:</small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setQuery('¿Cuál es el presupuesto total aprobado este mes?')">Total aprobado</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setQuery('¿Qué obras están excediendo el presupuesto?')">Excesos presupuesto</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Inventario -->
+                        <div class="mb-2">
+                            <small class="text-muted fw-bold">Inventario:</small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <button type="button" class="btn btn-outline-warning btn-sm" onclick="setQuery('¿Qué materiales están en stock crítico?')">Stock crítico</button>
+                                <button type="button" class="btn btn-outline-warning btn-sm" onclick="setQuery('¿Qué herramientas están asignadas actualmente?')">Herramientas asignadas</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Usuarios -->
+                        <div class="mb-2">
+                            <small class="text-muted fw-bold">Usuarios:</small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="setQuery('¿Cuántos operarios están asignados a cada obra?')">Operarios por obra</button>
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="setQuery('¿Quién es el responsable de cada obra?')">Responsables obras</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Resumen general -->
+                        <div class="mb-2">
+                            <small class="text-muted fw-bold">Resumen general:</small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setQuery('¿Cuál es el estado general de mis obras, equipos y presupuestos?')">Resumen completo</button>
+                            </div>
                         </div>
                     </div>
                     
