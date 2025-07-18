@@ -391,14 +391,18 @@ def auditoria_consultas():
     
     # Convertir a formato adecuado para el template
     consultas_por_dia = []
-    for fecha_str, total in consultas_por_dia_query:
-        if isinstance(fecha_str, str):
-            try:
-                fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
-            except:
+    for fecha_item, total in consultas_por_dia_query:
+        # Asegurar que tenemos un objeto de fecha válido
+        try:
+            if isinstance(fecha_item, str):
+                fecha_obj = datetime.strptime(fecha_item, '%Y-%m-%d').date()
+            elif hasattr(fecha_item, 'strftime'):
+                fecha_obj = fecha_item
+            else:
                 fecha_obj = datetime.now().date()
-        else:
-            fecha_obj = fecha_str
+        except:
+            fecha_obj = datetime.now().date()
+        
         consultas_por_dia.append((fecha_obj, total))
     
     # Obtener todas las organizaciones para el filtro
