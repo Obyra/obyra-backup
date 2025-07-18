@@ -99,7 +99,7 @@
                         <i class="fas fa-chart-pie me-2"></i>Consultas por Tipo
                     </h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="height: 300px;">
                     <canvas id="tiposChart"></canvas>
                 </div>
             </div>
@@ -112,7 +112,7 @@
                         <i class="fas fa-chart-line me-2"></i>Consultas por Día (Últimos 7 días)
                     </h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="height: 300px;">
                     <canvas id="diasChart"></canvas>
                 </div>
             </div>
@@ -338,6 +338,36 @@
     </div>
 </div>
 
+<!-- Modal de Exportación -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalLabel">
+                    <i class="fas fa-download me-2"></i>Exportar Datos de Auditoría
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Selecciona el formato de exportación para los datos de auditoría:</p>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success" onclick="exportarExcel()">
+                        <i class="fas fa-file-excel me-2"></i>Exportar a Excel (.xlsx)
+                        <br><small class="text-light">Incluye todas las consultas con filtros aplicados</small>
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="exportarPDF()">
+                        <i class="fas fa-file-pdf me-2"></i>Exportar a PDF
+                        <br><small class="text-light">Reporte ejecutivo con estadísticas y gráficos</small>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Gráfico de tipos de consulta
@@ -360,6 +390,7 @@ new Chart(document.getElementById('tiposChart'), {
     data: tiposData,
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: {
                 position: 'bottom'
@@ -385,6 +416,7 @@ new Chart(document.getElementById('diasChart'), {
     data: diasData,
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         scales: {
             y: {
                 beginAtZero: true
@@ -394,8 +426,20 @@ new Chart(document.getElementById('diasChart'), {
 });
 
 function exportarDatos() {
-    // Implementar exportación de datos
-    alert('Función de exportación en desarrollo');
+    const modal = new bootstrap.Modal(document.getElementById('exportModal'));
+    modal.show();
+}
+
+function exportarExcel() {
+    const filtros = new URLSearchParams(window.location.search);
+    filtros.append('export', 'excel');
+    window.location.href = '{{ url_for("agent_local.auditoria_consultas") }}?' + filtros.toString();
+}
+
+function exportarPDF() {
+    const filtros = new URLSearchParams(window.location.search);
+    filtros.append('export', 'pdf');
+    window.open('{{ url_for("agent_local.auditoria_consultas") }}?' + filtros.toString(), '_blank');
 }
 </script>
 {% endblock %}

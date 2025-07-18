@@ -1,9 +1,18 @@
-from flask import Blueprint, render_template, redirect, url_for, request, jsonify
+from flask import Blueprint, render_template, redirect, url_for, request, jsonify, make_response, send_file
 from flask_login import current_user, login_required
-from models import Obra, Presupuesto, ItemInventario, Usuario, ConsultaAgente, db
-from sqlalchemy import func, desc
+from models import Obra, Presupuesto, ItemInventario, Usuario, ConsultaAgente, db, Organizacion
+from sqlalchemy import func, desc, or_, and_
 from datetime import datetime, timedelta
 import time
+import json
+import io
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 agent_bp = Blueprint('agent_local', __name__)
 
@@ -405,8 +414,16 @@ def auditoria_consultas():
         
         consultas_por_dia.append((fecha_obj, total))
     
+    # Si es exportación, obtener todos los datos
+    if request.args.get('export'):
+        export_format = request.args.get('export')
+        consultas_export = query.order_by(desc(ConsultaAgente.fecha_consulta)).all()
+        if export_format == 'excel':
+            return exportar_excel(consultas_export)
+        elif export_format == 'pdf':
+            return exportar_pdf(consultas_export)
+    
     # Obtener todas las organizaciones para el filtro
-    from models import Organizacion
     organizaciones = Organizacion.query.all()
     
     return render_template('asistente/auditoria_consultas.html',
@@ -443,3 +460,153 @@ def detalle_consulta(consulta_id):
     consulta = ConsultaAgente.query.get_or_404(consulta_id)
     
     return render_template('asistente/detalle_consulta.html', consulta=consulta)
+
+
+def exportar_excel(consultas):
+    """Exportar consultas a Excel"""
+    # Crear workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Auditoría Consultas IA"
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    
+    # Encabezados
+    headers = [
+        'Fecha/Hora', 'Usuario', 'Email', 'Organización', 'Consulta', 
+        'Respuesta', 'Tipo', 'Estado', 'Tiempo (ms)', 'IP'
+    ]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+    
+    # Datos
+    for row, consulta in enumerate(consultas, 2):
+        ws.cell(row=row, column=1, value=consulta.fecha_consulta.strftime('%d/%m/%Y %H:%M'))
+        ws.cell(row=row, column=2, value=consulta.usuario.nombre_completo)
+        ws.cell(row=row, column=3, value=consulta.usuario.email)
+        ws.cell(row=row, column=4, value=consulta.organizacion.nombre)
+        ws.cell(row=row, column=5, value=consulta.consulta_texto)
+        ws.cell(row=row, column=6, value=consulta.respuesta_texto)
+        ws.cell(row=row, column=7, value=consulta.tipo_consulta)
+        ws.cell(row=row, column=8, value=consulta.estado)
+        ws.cell(row=row, column=9, value=consulta.tiempo_respuesta_ms)
+        ws.cell(row=row, column=10, value=consulta.ip_address)
+    
+    # Ajustar anchos de columna
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Crear respuesta
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename=auditoria_consultas_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    
+    return response
+
+
+def exportar_pdf(consultas):
+    """Exportar consultas a PDF"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    
+    # Estilos
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        spaceAfter=30,
+        alignment=1  # Centrado
+    )
+    
+    story = []
+    
+    # Título
+    story.append(Paragraph("Reporte de Auditoría - Agente IA", title_style))
+    story.append(Paragraph(f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Estadísticas generales
+    total_consultas = len(consultas)
+    consultas_exitosas = len([c for c in consultas if c.estado == 'exito'])
+    
+    stats_data = [
+        ['Estadística', 'Valor'],
+        ['Total de Consultas', str(total_consultas)],
+        ['Consultas Exitosas', str(consultas_exitosas)],
+        ['Tasa de Éxito', f"{(consultas_exitosas/total_consultas*100):.1f}%" if total_consultas > 0 else "0%"]
+    ]
+    
+    stats_table = Table(stats_data)
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    
+    story.append(stats_table)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Tabla de consultas (últimas 50)
+    story.append(Paragraph("Consultas Recientes (Últimas 50)", styles['Heading2']))
+    story.append(Spacer(1, 0.1*inch))
+    
+    data = [['Fecha', 'Usuario', 'Organización', 'Tipo', 'Estado']]
+    
+    for consulta in consultas[:50]:
+        data.append([
+            consulta.fecha_consulta.strftime('%d/%m %H:%M'),
+            consulta.usuario.nombre_completo[:20],
+            consulta.organizacion.nombre[:15],
+            consulta.tipo_consulta.title(),
+            consulta.estado.title()
+        ])
+    
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    
+    story.append(table)
+    
+    # Construir PDF
+    doc.build(story)
+    buffer.seek(0)
+    
+    response = make_response(buffer.getvalue())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename=auditoria_consultas_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+    
+    return response
