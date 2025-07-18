@@ -37,10 +37,12 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
 
+
 @login_manager.user_loader
 def load_user(user_id):
     from models import Usuario
     return Usuario.query.get(int(user_id))
+
 
 # Register blueprints
 from auth import auth_bp
@@ -53,6 +55,7 @@ from asistente_ia import asistente_bp
 from cotizacion_inteligente import cotizacion_bp
 from control_documentos import documentos_bp
 from seguridad_cumplimiento import seguridad_bp
+from agent_local import agent_bp  # 👈 nuestro mini agente local
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(obras_bp, url_prefix='/obras')
@@ -65,17 +68,21 @@ app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
 app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 
+
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('reportes.dashboard'))
     return render_template('index.html')
 
+
 @app.route('/dashboard')
 def dashboard():
     if current_user.is_authenticated:
         return redirect(url_for('reportes.dashboard'))
     return redirect(url_for('auth.login'))
+
 
 # Filtros personalizados
 @app.template_filter('fecha')
@@ -84,11 +91,13 @@ def fecha_filter(fecha):
         return fecha.strftime('%d/%m/%Y')
     return ''
 
+
 @app.template_filter('moneda')
 def moneda_filter(valor):
     if valor is None:
         return '$0'
     return f'${valor:,.2f}'
+
 
 @app.template_filter('porcentaje')
 def porcentaje_filter(valor):
@@ -96,11 +105,13 @@ def porcentaje_filter(valor):
         return '0%'
     return f'{valor:.1f}%'
 
+
 @app.template_filter('numero')
 def numero_filter(valor, decimales=0):
     if valor is None:
         return '0'
     return f'{valor:,.{decimales}f}'
+
 
 @app.template_filter('estado_badge')
 def estado_badge_filter(estado):
@@ -119,10 +130,11 @@ def estado_badge_filter(estado):
     }
     return badges.get(estado, 'bg-secondary')
 
+
 # Create tables and initial data
 with app.app_context():
     from models import Usuario, Organizacion
-    
+
     # Create all tables
     db.create_all()
     print("📊 Database tables created successfully")

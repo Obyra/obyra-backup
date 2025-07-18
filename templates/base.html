@@ -58,6 +58,12 @@
                             <li><a class="dropdown-item" href="{{ url_for('asistente.predicciones') }}">
                                 <i class="fas fa-crystal-ball me-2"></i>Predicciones IA
                             </a></li>
+                            {% if current_user.rol == 'administrador' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('agent_local.diagnostico_agent') }}">
+                                <i class="fas fa-robot me-2"></i>Diagnóstico IA Local
+                            </a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     
