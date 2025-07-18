@@ -36,23 +36,7 @@
                         </a>
                     </li>
                     
-                    <!-- Asistente Inteligente -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle text-warning" href="#" id="navbarAsistente" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-robot me-1"></i>Asistente IA
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('asistente.inicio') }}">
-                                <i class="fas fa-home me-2"></i>INICIO
-                            </a></li>
-                            {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
-                                <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
-                            </a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
+
                     
                     {% if current_user.puede_acceder_modulo('obras') %}
                     <li class="nav-item dropdown">
@@ -203,6 +187,12 @@
                             <span>{{ current_user.nombre }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
+                                <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
                             </a></li>
