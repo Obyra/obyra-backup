@@ -67,6 +67,7 @@ app.register_blueprint(asistente_bp, url_prefix='/asistente')
 app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
 app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
+app.register_blueprint(agent_bp)  # Agente IA local sin prefijo
 
 
 
