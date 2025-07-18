@@ -1,8 +1,9 @@
 from flask import Blueprint, render_template, redirect, url_for, request, jsonify
 from flask_login import current_user, login_required
-from models import Obra, Presupuesto, ItemInventario, Usuario, db
-from sqlalchemy import func
+from models import Obra, Presupuesto, ItemInventario, Usuario, ConsultaAgente, db
+from sqlalchemy import func, desc
 from datetime import datetime, timedelta
+import time
 
 agent_bp = Blueprint('agent_local', __name__)
 
@@ -20,9 +21,34 @@ def diagnostico_agent():
 @login_required
 def procesar_consulta():
     """Procesa consultas del agente IA con datos reales de la organización"""
+    start_time = time.time()
+    consulta_registro = None
+    
     try:
         data = request.get_json()
-        consulta = data.get('consulta', '').lower()
+        consulta_texto = data.get('consulta', '')
+        consulta = consulta_texto.lower()
+        
+        # Crear registro de auditoría
+        consulta_registro = ConsultaAgente(
+            organizacion_id=current_user.organizacion_id,
+            usuario_id=current_user.id,
+            consulta_texto=consulta_texto,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent', '')
+        )
+        
+        # Determinar tipo de consulta
+        if 'obra' in consulta or 'construcción' in consulta or 'proyecto' in consulta:
+            consulta_registro.tipo_consulta = 'obra'
+        elif 'presupuesto' in consulta or 'costo' in consulta or 'precio' in consulta:
+            consulta_registro.tipo_consulta = 'presupuesto'
+        elif 'inventario' in consulta or 'stock' in consulta or 'material' in consulta:
+            consulta_registro.tipo_consulta = 'inventario'
+        elif 'usuario' in consulta or 'equipo' in consulta or 'persona' in consulta:
+            consulta_registro.tipo_consulta = 'usuario'
+        else:
+            consulta_registro.tipo_consulta = 'general'
         
         # Obtener datos reales de la organización del usuario
         org_id = current_user.organizacion_id
@@ -246,15 +272,158 @@ def procesar_consulta():
             • <strong>Elementos con stock bajo:</strong> {len(items_stock_bajo)}<br><br>
             Puedes hacer preguntas específicas sobre obras, presupuestos, inventario o usuarios."""
         
+        # Calcular tiempo de respuesta
+        tiempo_respuesta = int((time.time() - start_time) * 1000)
+        
+        # Completar registro de auditoría
+        consulta_registro.respuesta_texto = respuesta
+        consulta_registro.estado = 'exito'
+        consulta_registro.tiempo_respuesta_ms = tiempo_respuesta
+        
+        # Metadata adicional
+        metadata = {
+            'obras_activas': len(obras_activas),
+            'total_obras': obras_total,
+            'items_stock_bajo': len(items_stock_bajo)
+        }
+        consulta_registro.set_metadata(metadata)
+        
+        db.session.add(consulta_registro)
+        db.session.commit()
+        
         return jsonify({
             'respuesta': respuesta,
-            'tiempo_respuesta': 150,  # Simulado
+            'tiempo_respuesta': tiempo_respuesta,
             'datos_reales': True
         })
     
     except Exception as e:
+        # Registrar error
+        tiempo_respuesta = int((time.time() - start_time) * 1000)
+        error_msg = f'Error al procesar la consulta: {str(e)}'
+        
+        if consulta_registro:
+            consulta_registro.respuesta_texto = error_msg
+            consulta_registro.estado = 'error'
+            consulta_registro.tiempo_respuesta_ms = tiempo_respuesta
+            consulta_registro.error_detalle = str(e)
+            db.session.add(consulta_registro)
+            db.session.commit()
+        
         return jsonify({
-            'respuesta': f'Error al procesar la consulta: {str(e)}',
-            'tiempo_respuesta': 0,
+            'respuesta': error_msg,
+            'tiempo_respuesta': tiempo_respuesta,
             'datos_reales': False
         }), 500
+
+
+@agent_bp.route('/super-admin/auditoria')
+@login_required
+def auditoria_consultas():
+    """Vista de superadministrador para auditoría de consultas del agente"""
+    # Solo permitir acceso a emails específicos de superadministradoras
+    emails_superadmin = ['brenda@gmail.com', 'admin@obyra.com']  # Agregar tu email aquí
+    
+    if current_user.email not in emails_superadmin:
+        return redirect(url_for('reportes.dashboard'))
+    
+    # Filtros de la consulta
+    filtro_org = request.args.get('organizacion', '')
+    filtro_tipo = request.args.get('tipo', '')
+    filtro_estado = request.args.get('estado', '')
+    filtro_fecha_desde = request.args.get('fecha_desde', '')
+    filtro_fecha_hasta = request.args.get('fecha_hasta', '')
+    
+    # Construir consulta base
+    consultas_query = db.session.query(ConsultaAgente).join(Usuario).join(ConsultaAgente.organizacion)
+    
+    # Aplicar filtros
+    if filtro_org:
+        consultas_query = consultas_query.filter(ConsultaAgente.organizacion_id == filtro_org)
+    if filtro_tipo:
+        consultas_query = consultas_query.filter(ConsultaAgente.tipo_consulta == filtro_tipo)
+    if filtro_estado:
+        consultas_query = consultas_query.filter(ConsultaAgente.estado == filtro_estado)
+    if filtro_fecha_desde:
+        consultas_query = consultas_query.filter(ConsultaAgente.fecha_consulta >= datetime.strptime(filtro_fecha_desde, '%Y-%m-%d'))
+    if filtro_fecha_hasta:
+        consultas_query = consultas_query.filter(ConsultaAgente.fecha_consulta <= datetime.strptime(filtro_fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+    
+    # Paginación
+    page = request.args.get('page', 1, type=int)
+    consultas = consultas_query.order_by(desc(ConsultaAgente.fecha_consulta)).paginate(
+        page=page, per_page=50, error_out=False
+    )
+    
+    # Estadísticas generales
+    total_consultas = db.session.query(ConsultaAgente).count()
+    consultas_exitosas = db.session.query(ConsultaAgente).filter_by(estado='exito').count()
+    consultas_error = db.session.query(ConsultaAgente).filter_by(estado='error').count()
+    
+    # Top consultas por tipo
+    tipos_consulta = db.session.query(
+        ConsultaAgente.tipo_consulta,
+        func.count(ConsultaAgente.id).label('total')
+    ).group_by(ConsultaAgente.tipo_consulta).all()
+    
+    # Top organizaciones que más consultan
+    top_organizaciones = db.session.query(
+        ConsultaAgente.organizacion_id,
+        func.count(ConsultaAgente.id).label('total'),
+        ConsultaAgente.organizacion
+    ).join(ConsultaAgente.organizacion).group_by(
+        ConsultaAgente.organizacion_id
+    ).order_by(desc(func.count(ConsultaAgente.id))).limit(10).all()
+    
+    # Tiempo promedio de respuesta
+    tiempo_promedio = db.session.query(
+        func.avg(ConsultaAgente.tiempo_respuesta_ms)
+    ).filter_by(estado='exito').scalar() or 0
+    
+    # Consultas por fecha (últimos 7 días)
+    hace_7_dias = datetime.now() - timedelta(days=7)
+    consultas_por_dia = db.session.query(
+        func.date(ConsultaAgente.fecha_consulta).label('fecha'),
+        func.count(ConsultaAgente.id).label('total')
+    ).filter(ConsultaAgente.fecha_consulta >= hace_7_dias).group_by(
+        func.date(ConsultaAgente.fecha_consulta)
+    ).order_by(func.date(ConsultaAgente.fecha_consulta)).all()
+    
+    # Obtener todas las organizaciones para el filtro
+    from models import Organizacion
+    organizaciones = Organizacion.query.all()
+    
+    return render_template('asistente/auditoria_consultas.html',
+                         consultas=consultas,
+                         organizaciones=organizaciones,
+                         estadisticas={
+                             'total_consultas': total_consultas,
+                             'consultas_exitosas': consultas_exitosas,
+                             'consultas_error': consultas_error,
+                             'tasa_exito': round((consultas_exitosas / total_consultas * 100) if total_consultas > 0 else 0, 2),
+                             'tiempo_promedio': round(tiempo_promedio, 2),
+                             'tipos_consulta': tipos_consulta,
+                             'top_organizaciones': top_organizaciones,
+                             'consultas_por_dia': consultas_por_dia
+                         },
+                         filtros={
+                             'organizacion': filtro_org,
+                             'tipo': filtro_tipo,
+                             'estado': filtro_estado,
+                             'fecha_desde': filtro_fecha_desde,
+                             'fecha_hasta': filtro_fecha_hasta
+                         })
+
+
+@agent_bp.route('/super-admin/consulta/<int:consulta_id>')
+@login_required
+def detalle_consulta(consulta_id):
+    """Vista detallada de una consulta específica"""
+    emails_superadmin = ['brenda@gmail.com', 'admin@obyra.com']
+    
+    if current_user.email not in emails_superadmin:
+        return redirect(url_for('reportes.dashboard'))
+    
+    consulta = ConsultaAgente.query.get_or_404(consulta_id)
+    
+    return render_template('asistente/detalle_consulta.html', consulta=consulta)

@@ -63,6 +63,11 @@
                             <li><a class="dropdown-item" href="/diagnostico-agent">
                                 <i class="fas fa-robot me-2"></i>Diagnóstico IA Local
                             </a></li>
+                            {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
+                                <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
+                            </a></li>
+                            {% endif %}
                             {% endif %}
                         </ul>
                     </li>

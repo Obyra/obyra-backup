@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle de Consulta - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-search me-2"></i>Detalle de Consulta #{{ consulta.id }}
+                </h1>
+                <a href="{{ url_for('agent_local.auditoria_consultas') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a Auditoría
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Información General -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Información de la Consulta
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Usuario:</strong>
+                            <p>{{ consulta.usuario.nombre_completo }} ({{ consulta.usuario.email }})</p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Organización:</strong>
+                            <p>{{ consulta.organizacion.nombre }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Fecha y Hora:</strong>
+                            <p>{{ consulta.fecha_consulta.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Tipo de Consulta:</strong>
+                            <p><span class="badge bg-primary">{{ consulta.tipo_consulta|title }}</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Estado:</strong>
+                            <p>
+                                {% if consulta.estado == 'exito' %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check me-1"></i>Éxito
+                                </span>
+                                {% else %}
+                                <span class="badge bg-danger">
+                                    <i class="fas fa-times me-1"></i>Error
+                                </span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Tiempo de Respuesta:</strong>
+                            <p>{{ consulta.tiempo_respuesta_ms }}ms</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-network-wired me-2"></i>Información Técnica
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <strong>IP Address:</strong>
+                        <p class="text-muted">{{ consulta.ip_address or 'No disponible' }}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>User Agent:</strong>
+                        <p class="text-muted small">{{ consulta.user_agent or 'No disponible' }}</p>
+                    </div>
+                    
+                    {% if consulta.metadata_dict %}
+                    <div class="mb-3">
+                        <strong>Metadata:</strong>
+                        <div class="mt-2">
+                            {% for key, value in consulta.metadata_dict.items() %}
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">{{ key|title }}:</span>
+                                <span>{{ value }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Consulta y Respuesta -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-comments me-2"></i>Consulta y Respuesta
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <h6 class="text-primary">
+                                <i class="fas fa-question-circle me-1"></i>Consulta del Usuario
+                            </h6>
+                            <div class="p-3 bg-light border rounded">
+                                <p class="mb-0">{{ consulta.consulta_texto }}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-6">
+                            <h6 class="text-success">
+                                <i class="fas fa-reply me-1"></i>Respuesta del Agente
+                            </h6>
+                            <div class="p-3 bg-light border rounded">
+                                {% if consulta.respuesta_texto %}
+                                <div>{{ consulta.respuesta_texto|safe }}</div>
+                                {% else %}
+                                <p class="text-muted mb-0">Sin respuesta registrada</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if consulta.estado == 'error' and consulta.error_detalle %}
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h6 class="text-danger">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Detalle del Error
+                            </h6>
+                            <div class="p-3 bg-danger bg-opacity-10 border border-danger rounded">
+                                <pre class="mb-0 text-danger">{{ consulta.error_detalle }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

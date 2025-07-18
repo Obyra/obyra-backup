@@ -2,6 +2,7 @@ from datetime import datetime, date
 from flask_login import UserMixin
 from app import db
 import uuid
+import json
 
 
 class Organizacion(db.Model):
@@ -347,6 +348,45 @@ class RegistroTiempo(db.Model):
     
     def __repr__(self):
         return f'<RegistroTiempo {self.usuario.nombre} - {self.tarea.nombre}>'
+
+
+class ConsultaAgente(db.Model):
+    __tablename__ = 'consultas_agente'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    consulta_texto = db.Column(db.Text, nullable=False)
+    respuesta_texto = db.Column(db.Text)
+    tipo_consulta = db.Column(db.String(50))  # obra, presupuesto, inventario, usuario, general
+    estado = db.Column(db.String(20), nullable=False)  # exito, error
+    tiempo_respuesta_ms = db.Column(db.Integer)
+    error_detalle = db.Column(db.Text)
+    metadata_consulta = db.Column(db.Text)  # JSON con datos adicionales
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.Text)
+    fecha_consulta = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    organizacion = db.relationship('Organizacion')
+    usuario = db.relationship('Usuario')
+    
+    def __repr__(self):
+        return f'<ConsultaAgente {self.usuario.nombre} - {self.tipo_consulta}>'
+    
+    @property
+    def metadata_dict(self):
+        """Convierte el metadata JSON a diccionario"""
+        if self.metadata_consulta:
+            try:
+                return json.loads(self.metadata_consulta)
+            except:
+                return {}
+        return {}
+    
+    def set_metadata(self, data_dict):
+        """Convierte diccionario a JSON para guardar metadata"""
+        self.metadata_consulta = json.dumps(data_dict) if data_dict else None
 
 
 # Nuevos modelos para configuración inteligente de proyectos
