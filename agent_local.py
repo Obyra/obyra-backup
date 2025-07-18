@@ -414,6 +414,10 @@ def auditoria_consultas():
         
         consultas_por_dia.append((fecha_obj, total))
     
+    # Paginación para vista normal
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
     # Si es exportación, obtener todos los datos
     if request.args.get('export'):
         export_format = request.args.get('export')
@@ -422,6 +426,9 @@ def auditoria_consultas():
             return exportar_excel(consultas_export)
         elif export_format == 'pdf':
             return exportar_pdf(consultas_export)
+    
+    consultas = query.order_by(desc(ConsultaAgente.fecha_consulta)).paginate(
+        page=page, per_page=per_page, error_out=False)
     
     # Obtener todas las organizaciones para el filtro
     organizaciones = Organizacion.query.all()

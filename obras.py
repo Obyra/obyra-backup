@@ -286,3 +286,67 @@ def asignar_usuario(id):
         flash('Error al asignar el usuario.', 'danger')
     
     return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
+@login_required
+def eliminar_obra(obra_id):
+    """Eliminar obra - Solo para superadministradores"""
+    if current_user.email not in ['brenda@gmail.com', 'admin@obyra.com']:
+        flash('No tienes permisos para eliminar obras.', 'danger')
+        return redirect(url_for('obras.lista'))
+    
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first_or_404()
+    nombre_obra = obra.nombre
+    
+    try:
+        # Eliminar asignaciones relacionadas
+        AsignacionObra.query.filter_by(obra_id=obra_id).delete()
+        
+        # Eliminar tareas relacionadas
+        for etapa in obra.etapas:
+            TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
+        
+        # Eliminar etapas relacionadas
+        EtapaObra.query.filter_by(obra_id=obra_id).delete()
+        
+        # Eliminar la obra
+        db.session.delete(obra)
+        db.session.commit()
+        
+        flash(f'La obra "{nombre_obra}" ha sido eliminada exitosamente.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al eliminar la obra. Inténtalo nuevamente.', 'danger')
+    
+    return redirect(url_for('obras.lista'))
+
+
+@obras_bp.route('/super-admin/reiniciar-sistema', methods=['POST'])
+@login_required
+def reiniciar_sistema():
+    """Reiniciar sistema eliminando todas las obras - Solo para superadministradores"""
+    if current_user.email not in ['brenda@gmail.com', 'admin@obyra.com']:
+        flash('No tienes permisos para reiniciar el sistema.', 'danger')
+        return redirect(url_for('obras.lista'))
+    
+    try:
+        # Eliminar todas las asignaciones
+        AsignacionObra.query.delete()
+        
+        # Eliminar todas las tareas
+        TareaEtapa.query.delete()
+        
+        # Eliminar todas las etapas
+        EtapaObra.query.delete()
+        
+        # Eliminar todas las obras
+        Obra.query.delete()
+        
+        db.session.commit()
+        flash('Sistema reiniciado exitosamente. Todas las obras han sido eliminadas.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al reiniciar el sistema. Inténtalo nuevamente.', 'danger')
+    
+    return redirect(url_for('obras.lista'))
