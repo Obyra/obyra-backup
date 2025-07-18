@@ -42,32 +42,14 @@
                             <i class="fas fa-robot me-1"></i>Asistente IA
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('asistente.dashboard') }}">
-                                <i class="fas fa-robot me-2"></i>Centro de Control IA
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('asistente.configuracion_inicial') }}">
-                                <i class="fas fa-magic me-2"></i>Configuración Inteligente
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('cotizacion.calculadora_inteligente') }}">
-                                <i class="fas fa-calculator me-2"></i>Calculadora Inteligente
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('asistente.analisis_rendimiento') }}">
-                                <i class="fas fa-chart-line me-2"></i>Análisis de Rendimiento
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('asistente.predicciones') }}">
-                                <i class="fas fa-crystal-ball me-2"></i>Predicciones IA
-                            </a></li>
-                            {% if current_user.rol == 'administrador' %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/diagnostico-agent">
-                                <i class="fas fa-robot me-2"></i>Diagnóstico IA Local
+                            <li><a class="dropdown-item" href="{{ url_for('asistente.inicio') }}">
+                                <i class="fas fa-home me-2"></i>INICIO
                             </a></li>
                             {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
                                 <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
                             </a></li>
-                            {% endif %}
                             {% endif %}
                         </ul>
                     </li>

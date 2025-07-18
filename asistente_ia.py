@@ -16,6 +16,12 @@ from utils import *
 
 asistente_bp = Blueprint('asistente', __name__)
 
+@asistente_bp.route('/inicio')
+@login_required
+def inicio():
+    """Página de inicio del asistente IA con imagen corporativa"""
+    return render_template('asistente/inicio.html')
+
 @asistente_bp.route('/')
 @asistente_bp.route('/dashboard')
 @asistente_bp.route('/control')

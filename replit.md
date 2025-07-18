@@ -143,6 +143,15 @@ The system is designed to be deployed on platforms like Replit, with easy config
 
 ## Recent Changes (July 2025)
 
+### Menu Optimization and Corporate Branding (Latest Update)
+- **Simplified Asistente IA Menu**: Cleaned up navigation by removing redundant items (Configuración Inteligente, Calculadora Inteligente, Análisis de Rendimiento, Diagnóstico IA Local)
+- **New INICIO Section**: Created professional landing page with corporate glass-effect styling using provided corporate image
+- **Streamlined Navigation**: Menu now contains only "INICIO" and "Auditoría IA (Super Admin)" for focused user experience
+- **Corporate Image Integration**: Implemented glassmorphism design with the provided architectural corporate background
+- **Enhanced User Experience**: Professional call-to-action button "Solicitá tu Asesoría" with hover effects and animations
+
+## Recent Changes (July 2025)
+
 ### Complete Authentication System Implementation
 - **Manual Registration & Login**: Full user registration with validations, password hashing, and auto-login
 - **Google OAuth Integration**: Authlib-based OAuth2 with automatic user creation and profile sync
