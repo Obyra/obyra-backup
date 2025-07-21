@@ -138,14 +138,24 @@
     
     <!-- Gráficos y datos -->
     <div class="row mb-4">
-        <!-- Gráfico de obras por estado -->
+        <!-- Mapa de obras por zonas -->
         <div class="col-lg-6 mb-4">
             <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="mb-0">Distribución de Obras por Estado</h5>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Distribución de Obras por Zonas</h5>
+                    <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
                 </div>
-                <div class="card-body">
-                    <canvas id="chartObrasEstado" width="400" height="300"></canvas>
+                <div class="card-body p-0">
+                    <div id="obras-map" style="height: 350px; width: 100%;"></div>
+                    {% if not obras_con_ubicacion %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-map-marker-alt fa-2x text-muted mb-2"></i>
+                        <p class="text-muted">No hay obras con ubicación definida</p>
+                        <a href="{{ url_for('obras.crear') }}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-plus me-1"></i>Crear primera obra
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -405,45 +415,21 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+
 {% block scripts %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Datos para gráfico de obras por estado
-    const obrasEstadoData = [
-        {% for estado, cantidad in obras_por_estado %}
-        {
-            label: '{{ estado.replace("_", " ").title() }}',
-            value: {{ cantidad }},
-            color: getEstadoColor('{{ estado }}')
-        },
-        {% endfor %}
-    ];
+    // Inicializar mapa de obras por zonas
+    initObrasMap();
     
-    // Gráfico de obras por estado
-    if (obrasEstadoData.length > 0) {
-        const ctx1 = document.getElementById('chartObrasEstado').getContext('2d');
-        new Chart(ctx1, {
-            type: 'doughnut',
-            data: {
-                labels: obrasEstadoData.map(item => item.label),
-                datasets: [{
-                    data: obrasEstadoData.map(item => item.value),
-                    backgroundColor: obrasEstadoData.map(item => item.color),
-                    borderWidth: 2,
-                    borderColor: '#fff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
+    // Gráfico de progreso circular (mantenemos este)
     
     // Gráfico de progreso circular
     const ctx2 = document.getElementById('chartProgreso').getContext('2d');
@@ -469,6 +455,106 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Función para inicializar el mapa de obras
+function initObrasMap() {
+    {% if obras_con_ubicacion %}
+    // Configurar centro del mapa (Buenos Aires por defecto)
+    const defaultLat = -34.6118;
+    const defaultLng = -58.3960;
+    
+    // Crear el mapa
+    const map = L.map('obras-map').setView([defaultLat, defaultLng], 10);
+    
+    // Agregar tiles de OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // Datos de obras con ubicación
+    const obrasData = [
+        {% for obra in obras_con_ubicacion %}
+        {
+            id: {{ obra.id }},
+            nombre: "{{ obra.nombre|e }}",
+            cliente: "{{ obra.cliente|e }}",
+            direccion: "{{ obra.direccion|e }}",
+            fechaInicio: "{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra.fecha_inicio else 'No definida' }}",
+            presupuesto: "{{ '${:,.0f}'.format(obra.presupuesto_total) if obra.presupuesto_total else '$0' }}",
+            estado: "{{ obra.estado }}",
+            color: getEstadoColor("{{ obra.estado }}")
+        },
+        {% endfor %}
+    ];
+    
+    // Geocodificar direcciones y agregar marcadores
+    const geocodePromises = obrasData.map(obra => 
+        geocodeAddress(obra.direccion).then(coords => {
+            if (coords) {
+                // Crear marcador personalizado según el estado
+                const markerIcon = L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color: ${obra.color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                
+                // Crear popup con información de la obra
+                const popupContent = `
+                    <div style="min-width: 200px;">
+                        <h6 class="mb-2 text-primary">${obra.nombre}</h6>
+                        <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
+                        <p class="mb-1"><strong>Inicio:</strong> ${obra.fechaInicio}</p>
+                        <p class="mb-1"><strong>Presupuesto:</strong> ${obra.presupuesto}</p>
+                        <span class="badge" style="background-color: ${obra.color};">${obra.estado.replace('_', ' ').toUpperCase()}</span>
+                        <div class="mt-2">
+                            <a href="/obras/${obra.id}" class="btn btn-sm btn-primary">Ver detalles</a>
+                        </div>
+                    </div>
+                `;
+                
+                // Agregar marcador al mapa
+                L.marker(coords, { icon: markerIcon })
+                    .addTo(map)
+                    .bindPopup(popupContent);
+                
+                return coords;
+            }
+            return null;
+        }).catch(e => {
+            console.log(`Error geocodificando ${obra.direccion}:`, e);
+            return null;
+        })
+    );
+    
+    // Ajustar vista del mapa cuando todos los marcadores estén cargados
+    Promise.all(geocodePromises).then(coordinates => {
+        const validCoords = coordinates.filter(coord => coord !== null);
+        if (validCoords.length > 0) {
+            const group = new L.featureGroup(map._layers);
+            if (Object.keys(group._layers).length > 0) {
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+    });
+    {% endif %}
+}
+
+// Función para geocodificar direcciones usando Nominatim
+async function geocodeAddress(address) {
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&addressdetails=1&countrycodes=ar`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+        return null;
+    } catch (error) {
+        console.error('Error en geocodificación:', error);
+        return null;
+    }
+}
 
 function getEstadoColor(estado) {
     const colores = {

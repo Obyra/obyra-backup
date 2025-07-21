@@ -37,7 +37,14 @@ def dashboard():
     obras_por_estado = db.session.query(
         Obra.estado,
         func.count(Obra.id)
-    ).group_by(Obra.estado).all()
+    ).filter(Obra.organizacion_id == current_user.organizacion_id).group_by(Obra.estado).all()
+    
+    # Obras con ubicación para el mapa (filtradas por organización)
+    obras_con_ubicacion = Obra.query.filter(
+        Obra.organizacion_id == current_user.organizacion_id,
+        Obra.direccion.isnot(None),
+        Obra.direccion != ''
+    ).all()
     
     # Presupuestos recientes
     presupuestos_recientes = Presupuesto.query.order_by(
@@ -64,6 +71,7 @@ def dashboard():
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_por_estado=obras_por_estado,
+                         obras_con_ubicacion=obras_con_ubicacion,
                          presupuestos_recientes=presupuestos_recientes,
                          items_stock_bajo=items_stock_bajo,
                          obras_vencimiento=obras_vencimiento,
