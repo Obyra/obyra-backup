@@ -145,18 +145,8 @@
                     <h5 class="mb-0">Distribución de Obras por Zonas</h5>
                     <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
                 </div>
-                <div class="card-body p-0">
-                    <div id="obras-map" style="height: 300px; width: 100%; position: relative;"></div>
-                    {% if not obras_con_ubicacion %}
-                    <div class="position-absolute top-50 start-50 translate-middle text-center" style="z-index: 1000; background: rgba(255,255,255,0.9); padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                        <i class="fas fa-map-marker-alt fa-2x text-muted mb-2"></i>
-                        <p class="text-muted mb-2">No hay obras con ubicación definida</p>
-                        <p class="text-muted mb-3"><small>Haz clic en el mapa para ver el clima</small></p>
-                        <a href="{{ url_for('obras.crear') }}" class="btn btn-sm btn-primary">
-                            <i class="fas fa-plus me-1"></i>Crear primera obra
-                        </a>
-                    </div>
-                    {% endif %}
+                <div class="card-body p-0" style="height: 300px; overflow: hidden;">
+                    <div id="mapa-obras-dashboard" style="width: 100%; height: 100%;"></div>
                 </div>
             </div>
         </div>
@@ -420,57 +410,51 @@
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-/* Estilo para el mapa - simplificado y directo */
-#obras-map {
+/* Mapa del dashboard - CSS limpio y funcional */
+#mapa-obras-dashboard {
     width: 100% !important;
-    height: 300px !important;
+    height: 100% !important;
     position: relative;
-    overflow: hidden;
 }
 
-.leaflet-container {
+#mapa-obras-dashboard .leaflet-container {
     width: 100% !important;
     height: 100% !important;
     font-family: inherit;
-    border-radius: 0;
 }
 
-/* Controles de zoom del mapa - visibles en esquina superior izquierda */
-.leaflet-control-zoom {
+/* Controles de zoom - visibles y estilizados */
+#mapa-obras-dashboard .leaflet-control-zoom {
     margin: 10px !important;
-    border: none !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
-    border-radius: 4px !important;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4) !important;
 }
 
-.leaflet-control-zoom a {
-    background-color: #fff !important;
+#mapa-obras-dashboard .leaflet-control-zoom a {
+    width: 30px !important;
+    height: 30px !important;
+    line-height: 30px !important;
+    font-size: 18px !important;
+    background: white !important;
     color: #333 !important;
-    border: 1px solid #ccc !important;
-    font-size: 16px !important;
-    font-weight: bold !important;
-    line-height: 26px !important;
-    width: 26px !important;
-    height: 26px !important;
+    border: none !important;
+    display: block !important;
     text-align: center !important;
     text-decoration: none !important;
 }
 
-.leaflet-control-zoom a:hover {
-    background-color: #f0f0f0 !important;
-    color: #000 !important;
+#mapa-obras-dashboard .leaflet-control-zoom a:hover {
+    background: #f4f4f4 !important;
 }
 
-/* Popup de clima estilizado */
-.weather-popup .leaflet-popup-content-wrapper {
-    border-radius: 12px !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2) !important;
-    max-width: 350px !important;
+/* Popup de clima */
+.clima-popup .leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    padding: 0;
 }
 
-.weather-popup .leaflet-popup-content {
-    margin: 16px !important;
-    font-family: inherit !important;
+.clima-popup .leaflet-popup-content {
+    margin: 15px;
+    font-family: inherit;
 }
 
 /* Marcadores personalizados */
@@ -500,8 +484,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Debug: verificar si hay obras con ubicación
     console.log('Obras con ubicación:', {{ obras_con_ubicacion|length }});
     
-    // Inicializar mapa de obras por zonas
-    initObrasMap();
+    // Inicializar mapa NUEVO
+    initMapaDashboard();
     
     // Gráfico de progreso circular (mantenemos este)
     

@@ -70,7 +70,7 @@ def dashboard():
     # Rendimiento del equipo (últimos 30 días)
     rendimiento_equipo = calcular_rendimiento_equipo(fecha_desde_obj, fecha_hasta_obj)
     
-    return render_template('reportes/dashboard.html',
+    return render_template('reportes/dashboard_nuevo.html',
                          kpis=kpis,
                          obras_por_estado=obras_por_estado,
                          obras_con_ubicacion=obras_con_ubicacion,
