@@ -425,10 +425,17 @@
 /* Estilo para que el mapa se mantenga dentro del contenedor */
 #obras-map-container {
     overflow: hidden;
+    position: relative;
+    width: 100%;
+    height: 300px;
 }
 
 #obras-map {
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     z-index: 1;
 }
 
@@ -436,6 +443,7 @@
     width: 100% !important;
     height: 100% !important;
     font-family: inherit;
+    border-radius: 0;
 }
 
 /* Asegurar que el contenedor tenga el tamaño correcto */
@@ -444,10 +452,26 @@
     overflow: hidden;
 }
 
+/* Controles de zoom del mapa */
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+}
+
 /* Marcadores personalizados */
 .custom-marker {
     background: transparent !important;
     border: none !important;
+}
+
+/* Popup de clima personalizado */
+.weather-popup .leaflet-popup-content-wrapper {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.weather-popup .leaflet-popup-content {
+    margin: 12px 16px;
 }
 </style>
 {% endblock %}
@@ -496,33 +520,69 @@ async function initObrasMap() {
     {% if obras_con_ubicacion %}
     console.log('Inicializando mapa con', {{ obras_con_ubicacion|length }}, 'obras');
     
-    // Configurar centro del mapa (Buenos Aires por defecto)
-    const defaultLat = -34.6118;
-    const defaultLng = -58.3960;
+    // Si no hay obras, crear una de prueba en CABA para demostrar funcionalidad
+    {% if obras_con_ubicacion|length == 0 %}
+    console.log('No hay obras con ubicación, agregando obra de prueba en CABA');
+    const obrasData = [{
+        id: 999,
+        nombre: "Obra de Prueba - Torre CABA",
+        cliente: "Cliente Demo",
+        direccion: "Av. Corrientes 1000, CABA, Argentina",
+        fechaInicio: "01/01/2024",
+        presupuesto: "$500,000",
+        estado: "en_curso",
+        color: "#28a745"
+    }];
+    {% endif %}
+    
+    // Configurar centro del mapa (Argentina - centrado en país)
+    const defaultLat = -38.4161;  // Centro de Argentina
+    const defaultLng = -63.6167;
     
     // Crear el mapa con opciones para mantenerlo en el contenedor
     const map = L.map('obras-map', {
         zoomControl: true,
         scrollWheelZoom: true,
         doubleClickZoom: true,
-        boxZoom: false,
-        keyboard: false,
+        boxZoom: true,
+        keyboard: true,
         dragging: true,
         touchZoom: true,
-        attributionControl: false
-    }).setView([defaultLat, defaultLng], 10);
+        attributionControl: false,
+        maxZoom: 18,
+        minZoom: 4
+    }).setView([defaultLat, defaultLng], 6);  // Zoom 6 para ver Argentina completa
     
     // Forzar invalidateSize cuando el mapa se carga
     map.whenReady(function() {
         setTimeout(() => {
             map.invalidateSize();
+            console.log('Mapa inicializado correctamente');
         }, 100);
     });
     
     // Agregar tiles de OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18
     }).addTo(map);
+    
+    // Agregar evento de clic en el mapa para mostrar clima
+    map.on('click', async function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        
+        console.log(`Obteniendo clima para: ${lat}, ${lng}`);
+        
+        try {
+            const climaData = await getWeatherWeekly(lat, lng);
+            if (climaData) {
+                showWeatherPopup(e.latlng, climaData);
+            }
+        } catch (error) {
+            console.error('Error obteniendo clima:', error);
+        }
+    });
     
     // Datos de obras con ubicación
     const obrasData = [
@@ -533,7 +593,7 @@ async function initObrasMap() {
             cliente: "{{ obra.cliente|e }}",
             direccion: "{{ obra.direccion|e }}",
             fechaInicio: "{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra.fecha_inicio else 'No definida' }}",
-            presupuesto: "{{ '${:,.0f}'.format(obra.presupuesto_total) if obra.presupuesto_total else '$0' }}",
+            presupuesto: "{{ '${:,.0f}'.format(obra.presupuesto_estimado) if obra.presupuesto_estimado else '$0' }}",
             estado: "{{ obra.estado }}",
             color: getEstadoColor("{{ obra.estado }}")
         },
@@ -618,6 +678,58 @@ async function initObrasMap() {
             }, 100);
         }
     });
+    {% else %}
+    console.log('No hay obras con ubicación, mostrando mapa de Argentina para demostrar funcionalidad del clima');
+    
+    // Configurar centro del mapa (Argentina - centrado en país)  
+    const defaultLat = -38.4161;
+    const defaultLng = -63.6167;
+    
+    // Crear el mapa centrado en Argentina
+    const map = L.map('obras-map', {
+        zoomControl: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        boxZoom: true,
+        keyboard: true,
+        dragging: true,
+        touchZoom: true,
+        attributionControl: false,
+        maxZoom: 18,
+        minZoom: 4
+    }).setView([defaultLat, defaultLng], 6);
+    
+    // Agregar tiles de OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18
+    }).addTo(map);
+    
+    // Forzar invalidateSize cuando el mapa se carga
+    map.whenReady(function() {
+        setTimeout(() => {
+            map.invalidateSize();
+            console.log('Mapa de Argentina inicializado correctamente');
+        }, 100);
+    });
+    
+    // Agregar evento de clic en el mapa para mostrar clima
+    map.on('click', async function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        
+        console.log(`Obteniendo clima para: ${lat}, ${lng}`);
+        
+        try {
+            const climaData = await getWeatherWeekly(lat, lng);
+            if (climaData) {
+                showWeatherPopup(e.latlng, climaData);
+            }
+        } catch (error) {
+            console.error('Error obteniendo clima:', error);
+        }
+    });
+    
     {% endif %}
 }
 
@@ -637,19 +749,46 @@ async function geocodeAddress(address) {
     }
 }
 
-// Función para obtener datos del clima usando OpenWeatherMap
+// Función para obtener clima semanal usando Open-Meteo
+async function getWeatherWeekly(lat, lon) {
+    try {
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=7`);
+        const data = await response.json();
+        
+        if (data && data.daily) {
+            const daily = data.daily;
+            const weeklyData = [];
+            
+            for (let i = 0; i < daily.time.length; i++) {
+                const weatherInfo = getWeatherInfo(daily.weather_code[i]);
+                weeklyData.push({
+                    date: daily.time[i],
+                    tempMax: Math.round(daily.temperature_2m_max[i]),
+                    tempMin: Math.round(daily.temperature_2m_min[i]),
+                    weatherCode: daily.weather_code[i],
+                    description: weatherInfo.description,
+                    icon: weatherInfo.icon
+                });
+            }
+            
+            return weeklyData;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error obteniendo clima semanal:', error);
+        return null;
+    }
+}
+
+// Función para obtener clima actual (para marcadores de obras)
 async function getWeatherData(lat, lon) {
     try {
-        // Usar la API gratuita de OpenWeatherMap (sin clave API para datos básicos)
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=America/Argentina/Buenos_Aires`);
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`);
         const data = await response.json();
         
         if (data && data.current_weather) {
             const weather = data.current_weather;
-            const weatherCode = weather.weathercode;
-            
-            // Mapear códigos de clima a descripción e iconos
-            const weatherInfo = getWeatherInfo(weatherCode);
+            const weatherInfo = getWeatherInfo(weather.weathercode);
             
             return {
                 temp: Math.round(weather.temperature),
@@ -686,6 +825,57 @@ function getWeatherInfo(code) {
     };
     
     return weatherMap[code] || { description: 'Clima variable', icon: '02d' };
+}
+
+// Función para mostrar popup de clima semanal
+function showWeatherPopup(latlng, weeklyData) {
+    const popupContent = `
+        <div style="min-width: 300px; max-width: 350px;">
+            <h6 class="mb-3 text-primary">
+                <i class="fas fa-cloud-sun me-2"></i>Pronóstico 7 días
+            </h6>
+            <div style="max-height: 200px; overflow-y: auto;">
+                ${weeklyData.map((day, index) => {
+                    const date = new Date(day.date);
+                    const dayName = index === 0 ? 'Hoy' : 
+                                   index === 1 ? 'Mañana' : 
+                                   date.toLocaleDateString('es-AR', { weekday: 'short' });
+                    const dateStr = date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+                    
+                    return `
+                        <div class="d-flex align-items-center justify-content-between py-2 ${index < weeklyData.length - 1 ? 'border-bottom' : ''}" style="border-color: #e0e0e0;">
+                            <div class="d-flex align-items-center">
+                                <img src="https://openweathermap.org/img/w/${day.icon}.png" alt="clima" style="width: 32px; height: 32px;">
+                                <div class="ms-2">
+                                    <div class="fw-bold" style="font-size: 0.9rem;">${dayName}</div>
+                                    <div class="text-muted" style="font-size: 0.8rem;">${dateStr}</div>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <div class="fw-bold" style="font-size: 0.9rem;">
+                                    <span class="text-danger">${day.tempMax}°</span>
+                                    <span class="text-muted mx-1">/</span>
+                                    <span class="text-primary">${day.tempMin}°</span>
+                                </div>
+                                <div class="text-muted" style="font-size: 0.8rem;">${day.description}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="mt-2 text-center">
+                <small class="text-muted">Haz clic en cualquier parte del mapa para ver el clima</small>
+            </div>
+        </div>
+    `;
+    
+    L.popup({
+        maxWidth: 350,
+        className: 'weather-popup'
+    })
+    .setLatLng(latlng)
+    .setContent(popupContent)
+    .openOn(map);
 }
 
 function getEstadoColor(estado) {
