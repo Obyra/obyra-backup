@@ -70,7 +70,7 @@ def dashboard():
     # Rendimiento del equipo (últimos 30 días)
     rendimiento_equipo = calcular_rendimiento_equipo(fecha_desde_obj, fecha_hasta_obj)
     
-    return render_template('reportes/dashboard_nuevo.html',
+    return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_por_estado=obras_por_estado,
                          obras_con_ubicacion=obras_con_ubicacion,
@@ -136,13 +136,13 @@ def calcular_kpis(fecha_desde, fecha_hasta):
     ).scalar() or 0
     
     return {
-        'obras_activas': obras_activas,
+        'total_obras': obras_activas,
         'obras_finalizadas': obras_finalizadas,
         'presupuestos_periodo': presupuestos_periodo,
-        'valor_presupuestos': float(valor_presupuestos),
+        'ingresos_totales': float(valor_presupuestos),
         'horas_trabajadas': float(horas_trabajadas),
-        'usuarios_activos': usuarios_activos,
-        'items_criticos': items_criticos,
+        'total_usuarios': usuarios_activos,
+        'alertas_inventario': items_criticos,
         'progreso_promedio': float(progreso_promedio)
     }
 
