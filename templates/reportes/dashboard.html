@@ -52,7 +52,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0">{{ kpis.obras_activas }}</h3>
+                            <h3 class="mb-0">{{ kpis.total_obras or 0 }}</h3>
                             <p class="mb-0">Obras Activas</p>
                         </div>
                         <div class="text-primary-light">
@@ -62,7 +62,7 @@
                     <div class="mt-2">
                         <small>
                             <i class="fas fa-arrow-up me-1"></i>
-                            {{ kpis.obras_finalizadas }} finalizadas este período
+                            {{ kpis.obras_finalizadas or 0 }} finalizadas este período
                         </small>
                     </div>
                 </div>
@@ -74,7 +74,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0">{{ kpis.valor_presupuestos|moneda }}</h3>
+                            <h3 class="mb-0">${{ kpis.ingresos_totales|numero or 0 }}</h3>
                             <p class="mb-0">Presupuestos Aprobados</p>
                         </div>
                         <div class="text-success-light">
@@ -84,7 +84,7 @@
                     <div class="mt-2">
                         <small>
                             <i class="fas fa-chart-line me-1"></i>
-                            {{ kpis.presupuestos_periodo }} generados este período
+                            {{ kpis.presupuestos_periodo or 0 }} generados este período
                         </small>
                     </div>
                 </div>
@@ -96,7 +96,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0">{{ kpis.usuarios_activos }}</h3>
+                            <h3 class="mb-0">{{ kpis.total_usuarios or 0 }}</h3>
                             <p class="mb-0">Usuarios Activos</p>
                         </div>
                         <div class="text-info-light">
@@ -106,7 +106,7 @@
                     <div class="mt-2">
                         <small>
                             <i class="fas fa-clock me-1"></i>
-                            {{ kpis.horas_trabajadas|numero(1) }}h trabajadas
+                            {{ (kpis.horas_trabajadas or 0)|numero(1) }}h trabajadas
                         </small>
                     </div>
                 </div>
@@ -118,7 +118,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0">{{ kpis.items_criticos }}</h3>
+                            <h3 class="mb-0">{{ kpis.alertas_inventario or 0 }}</h3>
                             <p class="mb-0">Items Críticos</p>
                         </div>
                         <div class="text-warning-light">
