@@ -47,12 +47,13 @@ def dashboard():
     ).all()
     
     # Presupuestos recientes
-    presupuestos_recientes = Presupuesto.query.order_by(
-        desc(Presupuesto.fecha_creacion)
-    ).limit(5).all()
+    presupuestos_recientes = Presupuesto.query.filter(
+        Presupuesto.organizacion_id == current_user.organizacion_id
+    ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
     
-    # Items con stock bajo
+    # Items con stock bajo  
     items_stock_bajo = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == current_user.organizacion_id,
         ItemInventario.stock_actual <= ItemInventario.stock_minimo,
         ItemInventario.activo == True
     ).order_by(ItemInventario.stock_actual).limit(10).all()
@@ -60,6 +61,7 @@ def dashboard():
     # Obras próximas a vencer
     fecha_limite = date.today() + timedelta(days=7)
     obras_vencimiento = Obra.query.filter(
+        Obra.organizacion_id == current_user.organizacion_id,
         Obra.fecha_fin_estimada <= fecha_limite,
         Obra.fecha_fin_estimada >= date.today(),
         Obra.estado.in_(['planificacion', 'en_curso'])

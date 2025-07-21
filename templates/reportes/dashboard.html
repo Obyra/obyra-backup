@@ -458,6 +458,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Debug: verificar si hay obras con ubicación
+    console.log('Obras con ubicación:', {{ obras_con_ubicacion|length }});
+    
     // Inicializar mapa de obras por zonas
     initObrasMap();
     
@@ -489,8 +492,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Función para inicializar el mapa de obras
-function initObrasMap() {
+async function initObrasMap() {
     {% if obras_con_ubicacion %}
+    console.log('Inicializando mapa con', {{ obras_con_ubicacion|length }}, 'obras');
+    
     // Configurar centro del mapa (Buenos Aires por defecto)
     const defaultLat = -34.6118;
     const defaultLng = -58.3960;
@@ -536,8 +541,9 @@ function initObrasMap() {
     ];
     
     // Geocodificar direcciones y agregar marcadores
-    const geocodePromises = obrasData.map(obra => 
-        geocodeAddress(obra.direccion).then(coords => {
+    const geocodePromises = obrasData.map(async (obra) => {
+        try {
+            const coords = await geocodeAddress(obra.direccion);
             if (coords) {
                 // Crear marcador personalizado según el estado
                 const markerIcon = L.divIcon({
@@ -576,18 +582,18 @@ function initObrasMap() {
                 `;
                 
                 // Agregar marcador al mapa
-                L.marker(coords, { icon: markerIcon })
+                const marker = L.marker(coords, { icon: markerIcon })
                     .addTo(map)
                     .bindPopup(popupContent);
                 
                 return coords;
             }
             return null;
-        }).catch(e => {
+        } catch (e) {
             console.log(`Error geocodificando ${obra.direccion}:`, e);
             return null;
-        })
-    );
+        }
+    });
     
     // Ajustar vista del mapa cuando todos los marcadores estén cargados
     Promise.all(geocodePromises).then(coordinates => {
