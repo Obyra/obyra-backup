@@ -46,7 +46,13 @@
                         <div class="mb-3">
                             <label for="direccion" class="form-label">Dirección</label>
                             <input type="text" class="form-control" id="direccion" name="direccion" 
-                                   placeholder="Escribí la dirección y seleccioná una opción..." autocomplete="off">
+                                   placeholder="Escribí la dirección..." autocomplete="off">
+                            <div class="form-text">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Podés escribir cualquier dirección válida o seleccionar una de las sugerencias que aparecen
+                                </small>
+                            </div>
                             <div id="direccion-suggestions" class="list-group position-absolute" style="z-index: 1000; display: none; width: 100%;"></div>
                             <div id="maps-link-container" class="mt-2" style="display: none;">
                                 <a id="maps-link" href="#" target="_blank" class="btn btn-outline-primary btn-sm">
@@ -219,11 +225,36 @@ function showMapsLink() {
 // También mostrar el link si hay una dirección escrita manualmente
 direccionInput.addEventListener('blur', function() {
     setTimeout(() => {
-        if (this.value.trim() && !selectedAddress) {
+        if (this.value.trim()) {
             selectedAddress = this.value.trim();
             showMapsLink();
         }
     }, 200);
+});
+
+// Mejorar validación y experiencia de usuario
+direccionInput.addEventListener('input', function() {
+    // Si el usuario escribe manualmente, actualizar selectedAddress
+    if (this.value.trim().length > 10) { // Direcciones largas probablemente son válidas
+        selectedAddress = this.value.trim();
+        // Mostrar el link después de un delay
+        setTimeout(() => {
+            if (direccionInput.value.trim().length > 10) {
+                showMapsLink();
+            }
+        }, 1000);
+    }
+});
+
+// Validar dirección antes del submit
+document.querySelector('form').addEventListener('submit', function(e) {
+    const direccionValue = direccionInput.value.trim();
+    
+    // Si hay dirección, asegurar que selectedAddress esté actualizada
+    if (direccionValue.length > 0) {
+        selectedAddress = direccionValue;
+        showMapsLink();
+    }
 });
 </script>
 

@@ -201,7 +201,7 @@
                                             {{ presupuesto.numero }}
                                         </a>
                                     </td>
-                                    <td>{{ presupuesto.obra.nombre[:20] }}{% if presupuesto.obra.nombre|length > 20 %}...{% endif %}</td>
+                                    <td>{{ (presupuesto.obra.nombre[:20] if presupuesto.obra else 'Sin obra')}}{% if presupuesto.obra and presupuesto.obra.nombre|length > 20 %}...{% endif %}</td>
                                     <td>
                                         <span class="badge {{ presupuesto.estado|estado_badge }}">
                                             {{ presupuesto.estado.title() }}
