@@ -145,9 +145,10 @@
                     <h5 class="mb-0">Distribución de Obras por Zonas</h5>
                     <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
                 </div>
-                <div class="card-body p-0">
-                    <div id="obras-map" style="height: 350px; width: 100%;"></div>
-                    {% if not obras_con_ubicacion %}
+                <div class="card-body">
+                    {% if obras_con_ubicacion %}
+                    <div id="obras-map" style="height: 300px; width: 100%; border-radius: 8px; overflow: hidden;"></div>
+                    {% else %}
                     <div class="text-center py-4">
                         <i class="fas fa-map-marker-alt fa-2x text-muted mb-2"></i>
                         <p class="text-muted">No hay obras con ubicación definida</p>
@@ -418,6 +419,31 @@
 {% block extra_head %}
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+/* Estilo para que el mapa se mantenga dentro del contenedor */
+#obras-map {
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+.leaflet-container {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 8px;
+}
+
+/* Asegurar que no haya scroll en el contenedor del mapa */
+.card-body:has(#obras-map) {
+    overflow: hidden;
+    padding: 1rem;
+}
+
+/* Marcadores personalizados */
+.custom-marker {
+    background: transparent !important;
+    border: none !important;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -463,8 +489,16 @@ function initObrasMap() {
     const defaultLat = -34.6118;
     const defaultLng = -58.3960;
     
-    // Crear el mapa
-    const map = L.map('obras-map').setView([defaultLat, defaultLng], 10);
+    // Crear el mapa con opciones para mantenerlo en el contenedor
+    const map = L.map('obras-map', {
+        zoomControl: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        boxZoom: false,
+        keyboard: false,
+        dragging: true,
+        touchZoom: true
+    }).setView([defaultLat, defaultLng], 10);
     
     // Agregar tiles de OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -531,10 +565,23 @@ function initObrasMap() {
     Promise.all(geocodePromises).then(coordinates => {
         const validCoords = coordinates.filter(coord => coord !== null);
         if (validCoords.length > 0) {
-            const group = new L.featureGroup(map._layers);
-            if (Object.keys(group._layers).length > 0) {
-                map.fitBounds(group.getBounds().pad(0.1));
-            }
+            // Invalidar el tamaño del mapa para asegurar que se renderice correctamente
+            setTimeout(() => {
+                map.invalidateSize();
+                
+                // Ajustar bounds si hay marcadores
+                const markers = [];
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker) {
+                        markers.push(layer);
+                    }
+                });
+                
+                if (markers.length > 0) {
+                    const group = new L.featureGroup(markers);
+                    map.fitBounds(group.getBounds().pad(0.1));
+                }
+            }, 100);
         }
     });
     {% endif %}
