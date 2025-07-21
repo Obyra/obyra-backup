@@ -140,13 +140,13 @@
     <div class="row mb-4">
         <!-- Mapa de obras por zonas -->
         <div class="col-lg-6 mb-4">
-            <div class="card h-100">
+            <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Distribución de Obras por Zonas</h5>
                     <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
                 </div>
-                <div class="card-body p-0" style="height: 300px;">
-                    <div id="mapa-final" style="width: 100%; height: 300px; background: #f8f9fa; border: 1px solid #dee2e6;"></div>
+                <div class="card-body p-0">
+                    <div id="mapa-final"></div>
                 </div>
             </div>
         </div>
@@ -416,17 +416,17 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 #mapa-final {
-    width: 100% !important;
-    height: 300px !important;
-    position: relative !important;
-    overflow: hidden !important;
+    height: 300px;
+    width: 100%;
+    position: relative;
+    z-index: 1;
 }
 
 .leaflet-container {
-    width: 100% !important;
-    height: 100% !important;
-    position: relative !important;
-    outline: 0 !important;
+    height: 100%;
+    width: 100%;
+    position: relative;
+    outline: 0;
 }
 
 /* Popups del mapa */
@@ -499,145 +499,141 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
         console.log('📈 Inicializando gráficos...');
         
-        // Gráfico de obras por estado
-        const ctx1 = document.getElementById('chartObras').getContext('2d');
-        new Chart(ctx1, {
-            type: 'doughnut',
-            data: {
-                labels: {{ estados_obras|map(attribute='estado')|list|tojson }},
-                datasets: [{
-                    data: {{ estados_obras|map(attribute='cantidad')|list|tojson }},
-                    backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
+        // Gráfico de obras por estado (solo si el elemento existe)
+        const chartElement = document.getElementById('chartObras');
+        if (chartElement) {
+            const ctx1 = chartElement.getContext('2d');
+            new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: {{ estados_obras|map(attribute='estado')|list|tojson }},
+                    datasets: [{
+                        data: {{ estados_obras|map(attribute='cantidad')|list|tojson }},
+                        backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }, 1000);
 });
 
 function inicializarMapaFinal() {
-    console.log('🗺️ INICIANDO MAPA FUNCIONAL');
+    console.log('Inicializando mapa de obras');
     
-    // Esperar a que el DOM esté completamente cargado
     setTimeout(function() {
-        // Verificar elemento existe
-        var elemento = document.getElementById('mapa-final');
-        if (!elemento) {
-            console.error('❌ Elemento mapa-final no existe');
-            return;
-        }
-        
-        // Limpiar contenido previo
-        elemento.innerHTML = '';
-        
         try {
-            // CREAR MAPA PASO A PASO
-            console.log('📍 Creando instancia de mapa...');
-            var mapa = L.map('mapa-final', {
-                center: [-34.6118, -58.3960],
-                zoom: 5,
-                zoomControl: true
-            });
-            
-            console.log('🌍 Agregando tiles...');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 18
-            }).addTo(mapa);
-            
-            // FORZAR RENDER
-            mapa.whenReady(function() {
-                console.log('✅ MAPA LISTO - forzando render...');
-                setTimeout(function() {
-                    mapa.invalidateSize();
-                    console.log('📐 Tamaño invalidado');
-                }, 100);
-            });
-        
-        // Datos de obras desde el backend
-        var obras = [
-        {% for obra in obras_con_ubicacion %}
-            {
-                id: {{ obra.id }},
-                nombre: "{{ obra.nombre|replace('"', '\\"') }}",
-                cliente: "{{ obra.cliente|replace('"', '\\"') if obra.cliente else 'Sin cliente' }}",
-                direccion: "{{ obra.direccion|replace('"', '\\"') if obra.direccion else 'Sin dirección' }}",
-                lat: {{ obra.latitud or 'null' }},
-                lng: {{ obra.longitud or 'null' }},
-                estado: "{{ obra.estado }}"
-            }{% if not loop.last %},{% endif %}
-        {% endfor %}
-        ];
-        
-        console.log('Agregando', obras.length, 'obras al mapa');
-        
-        // Agregar marcador por cada obra
-        obras.forEach(function(obra) {
-            if (obra.lat && obra.lng) {
-                // Marcador rojo
-                var marcador = L.circleMarker([obra.lat, obra.lng], {
-                    radius: 8,
-                    fillColor: '#dc3545',
-                    color: '#fff',
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.8
-                }).addTo(mapa);
-                
-                // Popup básico
-                var popupHtml = '<div style="min-width: 200px;">' +
-                    '<h6><i class="fas fa-building"></i> ' + obra.nombre + '</h6>' +
-                    '<p><strong>Cliente:</strong> ' + obra.cliente + '</p>' +
-                    '<p><strong>Dirección:</strong> ' + obra.direccion + '</p>' +
-                    '<a href="/obras/' + obra.id + '" class="btn btn-primary btn-sm">Ver Obra</a>' +
-                    '</div>';
-                
-                marcador.bindPopup(popupHtml);
-                
-                // Cargar clima al hacer clic
-                marcador.on('click', function() {
-                    cargarClimaObra(obra.lat, obra.lng, obra.nombre, obra.direccion);
-                });
+            // Limpiar mapa existente si hay uno
+            if (window.mapaObras) {
+                window.mapaObras.remove();
             }
-        });
-        
-        // Ajustar vista para mostrar todas las obras
-        if (obras.length > 0) {
-            var grupo = new L.featureGroup();
+            
+            // Crear nuevo mapa
+            window.mapaObras = L.map('mapa-final').setView([-34.6118, -58.3960], 5);
+            
+            // Agregar tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(window.mapaObras);
+            
+            // Forzar redimensión después de cargar
+            setTimeout(function() {
+                window.mapaObras.invalidateSize();
+                console.log('Mapa redimensionado correctamente');
+            }, 200);
+            
+            // Agregar obras al mapa
+            var obras = [
+            {% for obra in obras_con_ubicacion %}
+                {
+                    id: {{ obra.id }},
+                    nombre: "{{ obra.nombre|replace('"', '\\"') }}",
+                    cliente: "{{ obra.cliente|replace('"', '\\"') if obra.cliente else 'Sin cliente' }}",
+                    direccion: "{{ obra.direccion|replace('"', '\\"') if obra.direccion else 'Sin dirección' }}",
+                    lat: {{ obra.latitud or 'null' }},
+                    lng: {{ obra.longitud or 'null' }},
+                    estado: "{{ obra.estado }}"
+                }{% if not loop.last %},{% endif %}
+            {% endfor %}
+            ];
+            
+            console.log('Agregando', obras.length, 'obras al mapa');
+            
+            // Crear marcadores para cada obra
             obras.forEach(function(obra) {
                 if (obra.lat && obra.lng) {
-                    grupo.addLayer(L.marker([obra.lat, obra.lng]));
+                    // Marcador rojo circular
+                    var marcador = L.circleMarker([obra.lat, obra.lng], {
+                        radius: 10,
+                        fillColor: '#dc3545',
+                        color: '#ffffff',
+                        weight: 3,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    }).addTo(window.mapaObras);
+                    
+                    // Contenido del popup
+                    var popupContent = 
+                        '<div style="min-width: 250px;">' +
+                        '<h6 class="text-primary mb-2"><i class="fas fa-building me-2"></i>' + obra.nombre + '</h6>' +
+                        '<p class="mb-1"><strong>Cliente:</strong> ' + obra.cliente + '</p>' +
+                        '<p class="mb-1"><strong>Dirección:</strong> ' + obra.direccion + '</p>' +
+                        '<p class="mb-2"><strong>Estado:</strong> <span class="badge bg-secondary">' + obra.estado + '</span></p>' +
+                        '<div class="d-grid gap-2">' +
+                        '<a href="/obras/' + obra.id + '" class="btn btn-primary btn-sm"><i class="fas fa-eye me-1"></i>Ver Obra</a>' +
+                        '<button onclick="cargarClimaObra(' + obra.lat + ', ' + obra.lng + ', \'' + obra.nombre + '\', \'' + obra.direccion + '\')" class="btn btn-outline-info btn-sm">' +
+                        '<i class="fas fa-cloud-sun me-1"></i>Ver Clima Semanal</button>' +
+                        '</div></div>';
+                    
+                    marcador.bindPopup(popupContent);
+                    
+                    // Auto-cargar clima al hacer clic
+                    marcador.on('click', function() {
+                        setTimeout(function() {
+                            cargarClimaObra(obra.lat, obra.lng, obra.nombre, obra.direccion);
+                        }, 100);
+                    });
                 }
             });
-            if (grupo.getLayers().length > 0) {
-                mapa.fitBounds(grupo.getBounds(), {padding: [20, 20]});
+            
+            // Ajustar vista si hay obras
+            if (obras.length > 0) {
+                var marcadores = [];
+                obras.forEach(function(obra) {
+                    if (obra.lat && obra.lng) {
+                        marcadores.push([obra.lat, obra.lng]);
+                    }
+                });
+                
+                if (marcadores.length === 1) {
+                    window.mapaObras.setView(marcadores[0], 12);
+                } else if (marcadores.length > 1) {
+                    var bounds = L.latLngBounds(marcadores);
+                    window.mapaObras.fitBounds(bounds, { padding: [20, 20] });
+                }
             }
-        }
-        
-        console.log('✅ Mapa completamente inicializado');
+            
+            console.log('Mapa con obras inicializado correctamente');
         
         } catch (error) {
-            console.error('❌ ERROR FATAL EN MAPA:', error);
-            elemento.innerHTML = 
-                '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 2px dashed #dc3545;">' +
-                '<div style="text-align: center; padding: 20px;">' +
-                '<i class="fas fa-exclamation-triangle" style="font-size: 48px; color: #dc3545; margin-bottom: 10px;"></i>' +
-                '<h5 style="color: #dc3545;">Error cargando mapa</h5>' +
-                '<p style="margin: 0; color: #6c757d;">Reintentando automáticamente...</p>' +
+            console.error('Error creando mapa:', error);
+            document.getElementById('mapa-final').innerHTML = 
+                '<div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6;">' +
+                '<div style="text-align: center; color: #6c757d;">' +
+                '<i class="fas fa-exclamation-triangle fa-2x mb-2"></i>' +
+                '<p>Error cargando mapa</p>' +
+                '<button onclick="inicializarMapaFinal()" class="btn btn-sm btn-outline-primary">Reintentar</button>' +
                 '</div></div>';
-            
-            // Reintentar después de 2 segundos
-            setTimeout(inicializarMapaFinal, 2000);
         }
-    }, 500); // Esperar 500ms antes de inicializar
+    }, 300);
 }
 
 // Función para cargar clima en el panel lateral
