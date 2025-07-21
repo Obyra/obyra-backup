@@ -538,9 +538,9 @@ async function initObrasMap() {
     }];
     {% endif %}
     
-    // Configurar centro del mapa (Argentina - centrado en país)
-    const defaultLat = -38.4161;  // Centro de Argentina
-    const defaultLng = -63.6167;
+    // Configurar centro del mapa (Buenos Aires como referencia)
+    const defaultLat = -34.6118;  // Buenos Aires
+    const defaultLng = -58.3960;
     
     // Crear el mapa con opciones para mantenerlo en el contenedor
     const map = L.map('obras-map', {
@@ -553,8 +553,8 @@ async function initObrasMap() {
         touchZoom: true,
         attributionControl: false,
         maxZoom: 18,
-        minZoom: 4
-    }).setView([defaultLat, defaultLng], 6);  // Zoom 6 para ver Argentina completa
+        minZoom: 3
+    }).setView([defaultLat, defaultLng], 5);  // Zoom 5 para mejor vista
     
     // Forzar invalidateSize cuando el mapa se carga
     map.whenReady(function() {
@@ -575,15 +575,33 @@ async function initObrasMap() {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         
-        console.log(`Obteniendo clima para: ${lat}, ${lng}`);
+        console.log(`Obteniendo clima para: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        
+        // Mostrar indicador de carga
+        const loadingPopup = L.popup()
+            .setLatLng(e.latlng)
+            .setContent('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando clima...</div>')
+            .openOn(map);
         
         try {
             const climaData = await getWeatherWeekly(lat, lng);
+            map.closePopup(loadingPopup);
+            
             if (climaData) {
                 showWeatherPopup(e.latlng, climaData);
+            } else {
+                L.popup()
+                    .setLatLng(e.latlng)
+                    .setContent('<div class="text-center text-danger">Error al obtener datos del clima</div>')
+                    .openOn(map);
             }
         } catch (error) {
             console.error('Error obteniendo clima:', error);
+            map.closePopup(loadingPopup);
+            L.popup()
+                .setLatLng(e.latlng)
+                .setContent('<div class="text-center text-danger">Error de conexión</div>')
+                .openOn(map);
         }
     });
     
@@ -684,9 +702,9 @@ async function initObrasMap() {
     {% else %}
     console.log('No hay obras con ubicación, mostrando mapa de Argentina para demostrar funcionalidad del clima');
     
-    // Configurar centro del mapa (Argentina - centrado en país)  
-    const defaultLat = -38.4161;
-    const defaultLng = -63.6167;
+    // Configurar centro del mapa (Buenos Aires como referencia)  
+    const defaultLat = -34.6118;
+    const defaultLng = -58.3960;
     
     // Crear el mapa centrado en Argentina
     const map = L.map('obras-map', {
@@ -699,8 +717,8 @@ async function initObrasMap() {
         touchZoom: true,
         attributionControl: false,
         maxZoom: 18,
-        minZoom: 4
-    }).setView([defaultLat, defaultLng], 6);
+        minZoom: 3
+    }).setView([defaultLat, defaultLng], 5);
     
     // Agregar tiles de OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -721,15 +739,33 @@ async function initObrasMap() {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         
-        console.log(`Obteniendo clima para: ${lat}, ${lng}`);
+        console.log(`Obteniendo clima para: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        
+        // Mostrar indicador de carga
+        const loadingPopup = L.popup()
+            .setLatLng(e.latlng)
+            .setContent('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando clima...</div>')
+            .openOn(map);
         
         try {
             const climaData = await getWeatherWeekly(lat, lng);
+            map.closePopup(loadingPopup);
+            
             if (climaData) {
                 showWeatherPopup(e.latlng, climaData);
+            } else {
+                L.popup()
+                    .setLatLng(e.latlng)
+                    .setContent('<div class="text-center text-danger">Error al obtener datos del clima</div>')
+                    .openOn(map);
             }
         } catch (error) {
             console.error('Error obteniendo clima:', error);
+            map.closePopup(loadingPopup);
+            L.popup()
+                .setLatLng(e.latlng)
+                .setContent('<div class="text-center text-danger">Error de conexión</div>')
+                .openOn(map);
         }
     });
     
