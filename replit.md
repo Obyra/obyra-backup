@@ -152,6 +152,14 @@ The system is designed to be deployed on platforms like Replit, with easy config
 
 ## Recent Changes (July 2025)
 
+### Mapa Interactivo - Estado Actual (21 Julio 2025)
+- **Problema Persistente**: Mapa de Leaflet presenta fragmentación visual y renderizado incorrecto
+- **Intentos realizados**: Múltiples implementaciones con diferentes enfoques CSS y JavaScript
+- **Funcionalidad parcial**: Backend de obras con coordenadas funcional, API Open-Meteo integrada
+- **Panel clima**: Implementado pero no se activa por problemas del mapa
+- **Estado**: Requiere enfoque alternativo o biblioteca diferente (ej: Google Maps, Mapbox)
+- **Logs técnicos**: Mapa se inicializa correctamente en consola pero falla renderizado visual
+
 ### Complete Authentication System Implementation
 - **Manual Registration & Login**: Full user registration with validations, password hashing, and auto-login
 - **Google OAuth Integration**: Authlib-based OAuth2 with automatic user creation and profile sync
