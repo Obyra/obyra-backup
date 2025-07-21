@@ -145,15 +145,15 @@
                     <h5 class="mb-0">Distribución de Obras por Zonas</h5>
                     <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
                 </div>
-                <div class="card-body p-0">
-                    {% if obras_con_ubicacion %}
-                    <div id="obras-map-container" style="height: 300px; width: 100%; position: relative;">
+                <div class="card-body" style="padding: 0; height: 300px; overflow: hidden;">
+                    <div id="obras-map-container" style="height: 100%; width: 100%; position: relative;">
                         <div id="obras-map" style="height: 100%; width: 100%;"></div>
                     </div>
-                    {% else %}
-                    <div class="text-center py-4" style="margin: 1rem;">
+                    {% if not obras_con_ubicacion %}
+                    <div class="position-absolute top-50 start-50 translate-middle text-center" style="z-index: 1000; background: rgba(255,255,255,0.9); padding: 2rem; border-radius: 8px;">
                         <i class="fas fa-map-marker-alt fa-2x text-muted mb-2"></i>
-                        <p class="text-muted">No hay obras con ubicación definida</p>
+                        <p class="text-muted mb-2">No hay obras con ubicación definida</p>
+                        <p class="text-muted mb-3"><small>Haz clic en el mapa para ver el clima</small></p>
                         <a href="{{ url_for('obras.crear') }}" class="btn btn-sm btn-primary">
                             <i class="fas fa-plus me-1"></i>Crear primera obra
                         </a>
@@ -427,13 +427,15 @@
     overflow: hidden;
     position: relative;
     width: 100%;
-    height: 300px;
+    height: 100%;
 }
 
 #obras-map {
     position: absolute;
     top: 0;
     left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
     height: 100%;
     z-index: 1;
@@ -446,16 +448,17 @@
     border-radius: 0;
 }
 
-/* Asegurar que el contenedor tenga el tamaño correcto */
-.card-body:has(#obras-map-container) {
-    padding: 0 !important;
-    overflow: hidden;
-}
-
 /* Controles de zoom del mapa */
 .leaflet-control-zoom {
     border: none !important;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+}
+
+/* Asegurar que la tarjeta del mapa tenga el tamaño correcto */
+.card:has(#obras-map-container) .card-body {
+    padding: 0 !important;
+    overflow: hidden !important;
+    height: 300px !important;
 }
 
 /* Marcadores personalizados */
