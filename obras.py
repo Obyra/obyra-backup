@@ -82,7 +82,7 @@ def crear():
         # Crear obra
         nueva_obra = Obra(
             nombre=nombre,
-            descripcion=None,  # Campo descripción eliminado
+            descripcion=descripcion if 'descripcion' in request.form else None,
             direccion=direccion,
             cliente=cliente,
             telefono_cliente=telefono_cliente,
@@ -90,7 +90,8 @@ def crear():
             fecha_inicio=fecha_inicio_obj,
             fecha_fin_estimada=fecha_fin_estimada_obj,
             presupuesto_total=float(presupuesto_total) if presupuesto_total else 0,
-            estado='planificacion'
+            estado='planificacion',
+            organizacion_id=current_user.organizacion_id
         )
         
         try:
@@ -100,7 +101,9 @@ def crear():
             return redirect(url_for('obras.detalle', id=nueva_obra.id))
         except Exception as e:
             db.session.rollback()
-            flash('Error al crear la obra. Intenta nuevamente.', 'danger')
+            # Mostrar el error específico para debug
+            flash(f'Error al crear la obra: {str(e)}', 'danger')
+            print(f"Error creating obra: {str(e)}")  # Para logs del servidor
     
     return render_template('obras/crear.html')
 
