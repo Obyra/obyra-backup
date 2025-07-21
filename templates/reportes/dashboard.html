@@ -151,19 +151,23 @@
             </div>
         </div>
         
-        <!-- Progreso promedio -->
+        <!-- Panel de clima semanal -->
         <div class="col-lg-6 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="mb-0">Progreso General de Obras</h5>
+                    <h5 class="mb-0">
+                        <i class="fas fa-cloud-sun me-2"></i>Pronóstico Semanal
+                    </h5>
+                    <small class="text-muted" id="clima-ubicacion">Haz clic en una obra del mapa</small>
                 </div>
-                <div class="card-body d-flex align-items-center justify-content-center">
-                    <div class="text-center">
-                        <div class="progress-circle mb-3" style="width: 150px; height: 150px;">
-                            <canvas id="chartProgreso" width="150" height="150"></canvas>
+                <div class="card-body" style="height: 268px; overflow-y: auto;">
+                    <div id="clima-container">
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                            <div class="text-center">
+                                <i class="fas fa-map-marker-alt fa-3x mb-3"></i>
+                                <p>Selecciona una obra en el mapa<br>para ver su pronóstico del tiempo</p>
+                            </div>
                         </div>
-                        <h3 class="text-primary">{{ kpis.progreso_promedio|numero(1) }}%</h3>
-                        <p class="text-muted">Progreso Promedio</p>
                     </div>
                 </div>
             </div>
@@ -410,7 +414,7 @@
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-/* Mapa del dashboard - FUNCIONAL */
+/* Mapa interactivo con obras */
 #mapa-final {
     width: 100% !important;
     height: 100% !important;
@@ -424,6 +428,7 @@
 
 .leaflet-control-zoom {
     margin: 10px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
 }
 
 .leaflet-control-zoom a {
@@ -435,6 +440,34 @@
     color: #333 !important;
     text-align: center !important;
     text-decoration: none !important;
+    border: none !important;
+}
+
+.leaflet-control-zoom a:hover {
+    background: #f8f9fa !important;
+    color: #007bff !important;
+}
+
+/* Popups del mapa */
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.leaflet-popup-content {
+    margin: 15px;
+    font-family: inherit;
+}
+
+/* Panel de clima */
+#clima-container {
+    min-height: 200px;
+}
+
+#clima-ubicacion {
+    display: block;
+    margin-top: 4px;
+    font-weight: normal;
 }
 
 /* Marcadores personalizados */
@@ -467,108 +500,216 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializar mapa final funcionando
     inicializarMapaFinal();
     
-    // Gráfico de progreso circular
-    const ctx2 = document.getElementById('chartProgreso').getContext('2d');
-    const progreso = {{ kpis.progreso_promedio }};
-    
-    new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-            datasets: [{
-                data: [progreso, 100 - progreso],
-                backgroundColor: ['#0d6efd', '#e9ecef'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: false,
-            cutout: '70%',
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
+    // Eliminamos el gráfico de progreso ya que ahora tenemos el panel de clima
 });
 
-// Mapa simple y funcional
+// Mapa interactivo con obras y clima
 function inicializarMapaFinal() {
-    console.log('🗺️ Inicializando mapa simple');
+    console.log('🗺️ Inicializando mapa interactivo de obras');
     
-    // Crear mapa
+    // Crear mapa centrado en Argentina
     const mapa = L.map('mapa-final').setView([-34.6118, -58.3960], 5);
     
-    // Agregar tiles
+    // Agregar tiles de OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+        attribution: '© OpenStreetMap contributors'
     }).addTo(mapa);
     
     // Configurar después de cargar
     mapa.whenReady(function() {
         setTimeout(() => {
             mapa.invalidateSize();
-            console.log('✅ Mapa listo - Argentina visible');
+            console.log('✅ Mapa de Argentina cargado correctamente');
         }, 100);
     });
     
-    // Clic para clima
-    mapa.on('click', async function(e) {
-        console.log('🌤️ Obteniendo clima...');
-        
-        const loading = L.popup()
-            .setLatLng(e.latlng)
-            .setContent('<div class="text-center p-2"><i class="fas fa-spinner fa-spin"></i> Cargando clima...</div>')
-            .openOn(mapa);
-        
-        try {
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${e.latlng.lat}&longitude=${e.latlng.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=7`;
-            const response = await fetch(url);
-            const data = await response.json();
+    // Datos de obras con coordenadas
+    const obras = [
+    {% for obra in obras_con_ubicacion %}
+        {
+            id: {{ obra.id }},
+            nombre: "{{ obra.nombre|replace('"', '\\"') }}",
+            cliente: "{{ obra.cliente|replace('"', '\\"') if obra.cliente else 'Sin cliente' }}",
+            direccion: "{{ obra.direccion|replace('"', '\\"') if obra.direccion else 'Sin dirección' }}",
+            lat: {{ obra.latitud or 'null' }},
+            lng: {{ obra.longitud or 'null' }},
+            estado: "{{ obra.estado }}",
+            progreso: {{ obra.progreso or 0 }}
+        }{% if not loop.last %},{% endif %}
+    {% endfor %}
+    ];
+    
+    console.log('📍 Agregando', obras.length, 'obras al mapa');
+    
+    // Agregar marcadores rojos para cada obra
+    obras.forEach(obra => {
+        if (obra.lat && obra.lng) {
+            // Crear marcador rojo personalizado
+            const marcadorRojo = L.circleMarker([obra.lat, obra.lng], {
+                radius: 10,
+                fillColor: '#dc3545',
+                color: '#ffffff',
+                weight: 3,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(mapa);
             
-            mapa.closePopup(loading);
+            // Popup con información de la obra y botón
+            const popupContent = `
+                <div style="min-width: 250px;">
+                    <h6 class="text-primary mb-2">
+                        <i class="fas fa-building me-2"></i>${obra.nombre}
+                    </h6>
+                    <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
+                    <p class="mb-1"><strong>Dirección:</strong> ${obra.direccion}</p>
+                    <p class="mb-2"><strong>Estado:</strong> <span class="badge bg-secondary">${obra.estado}</span></p>
+                    <div class="d-grid gap-2">
+                        <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-eye me-1"></i>Ver Obra
+                        </a>
+                        <button onclick="cargarClimaObra(${obra.lat}, ${obra.lng}, '${obra.nombre}', '${obra.direccion}')" 
+                                class="btn btn-outline-info btn-sm">
+                            <i class="fas fa-cloud-sun me-1"></i>Ver Clima Semanal
+                        </button>
+                    </div>
+                </div>
+            `;
             
-            if (data && data.daily) {
-                let contenido = '<div style="min-width: 280px;"><h6 class="text-primary mb-2"><i class="fas fa-cloud-sun me-2"></i>Pronóstico 7 días</h6>';
+            marcadorRojo.bindPopup(popupContent);
+            
+            // Auto-cargar clima al hacer clic en el marcador
+            marcadorRojo.on('click', function() {
+                setTimeout(() => {
+                    cargarClimaObra(obra.lat, obra.lng, obra.nombre, obra.direccion);
+                }, 100);
+            });
+        }
+    });
+    
+    // Ajustar vista si hay obras
+    if (obras.length > 0) {
+        const coordenadas = obras
+            .filter(obra => obra.lat && obra.lng)
+            .map(obra => [obra.lat, obra.lng]);
+        
+        if (coordenadas.length === 1) {
+            mapa.setView(coordenadas[0], 12);
+        } else if (coordenadas.length > 1) {
+            const bounds = L.latLngBounds(coordenadas);
+            mapa.fitBounds(bounds, { padding: [20, 20] });
+        }
+        console.log('✅ Vista ajustada para mostrar todas las obras');
+    }
+}
+
+// Función para cargar clima en el panel lateral
+async function cargarClimaObra(lat, lng, nombreObra, direccion) {
+    console.log(`🌤️ Cargando clima para ${nombreObra}`);
+    
+    // Actualizar título
+    document.getElementById('clima-ubicacion').textContent = `${nombreObra} - ${direccion}`;
+    
+    // Mostrar loading
+    document.getElementById('clima-container').innerHTML = `
+        <div class="d-flex align-items-center justify-content-center h-100">
+            <div class="text-center">
+                <div class="spinner-border text-primary mb-3"></div>
+                <p>Cargando pronóstico del tiempo...</p>
+            </div>
+        </div>
+    `;
+    
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=7`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data && data.daily) {
+            let climaHTML = '';
+            
+            for (let i = 0; i < Math.min(data.daily.time.length, 7); i++) {
+                const fecha = new Date(data.daily.time[i]);
+                const nombreDia = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : 
+                                fecha.toLocaleDateString('es-AR', { weekday: 'long' });
+                const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+                const tempMax = Math.round(data.daily.temperature_2m_max[i]);
+                const tempMin = Math.round(data.daily.temperature_2m_min[i]);
+                const codigoClima = data.daily.weather_code[i];
+                const infoClima = obtenerInfoClima(codigoClima);
                 
-                for (let i = 0; i < Math.min(data.daily.time.length, 7); i++) {
-                    const fecha = new Date(data.daily.time[i]);
-                    const dia = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : fecha.toLocaleDateString('es-AR', {weekday: 'short'});
-                    const tempMax = Math.round(data.daily.temperature_2m_max[i]);
-                    const tempMin = Math.round(data.daily.temperature_2m_min[i]);
-                    
-                    contenido += `
-                        <div class="d-flex justify-content-between align-items-center py-1 ${i < 6 ? 'border-bottom' : ''}">
-                            <div class="fw-bold">${dia}</div>
-                            <div class="text-end">
-                                <span class="text-danger">${tempMax}°</span> / 
+                climaHTML += `
+                    <div class="d-flex align-items-center justify-content-between py-3 ${i < 6 ? 'border-bottom' : ''}" 
+                         style="border-color: #e9ecef;">
+                        <div class="d-flex align-items-center">
+                            <div class="text-center me-3" style="min-width: 40px;">
+                                <span style="font-size: 24px;">${infoClima.icono}</span>
+                            </div>
+                            <div>
+                                <div class="fw-bold">${nombreDia}</div>
+                                <div class="text-muted small">${fechaStr}</div>
+                                <div class="text-muted small">${infoClima.descripcion}</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <div class="fw-bold">
+                                <span class="text-danger">${tempMax}°</span>
+                                <span class="text-muted mx-1">/</span>
                                 <span class="text-primary">${tempMin}°</span>
                             </div>
                         </div>
-                    `;
-                }
-                
-                contenido += '<div class="mt-2 text-center"><small class="text-muted">Datos de Open-Meteo</small></div></div>';
-                
-                L.popup()
-                    .setLatLng(e.latlng)
-                    .setContent(contenido)
-                    .openOn(mapa);
-            } else {
-                L.popup()
-                    .setLatLng(e.latlng)
-                    .setContent('<div class="text-center text-danger p-2">Error al obtener clima</div>')
-                    .openOn(mapa);
+                    </div>
+                `;
             }
-        } catch (error) {
-            console.error('❌ Error:', error);
-            mapa.closePopup(loading);
-            L.popup()
-                .setLatLng(e.latlng)
-                .setContent('<div class="text-center text-danger p-2">Error de conexión</div>')
-                .openOn(mapa);
+            
+            document.getElementById('clima-container').innerHTML = climaHTML;
+            console.log('✅ Clima cargado para', nombreObra);
+        } else {
+            throw new Error('No se recibieron datos del clima');
         }
-    });
+    } catch (error) {
+        console.error('❌ Error cargando clima:', error);
+        document.getElementById('clima-container').innerHTML = `
+            <div class="d-flex align-items-center justify-content-center h-100 text-danger">
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                    <p>Error al cargar el pronóstico</p>
+                    <button onclick="cargarClimaObra(${lat}, ${lng}, '${nombreObra}', '${direccion}')" 
+                            class="btn btn-sm btn-outline-primary">
+                        Reintentar
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Función para obtener iconos y descripciones del clima según código WMO
+function obtenerInfoClima(codigo) {
+    const mapaClima = {
+        0: { descripcion: 'Cielo despejado', icono: '☀️' },
+        1: { descripcion: 'Principalmente despejado', icono: '🌤️' },
+        2: { descripcion: 'Parcialmente nublado', icono: '⛅' },
+        3: { descripcion: 'Nublado', icono: '☁️' },
+        45: { descripcion: 'Niebla', icono: '🌫️' },
+        48: { descripcion: 'Niebla con escarcha', icono: '🌫️' },
+        51: { descripcion: 'Llovizna ligera', icono: '🌦️' },
+        53: { descripcion: 'Llovizna moderada', icono: '🌦️' },
+        55: { descripcion: 'Llovizna intensa', icono: '🌦️' },
+        61: { descripcion: 'Lluvia ligera', icono: '🌧️' },
+        63: { descripcion: 'Lluvia moderada', icono: '🌧️' },
+        65: { descripcion: 'Lluvia intensa', icono: '🌧️' },
+        71: { descripcion: 'Nieve ligera', icono: '❄️' },
+        73: { descripcion: 'Nieve moderada', icono: '❄️' },
+        75: { descripcion: 'Nieve intensa', icono: '❄️' },
+        80: { descripcion: 'Chubascos ligeros', icono: '🌦️' },
+        81: { descripcion: 'Chubascos moderados', icono: '🌧️' },
+        82: { descripcion: 'Chubascos violentos', icono: '⛈️' },
+        95: { descripcion: 'Tormenta', icono: '⛈️' },
+        96: { descripcion: 'Tormenta con granizo', icono: '⛈️' },
+        99: { descripcion: 'Tormenta con granizo intenso', icono: '⛈️' }
+    };
+    
+    return mapaClima[codigo] || { descripcion: 'Clima variable', icono: '🌤️' };
 }
 
 // Función para inicializar el mapa de obras
