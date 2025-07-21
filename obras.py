@@ -43,7 +43,6 @@ def crear():
     
     if request.method == 'POST':
         nombre = request.form.get('nombre')
-        descripcion = request.form.get('descripcion')
         direccion = request.form.get('direccion')
         cliente = request.form.get('cliente')
         telefono_cliente = request.form.get('telefono_cliente')
@@ -83,7 +82,7 @@ def crear():
         # Crear obra
         nueva_obra = Obra(
             nombre=nombre,
-            descripcion=descripcion,
+            descripcion=None,  # Campo descripción eliminado
             direccion=direccion,
             cliente=cliente,
             telefono_cliente=telefono_cliente,
