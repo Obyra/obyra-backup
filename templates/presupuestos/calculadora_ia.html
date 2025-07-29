@@ -398,6 +398,11 @@ document.getElementById('calculadoraForm').addEventListener('submit', function(e
     });
 });
 
+// Función para limpiar nombres (remover guiones bajos y capitalizar)
+function limpiarNombre(nombre) {
+    return nombre.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 // Mostrar resultados
 function mostrarResultados(data) {
     // Resumen
@@ -428,7 +433,7 @@ function mostrarResultados(data) {
             countMateriales++;
             const row = tablaMateriales.insertRow();
             row.innerHTML = `
-                <td><strong>${material.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></td>
+                <td><strong>${limpiarNombre(material)}</strong></td>
                 <td class="text-end">${cantidad.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                 <td class="text-center"><span class="badge bg-light text-dark">${unidadesMap[material] || 'unidades'}</span></td>
             `;
@@ -447,7 +452,7 @@ function mostrarResultados(data) {
             countEquipos++;
             const row = tablaEquipos.insertRow();
             row.innerHTML = `
-                <td><strong>${equipo.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></td>
+                <td><strong>${limpiarNombre(equipo)}</strong></td>
                 <td class="text-end">${specs.cantidad}</td>
                 <td class="text-end">${specs.dias || specs.dias_uso || 0}</td>
             `;
@@ -466,7 +471,7 @@ function mostrarResultados(data) {
             countHerramientas++;
             const row = tablaHerramientas.insertRow();
             row.innerHTML = `
-                <td><strong>${herramienta.replace(/\b\w/g, l => l.toUpperCase())}</strong></td>
+                <td><strong>${limpiarNombre(herramienta)}</strong></td>
                 <td class="text-end">${cantidad}</td>
             `;
         }
@@ -507,54 +512,95 @@ function mostrarEtapas(etapas) {
     
     for (const [etapaNombre, etapaData] of Object.entries(etapas)) {
         const etapaDiv = document.createElement('div');
-        etapaDiv.className = 'accordion mb-3';
+        etapaDiv.className = 'card mb-4 shadow-sm';
         etapaDiv.innerHTML = `
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <button class="btn btn-link text-white text-decoration-none w-100 text-start" type="button" data-bs-toggle="collapse" 
                             data-bs-target="#collapse${etapaNombre}" aria-expanded="false">
-                        <strong>${etapasNombres[etapaNombre] || etapaNombre}</strong>
+                        <strong>${etapasNombres[etapaNombre] || limpiarNombre(etapaNombre)}</strong>
+                        <i class="fas fa-chevron-down float-end mt-1"></i>
                     </button>
-                </h2>
-                <div id="collapse${etapaNombre}" class="accordion-collapse collapse">
-                    <div class="accordion-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6 class="text-warning"><i class="fas fa-cubes"></i> Materiales</h6>
-                                <ul class="list-unstyled small">
-                                    ${Object.entries(etapaData.materiales || {})
-                                        .map(([material, cantidad]) => 
-                                            `<li>• ${material.replace('_', ' ')}: <strong>${cantidad}</strong></li>`
-                                        ).join('')}
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6 class="text-danger"><i class="fas fa-cogs"></i> Maquinaria</h6>
-                                <ul class="list-unstyled small">
-                                    ${Object.entries(etapaData.maquinaria || {})
-                                        .filter(([_, specs]) => specs.cantidad > 0)
-                                        .map(([maquina, specs]) => 
-                                            `<li>• ${maquina.replace('_', ' ')}: <strong>${specs.cantidad}</strong> (${specs.dias} días)</li>`
-                                        ).join('')}
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6 class="text-info"><i class="fas fa-tools"></i> Herramientas</h6>
-                                <ul class="list-unstyled small">
-                                    ${Object.entries(etapaData.herramientas || {})
-                                        .filter(([_, specs]) => specs.cantidad > 0)
-                                        .map(([herramienta, specs]) => 
-                                            `<li>• ${herramienta.replace('_', ' ')}: <strong>${specs.cantidad}</strong></li>`
-                                        ).join('')}
-                                </ul>
-                            </div>
-                        </div>
+                </h5>
+            </div>
+            <div id="collapse${etapaNombre}" class="collapse">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Categoría</th>
+                                    <th>Elemento</th>
+                                    <th>Cantidad</th>
+                                    <th>Días de Uso</th>
+                                    <th>Tipo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${generarFilasEtapa(etapaData)}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         `;
         contenidoEtapas.appendChild(etapaDiv);
     }
+}
+
+function generarFilasEtapa(etapaData) {
+    let filas = '';
+    
+    // Materiales
+    if (etapaData.materiales) {
+        Object.entries(etapaData.materiales).forEach(([material, cantidad]) => {
+            filas += `
+                <tr class="table-warning">
+                    <td><i class="fas fa-cubes text-warning"></i> <strong>Materiales</strong></td>
+                    <td>${limpiarNombre(material)}</td>
+                    <td><span class="badge bg-warning text-dark">${cantidad}</span></td>
+                    <td>-</td>
+                    <td><small class="text-muted">Material base</small></td>
+                </tr>
+            `;
+        });
+    }
+    
+    // Maquinaria
+    if (etapaData.maquinaria) {
+        Object.entries(etapaData.maquinaria)
+            .filter(([_, specs]) => specs.cantidad > 0)
+            .forEach(([maquina, specs]) => {
+                filas += `
+                    <tr class="table-danger">
+                        <td><i class="fas fa-cogs text-danger"></i> <strong>Maquinaria</strong></td>
+                        <td>${limpiarNombre(maquina)}</td>
+                        <td><span class="badge bg-danger">${specs.cantidad}</span></td>
+                        <td><span class="badge bg-secondary">${specs.dias} días</span></td>
+                        <td><small class="text-muted">Equipo pesado</small></td>
+                    </tr>
+                `;
+            });
+    }
+    
+    // Herramientas
+    if (etapaData.herramientas) {
+        Object.entries(etapaData.herramientas)
+            .filter(([_, specs]) => specs.cantidad > 0)
+            .forEach(([herramienta, specs]) => {
+                filas += `
+                    <tr class="table-info">
+                        <td><i class="fas fa-tools text-info"></i> <strong>Herramientas</strong></td>
+                        <td>${limpiarNombre(herramienta)}</td>
+                        <td><span class="badge bg-info">${specs.cantidad}</span></td>
+                        <td><span class="badge bg-secondary">${specs.dias || '-'} días</span></td>
+                        <td><small class="text-muted">Herramienta manual/eléctrica</small></td>
+                    </tr>
+                `;
+            });
+    }
+    
+    return filas || '<tr><td colspan="5" class="text-center text-muted">No hay elementos en esta etapa</td></tr>';
 }
 
 function mostrarResumenMaquinaria(resumen) {
