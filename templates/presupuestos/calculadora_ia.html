@@ -1,0 +1,533 @@
+{% extends "base.html" %}
+
+{% block title %}Calculadora IA de Presupuestos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-brain text-primary"></i> Calculadora IA de Presupuestos</h2>
+                    <p class="text-muted mb-0">Analiza planos arquitectónicos y calcula materiales automáticamente</p>
+                </div>
+                <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver a Presupuestos
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulario Principal -->
+    <div class="row">
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-upload"></i> Datos del Proyecto</h5>
+                </div>
+                <div class="card-body">
+                    <form id="calculadoraForm" enctype="multipart/form-data">
+                        
+                        <!-- Upload PDF -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-file-pdf text-danger"></i> Plano Arquitectónico (PDF)
+                            </label>
+                            <input type="file" class="form-control" id="archivo_pdf" name="archivo_pdf" 
+                                   accept=".pdf" onchange="mostrarArchivoSeleccionado()">
+                            <div class="form-text">
+                                <i class="fas fa-info-circle"></i> 
+                                Opcional: La IA analizará el plano para extraer dimensiones automáticamente
+                            </div>
+                            <div id="archivoSeleccionado" class="alert alert-info mt-2" style="display: none;">
+                                <i class="fas fa-check-circle"></i> <span id="nombreArchivo"></span>
+                            </div>
+                        </div>
+
+                        <!-- Metros cuadrados manual -->
+                        <div class="mb-4">
+                            <label for="metros_cuadrados" class="form-label fw-bold">
+                                <i class="fas fa-ruler-combined text-success"></i> Superficie Total (m²)
+                            </label>
+                            <input type="number" class="form-control form-control-lg" 
+                                   id="metros_cuadrados" name="metros_cuadrados" 
+                                   step="0.01" min="1" placeholder="Ej: 120.50">
+                            <div class="form-text">
+                                Si subes un PDF, este valor sobrescribirá el análisis automático
+                            </div>
+                        </div>
+
+                        <!-- Tipo de construcción -->
+                        <div class="mb-4">
+                            <label for="tipo_construccion" class="form-label fw-bold">
+                                <i class="fas fa-building text-warning"></i> Tipo de Construcción
+                            </label>
+                            <select class="form-select form-select-lg" id="tipo_construccion" name="tipo_construccion">
+                                <option value="">Dejar que la IA sugiera...</option>
+                                {% for tipo in tipos_construccion %}
+                                <option value="{{ tipo }}">{{ tipo }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                Si no seleccionas, la IA sugerirá el tipo más apropiado
+                            </div>
+                        </div>
+
+                        <!-- Botones de acción -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-calculator"></i> Calcular con IA
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="limpiarFormulario()">
+                                <i class="fas fa-broom"></i> Limpiar Formulario
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Información de Coeficientes -->
+            <div class="card mt-4 shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-info-circle"></i> Coeficientes por Tipo</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="bg-light p-2 rounded">
+                                <strong class="text-success">Económica</strong><br>
+                                <small>Factor: 1.0x</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="bg-light p-2 rounded">
+                                <strong class="text-primary">Estándar</strong><br>
+                                <small>Factor: 1.3x</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="bg-light p-2 rounded">
+                                <strong class="text-warning">Premium</strong><br>
+                                <small>Factor: 1.8x</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resultados -->
+        <div class="col-lg-7">
+            <!-- Loading -->
+            <div id="loadingSpinner" class="card shadow-sm" style="display: none;">
+                <div class="card-body text-center py-5">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Procesando...</span>
+                    </div>
+                    <h5>Analizando con IA...</h5>
+                    <p class="text-muted">Esto puede tomar unos segundos</p>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="errorContainer" class="alert alert-danger" style="display: none;" role="alert">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>Error:</strong> <span id="errorMessage"></span>
+            </div>
+
+            <!-- Resultados -->
+            <div id="resultadosContainer" style="display: none;">
+                
+                <!-- Resumen del Análisis -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-check-circle"></i> Análisis Completado</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h3 class="text-primary" id="superficieCalculada">-</h3>
+                                    <small class="text-muted">Superficie (m²)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h5 class="text-success" id="tipoUsado">-</h5>
+                                    <small class="text-muted">Tipo de Construcción</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div id="observacionesIA" class="small text-muted"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Materiales -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-cubes text-warning"></i> Materiales Calculados</h5>
+                        <span class="badge bg-warning text-dark" id="cantidadMateriales">0 items</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Material</th>
+                                        <th class="text-end">Cantidad</th>
+                                        <th class="text-center">Unidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaMateriales">
+                                    <!-- Contenido dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Equipos y Maquinarias -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-tools text-danger"></i> Equipos y Maquinarias</h5>
+                        <span class="badge bg-danger" id="cantidadEquipos">0 items</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Equipo</th>
+                                        <th class="text-end">Cantidad</th>
+                                        <th class="text-end">Días de Uso</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaEquipos">
+                                    <!-- Contenido dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Herramientas -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-hammer text-info"></i> Herramientas</h5>
+                        <span class="badge bg-info" id="cantidadHerramientas">0 items</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Herramienta</th>
+                                        <th class="text-end">Cantidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaHerramientas">
+                                    <!-- Contenido dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IA Recomendaciones -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-gradient" style="background: linear-gradient(45deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <h5 class="mb-0"><i class="fas fa-lightbulb"></i> Recomendaciones IA</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="recomendacionesIA" class="text-muted">
+                            <p><i class="fas fa-robot"></i> Las recomendaciones aparecerán aquí después del análisis...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Acciones -->
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="obra_destino" class="form-label fw-bold">
+                                    <i class="fas fa-building"></i> Obra Destino
+                                </label>
+                                <select class="form-select" id="obra_destino">
+                                    <option value="">Seleccionar obra...</option>
+                                    {% for obra in obras %}
+                                    <option value="{{ obra.id }}">{{ obra.nombre }} - {{ obra.cliente or 'Sin cliente' }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="observaciones_presupuesto" class="form-label fw-bold">
+                                    <i class="fas fa-comment"></i> Observaciones
+                                </label>
+                                <input type="text" class="form-control" id="observaciones_presupuesto" 
+                                       placeholder="Observaciones adicionales...">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-3">
+                            <button type="button" class="btn btn-success" onclick="crearPresupuesto()">
+                                <i class="fas fa-plus"></i> Crear Presupuesto
+                            </button>
+                            <button type="button" class="btn btn-outline-success" onclick="exportarExcel()">
+                                <i class="fas fa-file-excel"></i> Exportar Excel
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" onclick="nuevoCalculo()">
+                                <i class="fas fa-redo"></i> Nuevo Cálculo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let datosPresupuesto = null;
+
+// Mostrar archivo seleccionado
+function mostrarArchivoSeleccionado() {
+    const input = document.getElementById('archivo_pdf');
+    const container = document.getElementById('archivoSeleccionado');
+    const nombreSpan = document.getElementById('nombreArchivo');
+    
+    if (input.files.length > 0) {
+        nombreSpan.textContent = input.files[0].name;
+        container.style.display = 'block';
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+// Limpiar formulario
+function limpiarFormulario() {
+    document.getElementById('calculadoraForm').reset();
+    document.getElementById('archivoSeleccionado').style.display = 'none';
+    document.getElementById('resultadosContainer').style.display = 'none';
+    document.getElementById('errorContainer').style.display = 'none';
+    datosPresupuesto = null;
+}
+
+// Procesar formulario
+document.getElementById('calculadoraForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const metros = document.getElementById('metros_cuadrados').value;
+    const archivo = document.getElementById('archivo_pdf').files[0];
+    
+    // Validación
+    if (!metros && !archivo) {
+        mostrarError('Debes proporcionar los metros cuadrados o subir un plano PDF');
+        return;
+    }
+    
+    // Mostrar loading
+    document.getElementById('loadingSpinner').style.display = 'block';
+    document.getElementById('resultadosContainer').style.display = 'none';
+    document.getElementById('errorContainer').style.display = 'none';
+    
+    // Enviar datos
+    fetch('/presupuestos/procesar-calculadora-ia', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        
+        if (data.exito) {
+            datosPresupuesto = data;
+            mostrarResultados(data);
+        } else {
+            mostrarError(data.error || 'Error procesando calculadora');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        mostrarError('Error de conexión: ' + error.message);
+    });
+});
+
+// Mostrar resultados
+function mostrarResultados(data) {
+    // Resumen
+    document.getElementById('superficieCalculada').textContent = data.superficie_calculada.toFixed(2);
+    document.getElementById('tipoUsado').textContent = data.tipo_usado;
+    
+    const analisis = data.presupuesto.analisis_ia;
+    if (analisis && analisis.observaciones) {
+        document.getElementById('observacionesIA').innerHTML = 
+            '<i class="fas fa-robot"></i> ' + analisis.observaciones;
+    }
+    
+    // Materiales
+    const materiales = data.presupuesto.materiales;
+    const tablaMateriales = document.getElementById('tablaMateriales');
+    tablaMateriales.innerHTML = '';
+    
+    let countMateriales = 0;
+    const unidadesMap = {
+        'ladrillos': 'unidades', 'cemento': 'bolsas', 'cal': 'kg',
+        'arena': 'm³', 'piedra': 'm³', 'hierro_8': 'kg',
+        'hierro_10': 'kg', 'hierro_12': 'kg', 'membrana': 'm²',
+        'pintura': 'litros'
+    };
+    
+    for (const [material, cantidad] of Object.entries(materiales)) {
+        if (cantidad > 0) {
+            countMateriales++;
+            const row = tablaMateriales.insertRow();
+            row.innerHTML = `
+                <td><strong>${material.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></td>
+                <td class="text-end">${cantidad.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                <td class="text-center"><span class="badge bg-light text-dark">${unidadesMap[material] || 'unidades'}</span></td>
+            `;
+        }
+    }
+    document.getElementById('cantidadMateriales').textContent = countMateriales + ' items';
+    
+    // Equipos
+    const equipos = data.presupuesto.equipos;
+    const tablaEquipos = document.getElementById('tablaEquipos');
+    tablaEquipos.innerHTML = '';
+    
+    let countEquipos = 0;
+    for (const [equipo, specs] of Object.entries(equipos)) {
+        if (specs.cantidad > 0) {
+            countEquipos++;
+            const row = tablaEquipos.insertRow();
+            row.innerHTML = `
+                <td><strong>${equipo.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></td>
+                <td class="text-end">${specs.cantidad}</td>
+                <td class="text-end">${specs.dias_uso}</td>
+            `;
+        }
+    }
+    document.getElementById('cantidadEquipos').textContent = countEquipos + ' items';
+    
+    // Herramientas
+    const herramientas = data.presupuesto.herramientas;
+    const tablaHerramientas = document.getElementById('tablaHerramientas');
+    tablaHerramientas.innerHTML = '';
+    
+    let countHerramientas = 0;
+    for (const [herramienta, cantidad] of Object.entries(herramientas)) {
+        if (cantidad > 0) {
+            countHerramientas++;
+            const row = tablaHerramientas.insertRow();
+            row.innerHTML = `
+                <td><strong>${herramienta.replace(/\b\w/g, l => l.toUpperCase())}</strong></td>
+                <td class="text-end">${cantidad}</td>
+            `;
+        }
+    }
+    document.getElementById('cantidadHerramientas').textContent = countHerramientas + ' items';
+    
+    // Recomendaciones IA
+    if (data.presupuesto.recomendaciones_ia) {
+        document.getElementById('recomendacionesIA').innerHTML = 
+            '<div class="text-dark">' + data.presupuesto.recomendaciones_ia.replace(/\n/g, '<br>') + '</div>';
+    }
+    
+    // Mostrar resultados
+    document.getElementById('resultadosContainer').style.display = 'block';
+}
+
+// Mostrar error
+function mostrarError(mensaje) {
+    document.getElementById('errorMessage').textContent = mensaje;
+    document.getElementById('errorContainer').style.display = 'block';
+}
+
+// Crear presupuesto
+function crearPresupuesto() {
+    if (!datosPresupuesto) {
+        mostrarError('No hay datos de presupuesto calculados');
+        return;
+    }
+    
+    const obraId = document.getElementById('obra_destino').value;
+    if (!obraId) {
+        mostrarError('Selecciona una obra destino');
+        return;
+    }
+    
+    const observaciones = document.getElementById('observaciones_presupuesto').value;
+    
+    const payload = {
+        obra_id: parseInt(obraId),
+        presupuesto: datosPresupuesto.presupuesto,
+        observaciones: observaciones
+    };
+    
+    fetch('/presupuestos/crear-desde-ia', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.exito) {
+            alert('¡Presupuesto ' + data.numero + ' creado exitosamente!');
+            window.location.href = data.redirect_url;
+        } else {
+            mostrarError(data.error || 'Error creando presupuesto');
+        }
+    })
+    .catch(error => {
+        mostrarError('Error de conexión: ' + error.message);
+    });
+}
+
+// Exportar Excel
+function exportarExcel() {
+    if (!datosPresupuesto) {
+        mostrarError('No hay datos para exportar');
+        return;
+    }
+    
+    fetch('/presupuestos/exportar-excel-ia', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(datosPresupuesto)
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        } else {
+            throw new Error('Error exportando Excel');
+        }
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'presupuesto_ia_' + new Date().toISOString().split('T')[0] + '.xlsx';
+        a.click();
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        mostrarError('Error exportando: ' + error.message);
+    });
+}
+
+// Nuevo cálculo
+function nuevoCalculo() {
+    limpiarFormulario();
+    window.scrollTo(0, 0);
+}
+</script>
+{% endblock %}

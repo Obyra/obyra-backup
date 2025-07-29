@@ -1,0 +1,80 @@
+Quiero que me ayudes a crear un sistema web en Python con Streamlit (o Flask si es mejor para Replit) que permita:
+
+1. Que el usuario suba un archivo PDF de un plano arquitectónico.
+2. Que el sistema tenga un campo para ingresar manualmente los m² totales (si no se puede leer del plano aún).
+3. Que el usuario seleccione el tipo de construcción: “Económica”, “Estándar” o “Premium”.
+
+Según los m² y el tipo seleccionado, quiero que el sistema calcule y muestre en una tabla lo siguiente:
+
+### 🔹 MATERIALES:
+- Ladrillos (u)
+- Bolsas de cemento (u)
+- Cal (kg)
+- Arena (m³)
+- Piedra (m³)
+- Hierro del 8, 10 y 12 (kg)
+- Aislación / Membrana (m²)
+- Pintura (litros)
+
+### 🔹 MAQUINARIAS / EQUIPOS:
+- Hormigonera (si aplica)
+- Andamios (módulos)
+- Carretilla (cantidad)
+- Nivel láser (si es Premium)
+
+### 🔹 HERRAMIENTAS:
+- Palas
+- Baldes
+- Fratacho
+- Regla
+
+Usá estos coeficientes como ejemplo por tipo de construcción y m²:
+
+```python
+coeficientes = {
+  "Económica": {
+    "ladrillos": 55,
+    "cemento": 0.25,
+    "cal": 3,
+    "arena": 0.03,
+    "piedra": 0.02,
+    "hierro_8": 2.5,
+    "hierro_10": 1.8,
+    "hierro_12": 1.2,
+    "membrana": 0.8,
+    "pintura": 0.1
+  },
+  "Estándar": {
+    "ladrillos": 60,
+    "cemento": 0.3,
+    "cal": 4,
+    "arena": 0.035,
+    "piedra": 0.025,
+    "hierro_8": 3.5,
+    "hierro_10": 2.2,
+    "hierro_12": 1.5,
+    "membrana": 1.1,
+    "pintura": 0.13
+  },
+  "Premium": {
+    "ladrillos": 65,
+    "cemento": 0.35,
+    "cal": 5,
+    "arena": 0.04,
+    "piedra": 0.03,
+    "hierro_8": 4,
+    "hierro_10": 2.8,
+    "hierro_12": 2,
+    "membrana": 1.5,
+    "pintura": 0.18
+  }
+}
+Los valores están por m², así que deben multiplicarse por la superficie total ingresada por el usuario.
+
+El resultado debe mostrarse en una tabla clara y también poder descargarse en Excel.
+
+Que la interfaz sea linda, responsiva y que funcione 100% en Replit.
+
+Que todos los cálculos estén explicados y bien comentados.
+
+¿Podés generarme todo el código completo?

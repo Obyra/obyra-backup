@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response
+from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify
 from flask_login import login_required, current_user
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
+import json
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib import colors
 from reportlab.lib.units import inch
@@ -10,6 +11,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from app import db
 from models import Presupuesto, ItemPresupuesto, Obra
+from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
+import xlsxwriter
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
@@ -69,12 +72,11 @@ def crear():
         else:
             numero = "PRES-0001"
         
-        nuevo_presupuesto = Presupuesto(
-            obra_id=obra_id,
-            numero=numero,
-            observaciones=observaciones,
-            iva_porcentaje=float(iva_porcentaje)
-        )
+        nuevo_presupuesto = Presupuesto()
+        nuevo_presupuesto.obra_id = obra_id
+        nuevo_presupuesto.numero = numero
+        nuevo_presupuesto.observaciones = observaciones
+        nuevo_presupuesto.iva_porcentaje = float(iva_porcentaje)
         
         try:
             db.session.add(nuevo_presupuesto)
@@ -86,6 +88,309 @@ def crear():
             flash('Error al crear el presupuesto. Intenta nuevamente.', 'danger')
     
     return render_template('presupuestos/crear.html', obras=obras)
+
+@presupuestos_bp.route('/calculadora-ia')
+@login_required
+def calculadora_ia():
+    """Nueva calculadora IA de presupuestos basada en planos"""
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        flash('No tienes permisos para acceder a la calculadora IA.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+    
+    obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
+    tipos_construccion = list(COEFICIENTES_CONSTRUCCION.keys())
+    
+    return render_template('presupuestos/calculadora_ia.html', 
+                         obras=obras, 
+                         tipos_construccion=tipos_construccion)
+
+@presupuestos_bp.route('/procesar-calculadora-ia', methods=['POST'])
+@login_required
+def procesar_calculadora_ia():
+    """Procesa el análisis IA del plano y calcula materiales"""
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'error': 'Sin permisos'}), 403
+    
+    try:
+        # Obtener datos del formulario
+        metros_cuadrados = request.form.get('metros_cuadrados')
+        tipo_construccion = request.form.get('tipo_construccion')
+        archivo_pdf = request.files.get('archivo_pdf')
+        
+        # Validaciones básicas
+        if not metros_cuadrados and not archivo_pdf:
+            return jsonify({'error': 'Proporciona los metros cuadrados o sube un plano PDF'}), 400
+        
+        if metros_cuadrados:
+            try:
+                metros_cuadrados = float(metros_cuadrados)
+                if metros_cuadrados <= 0:
+                    return jsonify({'error': 'Los metros cuadrados deben ser mayor a 0'}), 400
+            except ValueError:
+                return jsonify({'error': 'Metros cuadrados inválidos'}), 400
+        
+        if tipo_construccion and tipo_construccion not in COEFICIENTES_CONSTRUCCION:
+            return jsonify({'error': 'Tipo de construcción inválido'}), 400
+        
+        # Procesar con IA
+        resultado = procesar_presupuesto_ia(
+            archivo_pdf=archivo_pdf,
+            metros_cuadrados_manual=metros_cuadrados,
+            tipo_construccion_forzado=tipo_construccion
+        )
+        
+        if not resultado['exito']:
+            return jsonify({'error': resultado['error']}), 500
+        
+        return jsonify({
+            'exito': True,
+            'presupuesto': resultado['presupuesto'],
+            'superficie_calculada': resultado['superficie_calculada'],
+            'tipo_usado': resultado['tipo_usado']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error procesando calculadora: {str(e)}'}), 500
+
+@presupuestos_bp.route('/crear-desde-ia', methods=['POST'])
+@login_required  
+def crear_desde_ia():
+    """Crea un presupuesto a partir de los resultados de la calculadora IA"""
+    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para crear presupuestos.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+    
+    try:
+        # Obtener datos del JSON enviado
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+        
+        obra_id = data.get('obra_id')
+        presupuesto_ia = data.get('presupuesto')
+        observaciones = data.get('observaciones', '')
+        
+        if not obra_id or not presupuesto_ia:
+            return jsonify({'error': 'Datos incompletos'}), 400
+        
+        # Verificar que la obra existe
+        obra = Obra.query.get(obra_id)
+        if not obra:
+            return jsonify({'error': 'Obra no encontrada'}), 404
+        
+        # Generar número de presupuesto
+        ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
+        if ultimo_numero:
+            numero = f"PRES-{int(ultimo_numero.split('-')[1]) + 1:04d}"
+        else:
+            numero = "PRES-0001"
+        
+        # Crear presupuesto base
+        nuevo_presupuesto = Presupuesto()
+        nuevo_presupuesto.obra_id = obra_id
+        nuevo_presupuesto.numero = numero
+        nuevo_presupuesto.observaciones = f"Calculado con IA - {observaciones}"
+        nuevo_presupuesto.iva_porcentaje = 21.0
+        
+        db.session.add(nuevo_presupuesto)
+        db.session.flush()  # Para obtener el ID
+        
+        # Agregar items de materiales
+        materiales = presupuesto_ia.get('materiales', {})
+        for material, cantidad in materiales.items():
+            if cantidad > 0:
+                # Mapear nombres técnicos a descripciones legibles
+                descripciones = {
+                    'ladrillos': 'Ladrillos comunes',
+                    'cemento': 'Bolsas de cemento',
+                    'cal': 'Cal hidratada',
+                    'arena': 'Arena gruesa',
+                    'piedra': 'Piedra partida',
+                    'hierro_8': 'Hierro 8mm',
+                    'hierro_10': 'Hierro 10mm', 
+                    'hierro_12': 'Hierro 12mm',
+                    'membrana': 'Membrana asfáltica',
+                    'pintura': 'Pintura látex'
+                }
+                
+                unidades = {
+                    'ladrillos': 'unidades',
+                    'cemento': 'bolsas',
+                    'cal': 'kg',
+                    'arena': 'm³',
+                    'piedra': 'm³',
+                    'hierro_8': 'kg',
+                    'hierro_10': 'kg',
+                    'hierro_12': 'kg',
+                    'membrana': 'm²',
+                    'pintura': 'litros'
+                }
+                
+                item = ItemPresupuesto()
+                item.presupuesto_id = nuevo_presupuesto.id
+                item.tipo = 'material'
+                item.descripcion = descripciones.get(material, material.title())
+                item.unidad = unidades.get(material, 'unidades')
+                item.cantidad = cantidad
+                item.precio_unitario = 0.0  # Se puede actualizar manualmente después
+                item.total = 0.0
+                db.session.add(item)
+        
+        # Agregar equipos
+        equipos = presupuesto_ia.get('equipos', {})
+        for equipo, specs in equipos.items():
+            if specs.get('cantidad', 0) > 0:
+                descripciones_equipos = {
+                    'hormigonera': 'Alquiler Hormigonera',
+                    'andamios': 'Alquiler Andamios',
+                    'carretilla': 'Carretilla',
+                    'nivel_laser': 'Alquiler Nivel Láser'
+                }
+                
+                item = ItemPresupuesto()
+                item.presupuesto_id = nuevo_presupuesto.id
+                item.tipo = 'equipo'
+                item.descripcion = f"{descripciones_equipos.get(equipo, equipo.title())} - {specs.get('dias_uso', 0)} días"
+                item.unidad = 'días' if equipo in ['hormigonera', 'andamios', 'nivel_laser'] else 'unidades'
+                item.cantidad = specs.get('cantidad', 1)
+                item.precio_unitario = 0.0
+                item.total = 0.0
+                db.session.add(item)
+        
+        # Agregar herramientas
+        herramientas = presupuesto_ia.get('herramientas', {})
+        for herramienta, cantidad in herramientas.items():
+            if cantidad > 0:
+                item = ItemPresupuesto()
+                item.presupuesto_id = nuevo_presupuesto.id
+                item.tipo = 'material'
+                item.descripcion = herramienta.title()
+                item.unidad = 'unidades'
+                item.cantidad = cantidad
+                item.precio_unitario = 0.0
+                item.total = 0.0
+                db.session.add(item)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'exito': True,
+            'presupuesto_id': nuevo_presupuesto.id,
+            'numero': numero,
+            'redirect_url': url_for('presupuestos.detalle', id=nuevo_presupuesto.id)
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error creando presupuesto: {str(e)}'}), 500
+
+@presupuestos_bp.route('/exportar-excel-ia', methods=['POST'])
+@login_required
+def exportar_excel_ia():
+    """Exporta los resultados de la calculadora IA a Excel"""
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'error': 'Sin permisos'}), 403
+    
+    try:
+        data = request.get_json()
+        if not data or not data.get('presupuesto'):
+            return jsonify({'error': 'No se recibieron datos'}), 400
+        
+        presupuesto = data['presupuesto']
+        
+        # Crear archivo Excel en memoria
+        output = BytesIO()
+        workbook = xlsxwriter.Workbook(output)
+        
+        # Formatos
+        header_format = workbook.add_format({
+            'bold': True,
+            'font_size': 14,
+            'bg_color': '#2E5BBA',
+            'color': 'white',
+            'align': 'center'
+        })
+        
+        subheader_format = workbook.add_format({
+            'bold': True,
+            'font_size': 12,
+            'bg_color': '#F0F0F0'
+        })
+        
+        number_format = workbook.add_format({'num_format': '#,##0.00'})
+        
+        # Hoja principal
+        worksheet = workbook.add_worksheet('Presupuesto IA')
+        
+        # Encabezado
+        worksheet.merge_range('A1:E1', 'PRESUPUESTO CALCULADO CON IA', header_format)
+        
+        row = 3
+        
+        # Información del proyecto
+        metadata = presupuesto.get('metadata', {})
+        worksheet.write(row, 0, 'Superficie:', subheader_format)
+        worksheet.write(row, 1, f"{metadata.get('superficie_m2', 0)} m²")
+        row += 1
+        
+        worksheet.write(row, 0, 'Tipo de Construcción:', subheader_format)
+        worksheet.write(row, 1, metadata.get('tipo_construccion', 'N/A'))
+        row += 2
+        
+        # Materiales
+        worksheet.write(row, 0, 'MATERIALES', subheader_format)
+        row += 1
+        
+        worksheet.write(row, 0, 'Material', subheader_format)
+        worksheet.write(row, 1, 'Cantidad', subheader_format)
+        worksheet.write(row, 2, 'Unidad', subheader_format)
+        row += 1
+        
+        materiales = presupuesto.get('materiales', {})
+        unidades_map = {
+            'ladrillos': 'unidades', 'cemento': 'bolsas', 'cal': 'kg',
+            'arena': 'm³', 'piedra': 'm³', 'hierro_8': 'kg',
+            'hierro_10': 'kg', 'hierro_12': 'kg', 'membrana': 'm²',
+            'pintura': 'litros'
+        }
+        
+        for material, cantidad in materiales.items():
+            worksheet.write(row, 0, material.replace('_', ' ').title())
+            worksheet.write(row, 1, cantidad, number_format)
+            worksheet.write(row, 2, unidades_map.get(material, 'unidades'))
+            row += 1
+        
+        row += 1
+        
+        # Equipos
+        worksheet.write(row, 0, 'EQUIPOS Y MAQUINARIAS', subheader_format)
+        row += 1
+        
+        worksheet.write(row, 0, 'Equipo', subheader_format)
+        worksheet.write(row, 1, 'Cantidad', subheader_format)
+        worksheet.write(row, 2, 'Días de Uso', subheader_format)
+        row += 1
+        
+        equipos = presupuesto.get('equipos', {})
+        for equipo, specs in equipos.items():
+            if specs.get('cantidad', 0) > 0:
+                worksheet.write(row, 0, equipo.replace('_', ' ').title())
+                worksheet.write(row, 1, specs.get('cantidad', 0))
+                worksheet.write(row, 2, specs.get('dias_uso', 0))
+                row += 1
+        
+        workbook.close()
+        output.seek(0)
+        
+        # Crear respuesta
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename=presupuesto_ia_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({'error': f'Error exportando Excel: {str(e)}'}), 500
 
 @presupuestos_bp.route('/<int:id>')
 @login_required
@@ -132,22 +437,21 @@ def agregar_item(id):
         return redirect(url_for('presupuestos.detalle', id=id))
     
     try:
-        cantidad = float(cantidad)
-        precio_unitario = float(precio_unitario)
-        total = cantidad * precio_unitario
+        cantidad_float = float(cantidad) if cantidad else 0.0
+        precio_unitario_float = float(precio_unitario) if precio_unitario else 0.0
+        total = cantidad_float * precio_unitario_float
     except ValueError:
         flash('Cantidad y precio deben ser números válidos.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
     
-    nuevo_item = ItemPresupuesto(
-        presupuesto_id=id,
-        tipo=tipo,
-        descripcion=descripcion,
-        unidad=unidad,
-        cantidad=cantidad,
-        precio_unitario=precio_unitario,
-        total=total
-    )
+    nuevo_item = ItemPresupuesto()
+    nuevo_item.presupuesto_id = id
+    nuevo_item.tipo = tipo
+    nuevo_item.descripcion = descripcion
+    nuevo_item.unidad = unidad
+    nuevo_item.cantidad = cantidad_float
+    nuevo_item.precio_unitario = precio_unitario_float
+    nuevo_item.total = total
     
     try:
         db.session.add(nuevo_item)
