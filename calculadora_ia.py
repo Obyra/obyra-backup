@@ -417,7 +417,20 @@ def calcular_por_etapas(superficie_m2, tipo_construccion):
         raise ValueError(f"Tipo de construcción '{tipo_construccion}' no válido")
     
     etapas_config = ETAPAS_CONSTRUCCION[tipo_construccion]
-    factor_superficie = max(1.0, superficie_m2 / 100.0)  # base 100m²
+    
+    # FACTOR DE ESCALA MÁS REALISTA: Solo aumentar levemente para obras grandes
+    if superficie_m2 <= 100:
+        factor_cantidad = 1.0
+        factor_dias = 1.0
+    elif superficie_m2 <= 200:
+        factor_cantidad = 1.0  # No aumentar cantidad
+        factor_dias = 1.2      # Solo aumentar días 20%
+    elif superficie_m2 <= 500:
+        factor_cantidad = 1.0  # No aumentar cantidad para maquinaria
+        factor_dias = 1.5      # Aumentar días 50%
+    else:
+        factor_cantidad = 1.0  # Cantidad máxima fija
+        factor_dias = 2.0      # Doblar días para obras muy grandes
     
     resultado_etapas = {}
     maquinaria_total = {}
@@ -434,41 +447,46 @@ def calcular_por_etapas(superficie_m2, tipo_construccion):
                 if cantidad > 0:
                     materiales_etapa[material] = round(cantidad, 2)
         
-        # Calcular maquinaria para esta etapa
+        # Calcular maquinaria para esta etapa CON CANTIDADES REALISTAS
         maquinaria_etapa = {}
         for maquina, specs in etapa_data["maquinaria"].items():
             if specs["cantidad"] > 0:
-                cantidad_ajustada = max(specs["cantidad"], int(specs["cantidad"] * factor_superficie))
-                dias_ajustados = max(specs["dias"], int(specs["dias"] * factor_superficie))
+                # Las cantidades se mantienen fijas, solo los días aumentan
+                cantidad_final = specs["cantidad"]
+                dias_final = int(specs["dias"] * factor_dias)
                 
                 maquinaria_etapa[maquina] = {
-                    "cantidad": cantidad_ajustada,
-                    "dias": dias_ajustados
+                    "cantidad": cantidad_final,
+                    "dias": dias_final
                 }
                 
                 # Sumar al total general
                 if maquina not in maquinaria_total:
                     maquinaria_total[maquina] = {"cantidad": 0, "dias_total": 0}
-                maquinaria_total[maquina]["cantidad"] = max(maquinaria_total[maquina]["cantidad"], cantidad_ajustada)
-                maquinaria_total[maquina]["dias_total"] += dias_ajustados
+                maquinaria_total[maquina]["cantidad"] = max(maquinaria_total[maquina]["cantidad"], cantidad_final)
+                maquinaria_total[maquina]["dias_total"] += dias_final
         
         # Calcular herramientas para esta etapa
         herramientas_etapa = {}
         for herramienta, specs in etapa_data["herramientas"].items():
             if specs["cantidad"] > 0:
-                cantidad_ajustada = max(specs["cantidad"], int(specs["cantidad"] * factor_superficie))
-                dias_ajustados = max(specs["dias"], int(specs["dias"] * factor_superficie))
+                # Para herramientas pequeñas, sí puede aumentar levemente la cantidad
+                cantidad_herramienta = specs["cantidad"]
+                if superficie_m2 > 300:
+                    cantidad_herramienta = int(specs["cantidad"] * 1.2)  # 20% más para obras grandes
+                
+                dias_herramienta = int(specs["dias"] * factor_dias)
                 
                 herramientas_etapa[herramienta] = {
-                    "cantidad": cantidad_ajustada,
-                    "dias": dias_ajustados
+                    "cantidad": cantidad_herramienta,
+                    "dias": dias_herramienta
                 }
                 
                 # Sumar al total general
                 if herramienta not in herramientas_total:
                     herramientas_total[herramienta] = {"cantidad": 0, "dias_total": 0}
-                herramientas_total[herramienta]["cantidad"] = max(herramientas_total[herramienta]["cantidad"], cantidad_ajustada)
-                herramientas_total[herramienta]["dias_total"] += dias_ajustados
+                herramientas_total[herramienta]["cantidad"] = max(herramientas_total[herramienta]["cantidad"], cantidad_herramienta)
+                herramientas_total[herramienta]["dias_total"] += dias_herramienta
         
         # Guardar resultado de la etapa
         resultado_etapas[etapa_nombre] = {
