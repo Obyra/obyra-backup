@@ -240,13 +240,12 @@ def crear_desde_ia():
         if not obra_id:
             # Crear nueva obra desde los datos del proyecto
             nombre_obra = datos_proyecto.get('nombre', f'Obra IA {datetime.now().strftime("%Y%m%d_%H%M")}')
-            superficie = datos_proyecto.get('superficie', 0)
-            tipo_construccion = datos_proyecto.get('tipo_construccion', 'Estándar')
             
             nueva_obra = Obra()
             nueva_obra.nombre = nombre_obra
             nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde IA')
-            nueva_obra.descripcion = datos_proyecto.get('ubicacion', 'Ubicación no especificada')
+            nueva_obra.descripcion = f"Superficie: {datos_proyecto.get('superficie', 0)}m² - {datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
+            nueva_obra.direccion = datos_proyecto.get('ubicacion', 'Por especificar')
             nueva_obra.estado = 'planificacion'
             nueva_obra.organizacion_id = current_user.organizacion_id
             
@@ -274,6 +273,8 @@ def crear_desde_ia():
         nuevo_presupuesto.numero = numero
         nuevo_presupuesto.observaciones = f"Calculado con IA - {observaciones}"
         nuevo_presupuesto.iva_porcentaje = 21.0
+        nuevo_presupuesto.estado = 'enviado'  # Pendiente de aprobación
+        nuevo_presupuesto.organizacion_id = current_user.organizacion_id
         
         db.session.add(nuevo_presupuesto)
         db.session.flush()  # Para obtener el ID
