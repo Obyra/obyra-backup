@@ -118,90 +118,148 @@ COEFICIENTES_CONSTRUCCION = {
     }
 }
 
-# Equipos y herramientas expandidos por tipo de construcción
-EQUIPOS_HERRAMIENTAS = {
+# Sistema de cálculo por etapas de construcción con maquinaria especializada
+ETAPAS_CONSTRUCCION = {
     "Económica": {
-        "equipos": {
-            "hormigonera": {"cantidad": 0, "dias": 0},
-            "andamios": {"cantidad": 2, "dias": 15},
-            "carretilla": {"cantidad": 1, "dias": 30},
-            "nivel_laser": {"cantidad": 0, "dias": 0},
-            "martillo_demoledor": {"cantidad": 0, "dias": 0},
-            "soldadora": {"cantidad": 0, "dias": 0},
-            "compresora": {"cantidad": 0, "dias": 0},
-            "generador": {"cantidad": 0, "dias": 0}
+        # Etapa 1: Cimentación y estructura (trabajo manual intensivo)
+        "cimentacion_estructura": {
+            "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "arena", "piedra"],
+            "maquinaria": {
+                "pala_mecanica": {"cantidad": 0, "dias": 0},  # Sin maquinaria pesada
+                "bomba_hormigon": {"cantidad": 0, "dias": 0},
+                "grua": {"cantidad": 0, "dias": 0},
+                "mixer": {"cantidad": 0, "dias": 0}  # Hormigón manual
+            },
+            "herramientas": {
+                "hormigonera_manual": {"cantidad": 1, "dias": 15},
+                "carretillas": {"cantidad": 2, "dias": 20},
+                "palas": {"cantidad": 4, "dias": 20},
+                "baldes": {"cantidad": 8, "dias": 20}
+            }
         },
-        "herramientas": {
-            "palas": 2,
-            "baldes": 4,
-            "fratacho": 2,
-            "regla": 1,
-            "llanas": 2,
-            "martillos": 2,
-            "serruchos": 1,
-            "taladros": 1,
-            "nivel_burbuja": 1,
-            "flexometros": 2
+        # Etapa 2: Albañilería (métodos tradicionales)
+        "albanileria": {
+            "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
+            "maquinaria": {
+                "cortadora_ladrillo": {"cantidad": 0, "dias": 0},  # Corte manual
+                "elevador_materiales": {"cantidad": 0, "dias": 0},
+                "mezcladora_automatica": {"cantidad": 0, "dias": 0}
+            },
+            "herramientas": {
+                "andamios_tubulares": {"cantidad": 3, "dias": 25},
+                "llanas": {"cantidad": 4, "dias": 25},
+                "fratacho": {"cantidad": 4, "dias": 25},
+                "nivel_burbuja": {"cantidad": 2, "dias": 25}
+            }
+        },
+        # Etapa 3: Terminaciones
+        "terminaciones": {
+            "materiales_etapa": ["pintura", "yeso", "ceramicos"],
+            "maquinaria": {
+                "compresora_pintura": {"cantidad": 0, "dias": 0},  # Pintura manual
+                "lijadora_pared": {"cantidad": 0, "dias": 0}
+            },
+            "herramientas": {
+                "rodillos": {"cantidad": 6, "dias": 15},
+                "pinceles": {"cantidad": 12, "dias": 15},
+                "espatulas": {"cantidad": 6, "dias": 15}
+            }
         }
     },
     "Estándar": {
-        "equipos": {
-            "hormigonera": {"cantidad": 1, "dias": 20},
-            "andamios": {"cantidad": 4, "dias": 25},
-            "carretilla": {"cantidad": 2, "dias": 35},
-            "nivel_laser": {"cantidad": 1, "dias": 10},
-            "martillo_demoledor": {"cantidad": 1, "dias": 5},
-            "soldadora": {"cantidad": 1, "dias": 8},
-            "compresora": {"cantidad": 1, "dias": 12},
-            "generador": {"cantidad": 0, "dias": 0}
+        # Etapa 1: Cimentación con tecnología intermedia
+        "cimentacion_estructura": {
+            "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "hierro_12", "arena", "piedra"],
+            "maquinaria": {
+                "pala_mecanica": {"cantidad": 1, "dias": 8},  # Maquinaria básica
+                "bomba_hormigon": {"cantidad": 0, "dias": 0},  # Aún sin bomba
+                "grua": {"cantidad": 0, "dias": 0},
+                "mixer": {"cantidad": 1, "dias": 12}  # Mixer para hormigón
+            },
+            "herramientas": {
+                "hormigonera_electrica": {"cantidad": 1, "dias": 20},
+                "carretillas": {"cantidad": 3, "dias": 25},
+                "vibrador_hormigon": {"cantidad": 1, "dias": 15},
+                "nivel_laser": {"cantidad": 1, "dias": 10}
+            }
         },
-        "herramientas": {
-            "palas": 3,
-            "baldes": 6, 
-            "fratacho": 3,
-            "regla": 2,
-            "llanas": 4,
-            "martillos": 3,
-            "serruchos": 2,
-            "taladros": 2,
-            "nivel_burbuja": 2,
-            "flexometros": 3,
-            "amoladoras": 2,
-            "pistola_calor": 1,
-            "alicates": 2,
-            "destornilladores": 4
+        # Etapa 2: Albañilería con herramientas eléctricas
+        "albanileria": {
+            "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
+            "maquinaria": {
+                "cortadora_ladrillo": {"cantidad": 1, "dias": 15},  # Cortadora eléctrica
+                "elevador_materiales": {"cantidad": 1, "dias": 20},
+                "mezcladora_automatica": {"cantidad": 1, "dias": 20}
+            },
+            "herramientas": {
+                "andamios_modulares": {"cantidad": 4, "dias": 30},
+                "taladros_profesionales": {"cantidad": 3, "dias": 25},
+                "amoladoras": {"cantidad": 2, "dias": 20},
+                "soldadora": {"cantidad": 1, "dias": 10}
+            }
+        },
+        # Etapa 3: Terminaciones con equipos semiautomáticos
+        "terminaciones": {
+            "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "ceramicos", "azulejos"],
+            "maquinaria": {
+                "compresora_pintura": {"cantidad": 1, "dias": 12},  # Pintura a presión
+                "lijadora_pared": {"cantidad": 1, "dias": 8},
+                "cortadora_ceramicos": {"cantidad": 1, "dias": 10}
+            },
+            "herramientas": {
+                "pistola_pintura": {"cantidad": 2, "dias": 12},
+                "pulidora": {"cantidad": 1, "dias": 8},
+                "nivel_laser_terminaciones": {"cantidad": 1, "dias": 15}
+            }
         }
     },
     "Premium": {
-        "equipos": {
-            "hormigonera": {"cantidad": 1, "dias": 30},
-            "andamios": {"cantidad": 6, "dias": 40},
-            "carretilla": {"cantidad": 3, "dias": 50},
-            "nivel_laser": {"cantidad": 1, "dias": 20},
-            "martillo_demoledor": {"cantidad": 1, "dias": 10},
-            "soldadora": {"cantidad": 1, "dias": 15},
-            "compresora": {"cantidad": 1, "dias": 25},
-            "generador": {"cantidad": 1, "dias": 20},
-            "elevador": {"cantidad": 1, "dias": 15},
-            "mezcladora": {"cantidad": 1, "dias": 30}
+        # Etapa 1: Cimentación con maquinaria de alta tecnología
+        "cimentacion_estructura": {
+            "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "hierro_12", "arena", "piedra"],
+            "maquinaria": {
+                "pala_mecanica": {"cantidad": 1, "dias": 12},  # Maquinaria moderna
+                "bomba_hormigon": {"cantidad": 1, "dias": 10},  # Bomba de hormigón
+                "grua_torre": {"cantidad": 1, "dias": 40},  # Grúa torre
+                "mixer_automatico": {"cantidad": 2, "dias": 15},  # Mixers automáticos
+                "planta_hormigon_movil": {"cantidad": 1, "dias": 8}  # Tecnología avanzada
+            },
+            "herramientas": {
+                "estacion_total": {"cantidad": 1, "dias": 20},  # Topografía de precisión
+                "vibrador_alta_frecuencia": {"cantidad": 2, "dias": 15},
+                "cortadora_hierro_automatica": {"cantidad": 1, "dias": 20},
+                "dobladoras_hierro": {"cantidad": 1, "dias": 15}
+            }
         },
-        "herramientas": {
-            "palas": 4,
-            "baldes": 8,
-            "fratacho": 4,
-            "regla": 3,
-            "llanas": 6,
-            "martillos": 4,
-            "serruchos": 3,
-            "taladros": 3,
-            "nivel_burbuja": 3,
-            "flexometros": 4,
-            "amoladoras": 3,
-            "pistola_calor": 2,
-            "alicates": 3,
-            "destornilladores": 6,
-            "sierra_circular": 1,
-            "router": 1
+        # Etapa 2: Albañilería robotizada
+        "albanileria": {
+            "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
+            "maquinaria": {
+                "robot_albanil": {"cantidad": 1, "dias": 25},  # Tecnología robótica
+                "elevador_materiales_automatico": {"cantidad": 1, "dias": 30},
+                "mezcladora_robotizada": {"cantidad": 1, "dias": 25},
+                "cortadora_laser_materiales": {"cantidad": 1, "dias": 15}
+            },
+            "herramientas": {
+                "andamios_autoelevables": {"cantidad": 2, "dias": 35},
+                "sistema_monitoreo_calidad": {"cantidad": 1, "dias": 30},
+                "soldadora_automatica": {"cantidad": 1, "dias": 20}
+            }
+        },
+        # Etapa 3: Terminaciones automatizadas
+        "terminaciones": {
+            "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "porcelanato", "azulejos"],
+            "maquinaria": {
+                "robot_pintura": {"cantidad": 1, "dias": 15},  # Pintura robotizada
+                "lijadora_automatica": {"cantidad": 1, "dias": 10},
+                "cortadora_ceramicos_cnc": {"cantidad": 1, "dias": 12},
+                "sistema_proyeccion_yeso": {"cantidad": 1, "dias": 8}
+            },
+            "herramientas": {
+                "sistema_control_clima": {"cantidad": 1, "dias": 20},
+                "medidor_laser_precision": {"cantidad": 2, "dias": 15},
+                "pulido_automatico": {"cantidad": 1, "dias": 10}
+            }
         }
     }
 }
@@ -285,28 +343,93 @@ def calcular_materiales(superficie_m2, tipo_construccion):
     
     return materiales
 
-def calcular_equipos_herramientas(superficie_m2, tipo_construccion):
+def calcular_por_etapas(superficie_m2, tipo_construccion):
     """
-    Calcula equipos y herramientas necesarios
+    Calcula materiales, maquinaria y herramientas por etapas de construcción
     """
-    if tipo_construccion not in EQUIPOS_HERRAMIENTAS:
+    if tipo_construccion not in ETAPAS_CONSTRUCCION:
         raise ValueError(f"Tipo de construcción '{tipo_construccion}' no válido")
-        
-    config = EQUIPOS_HERRAMIENTAS[tipo_construccion]
     
-    # Ajustar equipos según superficie (más grande = más tiempo/cantidad)
+    etapas_config = ETAPAS_CONSTRUCCION[tipo_construccion]
     factor_superficie = max(1.0, superficie_m2 / 100.0)  # base 100m²
     
+    resultado_etapas = {}
+    maquinaria_total = {}
+    herramientas_total = {}
+    
+    for etapa_nombre, etapa_data in etapas_config.items():
+        # Calcular materiales para esta etapa
+        materiales_etapa = {}
+        coef = COEFICIENTES_CONSTRUCCION[tipo_construccion]
+        
+        for material in etapa_data["materiales_etapa"]:
+            if material in coef:
+                cantidad = superficie_m2 * coef[material]
+                if cantidad > 0:
+                    materiales_etapa[material] = round(cantidad, 2)
+        
+        # Calcular maquinaria para esta etapa
+        maquinaria_etapa = {}
+        for maquina, specs in etapa_data["maquinaria"].items():
+            if specs["cantidad"] > 0:
+                cantidad_ajustada = max(specs["cantidad"], int(specs["cantidad"] * factor_superficie))
+                dias_ajustados = max(specs["dias"], int(specs["dias"] * factor_superficie))
+                
+                maquinaria_etapa[maquina] = {
+                    "cantidad": cantidad_ajustada,
+                    "dias": dias_ajustados
+                }
+                
+                # Sumar al total general
+                if maquina not in maquinaria_total:
+                    maquinaria_total[maquina] = {"cantidad": 0, "dias_total": 0}
+                maquinaria_total[maquina]["cantidad"] = max(maquinaria_total[maquina]["cantidad"], cantidad_ajustada)
+                maquinaria_total[maquina]["dias_total"] += dias_ajustados
+        
+        # Calcular herramientas para esta etapa
+        herramientas_etapa = {}
+        for herramienta, specs in etapa_data["herramientas"].items():
+            if specs["cantidad"] > 0:
+                cantidad_ajustada = max(specs["cantidad"], int(specs["cantidad"] * factor_superficie))
+                dias_ajustados = max(specs["dias"], int(specs["dias"] * factor_superficie))
+                
+                herramientas_etapa[herramienta] = {
+                    "cantidad": cantidad_ajustada,
+                    "dias": dias_ajustados
+                }
+                
+                # Sumar al total general
+                if herramienta not in herramientas_total:
+                    herramientas_total[herramienta] = {"cantidad": 0, "dias_total": 0}
+                herramientas_total[herramienta]["cantidad"] = max(herramientas_total[herramienta]["cantidad"], cantidad_ajustada)
+                herramientas_total[herramienta]["dias_total"] += dias_ajustados
+        
+        # Guardar resultado de la etapa
+        resultado_etapas[etapa_nombre] = {
+            "materiales": materiales_etapa,
+            "maquinaria": maquinaria_etapa,
+            "herramientas": herramientas_etapa
+        }
+    
+    return resultado_etapas, maquinaria_total, herramientas_total
+
+def calcular_equipos_herramientas(superficie_m2, tipo_construccion):
+    """
+    Calcula equipos y herramientas necesarios (función compatible con código existente)
+    """
+    _, maquinaria_total, herramientas_total = calcular_por_etapas(superficie_m2, tipo_construccion)
+    
+    # Convertir formato para compatibilidad
     equipos_calculados = {}
-    for equipo, specs in config["equipos"].items():
-        equipos_calculados[equipo] = {
-            "cantidad": max(specs["cantidad"], int(specs["cantidad"] * factor_superficie)),
-            "dias_uso": max(specs["dias"], int(specs["dias"] * factor_superficie))
+    for maquina, data in maquinaria_total.items():
+        equipos_calculados[maquina] = {
+            "cantidad": data["cantidad"],
+            "dias_uso": data["dias_total"]
         }
     
     herramientas_calculadas = {}
-    for herramienta, cantidad_base in config["herramientas"].items():
-        herramientas_calculadas[herramienta] = max(cantidad_base, int(cantidad_base * factor_superficie))
+    for herramienta, data in herramientas_total.items():
+        herramientas_calculadas[herramienta] = data["cantidad"]
     
     return equipos_calculados, herramientas_calculadas
 
@@ -405,8 +528,47 @@ def procesar_presupuesto_ia(archivo_pdf=None, metros_cuadrados_manual=None, tipo
         # Usar tipo forzado si se especifica
         tipo_final = tipo_construccion_forzado if tipo_construccion_forzado else tipo_sugerido
         
-        # Generar presupuesto completo
-        presupuesto = generar_presupuesto_completo(superficie_final, tipo_final, analisis_ia)
+        # Generar presupuesto con sistema de etapas
+        etapas_resultado, maquinaria_total, herramientas_total = calcular_por_etapas(superficie_final, tipo_final)
+        materiales_totales = calcular_materiales(superficie_final, tipo_final)
+        
+        # Formatear para compatibilidad
+        equipos_totales = {}
+        for maquina, data in maquinaria_total.items():
+            equipos_totales[maquina] = {
+                "cantidad": data["cantidad"],
+                "dias": data["dias_total"]
+            }
+        
+        herramientas_totales = {}
+        for herramienta, data in herramientas_total.items():
+            herramientas_totales[herramienta] = data["cantidad"]
+        
+        coef = COEFICIENTES_CONSTRUCCION[tipo_final]
+        
+        presupuesto = {
+            "metadata": {
+                "superficie_m2": superficie_final,
+                "tipo_construccion": tipo_final,
+                "fecha_calculo": datetime.now().isoformat(),
+                "factor_precio": coef["factor_precio"],
+                "metodo_calculo": "etapas_profesional"
+            },
+            "materiales": materiales_totales,
+            "equipos": equipos_totales,
+            "herramientas": herramientas_totales,
+            "etapas": etapas_resultado,
+            "resumen_maquinaria": {
+                "total_maquinas": len(maquinaria_total),
+                "total_dias_maquinaria": sum(data["dias_total"] for data in maquinaria_total.values()),
+                "nivel_tecnologia": {
+                    "Económica": "Manual/Básico",
+                    "Estándar": "Intermedio/Eléctrico", 
+                    "Premium": "Avanzado/Robotizado"
+                }[tipo_final]
+            },
+            "analisis_ia": analisis_ia
+        }
         
         return {
             "exito": True,
