@@ -297,10 +297,19 @@ def crear_desde_ia():
         # Agregar equipos
         equipos = presupuesto_ia.get('equipos', {})
         for equipo, specs in equipos.items():
-            if specs.get('cantidad', 0) > 0:
+            # Manejar tanto diccionarios como valores simples
+            if isinstance(specs, dict):
+                cantidad = specs.get('cantidad', 0)
+                dias_uso = specs.get('dias_uso', 0)
+            else:
+                # Fallback si no es un diccionario
+                cantidad = 1
+                dias_uso = 0
+                
+            if cantidad > 0:
                 descripciones_equipos = {
                     'hormigonera': 'Alquiler Hormigonera',
-                    'andamios': 'Alquiler Andamios',
+                    'andamios': 'Alquiler Andamios',  
                     'carretilla': 'Carretilla',
                     'nivel_laser': 'Alquiler Nivel Láser'
                 }
@@ -308,9 +317,16 @@ def crear_desde_ia():
                 item = ItemPresupuesto()
                 item.presupuesto_id = nuevo_presupuesto.id
                 item.tipo = 'equipo'
-                item.descripcion = f"{descripciones_equipos.get(equipo, equipo.title())} - {specs.get('dias_uso', 0)} días"
+                
+                # Descripción con días de uso si aplica
+                base_desc = descripciones_equipos.get(equipo, equipo.replace('_', ' ').title())
+                if dias_uso > 0:
+                    item.descripcion = f"{base_desc} - {dias_uso} días"
+                else:
+                    item.descripcion = base_desc
+                    
                 item.unidad = 'días' if equipo in ['hormigonera', 'andamios', 'nivel_laser'] else 'unidades'
-                item.cantidad = specs.get('cantidad', 1)
+                item.cantidad = float(cantidad)
                 item.precio_unitario = 0.0
                 item.total = 0.0
                 db.session.add(item)
@@ -318,16 +334,28 @@ def crear_desde_ia():
         # Agregar herramientas
         herramientas = presupuesto_ia.get('herramientas', {})
         for herramienta, cantidad in herramientas.items():
-            if cantidad > 0:
-                item = ItemPresupuesto()
-                item.presupuesto_id = nuevo_presupuesto.id
-                item.tipo = 'material'
-                item.descripcion = herramienta.title()
-                item.unidad = 'unidades'
-                item.cantidad = cantidad
-                item.precio_unitario = 0.0
-                item.total = 0.0
-                db.session.add(item)
+            try:
+                cantidad_float = float(cantidad) if cantidad else 0.0
+                if cantidad_float > 0:
+                    descripciones_herramientas = {
+                        'palas': 'Palas',
+                        'baldes': 'Baldes',
+                        'fratacho': 'Fratacho',
+                        'regla': 'Regla de albañil'
+                    }
+                    
+                    item = ItemPresupuesto()
+                    item.presupuesto_id = nuevo_presupuesto.id
+                    item.tipo = 'herramienta'
+                    item.descripcion = descripciones_herramientas.get(herramienta, herramienta.replace('_', ' ').title())
+                    item.unidad = 'unidades'
+                    item.cantidad = cantidad_float
+                    item.precio_unitario = 0.0
+                    item.total = 0.0
+                    db.session.add(item)
+            except (ValueError, TypeError):
+                # Omitir herramientas con valores inválidos
+                continue
         
         db.session.commit()
         
