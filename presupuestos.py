@@ -219,8 +219,7 @@ def procesar_calculadora_ia():
 def crear_desde_ia():
     """Crea un presupuesto a partir de los resultados de la calculadora IA"""
     if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para crear presupuestos.', 'danger')
-        return redirect(url_for('presupuestos.lista'))
+        return jsonify({'error': 'No tienes permisos para crear presupuestos'}), 403
     
     try:
         # Obtener datos del JSON enviado
@@ -228,17 +227,39 @@ def crear_desde_ia():
         if not data:
             return jsonify({'error': 'No se recibieron datos'}), 400
         
-        obra_id = data.get('obra_id')
         presupuesto_ia = data.get('presupuesto')
         observaciones = data.get('observaciones', '')
+        datos_proyecto = data.get('datos_proyecto', {})
         
-        if not obra_id or not presupuesto_ia:
-            return jsonify({'error': 'Datos incompletos'}), 400
+        if not presupuesto_ia:
+            return jsonify({'error': 'Datos del presupuesto incompletos'}), 400
         
-        # Verificar que la obra existe
-        obra = Obra.query.get(obra_id)
-        if not obra:
-            return jsonify({'error': 'Obra no encontrada'}), 404
+        # CREAR OBRA AUTOMÁTICAMENTE SI NO EXISTE
+        obra_id = data.get('obra_id')
+        
+        if not obra_id:
+            # Crear nueva obra desde los datos del proyecto
+            nombre_obra = datos_proyecto.get('nombre', f'Obra IA {datetime.now().strftime("%Y%m%d_%H%M")}')
+            superficie = datos_proyecto.get('superficie', 0)
+            tipo_construccion = datos_proyecto.get('tipo_construccion', 'Estándar')
+            
+            nueva_obra = Obra()
+            nueva_obra.nombre = nombre_obra
+            nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde IA')
+            nueva_obra.descripcion = datos_proyecto.get('ubicacion', 'Ubicación no especificada')
+            nueva_obra.estado = 'planificacion'
+            nueva_obra.organizacion_id = current_user.organizacion_id
+            
+            db.session.add(nueva_obra)
+            db.session.flush()  # Para obtener el ID
+            
+            obra_id = nueva_obra.id
+            
+        else:
+            # Verificar que la obra existe
+            obra = Obra.query.get(obra_id)
+            if not obra:
+                return jsonify({'error': 'Obra no encontrada'}), 404
         
         # Generar número de presupuesto
         ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
