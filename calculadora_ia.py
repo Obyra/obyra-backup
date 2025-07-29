@@ -12,22 +12,44 @@ from openai import OpenAI
 # Inicializar cliente OpenAI
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-# Coeficientes de construcción por tipo y m²
+# Coeficientes de construcción expandidos por tipo y m² - Estilo Togal.AI
 COEFICIENTES_CONSTRUCCION = {
     "Económica": {
-        "ladrillos": 55,      # unidades por m²
-        "cemento": 0.25,      # bolsas por m²
-        "cal": 3,             # kg por m²
-        "arena": 0.03,        # m³ por m²
-        "piedra": 0.02,       # m³ por m²
-        "hierro_8": 2.5,      # kg por m²
-        "hierro_10": 1.8,     # kg por m²
-        "hierro_12": 1.2,     # kg por m²
-        "membrana": 0.8,      # m² por m²
-        "pintura": 0.1,       # litros por m²
-        "factor_precio": 1.0   # factor multiplicador base
+        # Materiales estructurales
+        "ladrillos": 55,           # unidades por m²
+        "cemento": 0.25,           # bolsas por m²
+        "cal": 3,                  # kg por m²
+        "arena": 0.03,             # m³ por m²
+        "piedra": 0.02,            # m³ por m²
+        "hierro_8": 2.5,           # kg por m²
+        "hierro_10": 1.8,          # kg por m²
+        "hierro_12": 1.2,          # kg por m²
+        
+        # Nuevos materiales de construcción
+        "ceramicos": 1.05,         # m² por m² (con desperdicio)
+        "porcelanato": 0,          # No incluido en económica
+        "azulejos": 0.5,           # m² por m² (solo baños)
+        "cables_electricos": 8,     # metros por m²
+        "caños_agua": 4,           # metros por m²
+        "caños_cloacas": 2,        # metros por m²
+        "chapas": 0.15,            # m² por m² (techos)
+        "tejas": 0.12,             # m² por m² (alt. a chapas)
+        "aislacion_termica": 0.8,   # m² por m²
+        "yeso": 0.5,               # kg por m² (terminaciones)
+        "madera_estructural": 0.05, # m³ por m²
+        "vidrios": 0.08,           # m² por m² (ventanas)
+        "aberturas_metal": 0.06,   # m² por m² (puertas/ventanas)
+        
+        # Impermeabilización y terminaciones
+        "membrana": 0.8,           # m² por m²
+        "pintura": 0.1,            # litros por m²
+        "pintura_exterior": 0.08,   # litros por m²
+        "sellador": 0.02,          # litros por m²
+        
+        "factor_precio": 1.0       # factor multiplicador base
     },
     "Estándar": {
+        # Materiales estructurales
         "ladrillos": 60,
         "cemento": 0.3,
         "cal": 4,
@@ -36,11 +58,32 @@ COEFICIENTES_CONSTRUCCION = {
         "hierro_8": 3.5,
         "hierro_10": 2.2,
         "hierro_12": 1.5,
+        
+        # Materiales mejorados
+        "ceramicos": 1.1,
+        "porcelanato": 0.3,        # Incluido parcialmente
+        "azulejos": 0.8,           # Más baños
+        "cables_electricos": 12,
+        "caños_agua": 6,
+        "caños_cloacas": 3,
+        "chapas": 0.2,
+        "tejas": 0.15,
+        "aislacion_termica": 1.2,
+        "yeso": 0.8,
+        "madera_estructural": 0.08,
+        "vidrios": 0.12,
+        "aberturas_metal": 0.1,
+        
+        # Terminaciones estándar
         "membrana": 1.1,
         "pintura": 0.13,
+        "pintura_exterior": 0.1,
+        "sellador": 0.03,
+        
         "factor_precio": 1.3
     },
     "Premium": {
+        # Materiales estructurales premium
         "ladrillos": 65,
         "cemento": 0.35,
         "cal": 5,
@@ -49,54 +92,116 @@ COEFICIENTES_CONSTRUCCION = {
         "hierro_8": 4,
         "hierro_10": 2.8,
         "hierro_12": 2,
+        
+        # Materiales premium
+        "ceramicos": 0.5,          # Menos cerámicos
+        "porcelanato": 1.2,        # Más porcelanato
+        "azulejos": 1.2,           # Todos los baños
+        "cables_electricos": 15,   # Más puntos eléctricos
+        "caños_agua": 8,           # Mejores instalaciones
+        "caños_cloacas": 4,
+        "chapas": 0.1,             # Menos chapas
+        "tejas": 0.25,             # Más tejas premium
+        "aislacion_termica": 1.8,   # Mejor aislación
+        "yeso": 1.2,               # Mejores terminaciones
+        "madera_estructural": 0.12,
+        "vidrios": 0.18,           # DVH, templados
+        "aberturas_metal": 0.15,   # Mejores aberturas
+        
+        # Terminaciones premium
         "membrana": 1.5,
         "pintura": 0.18,
+        "pintura_exterior": 0.15,
+        "sellador": 0.05,
+        
         "factor_precio": 1.8
     }
 }
 
-# Equipos y herramientas por tipo de construcción
+# Equipos y herramientas expandidos por tipo de construcción
 EQUIPOS_HERRAMIENTAS = {
     "Económica": {
         "equipos": {
             "hormigonera": {"cantidad": 0, "dias": 0},
-            "andamios": {"modulos": 2, "dias": 15},
+            "andamios": {"cantidad": 2, "dias": 15},
             "carretilla": {"cantidad": 1, "dias": 30},
-            "nivel_laser": {"cantidad": 0, "dias": 0}
+            "nivel_laser": {"cantidad": 0, "dias": 0},
+            "martillo_demoledor": {"cantidad": 0, "dias": 0},
+            "soldadora": {"cantidad": 0, "dias": 0},
+            "compresora": {"cantidad": 0, "dias": 0},
+            "generador": {"cantidad": 0, "dias": 0}
         },
         "herramientas": {
             "palas": 2,
             "baldes": 4,
             "fratacho": 2,
-            "regla": 1
+            "regla": 1,
+            "llanas": 2,
+            "martillos": 2,
+            "serruchos": 1,
+            "taladros": 1,
+            "nivel_burbuja": 1,
+            "flexometros": 2
         }
     },
     "Estándar": {
         "equipos": {
             "hormigonera": {"cantidad": 1, "dias": 20},
-            "andamios": {"modulos": 4, "dias": 25},
+            "andamios": {"cantidad": 4, "dias": 25},
             "carretilla": {"cantidad": 2, "dias": 35},
-            "nivel_laser": {"cantidad": 0, "dias": 0}
+            "nivel_laser": {"cantidad": 1, "dias": 10},
+            "martillo_demoledor": {"cantidad": 1, "dias": 5},
+            "soldadora": {"cantidad": 1, "dias": 8},
+            "compresora": {"cantidad": 1, "dias": 12},
+            "generador": {"cantidad": 0, "dias": 0}
         },
         "herramientas": {
             "palas": 3,
-            "baldes": 6,
+            "baldes": 6, 
             "fratacho": 3,
-            "regla": 2
+            "regla": 2,
+            "llanas": 4,
+            "martillos": 3,
+            "serruchos": 2,
+            "taladros": 2,
+            "nivel_burbuja": 2,
+            "flexometros": 3,
+            "amoladoras": 2,
+            "pistola_calor": 1,
+            "alicates": 2,
+            "destornilladores": 4
         }
     },
     "Premium": {
         "equipos": {
             "hormigonera": {"cantidad": 1, "dias": 30},
-            "andamios": {"modulos": 6, "dias": 40},
-            "carretilla": {"cantidad": 3, "dias": 45},
-            "nivel_laser": {"cantidad": 1, "dias": 10}
+            "andamios": {"cantidad": 6, "dias": 40},
+            "carretilla": {"cantidad": 3, "dias": 50},
+            "nivel_laser": {"cantidad": 1, "dias": 20},
+            "martillo_demoledor": {"cantidad": 1, "dias": 10},
+            "soldadora": {"cantidad": 1, "dias": 15},
+            "compresora": {"cantidad": 1, "dias": 25},
+            "generador": {"cantidad": 1, "dias": 20},
+            "elevador": {"cantidad": 1, "dias": 15},
+            "mezcladora": {"cantidad": 1, "dias": 30}
         },
         "herramientas": {
             "palas": 4,
             "baldes": 8,
             "fratacho": 4,
-            "regla": 2
+            "regla": 3,
+            "llanas": 6,
+            "martillos": 4,
+            "serruchos": 3,
+            "taladros": 3,
+            "nivel_burbuja": 3,
+            "flexometros": 4,
+            "amoladoras": 3,
+            "pistola_calor": 2,
+            "alicates": 3,
+            "destornilladores": 6,
+            "sierra_circular": 1,
+            "router": 1
         }
     }
 }

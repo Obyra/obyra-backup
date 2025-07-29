@@ -304,8 +304,9 @@ def crear_desde_ia():
         materiales = presupuesto_ia.get('materiales', {})
         for material, cantidad in materiales.items():
             if cantidad > 0:
-                # Mapear nombres técnicos a descripciones legibles
+                # Mapear nombres técnicos a descripciones legibles expandidas
                 descripciones = {
+                    # Materiales estructurales
                     'ladrillos': 'Ladrillos comunes',
                     'cemento': 'Bolsas de cemento',
                     'cal': 'Cal hidratada',
@@ -314,11 +315,37 @@ def crear_desde_ia():
                     'hierro_8': 'Hierro 8mm',
                     'hierro_10': 'Hierro 10mm', 
                     'hierro_12': 'Hierro 12mm',
+                    
+                    # Revestimientos y pisos
+                    'ceramicos': 'Cerámicos esmaltados',
+                    'porcelanato': 'Porcelanato rectificado',
+                    'azulejos': 'Azulejos para baños',
+                    
+                    # Instalaciones
+                    'cables_electricos': 'Cables eléctricos',
+                    'caños_agua': 'Caños para agua',
+                    'caños_cloacas': 'Caños cloacales',
+                    
+                    # Techado
+                    'chapas': 'Chapas acanaladas',
+                    'tejas': 'Tejas cerámicas',
+                    'aislacion_termica': 'Aislación térmica',
+                    
+                    # Terminaciones
+                    'yeso': 'Yeso para terminaciones',
+                    'madera_estructural': 'Madera estructural',
+                    'vidrios': 'Vidrios templados',
+                    'aberturas_metal': 'Aberturas metálicas',
+                    
+                    # Impermeabilización
                     'membrana': 'Membrana asfáltica',
-                    'pintura': 'Pintura látex'
+                    'pintura': 'Pintura látex interior',
+                    'pintura_exterior': 'Pintura exterior',
+                    'sellador': 'Sellador acrílico'
                 }
                 
                 unidades = {
+                    # Estructurales
                     'ladrillos': 'unidades',
                     'cemento': 'bolsas',
                     'cal': 'kg',
@@ -327,8 +354,33 @@ def crear_desde_ia():
                     'hierro_8': 'kg',
                     'hierro_10': 'kg',
                     'hierro_12': 'kg',
+                    
+                    # Revestimientos
+                    'ceramicos': 'm²',
+                    'porcelanato': 'm²',
+                    'azulejos': 'm²',
+                    
+                    # Instalaciones
+                    'cables_electricos': 'metros',
+                    'caños_agua': 'metros',
+                    'caños_cloacas': 'metros',
+                    
+                    # Techado
+                    'chapas': 'm²',
+                    'tejas': 'm²',
+                    'aislacion_termica': 'm²',
+                    
+                    # Terminaciones
+                    'yeso': 'kg',
+                    'madera_estructural': 'm³',
+                    'vidrios': 'm²',
+                    'aberturas_metal': 'm²',
+                    
+                    # Impermeabilización
                     'membrana': 'm²',
-                    'pintura': 'litros'
+                    'pintura': 'litros',
+                    'pintura_exterior': 'litros',
+                    'sellador': 'litros'
                 }
                 
                 item = ItemPresupuesto()
@@ -358,7 +410,13 @@ def crear_desde_ia():
                     'hormigonera': 'Alquiler Hormigonera',
                     'andamios': 'Alquiler Andamios',  
                     'carretilla': 'Carretilla',
-                    'nivel_laser': 'Alquiler Nivel Láser'
+                    'nivel_laser': 'Alquiler Nivel Láser',
+                    'martillo_demoledor': 'Alquiler Martillo Demoledor',
+                    'soldadora': 'Alquiler Soldadora',
+                    'compresora': 'Alquiler Compresora',
+                    'generador': 'Alquiler Generador',
+                    'elevador': 'Alquiler Elevador',
+                    'mezcladora': 'Alquiler Mezcladora'
                 }
                 
                 item = ItemPresupuesto()
@@ -388,7 +446,19 @@ def crear_desde_ia():
                         'palas': 'Palas',
                         'baldes': 'Baldes',
                         'fratacho': 'Fratacho',
-                        'regla': 'Regla de albañil'
+                        'regla': 'Regla de albañil',
+                        'llanas': 'Llanas',
+                        'martillos': 'Martillos',
+                        'serruchos': 'Serruchos',
+                        'taladros': 'Taladros',
+                        'nivel_burbuja': 'Nivel de burbuja',
+                        'flexometros': 'Flexómetros',
+                        'amoladoras': 'Amoladoras',
+                        'pistola_calor': 'Pistola de calor',
+                        'alicates': 'Alicates',
+                        'destornilladores': 'Destornilladores',
+                        'sierra_circular': 'Sierra circular',
+                        'router': 'Router'
                     }
                     
                     item = ItemPresupuesto()
