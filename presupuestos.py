@@ -47,6 +47,7 @@ def lista():
                          estado=estado, 
                          buscar=buscar)
 
+
 @presupuestos_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
 def crear():
