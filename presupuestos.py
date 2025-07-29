@@ -54,40 +54,98 @@ def crear():
         flash('No tienes permisos para crear presupuestos.', 'danger')
         return redirect(url_for('presupuestos.lista'))
     
-    obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
-    
     if request.method == 'POST':
-        obra_id = request.form.get('obra_id')
-        observaciones = request.form.get('observaciones')
-        iva_porcentaje = request.form.get('iva_porcentaje', 21)
+        # Obtener datos del nuevo formulario
+        nombre_obra = request.form.get('nombre_obra')
+        tipo_obra = request.form.get('tipo_obra')
+        ubicacion = request.form.get('ubicacion')
+        tipo_construccion = request.form.get('tipo_construccion')
+        superficie_m2 = request.form.get('superficie_m2')
+        fecha_inicio = request.form.get('fecha_inicio')
+        fecha_fin = request.form.get('fecha_fin')
+        presupuesto_disponible = request.form.get('presupuesto_disponible')
+        moneda = request.form.get('moneda', 'ARS')
+        cliente_nombre = request.form.get('cliente_nombre')
+        plano_pdf = request.files.get('plano_pdf')
         
-        if not obra_id:
-            flash('Selecciona una obra.', 'danger')
-            return render_template('presupuestos/crear.html', obras=obras)
-        
-        # Generar número de presupuesto
-        ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
-        if ultimo_numero:
-            numero = f"PRES-{int(ultimo_numero.split('-')[1]) + 1:04d}"
-        else:
-            numero = "PRES-0001"
-        
-        nuevo_presupuesto = Presupuesto()
-        nuevo_presupuesto.obra_id = obra_id
-        nuevo_presupuesto.numero = numero
-        nuevo_presupuesto.observaciones = observaciones
-        nuevo_presupuesto.iva_porcentaje = float(iva_porcentaje)
+        # Validaciones
+        if not all([nombre_obra, tipo_obra, ubicacion, tipo_construccion, superficie_m2]):
+            flash('Completa todos los campos obligatorios.', 'danger')
+            return render_template('presupuestos/crear.html')
         
         try:
+            superficie_float = float(superficie_m2)
+            if superficie_float <= 0:
+                flash('La superficie debe ser mayor a 0.', 'danger')
+                return render_template('presupuestos/crear.html')
+        except ValueError:
+            flash('La superficie debe ser un número válido.', 'danger')
+            return render_template('presupuestos/crear.html')
+        
+        # Crear nueva obra basada en los datos del formulario
+        nueva_obra = Obra()
+        nueva_obra.nombre = nombre_obra
+        nueva_obra.descripcion = f"Obra {tipo_obra.replace('_', ' ').title()} - {tipo_construccion.title()}"
+        nueva_obra.direccion = ubicacion
+        nueva_obra.cliente = cliente_nombre or "Cliente Sin Especificar"
+        nueva_obra.estado = 'planificacion'
+        nueva_obra.organizacion_id = current_user.organizacion_id
+        
+        # Procesar fechas
+        if fecha_inicio:
+            from datetime import datetime
+            nueva_obra.fecha_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+        if fecha_fin:
+            nueva_obra.fecha_fin_estimada = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+        
+        # Procesar presupuesto disponible
+        if presupuesto_disponible:
+            try:
+                presupuesto_float = float(presupuesto_disponible)
+                nueva_obra.presupuesto_total = presupuesto_float
+            except ValueError:
+                pass
+        
+        try:
+            db.session.add(nueva_obra)
+            db.session.flush()  # Para obtener el ID de la obra
+            
+            # Generar número de presupuesto
+            ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
+            if ultimo_numero and '-' in ultimo_numero:
+                numero = f"PRES-{int(ultimo_numero.split('-')[1]) + 1:04d}"
+            else:
+                numero = "PRES-0001"
+            
+            # Crear presupuesto asociado
+            nuevo_presupuesto = Presupuesto()
+            nuevo_presupuesto.obra_id = nueva_obra.id
+            nuevo_presupuesto.numero = numero
+            nuevo_presupuesto.iva_porcentaje = 21.0  # Fijo según lo solicitado
+            
+            # Agregar observaciones con detalles del proyecto
+            observaciones_proyecto = []
+            observaciones_proyecto.append(f"Tipo de obra: {tipo_obra.replace('_', ' ').title()}")
+            observaciones_proyecto.append(f"Tipo de construcción: {tipo_construccion.title()}")
+            observaciones_proyecto.append(f"Superficie: {superficie_float} m²")
+            if presupuesto_disponible:
+                observaciones_proyecto.append(f"Presupuesto disponible: {moneda} {presupuesto_disponible}")
+            if plano_pdf and plano_pdf.filename:
+                observaciones_proyecto.append(f"Plano PDF: {plano_pdf.filename}")
+            
+            nuevo_presupuesto.observaciones = " | ".join(observaciones_proyecto)
+            
             db.session.add(nuevo_presupuesto)
             db.session.commit()
-            flash(f'Presupuesto {numero} creado exitosamente.', 'success')
+            
+            flash(f'Obra "{nombre_obra}" y presupuesto {numero} creados exitosamente.', 'success')
             return redirect(url_for('presupuestos.detalle', id=nuevo_presupuesto.id))
+            
         except Exception as e:
             db.session.rollback()
-            flash('Error al crear el presupuesto. Intenta nuevamente.', 'danger')
+            flash(f'Error al crear la obra y presupuesto: {str(e)}', 'danger')
     
-    return render_template('presupuestos/crear.html', obras=obras)
+    return render_template('presupuestos/crear.html')
 
 @presupuestos_bp.route('/calculadora-ia')
 @login_required

@@ -59,9 +59,6 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('presupuestos.lista') }}">Ver Presupuestos</a></li>
-                            {% if current_user.rol in ['administrador', 'tecnico'] %}
-                            <li><a class="dropdown-item" href="{{ url_for('presupuestos.crear') }}">Nuevo Presupuesto</a></li>
-                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}

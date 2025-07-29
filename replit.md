@@ -143,6 +143,17 @@ The system is designed to be deployed on platforms like Replit, with easy config
 
 ## Recent Changes (July 2025)
 
+### Presupuestos Module Redesign (29 July 2025)
+- **Menu Simplification**: Removed "Nuevo Presupuesto" from dropdown menu - now only "Ver Presupuestos" option
+- **Comprehensive Form Redesign**: Complete overhaul of presupuesto creation form with:
+  - **New Required Fields**: Nombre obra, tipo obra (Casa 1/2 plantas, Edificio 3-5/5-10 pisos), ubicación, tipo construcción (Económica/Estándar/Premium), superficie m²
+  - **Optional Enhancement Fields**: Fechas inicio/fin, presupuesto disponible (ARS/USD), cliente, plano PDF drag-and-drop
+  - **Removed Fields**: Observaciones editables, IVA editable (fixed at 21%)
+  - **IA Integration**: Direct "Calcular con IA" button in form with real-time results panel
+- **Automatic Work Creation**: Form now creates both obra and presupuesto simultaneously from single interface
+- **Modern UX**: Drag-and-drop PDF upload, responsive layout with guidance panels, real-time validation
+- **Backend Integration**: Complete form processing with automatic obra generation and presupuesto association
+
 ### Menu Optimization and Corporate Branding (Latest Update)
 - **Complete Removal of Asistente IA Menu**: Eliminated entire "Asistente IA" dropdown from main navigation for cleaner interface
 - **Relocated Super Admin Access**: Moved "Auditoría IA (Super Admin)" to user dropdown menu (top-right) for authorized users only

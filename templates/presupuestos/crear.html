@@ -3,63 +3,444 @@
 {% block title %}Nuevo Presupuesto - OBYRA IA{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-plus me-2"></i>Nuevo Presupuesto</h2>
-                <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left me-1"></i>Volver a Presupuestos
-                </a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow">
-                <div class="card-body">
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label for="obra_id" class="form-label">Obra *</label>
-                            <select class="form-select" id="obra_id" name="obra_id" required>
-                                <option value="">Seleccionar obra...</option>
-                                {% for obra in obras %}
-                                <option value="{{ obra.id }}">{{ obra.nombre }} - {{ obra.cliente }}</option>
-                                {% endfor %}
-                            </select>
-                            {% if not obras %}
-                            <div class="form-text text-danger">
-                                No hay obras disponibles. <a href="{{ url_for('obras.crear') }}">Crear una obra primero</a>.
-                            </div>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="iva_porcentaje" class="form-label">IVA (%)</label>
-                            <input type="number" class="form-control" id="iva_porcentaje" name="iva_porcentaje" 
-                                   value="21" step="0.01" min="0" max="100">
-                            <div class="form-text">Porcentaje de IVA a aplicar (por defecto 21% para Argentina)</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="observaciones" class="form-label">Observaciones</label>
-                            <textarea class="form-control" id="observaciones" name="observaciones" rows="4" 
-                                      placeholder="Condiciones generales, términos de pago, validez, etc."></textarea>
-                        </div>
-                        
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary me-md-2">
-                                Cancelar
-                            </a>
-                            <button type="submit" class="btn btn-primary" {{ 'disabled' if not obras }}>
-                                <i class="fas fa-save me-1"></i>Crear Presupuesto
-                            </button>
-                        </div>
-                    </form>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-plus text-primary"></i> Nuevo Presupuesto</h2>
+                    <p class="text-muted mb-0">Crea un presupuesto completo con análisis inteligente de materiales</p>
+                </div>
+                <div class="btn-group" role="group">
+                    <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </a>
+                    <a href="{{ url_for('presupuestos.calculadora_ia') }}" class="btn btn-success">
+                        <i class="fas fa-brain"></i> Calculadora IA
+                    </a>
                 </div>
             </div>
         </div>
     </div>
+
+    <div class="row">
+        <!-- Formulario Principal -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-building"></i> Información del Proyecto</h5>
+                </div>
+                <div class="card-body">
+                    <form id="nuevoPresupuestoForm" method="POST" enctype="multipart/form-data">
+                        
+                        <!-- Primera fila: Nombre y Tipo de Obra -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="nombre_obra" class="form-label fw-bold">
+                                    <i class="fas fa-building text-primary"></i> Nombre de la Obra *
+                                </label>
+                                <input type="text" class="form-control form-control-lg" 
+                                       id="nombre_obra" name="nombre_obra" required
+                                       placeholder="Ej: Casa Familiar Rodriguez">
+                                <div class="form-text">Nombre descriptivo del proyecto</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="tipo_obra" class="form-label fw-bold">
+                                    <i class="fas fa-home text-warning"></i> Tipo de Obra *
+                                </label>
+                                <select class="form-select form-select-lg" id="tipo_obra" name="tipo_obra" required>
+                                    <option value="">Seleccionar tipo...</option>
+                                    <option value="casa_1_planta">Casa 1 planta</option>
+                                    <option value="casa_2_plantas">Casa 2 plantas</option>
+                                    <option value="edificio_3_5_pisos">Edificio de 3 a 5 pisos</option>
+                                    <option value="edificio_5_10_pisos">Edificio de 5 a 10 pisos</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Segunda fila: Ubicación y Tipo de Construcción -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="ubicacion" class="form-label fw-bold">
+                                    <i class="fas fa-map-marker-alt text-danger"></i> Ubicación *
+                                </label>
+                                <input type="text" class="form-control form-control-lg" 
+                                       id="ubicacion" name="ubicacion" required
+                                       placeholder="Dirección completa o zona">
+                                <div class="form-text">Ciudad, provincia o dirección específica</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="tipo_construccion" class="form-label fw-bold">
+                                    <i class="fas fa-star text-warning"></i> Tipo de Construcción *
+                                </label>
+                                <select class="form-select form-select-lg" id="tipo_construccion" name="tipo_construccion" required>
+                                    <option value="">Seleccionar nivel...</option>
+                                    <option value="economica">Económica</option>
+                                    <option value="estandar">Estándar</option>
+                                    <option value="premium">Premium</option>
+                                </select>
+                                <div class="form-text">
+                                    <small>
+                                        <span class="badge bg-light text-dark">Económica: 1.0x</span>
+                                        <span class="badge bg-primary">Estándar: 1.3x</span>
+                                        <span class="badge bg-warning text-dark">Premium: 1.8x</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tercera fila: Superficie y Fechas -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <label for="superficie_m2" class="form-label fw-bold">
+                                    <i class="fas fa-ruler-combined text-success"></i> Superficie (m²) *
+                                </label>
+                                <input type="number" class="form-control form-control-lg" 
+                                       id="superficie_m2" name="superficie_m2" 
+                                       step="0.01" min="1" required
+                                       placeholder="120.50">
+                                <div class="form-text">Metros cuadrados totales</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="fecha_inicio" class="form-label fw-bold">
+                                    <i class="fas fa-calendar-alt text-info"></i> Fecha Inicio
+                                </label>
+                                <input type="date" class="form-control form-control-lg" 
+                                       id="fecha_inicio" name="fecha_inicio">
+                                <div class="form-text">Fecha estimada de inicio</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="fecha_fin" class="form-label fw-bold">
+                                    <i class="fas fa-calendar-check text-info"></i> Fecha Finalización
+                                </label>
+                                <input type="date" class="form-control form-control-lg" 
+                                       id="fecha_fin" name="fecha_fin">
+                                <div class="form-text">Fecha estimada de entrega</div>
+                            </div>
+                        </div>
+
+                        <!-- Cuarta fila: Presupuesto -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="presupuesto_disponible" class="form-label fw-bold">
+                                    <i class="fas fa-dollar-sign text-success"></i> Presupuesto Disponible
+                                </label>
+                                <div class="input-group input-group-lg">
+                                    <select class="form-select" id="moneda" name="moneda" style="max-width: 100px;">
+                                        <option value="ARS">ARS</option>
+                                        <option value="USD">USD</option>
+                                    </select>
+                                    <input type="number" class="form-control" 
+                                           id="presupuesto_disponible" name="presupuesto_disponible" 
+                                           step="0.01" min="0" placeholder="0.00">
+                                </div>
+                                <div class="form-text">Presupuesto máximo disponible (opcional)</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="cliente_nombre" class="form-label fw-bold">
+                                    <i class="fas fa-user text-secondary"></i> Cliente
+                                </label>
+                                <input type="text" class="form-control form-control-lg" 
+                                       id="cliente_nombre" name="cliente_nombre" 
+                                       placeholder="Nombre del cliente">
+                                <div class="form-text">Persona o empresa contratante</div>
+                            </div>
+                        </div>
+
+                        <!-- Upload de Plano -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-file-pdf text-danger"></i> Plano Arquitectónico (PDF)
+                            </label>
+                            <div class="card border-2 border-dashed" style="border-color: #dee2e6;">
+                                <div class="card-body text-center py-4">
+                                    <input type="file" class="form-control d-none" 
+                                           id="plano_pdf" name="plano_pdf" accept=".pdf"
+                                           onchange="mostrarArchivoPlano()">
+                                    <div id="dropZone" onclick="document.getElementById('plano_pdf').click();" 
+                                         style="cursor: pointer;">
+                                        <i class="fas fa-upload fa-2x text-muted mb-2"></i>
+                                        <p class="mb-1"><strong>Arrastra y suelta tu plano PDF aquí</strong></p>
+                                        <p class="text-muted mb-0">o haz clic para seleccionar archivo</p>
+                                    </div>
+                                    <div id="archivoPlanoInfo" class="alert alert-info mt-3" style="display: none;">
+                                        <i class="fas fa-file-pdf text-danger"></i>
+                                        <span id="nombreArchivoPlano"></span>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" 
+                                                onclick="removerArchivo()">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle"></i> 
+                                Si subes un plano, la IA podrá extraer automáticamente las dimensiones
+                            </div>
+                        </div>
+
+                        <!-- Botones de acción -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="submit" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-save"></i> Crear Presupuesto
+                                    </button>
+                                    <button type="button" class="btn btn-success btn-lg" onclick="calcularConIA()">
+                                        <i class="fas fa-brain"></i> Calcular con IA
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="limpiarFormulario()">
+                                        <i class="fas fa-broom"></i> Limpiar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Lateral con información -->
+        <div class="col-lg-4">
+            
+            <!-- Guía rápida -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-lightbulb"></i> Guía Rápida</h6>
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <p><strong>Para mejores resultados:</strong></p>
+                        <ul class="mb-0">
+                            <li>Sube un plano PDF para análisis automático</li>
+                            <li>Especifica la superficie si no tienes plano</li>
+                            <li>Elige el tipo de construcción apropiado</li>
+                            <li>Usa "Calcular con IA" para obtener materiales</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tipos de construcción -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-star"></i> Tipos de Construcción</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-12 mb-2">
+                            <div class="bg-light p-2 rounded">
+                                <strong class="text-success">Económica</strong><br>
+                                <small>Materiales básicos, acabados sencillos</small>
+                            </div>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <div class="bg-light p-2 rounded">
+                                <strong class="text-primary">Estándar</strong><br>
+                                <small>Calidad media, acabados intermedios</small>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="bg-light p-2 rounded">
+                                <strong class="text-warning">Premium</strong><br>
+                                <small>Alta calidad, acabados superiores</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado del cálculo IA -->
+            <div id="calculoIAPanel" class="card shadow-sm" style="display: none;">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0"><i class="fas fa-robot"></i> Cálculo IA Completado</h6>
+                </div>
+                <div class="card-body">
+                    <div id="resultadoIAResumen" class="text-center">
+                        <!-- Se completará con JavaScript -->
+                    </div>
+                    <div class="d-grid mt-3">
+                        <button class="btn btn-outline-success btn-sm" onclick="verCalculoCompleto()">
+                            <i class="fas fa-eye"></i> Ver Cálculo Completo
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
+
+<script>
+let datosCalculoIA = null;
+
+// Manejo de archivo de plano
+function mostrarArchivoPlano() {
+    const input = document.getElementById('plano_pdf');
+    const info = document.getElementById('archivoPlanoInfo');
+    const nombre = document.getElementById('nombreArchivoPlano');
+    
+    if (input.files.length > 0) {
+        nombre.textContent = input.files[0].name;
+        info.style.display = 'block';
+    } else {
+        info.style.display = 'none';
+    }
+}
+
+function removerArchivo() {
+    document.getElementById('plano_pdf').value = '';
+    document.getElementById('archivoPlanoInfo').style.display = 'none';
+}
+
+// Drag and drop para planos
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#007bff';
+    dropZone.style.backgroundColor = '#f8f9fa';
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#dee2e6';
+    dropZone.style.backgroundColor = 'transparent';
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#dee2e6';
+    dropZone.style.backgroundColor = 'transparent';
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0 && files[0].type === 'application/pdf') {
+        document.getElementById('plano_pdf').files = files;
+        mostrarArchivoPlano();
+    } else {
+        alert('Por favor, sube solo archivos PDF');
+    }
+});
+
+// Calcular con IA
+function calcularConIA() {
+    const superficie = document.getElementById('superficie_m2').value;
+    const tipo = document.getElementById('tipo_construccion').value;
+    const archivo = document.getElementById('plano_pdf').files[0];
+    
+    if (!superficie && !archivo) {
+        alert('Debes especificar la superficie o subir un plano PDF para usar la IA');
+        return;
+    }
+    
+    if (!tipo) {
+        alert('Selecciona el tipo de construcción');
+        return;
+    }
+    
+    // Crear FormData
+    const formData = new FormData();
+    if (superficie) formData.append('metros_cuadrados', superficie);
+    if (tipo) formData.append('tipo_construccion', tipo);
+    if (archivo) formData.append('archivo_pdf', archivo);
+    
+    // Mostrar loading
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculando...';
+    btn.disabled = true;
+    
+    // Llamar a la IA
+    fetch('/presupuestos/procesar-calculadora-ia', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (data.exito) {
+            datosCalculoIA = data;
+            mostrarResultadoIA(data);
+        } else {
+            alert('Error en el cálculo IA: ' + (data.error || 'Error desconocido'));
+        }
+    })
+    .catch(error => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        alert('Error de conexión: ' + error.message);
+    });
+}
+
+// Mostrar resultado del cálculo IA
+function mostrarResultadoIA(data) {
+    const panel = document.getElementById('calculoIAPanel');
+    const resumen = document.getElementById('resultadoIAResumen');
+    
+    const materiales = Object.keys(data.presupuesto.materiales).length;
+    const equipos = Object.keys(data.presupuesto.equipos).length;
+    
+    resumen.innerHTML = `
+        <div class="row text-center">
+            <div class="col-6">
+                <h4 class="text-success">${data.superficie_calculada.toFixed(0)}</h4>
+                <small>m² calculados</small>
+            </div>
+            <div class="col-6">
+                <h4 class="text-primary">${materiales + equipos}</h4>
+                <small>items calculados</small>
+            </div>
+        </div>
+        <hr>
+        <p class="small mb-0">
+            <i class="fas fa-check-circle text-success"></i>
+            Tipo: ${data.tipo_usado}
+        </p>
+    `;
+    
+    panel.style.display = 'block';
+}
+
+// Ver cálculo completo
+function verCalculoCompleto() {
+    if (datosCalculoIA) {
+        window.open('/presupuestos/calculadora-ia', '_blank');
+    }
+}
+
+// Limpiar formulario
+function limpiarFormulario() {
+    if (confirm('¿Estás seguro de que quieres limpiar todos los campos?')) {
+        document.getElementById('nuevoPresupuestoForm').reset();
+        document.getElementById('archivoPlanoInfo').style.display = 'none';
+        document.getElementById('calculoIAPanel').style.display = 'none';
+        datosCalculoIA = null;
+    }
+}
+
+// Validación del formulario antes de enviar
+document.getElementById('nuevoPresupuestoForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Validaciones básicas
+    const nombre = document.getElementById('nombre_obra').value.trim();
+    const tipo = document.getElementById('tipo_obra').value;
+    const ubicacion = document.getElementById('ubicacion').value.trim();
+    const tipoConst = document.getElementById('tipo_construccion').value;
+    const superficie = document.getElementById('superficie_m2').value;
+    
+    if (!nombre || !tipo || !ubicacion || !tipoConst || !superficie) {
+        alert('Por favor, completa todos los campos obligatorios marcados con *');
+        return;
+    }
+    
+    // Si todo está bien, enviar
+    this.submit();
+});
+</script>
+
 {% endblock %}
