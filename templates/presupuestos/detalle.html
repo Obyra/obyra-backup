@@ -47,6 +47,73 @@
                             <strong>Creado:</strong> {{ presupuesto.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}<br>
                         </div>
                     </div>
+                    
+                    <!-- Información editable de la obra -->
+                    <hr>
+                    <h6 class="text-primary mb-3">
+                        <i class="fas fa-building me-2"></i>Información de la Obra
+                        <button class="btn btn-outline-primary btn-sm ms-2" onclick="toggleEditarObra()">
+                            <i class="fas fa-edit"></i> Editar
+                        </button>
+                    </h6>
+                    
+                    <div id="info-obra-view">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Nombre:</strong> <span id="obra-nombre">{{ presupuesto.obra.nombre }}</span><br>
+                                <strong>Cliente:</strong> <span id="obra-cliente">{{ presupuesto.obra.cliente }}</span><br>
+                                <strong>Descripción:</strong> <span id="obra-descripcion">{{ presupuesto.obra.descripcion or 'Sin descripción' }}</span><br>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Dirección:</strong> <span id="obra-direccion">{{ presupuesto.obra.direccion or 'Sin especificar' }}</span><br>
+                                <strong>Fecha Inicio:</strong> <span id="obra-fecha-inicio">{{ presupuesto.obra.fecha_inicio.strftime('%d/%m/%Y') if presupuesto.obra.fecha_inicio else 'Sin definir' }}</span><br>
+                                <strong>Fecha Fin Est.:</strong> <span id="obra-fecha-fin">{{ presupuesto.obra.fecha_fin_estimada.strftime('%d/%m/%Y') if presupuesto.obra.fecha_fin_estimada else 'Sin definir' }}</span><br>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="info-obra-edit" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">Nombre:</label>
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ presupuesto.obra.nombre }}">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">Cliente:</label>
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ presupuesto.obra.cliente }}">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">Descripción:</label>
+                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ presupuesto.obra.descripcion or '' }}</textarea>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">Dirección:</label>
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion" value="{{ presupuesto.obra.direccion or '' }}">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">Fecha Inicio:</label>
+                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-inicio" 
+                                           value="{{ presupuesto.obra.fecha_inicio.strftime('%Y-%m-%d') if presupuesto.obra.fecha_inicio else '' }}">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">Fecha Fin Estimada:</label>
+                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-fin" 
+                                           value="{{ presupuesto.obra.fecha_fin_estimada.strftime('%Y-%m-%d') if presupuesto.obra.fecha_fin_estimada else '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-3">
+                            <button class="btn btn-success btn-sm" onclick="guardarObra()">
+                                <i class="fas fa-save"></i> Guardar
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="cancelarEditarObra()">
+                                <i class="fas fa-times"></i> Cancelar
+                            </button>
+                        </div>
+                    </div>
                     {% if presupuesto.observaciones %}
                     <hr>
                     <strong>Observaciones:</strong><br>
@@ -133,12 +200,20 @@
                             </thead>
                             <tbody>
                                 {% for item in materiales %}
-                                <tr>
+                                <tr data-item-id="{{ item.id }}">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
                                     <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end fw-bold">{{ item.total|moneda }}</td>
+                                    <td class="text-end fw-bold">
+                                        {{ item.total|moneda }}
+                                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                        <button class="btn btn-outline-primary btn-sm ms-2" 
+                                                onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td>
                                         <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
@@ -206,12 +281,20 @@
                             </thead>
                             <tbody>
                                 {% for item in mano_obra %}
-                                <tr>
+                                <tr data-item-id="{{ item.id }}">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
                                     <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end fw-bold">{{ item.total|moneda }}</td>
+                                    <td class="text-end fw-bold">
+                                        {{ item.total|moneda }}
+                                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                        <button class="btn btn-outline-primary btn-sm ms-2" 
+                                                onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td>
                                         <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
@@ -279,12 +362,20 @@
                             </thead>
                             <tbody>
                                 {% for item in equipos %}
-                                <tr>
+                                <tr data-item-id="{{ item.id }}">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
                                     <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end fw-bold">{{ item.total|moneda }}</td>
+                                    <td class="text-end fw-bold">
+                                        {{ item.total|moneda }}
+                                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                        <button class="btn btn-outline-primary btn-sm ms-2" 
+                                                onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td>
                                         <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
@@ -444,6 +535,223 @@ function abrirModalItem(tipo) {
     document.getElementById('tipoItem').value = tipo;
     document.getElementById('tipoItemTexto').textContent = tipos[tipo];
     new bootstrap.Modal(document.getElementById('agregarItemModal')).show();
+}
+
+// Funciones para editar información de la obra
+function toggleEditarObra() {
+    const viewDiv = document.getElementById('info-obra-view');
+    const editDiv = document.getElementById('info-obra-edit');
+    
+    if (viewDiv.style.display === 'none') {
+        viewDiv.style.display = 'block';
+        editDiv.style.display = 'none';
+    } else {
+        viewDiv.style.display = 'none';
+        editDiv.style.display = 'block';
+    }
+}
+
+function cancelarEditarObra() {
+    document.getElementById('info-obra-view').style.display = 'block';
+    document.getElementById('info-obra-edit').style.display = 'none';
+}
+
+async function guardarObra() {
+    const data = {
+        nombre: document.getElementById('edit-obra-nombre').value,
+        cliente: document.getElementById('edit-obra-cliente').value,
+        descripcion: document.getElementById('edit-obra-descripcion').value,
+        direccion: document.getElementById('edit-obra-direccion').value,
+        fecha_inicio: document.getElementById('edit-obra-fecha-inicio').value,
+        fecha_fin_estimada: document.getElementById('edit-obra-fecha-fin').value
+    };
+    
+    try {
+        const response = await fetch(`/presupuestos/{{ presupuesto.id }}/editar-obra`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.exito) {
+            // Actualizar los valores mostrados
+            document.getElementById('obra-nombre').textContent = data.nombre;
+            document.getElementById('obra-cliente').textContent = data.cliente;
+            document.getElementById('obra-descripcion').textContent = data.descripcion || 'Sin descripción';
+            document.getElementById('obra-direccion').textContent = data.direccion || 'Sin especificar';
+            
+            // Formatear fechas para mostrar
+            if (data.fecha_inicio) {
+                const fechaInicio = new Date(data.fecha_inicio + 'T00:00:00');
+                document.getElementById('obra-fecha-inicio').textContent = fechaInicio.toLocaleDateString('es-AR');
+            } else {
+                document.getElementById('obra-fecha-inicio').textContent = 'Sin definir';
+            }
+            
+            if (data.fecha_fin_estimada) {
+                const fechaFin = new Date(data.fecha_fin_estimada + 'T00:00:00');
+                document.getElementById('obra-fecha-fin').textContent = fechaFin.toLocaleDateString('es-AR');
+            } else {
+                document.getElementById('obra-fecha-fin').textContent = 'Sin definir';
+            }
+            
+            // Volver a vista normal
+            cancelarEditarObra();
+            
+            // Mostrar mensaje de éxito
+            showAlert('Obra actualizada correctamente', 'success');
+        } else {
+            showAlert(result.error || 'Error al actualizar la obra', 'danger');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error de conexión al actualizar la obra', 'danger');
+    }
+}
+
+// Funciones para editar items del presupuesto
+function editarItem(itemId, descripcion, unidad, cantidad, precioUnitario) {
+    const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (!row) return;
+    
+    // Limpiar el precio unitario de cualquier formato de moneda
+    const precioLimpio = String(precioUnitario).replace(/[$,]/g, '');
+    
+    // Reemplazar celdas con inputs editables
+    row.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm" value="${descripcion}" id="edit-desc-${itemId}"></td>
+        <td>
+            <select class="form-select form-select-sm" id="edit-unidad-${itemId}">
+                <option value="unidad" ${unidad === 'unidad' ? 'selected' : ''}>Unidad</option>
+                <option value="m²" ${unidad === 'm²' ? 'selected' : ''}>m²</option>
+                <option value="m³" ${unidad === 'm³' ? 'selected' : ''}>m³</option>
+                <option value="kg" ${unidad === 'kg' ? 'selected' : ''}>kg</option>
+                <option value="metros" ${unidad === 'metros' ? 'selected' : ''}>metros</option>
+                <option value="litros" ${unidad === 'litros' ? 'selected' : ''}>litros</option>
+            </select>
+        </td>
+        <td><input type="number" class="form-control form-control-sm" value="${cantidad}" step="0.01" id="edit-cant-${itemId}"></td>
+        <td><input type="number" class="form-control form-control-sm" value="${precioLimpio}" step="0.01" id="edit-precio-${itemId}"></td>
+        <td>
+            <button class="btn btn-success btn-sm me-1" onclick="guardarItem(${itemId})">
+                <i class="fas fa-save"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId}, '${descripcion}', '${unidad}', ${cantidad}, ${precioLimpio})">
+                <i class="fas fa-times"></i>
+            </button>
+        </td>
+    `;
+}
+
+function cancelarEditarItem(itemId, descripcion, unidad, cantidad, precioUnitario) {
+    const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (!row) return;
+    
+    const total = (cantidad * precioUnitario).toFixed(2);
+    
+    row.innerHTML = `
+        <td>${descripcion}</td>
+        <td>${unidad}</td>
+        <td>${parseFloat(cantidad).toFixed(2)}</td>
+        <td>$${parseFloat(precioUnitario).toFixed(2)}</td>
+        <td>
+            <strong>$${total}</strong>
+            <button class="btn btn-outline-primary btn-sm ms-2" onclick="editarItem(${itemId}, '${descripcion}', '${unidad}', ${cantidad}, ${precioUnitario})">
+                <i class="fas fa-edit"></i>
+            </button>
+        </td>
+    `;
+}
+
+async function guardarItem(itemId) {
+    const data = {
+        descripcion: document.getElementById(`edit-desc-${itemId}`).value,
+        unidad: document.getElementById(`edit-unidad-${itemId}`).value,
+        cantidad: parseFloat(document.getElementById(`edit-cant-${itemId}`).value),
+        precio_unitario: parseFloat(document.getElementById(`edit-precio-${itemId}`).value)
+    };
+    
+    try {
+        const response = await fetch(`/presupuestos/item/${itemId}/editar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.exito) {
+            // Actualizar la fila con los nuevos valores
+            const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+            const total = (data.cantidad * data.precio_unitario).toFixed(2);
+            
+            row.innerHTML = `
+                <td>${data.descripcion}</td>
+                <td>${data.unidad}</td>
+                <td>${data.cantidad.toFixed(2)}</td>
+                <td>$${data.precio_unitario.toFixed(2)}</td>
+                <td>
+                    <strong>$${total}</strong>
+                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="editarItem(${itemId}, '${data.descripcion}', '${data.unidad}', ${data.cantidad}, ${data.precio_unitario})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </td>
+            `;
+            
+            // Actualizar totales en el resumen
+            actualizarTotales(result);
+            
+            showAlert('Item actualizado correctamente', 'success');
+        } else {
+            showAlert(result.error || 'Error al actualizar el item', 'danger');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error de conexión al actualizar el item', 'danger');
+    }
+}
+
+function actualizarTotales(result) {
+    // Actualizar los totales en el resumen del presupuesto
+    const formatMoney = (amount) => `$${parseFloat(amount).toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
+    
+    // Buscar los elementos del resumen y actualizarlos
+    const materialesEl = document.querySelector('.text-info.d-block');
+    const manoObraEl = document.querySelector('.text-warning.d-block');
+    const equiposEl = document.querySelector('.text-secondary.d-block');
+    const sinIvaEl = document.querySelector('.text-primary.d-block');
+    const totalEl = document.querySelector('.text-success.d-block.h5');
+    
+    if (materialesEl) materialesEl.textContent = formatMoney(result.subtotal_materiales);
+    if (manoObraEl) manoObraEl.textContent = formatMoney(result.subtotal_mano_obra);
+    if (equiposEl) equiposEl.textContent = formatMoney(result.subtotal_equipos);
+    if (sinIvaEl) sinIvaEl.textContent = formatMoney(result.total_sin_iva);
+    if (totalEl) totalEl.textContent = formatMoney(result.total_con_iva);
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
 }
 </script>
 {% endblock %}

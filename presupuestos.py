@@ -589,12 +589,14 @@ def detalle(id):
     materiales = [item for item in items if item.tipo == 'material']
     mano_obra = [item for item in items if item.tipo == 'mano_obra']
     equipos = [item for item in items if item.tipo == 'equipo']
+    herramientas = [item for item in items if item.tipo == 'herramienta']
     
     return render_template('presupuestos/detalle.html', 
                          presupuesto=presupuesto,
                          materiales=materiales,
                          mano_obra=mano_obra,
-                         equipos=equipos)
+                         equipos=equipos,
+                         herramientas=herramientas)
 
 @presupuestos_bp.route('/<int:id>/item', methods=['POST'])
 @login_required
@@ -840,3 +842,84 @@ def generar_pdf(id):
     response.headers['Content-Disposition'] = f'inline; filename=presupuesto_{presupuesto.numero}.pdf'
     
     return response
+
+@presupuestos_bp.route('/<int:id>/editar-obra', methods=['POST'])
+@login_required
+def editar_obra(id):
+    """Editar información de la obra asociada al presupuesto"""
+    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'Sin permisos'}), 403
+    
+    presupuesto = Presupuesto.query.get_or_404(id)
+    obra = presupuesto.obra
+    
+    data = request.get_json()
+    
+    try:
+        # Actualizar campos de la obra
+        if 'nombre' in data:
+            obra.nombre = data['nombre']
+        if 'cliente' in data:
+            obra.cliente = data['cliente']
+        if 'descripcion' in data:
+            obra.descripcion = data['descripcion']
+        if 'direccion' in data:
+            obra.direccion = data['direccion']
+        if 'fecha_inicio' in data and data['fecha_inicio']:
+            obra.fecha_inicio = datetime.strptime(data['fecha_inicio'], '%Y-%m-%d').date()
+        if 'fecha_fin_estimada' in data and data['fecha_fin_estimada']:
+            obra.fecha_fin_estimada = datetime.strptime(data['fecha_fin_estimada'], '%Y-%m-%d').date()
+        if 'presupuesto_total' in data and data['presupuesto_total']:
+            obra.presupuesto_total = float(data['presupuesto_total'])
+        
+        db.session.commit()
+        return jsonify({'exito': True, 'mensaje': 'Obra actualizada correctamente'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error actualizando obra: {str(e)}'}), 500
+
+@presupuestos_bp.route('/item/<int:item_id>/editar', methods=['POST'])
+@login_required
+def editar_item(item_id):
+    """Editar un item específico del presupuesto"""
+    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'Sin permisos'}), 403
+    
+    item = ItemPresupuesto.query.get_or_404(item_id)
+    presupuesto = item.presupuesto
+    
+    data = request.get_json()
+    
+    try:
+        # Actualizar campos del item
+        if 'descripcion' in data:
+            item.descripcion = data['descripcion']
+        if 'unidad' in data:
+            item.unidad = data['unidad']
+        if 'cantidad' in data:
+            item.cantidad = float(data['cantidad'])
+        if 'precio_unitario' in data:
+            item.precio_unitario = float(data['precio_unitario'])
+        
+        # Recalcular total
+        item.total = item.cantidad * item.precio_unitario
+        
+        # Recalcular totales del presupuesto
+        presupuesto.calcular_totales()
+        
+        db.session.commit()
+        return jsonify({
+            'exito': True, 
+            'mensaje': 'Item actualizado correctamente',
+            'nuevo_total': float(item.total),
+            'subtotal_materiales': float(presupuesto.subtotal_materiales),
+            'subtotal_mano_obra': float(presupuesto.subtotal_mano_obra),
+            'subtotal_equipos': float(presupuesto.subtotal_equipos),
+            'total_sin_iva': float(presupuesto.total_sin_iva),
+            'total_con_iva': float(presupuesto.total_con_iva)
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error actualizando item: {str(e)}'}), 500
