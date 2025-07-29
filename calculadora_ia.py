@@ -118,147 +118,213 @@ COEFICIENTES_CONSTRUCCION = {
     }
 }
 
-# Sistema de cálculo por etapas de construcción con maquinaria especializada
+# Sistema exhaustivo de cálculo por etapas de construcción con maquinaria completa
 ETAPAS_CONSTRUCCION = {
     "Económica": {
         # Etapa 1: Cimentación y estructura (trabajo manual intensivo)
         "cimentacion_estructura": {
             "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "arena", "piedra"],
             "maquinaria": {
-                "pala_mecanica": {"cantidad": 0, "dias": 0},  # Sin maquinaria pesada
-                "bomba_hormigon": {"cantidad": 0, "dias": 0},
-                "grua": {"cantidad": 0, "dias": 0},
-                "mixer": {"cantidad": 0, "dias": 0}  # Hormigón manual
+                # NIVEL ECONÓMICO: TODO MANUAL, SIN MAQUINARIA PESADA
+                "hormigonera_trompo_manual": {"cantidad": 1, "dias": 25},  # Trompo manual 160L
+                "carretilla_manual": {"cantidad": 4, "dias": 30},
+                "cortadora_hierro_manual": {"cantidad": 1, "dias": 20},  # Cortadora manual de mesa
+                "dobladora_hierro_manual": {"cantidad": 1, "dias": 20},  # Dobladora manual
+                "andamios_tubulares": {"cantidad": 15, "dias": 35}  # Andamios básicos
             },
             "herramientas": {
-                "hormigonera_manual": {"cantidad": 1, "dias": 15},
-                "carretillas": {"cantidad": 2, "dias": 20},
-                "palas": {"cantidad": 4, "dias": 20},
-                "baldes": {"cantidad": 8, "dias": 20}
+                "palas_punta": {"cantidad": 6, "dias": 25},
+                "palas_ancha": {"cantidad": 4, "dias": 25},
+                "picos": {"cantidad": 4, "dias": 25},
+                "baldes_goma": {"cantidad": 12, "dias": 30},
+                "mangueras": {"cantidad": 2, "dias": 30},
+                "nivel_burbuja_60cm": {"cantidad": 3, "dias": 35},
+                "plomada": {"cantidad": 2, "dias": 35},
+                "martillo_goma": {"cantidad": 3, "dias": 30},
+                "sierra_manual_hierro": {"cantidad": 2, "dias": 20}
             }
         },
         # Etapa 2: Albañilería (métodos tradicionales)
         "albanileria": {
             "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
             "maquinaria": {
-                "cortadora_ladrillo": {"cantidad": 0, "dias": 0},  # Corte manual
-                "elevador_materiales": {"cantidad": 0, "dias": 0},
-                "mezcladora_automatica": {"cantidad": 0, "dias": 0}
+                # NIVEL ECONÓMICO: HERRAMIENTAS BÁSICAS MANUALES
+                "mezcladora_manual_80L": {"cantidad": 1, "dias": 35},  # Mezcladora manual
+                "escalera_tijera": {"cantidad": 2, "dias": 30},
+                "carretilla_albanil": {"cantidad": 3, "dias": 35}
             },
             "herramientas": {
-                "andamios_tubulares": {"cantidad": 3, "dias": 25},
-                "llanas": {"cantidad": 4, "dias": 25},
-                "fratacho": {"cantidad": 4, "dias": 25},
-                "nivel_burbuja": {"cantidad": 2, "dias": 25}
+                "llanas_acero_inox": {"cantidad": 6, "dias": 35},
+                "fratacho_madera": {"cantidad": 6, "dias": 35},
+                "regla_aluminio_2m": {"cantidad": 3, "dias": 35},
+                "escuadra_albanil": {"cantidad": 2, "dias": 35},
+                "hilo_nylon": {"cantidad": 15, "dias": 35},
+                "nivel_burbuja_40cm": {"cantidad": 4, "dias": 35},
+                "balde_goma_15L": {"cantidad": 8, "dias": 35},
+                "cortafrio": {"cantidad": 3, "dias": 30},
+                "cucharas_albanil": {"cantidad": 4, "dias": 35},
+                "esponja_goma": {"cantidad": 10, "dias": 30}
             }
         },
         # Etapa 3: Terminaciones
         "terminaciones": {
-            "materiales_etapa": ["pintura", "yeso", "ceramicos"],
+            "materiales_etapa": ["pintura", "yeso", "ceramicos", "azulejos"],
             "maquinaria": {
-                "compresora_pintura": {"cantidad": 0, "dias": 0},  # Pintura manual
-                "lijadora_pared": {"cantidad": 0, "dias": 0}
+                # NIVEL ECONÓMICO: SIN MÁQUINAS, TODO MANUAL
+                "escalera_extensible": {"cantidad": 1, "dias": 25},
+                "caballete_trabajo": {"cantidad": 4, "dias": 25}
             },
             "herramientas": {
-                "rodillos": {"cantidad": 6, "dias": 15},
-                "pinceles": {"cantidad": 12, "dias": 15},
-                "espatulas": {"cantidad": 6, "dias": 15}
+                "rodillos_pintura_18cm": {"cantidad": 8, "dias": 25},
+                "pinceles_1_pulgada": {"cantidad": 6, "dias": 25},
+                "pinceles_2_pulgadas": {"cantidad": 4, "dias": 25},
+                "pinceles_detalle": {"cantidad": 8, "dias": 25},
+                "bandejas_pintura": {"cantidad": 6, "dias": 25},
+                "espatulas_masilla": {"cantidad": 4, "dias": 20},
+                "llana_dentada_6mm": {"cantidad": 2, "dias": 15},
+                "llana_dentada_8mm": {"cantidad": 2, "dias": 15},
+                "cortadora_ceramico_manual": {"cantidad": 1, "dias": 12},
+                "regla_cortaceramico": {"cantidad": 1, "dias": 12},
+                "esponja_limpieza": {"cantidad": 12, "dias": 15},
+                "nivel_pequeno_20cm": {"cantidad": 4, "dias": 20}
             }
         }
     },
     "Estándar": {
-        # Etapa 1: Cimentación con tecnología intermedia
+        # Etapa 1: Cimentación con maquinaria eléctrica básica
         "cimentacion_estructura": {
             "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "hierro_12", "arena", "piedra"],
             "maquinaria": {
-                "pala_mecanica": {"cantidad": 1, "dias": 8},  # Maquinaria básica
-                "bomba_hormigon": {"cantidad": 0, "dias": 0},  # Aún sin bomba
-                "grua": {"cantidad": 0, "dias": 0},
-                "mixer": {"cantidad": 1, "dias": 12}  # Mixer para hormigón
+                # NIVEL ESTÁNDAR: MAQUINARIA ELÉCTRICA BÁSICA
+                "minicargadora": {"cantidad": 1, "dias": 15},  # Minicargadora para excavación
+                "hormigonera_electrica_300L": {"cantidad": 1, "dias": 25},  # Hormigonera eléctrica
+                "cortadora_hierro_electrica": {"cantidad": 1, "dias": 20},  # Cortadora eléctrica
+                "dobladora_hierro_electrica": {"cantidad": 1, "dias": 20},  # Dobladora eléctrica
+                "atadora_hierro_electrica": {"cantidad": 1, "dias": 15},  # Atadora eléctrica de hierro
+                "andamios_modulares": {"cantidad": 20, "dias": 35},
+                "vibrador_hormigon_electrico": {"cantidad": 2, "dias": 20}
             },
             "herramientas": {
-                "hormigonera_electrica": {"cantidad": 1, "dias": 20},
-                "carretillas": {"cantidad": 3, "dias": 25},
-                "vibrador_hormigon": {"cantidad": 1, "dias": 15},
-                "nivel_laser": {"cantidad": 1, "dias": 10}
+                "taladro_percutor": {"cantidad": 2, "dias": 25},
+                "amoladora_grande": {"cantidad": 2, "dias": 30},
+                "nivel_laser_basico": {"cantidad": 1, "dias": 35},
+                "carretilla_motorizada": {"cantidad": 2, "dias": 30},
+                "sierra_circular": {"cantidad": 1, "dias": 20},
+                "soldadora_inverter": {"cantidad": 1, "dias": 15},
+                "compresor_aire": {"cantidad": 1, "dias": 25}
             }
         },
         # Etapa 2: Albañilería con herramientas eléctricas
         "albanileria": {
             "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
             "maquinaria": {
-                "cortadora_ladrillo": {"cantidad": 1, "dias": 15},  # Cortadora eléctrica
-                "elevador_materiales": {"cantidad": 1, "dias": 20},
-                "mezcladora_automatica": {"cantidad": 1, "dias": 20}
+                # NIVEL ESTÁNDAR: MÁQUINAS ELÉCTRICAS INTERMEDIAS
+                "mezcladora_electrica_200L": {"cantidad": 1, "dias": 30},  # Mezcladora eléctrica
+                "cortadora_ladrillo_electrica": {"cantidad": 1, "dias": 25},  # Cortadora eléctrica
+                "elevador_materiales_electrico": {"cantidad": 1, "dias": 30},  # Elevador eléctrico
+                "bomba_mortero_electrica": {"cantidad": 1, "dias": 20},  # Bomba de mortero
+                "andamios_electricos": {"cantidad": 25, "dias": 35}
             },
             "herramientas": {
-                "andamios_modulares": {"cantidad": 4, "dias": 30},
-                "taladros_profesionales": {"cantidad": 3, "dias": 25},
-                "amoladoras": {"cantidad": 2, "dias": 20},
-                "soldadora": {"cantidad": 1, "dias": 10}
+                "taladro_profesional": {"cantidad": 3, "dias": 30},
+                "amoladora_albanil": {"cantidad": 3, "dias": 30},
+                "sierra_sable": {"cantidad": 2, "dias": 25},
+                "nivel_laser_rotativo": {"cantidad": 1, "dias": 35},
+                "pistola_calor": {"cantidad": 1, "dias": 20},
+                "martillo_demoledor": {"cantidad": 1, "dias": 15},
+                "aspiradora_industrial": {"cantidad": 1, "dias": 25}
             }
         },
         # Etapa 3: Terminaciones con equipos semiautomáticos
         "terminaciones": {
             "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "ceramicos", "azulejos"],
             "maquinaria": {
-                "compresora_pintura": {"cantidad": 1, "dias": 12},  # Pintura a presión
-                "lijadora_pared": {"cantidad": 1, "dias": 8},
-                "cortadora_ceramicos": {"cantidad": 1, "dias": 10}
+                # NIVEL ESTÁNDAR: EQUIPOS ELÉCTRICOS DE TERMINACIÓN
+                "compresora_pintura": {"cantidad": 1, "dias": 20},  # Compresora para pintura
+                "lijadora_pared_electrica": {"cantidad": 1, "dias": 15},  # Lijadora de pared
+                "cortadora_ceramicos_electrica": {"cantidad": 1, "dias": 15},  # Cortadora eléctrica
+                "proyectora_yeso": {"cantidad": 1, "dias": 12},  # Proyectora de yeso
+                "pulidora_pisos": {"cantidad": 1, "dias": 10}  # Pulidora eléctrica
             },
             "herramientas": {
-                "pistola_pintura": {"cantidad": 2, "dias": 12},
-                "pulidora": {"cantidad": 1, "dias": 8},
-                "nivel_laser_terminaciones": {"cantidad": 1, "dias": 15}
+                "pistola_pintura_electrica": {"cantidad": 2, "dias": 20},
+                "lijadora_orbital": {"cantidad": 2, "dias": 15},
+                "taladro_mezclador": {"cantidad": 1, "dias": 15},
+                "nivel_laser_pequeno": {"cantidad": 2, "dias": 20},
+                "aspiradora_seco_humedo": {"cantidad": 1, "dias": 20},
+                "esmeril_angular": {"cantidad": 1, "dias": 15},
+                "caladora_profesional": {"cantidad": 1, "dias": 10}
             }
         }
     },
     "Premium": {
-        # Etapa 1: Cimentación con maquinaria de alta tecnología
+        # Etapa 1: Cimentación con maquinaria de alta tecnología y velocidad
         "cimentacion_estructura": {
             "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "hierro_12", "arena", "piedra"],
             "maquinaria": {
-                "pala_mecanica": {"cantidad": 1, "dias": 12},  # Maquinaria moderna
-                "bomba_hormigon": {"cantidad": 1, "dias": 10},  # Bomba de hormigón
-                "grua_torre": {"cantidad": 1, "dias": 40},  # Grúa torre
-                "mixer_automatico": {"cantidad": 2, "dias": 15},  # Mixers automáticos
-                "planta_hormigon_movil": {"cantidad": 1, "dias": 8}  # Tecnología avanzada
+                # NIVEL PREMIUM: MAQUINARIA DE ALTA VELOCIDAD Y AUTOMATIZACIÓN
+                "excavadora_hidraulica_CAT": {"cantidad": 1, "dias": 8},  # Excavadora de alta gama
+                "bomba_hormigon_autopropulsada": {"cantidad": 1, "dias": 10},  # Bomba autopropulsada
+                "grua_torre_computarizada": {"cantidad": 1, "dias": 40},  # Grúa con control computarizado
+                "planta_hormigon_automatica": {"cantidad": 1, "dias": 12},  # Planta automática móvil
+                "montacargas_telescopico": {"cantidad": 2, "dias": 35},  # Montacargas telescópicos
+                "compactadora_vibratoria": {"cantidad": 1, "dias": 8},  # Compactadora de alta frecuencia
+                "cortadora_hierro_CNC": {"cantidad": 1, "dias": 15},  # Cortadora CNC automática
+                "dobladora_hierro_automatica": {"cantidad": 1, "dias": 15},  # Dobladora automática
+                "atadora_hierro_robotica": {"cantidad": 1, "dias": 12}  # Atadora robótica
             },
             "herramientas": {
-                "estacion_total": {"cantidad": 1, "dias": 20},  # Topografía de precisión
-                "vibrador_alta_frecuencia": {"cantidad": 2, "dias": 15},
-                "cortadora_hierro_automatica": {"cantidad": 1, "dias": 20},
-                "dobladoras_hierro": {"cantidad": 1, "dias": 15}
+                "estacion_total_GPS": {"cantidad": 1, "dias": 20},  # Topografía GPS de precisión
+                "vibrador_alta_frecuencia": {"cantidad": 3, "dias": 15},
+                "martillo_hidraulico": {"cantidad": 1, "dias": 10},
+                "nivel_laser_3D": {"cantidad": 2, "dias": 20},
+                "drone_supervision": {"cantidad": 1, "dias": 40},  # Drone para monitoreo
+                "soldadora_robotica": {"cantidad": 1, "dias": 15}
             }
         },
-        # Etapa 2: Albañilería robotizada
+        # Etapa 2: Albañilería automatizada con robots
         "albanileria": {
             "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
             "maquinaria": {
-                "robot_albanil": {"cantidad": 1, "dias": 25},  # Tecnología robótica
-                "elevador_materiales_automatico": {"cantidad": 1, "dias": 30},
-                "mezcladora_robotizada": {"cantidad": 1, "dias": 25},
-                "cortadora_laser_materiales": {"cantidad": 1, "dias": 15}
+                # NIVEL PREMIUM: ROBOTS Y AUTOMATIZACIÓN COMPLETA
+                "robot_albanil_SAM": {"cantidad": 1, "dias": 20},  # Robot albañil automático
+                "montacargas_materiales": {"cantidad": 2, "dias": 30},  # Montacargas de materiales
+                "mezcladora_robotizada_500L": {"cantidad": 1, "dias": 25},  # Mezcladora robótica
+                "bomba_mortero_automatica": {"cantidad": 1, "dias": 15},  # Bomba automática
+                "cortadora_laser_materiales": {"cantidad": 1, "dias": 12},  # Cortadora láser
+                "elevador_tijera_autopropulsado": {"cantidad": 2, "dias": 30},  # Elevadores autopropulsados
+                "sistema_transporte_automatico": {"cantidad": 1, "dias": 25}  # Sistema de transporte
             },
             "herramientas": {
-                "andamios_autoelevables": {"cantidad": 2, "dias": 35},
-                "sistema_monitoreo_calidad": {"cantidad": 1, "dias": 30},
-                "soldadora_automatica": {"cantidad": 1, "dias": 20}
+                "andamios_autoelevables": {"cantidad": 4, "dias": 30},
+                "sistema_control_calidad": {"cantidad": 1, "dias": 35},  # Sistema de control de calidad
+                "martillo_neumatico_profesional": {"cantidad": 2, "dias": 20},
+                "nivel_laser_rotativo_premium": {"cantidad": 2, "dias": 35},
+                "aspiradora_industrial_robotica": {"cantidad": 1, "dias": 25},
+                "soldadora_automatica_MIG": {"cantidad": 1, "dias": 15}
             }
         },
-        # Etapa 3: Terminaciones automatizadas
+        # Etapa 3: Terminaciones robotizadas y de alta velocidad
         "terminaciones": {
             "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "porcelanato", "azulejos"],
             "maquinaria": {
-                "robot_pintura": {"cantidad": 1, "dias": 15},  # Pintura robotizada
-                "lijadora_automatica": {"cantidad": 1, "dias": 10},
-                "cortadora_ceramicos_cnc": {"cantidad": 1, "dias": 12},
-                "sistema_proyeccion_yeso": {"cantidad": 1, "dias": 8}
+                # NIVEL PREMIUM: TERMINACIONES ROBOTIZADAS Y VELOCES
+                "robot_pintura_automatico": {"cantidad": 1, "dias": 10},  # Robot de pintura
+                "sistema_proyeccion_yeso_robotico": {"cantidad": 1, "dias": 8},  # Proyección robótica
+                "cortadora_porcelanato_CNC": {"cantidad": 1, "dias": 10},  # Cortadora CNC porcelanato
+                "pulidora_pisos_robotica": {"cantidad": 1, "dias": 8},  # Pulidora robótica
+                "montacargas_terminaciones": {"cantidad": 1, "dias": 20},  # Montacargas especializado
+                "lijadora_pared_automatica": {"cantidad": 1, "dias": 6},  # Lijadora automática
+                "sistema_ventilacion_controlado": {"cantidad": 1, "dias": 20}  # Sistema de ventilación
             },
             "herramientas": {
-                "sistema_control_clima": {"cantidad": 1, "dias": 20},
-                "medidor_laser_precision": {"cantidad": 2, "dias": 15},
-                "pulido_automatico": {"cantidad": 1, "dias": 10}
+                "pistola_pintura_electrostatica": {"cantidad": 2, "dias": 12},  # Pintura electrostática
+                "medidor_laser_3D": {"cantidad": 2, "dias": 15},  # Medición 3D
+                "sistema_control_humedad": {"cantidad": 1, "dias": 15},  # Control de humedad
+                "aspiradora_HEPA_profesional": {"cantidad": 1, "dias": 15},  # Aspiradora HEPA
+                "cepillo_pulidora_diamante": {"cantidad": 2, "dias": 10},  # Pulidora de diamante
+                "nivel_laser_autonivelante": {"cantidad": 3, "dias": 20},  # Nivel autonivelante
+                "compresor_silencioso_premium": {"cantidad": 1, "dias": 15}  # Compresor premium
             }
         }
     }
