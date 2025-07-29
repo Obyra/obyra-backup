@@ -202,57 +202,14 @@ def procesar_calculadora_ia():
         if tipo_final not in COEFICIENTES_CONSTRUCCION:
             tipo_final = "Estándar"
         
-        # Calcular materiales directamente (como Togal.AI)
-        coef = COEFICIENTES_CONSTRUCCION[tipo_final]
+        # USAR FUNCIÓN COMPLETA CON ETAPAS
+        resultado = procesar_presupuesto_ia(
+            archivo_pdf=archivo_pdf,
+            metros_cuadrados_manual=metros_cuadrados,
+            tipo_construccion_forzado=tipo_final
+        )
         
-        # Materiales básicos calculados automáticamente
-        materiales_calculados = {}
-        for material, coef_material in coef.items():
-            if material != "factor_precio":
-                cantidad = superficie_m2 * coef_material
-                if cantidad > 0:
-                    materiales_calculados[material] = round(cantidad, 2)
-        
-        # Equipos básicos
-        equipos_calculados = {
-            "hormigonera": {"cantidad": 1, "dias": max(10, int(superficie_m2 / 50))},
-            "andamios": {"cantidad": max(2, int(superficie_m2 / 100)), "dias": max(15, int(superficie_m2 / 30))},
-            "carretilla": {"cantidad": max(1, int(superficie_m2 / 150)), "dias": max(20, int(superficie_m2 / 25))}
-        }
-        
-        # Herramientas básicas
-        herramientas_calculadas = {
-            "palas": max(2, int(superficie_m2 / 200)),
-            "baldes": max(4, int(superficie_m2 / 100)),
-            "fratacho": max(2, int(superficie_m2 / 150))
-        }
-        
-        # Preparar respuesta estilo Togal.AI
-        presupuesto_resultado = {
-            "metadata": {
-                "superficie_m2": superficie_m2,
-                "tipo_construccion": tipo_final,
-                "fecha_calculo": datetime.now().isoformat(),
-                "factor_precio": coef["factor_precio"]
-            },
-            "materiales": materiales_calculados,
-            "equipos": equipos_calculados,
-            "herramientas": herramientas_calculadas,
-            "analisis_ia": {
-                "superficie_total_m2": superficie_m2,
-                "tipo_construccion_sugerido": tipo_final,
-                "observaciones": f"Análisis automático para {superficie_m2}m² - Tipo {tipo_final}",
-                "confianza_analisis": 0.9,
-                "superficie_origen": "manual"
-            }
-        }
-        
-        return jsonify({
-            'exito': True,
-            'presupuesto': presupuesto_resultado,
-            'superficie_calculada': superficie_m2,
-            'tipo_usado': tipo_final
-        })
+        return jsonify(resultado)
         
     except Exception as e:
         return jsonify({'error': f'Error procesando calculadora: {str(e)}'}), 500
