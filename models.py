@@ -112,6 +112,8 @@ class Obra(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text)
     direccion = db.Column(db.String(300))
+    latitud = db.Column(db.Numeric(10, 8))  # Para geolocalización en mapa
+    longitud = db.Column(db.Numeric(11, 8))  # Para geolocalización en mapa
     cliente = db.Column(db.String(200), nullable=False)
     telefono_cliente = db.Column(db.String(20))
     email_cliente = db.Column(db.String(120))
@@ -202,6 +204,7 @@ class AsignacionObra(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)  # Asignación por etapa específica
     rol_en_obra = db.Column(db.String(50), nullable=False)  # jefe_obra, supervisor, operario
     fecha_asignacion = db.Column(db.DateTime, default=datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
@@ -209,6 +212,7 @@ class AsignacionObra(db.Model):
     # Relaciones
     obra = db.relationship('Obra', back_populates='asignaciones')
     usuario = db.relationship('Usuario', back_populates='obras_asignadas')
+    etapa = db.relationship('EtapaObra', backref='asignaciones')
     
     def __repr__(self):
         return f'<AsignacionObra {self.usuario.nombre} en {self.obra.nombre}>'

@@ -167,8 +167,11 @@
                             <i class="fas fa-list-ul fa-2x text-muted mb-3"></i>
                             <p class="text-muted">No hay etapas definidas para esta obra.</p>
                             {% if current_user.rol in ['administrador', 'tecnico'] %}
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#nuevaEtapaModal">
-                                <i class="fas fa-plus me-1"></i>Crear Primera Etapa
+                            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
+                                <i class="fas fa-tasks me-1"></i>Seleccionar Etapas
+                            </button>
+                            <button class="btn btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#nuevaEtapaModal">
+                                <i class="fas fa-plus me-1"></i>Etapa Personalizada
                             </button>
                             {% endif %}
                         </div>
@@ -198,6 +201,11 @@
                             <div class="border rounded p-3">
                                 <h6 class="mb-1">{{ asignacion.usuario.nombre_completo }}</h6>
                                 <p class="text-muted mb-1">{{ asignacion.rol_en_obra.replace('_', ' ').title() }}</p>
+                                {% if asignacion.etapa %}
+                                <div class="mb-2">
+                                    <span class="badge bg-info">{{ asignacion.etapa.nombre }}</span>
+                                </div>
+                                {% endif %}
                                 <small class="text-muted">
                                     <i class="fas fa-calendar me-1"></i>
                                     Desde {{ asignacion.fecha_asignacion.strftime('%d/%m/%Y') }}
@@ -377,6 +385,16 @@
                         </select>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Etapa Específica (Opcional)</label>
+                        <select class="form-select" name="etapa_id">
+                            <option value="">Asignación general a la obra</option>
+                            {% for etapa in etapas %}
+                            <option value="{{ etapa.id }}">{{ etapa.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Si seleccionas una etapa, el usuario trabajará específicamente en esa etapa.</div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Rol en la Obra</label>
                         <select class="form-select" name="rol_en_obra" required>
                             <option value="">Seleccionar rol...</option>
@@ -395,6 +413,52 @@
     </div>
 </div>
 
+<!-- Modal Seleccionar Etapas Predefinidas -->
+<div class="modal fade" id="seleccionarEtapasModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('obras.agregar_etapas', id=obra.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Seleccionar Etapas del Proyecto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Selecciona las etapas que aplicarán a esta obra de construcción:</p>
+                    
+                    <div class="row">
+                        {% for etapa in etapas_disponibles %}
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="etapas[]" value="{{ etapa.nombre }}" 
+                                       id="etapa_{{ loop.index }}">
+                                <label class="form-check-label" for="etapa_{{ loop.index }}">
+                                    <strong>{{ etapa.nombre }}</strong>
+                                    <small class="d-block text-muted">{{ etapa.descripcion }}</small>
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="seleccionarTodas()">
+                            Seleccionar Todas
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deseleccionarTodas()">
+                            Deseleccionar Todas
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Agregar Etapas Seleccionadas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endif %}
 {% endblock %}
 
@@ -404,6 +468,18 @@ function abrirModalTarea(etapaId, nombreEtapa) {
     document.getElementById('formNuevaTarea').action = `/obras/etapa/${etapaId}/tarea`;
     document.getElementById('nombreEtapa').textContent = nombreEtapa;
     new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
+}
+
+function seleccionarTodas() {
+    document.querySelectorAll('input[name="etapas[]"]').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deseleccionarTodas() {
+    document.querySelectorAll('input[name="etapas[]"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
 }
 </script>
 {% endblock %}

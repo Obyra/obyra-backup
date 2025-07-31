@@ -1,8 +1,11 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, date
+from decimal import Decimal
+import requests
 from app import db
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario
+from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -79,11 +82,20 @@ def crear():
             flash('La fecha de fin debe ser posterior a la fecha de inicio.', 'danger')
             return render_template('obras/crear.html')
         
+        # Geolocalizar dirección si se proporciona
+        latitud, longitud = None, None
+        if direccion:
+            coords = geolocalizar_direccion(direccion)
+            if coords:
+                latitud, longitud = coords
+        
         # Crear obra
         nueva_obra = Obra(
             nombre=nombre,
             descripcion=descripcion if 'descripcion' in request.form else None,
             direccion=direccion,
+            latitud=latitud,
+            longitud=longitud,
             cliente=cliente,
             telefono_cliente=telefono_cliente,
             email_cliente=email_cliente,
@@ -117,13 +129,15 @@ def detalle(id):
     obra = Obra.query.get_or_404(id)
     etapas = obra.etapas.order_by(EtapaObra.orden).all()
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
-    usuarios_disponibles = Usuario.query.filter_by(activo=True).all()
+    usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=current_user.organizacion_id).all()
+    etapas_disponibles = obtener_etapas_disponibles()
     
     return render_template('obras/detalle.html', 
                          obra=obra, 
                          etapas=etapas, 
                          asignaciones=asignaciones,
-                         usuarios_disponibles=usuarios_disponibles)
+                         usuarios_disponibles=usuarios_disponibles,
+                         etapas_disponibles=etapas_disponibles)
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
@@ -134,12 +148,21 @@ def editar(id):
     
     obra = Obra.query.get_or_404(id)
     
+    # Actualizar datos básicos
     obra.nombre = request.form.get('nombre', obra.nombre)
     obra.descripcion = request.form.get('descripcion', obra.descripcion)
-    obra.direccion = request.form.get('direccion', obra.direccion)
+    nueva_direccion = request.form.get('direccion', obra.direccion)
     obra.cliente = request.form.get('cliente', obra.cliente)
     obra.telefono_cliente = request.form.get('telefono_cliente', obra.telefono_cliente)
     obra.email_cliente = request.form.get('email_cliente', obra.email_cliente)
+    
+    # Si cambió la dirección, geolocalizar nuevamente
+    if nueva_direccion != obra.direccion:
+        obra.direccion = nueva_direccion
+        if nueva_direccion:
+            coords = geolocalizar_direccion(nueva_direccion)
+            if coords:
+                obra.latitud, obra.longitud = coords
     obra.estado = request.form.get('estado', obra.estado)
     obra.progreso = int(request.form.get('progreso', obra.progreso))
     
@@ -171,6 +194,113 @@ def editar(id):
     except Exception as e:
         db.session.rollback()
         flash('Error al actualizar la obra.', 'danger')
+    
+    return redirect(url_for('obras.detalle', id=id))
+
+
+def geolocalizar_direccion(direccion):
+    """Geolocaliza una dirección usando OpenStreetMap Nominatim API"""
+    try:
+        # Usar API gratuita de OpenStreetMap
+        url = f"https://nominatim.openstreetmap.org/search"
+        params = {
+            'q': f"{direccion}, Argentina",
+            'format': 'json',
+            'limit': 1,
+            'addressdetails': 1
+        }
+        
+        headers = {
+            'User-Agent': 'OBYRA-IA-Construction-Management'
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                lat = float(data[0]['lat'])
+                lon = float(data[0]['lon'])
+                return (lat, lon)
+    except Exception as e:
+        print(f"Error geolocalizando {direccion}: {str(e)}")
+    
+    return None
+
+
+@obras_bp.route('/<int:id>/agregar_etapas', methods=['POST'])
+@login_required
+def agregar_etapas(id):
+    """Agregar etapas predefinidas a una obra"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para gestionar etapas.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    obra = Obra.query.get_or_404(id)
+    etapas_seleccionadas = request.form.getlist('etapas[]')
+    
+    if not etapas_seleccionadas:
+        flash('Selecciona al menos una etapa.', 'warning')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    try:
+        etapas_creadas = crear_etapas_para_obra(obra.id, etapas_seleccionadas)
+        flash(f'Se agregaron {len(etapas_creadas)} etapas a la obra.', 'success')
+    except Exception as e:
+        flash(f'Error al agregar etapas: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/<int:id>/asignar_usuario', methods=['POST'])
+@login_required
+def asignar_usuario(id):
+    """Asignar usuario a obra con etapa específica"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para gestionar asignaciones.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    obra = Obra.query.get_or_404(id)
+    usuario_id = request.form.get('usuario_id')
+    etapa_id = request.form.get('etapa_id')  # Puede ser None para asignación general
+    rol_en_obra = request.form.get('rol_en_obra', 'operario')
+    
+    if not usuario_id:
+        flash('Selecciona un usuario.', 'warning')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    # Verificar si ya existe asignación
+    asignacion_existente = AsignacionObra.query.filter_by(
+        obra_id=obra.id,
+        usuario_id=usuario_id,
+        etapa_id=etapa_id,
+        activo=True
+    ).first()
+    
+    if asignacion_existente:
+        flash('El usuario ya está asignado a esta obra/etapa.', 'warning')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    try:
+        nueva_asignacion = AsignacionObra(
+            obra_id=obra.id,
+            usuario_id=usuario_id,
+            etapa_id=etapa_id if etapa_id else None,
+            rol_en_obra=rol_en_obra
+        )
+        
+        db.session.add(nueva_asignacion)
+        db.session.commit()
+        
+        usuario = Usuario.query.get(usuario_id)
+        etapa_nombre = ""
+        if etapa_id:
+            etapa = EtapaObra.query.get(etapa_id)
+            etapa_nombre = f" - Etapa: {etapa.nombre}"
+            
+        flash(f'Usuario {usuario.nombre_completo} asignado exitosamente{etapa_nombre}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al asignar usuario: {str(e)}', 'danger')
     
     return redirect(url_for('obras.detalle', id=id))
 
@@ -246,48 +376,7 @@ def agregar_tarea(id):
     
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
 
-@obras_bp.route('/<int:id>/asignar', methods=['POST'])
-@login_required
-def asignar_usuario(id):
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para asignar usuarios.', 'danger')
-        return redirect(url_for('obras.detalle', id=id))
-    
-    obra = Obra.query.get_or_404(id)
-    
-    usuario_id = request.form.get('usuario_id')
-    rol_en_obra = request.form.get('rol_en_obra')
-    
-    if not all([usuario_id, rol_en_obra]):
-        flash('Selecciona un usuario y un rol.', 'danger')
-        return redirect(url_for('obras.detalle', id=id))
-    
-    # Verificar que no esté ya asignado
-    asignacion_existente = AsignacionObra.query.filter_by(
-        obra_id=id,
-        usuario_id=usuario_id,
-        activo=True
-    ).first()
-    
-    if asignacion_existente:
-        flash('El usuario ya está asignado a esta obra.', 'danger')
-        return redirect(url_for('obras.detalle', id=id))
-    
-    nueva_asignacion = AsignacionObra(
-        obra_id=id,
-        usuario_id=usuario_id,
-        rol_en_obra=rol_en_obra
-    )
-    
-    try:
-        db.session.add(nueva_asignacion)
-        db.session.commit()
-        flash('Usuario asignado exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al asignar el usuario.', 'danger')
-    
-    return redirect(url_for('obras.detalle', id=id))
+# Función asignar_usuario ya implementada arriba
 
 
 @obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
