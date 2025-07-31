@@ -8,11 +8,11 @@
         <div class="col-12">
             <div class="card border-0 shadow">
                 <div class="card-header bg-gradient-info text-white">
-                    <h3 class="mb-0">
+                    <h3 class="mb-0 text-white fw-bold">
                         <i class="fas fa-calculator me-2"></i>
                         Calculadora Inteligente de Materiales
                     </h3>
-                    <p class="mb-0">Cálculo automático de materiales, costos y cronograma optimizado por IA</p>
+                    <p class="mb-0 text-white">Cálculo automático de materiales, costos y cronograma optimizado por IA</p>
                 </div>
                 
                 <div class="card-body p-4">
@@ -252,4 +252,30 @@ function mostrarResultados(calculo) {
     document.getElementById('resultados-calculo').classList.remove('d-none');
 }
 </script>
+
+<style>
+/* CSS para mejorar visibilidad de títulos */
+h1, h2, h3, h4, h5, h6 {
+    color: #212529 !important;
+}
+
+.card-header h1,
+.card-header h2, 
+.card-header h3,
+.card-header h4,
+.card-header h5,
+.card-header h6 {
+    color: #ffffff !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+}
+
+.text-white {
+    color: #ffffff !important;
+}
+
+.fw-bold {
+    font-weight: 700 !important;
+}
+</style>
+
 {% endblock %}

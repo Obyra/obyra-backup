@@ -153,6 +153,21 @@ def obtener_tipos_obra_disponibles():
             'descripcion': 'Edificio residencial multifamiliar'
         },
         {
+            'id': 'edificio_3_5_pisos',
+            'nombre': 'Edificio 3-5 Pisos',
+            'descripcion': 'Edificio de mediana altura con estructura de hormigón'
+        },
+        {
+            'id': 'edificio_6_10_pisos',
+            'nombre': 'Edificio 6-10 Pisos',
+            'descripcion': 'Edificio de altura media con estructura reforzada'
+        },
+        {
+            'id': 'edificio_11_15_pisos',
+            'nombre': 'Edificio 11-15 Pisos',
+            'descripcion': 'Edificio de gran altura con estructura especial'
+        },
+        {
             'id': 'local_comercial',
             'nombre': 'Local Comercial',
             'descripcion': 'Espacio comercial para negocio'
@@ -163,9 +178,24 @@ def obtener_tipos_obra_disponibles():
             'descripcion': 'Nave industrial para depósito o producción'
         },
         {
+            'id': 'nave_industrial',
+            'nombre': 'Nave Industrial',
+            'descripcion': 'Estructura industrial de gran envergadura'
+        },
+        {
+            'id': 'centro_comercial',
+            'nombre': 'Centro Comercial',
+            'descripcion': 'Complejo comercial de múltiples locales'
+        },
+        {
             'id': 'reforma_ampliacion',
             'nombre': 'Reforma/Ampliación',
             'descripcion': 'Modificación de estructura existente'
+        },
+        {
+            'id': 'renovacion_completa',
+            'nombre': 'Renovación Completa',
+            'descripcion': 'Remodelación total de edificio existente'
         }
     ]
 
@@ -203,6 +233,66 @@ def calcular_materiales_automatico(tipo_obra, metros_cuadrados, calidad, ubicaci
             'pintura': 0.35,
             'ceramico': 1.0,
             'mano_obra_dias': 0.6
+        },
+        'edificio_3_5_pisos': {
+            'cemento': 0.9,
+            'arena_gruesa': 0.5,
+            'arena_fina': 0.25,
+            'ladrillos': 0.14,
+            'hierro': 0.065,
+            'pintura': 0.32,
+            'ceramico': 0.8,
+            'mano_obra_dias': 1.4
+        },
+        'edificio_6_10_pisos': {
+            'cemento': 1.1,
+            'arena_gruesa': 0.6,
+            'arena_fina': 0.3,
+            'ladrillos': 0.16,
+            'hierro': 0.08,
+            'pintura': 0.35,
+            'ceramico': 0.85,
+            'mano_obra_dias': 1.6
+        },
+        'edificio_11_15_pisos': {
+            'cemento': 1.3,
+            'arena_gruesa': 0.7,
+            'arena_fina': 0.35,
+            'ladrillos': 0.18,
+            'hierro': 0.1,
+            'pintura': 0.4,
+            'ceramico': 0.9,
+            'mano_obra_dias': 1.8
+        },
+        'nave_industrial': {
+            'cemento': 0.6,
+            'arena_gruesa': 0.35,
+            'arena_fina': 0.18,
+            'ladrillos': 0.04,
+            'hierro': 0.075,
+            'pintura': 0.15,
+            'ceramico': 0.3,
+            'mano_obra_dias': 1.0
+        },
+        'centro_comercial': {
+            'cemento': 0.7,
+            'arena_gruesa': 0.4,
+            'arena_fina': 0.2,
+            'ladrillos': 0.08,
+            'hierro': 0.045,
+            'pintura': 0.45,
+            'ceramico': 1.2,
+            'mano_obra_dias': 1.1
+        },
+        'renovacion_completa': {
+            'cemento': 0.4,
+            'arena_gruesa': 0.25,
+            'arena_fina': 0.12,
+            'ladrillos': 0.06,
+            'hierro': 0.025,
+            'pintura': 0.5,
+            'ceramico': 0.9,
+            'mano_obra_dias': 0.9
         }
     }
     
