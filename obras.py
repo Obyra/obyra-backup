@@ -6,6 +6,7 @@ import requests
 from app import db
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
+from geocoding import geocodificar_direccion, normalizar_direccion_argentina
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -85,9 +86,8 @@ def crear():
         # Geolocalizar dirección si se proporciona
         latitud, longitud = None, None
         if direccion:
-            coords = geolocalizar_direccion(direccion)
-            if coords:
-                latitud, longitud = coords
+            direccion_normalizada = normalizar_direccion_argentina(direccion)
+            latitud, longitud = geocodificar_direccion(direccion_normalizada)
         
         # Crear obra
         nueva_obra = Obra(
@@ -376,7 +376,27 @@ def agregar_tarea(id):
     
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
 
-# Función asignar_usuario ya implementada arriba
+@obras_bp.route('/geocodificar-todas', methods=['POST'])
+@login_required
+def geocodificar_todas():
+    """Geocodifica todas las obras existentes que no tienen coordenadas"""
+    if current_user.rol != 'administrador':
+        flash('Solo los administradores pueden ejecutar esta acción.', 'danger')
+        return redirect(url_for('obras.lista'))
+    
+    try:
+        from geocoding import geocodificar_obras_existentes
+        exitosas, fallidas = geocodificar_obras_existentes()
+        
+        if exitosas > 0:
+            flash(f'Geocodificación completada: {exitosas} obras actualizadas, {fallidas} fallaron.', 'success')
+        else:
+            flash('No se pudieron geocodificar las obras. Verifica las direcciones.', 'warning')
+            
+    except Exception as e:
+        flash(f'Error en la geocodificación: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.lista'))
 
 
 @obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])

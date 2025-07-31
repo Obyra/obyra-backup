@@ -536,8 +536,8 @@ function inicializarMapaFinal() {
                 window.mapaObras.remove();
             }
             
-            // Crear nuevo mapa
-            window.mapaObras = L.map('mapa-final').setView([-34.6118, -58.3960], 5);
+            // Crear nuevo mapa centrado en Buenos Aires
+            window.mapaObras = L.map('mapa-final').setView([-34.6118, -58.3960], 11);
             
             // Agregar tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -558,27 +558,33 @@ function inicializarMapaFinal() {
                     nombre: "{{ obra.nombre|replace('"', '\\"') }}",
                     cliente: "{{ obra.cliente|replace('"', '\\"') if obra.cliente else 'Sin cliente' }}",
                     direccion: "{{ obra.direccion|replace('"', '\\"') if obra.direccion else 'Sin dirección' }}",
-                    lat: {{ obra.latitud or 'null' }},
-                    lng: {{ obra.longitud or 'null' }},
+                    lat: {{ obra.latitud if obra.latitud else 'null' }},
+                    lng: {{ obra.longitud if obra.longitud else 'null' }},
                     estado: "{{ obra.estado }}"
                 }{% if not loop.last %},{% endif %}
             {% endfor %}
             ];
             
-            console.log('Agregando', obras.length, 'obras al mapa');
+            console.log('🏗️ Obras cargadas:', obras);
+            console.log('📍 Obras con coordenadas:', obras.filter(o => o.lat && o.lng).length);
+            
+            // Filtrar obras con coordenadas válidas
+            const obrasValidas = obras.filter(obra => obra.lat && obra.lng && !isNaN(obra.lat) && !isNaN(obra.lng));
+            console.log('✅ Obras con coordenadas válidas:', obrasValidas.length);
             
             // Crear marcadores para cada obra
-            obras.forEach(function(obra) {
-                if (obra.lat && obra.lng) {
-                    // Marcador rojo circular
-                    var marcador = L.circleMarker([obra.lat, obra.lng], {
-                        radius: 10,
-                        fillColor: '#dc3545',
-                        color: '#ffffff',
-                        weight: 3,
-                        opacity: 1,
-                        fillOpacity: 0.9
-                    }).addTo(window.mapaObras);
+            obrasValidas.forEach(function(obra, index) {
+                console.log(`📍 Agregando marcador ${index + 1}: ${obra.nombre} en (${obra.lat}, ${obra.lng})`);
+                
+                // Marcador rojo circular
+                var marcador = L.circleMarker([obra.lat, obra.lng], {
+                    radius: 12,
+                    fillColor: '#dc3545',
+                    color: '#ffffff',
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                }).addTo(window.mapaObras);
                     
                     // Contenido del popup
                     var popupContent = 
@@ -601,27 +607,21 @@ function inicializarMapaFinal() {
                             cargarClimaObra(obra.lat, obra.lng, obra.nombre, obra.direccion);
                         }, 100);
                     });
-                }
             });
             
-            // Ajustar vista si hay obras
-            if (obras.length > 0) {
-                var marcadores = [];
-                obras.forEach(function(obra) {
-                    if (obra.lat && obra.lng) {
-                        marcadores.push([obra.lat, obra.lng]);
-                    }
-                });
+            // Ajustar vista para incluir todas las obras si hay alguna
+            if (obrasValidas.length > 0) {
+                var marcadores = obrasValidas.map(obra => [obra.lat, obra.lng]);
                 
                 if (marcadores.length === 1) {
-                    window.mapaObras.setView(marcadores[0], 12);
+                    window.mapaObras.setView(marcadores[0], 13);
                 } else if (marcadores.length > 1) {
                     var bounds = L.latLngBounds(marcadores);
                     window.mapaObras.fitBounds(bounds, { padding: [20, 20] });
                 }
             }
             
-            console.log('Mapa con obras inicializado correctamente');
+            console.log('✅ Mapa con obras inicializado correctamente');
         
         } catch (error) {
             console.error('Error creando mapa:', error);
