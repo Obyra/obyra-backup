@@ -1,7 +1,7 @@
 """
-Módulo de Cotización Inteligente - OBYRA IA
-Sistema avanzado de cotización con cálculos automáticos,
-análisis de mercado y optimización de precios.
+Módulo de Presupuesto Estimado Automático - OBYRA IA
+Sistema avanzado de presupuestación con cálculos automáticos de materiales,
+análisis inteligente de costos y estimación por IA.
 """
 
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
@@ -61,13 +61,65 @@ def calcular_materiales():
         # Calcular materiales automáticamente
         calculo = calcular_materiales_automatico(tipo_obra, metros_cuadrados, calidad, ubicacion)
         
+        # Guardar datos en la sesión para el flujo completo
+        from flask import session
+        session['presupuesto_datos'] = {
+            'tipo_obra': tipo_obra,
+            'metros_cuadrados': metros_cuadrados,
+            'calidad': calidad,
+            'ubicacion': ubicacion,
+            'calculo': calculo,
+            'paso_actual': 2
+        }
+        
         return jsonify({
             'success': True,
-            'calculo': calculo
+            'calculo': calculo,
+            'siguiente_paso': url_for('cotizacion.paso_revision')
         })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+@cotizacion_bp.route('/paso-revision')
+@login_required
+def paso_revision():
+    """Paso 3: Revisión del presupuesto calculado por IA"""
+    from flask import session
+    datos = session.get('presupuesto_datos')
+    
+    if not datos:
+        flash('No hay datos de presupuesto para revisar. Comience el proceso nuevamente.', 'warning')
+        return redirect(url_for('cotizacion.calculadora_inteligente'))
+    
+    return render_template('cotizacion/revision.html', datos=datos)
+
+@cotizacion_bp.route('/generar-pdf')
+@login_required
+def generar_pdf():
+    """Genera PDF del presupuesto final"""
+    from flask import session
+    datos = session.get('presupuesto_datos')
+    
+    if not datos:
+        return jsonify({'success': False, 'error': 'No hay datos para generar PDF'}), 400
+    
+    try:
+        # Generar PDF
+        pdf_filename = crear_pdf_presupuesto(datos, current_user)
+        pdf_url = url_for('static', filename=f'pdfs/{pdf_filename}', _external=True)
+        
+        # Limpiar sesión
+        session.pop('presupuesto_datos', None)
+        
+        return jsonify({
+            'success': True,
+            'pdf_url': pdf_url,
+            'mensaje': 'PDF generado correctamente'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @cotizacion_bp.route('/optimizar_presupuesto', methods=['POST'])
 @login_required
@@ -455,6 +507,9 @@ def calcular_materiales_automatico(tipo_obra, metros_cuadrados, calidad, ubicaci
     return {
         'materiales': materiales_calculados,
         'mano_obra': mano_obra,
+        'total_materiales': total_materiales,
+        'total_mano_obra': total_mano_obra,
+        'total_general': total_final,
         'resumen': {
             'total_materiales': total_materiales,
             'total_mano_obra': total_mano_obra,
@@ -472,7 +527,12 @@ def calcular_materiales_automatico(tipo_obra, metros_cuadrados, calidad, ubicaci
             'ubicacion': ubicacion,
             'factor_ubicacion': factor_ubicacion
         },
-        'recomendaciones': generar_recomendaciones_calculo(tipo_obra, metros_cuadrados, total_final)
+        'recomendaciones': [
+            f"Para {tipo_obra.replace('_', ' ')}, se recomienda usar materiales de calidad {calidad}",
+            f"El presupuesto está calculado para {metros_cuadrados} m² con factor de ubicación aplicado",
+            "Considere un 10-15% adicional para imprevistos",
+            "Verifique precios de materiales locales antes de comprar"
+        ]
     }
 
 def generar_optimizaciones_presupuesto(presupuesto):
@@ -584,6 +644,51 @@ def optimizar_cantidades(items):
             })
     
     return optimizaciones
+
+def crear_pdf_presupuesto(datos, usuario):
+    """Crea un PDF del presupuesto calculado"""
+    import os
+    from datetime import datetime
+    
+    try:
+        # Crear directorio si no existe
+        os.makedirs('static/pdfs', exist_ok=True)
+        
+        # Nombre del archivo
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'presupuesto_{usuario.id}_{timestamp}.pdf'
+        
+        # Por ahora, crear un archivo de texto como placeholder
+        # En producción, se usaría ReportLab para generar PDF real
+        filepath = f'static/pdfs/{filename}'
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("PRESUPUESTO ESTIMADO AUTOMÁTICO - OBYRA IA\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Tipo de obra: {datos['tipo_obra'].replace('_', ' ').title()}\n")
+            f.write(f"Superficie: {datos['metros_cuadrados']} m²\n")
+            f.write(f"Calidad: {datos['calidad'].title()}\n")
+            f.write(f"Ubicación: {datos['ubicacion'].replace('_', ' ').title()}\n")
+            f.write(f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n")
+            
+            calculo = datos['calculo']
+            f.write("RESUMEN FINANCIERO:\n")
+            f.write(f"Total Materiales: ${calculo['total_materiales']:,.0f}\n")
+            f.write(f"Total Mano de Obra: ${calculo['total_mano_obra']:,.0f}\n")
+            f.write(f"TOTAL GENERAL: ${calculo['total_general']:,.0f}\n\n")
+            
+            f.write("MATERIALES DETALLADOS:\n")
+            for mat in calculo['materiales']:
+                f.write(f"- {mat['material']}: {mat['cantidad']} {mat['unidad']} x ${mat['precio_unitario']:,.0f} = ${mat['total']:,.0f}\n")
+            
+            f.write("\nRECOMENDACIONES:\n")
+            for rec in calculo['recomendaciones']:
+                f.write(f"• {rec}\n")
+        
+        return filename
+        
+    except Exception as e:
+        raise Exception(f"Error generando PDF: {str(e)}")
 
 def obtener_cantidad_tipica(material):
     """Obtiene cantidad típica para un material por m²"""

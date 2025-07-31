@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Revisión de Presupuesto - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Progreso del flujo -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0"><i class="fas fa-clipboard-check text-primary me-2"></i>Paso 3: Revisión</h4>
+                        <div class="progress" style="width: 200px; height: 8px;">
+                            <div class="progress-bar bg-primary" role="progressbar" style="width: 75%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Resumen del proyecto -->
+    <div class="row mb-4">
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Información del Proyecto</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tipo de Obra:</label>
+                        <p class="mb-1">{{ datos.tipo_obra|title|replace('_', ' ') }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Superficie:</label>
+                        <p class="mb-1">{{ datos.metros_cuadrados }} m²</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Calidad:</label>
+                        <p class="mb-1">{{ datos.calidad|title }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Ubicación:</label>
+                        <p class="mb-1">{{ datos.ubicacion|title|replace('_', ' ') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Resultados del cálculo IA -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-brain me-2"></i>Presupuesto Calculado por IA</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Resumen financiero -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h3 class="text-primary mb-1">${{ "{:,.0f}".format(datos.calculo.total_materiales) }}</h3>
+                                <small class="text-muted">Total Materiales</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h3 class="text-warning mb-1">${{ "{:,.0f}".format(datos.calculo.total_mano_obra) }}</h3>
+                                <small class="text-muted">Mano de Obra</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-success text-white rounded">
+                                <h3 class="mb-1">${{ "{:,.0f}".format(datos.calculo.total_general) }}</h3>
+                                <small>Total General</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Desglose de materiales -->
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Material</th>
+                                    <th>Cantidad</th>
+                                    <th>Unidad</th>
+                                    <th>Precio Unit.</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for material in datos.calculo.materiales %}
+                                <tr>
+                                    <td>{{ material.material }}</td>
+                                    <td>{{ material.cantidad }}</td>
+                                    <td>{{ material.unidad }}</td>
+                                    <td>${{ "{:,.0f}".format(material.precio_unitario) }}</td>
+                                    <td>${{ "{:,.0f}".format(material.total) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Recomendaciones IA -->
+                    <div class="mt-4">
+                        <h6 class="fw-bold"><i class="fas fa-lightbulb text-warning me-2"></i>Recomendaciones IA</h6>
+                        <ul class="list-unstyled">
+                            {% for rec in datos.calculo.recomendaciones %}
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>{{ rec }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Acciones finales -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h5 class="mb-4">¿Desea finalizar y generar el PDF del presupuesto?</h5>
+                    <div class="d-flex justify-content-center gap-3">
+                        <a href="{{ url_for('cotizacion.calculadora_inteligente') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver al Inicio
+                        </a>
+                        <button onclick="editarPresupuesto()" class="btn btn-warning">
+                            <i class="fas fa-edit me-2"></i>Editar Datos
+                        </button>
+                        <button onclick="generarPDF()" class="btn btn-success btn-lg" id="btnGenerarPDF">
+                            <i class="fas fa-file-pdf me-2"></i>Generar PDF Final
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editarPresupuesto() {
+    if(confirm('¿Desea modificar los datos del presupuesto? Esto lo llevará de vuelta al formulario inicial.')) {
+        window.location.href = "{{ url_for('cotizacion.calculadora_inteligente') }}";
+    }
+}
+
+function generarPDF() {
+    const btn = document.getElementById('btnGenerarPDF');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generando PDF...';
+    
+    fetch("{{ url_for('cotizacion.generar_pdf') }}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Descargar PDF
+                window.open(data.pdf_url, '_blank');
+                
+                // Mostrar mensaje de éxito
+                alert('PDF generado correctamente. El archivo se ha descargado.');
+                
+                // Opción de ir al dashboard o comenzar nuevo presupuesto
+                if(confirm('¿Desea crear un nuevo presupuesto?')) {
+                    window.location.href = "{{ url_for('cotizacion.calculadora_inteligente') }}";
+                }
+            } else {
+                alert('Error generando PDF: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error.message);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+}
+</script>
+{% endblock %}

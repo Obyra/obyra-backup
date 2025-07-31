@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Calculadora Inteligente - OBYRA IA{% endblock %}
+{% block title %}Presupuesto Estimado Automático - OBYRA IA{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -9,10 +9,10 @@
             <div class="card border-0 shadow">
                 <div class="card-header bg-gradient-info text-white">
                     <h3 class="mb-0 text-white fw-bold">
-                        <i class="fas fa-calculator me-2"></i>
-                        Calculadora Inteligente de Materiales
+                        <i class="fas fa-brain me-2"></i>
+                        Presupuesto Estimado Automático
                     </h3>
-                    <p class="mb-0 text-white">Cálculo automático de materiales, costos y cronograma optimizado por IA</p>
+                    <p class="mb-0 text-white">Estimación inteligente por IA de materiales, costos y cronograma de construcción</p>
                 </div>
                 
                 <div class="card-body p-4">
@@ -70,9 +70,9 @@
                         
                         <div class="col-md-6 mb-3">
                             <div class="d-flex align-items-end h-100">
-                                <button type="button" class="btn btn-primary btn-lg w-100" onclick="calcularMateriales()">
-                                    <i class="fas fa-magic me-2"></i>
-                                    Calcular con IA
+                                <button type="button" class="btn btn-primary btn-lg w-100" onclick="iniciarCalculoIA()">
+                                    <i class="fas fa-arrow-right me-2"></i>
+                                    Avanzar al Paso 2: Cálculos IA
                                 </button>
                             </div>
                         </div>
@@ -99,7 +99,7 @@
 
 {% block scripts %}
 <script>
-function calcularMateriales() {
+function iniciarCalculoIA() {
     const form = document.getElementById('form-calculadora');
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
@@ -126,6 +126,16 @@ function calcularMateriales() {
     .then(data => {
         if (data.success) {
             mostrarResultados(data.calculo);
+            
+            // Agregar botón para continuar al paso 3
+            setTimeout(() => {
+                const continuarBtn = document.createElement('button');
+                continuarBtn.className = 'btn btn-success btn-lg mt-3 w-100';
+                continuarBtn.innerHTML = '<i class="fas fa-arrow-right me-2"></i>Continuar al Paso 3: Revisión';
+                continuarBtn.onclick = () => window.location.href = data.siguiente_paso;
+                
+                document.getElementById('resultados-calculo').appendChild(continuarBtn);
+            }, 500);
         } else {
             alert('Error: ' + data.error);
         }
@@ -153,19 +163,19 @@ function mostrarResultados(calculo) {
                     <div class="row text-center">
                         <div class="col-md-3">
                             <h6 class="text-muted">Materiales</h6>
-                            <h4 class="text-primary">$${calculo.resumen.total_materiales.toLocaleString('es-AR')}</h4>
+                            <h4 class="text-primary">$${calculo.total_materiales.toLocaleString('es-AR')}</h4>
                         </div>
                         <div class="col-md-3">
                             <h6 class="text-muted">Mano de Obra</h6>
-                            <h4 class="text-warning">$${calculo.resumen.total_mano_obra.toLocaleString('es-AR')}</h4>
+                            <h4 class="text-warning">$${calculo.total_mano_obra.toLocaleString('es-AR')}</h4>
                         </div>
                         <div class="col-md-3">
                             <h6 class="text-muted">Subtotal</h6>
-                            <h4 class="text-info">$${calculo.resumen.subtotal.toLocaleString('es-AR')}</h4>
+                            <h4 class="text-info">$${(calculo.total_materiales + calculo.total_mano_obra).toLocaleString('es-AR')}</h4>
                         </div>
                         <div class="col-md-3">
                             <h6 class="text-muted">Total Final</h6>
-                            <h4 class="text-success fw-bold">$${calculo.resumen.total_final.toLocaleString('es-AR')}</h4>
+                            <h4 class="text-success fw-bold">$${calculo.total_general.toLocaleString('es-AR')}</h4>
                         </div>
                     </div>
                 </div>
