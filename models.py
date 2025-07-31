@@ -59,6 +59,8 @@ class Usuario(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    plan_activo = db.Column(db.String(50), default='prueba')  # prueba, standard, premium
+    fecha_expiracion_plan = db.Column(db.DateTime)  # Para controlar la expiración del plan
     
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='usuarios')
@@ -67,6 +69,28 @@ class Usuario(UserMixin, db.Model):
     
     def __repr__(self):
         return f'<Usuario {self.nombre} {self.apellido}>'
+    
+    def esta_en_periodo_prueba(self):
+        """Verifica si el usuario aún está en periodo de prueba"""
+        if self.plan_activo != 'prueba':
+            return False
+        
+        if not self.fecha_creacion:
+            return True
+        
+        from datetime import datetime, timedelta
+        fecha_limite = self.fecha_creacion + timedelta(days=30)
+        return datetime.utcnow() <= fecha_limite
+    
+    def dias_restantes_prueba(self):
+        """Calcula los días restantes del periodo de prueba"""
+        if self.plan_activo != 'prueba' or not self.fecha_creacion:
+            return 0
+        
+        from datetime import datetime, timedelta
+        fecha_limite = self.fecha_creacion + timedelta(days=30)
+        dias_restantes = (fecha_limite - datetime.utcnow()).days
+        return max(0, dias_restantes)
     
     @property
     def nombre_completo(self):

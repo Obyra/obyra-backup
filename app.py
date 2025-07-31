@@ -56,6 +56,7 @@ from cotizacion_inteligente import cotizacion_bp
 from control_documentos import documentos_bp
 from seguridad_cumplimiento import seguridad_bp
 from agent_local import agent_bp  # 👈 nuestro mini agente local
+from planes import planes_bp
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(obras_bp, url_prefix='/obras')
@@ -68,8 +69,31 @@ app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
 app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 app.register_blueprint(agent_bp)  # Agente IA local sin prefijo
+app.register_blueprint(planes_bp)  # Sistema de planes
 
 
+
+@app.before_request
+def verificar_periodo_prueba():
+    """Middleware para verificar si el usuario necesita seleccionar un plan"""
+    from flask import request
+    
+    # Rutas que no requieren verificación de plan
+    rutas_excluidas = [
+        'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
+        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
+    ]
+    
+    if (current_user.is_authenticated and 
+        request.endpoint not in rutas_excluidas and 
+        not request.endpoint.startswith('static')):
+        
+        # Verificar si el usuario está en periodo de prueba y ya expiró
+        if (current_user.plan_activo == 'prueba' and 
+            not current_user.esta_en_periodo_prueba()):
+            
+            flash(f'Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
+            return redirect(url_for('planes.mostrar_planes'))
 
 @app.route('/')
 def index():

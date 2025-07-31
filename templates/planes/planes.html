@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Planes de Suscripción - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <!-- Encabezado -->
+            <div class="text-center mb-5">
+                <h1 class="display-4 fw-bold text-primary mb-3">
+                    <i class="fas fa-crown me-3"></i>Elige tu Plan
+                </h1>
+                <p class="lead text-muted">
+                    Desbloquea todo el potencial de OBYRA IA para tu empresa constructora
+                </p>
+            </div>
+
+            <!-- Planes -->
+            <div class="row g-4">
+                <!-- Plan Standard -->
+                <div class="col-lg-6">
+                    <div class="card h-100 shadow-lg border-0 position-relative">
+                        <div class="card-header bg-gradient text-white text-center py-4" 
+                             style="background: linear-gradient(135deg, #28a745, #20c997);">
+                            <h3 class="card-title mb-0">
+                                <i class="fas fa-building me-2"></i>Plan Standard
+                            </h3>
+                            <p class="card-text mt-2 mb-0 opacity-90">
+                                Perfecto para empresas pequeñas
+                            </p>
+                        </div>
+                        
+                        <div class="card-body p-4">
+                            <div class="mb-4">
+                                <h4 class="text-success fw-bold">Incluye:</h4>
+                                <ul class="list-unstyled">
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-success me-2"></i>
+                                        <strong>Acceso al sistema de presupuestos</strong>
+                                    </li>
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-success me-2"></i>
+                                        <strong>Cálculo de materiales por m² aproximado</strong>
+                                    </li>
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-success me-2"></i>
+                                        <strong>Exportación en PDF</strong>
+                                    </li>
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-success me-2"></i>
+                                        <strong>Soporte por email</strong>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="card-footer bg-transparent p-4">
+                            <div class="d-grid">
+                                <a href="{{ url_for('planes.plan_standard') }}" 
+                                   class="btn btn-success btn-lg">
+                                    <i class="fas fa-credit-card me-2"></i>
+                                    Elegir Plan Standard
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plan Premium -->
+                <div class="col-lg-6">
+                    <div class="card h-100 shadow-lg border-0 position-relative">
+                        <!-- Badge de Recomendado -->
+                        <div class="position-absolute top-0 start-50 translate-middle">
+                            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill">
+                                <i class="fas fa-star me-1"></i>Recomendado
+                            </span>
+                        </div>
+                        
+                        <div class="card-header bg-gradient text-white text-center py-4" 
+                             style="background: linear-gradient(135deg, #6f42c1, #e83e8c);">
+                            <h3 class="card-title mb-0">
+                                <i class="fas fa-crown me-2"></i>Plan Premium
+                            </h3>
+                            <p class="card-text mt-2 mb-0 opacity-90">
+                                Para empresas que buscan máximo rendimiento
+                            </p>
+                        </div>
+                        
+                        <div class="card-body p-4">
+                            <div class="mb-4">
+                                <h4 class="text-primary fw-bold">Todo lo incluido en Standard, más:</h4>
+                                <ul class="list-unstyled">
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-primary me-2"></i>
+                                        <strong>Cálculo detallado y preciso según etapa de obra</strong>
+                                    </li>
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-primary me-2"></i>
+                                        <strong>Integración con IA para lectura de planos</strong>
+                                    </li>
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-primary me-2"></i>
+                                        <strong>Comparador de precios entre proveedores</strong>
+                                    </li>
+                                    <li class="mb-3">
+                                        <i class="fas fa-check-circle text-primary me-2"></i>
+                                        <strong>Soporte prioritario por WhatsApp</strong>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="card-footer bg-transparent p-4">
+                            <div class="d-grid">
+                                <a href="{{ url_for('planes.plan_premium') }}" 
+                                   class="btn btn-primary btn-lg">
+                                    <i class="fas fa-crown me-2"></i>
+                                    Elegir Plan Premium
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Información adicional -->
+            <div class="row mt-5">
+                <div class="col-12">
+                    <div class="card bg-light border-0">
+                        <div class="card-body text-center p-4">
+                            <h5 class="fw-bold mb-3">
+                                <i class="fas fa-shield-alt text-success me-2"></i>
+                                Garantía de satisfacción
+                            </h5>
+                            <p class="text-muted mb-0">
+                                Si no estás completamente satisfecho con tu plan, 
+                                te devolvemos tu dinero en los primeros 7 días.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botón de contacto -->
+            <div class="text-center mt-4">
+                <p class="text-muted">
+                    ¿Tienes dudas sobre cuál plan elegir?
+                </p>
+                <a href="mailto:soporte@obyra.com" class="btn btn-outline-primary">
+                    <i class="fas fa-envelope me-2"></i>
+                    Contactar Asesor
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
+}
+
+.bg-gradient {
+    background: linear-gradient(135deg, var(--bs-primary), var(--bs-info));
+}
+
+.list-unstyled li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.list-unstyled li:last-child {
+    border-bottom: none;
+}
+
+.badge {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .card:hover {
+        transform: none;
+    }
+}
+</style>
+{% endblock %}

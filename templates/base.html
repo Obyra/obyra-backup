@@ -184,6 +184,16 @@
                             <span>{{ current_user.nombre }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            {% if current_user.plan_activo == 'prueba' %}
+                            <li class="dropdown-item-text bg-warning text-dark small">
+                                <i class="fas fa-clock me-1"></i>
+                                Prueba: {{ current_user.dias_restantes_prueba() }} días restantes
+                            </li>
+                            <li><a class="dropdown-item" href="{{ url_for('planes.mostrar_planes') }}">
+                                <i class="fas fa-crown me-2"></i>Ver Planes
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
                             <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
                                 <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
