@@ -111,18 +111,30 @@ def crear():
             db.session.add(nueva_obra)
             db.session.flush()  # Para obtener el ID de la obra
             
-            # Generar número de presupuesto
+            # Generar número de presupuesto único
             ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
-            if ultimo_numero and '-' in ultimo_numero:
-                numero = f"PRES-{int(ultimo_numero.split('-')[1]) + 1:04d}"
+            if ultimo_numero and ultimo_numero.startswith('PRES-'):
+                try:
+                    siguiente_num = int(ultimo_numero.split('-')[1]) + 1
+                except:
+                    siguiente_num = 1
             else:
-                numero = "PRES-0001"
+                siguiente_num = 1
+            
+            # Asegurar que el número sea único
+            while True:
+                numero = f"PRES-{siguiente_num:04d}"
+                existe = Presupuesto.query.filter_by(numero=numero).first()
+                if not existe:
+                    break
+                siguiente_num += 1
             
             # Crear presupuesto asociado
             nuevo_presupuesto = Presupuesto()
             nuevo_presupuesto.obra_id = nueva_obra.id
             nuevo_presupuesto.numero = numero
             nuevo_presupuesto.iva_porcentaje = 21.0  # Fijo según lo solicitado
+            nuevo_presupuesto.organizacion_id = current_user.organizacion_id
             
             # Agregar observaciones con detalles del proyecto
             observaciones_proyecto = []
@@ -261,12 +273,23 @@ def crear_desde_ia():
             if not obra:
                 return jsonify({'error': 'Obra no encontrada'}), 404
         
-        # Generar número de presupuesto
+        # Generar número de presupuesto único
         ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
-        if ultimo_numero:
-            numero = f"PRES-{int(ultimo_numero.split('-')[1]) + 1:04d}"
+        if ultimo_numero and ultimo_numero.startswith('PRES-'):
+            try:
+                siguiente_num = int(ultimo_numero.split('-')[1]) + 1
+            except:
+                siguiente_num = 1
         else:
-            numero = "PRES-0001"
+            siguiente_num = 1
+        
+        # Asegurar que el número sea único
+        while True:
+            numero = f"PRES-{siguiente_num:04d}"
+            existe = Presupuesto.query.filter_by(numero=numero).first()
+            if not existe:
+                break
+            siguiente_num += 1
         
         # Crear presupuesto base
         nuevo_presupuesto = Presupuesto()
