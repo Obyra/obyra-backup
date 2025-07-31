@@ -73,6 +73,7 @@ app.register_blueprint(planes_bp)  # Sistema de planes
 
 
 
+
 @app.before_request
 def verificar_periodo_prueba():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
@@ -97,9 +98,10 @@ def verificar_periodo_prueba():
 
 @app.route('/')
 def index():
+    """Redirigir automáticamente al dashboard después del login"""
     if current_user.is_authenticated:
         return redirect(url_for('reportes.dashboard'))
-    return render_template('index.html')
+    return redirect(url_for('auth.login'))
 
 
 @app.route('/dashboard')

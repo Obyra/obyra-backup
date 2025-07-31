@@ -53,7 +53,7 @@ Documentación completa: https://docs.replit.com/additional-resources/google-aut
 def google_login():
     """Iniciar proceso de login con Google"""
     if current_user.is_authenticated:
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     
     if not google:
         flash('Google OAuth no está configurado. Contacta al administrador del sistema.', 'warning')

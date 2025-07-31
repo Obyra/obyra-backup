@@ -68,7 +68,7 @@ def login():
                 next_page = request.args.get('next')
                 if next_page:
                     return redirect(next_page)
-                return redirect(url_for('asistente.dashboard'))
+                return redirect(url_for('reportes.dashboard'))
             elif usuario.auth_provider == 'google':
                 flash('Esta cuenta está vinculada con Google. Use "Iniciar sesión con Google".', 'warning')
             else:
@@ -89,7 +89,7 @@ def logout():
 def register():
     # Permitir registro público, pero usuarios existentes van al dashboard
     if current_user.is_authenticated:
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     
     if request.method == 'POST':
         nombre = request.form.get('nombre')
@@ -141,7 +141,7 @@ def register():
             # Auto-login después del registro
             login_user(nuevo_usuario)
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
-            return redirect(url_for('asistente.dashboard'))
+            return redirect(url_for('reportes.dashboard'))
             
         except Exception as e:
             db.session.rollback()
@@ -159,7 +159,7 @@ def register():
 def google_login():
     """Iniciar login con Google"""
     if current_user.is_authenticated:
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     
     if not google:
         flash('Google OAuth no está configurado. Contacta al administrador.', 'warning')
@@ -226,7 +226,7 @@ def google_callback():
                 db.session.commit()
                 login_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
-                return redirect(url_for('asistente.dashboard'))
+                return redirect(url_for('reportes.dashboard'))
             else:
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
                 return redirect(url_for('auth.login'))
@@ -299,7 +299,7 @@ def google_callback():
                 
                 login_user(nuevo_usuario)
                 flash(mensaje, 'success')
-                return redirect(url_for('asistente.dashboard'))
+                return redirect(url_for('reportes.dashboard'))
                 
             except Exception as e:
                 db.session.rollback()
@@ -321,7 +321,7 @@ def admin_register():
     """Registro administrativo - solo para administradores"""
     if current_user.rol != 'administrador':
         flash('No tienes permisos para registrar usuarios administrativamente.', 'danger')
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     
     if request.method == 'POST':
         nombre = request.form.get('nombre')
@@ -374,7 +374,7 @@ def usuarios_admin():
     """Panel de administración de usuarios - solo para administradores"""
     if current_user.rol != 'administrador':
         flash('No tienes permisos para acceder a la gestión de usuarios.', 'danger')
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     
     # Filtros
     rol_filtro = request.args.get('rol', '')
@@ -510,7 +510,7 @@ def invitar_usuario():
     """Invitar usuarios a la organización"""
     if current_user.rol != 'administrador':
         flash('No tienes permisos para invitar usuarios.', 'danger')
-        return redirect(url_for('asistente.dashboard'))
+        return redirect(url_for('reportes.dashboard'))
     
     if request.method == 'POST':
         email = request.form.get('email')
@@ -597,7 +597,7 @@ def aceptar_invitacion():
             
             login_user(usuario)
             flash(f'¡Bienvenido/a a {organizacion.nombre}!', 'success')
-            return redirect(url_for('asistente.dashboard'))
+            return redirect(url_for('reportes.dashboard'))
         else:
             flash('Error al procesar la invitación.', 'danger')
     
