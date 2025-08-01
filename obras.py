@@ -4,7 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal
 import requests
 from app import db
-from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario
+from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
 
@@ -148,10 +148,17 @@ def editar(id):
     
     obra = Obra.query.get_or_404(id)
     
+    # Verificar permisos para pausar obra
+    nuevo_estado = request.form.get('estado', obra.estado)
+    if nuevo_estado == 'pausada' and not obra.puede_ser_pausada_por(current_user):
+        flash('No tienes permisos para pausar esta obra.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+    
     # Actualizar datos básicos
     obra.nombre = request.form.get('nombre', obra.nombre)
     obra.descripcion = request.form.get('descripcion', obra.descripcion)
     nueva_direccion = request.form.get('direccion', obra.direccion)
+    obra.estado = nuevo_estado
     obra.cliente = request.form.get('cliente', obra.cliente)
     obra.telefono_cliente = request.form.get('telefono_cliente', obra.telefono_cliente)
     obra.email_cliente = request.form.get('email_cliente', obra.email_cliente)
@@ -461,3 +468,129 @@ def reiniciar_sistema():
         flash('Error al reiniciar el sistema. Inténtalo nuevamente.', 'danger')
     
     return redirect(url_for('obras.lista'))
+
+
+# NUEVAS FUNCIONES PARA SISTEMA DE CERTIFICACIONES Y AVANCE AUTOMÁTICO
+
+@obras_bp.route('/<int:id>/certificar_avance', methods=['POST'])
+@login_required
+def certificar_avance(id):
+    """Crear nueva certificación de avance para una obra"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para certificar avances.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    obra = Obra.query.get_or_404(id)
+    
+    porcentaje_avance = request.form.get('porcentaje_avance')
+    costo_certificado = request.form.get('costo_certificado')
+    notas = request.form.get('notas')
+    
+    if not porcentaje_avance:
+        flash('El porcentaje de avance es obligatorio.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    try:
+        porcentaje = Decimal(porcentaje_avance)
+        costo = Decimal(costo_certificado) if costo_certificado else Decimal('0')
+        
+        # Validar certificación
+        valida, mensaje = CertificacionAvance.validar_certificacion(id, porcentaje)
+        if not valida:
+            flash(mensaje, 'danger')
+            return redirect(url_for('obras.detalle', id=id))
+        
+        # Crear certificación
+        certificacion = CertificacionAvance(
+            obra_id=id,
+            usuario_id=current_user.id,
+            porcentaje_avance=porcentaje,
+            costo_certificado=costo,
+            notas=notas
+        )
+        
+        db.session.add(certificacion)
+        
+        # Actualizar costo real de la obra
+        obra.costo_real += costo
+        
+        # Recalcular progreso automático
+        obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        flash(f'Certificación de {porcentaje}% registrada exitosamente.', 'success')
+        
+    except ValueError:
+        flash('Los valores numéricos no son válidos.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al registrar certificación: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/<int:id>/actualizar_progreso', methods=['POST'])
+@login_required
+def actualizar_progreso_automatico(id):
+    """Recalcular el progreso automático de una obra"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para actualizar el progreso.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+    
+    obra = Obra.query.get_or_404(id)
+    
+    try:
+        progreso_anterior = obra.progreso
+        nuevo_progreso = obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        
+        flash(f'Progreso actualizado de {progreso_anterior}% a {nuevo_progreso}%.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar progreso: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/tarea/<int:id>/actualizar_estado', methods=['POST'])
+@login_required
+def actualizar_estado_tarea(id):
+    """Actualizar estado y progreso de una tarea"""
+    tarea = TareaEtapa.query.get_or_404(id)
+    obra = tarea.etapa.obra
+    
+    nuevo_estado = request.form.get('estado')
+    porcentaje_avance = request.form.get('porcentaje_avance')
+    
+    if nuevo_estado not in ['pendiente', 'en_curso', 'completada', 'cancelada']:
+        flash('Estado no válido.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra.id))
+    
+    try:
+        tarea.estado = nuevo_estado
+        
+        if porcentaje_avance:
+            tarea.porcentaje_avance = Decimal(porcentaje_avance)
+        
+        # Si se marca como completada, establecer el avance al 100%
+        if nuevo_estado == 'completada':
+            tarea.porcentaje_avance = Decimal('100')
+            tarea.fecha_fin_real = date.today()
+        elif nuevo_estado == 'en_curso' and not tarea.fecha_inicio_real:
+            tarea.fecha_inicio_real = date.today()
+        
+        # Recalcular progreso automático de la obra
+        obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        flash('Estado de tarea actualizado exitosamente.', 'success')
+        
+    except ValueError:
+        flash('Porcentaje de avance no válido.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar tarea: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.detalle', id=obra.id))

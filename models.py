@@ -52,6 +52,7 @@ class Usuario(UserMixin, db.Model):
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
     rol = db.Column(db.String(20), nullable=False, default='operario')  # administrador, tecnico, operario
+    puede_pausar_obras = db.Column(db.Boolean, default=False)  # Permiso especial para pausar obras
     activo = db.Column(db.Boolean, default=True)
     auth_provider = db.Column(db.String(20), nullable=False, default='manual')  # manual, google
     google_id = db.Column(db.String(100), nullable=True)  # ID de Google para usuarios OAuth
@@ -133,6 +134,7 @@ class Obra(db.Model):
     asignaciones = db.relationship('AsignacionObra', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     presupuestos = db.relationship('Presupuesto', back_populates='obra', lazy='dynamic')
     uso_inventario = db.relationship('UsoInventario', back_populates='obra', lazy='dynamic')
+    certificaciones = db.relationship('CertificacionAvance', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     
     def __repr__(self):
         return f'<Obra {self.nombre}>'
@@ -148,6 +150,44 @@ class Obra(db.Model):
         if self.fecha_fin_estimada:
             return (self.fecha_fin_estimada - date.today()).days
         return None
+    
+    def calcular_progreso_automatico(self):
+        """Calcula el progreso automático basado en etapas, tareas y certificaciones"""
+        total_etapas = self.etapas.count()
+        if total_etapas == 0:
+            return 0
+        
+        progreso_etapas = 0
+        for etapa in self.etapas:
+            total_tareas = etapa.tareas.count()
+            if total_tareas > 0:
+                tareas_completadas = etapa.tareas.filter_by(estado='completada').count()
+                progreso_etapas += (tareas_completadas / total_tareas) * (100 / total_etapas)
+            elif etapa.estado == 'finalizada':
+                progreso_etapas += (100 / total_etapas)
+        
+        # Agregar progreso de certificaciones
+        progreso_certificaciones = sum(cert.porcentaje_avance for cert in self.certificaciones.filter_by(activa=True))
+        
+        # El progreso total no puede exceder 100%
+        progreso_total = min(100, progreso_etapas + progreso_certificaciones)
+        
+        # Actualizar el progreso en la base de datos
+        self.progreso = int(progreso_total)
+        return self.progreso
+    
+    @property 
+    def porcentaje_presupuesto_ejecutado(self):
+        """Calcula el porcentaje del presupuesto ejecutado"""
+        if self.presupuesto_total > 0:
+            return (self.costo_real / self.presupuesto_total) * 100
+        return 0
+    
+    def puede_ser_pausada_por(self, usuario):
+        """Verifica si un usuario puede pausar esta obra"""
+        return (usuario.rol == 'administrador' or 
+                usuario.puede_pausar_obras or 
+                usuario.organizacion_id == self.organizacion_id)
 
 
 class EtapaObra(db.Model):
@@ -184,9 +224,10 @@ class TareaEtapa(db.Model):
     fecha_fin_estimada = db.Column(db.Date)
     fecha_inicio_real = db.Column(db.Date)
     fecha_fin_real = db.Column(db.Date)
-    estado = db.Column(db.String(20), default='pendiente')
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente, en_curso, completada, cancelada
     horas_estimadas = db.Column(db.Numeric(8, 2))
     horas_reales = db.Column(db.Numeric(8, 2), default=0)
+    porcentaje_avance = db.Column(db.Numeric(5, 2), default=0)  # Para control granular del avance
     responsable_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     
     # Relaciones
@@ -521,3 +562,45 @@ class ConfiguracionInteligente(db.Model):
     
     def __repr__(self):
         return f'<ConfiguracionInteligente Obra-{self.obra_id}>'
+
+
+class CertificacionAvance(db.Model):
+    __tablename__ = 'certificaciones_avance'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    fecha = db.Column(db.Date, default=date.today)
+    porcentaje_avance = db.Column(db.Numeric(5, 2), nullable=False)  # Porcentaje de avance certificado
+    costo_certificado = db.Column(db.Numeric(15, 2), default=0)  # Costo asociado a este avance
+    notas = db.Column(db.Text)  # Notas opcionales
+    activa = db.Column(db.Boolean, default=True)  # Para poder desactivar certificaciones si es necesario
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    obra = db.relationship('Obra', back_populates='certificaciones')
+    usuario = db.relationship('Usuario')  # Usuario que creó la certificación
+    
+    def __repr__(self):
+        return f'<CertificacionAvance {self.porcentaje_avance}% - Obra {self.obra.nombre}>'
+    
+    @classmethod
+    def validar_certificacion(cls, obra_id, nuevo_porcentaje):
+        """Valida que la nueva certificación no exceda el 100% del progreso total"""
+        obra = Obra.query.get(obra_id)
+        if not obra:
+            return False, "Obra no encontrada"
+        
+        # Calcular progreso actual de certificaciones activas
+        progreso_certificaciones = sum(cert.porcentaje_avance for cert in obra.certificaciones.filter_by(activa=True))
+        
+        # Calcular progreso de tareas/etapas
+        progreso_tareas = obra.calcular_progreso_automatico() - progreso_certificaciones
+        
+        # Verificar que el nuevo total no exceda 100%
+        nuevo_total = progreso_tareas + progreso_certificaciones + nuevo_porcentaje
+        
+        if nuevo_total > 100:
+            return False, f"El total de avance sería {nuevo_total}%, excede el 100% permitido"
+        
+        return True, "Certificación válida"

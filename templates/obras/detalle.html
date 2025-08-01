@@ -75,17 +75,24 @@
         </div>
         
         <div class="col-lg-4">
-            <div class="card">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Progreso General</h6>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal">
+                        <i class="fas fa-certificate me-1"></i>Certificar
+                    </button>
+                    {% endif %}
+                </div>
                 <div class="card-body text-center">
-                    <h6 class="text-muted">Progreso General</h6>
-                    <div class="progress mb-3" style="height: 10px;">
+                    <div class="progress mb-3" style="height: 15px;">
                         <div class="progress-bar" role="progressbar" style="width: {{ obra.progreso }}%"></div>
                     </div>
                     <h3 class="text-primary">{{ obra.progreso }}%</h3>
                     
                     <hr>
                     
-                    <div class="row text-center">
+                    <div class="row text-center mb-3">
                         <div class="col-6">
                             <strong class="text-success d-block">{{ obra.presupuesto_total|moneda }}</strong>
                             <small class="text-muted">Presupuesto</small>
@@ -95,6 +102,69 @@
                             <small class="text-muted">Costo Real</small>
                         </div>
                     </div>
+
+                    <!-- Control de Presupuesto -->
+                    <div class="progress mb-2" style="height: 8px;">
+                        <div class="progress-bar {% if obra.porcentaje_presupuesto_ejecutado > 100 %}bg-danger{% elif obra.porcentaje_presupuesto_ejecutado > 80 %}bg-warning{% else %}bg-info{% endif %}" 
+                             role="progressbar" 
+                             style="width: {{ [obra.porcentaje_presupuesto_ejecutado, 100]|max }}%;" 
+                             aria-valuenow="{{ obra.porcentaje_presupuesto_ejecutado }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                    <small class="text-muted mb-3 d-block">{{ "%.1f"|format(obra.porcentaje_presupuesto_ejecutado) }}% del presupuesto</small>
+                    
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <form action="{{ url_for('obras.actualizar_progreso_automatico', id=obra.id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-sync-alt me-1"></i>Recalcular
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    {% if obra.dias_transcurridos %}
+                    <hr>
+                    <small class="text-muted">
+                        <i class="fas fa-clock me-1"></i>{{ obra.dias_transcurridos }} días transcurridos
+                        {% if obra.dias_restantes %}
+                        <br><i class="fas fa-calendar me-1"></i>{{ obra.dias_restantes }} días restantes
+                        {% endif %}
+                    </small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Certificaciones recientes -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Certificaciones</h6>
+                    <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-history me-1"></i>Ver Todo
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% set certificaciones_recientes = obra.certificaciones.filter_by(activa=True).order_by(obra.certificaciones.model.fecha.desc()).limit(3).all() %}
+                    {% if certificaciones_recientes %}
+                        {% for cert in certificaciones_recientes %}
+                        <div class="d-flex justify-content-between align-items-center py-2 {% if not loop.last %}border-bottom{% endif %}">
+                            <div>
+                                <strong>{{ cert.porcentaje_avance }}%</strong>
+                                <br>
+                                <small class="text-muted">{{ cert.fecha|fecha }}</small>
+                                {% if cert.costo_certificado > 0 %}
+                                <br>
+                                <small class="text-success">${{ "%.2f"|format(cert.costo_certificado) }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted">{{ cert.usuario.nombre }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0 text-center">No hay certificaciones</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -472,6 +542,56 @@
 {% endif %}
 {% endblock %}
 
+<!-- Modal para Certificar Avance -->
+<div class="modal fade" id="certificarAvanceModal" tabindex="-1" aria-labelledby="certificarAvanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="certificarAvanceModalLabel">
+                    <i class="fas fa-certificate me-2"></i>Certificar Avance
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('obras.certificar_avance', id=obra.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="porcentaje_avance" class="form-label">Porcentaje de Avance *</label>
+                        <input type="number" class="form-control" id="porcentaje_avance" name="porcentaje_avance" 
+                               min="0" max="100" step="0.1" required>
+                        <div class="form-text">Porcentaje de avance certificado para esta obra</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="costo_certificado" class="form-label">Costo Certificado (USD)</label>
+                        <input type="number" class="form-control" id="costo_certificado" name="costo_certificado" 
+                               min="0" step="0.01" placeholder="0.00">
+                        <div class="form-text">Costo asociado a este avance (opcional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="notas" class="form-label">Notas</label>
+                        <textarea class="form-control" id="notas" name="notas" rows="3" 
+                                  placeholder="Descripción del avance, observaciones, etc."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Progreso actual:</strong> {{ obra.progreso }}%<br>
+                        <strong>Presupuesto disponible:</strong> {{ obra.presupuesto_total|moneda }}<br>
+                        <strong>Costo actual:</strong> {{ obra.costo_real|moneda }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-certificate me-1"></i>Certificar Avance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% block scripts %}
 <script>
 function abrirModalTarea(etapaId, nombreEtapa) {
@@ -491,5 +611,47 @@ function deseleccionarTodas() {
         checkbox.checked = false;
     });
 }
+
+// Funciones para el sistema de certificaciones
+function actualizarEstadoTarea(tareaId, nuevoEstado) {
+    if (confirm(`¿Cambiar estado de la tarea a "${nuevoEstado}"?`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/obras/tarea/${tareaId}/actualizar_estado`;
+        
+        const estadoInput = document.createElement('input');
+        estadoInput.type = 'hidden';
+        estadoInput.name = 'estado';
+        estadoInput.value = nuevoEstado;
+        
+        form.appendChild(estadoInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// Validación del modal de certificación
+document.addEventListener('DOMContentLoaded', function() {
+    const certificarForm = document.querySelector('#certificarAvanceModal form');
+    if (certificarForm) {
+        certificarForm.addEventListener('submit', function(e) {
+            const porcentaje = parseFloat(document.getElementById('porcentaje_avance').value);
+            const progresoActual = {{ obra.progreso }};
+            
+            if (porcentaje <= 0) {
+                e.preventDefault();
+                alert('El porcentaje debe ser mayor a 0');
+                return;
+            }
+            
+            if (porcentaje + progresoActual > 100) {
+                if (!confirm(`El total sería ${porcentaje + progresoActual}%, excediendo el 100%. ¿Continuar?`)) {
+                    e.preventDefault();
+                    return;
+                }
+            }
+        });
+    }
+});
 </script>
 {% endblock %}
