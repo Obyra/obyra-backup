@@ -561,7 +561,7 @@ function agregarMarcadorObraDashboard(obra) {
                 <p class="mb-2"><strong>Progreso:</strong> ${obra.progreso}%</p>
                 ${obra.presupuesto > 0 ? `<p class="mb-2"><strong>Presupuesto:</strong> $${Number(obra.presupuesto).toLocaleString()}</p>` : ''}
                 <div class="d-grid gap-2">
-                    <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
+                    <a href="/obras/${obra.id}" class="btn btn-primary btn-sm text-white" style="color: white !important;">
                         <i class="fas fa-eye me-1"></i>Ver Detalles
                     </a>
                 </div>
