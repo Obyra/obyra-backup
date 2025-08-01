@@ -320,35 +320,65 @@ async function mostrarClima(lat, lng, marcadorId) {
     try {
         console.log(`☁️ Obteniendo clima para obra ${marcadorId}: ${lat}, ${lng}`);
         
-        // API de Open-Meteo (gratuita y sin necesidad de API key)
-        const response = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=temperature_2m,relative_humidity_2m,weather_code&timezone=auto`
-        );
+        // API de Open-Meteo - clima actual + pronóstico 7 días
+        const [climaActual, pronostico] = await Promise.all([
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&timezone=auto`),
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`)
+        ]);
         
-        if (!response.ok) {
+        if (!climaActual.ok || !pronostico.ok) {
             throw new Error('Error al obtener datos del clima');
         }
         
-        const data = await response.json();
-        const clima = data.current_weather;
+        const dataActual = await climaActual.json();
+        const dataPronostico = await pronostico.json();
         
-        // Convertir código del tiempo a descripción
-        const descripcionClima = obtenerDescripcionClima(clima.weather_code);
-        const iconoClima = obtenerIconoClima(clima.weather_code);
+        const clima = dataActual.current_weather;
+        const pronos = dataPronostico.daily;
+        
+        // Convertir código del tiempo a descripción (usar weathercode del clima actual)
+        const descripcionClima = obtenerDescripcionClima(clima.weathercode);
+        const iconoClima = obtenerIconoClima(clima.weathercode);
+        
+        // Generar pronóstico de 7 días
+        let pronosticoHTML = '';
+        for (let i = 0; i < Math.min(7, pronos.time.length); i++) {
+            const fecha = new Date(pronos.time[i]);
+            const dia = fecha.toLocaleDateString('es-ES', { weekday: 'short' });
+            const tempMax = Math.round(pronos.temperature_2m_max[i]);
+            const tempMin = Math.round(pronos.temperature_2m_min[i]);
+            const weathercode = pronos.weathercode[i];
+            const iconoDia = obtenerIconoClima(weathercode);
+            
+            pronosticoHTML += `
+                <div class="d-flex justify-content-between align-items-center py-1">
+                    <span class="small">${dia}</span>
+                    <i class="${iconoDia}" style="font-size: 12px;"></i>
+                    <span class="small">${tempMax}°/${tempMin}°</span>
+                </div>
+            `;
+        }
         
         climaDiv.innerHTML = `
             <div class="card card-body p-2 small bg-light">
-                <div class="text-center">
+                <div class="text-center mb-2">
                     <i class="${iconoClima} me-1"></i>
                     <strong>${clima.temperature}°C</strong>
                 </div>
-                <div class="text-center">
+                <div class="text-center mb-1">
                     ${descripcionClima}
                 </div>
-                <div class="text-center text-muted">
+                <div class="text-center text-muted mb-2">
                     Viento: ${clima.windspeed} km/h
                 </div>
-                <div class="text-center mt-1">
+                <hr class="my-1">
+                <div class="text-center mb-1" style="font-size: 11px; font-weight: bold;">
+                    Pronóstico 7 días
+                </div>
+                <div style="max-height: 120px; overflow-y: auto;">
+                    ${pronosticoHTML}
+                </div>
+                <div class="text-center mt-2">
                     <button onclick="ocultarClima(${marcadorId})" class="btn btn-xs btn-outline-secondary">
                         <i class="fas fa-times"></i>
                     </button>
@@ -356,7 +386,7 @@ async function mostrarClima(lat, lng, marcadorId) {
             </div>
         `;
         
-        console.log(`✅ Clima cargado para obra ${marcadorId}`);
+        console.log(`✅ Clima y pronóstico cargados para obra ${marcadorId}`);
         
     } catch (error) {
         console.error('❌ Error al cargar clima:', error);
@@ -380,17 +410,21 @@ function ocultarClima(marcadorId) {
 function obtenerDescripcionClima(codigo) {
     const descripciones = {
         0: 'Despejado',
-        1: 'Mayormente despejado',
+        1: 'Mayormente despejado', 
         2: 'Parcialmente nublado',
         3: 'Nublado',
         45: 'Neblina',
         48: 'Neblina con escarcha',
         51: 'Llovizna ligera',
-        53: 'Llovizna moderada',
+        53: 'Llovizna moderada', 
         55: 'Llovizna intensa',
+        56: 'Llovizna helada ligera',
+        57: 'Llovizna helada intensa',
         61: 'Lluvia ligera',
         63: 'Lluvia moderada',
         65: 'Lluvia intensa',
+        66: 'Lluvia helada ligera',
+        67: 'Lluvia helada intensa',
         71: 'Nevada ligera',
         73: 'Nevada moderada',
         75: 'Nevada intensa',
@@ -398,21 +432,45 @@ function obtenerDescripcionClima(codigo) {
         80: 'Chubascos ligeros',
         81: 'Chubascos moderados',
         82: 'Chubascos intensos',
+        85: 'Chubascos de nieve ligeros',
+        86: 'Chubascos de nieve intensos',
         95: 'Tormenta',
         96: 'Tormenta con granizo ligero',
         99: 'Tormenta con granizo intenso'
     };
-    return descripciones[codigo] || 'Condición desconocida';
+    
+    console.log(`🌤️ Código de clima recibido: ${codigo}`);
+    const descripcion = descripciones[codigo];
+    if (!descripcion) {
+        console.warn(`⚠️ Código de clima desconocido: ${codigo}`);
+        return `Código ${codigo}`;
+    }
+    return descripcion;
 }
 
 function obtenerIconoClima(codigo) {
+    // Despejado y mayormente despejado
     if (codigo === 0 || codigo === 1) return 'fas fa-sun text-warning';
+    
+    // Parcialmente nublado y nublado
     if (codigo === 2 || codigo === 3) return 'fas fa-cloud text-secondary';
+    
+    // Neblina
     if (codigo >= 45 && codigo <= 48) return 'fas fa-smog text-muted';
-    if (codigo >= 51 && codigo <= 65) return 'fas fa-cloud-rain text-primary';
-    if (codigo >= 71 && codigo <= 77) return 'fas fa-snowflake text-info';
+    
+    // Llovizna y lluvia (incluyendo helada)
+    if ((codigo >= 51 && codigo <= 67)) return 'fas fa-cloud-rain text-primary';
+    
+    // Nieve y granizo
+    if ((codigo >= 71 && codigo <= 77) || (codigo >= 85 && codigo <= 86)) return 'fas fa-snowflake text-info';
+    
+    // Chubascos
     if (codigo >= 80 && codigo <= 82) return 'fas fa-cloud-showers-heavy text-primary';
+    
+    // Tormentas
     if (codigo >= 95 && codigo <= 99) return 'fas fa-bolt text-danger';
+    
+    // Default para códigos no reconocidos
     return 'fas fa-cloud text-secondary';
 }
 
