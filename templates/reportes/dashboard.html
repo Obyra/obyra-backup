@@ -599,7 +599,7 @@ function agregarMarcadorObraDashboard(obra) {
                     <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
                         <i class="fas fa-eye me-1"></i>Ver Detalles
                     </a>
-                    <button onclick="mostrarClima(${obra.lat}, ${obra.lng}, '${obra.nombre.replace(/'/g, "\\'")}'); event.stopPropagation();" 
+                    <button onclick="console.log('🌤️ Botón clima dashboard clickeado'); mostrarClima(${obra.lat}, ${obra.lng}, '${obra.nombre.replace(/'/g, "\\'")}'); event.stopPropagation();" 
                             class="btn btn-outline-info btn-sm">
                         <i class="fas fa-cloud-sun me-1"></i>Ver Clima
                     </button>
@@ -663,13 +663,26 @@ function inicializarGraficos() {
 }
 
 function mostrarClima(lat, lng, nombreObra) {
-    console.log(`🌤️ Mostrando clima para: ${nombreObra}`);
+    console.log(`🌤️ Dashboard - Función mostrarClima llamada para: ${nombreObra}`);
+    console.log(`📍 Coordenadas: ${lat}, ${lng}`);
+    
+    // Verificar que existen los elementos
+    const tituloElement = document.getElementById('nombreObraClima');
+    const modalElement = document.getElementById('modalClima');
+    
+    console.log('🔍 Elemento título:', tituloElement);
+    console.log('🔍 Elemento modal:', modalElement);
+    
+    if (!tituloElement || !modalElement) {
+        console.error('❌ No se encontraron elementos del modal del clima');
+        return;
+    }
     
     // Actualizar título del modal
-    document.getElementById('nombreObraClima').textContent = nombreObra;
+    tituloElement.textContent = nombreObra;
     
     // Mostrar modal
-    const modal = new bootstrap.Modal(document.getElementById('modalClima'));
+    const modal = new bootstrap.Modal(modalElement);
     modal.show();
     
     // Simular carga
