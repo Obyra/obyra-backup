@@ -86,6 +86,7 @@ def verificar_periodo_prueba():
     ]
     
     if (current_user.is_authenticated and 
+        request.endpoint and
         request.endpoint not in rutas_excluidas and 
         not request.endpoint.startswith('static')):
         

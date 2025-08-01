@@ -395,42 +395,7 @@
 </div>
 {% endblock %}
 
-<!-- Modal del Pronóstico del Tiempo -->
-<div class="modal fade" id="modalClimaDashboard" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-cloud-sun me-2"></i>
-                    Pronóstico del Tiempo - <span id="nombreObraClimaDashboard"></span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="loadingClimaDashboard" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Cargando...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Obteniendo pronóstico del tiempo...</p>
-                </div>
-                
-                <div id="contenidoClimaDashboard" style="display: none;">
-                    <div class="row" id="pronosticoSemanalDashboard">
-                        <!-- Se llena dinámicamente con JavaScript -->
-                    </div>
-                </div>
-                
-                <div id="errorClimaDashboard" style="display: none;" class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    No se pudo obtener el pronóstico del tiempo para esta ubicación.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 {% block scripts %}
 <!-- Leaflet CSS y JS -->
@@ -599,10 +564,6 @@ function agregarMarcadorObraDashboard(obra) {
                     <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
                         <i class="fas fa-eye me-1"></i>Ver Detalles
                     </a>
-                    <button onclick="console.log('🌤️ Botón clima dashboard clickeado'); mostrarClima(${obra.lat}, ${obra.lng}, '${obra.nombre.replace(/'/g, "\\'")}'); event.stopPropagation();" 
-                            class="btn btn-outline-info btn-sm">
-                        <i class="fas fa-cloud-sun me-1"></i>Ver Clima
-                    </button>
                 </div>
             </div>
         `;
@@ -662,84 +623,7 @@ function inicializarGraficos() {
     console.log('✅ Sistema de gráficos del dashboard inicializado');
 }
 
-function mostrarClima(lat, lng, nombreObra) {
-    console.log(`🌤️ Dashboard - Función mostrarClima llamada para: ${nombreObra}`);
-    console.log(`📍 Coordenadas: ${lat}, ${lng}`);
-    
-    // Verificar que existen los elementos
-    const tituloElement = document.getElementById('nombreObraClima');
-    const modalElement = document.getElementById('modalClima');
-    
-    console.log('🔍 Elemento título:', tituloElement);
-    console.log('🔍 Elemento modal:', modalElement);
-    
-    if (!tituloElement || !modalElement) {
-        console.error('❌ No se encontraron elementos del modal del clima');
-        return;
-    }
-    
-    // Actualizar título del modal
-    tituloElement.textContent = nombreObra;
-    
-    // Mostrar modal
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
-    
-    // Simular carga
-    document.getElementById('loadingClima').style.display = 'block';
-    document.getElementById('contenidoClima').style.display = 'none';
-    document.getElementById('errorClima').style.display = 'none';
-    
-    // Simular datos del clima después de 1 segundo
-    setTimeout(function() {
-        generarPronosticoSimuladoDashboard();
-        document.getElementById('loadingClima').style.display = 'none';
-        document.getElementById('contenidoClima').style.display = 'block';
-    }, 1000);
-}
-
-function generarPronosticoSimuladoDashboard() {
-    const dias = ['Hoy', 'Mañana', 'Viernes', 'Sábado', 'Domingo', 'Lunes', 'Martes'];
-    const iconos = ['☀️', '⛅', '🌤️', '🌦️', '☁️', '🌧️'];
-    const condiciones = ['Soleado', 'Parcialmente nublado', 'Mayormente soleado', 'Lluvias dispersas', 'Nublado', 'Lluvia'];
-    
-    let html = '';
-    
-    for (let i = 0; i < 7; i++) {
-        const tempAlta = Math.floor(Math.random() * 10) + 18; // 18-28°C
-        const tempBaja = tempAlta - Math.floor(Math.random() * 8) - 3; // 5-15°C menos
-        const iconIndex = Math.floor(Math.random() * iconos.length);
-        
-        html += `
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card bg-primary text-white">
-                    <div class="card-body">
-                        <h6 class="card-title">${dias[i]}</h6>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="h4">${tempAlta}°</div>
-                                <div class="opacity-75">${tempBaja}°</div>
-                            </div>
-                            <div class="text-end">
-                                <div style="font-size: 2rem;">${iconos[iconIndex]}</div>
-                                <small>${condiciones[iconIndex]}</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Usar el ID correcto para el dashboard
-    const targetElement = document.getElementById('pronosticoSemanal');
-    if (targetElement) {
-        targetElement.innerHTML = html;
-        console.log('✅ Pronóstico generado en dashboard');
-    } else {
-        console.error('❌ No se encontró elemento pronosticoSemanal');
-    }
-}
+// Funciones del clima eliminadas por solicitud del usuario
 
 // Redimensionar mapa cuando cambie el tamaño de la ventana
 window.addEventListener('resize', function() {
