@@ -290,17 +290,12 @@ function inicializarMapa() {
                     <div class="progress mb-2" style="height: 4px;">
                         <div class="progress-bar" style="width: {{ obra.progreso }}%"></div>
                     </div>
-                    <div id="clima-info-{{ loop.index }}" class="mb-2" style="display: none;">
-                        <div class="text-center small">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ms-1">Cargando clima...</span>
-                        </div>
-                    </div>
+
                     <div class="text-center">
                         <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-sm btn-primary me-1">
                             <i class="fas fa-eye me-1"></i>Ver Detalles
                         </a>
-                        <button onclick="mostrarClima({{ obra.latitud }}, {{ obra.longitud }}, {{ loop.index }})" class="btn btn-sm btn-info">
+                        <button onclick="abrirVentanaClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre }}', '{{ obra.direccion }}')" class="btn btn-sm btn-info">
                             <i class="fas fa-cloud-sun me-1"></i>Clima
                         </button>
                     </div>
@@ -332,14 +327,53 @@ function centrarEnObra(lat, lng) {
     }
 }
 
-// Función para mostrar clima
-async function mostrarClima(lat, lng, marcadorId) {
-    const climaDiv = document.getElementById(`clima-info-${marcadorId}`);
-    climaDiv.style.display = 'block';
+// Función para abrir ventana de clima en pantalla completa
+function abrirVentanaClima(lat, lng, nombreObra, direccion) {
+    console.log(`☁️ Abriendo ventana de clima para ${nombreObra}: ${lat}, ${lng}`);
+    
+    // Crear ventana modal de clima
+    const modalHTML = `
+        <div class="modal fade" id="modalClima" tabindex="-1" aria-labelledby="modalClimaLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="modalClimaLabel">
+                            <i class="fas fa-cloud-sun me-2"></i>Información Climática - ${nombreObra}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="contenidoClima">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">Cargando información climática...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Agregar modal al DOM si no existe
+    let modalExistente = document.getElementById('modalClima');
+    if (modalExistente) {
+        modalExistente.remove();
+    }
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalClima'));
+    modal.show();
+    
+    // Cargar datos del clima
+    cargarDatosClima(lat, lng, nombreObra, direccion);
+}
+
+// Función para cargar datos de clima en el modal
+async function cargarDatosClima(lat, lng, nombreObra, direccion) {
+    const contenidoDiv = document.getElementById('contenidoClima');
     
     try {
-        console.log(`☁️ Obteniendo clima para obra ${marcadorId}: ${lat}, ${lng}`);
-        
         // API de Open-Meteo - clima actual + pronóstico 7 días
         const [climaActual, pronostico] = await Promise.all([
             fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&timezone=auto`),
@@ -356,7 +390,7 @@ async function mostrarClima(lat, lng, marcadorId) {
         const clima = dataActual.current_weather;
         const pronos = dataPronostico.daily;
         
-        // Convertir código del tiempo a descripción (usar weathercode del clima actual)
+        // Convertir código del tiempo a descripción
         const descripcionClima = obtenerDescripcionClima(clima.weathercode);
         const iconoClima = obtenerIconoClima(clima.weathercode);
         
@@ -364,88 +398,85 @@ async function mostrarClima(lat, lng, marcadorId) {
         let pronosticoHTML = '';
         for (let i = 0; i < Math.min(7, pronos.time.length); i++) {
             const fecha = new Date(pronos.time[i]);
-            const dia = fecha.toLocaleDateString('es-ES', { weekday: 'long' }); // Cambiar a 'long' para nombres completos
+            const dia = fecha.toLocaleDateString('es-ES', { weekday: 'long' });
             const diaCapitalizado = dia.charAt(0).toUpperCase() + dia.slice(1);
+            const fechaFormateada = fecha.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
             const tempMax = Math.round(pronos.temperature_2m_max[i]);
             const tempMin = Math.round(pronos.temperature_2m_min[i]);
             const weathercode = pronos.weathercode[i];
             const iconoDia = obtenerIconoClima(weathercode);
+            const descripcionDia = obtenerDescripcionClima(weathercode);
             
             pronosticoHTML += `
-                <div class="d-flex justify-content-between align-items-center py-1 ${i < 6 ? 'border-bottom border-light' : ''}">
-                    <div class="flex-fill text-start">
-                        <span class="small fw-semibold">${diaCapitalizado}</span>
-                    </div>
-                    <div class="text-center px-1">
-                        <i class="${iconoDia}" style="font-size: 16px;"></i>
-                    </div>
-                    <div class="flex-fill text-end">
-                        <span class="small fw-bold text-dark">${tempMax}°</span>
-                        <span class="small text-muted ms-1">${tempMin}°</span>
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-3">
+                            <h6 class="card-title fw-bold text-primary">${diaCapitalizado}</h6>
+                            <p class="small text-muted mb-2">${fechaFormateada}</p>
+                            <div class="mb-3">
+                                <i class="${iconoDia}" style="font-size: 32px;"></i>
+                            </div>
+                            <div class="mb-2">
+                                <span class="h5 fw-bold text-dark">${tempMax}°</span>
+                                <span class="text-muted ms-2">${tempMin}°</span>
+                            </div>
+                            <p class="small text-muted mb-0">${descripcionDia}</p>
+                        </div>
                     </div>
                 </div>
             `;
         }
         
-        climaDiv.innerHTML = `
-            <div class="card border-0 shadow-sm" style="width: 280px; max-height: 400px; margin: 0 auto;">
-                <div class="card-header bg-primary text-white text-center py-1">
-                    <small class="fw-bold">
-                        <i class="fas fa-cloud-sun me-1"></i>Información Climática
-                    </small>
-                </div>
-                <div class="card-body p-2 bg-light" style="max-height: 340px; overflow-y: auto;">
-                    <!-- Clima Actual -->
-                    <div class="text-center mb-2 p-2 bg-white rounded">
-                        <div class="d-flex align-items-center justify-content-center mb-1">
-                            <i class="${iconoClima} me-2" style="font-size: 24px;"></i>
-                            <span class="h5 mb-0 fw-bold text-primary">${clima.temperature}°C</span>
-                        </div>
-                        <div class="small text-muted mb-1">${descripcionClima}</div>
-                        <div class="small text-secondary">
-                            <i class="fas fa-wind me-1"></i>${clima.windspeed} km/h
-                        </div>
+        contenidoDiv.innerHTML = `
+            <div class="row">
+                <!-- Información de la obra -->
+                <div class="col-12 mb-4">
+                    <div class="alert alert-info border-0 bg-light">
+                        <h6 class="alert-heading"><i class="fas fa-map-marker-alt me-1"></i>${nombreObra}</h6>
+                        <p class="mb-0 small">${direccion || 'Sin dirección especificada'}</p>
                     </div>
-                    
-                    <!-- Pronóstico 7 días -->
-                    <div class="bg-white rounded p-2">
-                        <div class="text-center mb-2 small fw-bold text-secondary">
-                            <i class="fas fa-calendar-week me-1"></i>Pronóstico 7 días
-                        </div>
-                        <div style="max-height: 200px; overflow-y: auto;">
-                            ${pronosticoHTML}
+                </div>
+                
+                <!-- Clima actual -->
+                <div class="col-12 mb-4">
+                    <div class="card border-0 shadow-sm bg-primary text-white">
+                        <div class="card-body text-center p-4">
+                            <h5 class="card-title fw-bold mb-3">Clima Actual</h5>
+                            <div class="mb-3">
+                                <i class="${iconoClima}" style="font-size: 48px;"></i>
+                            </div>
+                            <div class="h2 fw-bold mb-2">${clima.temperature}°C</div>
+                            <p class="mb-2">${descripcionClima}</p>
+                            <p class="small mb-0">
+                                <i class="fas fa-wind me-1"></i>Viento: ${clima.windspeed} km/h
+                            </p>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Botón Cerrar - Fijo en la parte inferior -->
-                <div class="card-footer bg-white text-center py-1 border-0">
-                    <button onclick="ocultarClima(${marcadorId})" class="btn btn-outline-secondary btn-sm">
-                        <i class="fas fa-times me-1"></i>Cerrar
-                    </button>
+                <!-- Pronóstico 7 días -->
+                <div class="col-12">
+                    <h5 class="mb-3 fw-bold text-center">
+                        <i class="fas fa-calendar-week me-2"></i>Pronóstico 7 días
+                    </h5>
+                    <div class="row">
+                        ${pronosticoHTML}
+                    </div>
                 </div>
             </div>
         `;
         
-        console.log(`✅ Clima y pronóstico cargados para obra ${marcadorId}`);
+        console.log(`✅ Clima completo cargado para ${nombreObra}`);
         
     } catch (error) {
         console.error('❌ Error al cargar clima:', error);
-        climaDiv.innerHTML = `
-            <div class="alert alert-warning p-2 small">
-                <i class="fas fa-exclamation-triangle me-1"></i>
-                No se pudo cargar el clima
-                <button onclick="ocultarClima(${marcadorId})" class="btn btn-xs btn-outline-secondary float-end">
-                    <i class="fas fa-times"></i>
-                </button>
+        contenidoDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">No se pudo cargar la información climática. Por favor, inténtalo de nuevo más tarde.</p>
             </div>
         `;
     }
-}
-
-function ocultarClima(marcadorId) {
-    const climaDiv = document.getElementById(`clima-info-${marcadorId}`);
-    climaDiv.style.display = 'none';
 }
 
 function obtenerDescripcionClima(codigo) {
