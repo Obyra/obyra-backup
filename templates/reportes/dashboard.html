@@ -731,7 +731,14 @@ function generarPronosticoSimuladoDashboard() {
         `;
     }
     
-    document.getElementById('pronosticoSemanal').innerHTML = html;
+    // Usar el ID correcto para el dashboard
+    const targetElement = document.getElementById('pronosticoSemanal');
+    if (targetElement) {
+        targetElement.innerHTML = html;
+        console.log('✅ Pronóstico generado en dashboard');
+    } else {
+        console.error('❌ No se encontró elemento pronosticoSemanal');
+    }
 }
 
 // Redimensionar mapa cuando cambie el tamaño de la ventana
