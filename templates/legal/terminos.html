@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Términos y Condiciones - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-file-contract me-2"></i>Términos y Condiciones y Contacto
+                    </h1>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <p class="lead">Bienvenido a OBYRA IA. Al utilizar esta plataforma aceptás nuestros términos:</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-check-circle text-success me-2"></i>Uso de la Plataforma</h5>
+                        <ul class="list-unstyled ps-4">
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                Esta plataforma está diseñada para facilitar la planificación, compras y control de avance en obras de construcción.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-exclamation-triangle text-warning me-2"></i>Limitaciones de Responsabilidad</h5>
+                        <ul class="list-unstyled ps-4">
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                OBYRA IA no se responsabiliza por errores humanos en la carga de datos o certificaciones.
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                Las recomendaciones son de carácter informativo. Las decisiones finales dependen del usuario.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-edit text-info me-2"></i>Modificaciones y Uso</h5>
+                        <ul class="list-unstyled ps-4">
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                Nos reservamos el derecho de modificar las condiciones sin previo aviso.
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                El uso indebido o fraudulento del sistema puede implicar la suspensión de la cuenta.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="mb-4">
+                        <h4><i class="fas fa-phone text-success me-2"></i>Contacto</h4>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card bg-light border-0">
+                                    <div class="card-body">
+                                        <h6><i class="fas fa-envelope text-primary me-2"></i>Email</h6>
+                                        <p class="mb-0">
+                                            <a href="mailto:info@obyra.com.ar" class="text-decoration-none">
+                                                info@obyra.com.ar
+                                            </a>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light border-0">
+                                    <div class="card-body">
+                                        <h6><i class="fab fa-whatsapp text-success me-2"></i>WhatsApp</h6>
+                                        <p class="mb-0">
+                                            <a href="https://wa.me/5491173685175" class="text-decoration-none" target="_blank">
+                                                +54 9 11 7368-5175
+                                            </a>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <h6><i class="fas fa-map-marker-alt text-danger me-2"></i>Dirección</h6>
+                                    <p class="mb-0">Caseros, Provincia de Buenos Aires, Argentina</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver al Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

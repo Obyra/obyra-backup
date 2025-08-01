@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Política de Privacidad - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-shield-alt me-2"></i>Política de Privacidad
+                    </h1>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <p class="lead">En OBYRA IA valoramos tu privacidad:</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-database text-primary me-2"></i>Información que Guardamos</h5>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Guardamos únicamente la información necesaria para operar la plataforma (nombre, mail, obras activas, usuarios, etc.).
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-user-shield text-success me-2"></i>Protección de Datos</h5>
+                        <ul class="list-unstyled ps-4">
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                No compartimos tu información con terceros, salvo requerimiento legal.
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-chevron-right text-primary me-2"></i>
+                                Protegemos tus datos con buenas prácticas de seguridad y encriptación.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-trash-alt text-warning me-2"></i>Eliminación de Datos</h5>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Podés solicitar la eliminación de tus datos en cualquier momento escribiendo a 
+                            <strong>soporte@obyra.com.ar</strong>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-cookie-bite text-info me-2"></i>Cookies</h5>
+                        <div class="alert alert-light border">
+                            <i class="fas fa-cookie me-2"></i>
+                            Utilizamos cookies mínimas para mejorar la experiencia de usuario.
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-lock text-dark me-2"></i>Seguridad</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card bg-light border-0 h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-key fa-2x text-primary mb-2"></i>
+                                        <h6>Encriptación</h6>
+                                        <p class="small text-muted">Datos protegidos con encriptación avanzada</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light border-0 h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-server fa-2x text-success mb-2"></i>
+                                        <h6>Servidores Seguros</h6>
+                                        <p class="small text-muted">Infraestructura con estándares de seguridad</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5><i class="fas fa-envelope text-primary me-2"></i>Contacto sobre Privacidad</h5>
+                        <p>Si tenés preguntas sobre esta política de privacidad, contactanos en:</p>
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <p class="mb-1">
+                                    <i class="fas fa-envelope me-2"></i>
+                                    <strong>Email:</strong> 
+                                    <a href="mailto:soporte@obyra.com.ar" class="text-decoration-none">
+                                        soporte@obyra.com.ar
+                                    </a>
+                                </p>
+                                <p class="mb-0">
+                                    <i class="fab fa-whatsapp me-2"></i>
+                                    <strong>WhatsApp:</strong> 
+                                    <a href="https://wa.me/5491173685175" class="text-decoration-none" target="_blank">
+                                        +54 9 11 7368-5175
+                                    </a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver al Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

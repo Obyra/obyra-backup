@@ -241,20 +241,21 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-light mt-5 py-4">
+    <footer class="mt-5 py-4 border-top" style="background-color: #f8f9fa;">
         <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <h6 class="fw-bold">OBYRA IA</h6>
-                    <p class="text-muted small">
-                        Plataforma integral de gestión de construcción para Argentina y LATAM
-                    </p>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <p class="text-muted small mb-0">
-                        © 2025 OBYRA IA. Todos los derechos reservados.
-                    </p>
-                </div>
+            <div class="text-center">
+                <p class="mb-2">
+                    <strong>OBYRA IA</strong><br>
+                    <small>Plataforma inteligente de planificación y compras para obras en LATAM</small><br>
+                    <small>&copy; 2025 OBYRA IA. Todos los derechos reservados.</small>
+                </p>
+                <p class="mb-0">
+                    <small>
+                        <a href="{{ url_for('terminos') }}" class="text-muted text-decoration-none">Términos y condiciones</a>
+                        |
+                        <a href="{{ url_for('privacidad') }}" class="text-muted text-decoration-none">Política de privacidad</a>
+                    </small>
+                </p>
             </div>
         </div>
     </footer>

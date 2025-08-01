@@ -4,7 +4,7 @@ Archivo de configuración para autenticación con Google usando Authlib
 """
 
 import os
-from flask import Flask, request, redirect, url_for, session, flash
+from flask import Flask, request, redirect, url_for, session, flash, render_template
 from flask_login import login_user, current_user
 from authlib.integrations.flask_client import OAuth
 from app import app, db
@@ -176,3 +176,13 @@ if __name__ == '__main__':
             print("🚀 OBYRA IA iniciado con Google OAuth habilitado")
         else:
             print("🚀 OBYRA IA iniciado - Google OAuth pendiente de configuración")
+
+@app.route('/terminos')
+def terminos():
+    """Página de términos y condiciones"""
+    return render_template('legal/terminos.html')
+
+@app.route('/privacidad')
+def privacidad():
+    """Página de política de privacidad"""
+    return render_template('legal/privacidad.html')

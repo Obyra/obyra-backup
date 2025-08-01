@@ -1,0 +1,83 @@
+1. Vista "Obras > Ver Obras"
+A. Reorganizar distribución:
+
+✅ Mover la Lista de Obras (panel derecho) para que se ubique debajo del mapa.
+✅ Etiqueta arriba: "📋 Lista de Obras".
+
+B. Rediseñar el Mapa:
+
+✅ El Mapa de Obras debe ocupar todo el ancho disponible (eliminando el espacio lateral de la lista).
+✅ Requiere ajuste de grid o layout CSS para que no quede cortado.
+
+2. Footer (pie de página):
+C. Rediseño y contenido nuevo del footer:
+
+✅ Reemplazar el texto actual del footer por lo siguiente:
+
+html
+Copiar
+Editar
+<strong>OBYRA IA</strong><br>
+Plataforma inteligente de planificación y compras para obras en LATAM<br>
+© 2025 OBYRA IA. Todos los derechos reservados.
+✅ Rediseñar estilo del footer para hacerlo más moderno:
+
+Fondo gris claro (#f8f9fa)
+
+Texto centrado
+
+Tipografía más pequeña
+
+Separador fino arriba
+
+3. Páginas legales y enlaces:
+D. Crear y vincular estas 2 páginas nuevas:
+
+🔗 1. /terminos
+Título: Términos y condiciones y contacto
+
+Contenido sugerido:
+
+Bienvenido a OBYRA IA. Al utilizar esta plataforma aceptás nuestros términos:
+
+Esta plataforma está diseñada para facilitar la planificación, compras y control de avance en obras de construcción.
+
+OBYRA IA no se responsabiliza por errores humanos en la carga de datos o certificaciones.
+
+Las recomendaciones son de carácter informativo. Las decisiones finales dependen del usuario.
+
+Nos reservamos el derecho de modificar las condiciones sin previo aviso.
+
+El uso indebido o fraudulento del sistema puede implicar la suspensión de la cuenta.
+
+📞 Contacto:
+
+Email: info@obyra.com.ar
+
+WhatsApp: +54 9 11 7368-5175
+
+Dirección: Caseros, Provincia de Buenos Aires, Argentina
+
+🔗 2. /privacidad
+Título: Política de privacidad
+
+Contenido sugerido:
+
+En OBYRA IA valoramos tu privacidad:
+
+Guardamos únicamente la información necesaria para operar la plataforma (nombre, mail, obras activas, usuarios, etc.).
+
+No compartimos tu información con terceros, salvo requerimiento legal.
+
+Podés solicitar la eliminación de tus datos en cualquier momento escribiendo a soporte@obyra.com.ar
+
+Utilizamos cookies mínimas para mejorar la experiencia de usuario.
+
+Protegemos tus datos con buenas prácticas de seguridad y encriptación.
+
+✅ Ambos links deben incluirse en el footer con formato pequeño:
+
+r
+Copiar
+Editar
+Términos y condiciones | Política de privacidad
