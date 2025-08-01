@@ -594,3 +594,46 @@ def actualizar_estado_tarea(id):
         flash(f'Error al actualizar tarea: {str(e)}', 'danger')
     
     return redirect(url_for('obras.detalle', id=obra.id))
+
+
+@obras_bp.route('/<int:id>/certificaciones')
+@login_required
+def historial_certificaciones(id):
+    """Ver historial de certificaciones de una obra"""
+    obra = Obra.query.get_or_404(id)
+    certificaciones = obra.certificaciones.order_by(CertificacionAvance.fecha.desc()).all()
+    
+    return render_template('obras/certificaciones.html', 
+                         obra=obra, 
+                         certificaciones=certificaciones)
+
+
+@obras_bp.route('/certificacion/<int:id>/desactivar', methods=['POST'])
+@login_required
+def desactivar_certificacion(id):
+    """Desactivar una certificación (solo administradores)"""
+    if current_user.rol != 'administrador':
+        flash('Solo los administradores pueden desactivar certificaciones.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+    
+    certificacion = CertificacionAvance.query.get_or_404(id)
+    obra = certificacion.obra
+    
+    try:
+        # Desactivar certificación
+        certificacion.activa = False
+        
+        # Restar el costo certificado del costo real
+        obra.costo_real -= certificacion.costo_certificado
+        
+        # Recalcular progreso
+        obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        flash('Certificación desactivada exitosamente.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al desactivar certificación: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.historial_certificaciones', id=obra.id))

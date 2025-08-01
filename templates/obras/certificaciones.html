@@ -39,7 +39,7 @@
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
-                    <h3 class="text-success">{{ certificaciones.filter_by(activa=True).count() }}</h3>
+                    <h3 class="text-success">{{ certificaciones|selectattr('activa')|list|length }}</h3>
                     <p class="text-muted mb-0">Certificaciones Activas</p>
                 </div>
             </div>
