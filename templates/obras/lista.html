@@ -292,10 +292,10 @@ function inicializarMapa() {
                     </div>
 
                     <div class="text-center">
-                        <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-sm btn-primary me-1">
+                        <button onclick="verDetallesObra({{ obra.id }})" class="btn btn-sm btn-primary me-1">
                             <i class="fas fa-eye me-1"></i>Ver Detalles
-                        </a>
-                        <button onclick="abrirVentanaClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre }}', '{{ obra.direccion }}')" class="btn btn-sm btn-info">
+                        </button>
+                        <button onclick="abrirVentanaClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre }}', '{{ obra.direccion }}', {{ obra.id }})" class="btn btn-sm btn-info">
                             <i class="fas fa-cloud-sun me-1"></i>Clima
                         </button>
                     </div>
@@ -327,8 +327,14 @@ function centrarEnObra(lat, lng) {
     }
 }
 
+// Función para ver detalles de la obra
+function verDetallesObra(obraId) {
+    console.log(`🏗️ Abriendo detalles de obra ID: ${obraId}`);
+    window.location.href = `/obras/${obraId}`;
+}
+
 // Función para abrir ventana de clima en pantalla completa
-function abrirVentanaClima(lat, lng, nombreObra, direccion) {
+function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
     console.log(`☁️ Abriendo ventana de clima para ${nombreObra}: ${lat}, ${lng}`);
     
     // Crear ventana modal de clima
@@ -347,6 +353,14 @@ function abrirVentanaClima(lat, lng, nombreObra, direccion) {
                             <div class="spinner-border text-primary" role="status"></div>
                             <p class="mt-2">Cargando información climática...</p>
                         </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-outline-primary" onclick="verDetallesObra(${obraId})">
+                            <i class="fas fa-eye me-1"></i>Ver Detalles de la Obra
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>Cerrar
+                        </button>
                     </div>
                 </div>
             </div>
@@ -431,9 +445,15 @@ async function cargarDatosClima(lat, lng, nombreObra, direccion) {
             <div class="row">
                 <!-- Información de la obra -->
                 <div class="col-12 mb-4">
-                    <div class="alert alert-info border-0 bg-light">
-                        <h6 class="alert-heading"><i class="fas fa-map-marker-alt me-1"></i>${nombreObra}</h6>
-                        <p class="mb-0 small">${direccion || 'Sin dirección especificada'}</p>
+                    <div class="card border-0 bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title text-primary mb-2">
+                                <i class="fas fa-building me-2"></i>${nombreObra}
+                            </h6>
+                            <p class="mb-0 small text-muted">
+                                <i class="fas fa-map-marker-alt me-1"></i>${direccion || 'Sin dirección especificada'}
+                            </p>
+                        </div>
                     </div>
                 </div>
                 
