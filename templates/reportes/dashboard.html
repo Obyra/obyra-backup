@@ -136,39 +136,24 @@
         </div>
     </div>
     
-    <!-- Gráficos y datos -->
+    <!-- Mapa Interactivo de Obras -->
     <div class="row mb-4">
-        <!-- Mapa de obras por zonas -->
-        <div class="col-lg-6 mb-4">
+        <div class="col-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Distribución de Obras por Zonas</h5>
-                    <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
-                </div>
-                <div class="card-body p-0">
-                    <div id="mapa-final"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Panel de clima semanal -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
                     <h5 class="mb-0">
-                        <i class="fas fa-cloud-sun me-2"></i>Pronóstico Semanal
+                        <i class="fas fa-map-marked-alt me-2"></i>Distribución de Obras por Zonas
                     </h5>
-                    <small class="text-muted" id="clima-ubicacion">Haz clic en una obra del mapa</small>
-                </div>
-                <div class="card-body" style="height: 268px; overflow-y: auto;">
-                    <div id="clima-container">
-                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
-                            <div class="text-center">
-                                <i class="fas fa-map-marker-alt fa-3x mb-3"></i>
-                                <p>Selecciona una obra en el mapa<br>para ver su pronóstico del tiempo</p>
-                            </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
+                        <div class="d-flex align-items-center gap-2 text-muted">
+                            <i class="fas fa-cloud me-1"></i>
+                            <span class="small">Haz clic en una obra para ver el clima</span>
                         </div>
                     </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="mapa-dashboard" style="height: 400px; width: 100%;"></div>
                 </div>
             </div>
         </div>
@@ -410,306 +395,318 @@
 </div>
 {% endblock %}
 
-{% block extra_head %}
-<!-- Leaflet CSS y JS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-#mapa-final {
-    height: 300px;
-    width: 100%;
-    position: relative;
-    z-index: 1;
-}
-
-.leaflet-container {
-    height: 100%;
-    width: 100%;
-    position: relative;
-    outline: 0;
-}
-
-/* Popups del mapa */
-.leaflet-popup-content-wrapper {
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-}
-
-.leaflet-popup-content {
-    margin: 15px;
-    font-family: inherit;
-}
-
-/* Panel de clima */
-#clima-container {
-    min-height: 200px;
-}
-
-#clima-ubicacion {
-    display: block;
-    margin-top: 4px;
-    font-weight: normal;
-}
-
-/* Marcadores personalizados */
-.custom-marker {
-    background: transparent !important;
-    border: none !important;
-}
-
-/* Popup de clima personalizado */
-.weather-popup .leaflet-popup-content-wrapper {
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-.weather-popup .leaflet-popup-content {
-    margin: 12px 16px;
-}
-</style>
-{% endblock %}
+<!-- Modal del Pronóstico del Tiempo -->
+<div class="modal fade" id="modalClimaDashboard" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cloud-sun me-2"></i>
+                    Pronóstico del Tiempo - <span id="nombreObraClimaDashboard"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loadingClimaDashboard" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Obteniendo pronóstico del tiempo...</p>
+                </div>
+                
+                <div id="contenidoClimaDashboard" style="display: none;">
+                    <div class="row" id="pronosticoSemanalDashboard">
+                        <!-- Se llena dinámicamente con JavaScript -->
+                    </div>
+                </div>
+                
+                <div id="errorClimaDashboard" style="display: none;" class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    No se pudo obtener el pronóstico del tiempo para esta ubicación.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% block scripts %}
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet CSS y JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+     crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+        crossorigin=""></script>
 
 <script>
-// INICIALIZACIÓN COMPLETA
+console.log('🗺️ Iniciando dashboard con mapa...');
+
+// Variables globales del mapa
+let mapaDashboard;
+let marcadoresDashboard = [];
+
+// Datos de obras desde el backend (solo las que tienen coordenadas)
+const obrasDataDashboard = [
+    {% for obra in obras_con_ubicacion %}
+    {% if obra.latitud and obra.longitud %}
+    {
+        id: {{ obra.id }},
+        nombre: {{ obra.nombre|tojson }},
+        cliente: {{ obra.cliente|tojson }},
+        direccion: {{ (obra.direccion or 'Sin dirección')|tojson }},
+        lat: {{ obra.latitud }},
+        lng: {{ obra.longitud }},
+        estado: "{{ obra.estado }}",
+        progreso: {{ obra.progreso }},
+        presupuesto: {{ obra.presupuesto_total or 0 }}
+    }{{ ',' if not loop.last }}
+    {% endif %}
+    {% endfor %}
+];
+
+console.log('📊 Obras para dashboard:', obrasDataDashboard.length);
+
+// Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📊 DOM CARGADO - Iniciando dashboard');
     console.log('🏗️ Obras disponibles:', {{ obras_con_ubicacion|length }});
     
-    // Verificar que Bootstrap y otros scripts estén cargados
+    // Verificar que Leaflet esté disponible
     if (typeof L === 'undefined') {
-        console.error('❌ Leaflet NO CARGADO');
-        // Cargar dinámicamente si no está presente
-        var script = document.createElement('script');
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = function() {
-            console.log('✅ Leaflet cargado dinámicamente');
-            inicializarMapaFinal();
-        };
-        document.head.appendChild(script);
-    } else {
-        console.log('✅ Leaflet disponible');
-        inicializarMapaFinal();
+        console.error('❌ Leaflet no está disponible');
+        return;
     }
     
-    // Gráficos de KPIs
+    console.log('✅ Leaflet disponible');
+    
+    // Esperar un poco para que el DOM esté completamente renderizado
+    setTimeout(function() {
+        inicializarMapaDashboard();
+    }, 500);
+    
+    // Inicializar gráficos
     setTimeout(function() {
         console.log('📈 Inicializando gráficos...');
-        
-        // Gráfico de obras por estado (solo si el elemento existe)
-        const chartElement = document.getElementById('chartObras');
-        if (chartElement) {
-            const ctx1 = chartElement.getContext('2d');
-            new Chart(ctx1, {
-                type: 'doughnut',
-                data: {
-                    labels: {{ estados_obras|map(attribute='estado')|list|tojson }},
-                    datasets: [{
-                        data: {{ estados_obras|map(attribute='cantidad')|list|tojson }},
-                        backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-        }
+        inicializarGraficos();
     }, 1000);
 });
 
-function inicializarMapaFinal() {
-    console.log('Inicializando mapa de obras');
-    
-    setTimeout(function() {
-        try {
-            // Limpiar mapa existente si hay uno
-            if (window.mapaObras) {
-                window.mapaObras.remove();
-            }
-            
-            // Crear nuevo mapa centrado en Buenos Aires
-            window.mapaObras = L.map('mapa-final').setView([-34.6118, -58.3960], 11);
-            
-            // Agregar tiles
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(window.mapaObras);
-            
-            // Forzar redimensión después de cargar
-            setTimeout(function() {
-                window.mapaObras.invalidateSize();
-                console.log('Mapa redimensionado correctamente');
-            }, 200);
-            
-            // Agregar obras al mapa
-            var obras = [
-            {% for obra in obras_con_ubicacion %}
-                {
-                    id: {{ obra.id }},
-                    nombre: "{{ obra.nombre|replace('"', '\\"') }}",
-                    cliente: "{{ obra.cliente|replace('"', '\\"') if obra.cliente else 'Sin cliente' }}",
-                    direccion: "{{ obra.direccion|replace('"', '\\"') if obra.direccion else 'Sin dirección' }}",
-                    lat: {{ obra.latitud if obra.latitud else 'null' }},
-                    lng: {{ obra.longitud if obra.longitud else 'null' }},
-                    estado: "{{ obra.estado }}"
-                }{% if not loop.last %},{% endif %}
-            {% endfor %}
-            ];
-            
-            console.log('🏗️ Obras cargadas:', obras);
-            console.log('📍 Obras con coordenadas:', obras.filter(o => o.lat && o.lng).length);
-            
-            // Filtrar obras con coordenadas válidas
-            const obrasValidas = obras.filter(obra => obra.lat && obra.lng && !isNaN(obra.lat) && !isNaN(obra.lng));
-            console.log('✅ Obras con coordenadas válidas:', obrasValidas.length);
-            
-            // Crear marcadores para cada obra
-            obrasValidas.forEach(function(obra, index) {
-                console.log(`📍 Agregando marcador ${index + 1}: ${obra.nombre} en (${obra.lat}, ${obra.lng})`);
-                
-                // Marcador rojo circular
-                var marcador = L.circleMarker([obra.lat, obra.lng], {
-                    radius: 12,
-                    fillColor: '#dc3545',
-                    color: '#ffffff',
-                    weight: 3,
-                    opacity: 1,
-                    fillOpacity: 0.9
-                }).addTo(window.mapaObras);
-                    
-                    // Contenido del popup
-                    var popupContent = 
-                        '<div style="min-width: 250px;">' +
-                        '<h6 class="text-primary mb-2"><i class="fas fa-building me-2"></i>' + obra.nombre + '</h6>' +
-                        '<p class="mb-1"><strong>Cliente:</strong> ' + obra.cliente + '</p>' +
-                        '<p class="mb-1"><strong>Dirección:</strong> ' + obra.direccion + '</p>' +
-                        '<p class="mb-2"><strong>Estado:</strong> <span class="badge bg-secondary">' + obra.estado + '</span></p>' +
-                        '<div class="d-grid gap-2">' +
-                        '<a href="/obras/' + obra.id + '" class="btn btn-primary btn-sm"><i class="fas fa-eye me-1"></i>Ver Obra</a>' +
-                        '<button onclick="cargarClimaObra(' + obra.lat + ', ' + obra.lng + ', \'' + obra.nombre + '\', \'' + obra.direccion + '\')" class="btn btn-outline-info btn-sm">' +
-                        '<i class="fas fa-cloud-sun me-1"></i>Ver Clima Semanal</button>' +
-                        '</div></div>';
-                    
-                    marcador.bindPopup(popupContent);
-                    
-                    // Auto-cargar clima al hacer clic
-                    marcador.on('click', function() {
-                        setTimeout(function() {
-                            cargarClimaObra(obra.lat, obra.lng, obra.nombre, obra.direccion);
-                        }, 100);
-                    });
-            });
-            
-            // Ajustar vista para incluir todas las obras si hay alguna
-            if (obrasValidas.length > 0) {
-                var marcadores = obrasValidas.map(obra => [obra.lat, obra.lng]);
-                
-                if (marcadores.length === 1) {
-                    window.mapaObras.setView(marcadores[0], 13);
-                } else if (marcadores.length > 1) {
-                    var bounds = L.latLngBounds(marcadores);
-                    window.mapaObras.fitBounds(bounds, { padding: [20, 20] });
-                }
-            }
-            
-            console.log('✅ Mapa con obras inicializado correctamente');
+function inicializarMapaDashboard() {
+    try {
+        console.log('🗺️ Inicializando mapa del dashboard...');
         
-        } catch (error) {
-            console.error('Error creando mapa:', error);
-            document.getElementById('mapa-final').innerHTML = 
-                '<div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6;">' +
-                '<div style="text-align: center; color: #6c757d;">' +
-                '<i class="fas fa-exclamation-triangle fa-2x mb-2"></i>' +
-                '<p>Error cargando mapa</p>' +
-                '<button onclick="inicializarMapaFinal()" class="btn btn-sm btn-outline-primary">Reintentar</button>' +
-                '</div></div>';
+        // Verificar que el contenedor existe
+        const contenedor = document.getElementById('mapa-dashboard');
+        if (!contenedor) {
+            console.error('❌ Contenedor del mapa dashboard no encontrado');
+            return;
         }
-    }, 300);
+        
+        // Limpiar contenedor
+        contenedor.innerHTML = '';
+        
+        // Coordenadas de Buenos Aires (centro)
+        const centroBA = [-34.6118, -58.3960];
+        
+        // Crear mapa
+        mapaDashboard = L.map('mapa-dashboard', {
+            center: centroBA,
+            zoom: 11,
+            zoomControl: true
+        });
+        
+        console.log('✅ Mapa dashboard creado');
+        
+        // Agregar capa base de OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(mapaDashboard);
+        
+        console.log('✅ Capa base agregada al dashboard');
+        
+        // Agregar marcadores para cada obra
+        obrasDataDashboard.forEach(function(obra, index) {
+            console.log(`📍 Agregando marcador dashboard ${index + 1}: ${obra.nombre}`);
+            agregarMarcadorObraDashboard(obra);
+        });
+        
+        // Ajustar vista si hay obras
+        if (obrasDataDashboard.length > 0) {
+            ajustarVistaAObrasDashboard();
+        }
+        
+        // Forzar redimensionamiento después de un momento
+        setTimeout(function() {
+            mapaDashboard.invalidateSize();
+            console.log('🔄 Mapa dashboard redimensionado');
+        }, 1000);
+        
+        console.log('✅ Mapa dashboard inicializado correctamente');
+        
+    } catch (error) {
+        console.error('❌ Error inicializando mapa dashboard:', error);
+        mostrarErrorMapaDashboard();
+    }
 }
 
-// Función para cargar clima en el panel lateral
-async function cargarClimaObra(lat, lng, nombreObra, direccion) {
-    console.log(`🌤️ Cargando clima para ${nombreObra}`);
-    
-    // Actualizar título
-    document.getElementById('clima-ubicacion').textContent = `${nombreObra} - ${direccion}`;
-    
-    // Mostrar loading
-    document.getElementById('clima-container').innerHTML = `
-        <div class="d-flex align-items-center justify-content-center h-100">
-            <div class="text-center">
-                <div class="spinner-border text-primary mb-3"></div>
-                <p>Cargando pronóstico del tiempo...</p>
-            </div>
-        </div>
-    `;
-    
+function agregarMarcadorObraDashboard(obra) {
     try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=7`;
-        const response = await fetch(url);
-        const data = await response.json();
+        // Verificar coordenadas válidas
+        if (!obra.lat || !obra.lng || isNaN(obra.lat) || isNaN(obra.lng)) {
+            console.warn(`⚠️ Coordenadas inválidas para ${obra.nombre}`);
+            return;
+        }
         
-        if (data && data.daily) {
-            let climaHTML = '';
-            
-            for (let i = 0; i < Math.min(data.daily.time.length, 7); i++) {
-                const fecha = new Date(data.daily.time[i]);
-                const nombreDia = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : 
-                                fecha.toLocaleDateString('es-AR', { weekday: 'long' });
-                const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-                const tempMax = Math.round(data.daily.temperature_2m_max[i]);
-                const tempMin = Math.round(data.daily.temperature_2m_min[i]);
-                const codigoClima = data.daily.weather_code[i];
-                const infoClima = obtenerInfoClima(codigoClima);
-                
-                climaHTML += `
-                    <div class="d-flex align-items-center justify-content-between py-3 ${i < 6 ? 'border-bottom' : ''}" 
-                         style="border-color: #e9ecef;">
-                        <div class="d-flex align-items-center">
-                            <div class="text-center me-3" style="min-width: 40px;">
-                                <span style="font-size: 24px;">${infoClima.icono}</span>
-                            </div>
+        // Color del marcador según estado
+        let color = '#dc3545'; // rojo por defecto
+        switch(obra.estado) {
+            case 'en_curso': color = '#28a745'; break;
+            case 'finalizada': color = '#6c757d'; break;
+            case 'pausada': color = '#ffc107'; break;
+            case 'cancelada': color = '#dc3545'; break;
+            case 'planificacion': color = '#007bff'; break;
+        }
+        
+        // Crear marcador circular
+        const marcador = L.circleMarker([parseFloat(obra.lat), parseFloat(obra.lng)], {
+            radius: 10,
+            fillColor: color,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+        });
+        
+        // Contenido del popup
+        const popupContent = `
+            <div style="min-width: 200px;">
+                <h6 class="text-primary mb-2">
+                    <i class="fas fa-building me-1"></i>${obra.nombre}
+                </h6>
+                <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
+                <p class="mb-1"><strong>Dirección:</strong> ${obra.direccion}</p>
+                <p class="mb-2">
+                    <strong>Estado:</strong> 
+                    <span class="badge bg-secondary">${obra.estado.replace('_', ' ')}</span>
+                </p>
+                <p class="mb-2"><strong>Progreso:</strong> ${obra.progreso}%</p>
+                ${obra.presupuesto > 0 ? `<p class="mb-2"><strong>Presupuesto:</strong> $${Number(obra.presupuesto).toLocaleString()}</p>` : ''}
+                <div class="d-grid gap-2">
+                    <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-eye me-1"></i>Ver Detalles
+                    </a>
+                    <button onclick="mostrarClimaDashboard(${obra.lat}, ${obra.lng}, '${obra.nombre.replace(/'/g, "\\'")}'); event.stopPropagation();" 
+                            class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-cloud-sun me-1"></i>Ver Clima
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Vincular popup al marcador
+        marcador.bindPopup(popupContent, {
+            maxWidth: 250,
+            className: 'popup-obra-dashboard'
+        });
+        
+        // Agregar marcador al mapa
+        marcador.addTo(mapaDashboard);
+        marcadoresDashboard.push(marcador);
+        
+        console.log(`✅ Marcador dashboard agregado para: ${obra.nombre}`);
+        
+    } catch (error) {
+        console.error(`❌ Error agregando marcador dashboard para ${obra.nombre}:`, error);
+    }
+}
+
+function ajustarVistaAObrasDashboard() {
+    if (obrasDataDashboard.length === 1) {
+        // Si hay una sola obra, centrar en ella
+        const obra = obrasDataDashboard[0];
+        mapaDashboard.setView([obra.lat, obra.lng], 14);
+    } else if (obrasDataDashboard.length > 1) {
+        // Si hay múltiples obras, ajustar para mostrar todas
+        const coordenadas = obrasDataDashboard.map(obra => [obra.lat, obra.lng]);
+        const bounds = L.latLngBounds(coordenadas);
+        mapaDashboard.fitBounds(bounds, { padding: [20, 20] });
+    }
+}
+
+function mostrarClimaDashboard(lat, lng, nombreObra) {
+    console.log(`🌤️ Mostrando clima dashboard para: ${nombreObra}`);
+    
+    // Actualizar título del modal
+    document.getElementById('nombreObraClimaDashboard').textContent = nombreObra;
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalClimaDashboard'));
+    modal.show();
+    
+    // Simular carga
+    document.getElementById('loadingClimaDashboard').style.display = 'block';
+    document.getElementById('contenidoClimaDashboard').style.display = 'none';
+    document.getElementById('errorClimaDashboard').style.display = 'none';
+    
+    // Simular datos del clima después de 1 segundo
+    setTimeout(function() {
+        generarPronosticoSimuladoDashboard();
+        document.getElementById('loadingClimaDashboard').style.display = 'none';
+        document.getElementById('contenidoClimaDashboard').style.display = 'block';
+    }, 1000);
+}
+
+function generarPronosticoSimuladoDashboard() {
+    const dias = ['Hoy', 'Mañana', 'Viernes', 'Sábado', 'Domingo', 'Lunes', 'Martes'];
+    const iconos = ['☀️', '⛅', '🌤️', '🌦️', '☁️', '🌧️'];
+    const condiciones = ['Soleado', 'Parcialmente nublado', 'Mayormente soleado', 'Lluvias dispersas', 'Nublado', 'Lluvia'];
+    
+    let html = '';
+    
+    for (let i = 0; i < 7; i++) {
+        const tempAlta = Math.floor(Math.random() * 10) + 18; // 18-28°C
+        const tempBaja = tempAlta - Math.floor(Math.random() * 8) - 3; // 5-15°C menos
+        const iconIndex = Math.floor(Math.random() * iconos.length);
+        
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h6 class="card-title">${dias[i]}</h6>
+                        <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <div class="fw-bold">${nombreDia}</div>
-                                <div class="text-muted small">${fechaStr}</div>
-                                <div class="text-muted small">${infoClima.descripcion}</div>
+                                <div class="h4">${tempAlta}°</div>
+                                <div class="opacity-75">${tempBaja}°</div>
                             </div>
-                        </div>
-                        <div class="text-end">
-                            <div class="fw-bold">
-                                <span class="text-danger">${tempMax}°</span>
-                                <span class="text-muted mx-1">/</span>
-                                <span class="text-primary">${tempMin}°</span>
+                            <div class="text-end">
+                                <div style="font-size: 2rem;">${iconos[iconIndex]}</div>
+                                <small>${condiciones[iconIndex]}</small>
                             </div>
                         </div>
                     </div>
-                `;
-            }
-            
-            document.getElementById('clima-container').innerHTML = climaHTML;
-            console.log('✅ Clima cargado para', nombreObra);
-        } else {
-            throw new Error('No se recibieron datos del clima');
-        }
-    } catch (error) {
-        console.error('❌ Error cargando clima:', error);
-        document.getElementById('clima-container').innerHTML = `
-            <div class="d-flex align-items-center justify-content-center h-100 text-danger">
-                <div class="text-center">
-                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
-                    <p>Error al cargar el pronóstico</p>
-                    <button onclick="cargarClimaObra(${lat}, ${lng}, '${nombreObra}', '${direccion}')" 
-                            class="btn btn-sm btn-outline-primary">
-                        Reintentar
+                </div>
+            </div>
+        `;
+    }
+    
+    document.getElementById('pronosticoSemanalDashboard').innerHTML = html;
+}
+
+function mostrarErrorMapaDashboard() {
+    const contenedor = document.getElementById('mapa-dashboard');
+    if (contenedor) {
+        contenedor.innerHTML = `
+            <div style="height: 400px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
+                <div style="text-align: center; color: #6c757d;">
+                    <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+                    <h5>Error cargando el mapa</h5>
+                    <p>No se pudo inicializar el mapa interactivo del dashboard.</p>
+                    <button onclick="location.reload()" class="btn btn-outline-primary">
+                        <i class="fas fa-redo me-1"></i>Recargar página
                     </button>
                 </div>
             </div>
@@ -717,481 +714,42 @@ async function cargarClimaObra(lat, lng, nombreObra, direccion) {
     }
 }
 
-// Función para obtener iconos y descripciones del clima según código WMO
-function obtenerInfoClima(codigo) {
-    const mapaClima = {
-        0: { descripcion: 'Cielo despejado', icono: '☀️' },
-        1: { descripcion: 'Principalmente despejado', icono: '🌤️' },
-        2: { descripcion: 'Parcialmente nublado', icono: '⛅' },
-        3: { descripcion: 'Nublado', icono: '☁️' },
-        45: { descripcion: 'Niebla', icono: '🌫️' },
-        48: { descripcion: 'Niebla con escarcha', icono: '🌫️' },
-        51: { descripcion: 'Llovizna ligera', icono: '🌦️' },
-        53: { descripcion: 'Llovizna moderada', icono: '🌦️' },
-        55: { descripcion: 'Llovizna intensa', icono: '🌦️' },
-        61: { descripcion: 'Lluvia ligera', icono: '🌧️' },
-        63: { descripcion: 'Lluvia moderada', icono: '🌧️' },
-        65: { descripcion: 'Lluvia intensa', icono: '🌧️' },
-        71: { descripcion: 'Nieve ligera', icono: '❄️' },
-        73: { descripcion: 'Nieve moderada', icono: '❄️' },
-        75: { descripcion: 'Nieve intensa', icono: '❄️' },
-        80: { descripcion: 'Chubascos ligeros', icono: '🌦️' },
-        81: { descripcion: 'Chubascos moderados', icono: '🌧️' },
-        82: { descripcion: 'Chubascos violentos', icono: '⛈️' },
-        95: { descripcion: 'Tormenta', icono: '⛈️' },
-        96: { descripcion: 'Tormenta con granizo', icono: '⛈️' },
-        99: { descripcion: 'Tormenta con granizo intenso', icono: '⛈️' }
-    };
-    
-    return mapaClima[codigo] || { descripcion: 'Clima variable', icono: '🌤️' };
-}
-
-// Función para inicializar el mapa de obras
-async function initObrasMap() {
-    {% if obras_con_ubicacion %}
-    console.log('Inicializando mapa con', {{ obras_con_ubicacion|length }}, 'obras');
-    
-    // Si no hay obras, crear una de prueba en CABA para demostrar funcionalidad
-    {% if obras_con_ubicacion|length == 0 %}
-    console.log('No hay obras con ubicación, agregando obra de prueba en CABA');
-    const obrasData = [{
-        id: 999,
-        nombre: "Obra de Prueba - Torre CABA",
-        cliente: "Cliente Demo",
-        direccion: "Av. Corrientes 1000, CABA, Argentina",
-        fechaInicio: "01/01/2024",
-        presupuesto: "$500,000",
-        estado: "en_curso",
-        color: "#28a745"
-    }];
-    {% endif %}
-    
-    // Configurar centro del mapa (Buenos Aires como referencia)
-    const defaultLat = -34.6118;  // Buenos Aires
-    const defaultLng = -58.3960;
-    
-    // Crear el mapa con controles visibles
-    const map = L.map('obras-map', {
-        zoomControl: true,
-        scrollWheelZoom: true,
-        doubleClickZoom: true,
-        boxZoom: true,
-        keyboard: true,
-        dragging: true,
-        touchZoom: true,
-        attributionControl: true,
-        maxZoom: 18,
-        minZoom: 3,
-        zoomControlPosition: 'topleft'
-    }).setView([defaultLat, defaultLng], 5);
-    
-    // Guardar referencia global del mapa para usar en popups
-    window.mapInstance = map;
-    
-    // Forzar invalidateSize cuando el mapa se carga
-    map.whenReady(function() {
-        setTimeout(() => {
-            map.invalidateSize();
-            console.log('Mapa inicializado correctamente - Argentina centrada');
-            
-            // Verificar que los controles de zoom sean visibles
-            const zoomControls = document.querySelector('.leaflet-control-zoom');
-            if (zoomControls) {
-                console.log('Controles de zoom cargados correctamente');
-            } else {
-                console.warn('Controles de zoom no encontrados');
-            }
-        }, 200);
-    });
-    
-    // Agregar tiles de OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 18
-    }).addTo(map);
-    
-    // Agregar evento de clic en el mapa para mostrar clima
-    map.on('click', async function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-        
-        console.log(`Obteniendo clima para: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        
-        // Mostrar indicador de carga
-        const loadingPopup = L.popup()
-            .setLatLng(e.latlng)
-            .setContent('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando clima...</div>')
-            .openOn(map);
-        
-        try {
-            const climaData = await getWeatherWeekly(lat, lng);
-            map.closePopup(loadingPopup);
-            
-            if (climaData) {
-                showWeatherPopup(e.latlng, climaData);
-            } else {
-                L.popup()
-                    .setLatLng(e.latlng)
-                    .setContent('<div class="text-center text-danger">Error al obtener datos del clima</div>')
-                    .openOn(map);
-            }
-        } catch (error) {
-            console.error('Error obteniendo clima:', error);
-            map.closePopup(loadingPopup);
-            L.popup()
-                .setLatLng(e.latlng)
-                .setContent('<div class="text-center text-danger">Error de conexión</div>')
-                .openOn(map);
-        }
-    });
-    
-    // Datos de obras con ubicación
-    const obrasData = [
-        {% for obra in obras_con_ubicacion %}
-        {
-            id: {{ obra.id }},
-            nombre: "{{ obra.nombre|e }}",
-            cliente: "{{ obra.cliente|e }}",
-            direccion: "{{ obra.direccion|e }}",
-            fechaInicio: "{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra.fecha_inicio else 'No definida' }}",
-            presupuesto: "{{ '${:,.0f}'.format(obra.presupuesto_estimado) if obra.presupuesto_estimado else '$0' }}",
-            estado: "{{ obra.estado }}",
-            color: getEstadoColor("{{ obra.estado }}")
-        },
-        {% endfor %}
-    ];
-    
-    // Geocodificar direcciones y agregar marcadores
-    const geocodePromises = obrasData.map(async (obra) => {
-        try {
-            const coords = await geocodeAddress(obra.direccion);
-            if (coords) {
-                // Crear marcador personalizado según el estado
-                const markerIcon = L.divIcon({
-                    className: 'custom-marker',
-                    html: `<div style="background-color: ${obra.color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10]
-                });
-                
-                // Obtener datos del clima para la ubicación
-                const climaData = await getWeatherData(coords[0], coords[1]);
-                
-                // Crear popup con información de la obra incluyendo clima
-                const popupContent = `
-                    <div style="min-width: 220px;">
-                        <h6 class="mb-2 text-primary">${obra.nombre}</h6>
-                        <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
-                        <p class="mb-1"><strong>Inicio:</strong> ${obra.fechaInicio}</p>
-                        <p class="mb-1"><strong>Presupuesto:</strong> ${obra.presupuesto}</p>
-                        ${climaData ? `
-                        <div class="mt-2 p-2" style="background-color: #f8f9fa; border-radius: 4px;">
-                            <div class="d-flex align-items-center">
-                                <img src="https://openweathermap.org/img/w/${climaData.icon}.png" alt="clima" style="width: 32px; height: 32px;">
-                                <div class="ms-2">
-                                    <small class="fw-bold">${climaData.temp}°C</small><br>
-                                    <small class="text-muted">${climaData.description}</small>
-                                </div>
-                            </div>
-                        </div>
-                        ` : ''}
-                        <div class="mt-2 d-flex justify-content-between align-items-center">
-                            <span class="badge" style="background-color: ${obra.color};">${obra.estado.replace('_', ' ').toUpperCase()}</span>
-                            <a href="/obras/${obra.id}" class="btn btn-sm btn-primary">Ver detalles</a>
-                        </div>
-                    </div>
-                `;
-                
-                // Agregar marcador al mapa
-                const marker = L.marker(coords, { icon: markerIcon })
-                    .addTo(map)
-                    .bindPopup(popupContent);
-                
-                return coords;
-            }
-            return null;
-        } catch (e) {
-            console.log(`Error geocodificando ${obra.direccion}:`, e);
-            return null;
-        }
-    });
-    
-    // Ajustar vista del mapa cuando todos los marcadores estén cargados
-    Promise.all(geocodePromises).then(coordinates => {
-        const validCoords = coordinates.filter(coord => coord !== null);
-        if (validCoords.length > 0) {
-            // Invalidar el tamaño del mapa para asegurar que se renderice correctamente
-            setTimeout(() => {
-                map.invalidateSize();
-                
-                // Ajustar bounds si hay marcadores
-                const markers = [];
-                map.eachLayer(layer => {
-                    if (layer instanceof L.Marker) {
-                        markers.push(layer);
+function inicializarGraficos() {
+    // Gráfico de obras por estado (solo si el elemento existe)
+    const chartElement = document.getElementById('chartObras');
+    if (chartElement) {
+        const ctx1 = chartElement.getContext('2d');
+        new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+                labels: {{ obras_por_estado|map(attribute='estado')|list|tojson }},
+                datasets: [{
+                    data: {{ obras_por_estado|map(attribute='count')|list|tojson }},
+                    backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
                     }
-                });
-                
-                if (markers.length > 0) {
-                    const group = new L.featureGroup(markers);
-                    map.fitBounds(group.getBounds().pad(0.1));
                 }
-            }, 100);
-        }
-    });
-    {% else %}
-    console.log('No hay obras con ubicación, mostrando mapa de Argentina para demostrar funcionalidad del clima');
-    
-    // Configurar centro del mapa (Buenos Aires como referencia)  
-    const defaultLat = -34.6118;
-    const defaultLng = -58.3960;
-    
-    // Crear el mapa centrado en Argentina
-    const map = L.map('obras-map', {
-        zoomControl: true,
-        scrollWheelZoom: true,
-        doubleClickZoom: true,
-        boxZoom: true,
-        keyboard: true,
-        dragging: true,
-        touchZoom: true,
-        attributionControl: true,
-        maxZoom: 18,
-        minZoom: 3,
-        zoomControlPosition: 'topleft'
-    }).setView([defaultLat, defaultLng], 5);
-    
-    // Guardar referencia global del mapa para usar en popups
-    window.mapInstance = map;
-    
-    // Agregar tiles de OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 18
-    }).addTo(map);
-    
-    // Forzar invalidateSize cuando el mapa se carga
-    map.whenReady(function() {
-        setTimeout(() => {
-            map.invalidateSize();
-            console.log('Mapa de Argentina inicializado correctamente - Sin obras');
-            
-            // Verificar que los controles de zoom sean visibles
-            const zoomControls = document.querySelector('.leaflet-control-zoom');
-            if (zoomControls) {
-                console.log('Controles de zoom cargados correctamente');
-            } else {
-                console.warn('Controles de zoom no encontrados');
             }
-        }, 200);
-    });
-    
-    // Agregar evento de clic en el mapa para mostrar clima
-    map.on('click', async function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-        
-        console.log(`Obteniendo clima para: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        
-        // Mostrar indicador de carga
-        const loadingPopup = L.popup()
-            .setLatLng(e.latlng)
-            .setContent('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando clima...</div>')
-            .openOn(map);
-        
-        try {
-            const climaData = await getWeatherWeekly(lat, lng);
-            map.closePopup(loadingPopup);
-            
-            if (climaData) {
-                showWeatherPopup(e.latlng, climaData);
-            } else {
-                L.popup()
-                    .setLatLng(e.latlng)
-                    .setContent('<div class="text-center text-danger">Error al obtener datos del clima</div>')
-                    .openOn(map);
-            }
-        } catch (error) {
-            console.error('Error obteniendo clima:', error);
-            map.closePopup(loadingPopup);
-            L.popup()
-                .setLatLng(e.latlng)
-                .setContent('<div class="text-center text-danger">Error de conexión</div>')
-                .openOn(map);
-        }
-    });
-    
-    {% endif %}
-}
-
-// Función para geocodificar direcciones usando Nominatim
-async function geocodeAddress(address) {
-    try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&addressdetails=1&countrycodes=ar`);
-        const data = await response.json();
-        
-        if (data && data.length > 0) {
-            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-        }
-        return null;
-    } catch (error) {
-        console.error('Error en geocodificación:', error);
-        return null;
+        });
     }
 }
 
-// Función para obtener clima semanal usando Open-Meteo
-async function getWeatherWeekly(lat, lon) {
-    try {
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=7`);
-        const data = await response.json();
-        
-        if (data && data.daily) {
-            const daily = data.daily;
-            const weeklyData = [];
-            
-            for (let i = 0; i < daily.time.length; i++) {
-                const weatherInfo = getWeatherInfo(daily.weather_code[i]);
-                weeklyData.push({
-                    date: daily.time[i],
-                    tempMax: Math.round(daily.temperature_2m_max[i]),
-                    tempMin: Math.round(daily.temperature_2m_min[i]),
-                    weatherCode: daily.weather_code[i],
-                    description: weatherInfo.description,
-                    icon: weatherInfo.icon
-                });
-            }
-            
-            return weeklyData;
-        }
-        return null;
-    } catch (error) {
-        console.error('Error obteniendo clima semanal:', error);
-        return null;
+// Redimensionar mapa cuando cambie el tamaño de la ventana
+window.addEventListener('resize', function() {
+    if (mapaDashboard) {
+        setTimeout(function() {
+            mapaDashboard.invalidateSize();
+        }, 100);
     }
-}
+});
 
-// Función para obtener clima actual (para marcadores de obras)
-async function getWeatherData(lat, lon) {
-    try {
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`);
-        const data = await response.json();
-        
-        if (data && data.current_weather) {
-            const weather = data.current_weather;
-            const weatherInfo = getWeatherInfo(weather.weathercode);
-            
-            return {
-                temp: Math.round(weather.temperature),
-                description: weatherInfo.description,
-                icon: weatherInfo.icon
-            };
-        }
-        return null;
-    } catch (error) {
-        console.error('Error obteniendo clima:', error);
-        return null;
-    }
-}
-
-// Mapear códigos de clima a descripciones e iconos
-function getWeatherInfo(code) {
-    const weatherMap = {
-        0: { description: 'Despejado', icon: '01d' },
-        1: { description: 'Mayormente despejado', icon: '02d' },
-        2: { description: 'Parcialmente nublado', icon: '03d' },
-        3: { description: 'Nublado', icon: '04d' },
-        45: { description: 'Niebla', icon: '50d' },
-        48: { description: 'Niebla con escarcha', icon: '50d' },
-        51: { description: 'Llovizna ligera', icon: '09d' },
-        53: { description: 'Llovizna moderada', icon: '09d' },
-        55: { description: 'Llovizna intensa', icon: '09d' },
-        61: { description: 'Lluvia ligera', icon: '10d' },
-        63: { description: 'Lluvia moderada', icon: '10d' },
-        65: { description: 'Lluvia intensa', icon: '10d' },
-        71: { description: 'Nieve ligera', icon: '13d' },
-        73: { description: 'Nieve moderada', icon: '13d' },
-        75: { description: 'Nieve intensa', icon: '13d' },
-        95: { description: 'Tormenta', icon: '11d' }
-    };
-    
-    return weatherMap[code] || { description: 'Clima variable', icon: '02d' };
-}
-
-// Función para mostrar popup de clima semanal
-function showWeatherPopup(latlng, weeklyData) {
-    console.log('Mostrando popup de clima con', weeklyData.length, 'días de datos');
-    
-    const popupContent = `
-        <div style="min-width: 320px; max-width: 380px;">
-            <h6 class="mb-3 text-primary d-flex align-items-center">
-                <i class="fas fa-cloud-sun me-2"></i>Pronóstico 7 días
-                <small class="ms-auto text-muted" style="font-size: 0.7rem;">(${latlng.lat.toFixed(2)}, ${latlng.lng.toFixed(2)})</small>
-            </h6>
-            <div style="max-height: 220px; overflow-y: auto;">
-                ${weeklyData.map((day, index) => {
-                    const date = new Date(day.date);
-                    const dayName = index === 0 ? 'Hoy' : 
-                                   index === 1 ? 'Mañana' : 
-                                   date.toLocaleDateString('es-AR', { weekday: 'short' });
-                    const dateStr = date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-                    
-                    return `
-                        <div class="d-flex align-items-center justify-content-between py-2 ${index < weeklyData.length - 1 ? 'border-bottom' : ''}" style="border-color: #e0e0e0;">
-                            <div class="d-flex align-items-center">
-                                <img src="https://openweathermap.org/img/w/${day.icon}.png" alt="${day.description}" style="width: 32px; height: 32px;">
-                                <div class="ms-2">
-                                    <div class="fw-bold" style="font-size: 0.9rem;">${dayName}</div>
-                                    <div class="text-muted" style="font-size: 0.8rem;">${dateStr}</div>
-                                </div>
-                            </div>
-                            <div class="text-end">
-                                <div class="fw-bold" style="font-size: 0.9rem;">
-                                    <span class="text-danger">${day.tempMax}°</span>
-                                    <span class="text-muted mx-1">/</span>
-                                    <span class="text-primary">${day.tempMin}°</span>
-                                </div>
-                                <div class="text-muted" style="font-size: 0.8rem;">${day.description}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-            <div class="mt-3 pt-2 text-center border-top" style="border-color: #e0e0e0;">
-                <small class="text-muted">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Datos de Open-Meteo API
-                </small>
-            </div>
-        </div>
-    `;
-    
-    const popup = L.popup({
-        maxWidth: 400,
-        className: 'weather-popup',
-        closeButton: true,
-        autoClose: false,
-        keepInView: true
-    })
-    .setLatLng(latlng)
-    .setContent(popupContent)
-    .openOn(window.mapInstance || map);
-}
-
-function getEstadoColor(estado) {
-    const colores = {
-        'planificacion': '#6c757d',
-        'en_curso': '#0d6efd',
-        'pausada': '#ffc107',
-        'finalizada': '#198754',
-        'cancelada': '#dc3545'
-    };
-    return colores[estado] || '#6c757d';
-}
-
-// Auto-refresh cada 5 minutos
-setTimeout(function() {
-    location.reload();
-}, 300000);
+console.log('🎯 Script del mapa dashboard cargado completamente');
 </script>
 {% endblock %}
