@@ -50,6 +50,21 @@
     opacity: 0.8;
 }
 
+.popup-obra .leaflet-popup-content {
+    margin: 8px 12px;
+    line-height: 1.4;
+}
+
+.popup-obra .leaflet-popup-content-wrapper {
+    border-radius: 8px;
+}
+
+/* Asegurar que el mapa se renderice correctamente */
+.leaflet-container {
+    height: 100% !important;
+    width: 100% !important;
+}
+
 @media (max-width: 768px) {
     .mapa-obras {
         height: 300px;
@@ -205,11 +220,11 @@
                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                             </a>
                             {% if obra.latitud and obra.longitud %}
-                            <button onclick="mostrarEnMapa({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre|replace("'", "\\'") }}')" 
+                            <button onclick="mostrarEnMapa({{ obra.latitud }}, {{ obra.longitud }}, {{ obra.nombre|tojson }})" 
                                     class="btn btn-outline-info btn-sm">
                                 <i class="fas fa-map-marker-alt"></i>
                             </button>
-                            <button onclick="abrirClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre|replace("'", "\\'") }}', '{{ obra.direccion|replace("'", "\\'") if obra.direccion else "" }}')" 
+                            <button onclick="abrirClima({{ obra.latitud }}, {{ obra.longitud }}, {{ obra.nombre|tojson }}, {{ (obra.direccion if obra.direccion else "")|tojson }})" 
                                     class="btn btn-outline-warning btn-sm">
                                 <i class="fas fa-cloud-sun"></i>
                             </button>
@@ -279,9 +294,9 @@ const obrasData = [
     {% if obra.latitud and obra.longitud %}
     {
         id: {{ obra.id }},
-        nombre: "{{ obra.nombre|replace('"', '\\"') }}",
-        cliente: "{{ obra.cliente|replace('"', '\\"') if obra.cliente else 'Sin cliente' }}",
-        direccion: "{{ obra.direccion|replace('"', '\\"') if obra.direccion else 'Sin dirección' }}",
+        nombre: {{ obra.nombre|tojson }},
+        cliente: {{ (obra.cliente if obra.cliente else 'Sin cliente')|tojson }},
+        direccion: {{ (obra.direccion if obra.direccion else 'Sin dirección')|tojson }},
         lat: {{ obra.latitud }},
         lng: {{ obra.longitud }},
         estado: "{{ obra.estado }}",
@@ -292,90 +307,159 @@ const obrasData = [
     {% endfor %}
 ];
 
+console.log('📊 Obras data loaded:', obrasData);
+
 // Inicializar mapa cuando se carga la página
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🗺️ Inicializando mapa de obras...');
-    inicializarMapa();
+    console.log('🗺️ DOM cargado, verificando dependencias...');
+    
+    // Verificar que Leaflet esté disponible
+    if (typeof L !== 'undefined') {
+        console.log('✅ Leaflet disponible');
+        // Esperar un poco para que el DOM esté completamente listo
+        setTimeout(inicializarMapa, 500);
+    } else {
+        console.error('❌ Leaflet no disponible');
+        // Reintentar después de un momento
+        setTimeout(function() {
+            if (typeof L !== 'undefined') {
+                console.log('✅ Leaflet disponible en segundo intento');
+                inicializarMapa();
+            } else {
+                console.error('❌ Leaflet sigue no disponible');
+            }
+        }, 2000);
+    }
 });
 
 function inicializarMapa() {
-    // Coordenadas de Argentina (centro aproximado)
-    const centroArgentina = [-38.4161, -63.6167];
-    
-    // Crear mapa
-    mapa = L.map('mapa-obras').setView(centroArgentina, 5);
-    
-    // Agregar capa de OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-    }).addTo(mapa);
-    
-    console.log(`📍 Cargando ${obrasData.length} obras en el mapa`);
-    
-    // Agregar marcadores de obras
-    obrasData.forEach(function(obra, index) {
-        agregarMarcadorObra(obra);
-    });
-    
-    // Ajustar vista si hay obras
-    if (obrasData.length > 0) {
-        ajustarVistaAObras();
+    try {
+        // Verificar que Leaflet esté disponible
+        if (typeof L === 'undefined') {
+            console.error('❌ Leaflet no está disponible');
+            return;
+        }
+        
+        console.log('🗺️ Inicializando mapa...');
+        
+        // Coordenadas de Buenos Aires (donde están las obras)
+        const centroBuenosAires = [-34.6118, -58.3960];
+        
+        // Crear mapa
+        mapa = L.map('mapa-obras').setView(centroBuenosAires, 11);
+        
+        // Agregar capa de OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(mapa);
+        
+        console.log(`📍 Cargando ${obrasData.length} obras en el mapa`);
+        
+        // Agregar marcadores de obras
+        obrasData.forEach(function(obra, index) {
+            console.log(`🏗️ Procesando obra ${index + 1}: ${obra.nombre}`);
+            agregarMarcadorObra(obra);
+        });
+        
+        // Ajustar vista si hay obras
+        if (obrasData.length > 0) {
+            setTimeout(() => {
+                ajustarVistaAObras();
+            }, 500);
+        }
+        
+        // Forzar redimensionamiento después de cargar
+        setTimeout(() => {
+            mapa.invalidateSize();
+            console.log('🔄 Mapa redimensionado');
+        }, 1000);
+        
+        console.log('✅ Mapa inicializado correctamente');
+        
+    } catch (error) {
+        console.error('❌ Error inicializando mapa:', error);
+        document.getElementById('mapa-obras').innerHTML = 
+            '<div style="height: 400px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6;">' +
+            '<div style="text-align: center; color: #6c757d;">' +
+            '<i class="fas fa-exclamation-triangle fa-2x mb-2"></i>' +
+            '<p>Error cargando mapa</p>' +
+            '<button onclick="location.reload()" class="btn btn-sm btn-outline-primary">Recargar página</button>' +
+            '</div></div>';
     }
-    
-    console.log('✅ Mapa inicializado correctamente');
 }
 
 function agregarMarcadorObra(obra) {
-    // Determinar color del marcador según estado
-    let color = '#dc3545'; // rojo por defecto
-    switch(obra.estado) {
-        case 'en_curso': color = '#28a745'; break;
-        case 'finalizada': color = '#6c757d'; break;
-        case 'pausada': color = '#ffc107'; break;
-        case 'cancelada': color = '#dc3545'; break;
-    }
-    
-    // Crear marcador
-    const marcador = L.circleMarker([obra.lat, obra.lng], {
-        radius: 8,
-        fillColor: color,
-        color: '#ffffff',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.8
-    }).addTo(mapa);
-    
-    // Crear contenido del popup
-    const popupContent = `
-        <div style="min-width: 250px;">
-            <h6 class="text-primary mb-2">
-                <i class="fas fa-building me-2"></i>${obra.nombre}
-            </h6>
-            <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
-            <p class="mb-1"><strong>Dirección:</strong> ${obra.direccion}</p>
-            <p class="mb-2">
-                <strong>Estado:</strong> 
-                <span class="badge bg-secondary">${obra.estado.replace('_', ' ')}</span>
-            </p>
-            <p class="mb-2">
-                <strong>Progreso:</strong> ${obra.progreso}%
-            </p>
-            ${obra.presupuesto > 0 ? `<p class="mb-2"><strong>Presupuesto:</strong> $${obra.presupuesto.toLocaleString()}</p>` : ''}
-            <div class="d-grid gap-2">
-                <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
-                    <i class="fas fa-eye me-1"></i>Ver Obra
-                </a>
-                <button onclick="abrirClima(${obra.lat}, ${obra.lng}, '${obra.nombre}', '${obra.direccion}')" 
-                        class="btn btn-outline-info btn-sm">
-                    <i class="fas fa-cloud-sun me-1"></i>Ver Clima Semanal
-                </button>
+    try {
+        console.log(`📍 Agregando marcador para: ${obra.nombre} en (${obra.lat}, ${obra.lng})`);
+        
+        // Verificar coordenadas válidas
+        if (!obra.lat || !obra.lng || isNaN(obra.lat) || isNaN(obra.lng)) {
+            console.warn(`⚠️ Coordenadas inválidas para ${obra.nombre}`);
+            return;
+        }
+        
+        // Determinar color del marcador según estado
+        let color = '#dc3545'; // rojo por defecto
+        switch(obra.estado) {
+            case 'en_curso': color = '#28a745'; break;
+            case 'finalizada': color = '#6c757d'; break;
+            case 'pausada': color = '#ffc107'; break;
+            case 'cancelada': color = '#dc3545'; break;
+        }
+        
+        // Crear marcador circular más visible
+        const marcador = L.circleMarker([parseFloat(obra.lat), parseFloat(obra.lng)], {
+            radius: 10,
+            fillColor: color,
+            color: '#ffffff',
+            weight: 3,
+            opacity: 1,
+            fillOpacity: 0.9
+        }).addTo(mapa);
+        
+        // Crear contenido del popup con escape de comillas
+        const nombreEscapado = obra.nombre.replace(/'/g, "\\'");
+        const direccionEscapada = obra.direccion.replace(/'/g, "\\'");
+        
+        const popupContent = `
+            <div style="min-width: 280px; max-width: 350px;">
+                <h6 class="text-primary mb-2" style="font-size: 1.1em;">
+                    <i class="fas fa-building me-2"></i>${obra.nombre}
+                </h6>
+                <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
+                <p class="mb-1"><strong>Dirección:</strong> ${obra.direccion}</p>
+                <p class="mb-2">
+                    <strong>Estado:</strong> 
+                    <span class="badge bg-secondary">${obra.estado.replace('_', ' ')}</span>
+                </p>
+                <p class="mb-2">
+                    <strong>Progreso:</strong> ${obra.progreso}%
+                </p>
+                ${obra.presupuesto > 0 ? `<p class="mb-2"><strong>Presupuesto:</strong> $${Number(obra.presupuesto).toLocaleString()}</p>` : ''}
+                <div class="d-grid gap-2 mt-3">
+                    <a href="/obras/${obra.id}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-eye me-1"></i>Ver Obra
+                    </a>
+                    <button onclick="abrirClima(${obra.lat}, ${obra.lng}, '${nombreEscapado}', '${direccionEscapada}')" 
+                            class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-cloud-sun me-1"></i>Ver Clima Semanal
+                    </button>
+                </div>
             </div>
-        </div>
-    `;
-    
-    marcador.bindPopup(popupContent);
-    marcadores.push(marcador);
+        `;
+        
+        marcador.bindPopup(popupContent, {
+            maxWidth: 350,
+            className: 'popup-obra'
+        });
+        
+        marcadores.push(marcador);
+        console.log(`✅ Marcador agregado exitosamente para ${obra.nombre}`);
+        
+    } catch (error) {
+        console.error(`❌ Error agregando marcador para ${obra.nombre}:`, error);
+    }
 }
 
 function ajustarVistaAObras() {
