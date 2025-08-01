@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+
+{% block title %}Obras - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-building me-2"></i>Distribución de Obras por Zonas</h2>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-primary fs-6">{{ obras|length }} obras</span>
+                    <div class="d-flex align-items-center gap-2 text-muted">
+                        <i class="fas fa-cloud me-1"></i>
+                        <span class="small">Pronóstico Semanal</span>
+                        <span class="text-muted small">Haz clic en una obra del mapa</span>
+                    </div>
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    <a href="{{ url_for('obras.crear') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Nueva Obra
+                    </a>
+                    {% endif %}
+                    {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
+                    <button type="button" class="btn btn-outline-warning" onclick="confirmarReinicio()">
+                        <i class="fas fa-sync-alt me-1"></i>Reiniciar Sistema
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label for="estado" class="form-label">Estado</label>
+                    <select class="form-select" id="estado" name="estado">
+                        <option value="">Todos los estados</option>
+                        <option value="planificacion" {{ 'selected' if estado == 'planificacion' }}>Planificación</option>
+                        <option value="en_curso" {{ 'selected' if estado == 'en_curso' }}>En Curso</option>
+                        <option value="pausada" {{ 'selected' if estado == 'pausada' }}>Pausada</option>
+                        <option value="finalizada" {{ 'selected' if estado == 'finalizada' }}>Finalizada</option>
+                        <option value="cancelada" {{ 'selected' if estado == 'cancelada' }}>Cancelada</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="buscar" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                           value="{{ buscar }}" placeholder="Nombre, cliente o dirección...">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('obras.lista') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpiar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Layout con Mapa y Lista -->
+    <div class="row">
+        <!-- Mapa Interactivo -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-map-marked-alt me-2"></i>Mapa de Obras
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div id="mapa" style="height: 500px; width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Lista de obras -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Lista de Obras</h5>
+                </div>
+                <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                    {% if obras %}
+                        {% for obra in obras %}
+                        <div class="obra-item border-bottom pb-3 mb-3" data-obra-id="{{ obra.id }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 fw-bold">{{ obra.nombre }}</h6>
+                                    <p class="text-muted mb-1 small">
+                                        <i class="fas fa-user me-1"></i>{{ obra.cliente }}
+                                    </p>
+                                    {% if obra.direccion %}
+                                    <p class="text-muted mb-2 small">
+                                        <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion[:40] }}{% if obra.direccion|length > 40 %}...{% endif %}
+                                    </p>
+                                    {% endif %}
+                                    
+                                    <div class="row text-center mb-2">
+                                        <div class="col-6">
+                                            <div class="progress mb-1" style="height: 4px;">
+                                                <div class="progress-bar" role="progressbar" 
+                                                     style="width: {{ obra.progreso }}%"></div>
+                                            </div>
+                                            <small class="fw-bold">{{ obra.progreso }}%</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-success fw-bold">{{ obra.presupuesto_total|moneda }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge {{ obra.estado|estado_badge }} mb-2">
+                                        {{ obra.estado.replace('_', ' ').title() }}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-sm btn-outline-primary flex-fill">
+                                    <i class="fas fa-eye me-1"></i>Detalles
+                                </a>
+                                <button class="btn btn-sm btn-outline-info" onclick="centrarEnObra({{ obra.latitud or 0 }}, {{ obra.longitud or 0 }})">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </button>
+                                {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmarEliminacion('{{ obra.id }}', '{{ obra.nombre }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-building fa-2x text-muted mb-3"></i>
+                            <h6 class="text-muted">No hay obras registradas</h6>
+                            <p class="text-muted small">
+                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    Comienza creando tu primera obra.
+                                {% else %}
+                                    No tienes obras asignadas actualmente.
+                                {% endif %}
+                            </p>
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <a href="{{ url_for('obras.crear') }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-plus me-1"></i>Crear Primera Obra
+                            </a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal del Pronóstico del Tiempo -->
+<div class="modal fade" id="modalClima" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cloud-sun me-2"></i>
+                    Pronóstico del Tiempo - <span id="nombreObraClima"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loadingClima" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Obteniendo pronóstico del tiempo...</p>
+                </div>
+                
+                <div id="contenidoClima" style="display: none;">
+                    <div class="row" id="pronosticoSemanal">
+                        <!-- Se llena dinámicamente con JavaScript -->
+                    </div>
+                </div>
+                
+                <div id="errorClima" style="display: none;" class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    No se pudo obtener el pronóstico del tiempo para esta ubicación.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación para eliminar obra -->
+<div class="modal fade" id="modalEliminarObra" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>Confirmar Eliminación
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">¿Estás segura/o que querés eliminar esta obra?</p>
+                <div class="alert alert-warning">
+                    <strong>Obra:</strong> <span id="nombreObraEliminar"></span><br>
+                    <strong>⚠️ Esta acción no se puede deshacer.</strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formEliminarObra" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Eliminar Obra
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación para reiniciar sistema -->
+<div class="modal fade" id="modalReiniciarSistema" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>Reiniciar Sistema
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <h6><strong>⚠️ ADVERTENCIA: Acción Irreversible</strong></h6>
+                    <p class="mb-0">Esta acción eliminará <strong>TODAS LAS OBRAS</strong> del sistema, incluyendo:</p>
+                    <ul class="mt-2 mb-0">
+                        <li>Todas las obras y sus datos</li>
+                        <li>Etapas y tareas asociadas</li>
+                        <li>Asignaciones de personal</li>
+                        <li>Progreso y estadísticas</li>
+                    </ul>
+                </div>
+                <p class="text-muted">Esta función está diseñada únicamente para <strong>pruebas y desarrollo</strong>.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form action="{{ url_for('obras.reiniciar_sistema') }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-sync-alt me-1"></i>Reiniciar Sistema
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Leaflet CSS y JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// Variables globales
+let mapa;
+let marcadores = [];
+
+// Datos de las obras
+const obrasData = [
+    {% for obra in obras %}
+    {
+        id: {{ obra.id }},
+        nombre: "{{ obra.nombre|e }}",
+        cliente: "{{ obra.cliente|e }}",
+        direccion: "{{ obra.direccion|e }}",
+        latitud: {{ obra.latitud or -34.6037 }},
+        longitud: {{ obra.longitud or -58.3816 }},
+        estado: "{{ obra.estado }}",
+        progreso: {{ obra.progreso }},
+        presupuesto: "{{ obra.presupuesto_total|moneda }}"
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// Inicializar el mapa
+function inicializarMapa() {
+    // Centro predeterminado (Buenos Aires)
+    const centroDefault = [-34.6037, -58.3816];
+    
+    // Crear el mapa
+    mapa = L.map('mapa').setView(centroDefault, 11);
+    
+    // Agregar tiles de OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18
+    }).addTo(mapa);
+    
+    // Agregar marcadores de las obras
+    agregarMarcadoresObras();
+    
+    // Ajustar vista para mostrar todas las obras
+    if (obrasData.length > 0) {
+        ajustarVistaObras();
+    }
+}
+
+function agregarMarcadoresObras() {
+    obrasData.forEach(obra => {
+        if (obra.latitud && obra.longitud) {
+            // Crear icono personalizado
+            const iconoObra = L.divIcon({
+                className: 'custom-marker',
+                html: <div style="background-color: #dc3545; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
+                    <i class="fas fa-building"></i>
+                </div>,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            
+            // Crear marcador
+            const marcador = L.marker([obra.latitud, obra.longitud], {
+                icon: iconoObra
+            }).addTo(mapa);
+            
+            // Contenido del popup
+            const popupContent = 
+                <div style="min-width: 250px;">
+                    <h6 class="fw-bold mb-2">${obra.nombre}</h6>
+                    <p class="mb-1"><i class="fas fa-user me-1"></i>${obra.cliente}</p>
+                    <p class="mb-2"><i class="fas fa-map-marker-alt me-1"></i>${obra.direccion}</p>
+                    
+                    <div class="row text-center mb-2">
+                        <div class="col-6">
+                            <small class="text-muted">Progreso</small><br>
+                            <span class="fw-bold">${obra.progreso}%</span>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Presupuesto</small><br>
+                            <span class="fw-bold text-success">${obra.presupuesto}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-1">
+                        <a href="/obras/${obra.id}" class="btn btn-sm btn-primary flex-fill">
+                            <i class="fas fa-eye me-1"></i>Ver Detalles
+                        </a>
+                        <button class="btn btn-sm btn-info" onclick="mostrarClima('${obra.nombre}', ${obra.latitud}, ${obra.longitud})">
+                            <i class="fas fa-cloud-sun"></i>
+                        </button>
+                    </div>
+                </div>
+            ;
+            
+            // Agregar popup
+            marcador.bindPopup(popupContent, {
+                maxWidth: 300,
+                className: 'popup-obra'
+            });
+            
+            marcadores.push(marcador);
+        }
+    });
+}
+
+function ajustarVistaObras() {
+    if (marcadores.length > 0) {
+        const group = new L.featureGroup(marcadores);
+        mapa.fitBounds(group.getBounds().pad(0.1));
+    }
+}
+
+function centrarEnObra(lat, lng) {
+    if (lat && lng) {
+        mapa.setView([lat, lng], 15);
+    }
+}
+
+// Función para mostrar el clima
+function mostrarClima(nombreObra, lat, lng) {
+    document.getElementById('nombreObraClima').textContent = nombreObra;
+    document.getElementById('loadingClima').style.display = 'block';
+    document.getElementById('contenidoClima').style.display = 'none';
+    document.getElementById('errorClima').style.display = 'none';
+    
+    const modalClima = new bootstrap.Modal(document.getElementById('modalClima'));
+    modalClima.show();
+    
+    // Simular carga del clima (reemplazar con API real)
+    setTimeout(() => {
+        obtenerPronosticoClima(lat, lng);
+    }, 1500);
+}
+
+function obtenerPronosticoClima(lat, lng) {
+    // Datos simulados del clima (reemplazar con API real como OpenWeatherMap)
+    const diasSemana = ['Hoy', 'Mañana', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const condiciones = [
+        { temp: 22, condicion: 'Soleado', icono: '☀️', humedad: 65, viento: 15 },
+        { temp: 24, condicion: 'Parcialmente nublado', icono: '⛅', humedad: 70, viento: 12 },
+        { temp: 19, condicion: 'Lluvia', icono: '🌧️', humedad: 85, viento: 20 },
+        { temp: 21, condicion: 'Nublado', icono: '☁️', humedad: 75, viento: 18 },
+        { temp: 25, condicion: 'Soleado', icono: '☀️', humedad: 60, viento: 10 },
+        { temp: 23, condicion: 'Parcialmente nublado', icono: '⛅', humedad: 68, viento: 14 },
+        { temp: 20, condicion: 'Lluvia ligera', icono: '🌦️', humedad: 80, viento: 16 }
+    ];
+    
+    let html = '';
+    for (let i = 0; i < 7; i++) {
+        const clima = condiciones[i];
+        html += 
+            <div class="col-md-4 col-lg-3 mb-3">
+                <div class="card text-center">
+                    <div class="card-body py-2">
+                        <h6 class="card-title mb-1">${diasSemana[i]}</h6>
+                        <div class="fs-1 mb-1">${clima.icono}</div>
+                        <div class="fs-4 fw-bold text-primary">${clima.temp}°C</div>
+                        <small class="text-muted">${clima.condicion}</small>
+                        <hr class="my-2">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <small class="text-muted">💧 ${clima.humedad}%</small>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">💨 ${clima.viento}km/h</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ;
+    }
+    
+    document.getElementById('pronosticoSemanal').innerHTML = html;
+    document.getElementById('loadingClima').style.display = 'none';
+    document.getElementById('contenidoClima').style.display = 'block';
+}
+
+// Funciones para modales
+function confirmarEliminacion(obraId, nombreObra) {
+    document.getElementById('nombreObraEliminar').textContent = nombreObra;
+    document.getElementById('formEliminarObra').action = '/obras/eliminar/' + obraId;
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalEliminarObra'));
+    modal.show();
+}
+
+function confirmarReinicio() {
+    const modal = new bootstrap.Modal(document.getElementById('modalReiniciarSistema'));
+    modal.show();
+}
+
+// Inicializar cuando se carga la página
+document.addEventListener('DOMContentLoaded', function() {
+    inicializarMapa();
+});
+</script>
+
+<style>
+.custom-marker {
+    background: transparent !important;
+    border: none !important;
+}
+
+.popup-obra .leaflet-popup-content {
+    margin: 8px;
+}
+
+.obra-item:hover {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+}
+
+.obra-item:last-child {
+    border-bottom: none !important;
+}
+
+#mapa {
+    border-radius: 8px;
+}
+</style>
+{% endblock %}
