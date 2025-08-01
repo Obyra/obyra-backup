@@ -715,30 +715,8 @@ function mostrarErrorMapaDashboard() {
 }
 
 function inicializarGraficos() {
-    // Gráfico de obras por estado (solo si el elemento existe)
-    const chartElement = document.getElementById('chartObras');
-    if (chartElement) {
-        const ctx1 = chartElement.getContext('2d');
-        new Chart(ctx1, {
-            type: 'doughnut',
-            data: {
-                labels: {{ obras_por_estado|map(attribute='estado')|list|tojson }},
-                datasets: [{
-                    data: {{ obras_por_estado|map(attribute='count')|list|tojson }},
-                    backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
+    // Los gráficos se manejan en otras secciones del dashboard
+    console.log('✅ Sistema de gráficos del dashboard inicializado');
 }
 
 // Redimensionar mapa cuando cambie el tamaño de la ventana
