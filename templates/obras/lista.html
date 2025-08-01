@@ -169,35 +169,81 @@
 
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+/* Asegurar que el mapa se renderice correctamente */
+#mapa {
+    height: 500px !important;
+    width: 100% !important;
+    z-index: 1;
+}
+
+.leaflet-container {
+    height: 500px !important;
+    width: 100% !important;
+}
+
+/* Arreglar iconos de marcadores rotos */
+.leaflet-default-icon-path {
+    background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png);
+}
+</style>
 <script>
 let mapa;
 let marcadores = [];
+
+// Fix para iconos de marcadores
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🗺️ Iniciando mapa de obras...');
     console.log('📊 Obras para mostrar:', {{ obras|length }});
     
-    if (typeof L !== 'undefined') {
-        console.log('✅ Leaflet disponible');
-        inicializarMapa();
-    } else {
-        console.error('❌ Error: Leaflet no está disponible');
-    }
+    // Esperar un poco para que el DOM esté completamente listo
+    setTimeout(function() {
+        if (typeof L !== 'undefined') {
+            console.log('✅ Leaflet disponible');
+            inicializarMapa();
+        } else {
+            console.error('❌ Error: Leaflet no está disponible');
+        }
+    }, 100);
 });
 
 function inicializarMapa() {
     try {
         console.log('🗺️ Inicializando mapa...');
         
+        // Verificar que el contenedor existe
+        const contenedor = document.getElementById('mapa');
+        if (!contenedor) {
+            console.error('❌ No se encontró el contenedor del mapa');
+            return;
+        }
+        
         // Crear mapa centrado en Buenos Aires
-        mapa = L.map('mapa').setView([-34.6037, -58.3816], 11);
+        mapa = L.map('mapa', {
+            preferCanvas: false,
+            zoomControl: true
+        }).setView([-34.6037, -58.3816], 11);
         console.log('✅ Mapa creado');
         
         // Agregar capa base
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
         }).addTo(mapa);
         console.log('✅ Capa base agregada');
+        
+        // Forzar redimensionamiento
+        setTimeout(() => {
+            mapa.invalidateSize();
+            console.log('🔄 Mapa redimensionado tras inicialización');
+        }, 250);
         
         // Agregar marcadores de obras
         {% for obra in obras %}
