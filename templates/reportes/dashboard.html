@@ -719,6 +719,65 @@ function inicializarGraficos() {
     console.log('✅ Sistema de gráficos del dashboard inicializado');
 }
 
+function mostrarClima(lat, lng, nombreObra) {
+    console.log(`🌤️ Mostrando clima para: ${nombreObra}`);
+    
+    // Actualizar título del modal
+    document.getElementById('nombreObraClima').textContent = nombreObra;
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalClima'));
+    modal.show();
+    
+    // Simular carga
+    document.getElementById('loadingClima').style.display = 'block';
+    document.getElementById('contenidoClima').style.display = 'none';
+    document.getElementById('errorClima').style.display = 'none';
+    
+    // Simular datos del clima después de 1 segundo
+    setTimeout(function() {
+        generarPronosticoSimuladoDashboard();
+        document.getElementById('loadingClima').style.display = 'none';
+        document.getElementById('contenidoClima').style.display = 'block';
+    }, 1000);
+}
+
+function generarPronosticoSimuladoDashboard() {
+    const dias = ['Hoy', 'Mañana', 'Viernes', 'Sábado', 'Domingo', 'Lunes', 'Martes'];
+    const iconos = ['☀️', '⛅', '🌤️', '🌦️', '☁️', '🌧️'];
+    const condiciones = ['Soleado', 'Parcialmente nublado', 'Mayormente soleado', 'Lluvias dispersas', 'Nublado', 'Lluvia'];
+    
+    let html = '';
+    
+    for (let i = 0; i < 7; i++) {
+        const tempAlta = Math.floor(Math.random() * 10) + 18; // 18-28°C
+        const tempBaja = tempAlta - Math.floor(Math.random() * 8) - 3; // 5-15°C menos
+        const iconIndex = Math.floor(Math.random() * iconos.length);
+        
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h6 class="card-title">${dias[i]}</h6>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="h4">${tempAlta}°</div>
+                                <div class="opacity-75">${tempBaja}°</div>
+                            </div>
+                            <div class="text-end">
+                                <div style="font-size: 2rem;">${iconos[iconIndex]}</div>
+                                <small>${condiciones[iconIndex]}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    document.getElementById('pronosticoSemanal').innerHTML = html;
+}
+
 // Redimensionar mapa cuando cambie el tamaño de la ventana
 window.addEventListener('resize', function() {
     if (mapaDashboard) {
