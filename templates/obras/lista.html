@@ -187,16 +187,25 @@
     background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png);
 }
 
-/* Mejorar popups de Leaflet para clima */
+/* Mejorar popups de Leaflet */
 .leaflet-popup-content-wrapper {
     padding: 0 !important;
-    border-radius: 8px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+    border: none !important;
 }
 
 .leaflet-popup-content {
     margin: 0 !important;
     width: auto !important;
     min-width: 280px;
+    max-width: 320px;
+    border-radius: 12px !important;
+}
+
+.leaflet-popup-tip {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+    border: none !important;
 }
 
 .leaflet-popup {
@@ -204,7 +213,24 @@
 }
 
 .popup-obra {
-    max-width: 300px;
+    max-width: 320px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Mejorar hover effects en botones del popup */
+.popup-obra .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+}
+
+.popup-obra .progress {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.popup-obra .badge {
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 </style>
 <script>
@@ -273,30 +299,58 @@ function inicializarMapa() {
         const marcador{{ loop.index }} = L.marker([{{ obra.latitud }}, {{ obra.longitud }}])
             .addTo(mapa)
             .bindPopup(`
-                <div class="popup-obra">
-                    <h6 class="mb-1"><strong>{{ obra.nombre }}</strong></h6>
-                    <p class="mb-1 small text-muted">
-                        <i class="fas fa-user me-1"></i>{{ obra.cliente }}
-                    </p>
-                    <p class="mb-2 small">
-                        <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion or 'Sin dirección' }}
-                    </p>
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="badge bg-{% if obra.estado == 'planificacion' %}secondary{% elif obra.estado == 'en_curso' %}success{% elif obra.estado == 'pausada' %}warning{% elif obra.estado == 'finalizada' %}info{% elif obra.estado == 'cancelada' %}danger{% else %}secondary{% endif %}">
-                            {{ obra.estado.replace('_', ' ').title() }}
-                        </span>
-                        <small class="fw-bold">{{ obra.progreso }}%</small>
+                <div class="popup-obra" style="padding: 16px; min-width: 280px; border-radius: 12px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+                    <!-- Header con ícono y título -->
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="me-3">
+                            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="fas fa-building text-white"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h6 class="mb-0 fw-bold text-dark">{{ obra.nombre }}</h6>
+                            <small class="text-muted">ID: #{{ obra.id }}</small>
+                        </div>
                     </div>
-                    <div class="progress mb-2" style="height: 4px;">
-                        <div class="progress-bar" style="width: {{ obra.progreso }}%"></div>
+                    
+                    <!-- Información principal -->
+                    <div class="mb-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas fa-user text-primary me-2" style="width: 16px;"></i>
+                            <span class="small">{{ obra.cliente }}</span>
+                        </div>
+                        <div class="d-flex align-items-start mb-2">
+                            <i class="fas fa-map-marker-alt text-danger me-2 mt-1" style="width: 16px;"></i>
+                            <span class="small">{{ obra.direccion or 'Sin dirección especificada' }}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Estado y progreso -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="badge badge-pill px-3 py-2 text-white" style="background: {% if obra.estado == 'planificacion' %}#6c757d{% elif obra.estado == 'en_curso' %}#198754{% elif obra.estado == 'pausada' %}#fd7e14{% elif obra.estado == 'finalizada' %}#0dcaf0{% elif obra.estado == 'cancelada' %}#dc3545{% else %}#6c757d{% endif %}; font-size: 11px;">
+                                {{ obra.estado.replace('_', ' ').title() }}
+                            </span>
+                            <span class="fw-bold text-primary">{{ obra.progreso }}%</span>
+                        </div>
+                        <div class="progress" style="height: 6px; border-radius: 10px;">
+                            <div class="progress-bar progress-bar-striped" 
+                                 style="width: {{ obra.progreso }}%; background: linear-gradient(90deg, #0d6efd, #6f42c1);"
+                                 role="progressbar"></div>
+                        </div>
                     </div>
 
-                    <div class="text-center">
-                        <button onclick="verDetallesObra({{ obra.id }})" class="btn btn-sm btn-primary me-1">
-                            <i class="fas fa-eye me-1"></i>Ver Detalles
+                    <!-- Botones de acción -->
+                    <div class="d-grid gap-2">
+                        <button onclick="verDetallesObra({{ obra.id }})" 
+                                class="btn btn-primary btn-sm d-flex align-items-center justify-content-center"
+                                style="border-radius: 8px; padding: 8px 16px;">
+                            <i class="fas fa-eye me-2"></i>Ver Detalles Completos
                         </button>
-                        <button onclick="abrirVentanaClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre }}', '{{ obra.direccion }}', {{ obra.id }})" class="btn btn-sm btn-info">
-                            <i class="fas fa-cloud-sun me-1"></i>Clima
+                        <button onclick="abrirVentanaClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre }}', '{{ obra.direccion }}', {{ obra.id }})" 
+                                class="btn btn-info btn-sm d-flex align-items-center justify-content-center"
+                                style="border-radius: 8px; padding: 8px 16px; background: linear-gradient(45deg, #17a2b8, #20c997); border: none;">
+                            <i class="fas fa-cloud-sun me-2"></i>Información del Clima
                         </button>
                     </div>
                 </div>
