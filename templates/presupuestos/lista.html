@@ -66,10 +66,30 @@
                         </span>
                     </div>
                     <div class="card-body">
-                        <h6 class="card-title">{{ presupuesto.obra.nombre }}</h6>
-                        <p class="text-muted mb-2">
-                            <i class="fas fa-user me-1"></i>{{ presupuesto.obra.cliente }}
-                        </p>
+                        {% if presupuesto.obra %}
+                            <h6 class="card-title">{{ presupuesto.obra.nombre }}</h6>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-user me-1"></i>{{ presupuesto.obra.cliente }}
+                            </p>
+                        {% else %}
+                            <h6 class="card-title">
+                                {% set datos = presupuesto.datos_proyecto|safe %}
+                                {% if datos %}
+                                    {% set proyecto_json = datos|from_json %}
+                                    {{ proyecto_json.nombre if proyecto_json.nombre else 'Presupuesto sin obra' }}
+                                {% else %}
+                                    Presupuesto sin obra
+                                {% endif %}
+                            </h6>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-user me-1"></i>
+                                {% if datos and proyecto_json.cliente %}
+                                    {{ proyecto_json.cliente }}
+                                {% else %}
+                                    Cliente por confirmar
+                                {% endif %}
+                            </p>
+                        {% endif %}
                         <p class="text-muted mb-3">
                             <i class="fas fa-calendar me-1"></i>{{ presupuesto.fecha|fecha }}
                         </p>
@@ -105,6 +125,13 @@
                                 <i class="fas fa-file-pdf me-1"></i>Descargar PDF
                             </a>
                             {% endif %}
+                            
+                            <!-- Botón Confirmar Obra para presupuestos sin obra -->
+                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and current_user.rol in ['administrador', 'tecnico'] %}
+                            <button class="btn btn-success btn-sm" onclick="confirmarComoObra({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
+                                <i class="fas fa-check-circle me-1"></i>Confirmar como Obra
+                            </button>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -132,4 +159,30 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmarComoObra(presupuestoId, numeroPresupuesto) {
+    if (confirm(`¿Estás seguro de que deseas convertir el presupuesto ${numeroPresupuesto} en una obra activa?`)) {
+        // Crear un formulario para enviar la solicitud POST
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/presupuestos/${presupuestoId}/confirmar-obra`;
+        
+        // Agregar token CSRF si existe
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const tokenInput = document.createElement('input');
+            tokenInput.type = 'hidden';
+            tokenInput.name = 'csrf_token';
+            tokenInput.value = csrfToken.content;
+            form.appendChild(tokenInput);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
 {% endblock %}

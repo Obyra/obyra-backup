@@ -159,6 +159,18 @@ def estado_badge_filter(estado):
     return badges.get(estado, 'bg-secondary')
 
 
+@app.template_filter('from_json')
+def from_json_filter(json_str):
+    """Filtro para convertir string JSON a diccionario"""
+    if not json_str:
+        return {}
+    try:
+        import json
+        return json.loads(json_str)
+    except:
+        return {}
+
+
 # Create tables and initial data
 with app.app_context():
     from models import Usuario, Organizacion

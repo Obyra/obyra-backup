@@ -263,11 +263,13 @@ class Presupuesto(db.Model):
     __tablename__ = 'presupuestos'
     
     id = db.Column(db.Integer, primary_key=True)
-    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)  # Ahora puede ser NULL
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     numero = db.Column(db.String(50), unique=True, nullable=False)
     fecha = db.Column(db.Date, default=date.today)
     estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado
+    confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra
+    datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
     subtotal_materiales = db.Column(db.Numeric(15, 2), default=0)
     subtotal_mano_obra = db.Column(db.Numeric(15, 2), default=0)
     subtotal_equipos = db.Column(db.Numeric(15, 2), default=0)

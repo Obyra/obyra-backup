@@ -26,7 +26,8 @@ def lista():
     estado = request.args.get('estado', '')
     buscar = request.args.get('buscar', '')
     
-    query = Presupuesto.query.join(Obra)
+    # Modificar query para incluir presupuestos sin obra (LEFT JOIN)
+    query = Presupuesto.query.outerjoin(Obra).filter(Presupuesto.organizacion_id == current_user.organizacion_id)
     
     if estado:
         query = query.filter(Presupuesto.estado == estado)
@@ -35,8 +36,9 @@ def lista():
         query = query.filter(
             db.or_(
                 Presupuesto.numero.contains(buscar),
-                Obra.nombre.contains(buscar),
-                Obra.cliente.contains(buscar)
+                Presupuesto.observaciones.contains(buscar),
+                Obra.nombre.contains(buscar) if Obra.nombre else False,
+                Obra.cliente.contains(buscar) if Obra.cliente else False
             )
         )
     
@@ -283,31 +285,8 @@ def crear_desde_ia():
         if not presupuesto_ia:
             return jsonify({'error': 'Datos del presupuesto incompletos'}), 400
         
-        # CREAR OBRA AUTOMÁTICAMENTE SI NO EXISTE
-        obra_id = data.get('obra_id')
-        
-        if not obra_id:
-            # Crear nueva obra desde los datos del proyecto
-            nombre_obra = datos_proyecto.get('nombre', f'Obra IA {datetime.now().strftime("%Y%m%d_%H%M")}')
-            
-            nueva_obra = Obra()
-            nueva_obra.nombre = nombre_obra
-            nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde IA')
-            nueva_obra.descripcion = f"Superficie: {datos_proyecto.get('superficie', 0)}m² - {datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
-            nueva_obra.direccion = datos_proyecto.get('ubicacion', 'Por especificar')
-            nueva_obra.estado = 'planificacion'
-            nueva_obra.organizacion_id = current_user.organizacion_id
-            
-            db.session.add(nueva_obra)
-            db.session.flush()  # Para obtener el ID
-            
-            obra_id = nueva_obra.id
-            
-        else:
-            # Verificar que la obra existe
-            obra = Obra.query.get(obra_id)
-            if not obra:
-                return jsonify({'error': 'Obra no encontrada'}), 404
+        # NO CREAR OBRA AUTOMÁTICAMENTE - Solo guardar datos del proyecto
+        # Los presupuestos quedan como "borrador" hasta que se confirmen explícitamente
         
         # Generar número de presupuesto único
         ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
@@ -327,13 +306,15 @@ def crear_desde_ia():
                 break
             siguiente_num += 1
         
-        # Crear presupuesto base
+        # Crear presupuesto base (SIN obra_id)
         nuevo_presupuesto = Presupuesto()
-        nuevo_presupuesto.obra_id = obra_id
+        nuevo_presupuesto.obra_id = None  # Sin obra asociada hasta confirmar
         nuevo_presupuesto.numero = numero
         nuevo_presupuesto.observaciones = f"Calculado con IA - {observaciones}"
         nuevo_presupuesto.iva_porcentaje = 21.0
-        nuevo_presupuesto.estado = 'enviado'  # Pendiente de aprobación
+        nuevo_presupuesto.estado = 'borrador'  # Borrador hasta que se confirme
+        nuevo_presupuesto.confirmado_como_obra = False
+        nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto)  # Guardar datos para posterior conversión
         nuevo_presupuesto.organizacion_id = current_user.organizacion_id
         
         db.session.add(nuevo_presupuesto)
@@ -519,6 +500,7 @@ def crear_desde_ia():
             'exito': True,
             'presupuesto_id': nuevo_presupuesto.id,
             'numero': numero,
+            'mensaje': 'Presupuesto creado como borrador. Podrás convertirlo en obra desde la lista de presupuestos.',
             'redirect_url': url_for('presupuestos.detalle', id=nuevo_presupuesto.id)
         })
         
@@ -982,3 +964,107 @@ def editar_item(item_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Error actualizando item: {str(e)}'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
+@login_required
+def confirmar_como_obra(id):
+    """Convierte un presupuesto borrador en una obra confirmada"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para confirmar obras.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+    
+    presupuesto = Presupuesto.query.get_or_404(id)
+    
+    if presupuesto.organizacion_id != current_user.organizacion_id:
+        flash('No tienes permisos para acceder a este presupuesto.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+    
+    if presupuesto.confirmado_como_obra:
+        flash('Este presupuesto ya fue confirmado como obra.', 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+    
+    try:
+        # Recuperar datos del proyecto
+        datos_proyecto = {}
+        if presupuesto.datos_proyecto:
+            datos_proyecto = json.loads(presupuesto.datos_proyecto)
+        
+        # Crear nueva obra desde los datos del presupuesto
+        nombre_obra = datos_proyecto.get('nombre', f'Obra desde Presupuesto {presupuesto.numero}')
+        
+        nueva_obra = Obra()
+        nueva_obra.nombre = nombre_obra
+        nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde presupuesto')
+        nueva_obra.descripcion = f"Superficie: {datos_proyecto.get('superficie', 0)}m² - {datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
+        nueva_obra.direccion = datos_proyecto.get('ubicacion', 'Por especificar')
+        nueva_obra.estado = 'planificacion'
+        nueva_obra.presupuesto_total = float(presupuesto.total_con_iva)
+        nueva_obra.organizacion_id = current_user.organizacion_id
+        
+        # Geocodificar si hay ubicación
+        if datos_proyecto.get('ubicacion'):
+            try:
+                from geocoding import geocodificar_direccion
+                coords = geocodificar_direccion(datos_proyecto['ubicacion'])
+                if coords:
+                    nueva_obra.latitud = coords['lat']
+                    nueva_obra.longitud = coords['lng']
+            except:
+                pass  # Si falla geocodificación, continúa sin coordenadas
+        
+        db.session.add(nueva_obra)
+        db.session.flush()  # Para obtener el ID
+        
+        # Asociar presupuesto con la obra
+        presupuesto.obra_id = nueva_obra.id
+        presupuesto.confirmado_como_obra = True
+        presupuesto.estado = 'aprobado'
+        
+        # Crear etapas básicas para la obra
+        etapas_basicas = [
+            {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
+            {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
+            {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
+            {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
+            {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
+            {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
+            {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
+        ]
+        
+        from tareas_predefinidas import TAREAS_POR_ETAPA
+        
+        for etapa_data in etapas_basicas:
+            nueva_etapa = EtapaObra(
+                obra_id=nueva_obra.id,
+                nombre=etapa_data['nombre'],
+                descripcion=etapa_data['descripcion'],
+                orden=etapa_data['orden'],
+                estado='pendiente',
+                organizacion_id=current_user.organizacion_id
+            )
+            
+            db.session.add(nueva_etapa)
+            db.session.flush()  # Para obtener el ID de la etapa
+            
+            # Agregar tareas predefinidas si existen
+            tareas_etapa = TAREAS_POR_ETAPA.get(etapa_data['nombre'], [])
+            for idx, nombre_tarea in enumerate(tareas_etapa[:10]):  # Limitar a 10 tareas por etapa
+                from models import TareaEtapa
+                nueva_tarea = TareaEtapa(
+                    etapa_id=nueva_etapa.id,
+                    nombre=nombre_tarea,
+                    descripcion=f"Tarea predefinida para {etapa_data['nombre']}",
+                    estado='pendiente'
+                )
+                db.session.add(nueva_tarea)
+        
+        db.session.commit()
+        
+        flash(f'¡Presupuesto convertido exitosamente en obra "{nombre_obra}"!', 'success')
+        return redirect(url_for('obras.detalle', id=nueva_obra.id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al confirmar obra: {str(e)}', 'danger')
+        return redirect(url_for('presupuestos.detalle', id=id))
