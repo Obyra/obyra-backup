@@ -263,11 +263,13 @@ def agregar_etapas(id):
                 if not nombre:
                     continue
                     
-                # Verificar que no exista ya una etapa con el mismo nombre
+                # Verificar que no exista ya una etapa con el mismo nombre y orden
                 existe = EtapaObra.query.filter_by(obra_id=obra.id, nombre=nombre).first()
                 if existe:
-                    print(f"⚠️ Etapa {nombre} ya existe en obra {obra.id}, saltando...")
+                    print(f"⚠️ DEBUG: Etapa '{nombre}' ya existe en obra {obra.id}, saltando...")
                     continue
+                
+                print(f"✅ DEBUG: Creando etapa '{nombre}' en obra {obra.id}")
                 
                 nueva_etapa = EtapaObra(
                     obra_id=obra.id,
@@ -436,6 +438,34 @@ def agregar_tarea(id):
         flash('Error al agregar la tarea.', 'danger')
     
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
+
+
+@obras_bp.route('/etapa/<int:etapa_id>/tareas')
+@login_required
+def obtener_tareas_etapa(etapa_id):
+    """Obtener tareas de una etapa específica - AJAX endpoint"""
+    etapa = EtapaObra.query.get_or_404(etapa_id)
+    
+    # Verificar que la etapa pertenezca a la organización del usuario
+    if etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+    
+    tareas = []
+    for tarea in etapa.tareas:
+        tareas.append({
+            'id': tarea.id,
+            'nombre': tarea.nombre,
+            'descripcion': tarea.descripcion,
+            'estado': tarea.estado,
+            'responsable': tarea.responsable.nombre_completo if tarea.responsable else None,
+            'horas_estimadas': tarea.horas_estimadas
+        })
+    
+    return jsonify({
+        'success': True,
+        'tareas': tareas,
+        'etapa_nombre': etapa.nombre
+    })
 
 @obras_bp.route('/geocodificar-todas', methods=['POST'])
 @login_required

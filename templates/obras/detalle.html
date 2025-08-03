@@ -227,7 +227,10 @@
                                         <div class="d-flex justify-content-between align-items-start mb-2">
                                             <div class="d-flex align-items-center">
                                                 <span class="badge bg-primary me-2">{{ etapa.orden }}</span>
-                                                <h6 class="mb-0 fw-bold">{{ etapa.nombre }}</h6>
+                                                <h6 class="mb-0 fw-bold cursor-pointer" onclick="toggleTareasEtapa({{ etapa.id }})">
+                                                    {{ etapa.nombre }}
+                                                    <i class="fas fa-chevron-down ms-1" id="chevron-{{ etapa.id }}"></i>
+                                                </h6>
                                             </div>
                                             <div class="d-flex align-items-center gap-1">
                                                 <span class="badge {{ etapa.estado|estado_badge }} fs-7">
@@ -251,23 +254,21 @@
                                 <div class="progress-bar" role="progressbar" style="width: {{ etapa.progreso }}%"></div>
                             </div>
                             
-                            <!-- Tareas de la etapa -->
-                            {% set tareas = etapa.tareas.all() %}
-                            {% if tareas %}
-                            <div class="mt-3">
-                                <small class="text-muted fw-bold">Tareas:</small>
-                                {% for tarea in tareas %}
-                                <div class="ms-3 mt-1">
-                                    <i class="fas fa-tasks me-1"></i>
-                                    {{ tarea.nombre }}
-                                    {% if tarea.responsable %}
-                                    <small class="text-muted">({{ tarea.responsable.nombre_completo }})</small>
-                                    {% endif %}
-                                    <span class="badge {{ tarea.estado|estado_badge }} ms-1">{{ tarea.estado }}</span>
+                            <!-- Tareas de la etapa - Colapsible -->
+                            <div class="mt-3 collapse" id="tareas-{{ etapa.id }}">
+                                <div class="border-top pt-2">
+                                    <small class="text-muted fw-bold">Tareas:</small>
+                                    <div id="tareas-container-{{ etapa.id }}">
+                                        <!-- Las tareas se cargarán aquí dinámicamente -->
+                                        <div class="text-center py-2">
+                                            <div class="spinner-border spinner-border-sm" role="status">
+                                                <span class="visually-hidden">Cargando...</span>
+                                            </div>
+                                            <small class="text-muted ms-2">Cargando tareas...</small>
+                                        </div>
+                                    </div>
                                 </div>
-                                {% endfor %}
                             </div>
-                            {% endif %}
                             
                             {% if current_user.rol in ['administrador', 'tecnico'] %}
                             <div class="mt-2">
@@ -594,7 +595,7 @@
                         <div class="col-md-6 mb-3">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" 
-                                       name="etapas[]" value="{{ etapa.nombre }}" 
+                                       name="etapas[]" value='{"nombre": "{{ etapa.nombre }}", "descripcion": "{{ etapa.descripcion }}", "orden": {{ etapa.orden }}}' 
                                        id="etapa_{{ loop.index }}">
                                 <label class="form-check-label" for="etapa_{{ loop.index }}">
                                     <strong>{{ etapa.nombre }}</strong>
@@ -677,11 +678,92 @@
 </div>
 
 {% block scripts %}
+<style>
+.cursor-pointer {
+    cursor: pointer !important;
+} 
+.cursor-pointer:hover {
+    color: #0056b3 !important;
+}
+</style>
 <script>
 function abrirModalTarea(etapaId, nombreEtapa) {
     document.getElementById('formNuevaTarea').action = `/obras/etapa/${etapaId}/tarea`;
     document.getElementById('nombreEtapa').textContent = nombreEtapa;
     new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
+}
+
+// Función para toggle tareas de una etapa
+function toggleTareasEtapa(etapaId) {
+    const tareasDiv = document.getElementById(`tareas-${etapaId}`);
+    const chevron = document.getElementById(`chevron-${etapaId}`);
+    const container = document.getElementById(`tareas-container-${etapaId}`);
+    
+    if (tareasDiv.classList.contains('show')) {
+        // Colapsar
+        tareasDiv.classList.remove('show');
+        chevron.classList.remove('fa-chevron-up');
+        chevron.classList.add('fa-chevron-down');
+    } else {
+        // Expandir y cargar tareas
+        tareasDiv.classList.add('show');
+        chevron.classList.remove('fa-chevron-down');
+        chevron.classList.add('fa-chevron-up');
+        
+        // Cargar tareas si no se han cargado aún
+        if (container.innerHTML.includes('spinner-border')) {
+            cargarTareasEtapa(etapaId);
+        }
+    }
+}
+
+// Función para cargar tareas de una etapa via AJAX
+function cargarTareasEtapa(etapaId) {
+    const container = document.getElementById(`tareas-container-${etapaId}`);
+    
+    fetch(`/obras/etapa/${etapaId}/tareas`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let html = '';
+                if (data.tareas.length > 0) {
+                    data.tareas.forEach(tarea => {
+                        const badgeClass = getBadgeClass(tarea.estado);
+                        html += `
+                            <div class="ms-3 mt-2 p-2 bg-light rounded">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-tasks me-1"></i>
+                                        <strong>${tarea.nombre}</strong>
+                                        ${tarea.responsable ? `<small class="text-muted">(${tarea.responsable})</small>` : ''}
+                                    </div>
+                                    <span class="badge ${badgeClass}">${tarea.estado}</span>
+                                </div>
+                                ${tarea.descripcion ? `<small class="text-muted d-block mt-1">${tarea.descripcion}</small>` : ''}
+                            </div>
+                        `;
+                    });
+                } else {
+                    html = '<div class="text-center py-2"><small class="text-muted">No hay tareas definidas</small></div>';
+                }
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<div class="text-center py-2"><small class="text-danger">Error al cargar tareas</small></div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            container.innerHTML = '<div class="text-center py-2"><small class="text-danger">Error al cargar tareas</small></div>';
+        });
+}
+
+function getBadgeClass(estado) {
+    switch(estado) {
+        case 'completada': return 'bg-success';
+        case 'en_progreso': return 'bg-warning';
+        case 'pausada': return 'bg-secondary';
+        default: return 'bg-info';
+    }
 }
 
 function seleccionarTodas() {
