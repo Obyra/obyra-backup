@@ -276,8 +276,7 @@ def agregar_etapas(id):
                     nombre=nombre,
                     descripcion=descripcion,
                     orden=orden,
-                    estado='pendiente',
-                    organizacion_id=current_user.organizacion_id
+                    estado='pendiente'
                 )
                 
                 db.session.add(nueva_etapa)
