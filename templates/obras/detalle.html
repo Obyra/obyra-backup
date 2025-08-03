@@ -191,9 +191,18 @@
                                     <span class="badge bg-secondary me-2">{{ etapa.orden }}</span>
                                     {{ etapa.nombre }}
                                 </h6>
-                                <span class="badge {{ etapa.estado|estado_badge }}">
-                                    {{ etapa.estado.replace('_', ' ').title() }}
-                                </span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge {{ etapa.estado|estado_badge }}">
+                                        {{ etapa.estado.replace('_', ' ').title() }}
+                                    </span>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
+                                            title="Eliminar etapa">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
                             </div>
                             
                             {% if etapa.descripcion %}
@@ -1264,6 +1273,33 @@ function agregarTareaPersonalizada(etapaNombre) {
     actualizarTareasPredefinidas();
     
     console.log(`✅ Tarea personalizada agregada: ${nombreTarea} en ${etapaNombre}`);
+}
+
+// Confirmar eliminación de etapa
+function confirmarEliminarEtapa(etapaId, nombreEtapa) {
+    if (confirm(`¿Estás seguro de que deseas eliminar la etapa "${nombreEtapa}"?\n\nEsta acción también eliminará todas las tareas asociadas y no se puede deshacer.`)) {
+        eliminarEtapa(etapaId);
+    }
+}
+
+// Eliminar etapa
+function eliminarEtapa(etapaId) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/obras/{{ obra.id }}/etapas/${etapaId}/eliminar`;
+    
+    // Agregar token CSRF si existe
+    const csrfToken = document.querySelector('meta[name="csrf-token"]');
+    if (csrfToken) {
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = 'csrf_token';
+        tokenInput.value = csrfToken.getAttribute('content');
+        form.appendChild(tokenInput);
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
 }
 </script>
 {% endblock %}

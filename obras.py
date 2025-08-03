@@ -691,3 +691,35 @@ def desactivar_certificacion(id):
         flash(f'Error al desactivar certificación: {str(e)}', 'danger')
     
     return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+
+@obras_bp.route('/<int:obra_id>/etapas/<int:etapa_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_etapa(obra_id, etapa_id):
+    """Eliminar una etapa de una obra (solo administradores y técnicos)"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para eliminar etapas.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+    
+    # Verificar que la obra pertenece a la organización del usuario
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first_or_404()
+    etapa = EtapaObra.query.filter_by(id=etapa_id, obra_id=obra_id).first_or_404()
+    
+    try:
+        # Obtener nombre de la etapa para el mensaje
+        nombre_etapa = etapa.nombre
+        
+        # Eliminar la etapa (las tareas se eliminan automáticamente por cascade)
+        db.session.delete(etapa)
+        
+        # Recalcular progreso de la obra
+        obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        flash(f'Etapa "{nombre_etapa}" eliminada exitosamente.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar etapa: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.detalle', id=obra_id))
