@@ -10,7 +10,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from app import db
-from models import Presupuesto, ItemPresupuesto, Obra
+from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
 from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
 import xlsxwriter
 
@@ -149,9 +149,45 @@ def crear():
             nuevo_presupuesto.observaciones = " | ".join(observaciones_proyecto)
             
             db.session.add(nuevo_presupuesto)
+            db.session.flush()  # Para obtener el ID del presupuesto
+            
+            # Procesar etapas si se enviaron
+            etapas_count = 0
+            etapa_index = 0
+            while True:
+                etapa_nombre = request.form.get(f'etapas[{etapa_index}][nombre]')
+                if not etapa_nombre:
+                    break
+                
+                etapa_descripcion = request.form.get(f'etapas[{etapa_index}][descripcion]', '')
+                etapa_orden = request.form.get(f'etapas[{etapa_index}][orden]', etapa_index + 1)
+                
+                try:
+                    orden_int = int(etapa_orden)
+                except ValueError:
+                    orden_int = etapa_index + 1
+                
+                # Crear etapa para la obra
+                nueva_etapa = EtapaObra(
+                    obra_id=nueva_obra.id,
+                    nombre=etapa_nombre,
+                    descripcion=etapa_descripcion,
+                    orden=orden_int,
+                    estado='pendiente',
+                    organizacion_id=current_user.organizacion_id
+                )
+                
+                db.session.add(nueva_etapa)
+                etapas_count += 1
+                etapa_index += 1
+            
             db.session.commit()
             
-            flash(f'Obra "{nombre_obra}" y presupuesto {numero} creados exitosamente.', 'success')
+            mensaje_exito = f'Obra "{nombre_obra}" y presupuesto {numero} creados exitosamente.'
+            if etapas_count > 0:
+                mensaje_exito += f' Se agregaron {etapas_count} etapas al proyecto.'
+            
+            flash(mensaje_exito, 'success')
             return redirect(url_for('presupuestos.detalle', id=nuevo_presupuesto.id))
             
         except Exception as e:
