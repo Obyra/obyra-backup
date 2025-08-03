@@ -1040,8 +1040,7 @@ def confirmar_como_obra(id):
                 nombre=etapa_data['nombre'],
                 descripcion=etapa_data['descripcion'],
                 orden=etapa_data['orden'],
-                estado='pendiente',
-                organizacion_id=current_user.organizacion_id
+                estado='pendiente'
             )
             
             db.session.add(nueva_etapa)
