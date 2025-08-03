@@ -382,6 +382,13 @@
                         <div class="row" id="etapasPredefinidas">
                             <!-- Se cargarán con JavaScript -->
                         </div>
+                        <!-- Panel de tareas que aparece al seleccionar etapas -->
+                        <div id="tareasContainer" class="mt-4" style="display: none;">
+                            <h6 class="mb-3"><i class="fas fa-tasks text-success"></i> Tareas Asociadas</h6>
+                            <div id="tareasPredefinidas" class="border rounded p-3 bg-light">
+                                <!-- Se cargarán las tareas según las etapas seleccionadas -->
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <h6 class="mb-3"><i class="fas fa-plus-circle text-success"></i> Etapa Personalizada</h6>
@@ -684,8 +691,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Variables para manejo de etapas en obras
+// Variables para manejo de etapas y tareas en obras
 let etapasSeleccionadasObra = [];
+let tareasSeleccionadasObra = [];
 
 // Etapas predefinidas (mismas que en presupuestos)
 const ETAPAS_PREDEFINIDAS_OBRA = [
@@ -706,12 +714,154 @@ const ETAPAS_PREDEFINIDAS_OBRA = [
     { nombre: 'Limpieza Final', descripcion: 'Limpieza y acondicionamiento final', orden: 15 }
 ];
 
+// Tareas predefinidas por etapa
+const TAREAS_POR_ETAPA_OBRA = {
+    'Excavación': [
+        'Replanteo y marcado del terreno',
+        'Excavación para fundaciones',
+        'Excavación para instalaciones subterráneas',
+        'Nivelación y compactación del terreno',
+        'Retiro de material excavado',
+        'Verificación de niveles según planos',
+        'Preparación de base para fundaciones'
+    ],
+    'Fundaciones': [
+        'Armado de hierros para fundaciones',
+        'Colocación de hormigón en fundaciones',
+        'Construcción de bases y zapatas',
+        'Impermeabilización de fundaciones',
+        'Construcción de muros de contención',
+        'Verificación de niveles y plomadas',
+        'Curado del hormigón'
+    ],
+    'Estructura': [
+        'Armado de columnas',
+        'Hormigonado de columnas',
+        'Armado de vigas',
+        'Hormigonado de vigas',
+        'Armado de losas',
+        'Hormigonado de losas',
+        'Construcción de escaleras',
+        'Verificación estructural'
+    ],
+    'Mampostería': [
+        'Construcción de muros exteriores',
+        'Construcción de muros interiores',
+        'Construcción de tabiques divisorios',
+        'Colocación de dinteles',
+        'Verificación de aplomes y niveles',
+        'Construcción de antepechos',
+        'Preparación para instalaciones'
+    ],
+    'Techos': [
+        'Construcción de estructura de techo',
+        'Colocación de aislación térmica',
+        'Impermeabilización de cubierta',
+        'Colocación de tejas o chapa',
+        'Instalación de canaletas',
+        'Construcción de aleros',
+        'Sellado de juntas y uniones'
+    ],
+    'Instalaciones Eléctricas': [
+        'Canalización eléctrica',
+        'Cableado principal',
+        'Instalación de tablero eléctrico',
+        'Colocación de tomas y llaves',
+        'Instalación de luminarias',
+        'Conexión de electrodomésticos',
+        'Pruebas y puesta en marcha'
+    ],
+    'Instalaciones Sanitarias': [
+        'Instalación de cañerías de agua',
+        'Instalación de desagües',
+        'Colocación de artefactos sanitarios',
+        'Instalación de grifería',
+        'Conexión a red cloacal',
+        'Pruebas hidráulicas',
+        'Sellado e impermeabilización'
+    ],
+    'Instalaciones de Gas': [
+        'Tendido de cañería de gas',
+        'Instalación de medidor',
+        'Conexión de artefactos',
+        'Pruebas de hermeticidad',
+        'Habilitación con empresa gasífera',
+        'Señalización de seguridad',
+        'Verificación de ventilaciones'
+    ],
+    'Revoque Grueso': [
+        'Preparación de superficies',
+        'Aplicación de revoque grueso exterior',
+        'Aplicación de revoque grueso interior',
+        'Verificación de verticalidad',
+        'Corrección de imperfecciones',
+        'Preparación para revoque fino',
+        'Curado del revoque'
+    ],
+    'Revoque Fino': [
+        'Preparación de mezcla fina',
+        'Aplicación de revoque fino interior',
+        'Aplicación de revoque fino exterior',
+        'Alisado y terminación',
+        'Corrección de detalles',
+        'Preparación para pintura',
+        'Limpieza de superficies'
+    ],
+    'Pisos': [
+        'Preparación de contrapisos',
+        'Nivelación de superficies',
+        'Colocación de pisos cerámicos',
+        'Colocación de pisos de madera',
+        'Instalación de zócalos',
+        'Sellado de juntas',
+        'Limpieza final de pisos'
+    ],
+    'Carpintería': [
+        'Instalación de marcos de puertas',
+        'Instalación de marcos de ventanas',
+        'Colocación de hojas de puertas',
+        'Colocación de hojas de ventanas',
+        'Instalación de herrajes',
+        'Ajuste y regulación',
+        'Sellado perimetral'
+    ],
+    'Pintura': [
+        'Preparación de superficies',
+        'Aplicación de imprimación',
+        'Lijado entre manos',
+        'Aplicación de pintura interior',
+        'Aplicación de pintura exterior',
+        'Retoques y detalles',
+        'Limpieza de elementos'
+    ],
+    'Instalaciones Complementarias': [
+        'Instalación de aire acondicionado',
+        'Instalación de calefacción',
+        'Instalación de sistema de seguridad',
+        'Instalación de portones automáticos',
+        'Colocación de toldos',
+        'Instalación de sistema de riego',
+        'Configuración domótica'
+    ],
+    'Limpieza Final': [
+        'Limpieza de obra gruesa',
+        'Limpieza de vidrios',
+        'Limpieza de pisos y superficies',
+        'Retiro de material sobrante',
+        'Limpieza de instalaciones',
+        'Entrega de documentación',
+        'Inspección final'
+    ]
+};
+
 // Cargar etapas predefinidas cuando se abre el modal
 document.getElementById('nuevaEtapaModal').addEventListener('shown.bs.modal', function () {
     console.log('🏗️ Abriendo modal de etapas para obra');
     cargarEtapasPredefinidas();
     etapasSeleccionadasObra = [];
+    tareasSeleccionadasObra = [];
     actualizarVistaEtapasSeleccionadas();
+    actualizarTareasPredefinidas();
 });
 
 // Cargar etapas predefinidas en el modal
@@ -761,6 +911,7 @@ function toggleEtapaPredefinidaObra(index) {
     }
     
     actualizarVistaEtapasSeleccionadas();
+    actualizarTareasPredefinidas();
     console.log(`📋 Etapas seleccionadas: ${etapasSeleccionadasObra.length}`);
 }
 
@@ -867,10 +1018,18 @@ function confirmarEtapasSeleccionadasObra() {
         const inputNombre = document.createElement('input');
         inputNombre.type = 'hidden';
         inputNombre.name = 'etapas[]';
+        
+        // Obtener tareas asociadas a esta etapa
+        const tareasEtapa = tareasSeleccionadasObra.filter(t => t.etapa === etapa.nombre);
+        
         inputNombre.value = JSON.stringify({
             nombre: etapa.nombre,
             descripcion: etapa.descripcion,
-            orden: etapa.orden
+            orden: etapa.orden,
+            tareas: tareasEtapa.map(t => ({
+                nombre: t.nombre,
+                personalizada: t.personalizada
+            }))
         });
         form.appendChild(inputNombre);
     });
@@ -880,6 +1039,209 @@ function confirmarEtapasSeleccionadasObra() {
     form.submit();
     
     console.log(`✅ Enviando ${etapasSeleccionadasObra.length} etapas al backend`);
+}
+
+// Actualizar tareas predefinidas basadas en etapas seleccionadas
+function actualizarTareasPredefinidas() {
+    const container = document.getElementById('tareasContainer');
+    const tareasDiv = document.getElementById('tareasPredefinidas');
+    
+    if (etapasSeleccionadasObra.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    
+    container.style.display = 'block';
+    let html = '';
+    
+    etapasSeleccionadasObra.forEach(etapa => {
+        const tareas = TAREAS_POR_ETAPA_OBRA[etapa.nombre] || [];
+        if (tareas.length > 0) {
+            html += `
+                <div class="mb-3 border-bottom pb-2">
+                    <h6 class="text-primary mb-2">
+                        <i class="fas fa-layer-group me-1"></i>${etapa.nombre}
+                        <small class="text-muted">(${tareas.length} tareas)</small>
+                    </h6>
+                    <div class="row">
+            `;
+            
+            tareas.forEach((tarea, index) => {
+                const tareaId = `tarea_${etapa.nombre}_${index}`;
+                const yaSeleccionada = tareasSeleccionadasObra.some(t => 
+                    t.etapa === etapa.nombre && t.nombre === tarea
+                );
+                
+                html += `
+                    <div class="col-md-6 mb-1">
+                        <div class="form-check form-check-sm">
+                            <input class="form-check-input" type="checkbox" id="${tareaId}" 
+                                   ${yaSeleccionada ? 'checked' : ''} 
+                                   onchange="toggleTareaPredefinida('${etapa.nombre}', '${tarea}', ${index})">
+                            <label class="form-check-label small" for="${tareaId}">
+                                ${tarea}
+                            </label>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-success" 
+                                onclick="seleccionarTodasTareasEtapa('${etapa.nombre}')">
+                            <i class="fas fa-check-square me-1"></i>Seleccionar Todas
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" 
+                                onclick="deseleccionarTodasTareasEtapa('${etapa.nombre}')">
+                            <i class="fas fa-square me-1"></i>Deseleccionar Todas
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" 
+                                onclick="mostrarFormularioTareaPersonalizada('${etapa.nombre}')">
+                            <i class="fas fa-plus me-1"></i>Agregar Tarea Personalizada
+                        </button>
+                    </div>
+                    <div id="formTareaPersonalizada_${etapa.nombre}" class="mt-2" style="display: none;">
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" 
+                                   placeholder="Nombre de la tarea personalizada" 
+                                   id="inputTareaPersonalizada_${etapa.nombre}">
+                            <button class="btn btn-success" type="button" 
+                                    onclick="agregarTareaPersonalizada('${etapa.nombre}')">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button class="btn btn-secondary" type="button" 
+                                    onclick="ocultarFormularioTareaPersonalizada('${etapa.nombre}')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    if (html === '') {
+        html = '<p class="text-muted text-center">Selecciona etapas para ver las tareas asociadas</p>';
+    }
+    
+    tareasDiv.innerHTML = html;
+}
+
+// Toggle tarea predefinida
+function toggleTareaPredefinida(etapaNombre, tareaNombre, index) {
+    const tareaId = `tarea_${etapaNombre}_${index}`;
+    const checkbox = document.getElementById(tareaId);
+    
+    if (checkbox.checked) {
+        // Agregar tarea si no existe
+        if (!tareasSeleccionadasObra.some(t => t.etapa === etapaNombre && t.nombre === tareaNombre)) {
+            tareasSeleccionadasObra.push({
+                etapa: etapaNombre,
+                nombre: tareaNombre,
+                personalizada: false
+            });
+        }
+    } else {
+        // Remover tarea
+        tareasSeleccionadasObra = tareasSeleccionadasObra.filter(t => 
+            !(t.etapa === etapaNombre && t.nombre === tareaNombre)
+        );
+    }
+    
+    console.log(`📋 Tareas seleccionadas: ${tareasSeleccionadasObra.length}`);
+}
+
+// Seleccionar todas las tareas de una etapa
+function seleccionarTodasTareasEtapa(etapaNombre) {
+    const tareas = TAREAS_POR_ETAPA_OBRA[etapaNombre] || [];
+    
+    tareas.forEach((tarea, index) => {
+        const tareaId = `tarea_${etapaNombre}_${index}`;
+        const checkbox = document.getElementById(tareaId);
+        
+        if (checkbox && !checkbox.checked) {
+            checkbox.checked = true;
+            
+            if (!tareasSeleccionadasObra.some(t => t.etapa === etapaNombre && t.nombre === tarea)) {
+                tareasSeleccionadasObra.push({
+                    etapa: etapaNombre,
+                    nombre: tarea,
+                    personalizada: false
+                });
+            }
+        }
+    });
+    
+    console.log(`✅ Todas las tareas de ${etapaNombre} seleccionadas`);
+}
+
+// Deseleccionar todas las tareas de una etapa
+function deseleccionarTodasTareasEtapa(etapaNombre) {
+    const tareas = TAREAS_POR_ETAPA_OBRA[etapaNombre] || [];
+    
+    tareas.forEach((tarea, index) => {
+        const tareaId = `tarea_${etapaNombre}_${index}`;
+        const checkbox = document.getElementById(tareaId);
+        
+        if (checkbox && checkbox.checked) {
+            checkbox.checked = false;
+        }
+    });
+    
+    // Remover todas las tareas de esta etapa de la selección
+    tareasSeleccionadasObra = tareasSeleccionadasObra.filter(t => t.etapa !== etapaNombre);
+    
+    console.log(`❌ Todas las tareas de ${etapaNombre} deseleccionadas`);
+}
+
+// Mostrar formulario para tarea personalizada
+function mostrarFormularioTareaPersonalizada(etapaNombre) {
+    const form = document.getElementById(`formTareaPersonalizada_${etapaNombre}`);
+    form.style.display = 'block';
+    document.getElementById(`inputTareaPersonalizada_${etapaNombre}`).focus();
+}
+
+// Ocultar formulario para tarea personalizada
+function ocultarFormularioTareaPersonalizada(etapaNombre) {
+    const form = document.getElementById(`formTareaPersonalizada_${etapaNombre}`);
+    const input = document.getElementById(`inputTareaPersonalizada_${etapaNombre}`);
+    form.style.display = 'none';
+    input.value = '';
+}
+
+// Agregar tarea personalizada
+function agregarTareaPersonalizada(etapaNombre) {
+    const input = document.getElementById(`inputTareaPersonalizada_${etapaNombre}`);
+    const nombreTarea = input.value.trim();
+    
+    if (!nombreTarea) {
+        alert('Ingresa el nombre de la tarea personalizada');
+        return;
+    }
+    
+    // Verificar que no exista ya
+    if (tareasSeleccionadasObra.some(t => t.etapa === etapaNombre && t.nombre.toLowerCase() === nombreTarea.toLowerCase())) {
+        alert('Ya existe una tarea con ese nombre en esta etapa');
+        return;
+    }
+    
+    // Agregar tarea personalizada
+    tareasSeleccionadasObra.push({
+        etapa: etapaNombre,
+        nombre: nombreTarea,
+        personalizada: true
+    });
+    
+    // Limpiar y ocultar formulario
+    input.value = '';
+    ocultarFormularioTareaPersonalizada(etapaNombre);
+    
+    // Actualizar vista
+    actualizarTareasPredefinidas();
+    
+    console.log(`✅ Tarea personalizada agregada: ${nombreTarea} en ${etapaNombre}`);
 }
 </script>
 {% endblock %}

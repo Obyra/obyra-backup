@@ -278,6 +278,21 @@ def agregar_etapas(id):
                 )
                 
                 db.session.add(nueva_etapa)
+                db.session.flush()  # Para obtener el ID de la etapa
+                
+                # Crear tareas asociadas si las hay
+                tareas = etapa_data.get('tareas', [])
+                for tarea_data in tareas:
+                    nombre_tarea = tarea_data.get('nombre', '').strip()
+                    if nombre_tarea:
+                        nueva_tarea = TareaEtapa(
+                            etapa_id=nueva_etapa.id,
+                            nombre=nombre_tarea,
+                            descripcion=f"Tarea {'personalizada' if tarea_data.get('personalizada') else 'predefinida'} para {nombre}",
+                            estado='pendiente'
+                        )
+                        db.session.add(nueva_tarea)
+                
                 etapas_creadas += 1
                 
             except (json.JSONDecodeError, ValueError) as e:
