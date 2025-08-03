@@ -1021,42 +1021,46 @@ def confirmar_como_obra(id):
         presupuesto.confirmado_como_obra = True
         presupuesto.estado = 'aprobado'
         
-        # Crear etapas básicas para la obra
-        etapas_basicas = [
-            {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
-            {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
-            {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
-            {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
-            {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
-            {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
-            {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
-        ]
+        # Verificar si la obra ya tiene etapas para evitar duplicados
+        etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
         
-        from tareas_predefinidas import TAREAS_POR_ETAPA
+        if etapas_existentes == 0:
+            # Solo crear etapas si no existen
+            etapas_basicas = [
+                {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
+                {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
+                {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
+                {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
+                {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
+                {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
+                {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
+            ]
         
-        for etapa_data in etapas_basicas:
-            nueva_etapa = EtapaObra(
-                obra_id=nueva_obra.id,
-                nombre=etapa_data['nombre'],
-                descripcion=etapa_data['descripcion'],
-                orden=etapa_data['orden'],
-                estado='pendiente'
-            )
+            from tareas_predefinidas import TAREAS_POR_ETAPA
             
-            db.session.add(nueva_etapa)
-            db.session.flush()  # Para obtener el ID de la etapa
-            
-            # Agregar tareas predefinidas si existen
-            tareas_etapa = TAREAS_POR_ETAPA.get(etapa_data['nombre'], [])
-            for idx, nombre_tarea in enumerate(tareas_etapa[:10]):  # Limitar a 10 tareas por etapa
-                from models import TareaEtapa
-                nueva_tarea = TareaEtapa(
-                    etapa_id=nueva_etapa.id,
-                    nombre=nombre_tarea,
-                    descripcion=f"Tarea predefinida para {etapa_data['nombre']}",
+            for etapa_data in etapas_basicas:
+                nueva_etapa = EtapaObra(
+                    obra_id=nueva_obra.id,
+                    nombre=etapa_data['nombre'],
+                    descripcion=etapa_data['descripcion'],
+                    orden=etapa_data['orden'],
                     estado='pendiente'
                 )
-                db.session.add(nueva_tarea)
+                
+                db.session.add(nueva_etapa)
+                db.session.flush()  # Para obtener el ID de la etapa
+                
+                # Agregar tareas predefinidas si existen
+                tareas_etapa = TAREAS_POR_ETAPA.get(etapa_data['nombre'], [])
+                for idx, nombre_tarea in enumerate(tareas_etapa[:10]):  # Limitar a 10 tareas por etapa
+                    from models import TareaEtapa
+                    nueva_tarea = TareaEtapa(
+                        etapa_id=nueva_etapa.id,
+                        nombre=nombre_tarea,
+                        descripcion=f"Tarea predefinida para {etapa_data['nombre']}",
+                        estado='pendiente'
+                    )
+                    db.session.add(nueva_tarea)
         
         db.session.commit()
         
