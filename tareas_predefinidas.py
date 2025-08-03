@@ -5,11 +5,19 @@ TAREAS_POR_ETAPA = {
     'Excavación': [
         'Replanteo y marcado del terreno',
         'Excavación para fundaciones',
-        'Excavación para instalaciones subterráneas',
+        'Excavación para instalaciones subterráneas', 
         'Nivelación y compactación del terreno',
-        'Retiro de material excavado',
+        'Retiro material excavado',
         'Verificación de niveles según planos',
-        'Preparación de base para fundaciones'
+        'Preparación de base para fundaciones',
+        'Limpieza y preparación del sitio',
+        'Instalación de cerco perimetral',
+        'Instalación de servicios temporales',
+        'Estudio de suelos',
+        'Verificación de medianeras',
+        'Demolición de estructuras existentes',
+        'Relleno y compactación de terreno',
+        'Drenaje preliminar'
     ],
     
     'Fundaciones': [
@@ -19,7 +27,14 @@ TAREAS_POR_ETAPA = {
         'Impermeabilización de fundaciones',
         'Construcción de muros de contención',
         'Verificación de niveles y plomadas',
-        'Curado del hormigón'
+        'Curado del hormigón',
+        'Excavación de zapatas',
+        'Colocación de piedra desplazadora',
+        'Armado de encadenados',
+        'Hormigonado de encadenados',
+        'Aislación hidrófuga horizontal',
+        'Relleno con material seleccionado',
+        'Compactación de rellenos'
     ],
     
     'Estructura': [
@@ -30,7 +45,14 @@ TAREAS_POR_ETAPA = {
         'Armado de losas',
         'Hormigonado de losas',
         'Construcción de escaleras',
-        'Verificación estructural'
+        'Verificación estructural',
+        'Colocación de encofrados',
+        'Desencofrado y limpieza',
+        'Control de calidad del hormigón',
+        'Apuntalamiento temporal',
+        'Juntas de dilatación',
+        'Tratamiento de superficies',
+        'Nivelación final de losas'
     ],
     
     'Mampostería': [

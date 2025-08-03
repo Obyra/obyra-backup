@@ -385,7 +385,7 @@
                         <!-- Panel de tareas que aparece al seleccionar etapas -->
                         <div id="tareasContainer" class="mt-4" style="display: none;">
                             <h6 class="mb-3"><i class="fas fa-tasks text-success"></i> Tareas Asociadas</h6>
-                            <div id="tareasPredefinidas" class="border rounded p-3 bg-light">
+                            <div id="tareasPredefinidas" class="border rounded p-4 bg-light" style="max-height: 400px; overflow-y: auto;">
                                 <!-- Se cargarán las tareas según las etapas seleccionadas -->
                             </div>
                         </div>
@@ -719,11 +719,19 @@ const TAREAS_POR_ETAPA_OBRA = {
     'Excavación': [
         'Replanteo y marcado del terreno',
         'Excavación para fundaciones',
-        'Excavación para instalaciones subterráneas',
+        'Excavación para instalaciones subterráneas', 
         'Nivelación y compactación del terreno',
-        'Retiro de material excavado',
+        'Retiro material excavado',
         'Verificación de niveles según planos',
-        'Preparación de base para fundaciones'
+        'Preparación de base para fundaciones',
+        'Limpieza y preparación del sitio',
+        'Instalación de cerco perimetral',
+        'Instalación de servicios temporales',
+        'Estudio de suelos',
+        'Verificación de medianeras',
+        'Demolición de estructuras existentes',
+        'Relleno y compactación de terreno',
+        'Drenaje preliminar'
     ],
     'Fundaciones': [
         'Armado de hierros para fundaciones',
@@ -732,7 +740,14 @@ const TAREAS_POR_ETAPA_OBRA = {
         'Impermeabilización de fundaciones',
         'Construcción de muros de contención',
         'Verificación de niveles y plomadas',
-        'Curado del hormigón'
+        'Curado del hormigón',
+        'Excavación de zapatas',
+        'Colocación de piedra desplazadora',
+        'Armado de encadenados',
+        'Hormigonado de encadenados',
+        'Aislación hidrófuga horizontal',
+        'Relleno con material seleccionado',
+        'Compactación de rellenos'
     ],
     'Estructura': [
         'Armado de columnas',
@@ -742,7 +757,14 @@ const TAREAS_POR_ETAPA_OBRA = {
         'Armado de losas',
         'Hormigonado de losas',
         'Construcción de escaleras',
-        'Verificación estructural'
+        'Verificación estructural',
+        'Colocación de encofrados',
+        'Desencofrado y limpieza',
+        'Control de calidad del hormigón',
+        'Apuntalamiento temporal',
+        'Juntas de dilatación',
+        'Tratamiento de superficies',
+        'Nivelación final de losas'
     ],
     'Mampostería': [
         'Construcción de muros exteriores',
@@ -1073,12 +1095,12 @@ function actualizarTareasPredefinidas() {
                 );
                 
                 html += `
-                    <div class="col-md-6 mb-1">
-                        <div class="form-check form-check-sm">
+                    <div class="col-md-6 mb-2">
+                        <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="${tareaId}" 
                                    ${yaSeleccionada ? 'checked' : ''} 
                                    onchange="toggleTareaPredefinida('${etapa.nombre}', '${tarea}', ${index})">
-                            <label class="form-check-label small" for="${tareaId}">
+                            <label class="form-check-label" for="${tareaId}" style="line-height: 1.4;">
                                 ${tarea}
                             </label>
                         </div>

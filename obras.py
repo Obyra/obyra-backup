@@ -266,6 +266,7 @@ def agregar_etapas(id):
                 # Verificar que no exista ya una etapa con el mismo nombre
                 existe = EtapaObra.query.filter_by(obra_id=obra.id, nombre=nombre).first()
                 if existe:
+                    print(f"⚠️ Etapa {nombre} ya existe en obra {obra.id}, saltando...")
                     continue
                 
                 nueva_etapa = EtapaObra(
@@ -300,9 +301,9 @@ def agregar_etapas(id):
         
         if etapas_creadas > 0:
             db.session.commit()
-            flash(f'Se agregaron {etapas_creadas} etapas a la obra.', 'success')
+            flash(f'Se agregaron {etapas_creadas} etapas con sus tareas correspondientes a la obra.', 'success')
         else:
-            flash('No se pudo agregar ninguna etapa. Verifique que no existan etapas duplicadas.', 'warning')
+            flash('No se agregaron etapas nuevas. Las etapas seleccionadas ya existen en esta obra.', 'info')
             
     except Exception as e:
         db.session.rollback()

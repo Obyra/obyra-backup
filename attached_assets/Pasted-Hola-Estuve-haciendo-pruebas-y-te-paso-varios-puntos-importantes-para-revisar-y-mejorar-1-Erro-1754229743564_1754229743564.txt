@@ -1,0 +1,33 @@
+Hola! Estuve haciendo pruebas y te paso varios puntos importantes para revisar y mejorar:
+
+1. ❌ Error al seleccionar etapas
+Cuando intento seleccionar nuevas etapas me aparece el siguiente mensaje:
+
+“No se pudo agregar ninguna etapa. Verifique que no existan etapas duplicadas.”
+
+Esto sucede incluso cuando estoy eligiendo etapas nuevas, por lo que no tendría que bloquearlo. Me gustaría que se corrija ese control o que al menos permita agregar nuevas tareas sin bloquear la selección de etapa.
+
+2. ❌ No me deja eliminar obras
+No encuentro opción para eliminar proyectos creados. Sería muy útil poder borrar obras creadas, especialmente las de prueba, para evitar confusión.
+¿Podés agregar la opción de eliminar obras desde el panel principal?
+
+3. ⚠️ Obras anteriores no compatibles con la nueva lógica
+Las obras que había creado antes de la implementación de tareas por etapa no me permiten agregar tareas nuevas como ahora.
+¿Hay forma de que pueda resetearlas o transformarlas para que tomen la nueva estructura?
+Si no, estaría bueno poder borrarlas y volver a cargarlas desde cero.
+
+4. ✔️ Tareas automáticas por etapa: ¡Funciona!
+Probé el sistema nuevo y cuando selecciono una etapa, me aparecen bien las tareas con checkbox y el botón de seleccionar/deseleccionar todas.
+👉 Sin embargo, algunas etapas tienen muy pocas tareas cargadas (solo 7), y yo ya te pasé una lista mucho más extensa. Estaría bueno que se carguen todas las tareas que te envié por etapa.
+
+5. 💅 Mejora visual sugerida
+La interfaz para seleccionar tareas por etapa funciona, pero visualmente está muy comprimida. Algunas sugerencias:
+
+Que el área de tareas sea más amplia y con mejor espaciado
+
+Que las tareas estén alineadas y bien organizadas en columnas limpias
+
+Si es posible, que se incluya una descripción corta al pasar el mouse sobre cada tarea
+
+Gracias por toda la implementación hasta ahora, está quedando espectacular. Si necesitás que te reenvíe la lista completa de tareas por etapa, avisame y te la paso formateada como JSON o como necesites.
+

@@ -377,7 +377,7 @@ def auditoria_consultas():
         func.count(ConsultaAgente.id).label('total'),
         ConsultaAgente.organizacion
     ).join(ConsultaAgente.organizacion).group_by(
-        ConsultaAgente.organizacion_id
+        ConsultaAgente.organizacion_id, Organizacion.id
     ).order_by(desc(func.count(ConsultaAgente.id))).limit(10).all()
     
     # Tiempo promedio de respuesta
