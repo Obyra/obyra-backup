@@ -30,94 +30,126 @@
         </div>
     </div>
     
-    <!-- Información general -->
+    <!-- Panel de información compacto -->
     <div class="row mb-4">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Información General</h5>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editarObraModal">
-                        <i class="fas fa-edit me-1"></i>Editar
-                    </button>
-                    {% endif %}
+        <!-- Información Principal -->
+        <div class="col-lg-9">
+            <div class="card h-100">
+                <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Información General</h5>
+                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                        <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#editarObraModal">
+                            <i class="fas fa-edit me-1"></i>Editar
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="card-body">
                     {% if obra.descripcion %}
-                    <p class="mb-3">{{ obra.descripcion }}</p>
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>{{ obra.descripcion }}
+                    </div>
                     {% endif %}
                     
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Contacto:</strong><br>
-                            {% if obra.telefono_cliente %}
-                            <i class="fas fa-phone me-1"></i>{{ obra.telefono_cliente }}<br>
-                            {% endif %}
-                            {% if obra.email_cliente %}
-                            <i class="fas fa-envelope me-1"></i>{{ obra.email_cliente }}<br>
-                            {% endif %}
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="border-start border-primary border-4 ps-3">
+                                <h6 class="text-primary mb-2"><i class="fas fa-user me-1"></i>Contacto</h6>
+                                {% if obra.telefono_cliente %}
+                                <p class="mb-1"><i class="fas fa-phone me-2 text-muted"></i>{{ obra.telefono_cliente }}</p>
+                                {% endif %}
+                                {% if obra.email_cliente %}
+                                <p class="mb-0"><i class="fas fa-envelope me-2 text-muted"></i>{{ obra.email_cliente }}</p>
+                                {% endif %}
+                                {% if not obra.telefono_cliente and not obra.email_cliente %}
+                                <p class="text-muted mb-0">Sin datos de contacto</p>
+                                {% endif %}
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <strong>Fechas:</strong><br>
-                            {% if obra.fecha_inicio %}
-                            <i class="fas fa-calendar-start me-1"></i>Inicio: {{ obra.fecha_inicio|fecha }}<br>
-                            {% endif %}
-                            {% if obra.fecha_fin_estimada %}
-                            <i class="fas fa-calendar-check me-1"></i>Fin estimado: {{ obra.fecha_fin_estimada|fecha }}<br>
-                            {% endif %}
-                            {% if obra.fecha_fin_real %}
-                            <i class="fas fa-calendar-times me-1"></i>Fin real: {{ obra.fecha_fin_real|fecha }}<br>
-                            {% endif %}
+                        <div class="col-md-4">
+                            <div class="border-start border-success border-4 ps-3">
+                                <h6 class="text-success mb-2"><i class="fas fa-calendar me-1"></i>Cronograma</h6>
+                                {% if obra.fecha_inicio %}
+                                <p class="mb-1"><i class="fas fa-play me-2 text-muted"></i>Inicio: {{ obra.fecha_inicio|fecha }}</p>
+                                {% endif %}
+                                {% if obra.fecha_fin_estimada %}
+                                <p class="mb-1"><i class="fas fa-flag me-2 text-muted"></i>Fin estimado: {{ obra.fecha_fin_estimada|fecha }}</p>
+                                {% endif %}
+                                {% if obra.fecha_fin_real %}
+                                <p class="mb-0"><i class="fas fa-check me-2 text-success"></i>Finalizado: {{ obra.fecha_fin_real|fecha }}</p>
+                                {% endif %}
+                                {% if not obra.fecha_inicio and not obra.fecha_fin_estimada %}
+                                <p class="text-muted mb-0">Sin fechas definidas</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border-start border-warning border-4 ps-3">
+                                <h6 class="text-warning mb-2"><i class="fas fa-clock me-1"></i>Tiempo</h6>
+                                {% if obra.dias_transcurridos %}
+                                <p class="mb-1"><i class="fas fa-hourglass-half me-2 text-muted"></i>{{ obra.dias_transcurridos }} días transcurridos</p>
+                                {% endif %}
+                                {% if obra.dias_restantes %}
+                                <p class="mb-0"><i class="fas fa-hourglass-end me-2 text-muted"></i>{{ obra.dias_restantes }} días restantes</p>
+                                {% endif %}
+                                {% if not obra.dias_transcurridos %}
+                                <p class="text-muted mb-0">Sin seguimiento temporal</p>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="col-lg-4">
-            <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">Progreso General</h6>
+        <!-- Panel de Progreso Compacto -->
+        <div class="col-lg-3">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fas fa-chart-pie me-1"></i>Progreso</h6>
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal">
-                        <i class="fas fa-certificate me-1"></i>Certificar
+                    <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal" title="Certificar avance">
+                        <i class="fas fa-certificate"></i>
                     </button>
                     {% endif %}
                 </div>
-                <div class="card-body text-center">
-                    <div class="progress mb-3" style="height: 15px;">
-                        <div class="progress-bar" role="progressbar" style="width: {{ obra.progreso }}%"></div>
-                    </div>
-                    <h3 class="text-primary">{{ obra.progreso }}%</h3>
-                    
-                    <hr>
-                    
-                    <div class="row text-center mb-3">
-                        <div class="col-6">
-                            <strong class="text-success d-block">{{ obra.presupuesto_total|moneda }}</strong>
-                            <small class="text-muted">Presupuesto</small>
+                <div class="card-body text-center p-3">
+                    <!-- Progreso circular visual -->
+                    <div class="position-relative mb-3">
+                        <div class="progress mx-auto" style="height: 8px; width: 100%;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ obra.progreso }}%"></div>
                         </div>
-                        <div class="col-6">
-                            <strong class="text-danger d-block">{{ obra.costo_real|moneda }}</strong>
-                            <small class="text-muted">Costo Real</small>
+                        <h2 class="text-primary mb-0 mt-2">{{ obra.progreso }}%</h2>
+                        <small class="text-muted">Completado</small>
+                    </div>
+                    
+                    <!-- Presupuesto vs Real -->
+                    <div class="row text-center mb-3">
+                        <div class="col-12 mb-2">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-success">Presupuesto:</small>
+                                <strong class="text-success">{{ obra.presupuesto_total|moneda }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-danger">Costo Real:</small>
+                                <strong class="text-danger">{{ obra.costo_real|moneda }}</strong>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Control de Presupuesto -->
-                    <div class="progress mb-2" style="height: 8px;">
+                    <!-- Barra de presupuesto -->
+                    <div class="progress mb-2" style="height: 6px;">
                         <div class="progress-bar {% if obra.porcentaje_presupuesto_ejecutado > 100 %}bg-danger{% elif obra.porcentaje_presupuesto_ejecutado > 80 %}bg-warning{% else %}bg-info{% endif %}" 
-                             role="progressbar" 
-                             style="width: {{ [obra.porcentaje_presupuesto_ejecutado, 100]|max }}%;" 
-                             aria-valuenow="{{ obra.porcentaje_presupuesto_ejecutado }}" 
-                             aria-valuemin="0" 
-                             aria-valuemax="100">
-                        </div>
+                             style="width: {{ [obra.porcentaje_presupuesto_ejecutado, 100]|max }}%;"></div>
                     </div>
-                    <small class="text-muted mb-3 d-block">{{ "%.1f"|format(obra.porcentaje_presupuesto_ejecutado) }}% del presupuesto</small>
+                    <small class="text-muted d-block mb-3">{{ "%.1f"|format(obra.porcentaje_presupuesto_ejecutado) }}% ejecutado</small>
                     
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <form action="{{ url_for('obras.actualizar_progreso_automatico', id=obra.id) }}" method="POST" class="d-inline">
-                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <form action="{{ url_for('obras.actualizar_progreso_automatico', id=obra.id) }}" method="POST">
+                        <button type="submit" class="btn btn-sm btn-outline-primary w-100">
                             <i class="fas fa-sync-alt me-1"></i>Recalcular
                         </button>
                     </form>
@@ -135,75 +167,81 @@
                 </div>
             </div>
 
-            <!-- Certificaciones recientes -->
+            <!-- Panel de Certificaciones Compacto -->
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">Certificaciones</h6>
-                    <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-history me-1"></i>Ver Todo
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fas fa-certificate me-1"></i>Certificaciones</h6>
+                    <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-light">
+                        <i class="fas fa-history"></i>
                     </a>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-2">
                     {% set certificaciones_recientes = obra.certificaciones.filter_by(activa=True).limit(3).all() %}
                     {% if certificaciones_recientes %}
                         {% for cert in certificaciones_recientes %}
-                        <div class="d-flex justify-content-between align-items-center py-2 {% if not loop.last %}border-bottom{% endif %}">
-                            <div>
-                                <strong>{{ cert.porcentaje_avance }}%</strong>
-                                <br>
-                                <small class="text-muted">{{ cert.fecha|fecha }}</small>
-                                {% if cert.costo_certificado > 0 %}
-                                <br>
-                                <small class="text-success">${{ "%.2f"|format(cert.costo_certificado) }}</small>
-                                {% endif %}
+                        <div class="d-flex justify-content-between align-items-center py-1 px-2 mb-1 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-success me-2">{{ cert.porcentaje_avance }}%</span>
+                                <div>
+                                    <small class="text-muted d-block">{{ cert.fecha|fecha }}</small>
+                                    {% if cert.costo_certificado > 0 %}
+                                    <small class="text-success fw-bold">${{ "%.0f"|format(cert.costo_certificado) }}</small>
+                                    {% endif %}
+                                </div>
                             </div>
-                            <div class="text-end">
-                                <small class="text-muted">{{ cert.usuario.nombre }}</small>
-                            </div>
+                            <small class="text-muted">{{ cert.usuario.nombre }}</small>
                         </div>
                         {% endfor %}
                     {% else %}
-                        <p class="text-muted mb-0 text-center">No hay certificaciones</p>
+                        <div class="text-center py-2">
+                            <i class="fas fa-certificate text-muted fa-2x mb-2"></i>
+                            <p class="text-muted mb-0 small">Sin certificaciones</p>
+                        </div>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Etapas y Tareas -->
-    <div class="row mb-4">
+    <!-- Etapas y Tareas - Diseño Mejorado -->
+    <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Etapas del Proyecto</h5>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#nuevaEtapaModal">
-                        <i class="fas fa-plus me-1"></i>Nueva Etapa
-                    </button>
-                    {% endif %}
+                <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Etapas del Proyecto</h5>
+                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                        <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#nuevaEtapaModal">
+                            <i class="fas fa-plus me-1"></i>Nueva Etapa
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-3">
                     {% if etapas %}
+                        <div class="row g-3">
                         {% for etapa in etapas %}
-                        <div class="border rounded p-3 mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">
-                                    <span class="badge bg-secondary me-2">{{ etapa.orden }}</span>
-                                    {{ etapa.nombre }}
-                                </h6>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="badge {{ etapa.estado|estado_badge }}">
-                                        {{ etapa.estado.replace('_', ' ').title() }}
-                                    </span>
-                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                    <button class="btn btn-sm btn-outline-danger" 
-                                            onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
-                                            title="Eliminar etapa">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                    {% endif %}
-                                </div>
-                            </div>
+                            <div class="col-lg-6">
+                                <div class="card h-100 shadow-sm border-0" style="border-left: 4px solid #007bff !important;">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <div class="d-flex align-items-center">
+                                                <span class="badge bg-primary me-2">{{ etapa.orden }}</span>
+                                                <h6 class="mb-0 fw-bold">{{ etapa.nombre }}</h6>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <span class="badge {{ etapa.estado|estado_badge }} fs-7">
+                                                    {{ etapa.estado.replace('_', ' ').title() }}
+                                                </span>
+                                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                                <button class="btn btn-sm btn-outline-danger p-1" 
+                                                        onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
+                                                        title="Eliminar etapa">
+                                                    <i class="fas fa-trash fa-xs"></i>
+                                                </button>
+                                                {% endif %}
+                                            </div>
+                                        </div>
                             
                             {% if etapa.descripcion %}
                             <p class="text-muted mb-2">{{ etapa.descripcion }}</p>

@@ -26,8 +26,11 @@ def lista():
     estado = request.args.get('estado', '')
     buscar = request.args.get('buscar', '')
     
-    # Modificar query para incluir presupuestos sin obra (LEFT JOIN)
-    query = Presupuesto.query.outerjoin(Obra).filter(Presupuesto.organizacion_id == current_user.organizacion_id)
+    # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir convertidos
+    query = Presupuesto.query.outerjoin(Obra).filter(
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.estado != 'convertido'  # Excluir presupuestos ya convertidos en obras
+    )
     
     if estado:
         query = query.filter(Presupuesto.estado == estado)
@@ -1016,10 +1019,10 @@ def confirmar_como_obra(id):
         db.session.add(nueva_obra)
         db.session.flush()  # Para obtener el ID
         
-        # Asociar presupuesto con la obra
+        # Asociar presupuesto con la obra y marcarlo como convertido
         presupuesto.obra_id = nueva_obra.id
         presupuesto.confirmado_como_obra = True
-        presupuesto.estado = 'aprobado'
+        presupuesto.estado = 'convertido'  # Cambiar estado para ocultarlo de la lista
         
         # Verificar si la obra ya tiene etapas para evitar duplicados
         etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
