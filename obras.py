@@ -243,16 +243,54 @@ def agregar_etapas(id):
         return redirect(url_for('obras.detalle', id=id))
     
     obra = Obra.query.get_or_404(id)
-    etapas_seleccionadas = request.form.getlist('etapas[]')
+    etapas_json = request.form.getlist('etapas[]')
     
-    if not etapas_seleccionadas:
+    if not etapas_json:
         flash('Selecciona al menos una etapa.', 'warning')
         return redirect(url_for('obras.detalle', id=id))
     
     try:
-        etapas_creadas = crear_etapas_para_obra(obra.id, etapas_seleccionadas)
-        flash(f'Se agregaron {len(etapas_creadas)} etapas a la obra.', 'success')
+        import json
+        etapas_creadas = 0
+        
+        for etapa_json in etapas_json:
+            try:
+                etapa_data = json.loads(etapa_json)
+                nombre = etapa_data.get('nombre', '').strip()
+                descripcion = etapa_data.get('descripcion', '').strip()
+                orden = int(etapa_data.get('orden', 1))
+                
+                if not nombre:
+                    continue
+                    
+                # Verificar que no exista ya una etapa con el mismo nombre
+                existe = EtapaObra.query.filter_by(obra_id=obra.id, nombre=nombre).first()
+                if existe:
+                    continue
+                
+                nueva_etapa = EtapaObra(
+                    obra_id=obra.id,
+                    nombre=nombre,
+                    descripcion=descripcion,
+                    orden=orden,
+                    estado='pendiente',
+                    organizacion_id=current_user.organizacion_id
+                )
+                
+                db.session.add(nueva_etapa)
+                etapas_creadas += 1
+                
+            except (json.JSONDecodeError, ValueError) as e:
+                continue
+        
+        if etapas_creadas > 0:
+            db.session.commit()
+            flash(f'Se agregaron {etapas_creadas} etapas a la obra.', 'success')
+        else:
+            flash('No se pudo agregar ninguna etapa. Verifique que no existan etapas duplicadas.', 'warning')
+            
     except Exception as e:
+        db.session.rollback()
         flash(f'Error al agregar etapas: {str(e)}', 'danger')
     
     return redirect(url_for('obras.detalle', id=id))

@@ -365,32 +365,62 @@
     </div>
 </div>
 
-<!-- Modal Nueva Etapa -->
-<div class="modal fade" id="nuevaEtapaModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Modal Nueva Etapa con Selección Múltiple -->
+<div class="modal fade" id="nuevaEtapaModal" tabindex="-1" aria-labelledby="nuevaEtapaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('obras.agregar_etapa', id=obra.id) }}">
-                <div class="modal-header">
-                    <h5 class="modal-title">Nueva Etapa</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Nombre de la Etapa</label>
-                        <input type="text" class="form-control" name="nombre" 
-                               placeholder="Ej: Excavación y Fundaciones" required>
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="nuevaEtapaModalLabel">
+                    <i class="fas fa-tasks me-2"></i>Seleccionar Etapas del Proyecto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6 class="mb-3"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
+                        <div class="row" id="etapasPredefinidas">
+                            <!-- Se cargarán con JavaScript -->
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Descripción</label>
-                        <textarea class="form-control" name="descripcion" rows="3" 
-                                  placeholder="Descripción detallada de la etapa..."></textarea>
+                    <div class="col-md-4">
+                        <h6 class="mb-3"><i class="fas fa-plus-circle text-success"></i> Etapa Personalizada</h6>
+                        <div class="mb-3">
+                            <label for="etapaPersonalizadaNombre" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="etapaPersonalizadaNombre" placeholder="Ej: Pintura Especial">
+                        </div>
+                        <div class="mb-3">
+                            <label for="etapaPersonalizadaDescripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="etapaPersonalizadaDescripcion" rows="3" placeholder="Descripción detallada..."></textarea>
+                        </div>
+                        <button type="button" class="btn btn-success btn-sm" onclick="agregarEtapaPersonalizadaObra()">
+                            <i class="fas fa-plus"></i> Agregar Personalizada
+                        </button>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Crear Etapa</button>
+                
+                <!-- Vista de etapas seleccionadas -->
+                <div class="mt-4" id="etapasSeleccionadasContainer" style="display: none;">
+                    <h6 class="mb-3"><i class="fas fa-check-circle text-success"></i> Etapas Seleccionadas</h6>
+                    <div id="listaEtapasSeleccionadas" class="border rounded p-3 bg-light">
+                        <!-- Se mostrará la lista de etapas seleccionadas -->
+                    </div>
                 </div>
-            </form>
+            </div>
+            <div class="modal-footer">
+                <div class="me-auto">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Selecciona múltiples etapas o agrega personalizadas
+                    </small>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="confirmarEtapasSeleccionadasObra()">
+                    <i class="fas fa-check"></i> Agregar Etapas
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -653,5 +683,203 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Variables para manejo de etapas en obras
+let etapasSeleccionadasObra = [];
+
+// Etapas predefinidas (mismas que en presupuestos)
+const ETAPAS_PREDEFINIDAS_OBRA = [
+    { nombre: 'Excavación', descripcion: 'Movimiento de suelos y preparación del terreno', orden: 1 },
+    { nombre: 'Fundaciones', descripcion: 'Construcción de cimientos y estructuras de base', orden: 2 },
+    { nombre: 'Estructura', descripcion: 'Construcción de estructura principal (hormigón, acero)', orden: 3 },
+    { nombre: 'Mampostería', descripcion: 'Construcción de muros y paredes', orden: 4 },
+    { nombre: 'Techos', descripcion: 'Construcción e impermeabilización de techos', orden: 5 },
+    { nombre: 'Instalaciones Eléctricas', descripcion: 'Instalación del sistema eléctrico', orden: 6 },
+    { nombre: 'Instalaciones Sanitarias', descripcion: 'Instalación de sistemas de agua y desagües', orden: 7 },
+    { nombre: 'Instalaciones de Gas', descripcion: 'Instalación del sistema de gas natural', orden: 8 },
+    { nombre: 'Revoque Grueso', descripcion: 'Aplicación de revoque base en paredes', orden: 9 },
+    { nombre: 'Revoque Fino', descripcion: 'Aplicación de revoque terminación', orden: 10 },
+    { nombre: 'Pisos', descripcion: 'Colocación de pisos y revestimientos', orden: 11 },
+    { nombre: 'Carpintería', descripcion: 'Instalación de puertas, ventanas y muebles', orden: 12 },
+    { nombre: 'Pintura', descripcion: 'Trabajos de pintura interior y exterior', orden: 13 },
+    { nombre: 'Instalaciones Complementarias', descripcion: 'Aire acondicionado, calefacción, etc.', orden: 14 },
+    { nombre: 'Limpieza Final', descripcion: 'Limpieza y acondicionamiento final', orden: 15 }
+];
+
+// Cargar etapas predefinidas cuando se abre el modal
+document.getElementById('nuevaEtapaModal').addEventListener('shown.bs.modal', function () {
+    console.log('🏗️ Abriendo modal de etapas para obra');
+    cargarEtapasPredefinidas();
+    etapasSeleccionadasObra = [];
+    actualizarVistaEtapasSeleccionadas();
+});
+
+// Cargar etapas predefinidas en el modal
+function cargarEtapasPredefinidas() {
+    const container = document.getElementById('etapasPredefinidas');
+    container.innerHTML = '';
+    
+    ETAPAS_PREDEFINIDAS_OBRA.forEach((etapa, index) => {
+        const yaSeleccionada = etapasSeleccionadasObra.some(e => e.nombre === etapa.nombre);
+        
+        const etapaHTML = `
+            <div class="col-md-6 mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="etapa_obra_${index}" 
+                           ${yaSeleccionada ? 'checked' : ''} 
+                           onchange="toggleEtapaPredefinidaObra(${index})">
+                    <label class="form-check-label" for="etapa_obra_${index}">
+                        <strong>${etapa.nombre}</strong>
+                        <br><small class="text-muted">${etapa.descripcion}</small>
+                    </label>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML += etapaHTML;
+    });
+}
+
+// Toggle etapa predefinida para obra
+function toggleEtapaPredefinidaObra(index) {
+    const etapa = ETAPAS_PREDEFINIDAS_OBRA[index];
+    const checkbox = document.getElementById(`etapa_obra_${index}`);
+    
+    if (checkbox.checked) {
+        // Agregar si no existe
+        if (!etapasSeleccionadasObra.some(e => e.nombre === etapa.nombre)) {
+            etapasSeleccionadasObra.push({
+                nombre: etapa.nombre,
+                descripcion: etapa.descripcion,
+                orden: etapa.orden,
+                personalizada: false
+            });
+        }
+    } else {
+        // Remover si existe
+        etapasSeleccionadasObra = etapasSeleccionadasObra.filter(e => e.nombre !== etapa.nombre);
+    }
+    
+    actualizarVistaEtapasSeleccionadas();
+    console.log(`📋 Etapas seleccionadas: ${etapasSeleccionadasObra.length}`);
+}
+
+// Agregar etapa personalizada para obra
+function agregarEtapaPersonalizadaObra() {
+    const nombre = document.getElementById('etapaPersonalizadaNombre').value.trim();
+    const descripcion = document.getElementById('etapaPersonalizadaDescripcion').value.trim();
+    
+    if (!nombre) {
+        alert('Ingresa el nombre de la etapa personalizada');
+        return;
+    }
+    
+    // Verificar que no exista ya
+    if (etapasSeleccionadasObra.some(e => e.nombre.toLowerCase() === nombre.toLowerCase())) {
+        alert('Ya existe una etapa con ese nombre');
+        return;
+    }
+    
+    // Agregar etapa personalizada
+    const nuevaEtapa = {
+        nombre: nombre,
+        descripcion: descripcion || 'Etapa personalizada',
+        orden: etapasSeleccionadasObra.length + 100, // Orden alto para personalizadas
+        personalizada: true
+    };
+    
+    etapasSeleccionadasObra.push(nuevaEtapa);
+    
+    // Limpiar campos
+    document.getElementById('etapaPersonalizadaNombre').value = '';
+    document.getElementById('etapaPersonalizadaDescripcion').value = '';
+    
+    // Actualizar vista
+    actualizarVistaEtapasSeleccionadas();
+    
+    console.log(`✅ Etapa personalizada agregada: ${nombre}`);
+}
+
+// Actualizar vista de etapas seleccionadas
+function actualizarVistaEtapasSeleccionadas() {
+    const container = document.getElementById('etapasSeleccionadasContainer');
+    const lista = document.getElementById('listaEtapasSeleccionadas');
+    
+    if (etapasSeleccionadasObra.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    
+    container.style.display = 'block';
+    
+    // Ordenar etapas por orden
+    const etapasOrdenadas = [...etapasSeleccionadasObra].sort((a, b) => a.orden - b.orden);
+    
+    let html = '<div class="row">';
+    etapasOrdenadas.forEach((etapa, index) => {
+        const esPersonalizada = etapa.personalizada;
+        html += `
+            <div class="col-md-6 mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <strong class="${esPersonalizada ? 'text-success' : 'text-primary'}">${etapa.nombre}</strong>
+                        ${esPersonalizada ? '<span class="badge bg-success ms-1">Personalizada</span>' : ''}
+                        <br><small class="text-muted">${etapa.descripcion}</small>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" 
+                            onclick="removerEtapaObra('${etapa.nombre}')" title="Remover etapa">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    lista.innerHTML = html;
+}
+
+// Remover etapa seleccionada
+function removerEtapaObra(nombreEtapa) {
+    etapasSeleccionadasObra = etapasSeleccionadasObra.filter(e => e.nombre !== nombreEtapa);
+    actualizarVistaEtapasSeleccionadas();
+    
+    // Actualizar checkboxes
+    cargarEtapasPredefinidas();
+    
+    console.log(`🗑️ Etapa removida: ${nombreEtapa}`);
+}
+
+// Confirmar etapas seleccionadas y enviar al backend
+function confirmarEtapasSeleccionadasObra() {
+    if (etapasSeleccionadasObra.length === 0) {
+        alert('Selecciona al menos una etapa antes de confirmar');
+        return;
+    }
+    
+    // Crear formulario dinámico para enviar las etapas
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("obras.agregar_etapas", id=obra.id) }}';
+    
+    // Agregar las etapas seleccionadas como campos del formulario
+    etapasSeleccionadasObra.forEach((etapa, index) => {
+        const inputNombre = document.createElement('input');
+        inputNombre.type = 'hidden';
+        inputNombre.name = 'etapas[]';
+        inputNombre.value = JSON.stringify({
+            nombre: etapa.nombre,
+            descripcion: etapa.descripcion,
+            orden: etapa.orden
+        });
+        form.appendChild(inputNombre);
+    });
+    
+    // Agregar al body y enviar
+    document.body.appendChild(form);
+    form.submit();
+    
+    console.log(`✅ Enviando ${etapasSeleccionadasObra.length} etapas al backend`);
+}
 </script>
 {% endblock %}
