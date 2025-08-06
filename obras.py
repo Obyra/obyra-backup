@@ -6,6 +6,7 @@ import requests
 from app import db
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
+from tareas_detalladas import obtener_tareas_detalladas_para_etapa
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
 
 obras_bp = Blueprint('obras', __name__)
@@ -282,15 +283,27 @@ def agregar_etapas(id):
                 db.session.add(nueva_etapa)
                 db.session.flush()  # Para obtener el ID de la etapa
                 
-                # Crear tareas asociadas si las hay
-                tareas = etapa_data.get('tareas', [])
-                for tarea_data in tareas:
+                # Crear tareas predefinidas automáticamente
+                tareas_predefinidas = obtener_tareas_detalladas_para_etapa(nombre)
+                for tarea_data in tareas_predefinidas:
+                    nueva_tarea = TareaEtapa(
+                        etapa_id=nueva_etapa.id,
+                        nombre=tarea_data['nombre'],
+                        descripcion=tarea_data['descripcion'],
+                        estado='pendiente'
+                    )
+                    db.session.add(nueva_tarea)
+                    print(f"✅ DEBUG: Tarea predefinida creada: {tarea_data['nombre']}")
+                
+                # Crear tareas adicionales del formulario si las hay
+                tareas_adicionales = etapa_data.get('tareas', [])
+                for tarea_data in tareas_adicionales:
                     nombre_tarea = tarea_data.get('nombre', '').strip()
                     if nombre_tarea:
                         nueva_tarea = TareaEtapa(
                             etapa_id=nueva_etapa.id,
                             nombre=nombre_tarea,
-                            descripcion=f"Tarea {'personalizada' if tarea_data.get('personalizada') else 'predefinida'} para {nombre}",
+                            descripcion=f"Tarea personalizada para {nombre}",
                             estado='pendiente'
                         )
                         db.session.add(nueva_tarea)
