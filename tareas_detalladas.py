@@ -6,24 +6,64 @@ Tareas predefinidas por etapa de construcción con descripciones detalladas - OB
 TAREAS_DETALLADAS_POR_ETAPA = {
     'Excavación': [
         {
-            'nombre': 'Replanteo y marcación del terreno',
+            'nombre': 'Replanteo y marcado del terreno',
             'descripcion': 'Marcar sobre el terreno las dimensiones y ubicación exacta de la construcción según planos'
         },
         {
-            'nombre': 'Excavación manual de zanjas',
-            'descripcion': 'Excavación a mano de zanjas para fundaciones en áreas de difícil acceso para maquinaria'
+            'nombre': 'Excavación para fundaciones',
+            'descripcion': 'Excavación específica para las bases y fundaciones de la estructura'
         },
         {
-            'nombre': 'Excavación mecánica',
-            'descripcion': 'Excavación con retroexcavadora o pala mecánica para movimiento de grandes volúmenes de tierra'
+            'nombre': 'Excavación para instalaciones subterráneas',
+            'descripcion': 'Excavación de zanjas para cañerías de agua, cloacas y gas'
         },
         {
-            'nombre': 'Nivelación del terreno',
-            'descripcion': 'Nivelación y compactación del terreno según cotas establecidas en el proyecto'
+            'nombre': 'Nivelación y compactación del terreno',
+            'descripcion': 'Nivelación y compactación del terreno según cotas del proyecto'
         },
         {
-            'nombre': 'Verificación de cotas y niveles',
-            'descripcion': 'Control topográfico de niveles y verificación de medidas según planos de obra'
+            'nombre': 'Retiro material excavado',
+            'descripcion': 'Transporte y disposición del material excavado fuera de la obra'
+        },
+        {
+            'nombre': 'Verificación de niveles según planos',
+            'descripcion': 'Control topográfico y verificación de cotas según documentación técnica'
+        },
+        {
+            'nombre': 'Preparación de base para fundaciones',
+            'descripcion': 'Acondicionamiento del terreno para recibir las fundaciones'
+        },
+        {
+            'nombre': 'Limpieza y preparación del sitio',
+            'descripcion': 'Limpieza general del terreno y preparación para inicio de obra'
+        },
+        {
+            'nombre': 'Instalación de cerco perimetral',
+            'descripcion': 'Colocación de cerco de seguridad alrededor del perímetro de obra'
+        },
+        {
+            'nombre': 'Instalación de servicios temporales',
+            'descripcion': 'Conexión provisoria de agua, luz y otros servicios necesarios'
+        },
+        {
+            'nombre': 'Estudio de suelos',
+            'descripcion': 'Análisis del suelo para determinar características y capacidad portante'
+        },
+        {
+            'nombre': 'Verificación de medianeras',
+            'descripcion': 'Control y verificación de límites del terreno con propiedades lindantes'
+        },
+        {
+            'nombre': 'Demolición de estructuras existentes',
+            'descripcion': 'Demolición de construcciones existentes que interfieran con el proyecto'
+        },
+        {
+            'nombre': 'Relleno y compactación de terreno',
+            'descripcion': 'Relleno con material seleccionado y compactación según especificaciones'
+        },
+        {
+            'nombre': 'Drenaje preliminar',
+            'descripcion': 'Instalación de drenajes temporarios para manejo de aguas'
         }
     ],
     'Fundaciones': [
@@ -32,20 +72,56 @@ TAREAS_DETALLADAS_POR_ETAPA = {
             'descripcion': 'Preparación y colocación de armaduras de acero según planos estructurales'
         },
         {
-            'nombre': 'Colocación de encofrado',
-            'descripcion': 'Instalación de moldes de madera o metal para dar forma al hormigón'
-        },
-        {
-            'nombre': 'Hormigonado de fundaciones',
+            'nombre': 'Colocación de hormigón en fundaciones',
             'descripcion': 'Vertido y vibrado del hormigón en fundaciones según especificaciones técnicas'
         },
         {
-            'nombre': 'Curado del hormigón',
-            'descripcion': 'Mantenimiento de humedad y temperatura para el correcto fraguado del hormigón'
+            'nombre': 'Construcción de bases y zapatas',
+            'descripcion': 'Construcción de zapatas aisladas y bases para columnas'
         },
         {
-            'nombre': 'Desencofrado',
-            'descripcion': 'Retiro de encofrados una vez alcanzada la resistencia mínima del hormigón'
+            'nombre': 'Impermeabilización de fundaciones',
+            'descripcion': 'Aplicación de membrana impermeabilizante en fundaciones'
+        },
+        {
+            'nombre': 'Construcción de muros de contención',
+            'descripcion': 'Construcción de muros para contención de tierras si es necesario'
+        },
+        {
+            'nombre': 'Verificación de niveles y plomadas',
+            'descripcion': 'Control de verticalidad y niveles de fundaciones terminadas'
+        },
+        {
+            'nombre': 'Curado del hormigón',
+            'descripcion': 'Mantenimiento de humedad para correcto fraguado del hormigón'
+        },
+        {
+            'nombre': 'Excavación de zapatas',
+            'descripcion': 'Excavación específica para zapatas individuales'
+        },
+        {
+            'nombre': 'Colocación de piedra desplazadora',
+            'descripcion': 'Colocación de piedra para reducir volumen de hormigón'
+        },
+        {
+            'nombre': 'Armado de encadenados',
+            'descripcion': 'Preparación de armaduras para vigas de encadenado'
+        },
+        {
+            'nombre': 'Hormigonado de encadenados',
+            'descripcion': 'Vertido de hormigón en vigas de encadenado perimetral'
+        },
+        {
+            'nombre': 'Aislación hidrófuga horizontal',
+            'descripcion': 'Colocación de barrera contra ascensión de humedad'
+        },
+        {
+            'nombre': 'Relleno con material seleccionado',
+            'descripcion': 'Relleno perimetral a fundaciones con material granular'
+        },
+        {
+            'nombre': 'Compactación de rellenos',
+            'descripcion': 'Compactación mecánica de rellenos perimetrales'
         }
     ],
     'Estructura': [
@@ -72,90 +148,138 @@ TAREAS_DETALLADAS_POR_ETAPA = {
         {
             'nombre': 'Hormigonado de losas',
             'descripcion': 'Vertido y nivelación de hormigón en losas con acabado superficial'
+        },
+        {
+            'nombre': 'Construcción de escaleras',
+            'descripcion': 'Construcción de escaleras principales y secundarias'
+        },
+        {
+            'nombre': 'Verificación estructural',
+            'descripcion': 'Control de calidad y verificación de elementos estructurales'
+        },
+        {
+            'nombre': 'Colocación de encofrados',
+            'descripcion': 'Instalación de moldes para elementos estructurales'
+        },
+        {
+            'nombre': 'Desencofrado y limpieza',
+            'descripcion': 'Retiro de encofrados y limpieza de superficies de hormigón'
+        },
+        {
+            'nombre': 'Control de calidad del hormigón',
+            'descripcion': 'Ensayos y verificación de resistencia del hormigón'
+        },
+        {
+            'nombre': 'Apuntalamiento temporal',
+            'descripcion': 'Instalación de puntales y sistemas de apeo temporarios'
+        },
+        {
+            'nombre': 'Juntas de dilatación',
+            'descripcion': 'Ejecución de juntas estructurales según proyecto'
+        },
+        {
+            'nombre': 'Tratamiento de superficies',
+            'descripcion': 'Preparación de superficies de hormigón visto'
+        },
+        {
+            'nombre': 'Nivelación final de losas',
+            'descripcion': 'Verificación y corrección de niveles finales en losas'
         }
     ],
     'Mampostería': [
         {
-            'nombre': 'Replanteo de muros',
-            'descripcion': 'Marcación de la ubicación y dimensiones de muros según planos'
+            'nombre': 'Construcción de muros exteriores',
+            'descripcion': 'Construcción de muros perimetrales con ladrillos o bloques'
         },
         {
-            'nombre': 'Colocación de ladrillos',
-            'descripcion': 'Construcción de muros con ladrillos, bloques o materiales similares'
+            'nombre': 'Construcción de muros interiores',
+            'descripcion': 'Construcción de muros divisorios interiores'
         },
         {
-            'nombre': 'Construcción de dinteles',
-            'descripcion': 'Instalación de elementos estructurales sobre aberturas'
+            'nombre': 'Construcción de tabiques divisorios',
+            'descripcion': 'Construcción de tabiques livianos para división de ambientes'
         },
         {
-            'nombre': 'Instalación de marcos de puertas',
-            'descripcion': 'Colocación y ajuste de marcos para puertas interiores y exteriores'
+            'nombre': 'Colocación de dinteles',
+            'descripcion': 'Instalación de dinteles sobre aberturas de puertas y ventanas'
         },
         {
-            'nombre': 'Instalación de marcos de ventanas',
-            'descripcion': 'Colocación de marcos de ventanas con sellado y aislación'
+            'nombre': 'Verificación de aplomes y niveles',
+            'descripcion': 'Control de verticalidad y horizontalidad de muros'
+        },
+        {
+            'nombre': 'Construcción de antepechos',
+            'descripcion': 'Construcción de antepechos de ventanas'
+        },
+        {
+            'nombre': 'Preparación para instalaciones',
+            'descripcion': 'Ejecución de canaletas y perforaciones para instalaciones'
         }
     ],
     'Techos': [
         {
-            'nombre': 'Armado de estructura de techo',
-            'descripcion': 'Construcción de estructura portante del techo (cabriadas, correas, etc.)'
+            'nombre': 'Construcción de estructura de techo',
+            'descripcion': 'Construcción de estructura portante del techo con cabriadas y correas'
         },
         {
-            'nombre': 'Colocación de chapas/tejas',
-            'descripcion': 'Instalación del material de cubierta según especificaciones'
+            'nombre': 'Colocación de aislación térmica',
+            'descripcion': 'Instalación de materiales aislantes bajo cubierta'
+        },
+        {
+            'nombre': 'Impermeabilización de cubierta',
+            'descripcion': 'Aplicación de membrana impermeabilizante en cubierta'
+        },
+        {
+            'nombre': 'Colocación de tejas o chapa',
+            'descripcion': 'Instalación del material de cubierta final según proyecto'
         },
         {
             'nombre': 'Instalación de canaletas',
-            'descripcion': 'Colocación de sistema de desagüe pluvial'
+            'descripcion': 'Colocación de sistema de desagüe pluvial perimetral'
         },
         {
-            'nombre': 'Impermeabilización',
-            'descripcion': 'Aplicación de materiales impermeabilizantes en cubierta'
+            'nombre': 'Construcción de aleros',
+            'descripcion': 'Construcción de aleros y remates perimetrales'
         },
         {
-            'nombre': 'Aislación térmica',
-            'descripcion': 'Instalación de materiales aislantes para eficiencia energética'
+            'nombre': 'Sellado de juntas y uniones',
+            'descripcion': 'Sellado hermético de todas las uniones de cubierta'
         }
     ],
     'Instalaciones Eléctricas': [
         {
-            'nombre': 'Replanteo de circuitos eléctricos',
-            'descripcion': 'Marcación de recorridos de cables y ubicación de componentes eléctricos'
-        },
-        {
             'nombre': 'Canalización eléctrica',
-            'descripcion': 'Instalación de caños y conductos para el paso de cables'
+            'descripcion': 'Instalación de caños y conductos para el paso de cables eléctricos'
         },
         {
             'nombre': 'Cableado principal',
-            'descripcion': 'Tendido de cables desde tablero principal a puntos de consumo'
+            'descripcion': 'Tendido de cables desde tablero principal a circuitos secundarios'
         },
         {
             'nombre': 'Instalación de tablero eléctrico',
-            'descripcion': 'Montaje y conexionado del tablero principal con protecciones'
+            'descripcion': 'Montaje y conexionado del tablero principal con llaves termomagnéticas'
         },
         {
             'nombre': 'Colocación de tomas y llaves',
-            'descripcion': 'Instalación de tomacorrientes, interruptores y llaves de luz'
+            'descripcion': 'Instalación de tomacorrientes, interruptores y pulsadores'
         },
         {
-            'nombre': 'Conexión de artefactos',
-            'descripcion': 'Conexión de luminarias y equipos eléctricos'
+            'nombre': 'Instalación de luminarias',
+            'descripcion': 'Montaje y conexión de artefactos de iluminación'
         },
         {
-            'nombre': 'Pruebas y verificaciones',
-            'descripcion': 'Control de funcionamiento y mediciones eléctricas de seguridad'
+            'nombre': 'Conexión de electrodomésticos',
+            'descripcion': 'Conexión eléctrica de equipos de línea blanca y aires acondicionados'
+        },
+        {
+            'nombre': 'Pruebas y puesta en marcha',
+            'descripcion': 'Verificación de funcionamiento y pruebas de seguridad eléctrica'
         }
     ],
     'Instalaciones Sanitarias': [
         {
-            'nombre': 'Replanteo de instalaciones',
-            'descripcion': 'Marcación de recorridos de cañerías y ubicación de artefactos'
-        },
-        {
             'nombre': 'Instalación de cañerías de agua',
-            'descripcion': 'Tendido de cañerías de agua fría y caliente'
+            'descripcion': 'Tendido de cañerías de agua fría y caliente en PVC o PPR'
         },
         {
             'nombre': 'Instalación de desagües',
@@ -163,161 +287,263 @@ TAREAS_DETALLADAS_POR_ETAPA = {
         },
         {
             'nombre': 'Colocación de artefactos sanitarios',
-            'descripcion': 'Instalación de inodoros, lavatorios, bachas y grifería'
+            'descripcion': 'Instalación de inodoros, lavatorios, bidet y receptáculos'
         },
         {
-            'nombre': 'Conexión a red pública',
-            'descripcion': 'Conexión a redes de agua potable y cloacas municipales'
+            'nombre': 'Instalación de grifería',
+            'descripcion': 'Montaje de canillas, mezcladores y accesorios de baño'
+        },
+        {
+            'nombre': 'Conexión a red cloacal',
+            'descripcion': 'Conexión de desagües a red cloacal municipal o pozo absorbente'
         },
         {
             'nombre': 'Pruebas hidráulicas',
-            'descripcion': 'Verificación de funcionamiento y pruebas de presión'
+            'descripcion': 'Verificación de funcionamiento y pruebas de presión en instalaciones'
+        },
+        {
+            'nombre': 'Sellado e impermeabilización',
+            'descripcion': 'Sellado de uniones y impermeabilización de zonas húmedas'
         }
     ],
     'Instalaciones de Gas': [
         {
-            'nombre': 'Replanteo de instalación de gas',
-            'descripcion': 'Marcación del recorrido de cañerías de gas según normativas'
+            'nombre': 'Tendido de cañería de gas',
+            'descripcion': 'Instalación de cañerías de acero o cobre según normativas NAG'
         },
         {
-            'nombre': 'Instalación de cañerías',
-            'descripcion': 'Tendido de cañerías de gas con uniones y conexiones reglamentarias'
+            'nombre': 'Instalación de medidor',
+            'descripcion': 'Colocación de medidor y regulador de presión de gas'
         },
         {
-            'nombre': 'Colocación de regulador',
-            'descripcion': 'Instalación de regulador de presión y medidor de gas'
+            'nombre': 'Conexión de artefactos',
+            'descripcion': 'Conexión de cocina, calefón, estufa y otros artefactos a gas'
         },
         {
-            'nombre': 'Instalación de artefactos',
-            'descripcion': 'Conexión de artefactos a gas (cocina, calefón, etc.)'
+            'nombre': 'Pruebas de hermeticidad',
+            'descripcion': 'Verificación de estanqueidad de toda la instalación de gas'
         },
         {
-            'nombre': 'Pruebas de estanqueidad',
-            'descripcion': 'Verificación de hermeticidad de toda la instalación'
+            'nombre': 'Habilitación con empresa gasífera',
+            'descripcion': 'Trámites y habilitación con empresa distribuidora de gas'
         },
         {
-            'nombre': 'Habilitación por gasista matriculado',
-            'descripcion': 'Certificación final de la instalación por profesional habilitado'
+            'nombre': 'Señalización de seguridad',
+            'descripcion': 'Colocación de señalética de seguridad en instalaciones de gas'
+        },
+        {
+            'nombre': 'Verificación de ventilaciones',
+            'descripcion': 'Control de ventilaciones superior e inferior en locales con gas'
         }
     ],
     'Revoque Grueso': [
         {
             'nombre': 'Preparación de superficies',
-            'descripcion': 'Limpieza y preparación de muros para aplicación de revoque'
+            'descripcion': 'Limpieza y humedecimiento de muros antes de revocar'
         },
         {
-            'nombre': 'Aplicación de revoque grueso',
-            'descripcion': 'Aplicación de primera capa de revoque para nivelación'
+            'nombre': 'Aplicación de revoque grueso exterior',
+            'descripcion': 'Aplicación de revoque impermeable en muros exteriores'
         },
         {
-            'nombre': 'Nivelación y alisado',
-            'descripcion': 'Nivelación de superficies con regla y alisado inicial'
+            'nombre': 'Aplicación de revoque grueso interior',
+            'descripcion': 'Aplicación de revoque de cal y arena en muros interiores'
+        },
+        {
+            'nombre': 'Verificación de verticalidad',
+            'descripcion': 'Control de aplome y verticalidad de superficies revocadas'
+        },
+        {
+            'nombre': 'Corrección de imperfecciones',
+            'descripcion': 'Reparación de defectos y irregularidades en revoque'
+        },
+        {
+            'nombre': 'Preparación para revoque fino',
+            'descripcion': 'Alisado y preparación de superficie para recibir revoque fino'
         },
         {
             'nombre': 'Curado del revoque',
-            'descripcion': 'Mantenimiento de humedad para correcto fraguado del revoque'
+            'descripcion': 'Mantenimiento de humedad para correcto fraguado'
         }
     ],
     'Revoque Fino': [
         {
-            'nombre': 'Preparación de superficie',
-            'descripcion': 'Limpieza y humedecimiento del revoque grueso'
+            'nombre': 'Preparación de mezcla fina',
+            'descripcion': 'Preparación de mezcla de cal hidratada y arena fina'
         },
         {
-            'nombre': 'Aplicación de revoque fino',
-            'descripcion': 'Aplicación de capa final de revoque para terminación'
+            'nombre': 'Aplicación de revoque fino interior',
+            'descripcion': 'Aplicación de capa fina en muros interiores'
+        },
+        {
+            'nombre': 'Aplicación de revoque fino exterior',
+            'descripcion': 'Aplicación de revoque fino impermeable en exteriores'
         },
         {
             'nombre': 'Alisado y terminación',
-            'descripcion': 'Alisado final con llana para obtener superficie lisa'
+            'descripcion': 'Alisado final con llana para terminación lisa'
         },
         {
-            'nombre': 'Control de calidad',
-            'descripcion': 'Verificación de planeidad y acabado superficial'
+            'nombre': 'Corrección de detalles',
+            'descripcion': 'Reparación de pequeños defectos y retoques'
+        },
+        {
+            'nombre': 'Preparación para pintura',
+            'descripcion': 'Sellado y preparación de superficie para recibir pintura'
+        },
+        {
+            'nombre': 'Limpieza de superficies',
+            'descripcion': 'Limpieza final de restos de material y salpicaduras'
         }
     ],
     'Pisos': [
         {
-            'nombre': 'Preparación del contrapiso',
-            'descripcion': 'Nivelación y preparación de base para colocación de pisos'
+            'nombre': 'Preparación de contrapisos',
+            'descripcion': 'Ejecución de contrapisos de hormigón con pendientes'
         },
         {
-            'nombre': 'Nivelación',
-            'descripcion': 'Verificación y corrección de niveles con mortero de nivelación'
+            'nombre': 'Nivelación de superficies',
+            'descripcion': 'Nivelación fina con mortero autonivelante'
         },
         {
-            'nombre': 'Colocación de pisos',
-            'descripcion': 'Instalación de revestimiento de piso según especificaciones'
+            'nombre': 'Colocación de pisos cerámicos',
+            'descripcion': 'Instalación de cerámicos con adhesivo especial'
+        },
+        {
+            'nombre': 'Colocación de pisos de madera',
+            'descripcion': 'Instalación de pisos de madera maciza o laminada'
         },
         {
             'nombre': 'Instalación de zócalos',
-            'descripcion': 'Colocación de zócalos perimetrales y guardapolvos'
+            'descripcion': 'Colocación de zócalos y guardapolvos perimetrales'
         },
         {
-            'nombre': 'Limpieza final',
-            'descripcion': 'Limpieza y pulido final del piso instalado'
+            'nombre': 'Sellado de juntas',
+            'descripcion': 'Sellado de juntas de dilatación y perimetrales'
+        },
+        {
+            'nombre': 'Limpieza final de pisos',
+            'descripcion': 'Limpieza profunda y pulido de pisos terminados'
         }
     ],
     'Carpintería': [
         {
-            'nombre': 'Instalación de puertas interiores',
-            'descripcion': 'Colocación y ajuste de puertas internas con herrajes'
+            'nombre': 'Instalación de marcos de puertas',
+            'descripcion': 'Colocación de marcos de puertas interiores y exteriores'
         },
         {
-            'nombre': 'Instalación de ventanas',
-            'descripcion': 'Montaje de ventanas con vidrios y herrajes de apertura'
+            'nombre': 'Instalación de marcos de ventanas',
+            'descripcion': 'Montaje de marcos de ventanas de madera o aluminio'
         },
         {
-            'nombre': 'Colocación de marcos',
-            'descripcion': 'Instalación de marcos de madera o aluminio'
+            'nombre': 'Colocación de hojas de puertas',
+            'descripcion': 'Instalación de hojas de puertas con bisagras'
+        },
+        {
+            'nombre': 'Colocación de hojas de ventanas',
+            'descripcion': 'Montaje de hojas móviles de ventanas'
         },
         {
             'nombre': 'Instalación de herrajes',
-            'descripcion': 'Colocación de cerraduras, bisagras y accesorios'
+            'descripcion': 'Colocación de cerraduras, picaportes y manijas'
         },
         {
-            'nombre': 'Ajustes finales',
-            'descripcion': 'Regulación y ajuste final de puertas y ventanas'
+            'nombre': 'Ajuste y regulación',
+            'descripcion': 'Regulación de apertura y cierre de carpinterías'
+        },
+        {
+            'nombre': 'Sellado perimetral',
+            'descripcion': 'Sellado con silicona entre marco y muro'
         }
     ],
     'Pintura': [
         {
             'nombre': 'Preparación de superficies',
-            'descripcion': 'Lijado, limpieza y reparación de superficies a pintar'
+            'descripcion': 'Lijado, enduido y preparación de superficies para pintar'
         },
         {
             'nombre': 'Aplicación de imprimación',
-            'descripcion': 'Aplicación de base o fijador según tipo de superficie'
+            'descripcion': 'Aplicación de sellador y fijador de superficie'
         },
         {
-            'nombre': 'Primera mano de pintura',
-            'descripcion': 'Aplicación de primera capa de pintura de acabado'
+            'nombre': 'Lijado entre manos',
+            'descripcion': 'Lijado fino entre capas para mejor terminación'
         },
         {
-            'nombre': 'Segunda mano de pintura',
-            'descripcion': 'Aplicación de segunda capa para terminación final'
+            'nombre': 'Aplicación de pintura interior',
+            'descripcion': 'Aplicación de pintura látex en muros interiores'
         },
         {
-            'nombre': 'Retoques finales',
-            'descripcion': 'Corrección de detalles y retoques de terminación'
+            'nombre': 'Aplicación de pintura exterior',
+            'descripcion': 'Aplicación de pintura acrílica en muros exteriores'
+        },
+        {
+            'nombre': 'Retoques y detalles',
+            'descripcion': 'Retoques finales y pintura de detalles'
+        },
+        {
+            'nombre': 'Limpieza de elementos',
+            'descripcion': 'Limpieza de salpicaduras en pisos y carpinterías'
         }
     ],
     'Instalaciones Complementarias': [
         {
             'nombre': 'Instalación de aire acondicionado',
-            'descripcion': 'Montaje de equipos de climatización y cañerías frigoríficas'
+            'descripcion': 'Montaje de equipos split y conductos de aire acondicionado'
         },
         {
-            'nombre': 'Sistema de calefacción',
-            'descripcion': 'Instalación de sistema de calefacción central o individual'
+            'nombre': 'Instalación de calefacción',
+            'descripcion': 'Instalación de sistema de calefacción por radiadores o losa radiante'
         },
         {
-            'nombre': 'Instalaciones especiales',
-            'descripcion': 'Sistemas de seguridad, domótica o instalaciones específicas'
+            'nombre': 'Instalación de sistema de seguridad',
+            'descripcion': 'Instalación de alarmas, cámaras y sensores de seguridad'
         },
         {
-            'nombre': 'Pruebas de funcionamiento',
-            'descripcion': 'Verificación del correcto funcionamiento de todos los sistemas'
+            'nombre': 'Instalación de portones automáticos',
+            'descripcion': 'Instalación de portones automatizados con motores y controles'
+        },
+        {
+            'nombre': 'Colocación de toldos',
+            'descripcion': 'Instalación de toldos retráctiles y fijos'
+        },
+        {
+            'nombre': 'Instalación de sistema de riego',
+            'descripcion': 'Instalación de riego automático para jardines'
+        },
+        {
+            'nombre': 'Configuración domótica',
+            'descripcion': 'Instalación y configuración de sistemas de automatización del hogar'
+        }
+    ],
+    'Limpieza Final': [
+        {
+            'nombre': 'Limpieza de obra gruesa',
+            'descripcion': 'Retiro de escombros y limpieza general de la obra'
+        },
+        {
+            'nombre': 'Limpieza de vidrios',
+            'descripcion': 'Limpieza completa de vidrios y espejos'
+        },
+        {
+            'nombre': 'Limpieza de pisos y superficies',
+            'descripcion': 'Limpieza profunda de pisos, azulejos y superficies'
+        },
+        {
+            'nombre': 'Retiro de material sobrante',
+            'descripcion': 'Retiro de materiales sobrantes y herramientas'
+        },
+        {
+            'nombre': 'Limpieza de instalaciones',
+            'descripcion': 'Limpieza y verificación de funcionamiento de instalaciones'
+        },
+        {
+            'nombre': 'Entrega de documentación',
+            'descripcion': 'Entrega de planos conforme a obra y certificados'
+        },
+        {
+            'nombre': 'Inspección final',
+            'descripcion': 'Inspección final de calidad y entrega de la obra'
         }
     ]
 }
