@@ -127,9 +127,46 @@
                                         </div>
                                         
                                         <div class="text-end">
-                                            <span class="badge {{ etapa.estado|estado_badge }} mb-2">
-                                                {{ etapa.estado.replace('_', ' ').title() }}
-                                            </span>
+                                            <!-- Dropdown para cambiar estado -->
+                                            <div class="dropdown mb-2">
+                                                <button class="btn btn-sm badge {{ etapa.estado|estado_badge }} dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    {{ etapa.estado.replace('_', ' ').title() }}
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li>
+                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                            <input type="hidden" name="estado" value="pendiente">
+                                                            <button class="dropdown-item" type="submit">
+                                                                <span class="badge bg-secondary me-2">Pendiente</span>
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li>
+                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                            <input type="hidden" name="estado" value="en_curso">
+                                                            <button class="dropdown-item" type="submit">
+                                                                <span class="badge bg-primary me-2">En Curso</span>
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li>
+                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                            <input type="hidden" name="estado" value="pausada">
+                                                            <button class="dropdown-item" type="submit">
+                                                                <span class="badge bg-warning me-2">Pausada</span>
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li>
+                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                            <input type="hidden" name="estado" value="finalizada">
+                                                            <button class="dropdown-item" type="submit">
+                                                                <span class="badge bg-success me-2">Finalizada</span>
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                             {% if current_user.rol in ['administrador', 'tecnico'] %}
                                             <br>
                                             <button class="btn btn-sm btn-outline-danger" 

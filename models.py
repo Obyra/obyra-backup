@@ -153,34 +153,43 @@ class Obra(db.Model):
     
     def calcular_progreso_automatico(self):
         """Calcula el progreso automático basado en etapas, tareas y certificaciones"""
+        from decimal import Decimal, ROUND_HALF_UP
+        
         total_etapas = self.etapas.count()
         if total_etapas == 0:
             return 0
         
-        progreso_etapas = 0
+        progreso_etapas = Decimal('0')
         for etapa in self.etapas:
             total_tareas = etapa.tareas.count()
             if total_tareas > 0:
                 tareas_completadas = etapa.tareas.filter_by(estado='completada').count()
-                progreso_etapas += (tareas_completadas / total_tareas) * (100 / total_etapas)
+                porcentaje_etapa = (Decimal(str(tareas_completadas)) / Decimal(str(total_tareas))) * (Decimal('100') / Decimal(str(total_etapas)))
+                progreso_etapas += porcentaje_etapa
             elif etapa.estado == 'finalizada':
-                progreso_etapas += (100 / total_etapas)
+                progreso_etapas += (Decimal('100') / Decimal(str(total_etapas)))
         
-        # Agregar progreso de certificaciones
-        progreso_certificaciones = sum(cert.porcentaje_avance for cert in self.certificaciones.filter_by(activa=True))
+        # Agregar progreso de certificaciones - convertir a Decimal
+        progreso_certificaciones = Decimal('0')
+        for cert in self.certificaciones.filter_by(activa=True):
+            if cert.porcentaje_avance:
+                progreso_certificaciones += Decimal(str(cert.porcentaje_avance))
         
         # El progreso total no puede exceder 100%
-        progreso_total = min(100, progreso_etapas + progreso_certificaciones)
+        progreso_total = min(Decimal('100'), progreso_etapas + progreso_certificaciones)
         
-        # Actualizar el progreso en la base de datos
-        self.progreso = int(progreso_total)
+        # Actualizar el progreso en la base de datos - convertir a int
+        self.progreso = int(progreso_total.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
         return self.progreso
     
     @property 
     def porcentaje_presupuesto_ejecutado(self):
         """Calcula el porcentaje del presupuesto ejecutado"""
-        if self.presupuesto_total > 0:
-            return (self.costo_real / self.presupuesto_total) * 100
+        from decimal import Decimal
+        if self.presupuesto_total and self.presupuesto_total > 0:
+            presupuesto = Decimal(str(self.presupuesto_total)) if not isinstance(self.presupuesto_total, Decimal) else self.presupuesto_total
+            costo = Decimal(str(self.costo_real)) if not isinstance(self.costo_real, Decimal) else self.costo_real
+            return float((costo / presupuesto) * Decimal('100'))
         return 0
     
     def puede_ser_pausada_por(self, usuario):

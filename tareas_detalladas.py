@@ -1,5 +1,6 @@
 """
 Tareas predefinidas por etapa de construcción con descripciones detalladas - OBYRA IA
+FUENTE ÚNICA DE DATOS - Usar esta lista completa para auto-generar tareas
 """
 
 # Tareas predefinidas por tipo de etapa con descripciones detalladas
