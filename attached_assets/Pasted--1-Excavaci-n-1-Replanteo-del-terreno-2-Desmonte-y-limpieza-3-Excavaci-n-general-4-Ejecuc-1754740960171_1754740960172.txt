@@ -1,0 +1,255 @@
+🔹 1. Excavación
+1.	Replanteo del terreno
+2.	Desmonte y limpieza
+3.	Excavación general
+4.	Ejecución de zanjas
+5.	Retiro de escombros
+6.	Control de niveles
+7.	Apuntalamiento de taludes
+8.	Relleno parcial
+9.	Compactación del fondo
+10.	Drenaje perimetral
+11.	Bombeo de agua por napa
+12.	Verificación de cotas
+13.	Movimiento de suelos con maquinaria
+14.	Acondicionamiento de accesos
+15.	Cierre perimetral de excavación
+________________________________________
+🔹 2. Fundaciones
+1.	Armado de bases
+2.	Colocación de encofrado
+3.	Hormigonado de fundaciones
+4.	Curado de hormigón
+5.	Retiro de encofrado
+6.	Sellado de juntas
+7.	Impermeabilización
+8.	Carga de capa aisladora
+9.	Compactación perimetral
+10.	Instalación de esperas
+11.	Control de nivel
+12.	Ensayos de resistencia
+13.	Colocación de viga de fundación
+14.	Aporte de suelo seleccionado
+15.	Aislación hidrófuga
+________________________________________
+🔹 3. Estructura
+1.	Armado de columnas
+2.	Encofrado de columnas
+3.	Hormigonado de columnas
+4.	Armado de vigas
+5.	Encofrado de vigas
+6.	Hormigonado de vigas
+7.	Colocación de losas
+8.	Armado de escaleras
+9.	Hormigonado de escaleras
+10.	Curado estructural
+11.	Retiro de encofrado
+12.	Control de verticalidad
+13.	Nivelación general
+14.	Refuerzos estructurales
+15.	Ensayos de estructura
+________________________________________
+🔹 4. Mampostería
+1.	Replanteo de muros
+2.	Acopio de ladrillos
+3.	Preparación de mortero
+4.	Levantamiento de muros exteriores
+5.	Levantamiento de muros interiores
+6.	Colocación de refuerzos horizontales
+7.	Armado de dinteles
+8.	Replanteo de vanos (puertas/ventanas)
+9.	Control de plomos y niveles
+10.	Verificación de encuentros de muros
+11.	Realización de buñas
+12.	Relleno y sellado de juntas
+13.	Limpieza de excedentes
+14.	Aperturas para instalaciones
+15.	Preparación para revoque
+________________________________________
+🔹 5. Instalaciones Eléctricas
+1.	Replanteo de canalizaciones
+2.	Ejecución de rozas
+3.	Colocación de cañerías
+4.	Colocación de cajas
+5.	Sellado de rozas
+6.	Tendido de cables
+7.	Instalación de tablero principal
+8.	Instalación de llaves térmicas y disyuntor
+9.	Conexionado de circuitos
+10.	Verificación de conexiones
+11.	Ensayo de funcionamiento
+12.	Colocación de artefactos
+13.	Tomas e interruptores
+14.	Conexión a puesta a tierra
+15.	Certificación de instalación eléctrica
+________________________________________
+🔹 6. Instalaciones Sanitarias
+1.	Replanteo de cañerías
+2.	Cañerías de agua fría
+3.	Cañerías de agua caliente
+4.	Desagües cloacales
+5.	Ventilaciones primarias/secundarias
+6.	Pruebas hidráulicas
+7.	Conexión de pluviales
+8.	Colocación de cámaras de inspección
+9.	Conexionado de artefactos
+10.	Aislación térmica de caños
+11.	Empalmes y sellado
+12.	Verificación de pendientes
+13.	Conexión a red pública
+14.	Ensayo de pérdidas
+15.	Cierre de obra sanitaria
+________________________________________
+🔹 7. Instalaciones de Gas
+1.	Replanteo de cañerías
+2.	Cañerías embutidas
+3.	Cañerías exteriores
+4.	Instalación de llaves de paso
+5.	Colocación de reguladores
+6.	Conexión a red de gas
+7.	Instalación de medidor
+8.	Prueba de hermeticidad
+9.	Ventilaciones reglamentarias
+10.	Conexión de artefactos
+11.	Instalación de calefactores
+12.	Conexión de cocina y horno
+13.	Certificación de gasista matriculado
+14.	Etiquetado normativo
+15.	Verificación final
+________________________________________
+🔹 8. Techos
+1.	Colocación de estructura de techado
+2.	Aislación térmica
+3.	Colocación de chapas o tejas
+4.	Colocación de membrana hidrófuga
+5.	Colocación de cumbreras
+6.	Colocación de babetas
+7.	Sellado de uniones
+8.	Fijación de remates
+9.	Instalación de canaletas
+10.	Bajadas pluviales
+11.	Revisión de filtraciones
+12.	Limpieza de techo
+13.	Pintura protectora (si aplica)
+14.	Aislamiento acústico
+15.	Revisión final
+________________________________________
+🔹 9. Revoque Grueso
+1.	Preparación de superficies
+2.	Colocación de guías maestras
+3.	Mezcla de mortero
+4.	Aplicación de mortero base
+5.	Nivelado de paños
+6.	Compactación del mortero
+7.	Relleno de imperfecciones
+8.	Revisión de plomos
+9.	Ajuste de esquinas y aristas
+10.	Humectado previo
+11.	Revisión de adherencia
+12.	Reparación de fisuras
+13.	Limpieza de restos
+14.	Preparación para revoque fino
+15.	Control final
+________________________________________
+🔹 10. Revoque Fino
+1.	Preparación de superficie
+2.	Limpieza de polvo y restos
+3.	Colocación de guías
+4.	Mezcla de revoque fino
+5.	Aplicación de capa fina
+6.	Nivelado de superficies
+7.	Ajuste en esquinas y bordes
+8.	Pulido de superficies
+9.	Relleno de imperfecciones
+10.	Lijado fino
+11.	Humectado previo
+12.	Revisión de plomos
+13.	Control de adherencia
+14.	Reparación de detalles
+15.	Limpieza final de sector
+________________________________________
+🔹 11. Pisos
+1.	Preparación de base
+2.	Colocación de capa aisladora
+3.	Ejecución de contrapiso
+4.	Nivelado de contrapiso
+5.	Curado de contrapiso
+6.	Preparación de mezcla de pegamento
+7.	Colocación de baldosas o cerámicos
+8.	Colocación de juntas
+9.	Nivelación de piezas
+10.	Limpieza de excedentes
+11.	Sellado de juntas
+12.	Pulido de superficie (si aplica)
+13.	Aplicación de tratamiento protector
+14.	Verificación de alineaciones
+15.	Limpieza final
+________________________________________
+🔹 12. Carpintería
+1.	Medición de aberturas
+2.	Fabricación de marcos
+3.	Colocación de marcos
+4.	Colocación de hojas
+5.	Instalación de herrajes
+6.	Ajuste de alineaciones
+7.	Colocación de burletes
+8.	Barnizado o pintado
+9.	Instalación de muebles fijos
+10.	Ajuste de bisagras
+11.	Colocación de cerraduras
+12.	Reparación de imperfecciones
+13.	Limpieza de aberturas
+14.	Sellado perimetral
+15.	Revisión final
+________________________________________
+🔹 13. Pintura
+1.	Limpieza de superficies
+2.	Reparación de grietas y fisuras
+3.	Lijado previo
+4.	Aplicación de sellador o fijador
+5.	Preparación de pintura
+6.	Pintura de primera mano
+7.	Lijado intermedio
+8.	Pintura de segunda mano
+9.	Pintura de detalles
+10.	Corrección de manchas
+11.	Aplicación de barniz (si aplica)
+12.	Retiro de protecciones
+13.	Limpieza de herramientas
+14.	Ventilación del área
+15.	Revisión final
+________________________________________
+🔹 14. Limpieza Final
+1.	Retiro de escombros
+2.	Limpieza de pisos
+3.	Limpieza de paredes
+4.	Limpieza de vidrios
+5.	Limpieza de carpinterías
+6.	Limpieza de sanitarios
+7.	Retiro de polvo en altura
+8.	Limpieza de luminarias
+9.	Aspirado general
+10.	Desinfección de superficies
+11.	Retiro de protecciones
+12.	Lavado de frentes
+13.	Desinfección de áreas húmedas
+14.	Perfume ambiental
+15.	Control final
+________________________________________
+🔹 15. Instalaciones Complementarias
+1.	Instalación de aire acondicionado
+2.	Instalación de calefacción
+3.	Colocación de ventiladores
+4.	Instalación de domótica
+5.	Colocación de paneles solares
+6.	Instalación de sistemas de seguridad
+7.	Colocación de cámaras de vigilancia
+8.	Instalación de portero eléctrico
+9.	Instalación de ascensores
+10.	Conexión de bombas de agua
+11.	Instalación de cercos eléctricos
+12.	Automatización de portones
+13.	Colocación de cartelería
+14.	Integración con red inteligente
+15.	Revisión final
+
