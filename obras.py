@@ -31,7 +31,6 @@ def seed_tareas_para_etapa(nueva_etapa):
                 
             # Crear nueva tarea
             nueva_tarea = TareaEtapa(
-                obra_id=nueva_etapa.obra_id,
                 etapa_id=nueva_etapa.id,
                 nombre=t["nombre"],
                 descripcion=t.get("descripcion", ""),
