@@ -694,7 +694,7 @@ function abrirModalTarea(etapaId, nombreEtapa) {
 }
 
 // Datos de tareas predefinidas cargados desde Python
-const TAREAS_PREDEFINIDAS_DICT = {{ TAREAS_DETALLADAS_POR_ETAPA|tojson|safe }};
+const TAREAS_PREDEFINIDAS_DICT = {{ TAREAS_POR_ETAPA|tojson|safe }};
 
 function obtenerTareasPredefinidas(nombreEtapa) {
     try {

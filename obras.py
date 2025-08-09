@@ -6,7 +6,7 @@ import requests
 from app import db
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
-from tareas_detalladas import TAREAS_DETALLADAS_POR_ETAPA
+from tareas_predefinidas import TAREAS_POR_ETAPA
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
 
 obras_bp = Blueprint('obras', __name__)
@@ -17,39 +17,37 @@ def D(x):
         return Decimal('0')
     return x if isinstance(x, Decimal) else Decimal(str(x))
 
-def crear_tareas_predefinidas_para_etapa(etapa_id, nombre_etapa):
-    """Crea tareas predefinidas para una etapa según la lista completa"""
+def seed_tareas_para_etapa(nueva_etapa):
+    """Función idempotente para crear tareas predefinidas en una etapa"""
     try:
-        # Verificar si ya existen tareas para evitar duplicación
-        tareas_existentes = TareaEtapa.query.filter_by(etapa_id=etapa_id).count()
-        if tareas_existentes > 0:
-            print(f"⚠️ La etapa {nombre_etapa} ya tiene {tareas_existentes} tareas")
-            return
-        
-        # Buscar tareas predefinidas para esta etapa
-        tareas_predefinidas = TAREAS_DETALLADAS_POR_ETAPA.get(nombre_etapa, [])
-        
-        if not tareas_predefinidas:
-            print(f"⚠️ No se encontraron tareas predefinidas para etapa: {nombre_etapa}")
-            return
-        
+        tareas = TAREAS_POR_ETAPA.get(nueva_etapa.nombre, [])
         tareas_creadas = 0
-        for tarea_data in tareas_predefinidas:
+        
+        for t in tareas:
+            # Verificar si ya existe (idempotente)
+            ya = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id, nombre=t["nombre"]).first()
+            if ya:
+                continue
+                
+            # Crear nueva tarea
             nueva_tarea = TareaEtapa(
-                etapa_id=etapa_id,
-                nombre=tarea_data['nombre'],
-                descripcion=tarea_data['descripcion'],
-                estado='pendiente'
+                obra_id=nueva_etapa.obra_id,
+                etapa_id=nueva_etapa.id,
+                nombre=t["nombre"],
+                descripcion=t.get("descripcion", ""),
+                horas_estimadas=t.get("horas", 0),
+                estado="pendiente"
             )
             db.session.add(nueva_tarea)
             tareas_creadas += 1
-            print(f"✅ DEBUG: Tarea predefinida creada: {tarea_data['nombre']}")
+            print(f"✅ Tarea creada: {t['nombre']}")
         
-        print(f"🎯 Total de tareas creadas para {nombre_etapa}: {tareas_creadas}")
+        print(f"🎯 Total tareas creadas para {nueva_etapa.nombre}: {tareas_creadas}")
+        return tareas_creadas
         
     except Exception as e:
-        print(f"❌ ERROR al crear tareas predefinidas: {str(e)}")
-        raise e
+        print(f"❌ ERROR en seed_tareas_para_etapa: {str(e)}")
+        return 0
 
 @obras_bp.route('/')
 @login_required
@@ -173,7 +171,7 @@ def detalle(id):
     usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=current_user.organizacion_id).all()
     etapas_disponibles = obtener_etapas_disponibles()
     
-    from tareas_detalladas import TAREAS_DETALLADAS_POR_ETAPA
+    from tareas_predefinidas import TAREAS_POR_ETAPA
     
     return render_template('obras/detalle.html', 
                          obra=obra, 
@@ -181,7 +179,7 @@ def detalle(id):
                          asignaciones=asignaciones,
                          usuarios_disponibles=usuarios_disponibles,
                          etapas_disponibles=etapas_disponibles,
-                         TAREAS_DETALLADAS_POR_ETAPA=TAREAS_DETALLADAS_POR_ETAPA)
+                         TAREAS_POR_ETAPA=TAREAS_POR_ETAPA)
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
@@ -326,17 +324,8 @@ def agregar_etapas(id):
                 db.session.add(nueva_etapa)
                 db.session.flush()  # Para obtener el ID de la etapa
                 
-                # Crear tareas predefinidas automáticamente
-                tareas_predefinidas = obtener_tareas_detalladas_para_etapa(nombre)
-                for tarea_data in tareas_predefinidas:
-                    nueva_tarea = TareaEtapa(
-                        etapa_id=nueva_etapa.id,
-                        nombre=tarea_data['nombre'],
-                        descripcion=tarea_data['descripcion'],
-                        estado='pendiente'
-                    )
-                    db.session.add(nueva_tarea)
-                    print(f"✅ DEBUG: Tarea predefinida creada: {tarea_data['nombre']}")
+                # Crear tareas predefinidas automáticamente usando la función seed
+                seed_tareas_para_etapa(nueva_etapa)
                 
                 # Crear tareas adicionales del formulario si las hay
                 tareas_adicionales = etapa_data.get('tareas', [])
@@ -455,7 +444,7 @@ def agregar_etapa(id):
         print(f"✅ DEBUG: Creando etapa '{nombre}' en obra {id}")
         
         # AUTO-CREAR TAREAS PREDEFINIDAS PARA LA ETAPA
-        crear_tareas_predefinidas_para_etapa(nueva_etapa.id, nombre)
+        seed_tareas_para_etapa(nueva_etapa)
         
         db.session.commit()
         flash(f'Etapa "{nombre}" agregada exitosamente con tareas predefinidas.', 'success')
@@ -502,6 +491,51 @@ def agregar_tarea(id):
     
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
 
+
+@obras_bp.route('/admin/backfill_tareas', methods=['POST'])
+@login_required
+def admin_backfill_tareas():
+    """Función de backfill para crear tareas faltantes en etapas existentes"""
+    # Solo super administradores
+    if current_user.email not in ['brenda@gmail.com', 'admin@obyra.com']:
+        flash('No tienes permisos para ejecutar el backfill.', 'danger')
+        return redirect(url_for('obras.lista'))
+    
+    try:
+        print("🚀 Iniciando backfill de tareas predefinidas...")
+        etapas_procesadas = 0
+        tareas_creadas_total = 0
+        
+        # Recorrer todas las etapas existentes
+        etapas = EtapaObra.query.all()
+        
+        for etapa in etapas:
+            print(f"📋 Procesando etapa: {etapa.nombre} (ID: {etapa.id})")
+            
+            # Contar tareas existentes
+            tareas_existentes = TareaEtapa.query.filter_by(etapa_id=etapa.id).count()
+            print(f"   Tareas existentes: {tareas_existentes}")
+            
+            # Si tiene menos de 5 tareas, ejecutar seed
+            if tareas_existentes < 5:
+                print(f"   🔧 Ejecutando seed para {etapa.nombre}...")
+                tareas_nuevas = seed_tareas_para_etapa(etapa)
+                tareas_creadas_total += tareas_nuevas
+                etapas_procesadas += 1
+            else:
+                print(f"   ✅ Etapa {etapa.nombre} ya tiene suficientes tareas")
+        
+        db.session.commit()
+        
+        flash(f'Backfill completado: {etapas_procesadas} etapas procesadas, {tareas_creadas_total} tareas creadas.', 'success')
+        print(f"🎯 BACKFILL COMPLETADO: {etapas_procesadas} etapas, {tareas_creadas_total} tareas")
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ ERROR en backfill: {str(e)}")
+        flash(f'Error en backfill: {str(e)}', 'danger')
+    
+    return redirect(url_for('obras.lista'))
 
 @obras_bp.route('/etapa/<int:etapa_id>/tareas')
 @login_required
@@ -854,43 +888,4 @@ def cambiar_estado_etapa(etapa_id):
     
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
 
-@obras_bp.route('/admin/backfill-tareas', methods=['POST'])
-@login_required
-def backfill_tareas_predefinidas():
-    """Crear tareas predefinidas para etapas existentes que no las tienen"""
-    if current_user.email not in ['brenda@gmail.com', 'admin@obyra.com']:
-        flash('No tienes permisos para ejecutar esta acción.', 'danger')
-        return redirect(url_for('obras.lista'))
-    
-    try:
-        etapas_actualizadas = 0
-        tareas_creadas = 0
-        
-        # Buscar todas las etapas sin tareas o con pocas tareas
-        todas_etapas = EtapaObra.query.all()
-        
-        for etapa in todas_etapas:
-            tareas_actuales = etapa.tareas.count()
-            
-            # Si tiene menos de 5 tareas, probablemente necesita backfill
-            if tareas_actuales < 5:
-                print(f"🔄 Procesando etapa: {etapa.nombre} (tiene {tareas_actuales} tareas)")
-                
-                # Usar la función de creación de tareas predefinidas
-                crear_tareas_predefinidas_para_etapa(etapa.id, etapa.nombre)
-                
-                nuevas_tareas = etapa.tareas.count() - tareas_actuales
-                if nuevas_tareas > 0:
-                    etapas_actualizadas += 1
-                    tareas_creadas += nuevas_tareas
-                    print(f"✅ Agregadas {nuevas_tareas} tareas a {etapa.nombre}")
-        
-        db.session.commit()
-        flash(f'Backfill completado: {etapas_actualizadas} etapas actualizadas, {tareas_creadas} tareas creadas.', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"❌ ERROR en backfill: {str(e)}")
-        flash(f'Error en backfill: {str(e)}', 'danger')
-    
-    return redirect(url_for('obras.lista'))
+# Función duplicada eliminada - usando admin_backfill_tareas arriba
