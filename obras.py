@@ -173,12 +173,15 @@ def detalle(id):
     usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=current_user.organizacion_id).all()
     etapas_disponibles = obtener_etapas_disponibles()
     
+    from tareas_detalladas import TAREAS_DETALLADAS_POR_ETAPA
+    
     return render_template('obras/detalle.html', 
                          obra=obra, 
                          etapas=etapas, 
                          asignaciones=asignaciones,
                          usuarios_disponibles=usuarios_disponibles,
-                         etapas_disponibles=etapas_disponibles)
+                         etapas_disponibles=etapas_disponibles,
+                         TAREAS_DETALLADAS_POR_ETAPA=TAREAS_DETALLADAS_POR_ETAPA)
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required

@@ -71,6 +71,12 @@ app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 app.register_blueprint(agent_bp)  # Agente IA local sin prefijo
 app.register_blueprint(planes_bp)  # Sistema de planes
 
+# Funciones globales para templates
+@app.context_processor
+def utility_processor():
+    from tareas_detalladas import TAREAS_DETALLADAS_POR_ETAPA
+    return dict(obtener_tareas_detalladas_para_etapa=lambda nombre_etapa: TAREAS_DETALLADAS_POR_ETAPA.get(nombre_etapa, []))
+
 
 
 

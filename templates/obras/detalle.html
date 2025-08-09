@@ -672,7 +672,87 @@
 function abrirModalTarea(etapaId, nombreEtapa) {
     document.getElementById('formNuevaTarea').action = `/obras/etapa/${etapaId}/tarea`;
     document.getElementById('nombreEtapa').textContent = nombreEtapa;
+    
+    // Llenar automáticamente con tareas predefinidas para esa etapa
+    const tareasInput = document.querySelector('#nuevaTareaModal input[name="nombre"]');
+    const descripcionTextarea = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
+    
+    // Obtener tareas predefinidas para esta etapa
+    const tareasDisponibles = obtenerTareasPredefinidas(nombreEtapa);
+    
+    if (tareasDisponibles && tareasDisponibles.length > 0) {
+        // Sugerir la primera tarea disponible
+        const primeraTarea = tareasDisponibles[0];
+        tareasInput.placeholder = `Ej: ${primeraTarea.nombre}`;
+        descripcionTextarea.placeholder = `Ej: ${primeraTarea.descripcion}`;
+        
+        // Agregar lista de sugerencias
+        mostrarSugerenciasTareas(tareasDisponibles, tareasInput, descripcionTextarea);
+    }
+    
     new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
+}
+
+// Datos de tareas predefinidas cargados desde Python
+const TAREAS_PREDEFINIDAS_DICT = {{ TAREAS_DETALLADAS_POR_ETAPA|tojson|safe }};
+
+function obtenerTareasPredefinidas(nombreEtapa) {
+    try {
+        const tareas = TAREAS_PREDEFINIDAS_DICT[nombreEtapa] || [];
+        console.log(`📋 Tareas encontradas para ${nombreEtapa}:`, tareas.length);
+        return tareas;
+    } catch (e) {
+        console.error('Error al obtener tareas predefinidas:', e);
+        return [];
+    }
+}
+
+function mostrarSugerenciasTareas(tareas, inputNombre, textareaDescripcion) {
+    // Crear dropdown de sugerencias
+    const modalBody = document.querySelector('#nuevaTareaModal .modal-body');
+    
+    // Remover dropdown previo si existe
+    const dropdownPrevio = modalBody.querySelector('#dropdownTareas');
+    if (dropdownPrevio) dropdownPrevio.remove();
+    
+    if (tareas.length === 0) return;
+    
+    // Crear nuevo dropdown
+    const dropdown = document.createElement('div');
+    dropdown.id = 'dropdownTareas';
+    dropdown.className = 'mb-3';
+    dropdown.innerHTML = `
+        <label class="form-label">
+            <i class="fas fa-lightbulb text-warning"></i> Tareas sugeridas para ${document.getElementById('nombreEtapa').textContent}
+        </label>
+        <select class="form-select" onchange="seleccionarTareaPredefinida(this.value)">
+            <option value="">-- Seleccionar tarea predefinida --</option>
+            ${tareas.map((tarea, index) => 
+                `<option value="${index}">${tarea.nombre}</option>`
+            ).join('')}
+        </select>
+        <small class="form-text text-muted">Selecciona una tarea predefinida o escribe una personalizada</small>
+    `;
+    
+    // Insertar después del primer input
+    const primerInput = modalBody.querySelector('.mb-3');
+    primerInput.insertAdjacentElement('afterend', dropdown);
+    
+    // Guardar referencia a las tareas para la función de selección
+    window.tareasActuales = tareas;
+}
+
+function seleccionarTareaPredefinida(index) {
+    if (!index || !window.tareasActuales) return;
+    
+    const tarea = window.tareasActuales[index];
+    const inputNombre = document.querySelector('#nuevaTareaModal input[name="nombre"]');
+    const textareaDescripcion = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
+    
+    inputNombre.value = tarea.nombre;
+    textareaDescripcion.value = tarea.descripcion;
+    
+    console.log(`✅ Tarea predefinida seleccionada: ${tarea.nombre}`);
 }
 
 // Función para toggle tareas de una etapa
