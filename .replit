@@ -1,8 +1,8 @@
-modules = ["python-3.11", "postgresql-16", "python3"]
+modules = ["postgresql-16", "python-3.11", "python3"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["freetype", "glibcLocales", "openssl", "postgresql"]
+packages = ["freetype", "glibcLocales", "openssl", "postgresql", "zip"]
 
 [deployment]
 deploymentTarget = "autoscale"

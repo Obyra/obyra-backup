@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from sqlalchemy.orm import DeclarativeBase
