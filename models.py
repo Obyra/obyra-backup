@@ -104,6 +104,27 @@ class Usuario(UserMixin, db.Model):
             'operario': ['obras', 'inventario', 'asistente', 'documentos']
         }
         return modulo in permisos.get(self.rol, [])
+    
+    def es_admin_completo(self):
+        """Verifica si el usuario es administrador con acceso completo sin restricciones de plan"""
+        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
+        return self.email in emails_admin_completo
+    
+    def tiene_acceso_sin_restricciones(self):
+        """Verifica si el usuario tiene acceso completo al sistema"""
+        # Administradores especiales tienen acceso completo
+        if self.es_admin_completo():
+            return True
+        
+        # Usuarios con planes activos (standard/premium) también tienen acceso
+        if self.plan_activo in ['standard', 'premium']:
+            return True
+            
+        # Usuarios en periodo de prueba válido
+        if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
+            return True
+            
+        return False
 
 
 class Obra(db.Model):

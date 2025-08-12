@@ -96,6 +96,11 @@ def verificar_periodo_prueba():
         request.endpoint not in rutas_excluidas and 
         not request.endpoint.startswith('static')):
         
+        # ✨ EXCEPCIÓN ESPECIAL: Administradores tienen acceso completo sin restricciones
+        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
+        if current_user.email in emails_admin_completo:
+            return  # Acceso completo sin restricciones de plan
+        
         # Verificar si el usuario está en periodo de prueba y ya expiró
         if (current_user.plan_activo == 'prueba' and 
             not current_user.esta_en_periodo_prueba()):
