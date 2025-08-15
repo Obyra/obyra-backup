@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}Marketplaces - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header con estadísticas -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-store me-2 text-warning"></i>Marketplaces
+                </h1>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('marketplaces.buscar') }}" class="btn btn-primary">
+                        <i class="fas fa-search me-1"></i>Búsqueda Avanzada
+                    </a>
+                    {% if current_user.es_admin() %}
+                    <a href="{{ url_for('marketplaces.admin_proveedores') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-cog me-1"></i>Administrar
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Estadísticas -->
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <div class="h4 mb-0">{{ total_proveedores }}</div>
+                                    <small>Proveedores Activos</small>
+                                </div>
+                                <div class="ms-3">
+                                    <i class="fas fa-users fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <div class="h4 mb-0">{{ cotizaciones_pendientes }}</div>
+                                    <small>Cotizaciones Pendientes</small>
+                                </div>
+                                <div class="ms-3">
+                                    <i class="fas fa-file-invoice fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <div class="h4 mb-0">{{ categorias|length }}</div>
+                                    <small>Categorías Disponibles</small>
+                                </div>
+                                <div class="ms-3">
+                                    <i class="fas fa-tags fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-dark">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <div class="h4 mb-0"><a href="{{ url_for('marketplaces.mis_cotizaciones') }}" class="text-decoration-none text-dark">Ver</a></div>
+                                    <small>Mis Solicitudes</small>
+                                </div>
+                                <div class="ms-3">
+                                    <i class="fas fa-clipboard-list fa-2x opacity-75"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros de búsqueda -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Categoría</label>
+                    <select name="categoria" class="form-select">
+                        <option value="">Todas las categorías</option>
+                        {% for key, cat in categorias.items() %}
+                        <option value="{{ key }}" {% if categoria == key %}selected{% endif %}>
+                            {{ cat.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Ubicación</label>
+                    <input type="text" name="ubicacion" class="form-control" 
+                           placeholder="Ciudad, provincia..." value="{{ ubicacion }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Buscar</label>
+                    <input type="text" name="buscar" class="form-control" 
+                           placeholder="Nombre, especialidad..." value="{{ buscar }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de proveedores -->
+    <div class="row">
+        {% if proveedores %}
+            {% for proveedor in proveedores %}
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="card-title mb-1">
+                                    {{ proveedor.nombre }}
+                                    {% if proveedor.verificado %}
+                                    <span class="badge bg-success ms-2">
+                                        <i class="fas fa-check-circle"></i> Verificado
+                                    </span>
+                                    {% endif %}
+                                </h5>
+                                <small class="text-muted">{{ proveedor.especialidad }}</small>
+                            </div>
+                            <div class="text-end">
+                                <div class="text-warning">
+                                    {% for i in range(5) %}
+                                        {% if i < proveedor.calificacion_estrellas %}
+                                        <i class="fas fa-star"></i>
+                                        {% else %}
+                                        <i class="far fa-star"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <small class="text-muted">{{ proveedor.calificacion_estrellas }}/5</small>
+                            </div>
+                        </div>
+                        
+                        <p class="card-text">{{ proveedor.descripcion|truncate(120) }}</p>
+                        
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <small class="text-muted">
+                                    <i class="fas fa-map-marker-alt me-1"></i>{{ proveedor.ubicacion }}
+                                </small>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">
+                                    <i class="fas fa-briefcase me-1"></i>{{ proveedor.trabajos_completados }} trabajos
+                                </small>
+                            </div>
+                            {% if proveedor.precio_promedio %}
+                            <div class="col-12">
+                                <small class="text-success">
+                                    <i class="fas fa-dollar-sign me-1"></i>Desde {{ proveedor.precio_promedio|moneda }}
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('marketplaces.detalle_proveedor', proveedor_id=proveedor.id) }}" 
+                               class="btn btn-outline-primary btn-sm flex-grow-1">
+                                <i class="fas fa-eye me-1"></i>Ver Detalle
+                            </a>
+                            <button type="button" 
+                                    class="btn btn-primary btn-sm"
+                                    onclick="solicitarCotizacion({{ proveedor.id }}, '{{ proveedor.nombre }}')">
+                                <i class="fas fa-file-invoice me-1"></i>Cotizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h4>No se encontraron proveedores</h4>
+                        <p class="text-muted">Intenta ajustar los filtros de búsqueda o 
+                           <a href="{{ url_for('marketplaces.buscar') }}">usar la búsqueda avanzada</a>
+                        </p>
+                        {% if current_user.es_admin() %}
+                        <a href="{{ url_for('marketplaces.crear_proveedor') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>Agregar Primer Proveedor
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal para solicitar cotización -->
+<div class="modal fade" id="cotizacionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Solicitar Cotización</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formCotizacion">
+                <div class="modal-body">
+                    <input type="hidden" id="proveedorId" name="proveedor_id">
+                    <div class="mb-3">
+                        <label class="form-label">Proveedor</label>
+                        <input type="text" id="proveedorNombre" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción del requerimiento *</label>
+                        <textarea name="descripcion" class="form-control" rows="4" 
+                                  placeholder="Describe detalladamente lo que necesitas..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane me-1"></i>Enviar Solicitud
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function solicitarCotizacion(proveedorId, proveedorNombre) {
+    document.getElementById('proveedorId').value = proveedorId;
+    document.getElementById('proveedorNombre').value = proveedorNombre;
+    new bootstrap.Modal(document.getElementById('cotizacionModal')).show();
+}
+
+document.getElementById('formCotizacion').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const proveedorId = document.getElementById('proveedorId').value;
+    
+    fetch(`/marketplaces/solicitar_cotizacion/${proveedorId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensaje de éxito
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = `
+                <strong>¡Excelente!</strong> ${data.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container-fluid').insertBefore(alert, document.querySelector('.row'));
+            
+            // Cerrar modal y limpiar formulario
+            bootstrap.Modal.getInstance(document.getElementById('cotizacionModal')).hide();
+            this.reset();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error al enviar solicitud: ' + error);
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Búsqueda Avanzada - Marketplaces{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-search me-2 text-primary"></i>Búsqueda Avanzada de Proveedores
+                </h1>
+                <a href="{{ url_for('marketplaces.index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulario de búsqueda avanzada -->
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-filter me-2"></i>Filtros de Búsqueda
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="formBusquedaAvanzada">
+                        <div class="mb-3">
+                            <label class="form-label">Término de búsqueda</label>
+                            <input type="text" id="buscarTermino" class="form-control" 
+                                   placeholder="Nombre, especialidad, descripción...">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Categoría</label>
+                            <select id="buscarCategoria" class="form-select">
+                                <option value="">Todas las categorías</option>
+                                {% for key, categoria in categorias.items() %}
+                                <option value="{{ key }}">{{ categoria.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Especialidad</label>
+                            <select id="buscarEspecialidad" class="form-select" disabled>
+                                <option value="">Selecciona una categoría primero</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Ubicación</label>
+                            <input type="text" id="buscarUbicacion" class="form-control" 
+                                   placeholder="Ciudad, provincia...">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Calificación mínima</label>
+                            <select id="buscarCalificacion" class="form-select">
+                                <option value="0">Cualquier calificación</option>
+                                <option value="3">3 estrellas o más</option>
+                                <option value="4">4 estrellas o más</option>
+                                <option value="4.5">4.5 estrellas o más</option>
+                                <option value="5">Solo 5 estrellas</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="soloVerificados">
+                                <label class="form-check-label" for="soloVerificados">
+                                    Solo proveedores verificados
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search me-1"></i>Buscar
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="limpiarFiltros()">
+                                <i class="fas fa-eraser me-1"></i>Limpiar Filtros
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-8">
+            <!-- Resultados de búsqueda -->
+            <div id="resultadosBusqueda">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h4>Usa los filtros para encontrar proveedores</h4>
+                        <p class="text-muted">Selecciona los criterios de búsqueda y presiona "Buscar"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Datos de categorías y especialidades
+const categoriasData = {{ categorias|tojson|safe }};
+
+// Actualizar especialidades cuando cambia la categoría
+document.getElementById('buscarCategoria').addEventListener('change', function() {
+    const categoria = this.value;
+    const especialidadSelect = document.getElementById('buscarEspecialidad');
+    
+    // Limpiar opciones anteriores
+    especialidadSelect.innerHTML = '<option value="">Todas las especialidades</option>';
+    
+    if (categoria && categoriasData[categoria]) {
+        especialidadSelect.disabled = false;
+        
+        categoriasData[categoria].subcategorias.forEach(subcategoria => {
+            const option = document.createElement('option');
+            option.value = subcategoria;
+            option.textContent = subcategoria;
+            especialidadSelect.appendChild(option);
+        });
+    } else {
+        especialidadSelect.disabled = true;
+        especialidadSelect.innerHTML = '<option value="">Selecciona una categoría primero</option>';
+    }
+});
+
+// Manejar el formulario de búsqueda
+document.getElementById('formBusquedaAvanzada').addEventListener('submit', function(e) {
+    e.preventDefault();
+    buscarProveedores();
+});
+
+function buscarProveedores() {
+    const termino = document.getElementById('buscarTermino').value;
+    const categoria = document.getElementById('buscarCategoria').value;
+    const ubicacion = document.getElementById('buscarUbicacion').value;
+    const calificacion = document.getElementById('buscarCalificacion').value;
+    const soloVerificados = document.getElementById('soloVerificados').checked;
+    
+    // Mostrar loading
+    document.getElementById('resultadosBusqueda').innerHTML = `
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Buscando...</span>
+                </div>
+                <h4 class="mt-3">Buscando proveedores...</h4>
+            </div>
+        </div>
+    `;
+    
+    // Construir parámetros de búsqueda
+    const params = new URLSearchParams();
+    if (termino) params.append('q', termino);
+    if (categoria) params.append('categoria', categoria);
+    if (ubicacion) params.append('ubicacion', ubicacion);
+    if (calificacion) params.append('calificacion', calificacion);
+    if (soloVerificados) params.append('verificados', 'true');
+    
+    // Realizar búsqueda
+    fetch(`/marketplaces/api/buscar?${params.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarResultados(data.proveedores);
+            } else {
+                mostrarError(data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarError('Error al realizar la búsqueda');
+        });
+}
+
+function mostrarResultados(proveedores) {
+    const contenedor = document.getElementById('resultadosBusqueda');
+    
+    if (proveedores.length === 0) {
+        contenedor.innerHTML = `
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                    <h4>No se encontraron proveedores</h4>
+                    <p class="text-muted">Intenta ajustar los criterios de búsqueda</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Resultados de búsqueda</h5>
+                <span class="badge bg-primary">${proveedores.length} encontrados</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+    `;
+    
+    proveedores.forEach(proveedor => {
+        const estrellas = generarEstrellas(proveedor.calificacion);
+        
+        html += `
+            <div class="col-12">
+                <div class="card border">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <div class="d-flex align-items-center mb-2">
+                                    <h6 class="mb-0 me-2">${proveedor.nombre}</h6>
+                                    ${proveedor.verificado ? '<span class="badge bg-success"><i class="fas fa-check-circle"></i> Verificado</span>' : ''}
+                                </div>
+                                <p class="text-muted small mb-1">${proveedor.especialidad}</p>
+                                <p class="mb-2">${proveedor.descripcion ? proveedor.descripcion.substring(0, 120) + '...' : ''}</p>
+                                <div class="d-flex gap-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-map-marker-alt me-1"></i>${proveedor.ubicacion}
+                                    </small>
+                                    <small class="text-muted">
+                                        <i class="fas fa-briefcase me-1"></i>${proveedor.trabajos_completados} trabajos
+                                    </small>
+                                    ${proveedor.precio_promedio ? `<small class="text-success"><i class="fas fa-dollar-sign me-1"></i>Desde $${proveedor.precio_promedio}</small>` : ''}
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div class="mb-2">
+                                    <div class="text-warning">${estrellas}</div>
+                                    <small class="text-muted">${proveedor.calificacion}/5</small>
+                                </div>
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <a href="/marketplaces/proveedor/${proveedor.id}" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-eye me-1"></i>Ver
+                                    </a>
+                                    <button class="btn btn-primary btn-sm" onclick="solicitarCotizacion(${proveedor.id}, '${proveedor.nombre}')">
+                                        <i class="fas fa-file-invoice me-1"></i>Cotizar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+                </div>
+            </div>
+        </div>
+    `;
+    
+    contenedor.innerHTML = html;
+}
+
+function generarEstrellas(calificacion) {
+    let estrellas = '';
+    for (let i = 1; i <= 5; i++) {
+        if (i <= calificacion) {
+            estrellas += '<i class="fas fa-star"></i>';
+        } else {
+            estrellas += '<i class="far fa-star"></i>';
+        }
+    }
+    return estrellas;
+}
+
+function mostrarError(mensaje) {
+    document.getElementById('resultadosBusqueda').innerHTML = `
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <h4>Error en la búsqueda</h4>
+                <p class="text-muted">${mensaje}</p>
+                <button class="btn btn-primary" onclick="buscarProveedores()">
+                    <i class="fas fa-retry me-1"></i>Intentar de nuevo
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function limpiarFiltros() {
+    document.getElementById('formBusquedaAvanzada').reset();
+    document.getElementById('buscarEspecialidad').disabled = true;
+    document.getElementById('buscarEspecialidad').innerHTML = '<option value="">Selecciona una categoría primero</option>';
+    
+    // Limpiar resultados
+    document.getElementById('resultadosBusqueda').innerHTML = `
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h4>Usa los filtros para encontrar proveedores</h4>
+                <p class="text-muted">Selecciona los criterios de búsqueda y presiona "Buscar"</p>
+            </div>
+        </div>
+    `;
+}
+
+function solicitarCotizacion(proveedorId, proveedorNombre) {
+    // Aquí podrías abrir un modal o redirigir
+    window.location.href = `/marketplaces/proveedor/${proveedorId}`;
+}
+</script>
+{% endblock %}

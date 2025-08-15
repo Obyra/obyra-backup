@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}{{ proveedor.nombre }} - Marketplaces{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-user-tie me-2 text-primary"></i>{{ proveedor.nombre }}
+                    {% if proveedor.verificado %}
+                    <span class="badge bg-success ms-2">
+                        <i class="fas fa-check-circle"></i> Verificado
+                    </span>
+                    {% endif %}
+                </h1>
+                <a href="{{ url_for('marketplaces.index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a Búsqueda
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Información principal -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <h5 class="card-title">{{ proveedor.especialidad }}</h5>
+                            <p class="card-text">{{ proveedor.descripcion }}</p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="text-warning mb-2">
+                                {% for i in range(5) %}
+                                    {% if i < proveedor.calificacion_estrellas %}
+                                    <i class="fas fa-star fa-lg"></i>
+                                    {% else %}
+                                    <i class="far fa-star fa-lg"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            <div class="h5 mb-0">{{ proveedor.calificacion_estrellas }}/5</div>
+                            <small class="text-muted">Calificación promedio</small>
+                        </div>
+                    </div>
+
+                    <!-- Información de contacto -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-map-marker-alt text-danger me-3"></i>
+                                <div>
+                                    <strong>Ubicación</strong><br>
+                                    <span class="text-muted">{{ proveedor.ubicacion }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% if proveedor.telefono %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-phone text-success me-3"></i>
+                                <div>
+                                    <strong>Teléfono</strong><br>
+                                    <a href="tel:{{ proveedor.telefono }}" class="text-decoration-none">{{ proveedor.telefono }}</a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if proveedor.email %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-envelope text-primary me-3"></i>
+                                <div>
+                                    <strong>Email</strong><br>
+                                    <a href="mailto:{{ proveedor.email }}" class="text-decoration-none">{{ proveedor.email }}</a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if proveedor.sitio_web %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-globe text-info me-3"></i>
+                                <div>
+                                    <strong>Sitio Web</strong><br>
+                                    <a href="{{ proveedor.sitio_web }}" target="_blank" class="text-decoration-none">
+                                        Ver sitio web <i class="fas fa-external-link-alt fa-sm"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Estadísticas -->
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-briefcase fa-2x text-primary mb-2"></i>
+                                    <h4 class="mb-0">{{ proveedor.trabajos_completados }}</h4>
+                                    <small class="text-muted">Trabajos Completados</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% if proveedor.precio_promedio %}
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-dollar-sign fa-2x text-success mb-2"></i>
+                                    <h4 class="mb-0">{{ proveedor.precio_promedio|moneda }}</h4>
+                                    <small class="text-muted">Precio Promedio</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar fa-2x text-info mb-2"></i>
+                                    <h4 class="mb-0">{{ proveedor.fecha_registro.strftime('%Y') }}</h4>
+                                    <small class="text-muted">Año de Registro</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de acciones -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-tools me-2"></i>Acciones
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-3">
+                        <button type="button" class="btn btn-primary btn-lg" 
+                                onclick="abrirModalCotizacion()">
+                            <i class="fas fa-file-invoice me-2"></i>Solicitar Cotización
+                        </button>
+                        
+                        {% if proveedor.telefono %}
+                        <a href="tel:{{ proveedor.telefono }}" class="btn btn-success">
+                            <i class="fas fa-phone me-2"></i>Llamar Ahora
+                        </a>
+                        {% endif %}
+                        
+                        {% if proveedor.email %}
+                        <a href="mailto:{{ proveedor.email }}" class="btn btn-outline-primary">
+                            <i class="fas fa-envelope me-2"></i>Enviar Email
+                        </a>
+                        {% endif %}
+                        
+                        <button type="button" class="btn btn-outline-warning" onclick="guardarFavorito()">
+                            <i class="fas fa-star me-2"></i>Agregar a Favoritos
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Información adicional -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Información
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>Categoría:</strong><br>
+                        <span class="badge bg-secondary">{{ proveedor.categoria|title }}</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Estado:</strong><br>
+                        {% if proveedor.activo %}
+                        <span class="badge bg-success">Activo</span>
+                        {% else %}
+                        <span class="badge bg-danger">Inactivo</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para solicitar cotización -->
+<div class="modal fade" id="modalCotizacion" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Solicitar Cotización a {{ proveedor.nombre }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formSolicitarCotizacion">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Descripción detallada del requerimiento *</label>
+                        <textarea name="descripcion" class="form-control" rows="5" required
+                                  placeholder="Describe detalladamente lo que necesitas:&#10;- Tipo de trabajo o servicio&#10;- Ubicación del proyecto&#10;- Fechas estimadas&#10;- Presupuesto aproximado&#10;- Cualquier requisito especial"></textarea>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Tip:</strong> Proporciona la mayor cantidad de detalles posible para obtener una cotización más precisa.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane me-1"></i>Enviar Solicitud
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function abrirModalCotizacion() {
+    new bootstrap.Modal(document.getElementById('modalCotizacion')).show();
+}
+
+document.getElementById('formSolicitarCotizacion').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(`/marketplaces/solicitar_cotizacion/{{ proveedor.id }}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensaje de éxito
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = `
+                <strong>¡Excelente!</strong> Tu solicitud de cotización ha sido enviada a {{ proveedor.nombre }}.
+                <br><small>Puedes ver el estado de tus solicitudes en <a href="/marketplaces/mis_cotizaciones">Mis Cotizaciones</a></small>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container-fluid').insertBefore(alert, document.querySelector('.row'));
+            
+            // Cerrar modal y limpiar formulario
+            bootstrap.Modal.getInstance(document.getElementById('modalCotizacion')).hide();
+            this.reset();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error al enviar solicitud: ' + error);
+    });
+});
+
+function guardarFavorito() {
+    // Implementar funcionalidad de favoritos
+    alert('Funcionalidad de favoritos próximamente disponible');
+}
+</script>
+{% endblock %}

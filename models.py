@@ -134,25 +134,25 @@ class Usuario(UserMixin, db.Model):
         
         # Asignar permisos por categoría de rol
         for rol in roles_direccion:
-            permisos[rol] = ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
+            permisos[rol] = ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
         
         for rol in roles_tecnicos:
-            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
+            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
             
         for rol in roles_supervision:
-            permisos[rol] = ['obras', 'inventario', 'reportes', 'asistente', 'documentos', 'seguridad']
+            permisos[rol] = ['obras', 'inventario', 'marketplaces', 'reportes', 'asistente', 'documentos', 'seguridad']
             
         for rol in roles_administrativos:
-            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'reportes', 'cotizacion', 'documentos']
+            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'cotizacion', 'documentos']
             
         for rol in roles_operativos:
-            permisos[rol] = ['obras', 'inventario', 'asistente', 'documentos']
+            permisos[rol] = ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
         
         # Mantener compatibilidad con roles antiguos
         permisos.update({
-            'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
-            'tecnico': ['obras', 'presupuestos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
-            'operario': ['obras', 'inventario', 'asistente', 'documentos']
+            'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
+            'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
+            'operario': ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
         })
         
         return modulo in permisos.get(self.rol, [])
@@ -688,3 +688,71 @@ class CertificacionAvance(db.Model):
             return False, f"El total de avance sería {nuevo_total}%, excede el 100% permitido"
         
         return True, "Certificación válida"
+
+
+class Proveedor(db.Model):
+    __tablename__ = 'proveedores'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text)
+    categoria = db.Column(db.String(100), nullable=False)  # materiales, equipos, servicios, profesionales
+    especialidad = db.Column(db.String(200))  # subcategoría específica
+    ubicacion = db.Column(db.String(300))
+    telefono = db.Column(db.String(20))
+    email = db.Column(db.String(120))
+    sitio_web = db.Column(db.String(200))
+    precio_promedio = db.Column(db.Numeric(15, 2))  # Precio promedio por servicio/producto
+    calificacion = db.Column(db.Numeric(3, 2), default=5.0)  # Calificación de 1 a 5
+    trabajos_completados = db.Column(db.Integer, default=0)
+    verificado = db.Column(db.Boolean, default=False)  # Verificado por la plataforma
+    activo = db.Column(db.Boolean, default=True)
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    organizacion = db.relationship('Organizacion')
+    cotizaciones = db.relationship('SolicitudCotizacion', back_populates='proveedor', lazy='dynamic')
+    
+    def __repr__(self):
+        return f'<Proveedor {self.nombre}>'
+    
+    @property
+    def calificacion_estrellas(self):
+        """Devuelve la calificación en formato de estrellas"""
+        return round(float(self.calificacion), 1)
+
+
+class CategoriaProveedor(db.Model):
+    __tablename__ = 'categorias_proveedor'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False, unique=True)
+    descripcion = db.Column(db.Text)
+    icono = db.Column(db.String(50))  # Clase de FontAwesome
+    activa = db.Column(db.Boolean, default=True)
+    
+    def __repr__(self):
+        return f'<CategoriaProveedor {self.nombre}>'
+
+
+class SolicitudCotizacion(db.Model):
+    __tablename__ = 'solicitudes_cotizacion'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores.id'), nullable=False)
+    solicitante_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    descripcion = db.Column(db.Text, nullable=False)
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente, cotizada, aceptada, rechazada
+    fecha_solicitud = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_respuesta = db.Column(db.DateTime)
+    precio_cotizado = db.Column(db.Numeric(15, 2))
+    notas_proveedor = db.Column(db.Text)
+    tiempo_entrega_dias = db.Column(db.Integer)
+    
+    # Relaciones
+    proveedor = db.relationship('Proveedor', back_populates='cotizaciones')
+    solicitante = db.relationship('Usuario')
+    
+    def __repr__(self):
+        return f'<SolicitudCotizacion {self.id} - {self.estado}>'

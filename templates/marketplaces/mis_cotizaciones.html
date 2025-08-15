@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Mis Cotizaciones - Marketplaces{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-file-invoice me-2 text-success"></i>Mis Solicitudes de Cotización
+                </h1>
+                <a href="{{ url_for('marketplaces.index') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Nueva Búsqueda
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todos los estados</option>
+                        <option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+                        <option value="cotizada" {% if estado == 'cotizada' %}selected{% endif %}>Cotizada</option>
+                        <option value="aceptada" {% if estado == 'aceptada' %}selected{% endif %}>Aceptada</option>
+                        <option value="rechazada" {% if estado == 'rechazada' %}selected{% endif %}>Rechazada</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="fas fa-filter"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de cotizaciones -->
+    {% if cotizaciones %}
+        <div class="row">
+            {% for cotizacion in cotizaciones %}
+            <div class="col-12 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <div class="d-flex align-items-center mb-2">
+                                    <h6 class="mb-0 me-3">{{ cotizacion.proveedor.nombre }}</h6>
+                                    {% if cotizacion.estado == 'pendiente' %}
+                                        <span class="badge bg-warning">Pendiente</span>
+                                    {% elif cotizacion.estado == 'cotizada' %}
+                                        <span class="badge bg-info">Cotizada</span>
+                                    {% elif cotizacion.estado == 'aceptada' %}
+                                        <span class="badge bg-success">Aceptada</span>
+                                    {% elif cotizacion.estado == 'rechazada' %}
+                                        <span class="badge bg-danger">Rechazada</span>
+                                    {% endif %}
+                                </div>
+                                
+                                <p class="mb-2">{{ cotizacion.descripcion|truncate(150) }}</p>
+                                
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            Solicitada: {{ cotizacion.fecha_solicitud.strftime('%d/%m/%Y') }}
+                                        </small>
+                                    </div>
+                                    {% if cotizacion.fecha_respuesta %}
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-reply me-1"></i>
+                                            Respondida: {{ cotizacion.fecha_respuesta.strftime('%d/%m/%Y') }}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                    {% if cotizacion.precio_cotizado %}
+                                    <div class="col-md-6">
+                                        <small class="text-success">
+                                            <i class="fas fa-dollar-sign me-1"></i>
+                                            Precio: {{ cotizacion.precio_cotizado|moneda }}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                    {% if cotizacion.tiempo_entrega_dias %}
+                                    <div class="col-md-6">
+                                        <small class="text-info">
+                                            <i class="fas fa-clock me-1"></i>
+                                            Entrega: {{ cotizacion.tiempo_entrega_dias }} días
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if cotizacion.notas_proveedor %}
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <strong>Notas del proveedor:</strong> {{ cotizacion.notas_proveedor }}
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-4 text-end">
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <a href="{{ url_for('marketplaces.detalle_proveedor', proveedor_id=cotizacion.proveedor.id) }}" 
+                                       class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-eye me-1"></i>Ver Proveedor
+                                    </a>
+                                    
+                                    {% if cotizacion.estado == 'cotizada' %}
+                                    <button class="btn btn-success btn-sm" 
+                                            onclick="aceptarCotizacion({{ cotizacion.id }})">
+                                        <i class="fas fa-check me-1"></i>Aceptar
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm"
+                                            onclick="rechazarCotizacion({{ cotizacion.id }})">
+                                        <i class="fas fa-times me-1"></i>Rechazar
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-file-invoice fa-3x text-muted mb-3"></i>
+                <h4>No tienes solicitudes de cotización</h4>
+                <p class="text-muted">
+                    {% if estado %}
+                    No hay cotizaciones con el estado "{{ estado }}".
+                    <a href="{{ url_for('marketplaces.mis_cotizaciones') }}">Ver todas</a>
+                    {% else %}
+                    Busca proveedores y solicita cotizaciones para tus proyectos.
+                    {% endif %}
+                </p>
+                <a href="{{ url_for('marketplaces.index') }}" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>Buscar Proveedores
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function aceptarCotizacion(cotizacionId) {
+    if (confirm('¿Estás seguro de que quieres aceptar esta cotización?')) {
+        // Aquí podrías implementar la lógica para aceptar
+        fetch(`/marketplaces/cotizacion/${cotizacionId}/aceptar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error al aceptar cotización: ' + error);
+        });
+    }
+}
+
+function rechazarCotizacion(cotizacionId) {
+    if (confirm('¿Estás seguro de que quieres rechazar esta cotización?')) {
+        // Aquí podrías implementar la lógica para rechazar
+        fetch(`/marketplaces/cotizacion/${cotizacionId}/rechazar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error al rechazar cotización: ' + error);
+        });
+    }
+}
+</script>
+{% endblock %}
