@@ -1,639 +1,298 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - OBYRA IA{% endblock %}
+{% block title %}Dashboard Principal - OBYRA IA{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <!-- Header con filtros de fecha -->
+    <!-- Header Principal -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2><i class="fas fa-tachometer-alt me-2"></i>Dashboard de Gestión</h2>
-                <div class="text-muted">
-                    <i class="fas fa-calendar me-1"></i>
-                    Último acceso: {{ current_user.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}
+            <div class="text-center mb-4">
+                <h1 class="display-6 fw-bold text-primary">Dashboard Principal</h1>
+                <p class="lead text-muted">Resumen de tus obras activas y métricas clave</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- KPIs Principales - 4 Tarjetas Compactas -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ kpis.obras_activas or 0 }}</h3>
+                            <p class="mb-0 text-muted">Obras Activas</p>
+                            <small class="text-success">+{{ kpis.obras_nuevas_mes or 0 }} este mes</small>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary rounded-circle p-2 me-2" style="width: 8px; height: 8px;"></div>
+                            <i class="fas fa-building text-primary fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">${{ kpis.costo_total|default('0.0')|round(1) }}M</h3>
+                            <p class="mb-0 text-muted">Costo Total</p>
+                            <small class="{% if kpis.variacion_presupuesto >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ kpis.variacion_presupuesto|default(0)|round(1) }}% vs presupuesto
+                            </small>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <div class="bg-success rounded-circle p-2 me-2" style="width: 8px; height: 8px;"></div>
+                            <i class="fas fa-dollar-sign text-success fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ kpis.avance_promedio|default(0)|round(0) }}%</h3>
+                            <p class="mb-0 text-muted">Avance Promedio</p>
+                            <small class="text-warning">{{ kpis.obras_retrasadas or 0 }} obras retrasadas</small>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <div class="bg-warning rounded-circle p-2 me-2" style="width: 8px; height: 8px;"></div>
+                            <i class="fas fa-chart-line text-warning fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ kpis.personal_activo or 0 }}</h3>
+                            <p class="mb-0 text-muted">Personal Activo</p>
+                            <small class="text-info">En {{ kpis.obras_con_personal or 0 }} obras</small>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <div class="bg-info rounded-circle p-2 me-2" style="width: 8px; height: 8px;"></div>
+                            <i class="fas fa-users text-info fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Contenido Principal - 2 Columnas -->
+    <div class="row">
+        <!-- Columna Izquierda -->
+        <div class="col-lg-8">
+            <!-- Obras Activas -->
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold">Obras Activas</h5>
+                    <a href="{{ url_for('obras.lista') }}" class="btn btn-sm btn-outline-primary">Ver todas</a>
+                </div>
+                <div class="card-body">
+                    {% if obras_activas %}
+                        {% for obra in obras_activas[:3] %}
+                        <div class="border rounded p-3 mb-3 {% if loop.last %}mb-0{% endif %}">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <h6 class="mb-1 fw-bold">{{ obra.nombre }}</h6>
+                                    <p class="mb-1 text-muted small">
+                                        <i class="fas fa-map-marker-alt me-1"></i>
+                                        {{ obra.direccion or 'Ubicación no especificada' }}
+                                    </p>
+                                    <span class="badge bg-success">{{ obra.estado.title() }}</span>
+                                </div>
+                                <div class="col-md-3 text-end">
+                                    <div class="fw-bold">${{ obra.presupuesto_total|default(0)|round(0) }}K</div>
+                                    {% if obra.costo_real and obra.costo_real > obra.presupuesto_total %}
+                                        <small class="text-danger">Sobrecosto</small>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="progress mb-1" style="height: 8px;">
+                                        <div class="progress-bar bg-primary" style="width: {{ obra.progreso or 0 }}%"></div>
+                                    </div>
+                                    <small class="text-muted">{{ obra.progreso or 0 }}% completado</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-building text-muted fa-3x mb-3"></i>
+                            <p class="text-muted">No hay obras activas en este momento</p>
+                            <a href="{{ url_for('obras.crear') }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-1"></i>Crear Nueva Obra
+                            </a>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
             
-            <!-- Filtros de fecha -->
-            <div class="card">
-                <div class="card-body py-2">
-                    <form method="GET" class="row g-3 align-items-end">
-                        <div class="col-md-3">
-                            <label for="fecha_desde" class="form-label small">Desde</label>
-                            <input type="date" class="form-control form-control-sm" id="fecha_desde" 
-                                   name="fecha_desde" value="{{ fecha_desde }}">
-                        </div>
-                        <div class="col-md-3">
-                            <label for="fecha_hasta" class="form-label small">Hasta</label>
-                            <input type="date" class="form-control form-control-sm" id="fecha_hasta" 
-                                   name="fecha_hasta" value="{{ fecha_hasta }}">
-                        </div>
-                        <div class="col-md-3">
-                            <button type="submit" class="btn btn-primary btn-sm">
-                                <i class="fas fa-filter me-1"></i>Actualizar
-                            </button>
-                        </div>
-                        <div class="col-md-3 text-end">
-                            <small class="text-muted">
-                                Período: {{ fecha_desde }} - {{ fecha_hasta }}
-                            </small>
-                        </div>
-                    </form>
+            <!-- Actividad Reciente -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0 fw-bold">Actividad Reciente</h5>
                 </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- KPIs principales -->
-    <div class="row mb-4">
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-primary text-white h-100">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0">{{ kpis.total_obras or 0 }}</h3>
-                            <p class="mb-0">Obras Activas</p>
-                        </div>
-                        <div class="text-primary-light">
-                            <i class="fas fa-building fa-2x opacity-75"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <small>
-                            <i class="fas fa-arrow-up me-1"></i>
-                            {{ kpis.obras_finalizadas or 0 }} finalizadas este período
-                        </small>
+                    <div class="text-center py-4">
+                        <i class="fas fa-clock text-muted fa-3x mb-3"></i>
+                        <p class="text-muted">Sistema de actividad en desarrollo</p>
+                        <small class="text-muted">Próximamente podrás ver el feed de eventos de tus obras</small>
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-success text-white h-100">
+        <!-- Columna Derecha -->
+        <div class="col-lg-4">
+            <!-- Acciones Rápidas -->
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0 fw-bold">Acciones Rápidas</h5>
+                </div>
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0">${{ kpis.ingresos_totales|numero or 0 }}</h3>
-                            <p class="mb-0">Presupuestos Aprobados</p>
-                        </div>
-                        <div class="text-success-light">
-                            <i class="fas fa-calculator fa-2x opacity-75"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <small>
-                            <i class="fas fa-chart-line me-1"></i>
-                            {{ kpis.presupuestos_periodo or 0 }} generados este período
-                        </small>
+                    <div class="d-grid gap-3">
+                        <a href="{{ url_for('obras.crear') }}" class="btn btn-primary d-flex align-items-center">
+                            <i class="fas fa-plus me-3"></i>
+                            <div class="text-start">
+                                <div class="fw-bold">Nueva Obra</div>
+                                <small>Crear proyecto</small>
+                            </div>
+                        </a>
+                        
+                        <a href="{{ url_for('presupuestos.calculadora_ia') }}" class="btn btn-success d-flex align-items-center">
+                            <i class="fas fa-calculator me-3"></i>
+                            <div class="text-start">
+                                <div class="fw-bold">Calcular Cómputo</div>
+                                <small>Estimar materiales</small>
+                            </div>
+                        </a>
+                        
+                        <a href="#" class="btn btn-warning d-flex align-items-center">
+                            <i class="fas fa-store me-3"></i>
+                            <div class="text-start">
+                                <div class="fw-bold">Marketplace</div>
+                                <small>Buscar proveedores</small>
+                            </div>
+                        </a>
+                        
+                        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-warning d-flex align-items-center">
+                            <i class="fas fa-file-pdf me-3"></i>
+                            <div class="text-start">
+                                <div class="fw-bold">Generar Reporte</div>
+                                <small>Exportar PDF</small>
+                            </div>
+                        </a>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-info text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0">{{ kpis.total_usuarios or 0 }}</h3>
-                            <p class="mb-0">Usuarios Activos</p>
-                        </div>
-                        <div class="text-info-light">
-                            <i class="fas fa-users fa-2x opacity-75"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <small>
-                            <i class="fas fa-clock me-1"></i>
-                            {{ (kpis.horas_trabajadas or 0)|numero(1) }}h trabajadas
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-warning text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0">{{ kpis.alertas_inventario or 0 }}</h3>
-                            <p class="mb-0">Items Críticos</p>
-                        </div>
-                        <div class="text-warning-light">
-                            <i class="fas fa-exclamation-triangle fa-2x opacity-75"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <small>
-                            <i class="fas fa-boxes me-1"></i>
-                            Stock bajo en inventario
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Mapa Interactivo de Obras -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-map-marked-alt me-2"></i>Distribución de Obras por Zonas
-                    </h5>
-                    <div class="d-flex gap-2 align-items-center">
-                        <span class="badge bg-primary">{{ obras_con_ubicacion|length }} obras</span>
-                        <div class="d-flex align-items-center gap-2 text-muted">
-                            <i class="fas fa-cloud me-1"></i>
-                            <span class="small">Haz clic en una obra para ver el clima</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div id="mapa-dashboard" style="height: 400px; width: 100%;"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Tablas de datos -->
-    <div class="row mb-4">
-        <!-- Presupuestos recientes -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Presupuestos Recientes</h5>
-                    <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-sm btn-outline-primary">
-                        Ver todos
-                    </a>
+            
+            <!-- Alertas y Notificaciones -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold">Alertas y Notificaciones</h5>
+                    <span class="badge bg-danger">{{ alertas|length or 0 }} nuevas</span>
                 </div>
                 <div class="card-body">
-                    {% if presupuestos_recientes %}
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Número</th>
-                                    <th>Obra</th>
-                                    <th>Estado</th>
-                                    <th class="text-end">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for presupuesto in presupuestos_recientes %}
-                                <tr>
-                                    <td>
-                                        <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" 
-                                           class="text-decoration-none">
-                                            {{ presupuesto.numero }}
-                                        </a>
-                                    </td>
-                                    <td>{{ (presupuesto.obra.nombre[:20] if presupuesto.obra else 'Sin obra')}}{% if presupuesto.obra and presupuesto.obra.nombre|length > 20 %}...{% endif %}</td>
-                                    <td>
-                                        <span class="badge {{ presupuesto.estado|estado_badge }}">
-                                            {{ presupuesto.estado.title() }}
-                                        </span>
-                                    </td>
-                                    <td class="text-end">{{ presupuesto.total_con_iva|moneda }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    {% if alertas %}
+                        {% for alerta in alertas %}
+                        <div class="alert alert-{{ alerta.nivel }} border-0 mb-3 p-3" style="background: linear-gradient(135deg, 
+                            {% if alerta.nivel == 'danger' %}#dc3545, #fd7e14{% elif alerta.nivel == 'warning' %}#fd7e14, #ffc107{% else %}#17a2b8, #6f42c1{% endif %});">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1 text-white">
+                                    <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                    <div class="small mb-1">{{ alerta.descripcion }}</div>
+                                    <div class="small opacity-75">{{ alerta.obra_nombre }}</div>
+                                </div>
+                                <span class="badge bg-white text-dark">{{ alerta.nivel }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
                     {% else %}
-                    <div class="text-center py-3">
-                        <i class="fas fa-calculator fa-2x text-muted mb-2"></i>
-                        <p class="text-muted">No hay presupuestos recientes</p>
-                    </div>
+                        <!-- Alertas de ejemplo -->
+                        <div class="alert alert-warning border-0 mb-3 p-3" style="background: linear-gradient(135deg, #fd7e14, #ffc107);">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1 text-white">
+                                    <div class="fw-bold mb-1">Sobrecosto detectado</div>
+                                    <div class="small mb-1">Costo supera presupuesto inicial en 15%</div>
+                                    <div class="small opacity-75">Centro Comercial Sur</div>
+                                </div>
+                                <span class="badge bg-white text-warning">alta</span>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-warning border-0 mb-3 p-3" style="background: linear-gradient(135deg, #fd7e14, #ffc107);">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1 text-white">
+                                    <div class="fw-bold mb-1">Retraso en cronograma</div>
+                                    <div class="small mb-1">3 tareas pendientes en albañilería</div>
+                                    <div class="small opacity-75">Edificio San Martín</div>
+                                </div>
+                                <span class="badge bg-white text-warning">media</span>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-warning border-0 mb-3 p-3" style="background: linear-gradient(135deg, #fd7e14, #ffc107);">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1 text-white">
+                                    <div class="fw-bold mb-1">Stock bajo de materiales</div>
+                                    <div class="small mb-1">Cemento Portland: solo 3 bolsas restantes</div>
+                                    <div class="small opacity-75">Complejo Industrial Norte</div>
+                                </div>
+                                <span class="badge bg-white text-warning">alta</span>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-danger border-0 mb-0 p-3" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1 text-white">
+                                    <div class="fw-bold mb-1">Hito completado</div>
+                                    <div class="small mb-1">Estructura principal finalizada</div>
+                                    <div class="small opacity-75">Edificio San Martín</div>
+                                </div>
+                                <span class="badge bg-white text-danger">crítica</span>
+                            </div>
+                        </div>
                     {% endif %}
-                </div>
-            </div>
-        </div>
-        
-        <!-- Items con stock bajo -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Alertas de Inventario</h5>
-                    <a href="{{ url_for('inventario.lista', stock_bajo='1') }}" class="btn btn-sm btn-outline-warning">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="card-body">
-                    {% if items_stock_bajo %}
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Item</th>
-                                    <th class="text-end">Stock</th>
-                                    <th class="text-end">Mínimo</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in items_stock_bajo %}
-                                <tr class="table-warning">
-                                    <td>
-                                        <div>
-                                            <strong>{{ item.codigo }}</strong><br>
-                                            <small class="text-muted">{{ item.nombre[:25] }}{% if item.nombre|length > 25 %}...{% endif %}</small>
-                                        </div>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="text-danger fw-bold">{{ item.stock_actual|numero(1) }}</span>
-                                        <small class="text-muted d-block">{{ item.unidad }}</small>
-                                    </td>
-                                    <td class="text-end">
-                                        {{ item.stock_minimo|numero(1) }}
-                                    </td>
-                                    <td>
-                                        <a href="{{ url_for('inventario.detalle', id=item.id) }}" 
-                                           class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    
+                    <div class="text-center mt-3">
+                        <a href="#" class="btn btn-sm btn-outline-secondary">Ver todas las alertas</a>
                     </div>
-                    {% else %}
-                    <div class="text-center py-3">
-                        <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
-                        <p class="text-muted">Inventario en niveles óptimos</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Obras próximas a vencer y rendimiento del equipo -->
-    <div class="row">
-        <!-- Obras próximas a vencer -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Obras Próximas a Vencer</h5>
-                    <a href="{{ url_for('obras.lista') }}" class="btn btn-sm btn-outline-danger">
-                        Ver todas
-                    </a>
-                </div>
-                <div class="card-body">
-                    {% if obras_vencimiento %}
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Obra</th>
-                                    <th>Cliente</th>
-                                    <th class="text-end">Vence</th>
-                                    <th class="text-center">Progreso</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for obra in obras_vencimiento %}
-                                <tr>
-                                    <td>
-                                        <a href="{{ url_for('obras.detalle', id=obra.id) }}" 
-                                           class="text-decoration-none">
-                                            {{ obra.nombre[:20] }}{% if obra.nombre|length > 20 %}...{% endif %}
-                                        </a>
-                                    </td>
-                                    <td>{{ obra.cliente[:15] }}{% if obra.cliente|length > 15 %}...{% endif %}</td>
-                                    <td class="text-end">
-                                        <span class="text-danger">{{ obra.fecha_fin_estimada|fecha }}</span>
-                                    </td>
-                                    <td class="text-center">
-                                        <div class="progress" style="height: 20px; width: 60px;">
-                                            <div class="progress-bar" role="progressbar" 
-                                                 style="width: {{ obra.progreso }}%">
-                                                <small>{{ obra.progreso }}%</small>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="text-center py-3">
-                        <i class="fas fa-calendar-check fa-2x text-success mb-2"></i>
-                        <p class="text-muted">No hay obras próximas a vencer</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        
-        <!-- Top rendimiento equipo -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Top Rendimiento del Equipo</h5>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <a href="{{ url_for('equipos.rendimiento') }}" class="btn btn-sm btn-outline-info">
-                        Ver completo
-                    </a>
-                    {% endif %}
-                </div>
-                <div class="card-body">
-                    {% if rendimiento_equipo %}
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Usuario</th>
-                                    <th>Rol</th>
-                                    <th class="text-end">Horas</th>
-                                    <th class="text-center">Días</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for rendimiento in rendimiento_equipo[:5] %}
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center me-2" 
-                                                 style="width: 24px; height: 24px; font-size: 10px;">
-                                                {{ rendimiento.nombre[0] }}{{ rendimiento.apellido[0] }}
-                                            </div>
-                                            <div>
-                                                <small class="fw-bold">{{ rendimiento.nombre }} {{ rendimiento.apellido }}</small>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-secondary small">{{ rendimiento.rol.title() }}</span>
-                                    </td>
-                                    <td class="text-end">
-                                        <strong class="text-primary">{{ rendimiento.total_horas|numero(1) }}h</strong>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-info">{{ rendimiento.dias_trabajados }}</span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="text-center py-3">
-                        <i class="fas fa-users fa-2x text-muted mb-2"></i>
-                        <p class="text-muted">No hay datos de rendimiento</p>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% endblock %}
 
-
-
-{% block scripts %}
-<!-- Leaflet CSS y JS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
-     crossorigin=""/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
-        crossorigin=""></script>
-
-<script>
-console.log('🗺️ Iniciando dashboard con mapa...');
-
-// Variables globales del mapa
-let mapaDashboard;
-let marcadoresDashboard = [];
-
-// Datos de obras desde el backend (solo las que tienen coordenadas)
-const obrasDataDashboard = [
-    {% for obra in obras_con_ubicacion %}
-    {% if obra.latitud and obra.longitud %}
-    {
-        id: {{ obra.id }},
-        nombre: {{ obra.nombre|tojson }},
-        cliente: {{ obra.cliente|tojson }},
-        direccion: {{ (obra.direccion or 'Sin dirección')|tojson }},
-        lat: {{ obra.latitud }},
-        lng: {{ obra.longitud }},
-        estado: "{{ obra.estado }}",
-        progreso: {{ obra.progreso }},
-        presupuesto: {{ obra.presupuesto_total or 0 }}
-    }{{ ',' if not loop.last }}
-    {% endif %}
-    {% endfor %}
-];
-
-console.log('📊 Obras para dashboard:', obrasDataDashboard.length);
-
-// Inicializar cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('📊 DOM CARGADO - Iniciando dashboard');
-    console.log('🏗️ Obras disponibles:', {{ obras_con_ubicacion|length }});
-    
-    // Verificar que Leaflet esté disponible
-    if (typeof L === 'undefined') {
-        console.error('❌ Leaflet no está disponible');
-        return;
-    }
-    
-    console.log('✅ Leaflet disponible');
-    
-    // Esperar un poco para que el DOM esté completamente renderizado
-    setTimeout(function() {
-        inicializarMapaDashboard();
-    }, 500);
-    
-    // Inicializar gráficos
-    setTimeout(function() {
-        console.log('📈 Inicializando gráficos...');
-        inicializarGraficos();
-    }, 1000);
-});
-
-function inicializarMapaDashboard() {
-    try {
-        console.log('🗺️ Inicializando mapa del dashboard...');
-        
-        // Verificar que el contenedor existe
-        const contenedor = document.getElementById('mapa-dashboard');
-        if (!contenedor) {
-            console.error('❌ Contenedor del mapa dashboard no encontrado');
-            return;
-        }
-        
-        // Limpiar contenedor
-        contenedor.innerHTML = '';
-        
-        // Coordenadas de Buenos Aires (centro)
-        const centroBA = [-34.6118, -58.3960];
-        
-        // Crear mapa
-        mapaDashboard = L.map('mapa-dashboard', {
-            center: centroBA,
-            zoom: 11,
-            zoomControl: true
-        });
-        
-        console.log('✅ Mapa dashboard creado');
-        
-        // Agregar capa base de OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(mapaDashboard);
-        
-        console.log('✅ Capa base agregada al dashboard');
-        
-        // Agregar marcadores para cada obra
-        obrasDataDashboard.forEach(function(obra, index) {
-            console.log(`📍 Agregando marcador dashboard ${index + 1}: ${obra.nombre}`);
-            agregarMarcadorObraDashboard(obra);
-        });
-        
-        // Ajustar vista si hay obras
-        if (obrasDataDashboard.length > 0) {
-            ajustarVistaAObrasDashboard();
-        }
-        
-        // Forzar redimensionamiento después de un momento
-        setTimeout(function() {
-            mapaDashboard.invalidateSize();
-            console.log('🔄 Mapa dashboard redimensionado');
-        }, 1000);
-        
-        console.log('✅ Mapa dashboard inicializado correctamente');
-        
-    } catch (error) {
-        console.error('❌ Error inicializando mapa dashboard:', error);
-        mostrarErrorMapaDashboard();
-    }
+<style>
+.card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-function agregarMarcadorObraDashboard(obra) {
-    try {
-        // Verificar coordenadas válidas
-        if (!obra.lat || !obra.lng || isNaN(obra.lat) || isNaN(obra.lng)) {
-            console.warn(`⚠️ Coordenadas inválidas para ${obra.nombre}`);
-            return;
-        }
-        
-        // Color del marcador según estado
-        let color = '#dc3545'; // rojo por defecto
-        switch(obra.estado) {
-            case 'en_curso': color = '#28a745'; break;
-            case 'finalizada': color = '#6c757d'; break;
-            case 'pausada': color = '#ffc107'; break;
-            case 'cancelada': color = '#dc3545'; break;
-            case 'planificacion': color = '#007bff'; break;
-        }
-        
-        // Crear marcador circular
-        const marcador = L.circleMarker([parseFloat(obra.lat), parseFloat(obra.lng)], {
-            radius: 10,
-            fillColor: color,
-            color: '#ffffff',
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.8
-        });
-        
-        // Contenido del popup
-        const popupContent = `
-            <div style="min-width: 200px;">
-                <h6 class="text-primary mb-2">
-                    <i class="fas fa-building me-1"></i>${obra.nombre}
-                </h6>
-                <p class="mb-1"><strong>Cliente:</strong> ${obra.cliente}</p>
-                <p class="mb-1"><strong>Dirección:</strong> ${obra.direccion}</p>
-                <p class="mb-2">
-                    <strong>Estado:</strong> 
-                    <span class="badge bg-secondary">${obra.estado.replace('_', ' ')}</span>
-                </p>
-                <p class="mb-2"><strong>Progreso:</strong> ${obra.progreso}%</p>
-                ${obra.presupuesto > 0 ? `<p class="mb-2"><strong>Presupuesto:</strong> $${Number(obra.presupuesto).toLocaleString()}</p>` : ''}
-                <div class="d-grid gap-2">
-                    <a href="/obras/${obra.id}" class="btn btn-primary btn-sm text-white" style="color: white !important;">
-                        <i class="fas fa-eye me-1"></i>Ver Detalles
-                    </a>
-                </div>
-            </div>
-        `;
-        
-        // Vincular popup al marcador
-        marcador.bindPopup(popupContent, {
-            maxWidth: 250,
-            className: 'popup-obra-dashboard'
-        });
-        
-        // Agregar marcador al mapa
-        marcador.addTo(mapaDashboard);
-        marcadoresDashboard.push(marcador);
-        
-        console.log(`✅ Marcador dashboard agregado para: ${obra.nombre}`);
-        
-    } catch (error) {
-        console.error(`❌ Error agregando marcador dashboard para ${obra.nombre}:`, error);
-    }
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
 }
 
-function ajustarVistaAObrasDashboard() {
-    if (obrasDataDashboard.length === 1) {
-        // Si hay una sola obra, centrar en ella
-        const obra = obrasDataDashboard[0];
-        mapaDashboard.setView([obra.lat, obra.lng], 14);
-    } else if (obrasDataDashboard.length > 1) {
-        // Si hay múltiples obras, ajustar para mostrar todas
-        const coordenadas = obrasDataDashboard.map(obra => [obra.lat, obra.lng]);
-        const bounds = L.latLngBounds(coordenadas);
-        mapaDashboard.fitBounds(bounds, { padding: [20, 20] });
-    }
+.btn {
+    transition: all 0.2s ease;
 }
 
-// Función del clima eliminada - ahora usa la función estándar mostrarClima()
-
-function mostrarErrorMapaDashboard() {
-    const contenedor = document.getElementById('mapa-dashboard');
-    if (contenedor) {
-        contenedor.innerHTML = `
-            <div style="height: 400px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
-                <div style="text-align: center; color: #6c757d;">
-                    <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
-                    <h5>Error cargando el mapa</h5>
-                    <p>No se pudo inicializar el mapa interactivo del dashboard.</p>
-                    <button onclick="location.reload()" class="btn btn-outline-primary">
-                        <i class="fas fa-redo me-1"></i>Recargar página
-                    </button>
-                </div>
-            </div>
-        `;
-    }
+.btn:hover {
+    transform: translateY(-1px);
 }
-
-function inicializarGraficos() {
-    // Los gráficos se manejan en otras secciones del dashboard
-    console.log('✅ Sistema de gráficos del dashboard inicializado');
-}
-
-// Funciones del clima eliminadas por solicitud del usuario
-
-// Redimensionar mapa cuando cambie el tamaño de la ventana
-window.addEventListener('resize', function() {
-    if (mapaDashboard) {
-        setTimeout(function() {
-            mapaDashboard.invalidateSize();
-        }, 100);
-    }
-});
-
-console.log('🎯 Script del mapa dashboard cargado completamente');
-</script>
+</style>
 {% endblock %}

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
@@ -70,80 +70,101 @@ def dashboard():
     # Rendimiento del equipo (últimos 30 días)
     rendimiento_equipo = calcular_rendimiento_equipo(fecha_desde_obj, fecha_hasta_obj)
     
+    # Obras activas para el dashboard
+    obras_activas = Obra.query.filter(
+        Obra.organizacion_id == current_user.organizacion_id,
+        Obra.estado.in_(['planificacion', 'en_curso'])
+    ).order_by(desc(Obra.fecha_creacion)).limit(10).all()
+    
+    # Alertas del sistema (ejemplo)
+    alertas = []
+    
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
-                         obras_por_estado=obras_por_estado,
-                         obras_con_ubicacion=obras_con_ubicacion,
-                         presupuestos_recientes=presupuestos_recientes,
-                         items_stock_bajo=items_stock_bajo,
-                         obras_vencimiento=obras_vencimiento,
-                         rendimiento_equipo=rendimiento_equipo,
+                         obras_activas=obras_activas,
+                         alertas=alertas,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta)
 
 def calcular_kpis(fecha_desde, fecha_hasta):
     """Calcula los KPIs principales del dashboard"""
     
-    # Total de obras activas
+    # Filtrar por organización del usuario actual
+    org_id = current_user.organizacion_id
+    
+    # Obras activas
     obras_activas = Obra.query.filter(
+        Obra.organizacion_id == org_id,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).count()
     
-    # Obras finalizadas en el período
-    obras_finalizadas = Obra.query.filter(
-        Obra.estado == 'finalizada',
-        Obra.fecha_fin_real >= fecha_desde,
-        Obra.fecha_fin_real <= fecha_hasta
+    # Obras nuevas este mes
+    primer_dia_mes = date.today().replace(day=1)
+    obras_nuevas_mes = Obra.query.filter(
+        Obra.organizacion_id == org_id,
+        Obra.fecha_creacion >= primer_dia_mes
     ).count()
     
-    # Presupuestos generados en el período
-    presupuestos_periodo = Presupuesto.query.filter(
-        Presupuesto.fecha >= fecha_desde,
-        Presupuesto.fecha <= fecha_hasta
-    ).count()
-    
-    # Valor total de presupuestos aprobados
-    valor_presupuestos = db.session.query(
-        func.sum(Presupuesto.total_con_iva)
+    # Costo total de obras activas (en millones)
+    costo_total = db.session.query(
+        func.sum(Obra.presupuesto_total)
     ).filter(
-        Presupuesto.estado == 'aprobado',
-        Presupuesto.fecha >= fecha_desde,
-        Presupuesto.fecha <= fecha_hasta
+        Obra.organizacion_id == org_id,
+        Obra.estado.in_(['planificacion', 'en_curso'])
+    ).scalar() or 0
+    costo_total_millones = float(costo_total) / 1000000 if costo_total else 0
+    
+    # Variación vs presupuesto
+    costo_real_total = db.session.query(
+        func.sum(Obra.costo_real)
+    ).filter(
+        Obra.organizacion_id == org_id,
+        Obra.estado.in_(['planificacion', 'en_curso']),
+        Obra.costo_real.isnot(None)
     ).scalar() or 0
     
-    # Horas trabajadas en el período
-    horas_trabajadas = db.session.query(
-        func.sum(RegistroTiempo.horas_trabajadas)
-    ).filter(
-        RegistroTiempo.fecha >= fecha_desde,
-        RegistroTiempo.fecha <= fecha_hasta
-    ).scalar() or 0
+    variacion_presupuesto = 0
+    if costo_total > 0 and costo_real_total > 0:
+        variacion_presupuesto = ((float(costo_real_total) - float(costo_total)) / float(costo_total)) * 100
     
-    # Usuarios activos
-    usuarios_activos = Usuario.query.filter_by(activo=True).count()
-    
-    # Items con stock crítico
-    items_criticos = ItemInventario.query.filter(
-        ItemInventario.stock_actual <= ItemInventario.stock_minimo,
-        ItemInventario.activo == True
-    ).count()
-    
-    # Progreso promedio de obras activas
-    progreso_promedio = db.session.query(
+    # Avance promedio de obras activas
+    avance_promedio = db.session.query(
         func.avg(Obra.progreso)
     ).filter(
+        Obra.organizacion_id == org_id,
         Obra.estado.in_(['planificacion', 'en_curso'])
+    ).scalar() or 0
+    
+    # Obras retrasadas (progreso menor al esperado)
+    obras_retrasadas = Obra.query.filter(
+        Obra.organizacion_id == org_id,
+        Obra.estado.in_(['planificacion', 'en_curso'])
+    ).filter(
+        Obra.progreso < 50  # Simplificado: menos del 50% se considera retrasado
+    ).count()
+    
+    # Personal activo
+    personal_activo = Usuario.query.filter(
+        Usuario.organizacion_id == org_id,
+        Usuario.activo == True
+    ).count()
+    
+    # Obras con personal asignado
+    obras_con_personal = db.session.query(
+        func.count(func.distinct(AsignacionObra.obra_id))
+    ).join(Obra).filter(
+        Obra.organizacion_id == org_id
     ).scalar() or 0
     
     return {
-        'total_obras': obras_activas,
-        'obras_finalizadas': obras_finalizadas,
-        'presupuestos_periodo': presupuestos_periodo,
-        'ingresos_totales': float(valor_presupuestos),
-        'horas_trabajadas': float(horas_trabajadas),
-        'total_usuarios': usuarios_activos,
-        'alertas_inventario': items_criticos,
-        'progreso_promedio': float(progreso_promedio)
+        'obras_activas': obras_activas,
+        'obras_nuevas_mes': obras_nuevas_mes,
+        'costo_total': costo_total_millones,
+        'variacion_presupuesto': variacion_presupuesto,
+        'avance_promedio': float(avance_promedio) if avance_promedio else 0,
+        'obras_retrasadas': obras_retrasadas,
+        'personal_activo': personal_activo,
+        'obras_con_personal': obras_con_personal
     }
 
 def calcular_rendimiento_equipo(fecha_desde, fecha_hasta):
