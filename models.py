@@ -51,7 +51,7 @@ class Usuario(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
-    rol = db.Column(db.String(20), nullable=False, default='operario')  # administrador, tecnico, operario
+    rol = db.Column(db.String(50), nullable=False, default='ayudante')  # Expandido para roles específicos de construcción
     puede_pausar_obras = db.Column(db.Boolean, default=False)  # Permiso especial para pausar obras
     activo = db.Column(db.Boolean, default=True)
     auth_provider = db.Column(db.String(20), nullable=False, default='manual')  # manual, google
@@ -98,11 +98,63 @@ class Usuario(UserMixin, db.Model):
         return f"{self.nombre} {self.apellido}"
     
     def puede_acceder_modulo(self, modulo):
-        permisos = {
+        # Roles de dirección tienen acceso completo
+        roles_direccion = [
+            'director_general', 'director_operaciones', 'director_proyectos', 
+            'jefe_obra', 'jefe_produccion', 'coordinador_proyectos'
+        ]
+        
+        # Roles técnicos tienen acceso amplio 
+        roles_tecnicos = [
+            'ingeniero_civil', 'ingeniero_construcciones', 'arquitecto',
+            'ingeniero_seguridad', 'ingeniero_electrico', 'ingeniero_sanitario',
+            'ingeniero_mecanico', 'topografo', 'bim_manager', 'computo_presupuesto'
+        ]
+        
+        # Roles de supervisión tienen acceso medio
+        roles_supervision = [
+            'encargado_obra', 'supervisor_obra', 'inspector_calidad',
+            'inspector_seguridad', 'supervisor_especialidades'
+        ]
+        
+        # Roles administrativos
+        roles_administrativos = [
+            'administrador_obra', 'comprador', 'logistica', 'recursos_humanos',
+            'contador_finanzas'
+        ]
+        
+        # Roles operativos básicos
+        roles_operativos = [
+            'capataz', 'maestro_mayor_obra', 'oficial_albanil', 'oficial_plomero',
+            'oficial_electricista', 'oficial_herrero', 'oficial_pintor', 'oficial_yesero',
+            'medio_oficial', 'ayudante', 'operador_maquinaria', 'chofer_camion'
+        ]
+        
+        permisos = {}
+        
+        # Asignar permisos por categoría de rol
+        for rol in roles_direccion:
+            permisos[rol] = ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
+        
+        for rol in roles_tecnicos:
+            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
+            
+        for rol in roles_supervision:
+            permisos[rol] = ['obras', 'inventario', 'reportes', 'asistente', 'documentos', 'seguridad']
+            
+        for rol in roles_administrativos:
+            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'reportes', 'cotizacion', 'documentos']
+            
+        for rol in roles_operativos:
+            permisos[rol] = ['obras', 'inventario', 'asistente', 'documentos']
+        
+        # Mantener compatibilidad con roles antiguos
+        permisos.update({
             'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'tecnico': ['obras', 'presupuestos', 'inventario', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'operario': ['obras', 'inventario', 'asistente', 'documentos']
-        }
+        })
+        
         return modulo in permisos.get(self.rol, [])
     
     def es_admin_completo(self):

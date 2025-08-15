@@ -46,17 +46,34 @@
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="rol" class="form-label">Rol <span class="text-danger">*</span></label>
+                                <label for="rol" class="form-label">Rol en la Obra <span class="text-danger">*</span></label>
                                 <select class="form-select" id="rol" name="rol" required>
                                     <option value="">Seleccionar rol...</option>
-                                    <option value="operario" {{ 'selected' if request.form.rol == 'operario' }}>Operario</option>
-                                    <option value="tecnico" {{ 'selected' if request.form.rol == 'tecnico' }}>Técnico</option>
-                                    <option value="administrador" {{ 'selected' if request.form.rol == 'administrador' }}>Administrador</option>
+                                    {% if roles_por_categoria %}
+                                        {% for categoria, roles in roles_por_categoria.items() %}
+                                        <optgroup label="{{ categoria }}">
+                                            {% for rol_codigo in roles %}
+                                                {% set rol_nombre = rol_codigo.replace('_', ' ').title() %}
+                                                <option value="{{ rol_codigo }}" 
+                                                        {{ 'selected' if request.form.rol == rol_codigo }}>
+                                                    {{ rol_nombre }}
+                                                </option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endfor %}
+                                    {% else %}
+                                        <!-- Roles básicos de fallback -->
+                                        <option value="ayudante" {{ 'selected' if request.form.rol == 'ayudante' }}>Ayudante</option>
+                                        <option value="oficial_albanil" {{ 'selected' if request.form.rol == 'oficial_albanil' }}>Oficial Albañil</option>
+                                        <option value="capataz" {{ 'selected' if request.form.rol == 'capataz' }}>Capataz</option>
+                                        <option value="supervisor_obra" {{ 'selected' if request.form.rol == 'supervisor_obra' }}>Supervisor de Obra</option>
+                                        <option value="jefe_obra" {{ 'selected' if request.form.rol == 'jefe_obra' }}>Jefe de Obra</option>
+                                        <option value="administrador" {{ 'selected' if request.form.rol == 'administrador' }}>Administrador</option>
+                                    {% endif %}
                                 </select>
                                 <small class="form-text text-muted">
-                                    <strong>Operario:</strong> Acceso básico a obras e inventario<br>
-                                    <strong>Técnico:</strong> Gestión de obras, presupuestos e inventario<br>
-                                    <strong>Administrador:</strong> Acceso completo al sistema
+                                    Selecciona el rol específico que tendrá esta persona en las obras de construcción.
+                                    Los permisos se asignan automáticamente según la jerarquía del rol.
                                 </small>
                             </div>
                             <div class="col-md-6 mb-3">

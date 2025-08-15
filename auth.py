@@ -334,15 +334,19 @@ def admin_register():
         # Validaciones
         if not all([nombre, apellido, email, rol, password]):
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
-            return render_template('auth/admin_register.html')
+            from roles_construccion import obtener_roles_por_categoria
+            return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
         
-        if rol not in ['administrador', 'tecnico', 'operario']:
+        # Importar roles válidos
+        from roles_construccion import ROLES_CONSTRUCCION
+        if rol not in ROLES_CONSTRUCCION.keys():
             flash('Rol no válido.', 'danger')
-            return render_template('auth/admin_register.html')
+            return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
         
         if Usuario.query.filter_by(email=email).first():
             flash('Ya existe un usuario con ese email.', 'danger')
-            return render_template('auth/admin_register.html')
+            from roles_construccion import obtener_roles_por_categoria
+            return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
         
         try:
             nuevo_usuario = Usuario(
@@ -366,7 +370,8 @@ def admin_register():
             db.session.rollback()
             flash('Error al registrar el usuario. Intenta nuevamente.', 'danger')
     
-    return render_template('auth/admin_register.html')
+    from roles_construccion import obtener_roles_por_categoria
+    return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
 
 @auth_bp.route('/usuarios')
 @login_required
@@ -431,7 +436,9 @@ def cambiar_rol():
     if not usuario_id or not nuevo_rol:
         return jsonify({'success': False, 'message': 'Datos incompletos'})
     
-    if nuevo_rol not in ['administrador', 'tecnico', 'operario']:
+    # Importar roles válidos
+    from roles_construccion import ROLES_CONSTRUCCION
+    if nuevo_rol not in ROLES_CONSTRUCCION.keys():
         return jsonify({'success': False, 'message': 'Rol no válido'})
     
     # No permitir cambiar el rol del usuario actual

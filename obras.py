@@ -8,6 +8,7 @@ from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, Certifi
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
+from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -178,6 +179,7 @@ def detalle(id):
                          asignaciones=asignaciones,
                          usuarios_disponibles=usuarios_disponibles,
                          etapas_disponibles=etapas_disponibles,
+                         roles_por_categoria=obtener_roles_por_categoria(),
                          TAREAS_POR_ETAPA=TAREAS_POR_ETAPA)
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])

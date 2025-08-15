@@ -170,6 +170,16 @@ def estado_badge_filter(estado):
     return badges.get(estado, 'bg-secondary')
 
 
+@app.template_filter('obtener_nombre_rol')
+def obtener_nombre_rol_filter(codigo_rol):
+    """Filtro para convertir códigos de rol a nombres legibles"""
+    try:
+        from roles_construccion import obtener_nombre_rol
+        return obtener_nombre_rol(codigo_rol)
+    except:
+        # Fallback si hay algún error
+        return codigo_rol.replace('_', ' ').title()
+
 @app.template_filter('from_json')
 def from_json_filter(json_str):
     """Filtro para convertir string JSON a diccionario"""
