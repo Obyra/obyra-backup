@@ -162,6 +162,10 @@ class Usuario(UserMixin, db.Model):
         emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
         return self.email in emails_admin_completo
     
+    def es_admin(self):
+        """Verifica si el usuario es administrador (rol administrador o admin completo)"""
+        return self.rol == 'administrador' or self.es_admin_completo()
+    
     def tiene_acceso_sin_restricciones(self):
         """Verifica si el usuario tiene acceso completo al sistema"""
         # Administradores especiales tienen acceso completo
