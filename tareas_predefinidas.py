@@ -111,93 +111,93 @@ TAREAS_POR_ETAPA = {
     ],
     
     'Instalaciones Sanitarias': [
-        'Instalación de cañerías de agua',
-        'Instalación de desagües',
-        'Colocación de artefactos sanitarios',
-        'Instalación de grifería',
-        'Conexión a red cloacal',
-        'Pruebas hidráulicas',
-        'Sellado e impermeabilización'
+        {'nombre': 'Colocación de cañerías de agua', 'descripcion': 'Instalación de cañerías de agua fría y caliente', 'horas': 16},
+        {'nombre': 'Instalación de desagües', 'descripcion': 'Colocación de cañerías de desagües cloacales y pluviales', 'horas': 12},
+        {'nombre': 'Colocación de sanitarios', 'descripcion': 'Instalación de inodoros, bidés y lavatorios', 'horas': 8},
+        {'nombre': 'Prueba de estanqueidad', 'descripcion': 'Pruebas de presión y hermeticidad del sistema', 'horas': 4},
+        {'nombre': 'Instalación de grifería', 'descripcion': 'Colocación de canillas, duchas y accesorios', 'horas': 6},
+        {'nombre': 'Conexión a red cloacal', 'descripcion': 'Conexión final a la red cloacal municipal', 'horas': 4},
+        {'nombre': 'Sellado e impermeabilización', 'descripcion': 'Sellado de juntas y puntos críticos', 'horas': 6}
     ],
     
     'Instalaciones de Gas': [
-        'Tendido de cañería de gas',
-        'Instalación de medidor',
-        'Conexión de artefactos',
-        'Pruebas de hermeticidad',
-        'Habilitación con empresa gasífera',
-        'Señalización de seguridad',
-        'Verificación de ventilaciones'
+        {'nombre': 'Colocación de cañerías principales', 'descripcion': 'Tendido de cañería principal de gas natural', 'horas': 12},
+        {'nombre': 'Instalación de llaves de paso', 'descripcion': 'Colocación de llaves de corte y seguridad', 'horas': 4},
+        {'nombre': 'Prueba de hermeticidad', 'descripcion': 'Pruebas de presión y detección de fugas', 'horas': 6},
+        {'nombre': 'Conexión de artefactos', 'descripcion': 'Conexión final de cocinas, calefones y calderas', 'horas': 8},
+        {'nombre': 'Instalación de medidor', 'descripcion': 'Colocación del medidor de gas', 'horas': 2},
+        {'nombre': 'Habilitación con empresa gasífera', 'descripcion': 'Trámites y habilitación oficial', 'horas': 4},
+        {'nombre': 'Verificación de ventilaciones', 'descripcion': 'Control de ventilaciones según normativa', 'horas': 2}
     ],
     
     'Revoque Grueso': [
-        'Preparación de superficies',
-        'Aplicación de revoque grueso exterior',
-        'Aplicación de revoque grueso interior',
-        'Verificación de verticalidad',
-        'Corrección de imperfecciones',
-        'Preparación para revoque fino',
-        'Curado del revoque'
+        {'nombre': 'Preparación de mezcla gruesa', 'descripcion': 'Preparación de mortero para revoque base', 'horas': 2},
+        {'nombre': 'Aplicación de capa base', 'descripcion': 'Aplicación de primera capa de revoque grueso', 'horas': 20},
+        {'nombre': 'Nivelado de superficie', 'descripcion': 'Nivelación y alisado de superficies', 'horas': 16},
+        {'nombre': 'Curado y preparación para capa fina', 'descripcion': 'Curado del revoque y preparación para terminación', 'horas': 8},
+        {'nombre': 'Aplicación revoque grueso exterior', 'descripcion': 'Revoque grueso en paredes exteriores', 'horas': 24},
+        {'nombre': 'Aplicación revoque grueso interior', 'descripcion': 'Revoque grueso en paredes interiores', 'horas': 16},
+        {'nombre': 'Verificación de verticalidad', 'descripcion': 'Control de plomadas y niveles', 'horas': 4}
     ],
     
     'Revoque Fino': [
-        'Preparación de mezcla fina',
-        'Aplicación de revoque fino interior',
-        'Aplicación de revoque fino exterior',
-        'Alisado y terminación',
-        'Corrección de detalles',
-        'Preparación para pintura',
-        'Limpieza de superficies'
+        {'nombre': 'Preparación de mezcla', 'descripcion': 'Preparación de mortero fino para terminación', 'horas': 2},
+        {'nombre': 'Aplicación de capa fina', 'descripcion': 'Aplicación de revoque fino sobre base', 'horas': 18},
+        {'nombre': 'Nivelado y alisado', 'descripcion': 'Nivelación perfecta y alisado final', 'horas': 12},
+        {'nombre': 'Curado y protección', 'descripcion': 'Curado controlado del revoque fino', 'horas': 6},
+        {'nombre': 'Aplicación interior', 'descripcion': 'Revoque fino en ambientes interiores', 'horas': 16},
+        {'nombre': 'Aplicación exterior', 'descripcion': 'Revoque fino en fachadas', 'horas': 20},
+        {'nombre': 'Preparación para pintura', 'descripcion': 'Lijado y preparación final', 'horas': 8}
     ],
     
     'Pisos': [
-        'Preparación de contrapisos',
-        'Nivelación de superficies',
-        'Colocación de pisos cerámicos',
-        'Colocación de pisos de madera',
-        'Instalación de zócalos',
-        'Sellado de juntas',
-        'Limpieza final de pisos'
+        {'nombre': 'Preparación de superficie', 'descripcion': 'Preparación y nivelación de contrapisos', 'horas': 12},
+        {'nombre': 'Colocación de baldosas o parquet', 'descripcion': 'Instalación del piso definitivo', 'horas': 24},
+        {'nombre': 'Aplicación de fragüe o sellador', 'descripcion': 'Fragüe de juntas y sellado', 'horas': 8},
+        {'nombre': 'Pulido y limpieza final', 'descripcion': 'Pulido y limpieza final de pisos', 'horas': 6},
+        {'nombre': 'Colocación de pisos cerámicos', 'descripcion': 'Instalación de cerámicos y porcelanatos', 'horas': 20},
+        {'nombre': 'Colocación de pisos de madera', 'descripcion': 'Instalación de parquet o deck', 'horas': 18},
+        {'nombre': 'Instalación de zócalos', 'descripcion': 'Colocación de zócalos perimetrales', 'horas': 8}
     ],
     
     'Carpintería': [
-        'Instalación de marcos de puertas',
-        'Instalación de marcos de ventanas',
-        'Colocación de hojas de puertas',
-        'Colocación de hojas de ventanas',
-        'Instalación de herrajes',
-        'Ajuste y regulación',
-        'Sellado perimetral'
+        {'nombre': 'Medición y corte de piezas', 'descripcion': 'Medición y corte preciso de maderas', 'horas': 8},
+        {'nombre': 'Ensamblado de estructuras', 'descripcion': 'Armado y ensamblado de marcos', 'horas': 12},
+        {'nombre': 'Colocación de puertas y ventanas', 'descripcion': 'Instalación final de aberturas', 'horas': 16},
+        {'nombre': 'Barnizado o pintado de madera', 'descripcion': 'Acabado final de carpintería', 'horas': 10},
+        {'nombre': 'Instalación de marcos', 'descripcion': 'Colocación de marcos de puertas y ventanas', 'horas': 12},
+        {'nombre': 'Instalación de herrajes', 'descripcion': 'Colocación de bisagras, cerraduras y manijas', 'horas': 6},
+        {'nombre': 'Ajuste y regulación', 'descripcion': 'Ajuste final y regulación de aberturas', 'horas': 4}
     ],
     
     'Pintura': [
-        'Preparación de superficies',
-        'Aplicación de imprimación',
-        'Lijado entre manos',
-        'Aplicación de pintura interior',
-        'Aplicación de pintura exterior',
-        'Retoques y detalles',
-        'Limpieza de elementos'
+        {'nombre': 'Lijado de superficies', 'descripcion': 'Lijado y preparación de superficies a pintar', 'horas': 8},
+        {'nombre': 'Aplicación de sellador', 'descripcion': 'Aplicación de sellador y fijador', 'horas': 6},
+        {'nombre': 'Primera mano de pintura', 'descripcion': 'Aplicación de la primera mano de pintura', 'horas': 12},
+        {'nombre': 'Segunda mano de pintura', 'descripcion': 'Aplicación de mano final de pintura', 'horas': 10},
+        {'nombre': 'Revisión y retoques finales', 'descripcion': 'Inspección final y corrección de detalles', 'horas': 6},
+        {'nombre': 'Pintura interior', 'descripcion': 'Pintura completa de ambientes interiores', 'horas': 16},
+        {'nombre': 'Pintura exterior', 'descripcion': 'Pintura de fachadas y exteriores', 'horas': 20}
     ],
     
     'Instalaciones Complementarias': [
-        'Instalación de aire acondicionado',
-        'Instalación de calefacción',
-        'Instalación de sistema de seguridad',
-        'Instalación de portones automáticos',
-        'Colocación de toldos',
-        'Instalación de sistema de riego',
-        'Configuración domótica'
+        {'nombre': 'Instalación de aire acondicionado', 'descripcion': 'Montaje de equipos de climatización', 'horas': 12},
+        {'nombre': 'Instalación de calefacción', 'descripcion': 'Sistema de calefacción central o individual', 'horas': 16},
+        {'nombre': 'Instalación de sistema de seguridad', 'descripcion': 'Alarmas, cámaras y sistemas de monitoreo', 'horas': 10},
+        {'nombre': 'Instalación de portones automáticos', 'descripcion': 'Automatización de portones y accesos', 'horas': 8},
+        {'nombre': 'Colocación de toldos', 'descripcion': 'Instalación de toldos y protecciones solares', 'horas': 6},
+        {'nombre': 'Instalación de sistema de riego', 'descripcion': 'Sistema de riego automático para jardines', 'horas': 12},
+        {'nombre': 'Configuración domótica', 'descripcion': 'Programación de sistemas inteligentes', 'horas': 8}
     ],
     
     'Limpieza Final': [
-        'Limpieza de obra gruesa',
-        'Limpieza de vidrios',
-        'Limpieza de pisos y superficies',
-        'Retiro de material sobrante',
-        'Limpieza de instalaciones',
-        'Entrega de documentación',
-        'Inspección final'
+        {'nombre': 'Limpieza de obra gruesa', 'descripcion': 'Limpieza general y retiro de escombros', 'horas': 12},
+        {'nombre': 'Limpieza de vidrios', 'descripcion': 'Limpieza de todas las superficies vidriadas', 'horas': 6},
+        {'nombre': 'Limpieza de pisos y superficies', 'descripcion': 'Limpieza profunda de pisos y superficies', 'horas': 8},
+        {'nombre': 'Retiro de material sobrante', 'descripcion': 'Retiro final de materiales y herramientas', 'horas': 4},
+        {'nombre': 'Limpieza de instalaciones', 'descripcion': 'Limpieza de sanitarios y instalaciones', 'horas': 4},
+        {'nombre': 'Entrega de documentación', 'descripcion': 'Preparación de documentación de entrega', 'horas': 2},
+        {'nombre': 'Inspección final', 'descripcion': 'Inspección final y lista de pendientes', 'horas': 4}
     ]
 }
 

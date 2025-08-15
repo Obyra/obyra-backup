@@ -25,27 +25,47 @@ def seed_tareas_para_etapa(nueva_etapa):
         tareas_creadas = 0
         
         for t in tareas:
+            # Manejar formato string o diccionario
+            if isinstance(t, str):
+                # Formato string (antiguo)
+                nombre_tarea = t
+                descripcion_tarea = ""
+                horas_tarea = 0
+            elif isinstance(t, dict):
+                # Formato diccionario (nuevo)
+                nombre_tarea = t.get("nombre", "")
+                descripcion_tarea = t.get("descripcion", "")
+                horas_tarea = t.get("horas", 0)
+            else:
+                print(f"⚠️ Formato de tarea no reconocido: {t}")
+                continue
+                
+            if not nombre_tarea:
+                continue
+            
             # Verificar si ya existe (idempotente)
-            ya = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id, nombre=t["nombre"]).first()
+            ya = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id, nombre=nombre_tarea).first()
             if ya:
                 continue
                 
             # Crear nueva tarea
             nueva_tarea = TareaEtapa(
                 etapa_id=nueva_etapa.id,
-                nombre=t["nombre"],
-                descripcion=t.get("descripcion", ""),
-                horas_estimadas=t.get("horas", 0),
+                nombre=nombre_tarea,
+                descripcion=descripcion_tarea,
+                horas_estimadas=horas_tarea,
                 estado="pendiente"
             )
             db.session.add(nueva_tarea)
             tareas_creadas += 1
-            print(f"✅ Tarea creada: {t['nombre']}")
+            print(f"✅ Tarea creada: {nombre_tarea}")
         
         print(f"🎯 Total tareas creadas para {nueva_etapa.nombre}: {tareas_creadas}")
+        db.session.commit()
         return tareas_creadas
         
     except Exception as e:
+        db.session.rollback()
         print(f"❌ ERROR en seed_tareas_para_etapa: {str(e)}")
         return 0
 

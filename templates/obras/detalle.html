@@ -692,9 +692,14 @@ function abrirModalTarea(etapaId, nombreEtapa) {
     document.getElementById('formNuevaTarea').action = `/obras/etapa/${etapaId}/tarea`;
     document.getElementById('nombreEtapa').textContent = nombreEtapa;
     
-    // Llenar automáticamente con tareas predefinidas para esa etapa
+    // Limpiar campos previos
     const tareasInput = document.querySelector('#nuevaTareaModal input[name="nombre"]');
     const descripcionTextarea = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
+    const horasInput = document.querySelector('#nuevaTareaModal input[name="horas_estimadas"]');
+    
+    tareasInput.value = '';
+    descripcionTextarea.value = '';
+    if (horasInput) horasInput.value = '';
     
     // Obtener tareas predefinidas para esta etapa
     const tareasDisponibles = obtenerTareasPredefinidas(nombreEtapa);
@@ -702,11 +707,14 @@ function abrirModalTarea(etapaId, nombreEtapa) {
     if (tareasDisponibles && tareasDisponibles.length > 0) {
         // Sugerir la primera tarea disponible
         const primeraTarea = tareasDisponibles[0];
-        tareasInput.placeholder = `Ej: ${primeraTarea.nombre}`;
-        descripcionTextarea.placeholder = `Ej: ${primeraTarea.descripcion}`;
+        tareasInput.placeholder = `Ej: ${primeraTarea.nombre || 'Nueva tarea'}`;
+        descripcionTextarea.placeholder = `Ej: ${primeraTarea.descripcion || 'Descripción de la tarea'}`;
         
         // Agregar lista de sugerencias
         mostrarSugerenciasTareas(tareasDisponibles, tareasInput, descripcionTextarea);
+    } else {
+        tareasInput.placeholder = 'Nombre de la tarea';
+        descripcionTextarea.placeholder = 'Descripción de la tarea...';
     }
     
     new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
@@ -730,11 +738,11 @@ function mostrarSugerenciasTareas(tareas, inputNombre, textareaDescripcion) {
     // Crear dropdown de sugerencias
     const modalBody = document.querySelector('#nuevaTareaModal .modal-body');
     
-    // Remover dropdown previo si existe
+    // Limpiar dropdown previo si existe
     const dropdownPrevio = modalBody.querySelector('#dropdownTareas');
     if (dropdownPrevio) dropdownPrevio.remove();
     
-    if (tareas.length === 0) return;
+    if (!tareas || tareas.length === 0) return;
     
     // Crear nuevo dropdown
     const dropdown = document.createElement('div');
@@ -747,7 +755,7 @@ function mostrarSugerenciasTareas(tareas, inputNombre, textareaDescripcion) {
         <select class="form-select" onchange="seleccionarTareaPredefinida(this.value)">
             <option value="">-- Seleccionar tarea predefinida --</option>
             ${tareas.map((tarea, index) => 
-                `<option value="${index}">${tarea.nombre}</option>`
+                `<option value="${index}">${tarea.nombre || ''}</option>`
             ).join('')}
         </select>
         <small class="form-text text-muted">Selecciona una tarea predefinida o escribe una personalizada</small>
@@ -767,11 +775,15 @@ function seleccionarTareaPredefinida(index) {
     const tarea = window.tareasActuales[index];
     const inputNombre = document.querySelector('#nuevaTareaModal input[name="nombre"]');
     const textareaDescripcion = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
+    const horasInput = document.querySelector('#nuevaTareaModal input[name="horas_estimadas"]');
     
-    inputNombre.value = tarea.nombre;
-    textareaDescripcion.value = tarea.descripcion;
+    inputNombre.value = tarea.nombre || '';
+    textareaDescripcion.value = tarea.descripcion || '';
+    if (horasInput && tarea.horas) {
+        horasInput.value = tarea.horas;
+    }
     
-    console.log(`✅ Tarea predefinida seleccionada: ${tarea.nombre}`);
+    console.log(`✅ Tarea predefinida seleccionada: ${tarea.nombre || 'Sin nombre'}`);
 }
 
 // Función para toggle tareas de una etapa

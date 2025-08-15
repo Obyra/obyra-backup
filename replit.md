@@ -215,3 +215,31 @@ The system is designed to be deployed on platforms like Replit, with easy config
 - Enhanced error handling for PostgreSQL data types
 - Location-based cost factor detection from autocomplete
 - Comprehensive building type configurations with specific industrial workflows
+
+## Latest Updates (August 2025)
+
+### Complete Construction Roles System Implementation (15 August 2025)
+- **Comprehensive Role Hierarchy**: Implemented 30+ specific construction roles organized in 5 hierarchical categories:
+  - Dirección y gestión (Director General, Gerente Técnico, etc.)
+  - Técnico-ingeniería (Arquitecto, Ingeniero, Maestro Mayor, etc.) 
+  - Supervisión y control (Jefe de Obra, Supervisor, Capataz, etc.)
+  - Administración y soporte (Administrativo, Seguridad, etc.)
+  - Operativo en terreno (Oficiales, Ayudantes, Operadores, etc.)
+- **Enhanced Authentication Forms**: Updated all registration and user assignment forms with organized role dropdowns
+- **Custom Jinja2 Filter**: Created `obtener_nombre_rol` filter for converting role codes to readable names
+- **Obras Assignment Modal**: Updated obra assignment modal with complete role selection
+- **Database Integration**: All roles properly integrated with existing permission system
+
+### Predefined Tasks System Completion (15 August 2025)
+- **Complete Task Database**: Implemented comprehensive task definitions for all 13 construction stages
+- **Unified Data Format**: Standardized all tasks with nombre, descripcion, and horas fields
+- **Error Resolution**: Fixed "string indices must be integers" error in seed_tareas_para_etapa function
+- **Enhanced Frontend**: Improved Nueva Tarea modal with automatic task suggestions and selection
+- **Smart Placeholders**: Dynamic placeholder text showing first available task for each stage
+- **Idempotent Creation**: Tasks are created automatically when stages are added, preventing duplicates
+
+### Technical Improvements
+- **Data Consistency**: All predefined tasks now use consistent dictionary format with full metadata
+- **Error Handling**: Robust error handling for both string and dictionary task formats
+- **Frontend Enhancement**: Improved JavaScript with proper null checking and field clearing
+- **Role Integration**: Complete integration of construction roles throughout the application
