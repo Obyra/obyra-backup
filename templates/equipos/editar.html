@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Crear Usuario - OBYRA IA{% endblock %}
+{% block title %}Editar Usuario - OBYRA IA{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
     <div class="row">
         <div class="col-12">
             <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
-                        <i class="fas fa-user-plus me-2"></i>
-                        Crear Nuevo Usuario
+                        <i class="fas fa-user-edit me-2"></i>
+                        Editar Usuario: {{ usuario.nombre_completo }}
                     </h5>
-                    <a href="{{ url_for('equipos.lista') }}" class="btn btn-light btn-sm">
+                    <a href="{{ url_for('equipos.detalle', id=usuario.id) }}" class="btn btn-light btn-sm">
                         <i class="fas fa-arrow-left me-1"></i>
-                        Volver a Lista
+                        Volver al Detalle
                     </a>
                 </div>
                 <div class="card-body">
@@ -22,25 +22,25 @@
                         <div class="col-md-6">
                             <label for="nombre" class="form-label">Nombre *</label>
                             <input type="text" class="form-control" id="nombre" name="nombre" 
-                                   value="{{ request.form.get('nombre', '') }}" required>
+                                   value="{{ usuario.nombre }}" required>
                         </div>
                         
                         <div class="col-md-6">
                             <label for="apellido" class="form-label">Apellido *</label>
                             <input type="text" class="form-control" id="apellido" name="apellido" 
-                                   value="{{ request.form.get('apellido', '') }}" required>
+                                   value="{{ usuario.apellido }}" required>
                         </div>
                         
                         <div class="col-md-6">
                             <label for="email" class="form-label">Email *</label>
                             <input type="email" class="form-control" id="email" name="email" 
-                                   value="{{ request.form.get('email', '') }}" required>
+                                   value="{{ usuario.email }}" required>
                         </div>
                         
                         <div class="col-md-6">
                             <label for="telefono" class="form-label">Teléfono</label>
                             <input type="tel" class="form-control" id="telefono" name="telefono" 
-                                   value="{{ request.form.get('telefono', '') }}">
+                                   value="{{ usuario.telefono or '' }}">
                         </div>
                         
                         <div class="col-md-6">
@@ -51,7 +51,7 @@
                                     <optgroup label="{{ categoria }}">
                                         {% for rol in roles_lista %}
                                             <option value="{{ rol }}" 
-                                                    {% if request.form.get('rol') == rol %}selected{% endif %}>
+                                                    {% if usuario.rol == rol %}selected{% endif %}>
                                                 {{ rol|title }}
                                             </option>
                                         {% endfor %}
@@ -61,32 +61,33 @@
                         </div>
                         
                         <div class="col-md-6">
-                            <label for="password" class="form-label">Contraseña *</label>
-                            <input type="password" class="form-control" id="password" name="password" 
-                                   minlength="6" required>
-                            <div class="form-text">Mínimo 6 caracteres</div>
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <label for="confirm_password" class="form-label">Confirmar Contraseña *</label>
-                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" 
-                                   minlength="6" required>
+                            <label class="form-label">Estado Actual</label>
+                            <div class="form-control-plaintext">
+                                {% if usuario.activo %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactivo</span>
+                                {% endif %}
+                            </div>
+                            <div class="form-text">
+                                Para cambiar el estado, usa el botón "Activar/Desactivar" en el detalle del usuario.
+                            </div>
                         </div>
                         
                         <div class="col-12">
-                            <div class="alert alert-info">
-                                <i class="fas fa-info-circle me-2"></i>
-                                <strong>Nota:</strong> El usuario será creado en estado activo y podrá iniciar sesión inmediatamente con las credenciales proporcionadas.
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Nota:</strong> Los cambios en el rol afectarán inmediatamente los permisos del usuario en el sistema.
                             </div>
                         </div>
                         
                         <div class="col-12">
                             <div class="d-flex gap-2">
-                                <button type="submit" class="btn btn-success">
+                                <button type="submit" class="btn btn-warning">
                                     <i class="fas fa-save me-2"></i>
-                                    Crear Usuario
+                                    Guardar Cambios
                                 </button>
-                                <a href="{{ url_for('equipos.lista') }}" class="btn btn-secondary">
+                                <a href="{{ url_for('equipos.detalle', id=usuario.id) }}" class="btn btn-secondary">
                                     <i class="fas fa-times me-2"></i>
                                     Cancelar
                                 </a>
@@ -98,18 +99,4 @@
         </div>
     </div>
 </div>
-
-<script>
-// Validar que las contraseñas coincidan
-document.getElementById('confirm_password').addEventListener('input', function() {
-    const password = document.getElementById('password').value;
-    const confirmPassword = this.value;
-    
-    if (password !== confirmPassword) {
-        this.setCustomValidity('Las contraseñas no coinciden');
-    } else {
-        this.setCustomValidity('');
-    }
-});
-</script>
 {% endblock %}

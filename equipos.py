@@ -51,8 +51,72 @@ def lista():
 @equipos_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
 def crear():
-    # Redirigir a registro de auth
-    return redirect(url_for('auth.register'))
+    if not current_user.puede_acceder_modulo('equipos') or current_user.rol != 'administrador':
+        flash('No tienes permisos para crear usuarios.', 'danger')
+        return redirect(url_for('equipos.lista'))
+    
+    from roles_construccion import ROLES_DISPONIBLES
+    
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        apellido = request.form.get('apellido')
+        email = request.form.get('email')
+        telefono = request.form.get('telefono')
+        rol = request.form.get('rol')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Validaciones
+        if not all([nombre, apellido, email, rol, password]):
+            flash('Por favor, completa todos los campos obligatorios.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        # Validar formato de email
+        import re
+        if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+            flash('Por favor, ingresa un email válido.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        if password != confirm_password:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        if len(password) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        # Verificar que el email no exista
+        if Usuario.query.filter_by(email=email).first():
+            flash('Ya existe un usuario con ese email.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        try:
+            from werkzeug.security import generate_password_hash
+            
+            # Crear nuevo usuario
+            nuevo_usuario = Usuario(
+                nombre=nombre,
+                apellido=apellido,
+                email=email.lower(),
+                telefono=telefono,
+                password_hash=generate_password_hash(password),
+                rol=rol,
+                auth_provider='manual',
+                activo=True,
+                organizacion_id=current_user.organizacion_id if current_user.organizacion_id else None
+            )
+            
+            db.session.add(nuevo_usuario)
+            db.session.commit()
+            
+            flash(f'Usuario {nombre} {apellido} creado exitosamente.', 'success')
+            return redirect(url_for('equipos.detalle', id=nuevo_usuario.id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al crear el usuario. Por favor, intenta de nuevo.', 'danger')
+    
+    return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
 
 @equipos_bp.route('/<int:id>')
 @login_required
@@ -78,7 +142,7 @@ def detalle(id):
                          total_horas=total_horas,
                          obras_completadas=obras_completadas)
 
-@equipos_bp.route('/<int:id>/editar', methods=['POST'])
+@equipos_bp.route('/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar(id):
     if current_user.rol != 'administrador':
@@ -86,31 +150,34 @@ def editar(id):
         return redirect(url_for('equipos.detalle', id=id))
     
     usuario = Usuario.query.get_or_404(id)
+    from roles_construccion import ROLES_DISPONIBLES
     
-    usuario.nombre = request.form.get('nombre', usuario.nombre)
-    usuario.apellido = request.form.get('apellido', usuario.apellido)
-    usuario.email = request.form.get('email', usuario.email)
-    usuario.telefono = request.form.get('telefono', usuario.telefono)
-    usuario.rol = request.form.get('rol', usuario.rol)
+    if request.method == 'POST':
+        usuario.nombre = request.form.get('nombre', usuario.nombre)
+        usuario.apellido = request.form.get('apellido', usuario.apellido)
+        usuario.email = request.form.get('email', usuario.email)
+        usuario.telefono = request.form.get('telefono', usuario.telefono)
+        usuario.rol = request.form.get('rol', usuario.rol)
+        
+        # Validar email único
+        email_existente = Usuario.query.filter(
+            Usuario.email == usuario.email,
+            Usuario.id != usuario.id
+        ).first()
+        
+        if email_existente:
+            flash('Ya existe otro usuario con ese email.', 'danger')
+            return render_template('equipos/editar.html', usuario=usuario, roles=ROLES_DISPONIBLES)
+        
+        try:
+            db.session.commit()
+            flash('Usuario actualizado exitosamente.', 'success')
+            return redirect(url_for('equipos.detalle', id=id))
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al actualizar el usuario.', 'danger')
     
-    # Validar email único
-    email_existente = Usuario.query.filter(
-        Usuario.email == usuario.email,
-        Usuario.id != usuario.id
-    ).first()
-    
-    if email_existente:
-        flash('Ya existe otro usuario con ese email.', 'danger')
-        return redirect(url_for('equipos.detalle', id=id))
-    
-    try:
-        db.session.commit()
-        flash('Usuario actualizado exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al actualizar el usuario.', 'danger')
-    
-    return redirect(url_for('equipos.detalle', id=id))
+    return render_template('equipos/editar.html', usuario=usuario, roles=ROLES_DISPONIBLES)
 
 @equipos_bp.route('/<int:id>/toggle', methods=['POST'])
 @login_required
