@@ -1,0 +1,330 @@
+Objetivo
+
+Completar el MVP de OBYRA IA agregando 5 módulos full-stack:
+
+Equipos
+
+Inventario
+
+Marketplaces (tipo Mercado Libre, con login de proveedores)
+
+Reportes
+
+Documentos
+
+Stack obligatorio:
+Backend: Python Flask + SQLAlchemy + Marshmallow + JWT (Auth), Celery+Redis (jobs asíncronos opcional).
+DB: PostgreSQL + migraciones (Alembic).
+Frontend: React + Vite + Tailwind + shadcn/ui + React Router + React Query.
+Auth: Email+password (JWT) y Google OAuth (opcional, si ya está).
+Archivos: Local dev + S3 compatible (MinIO) por env var.
+Tests: Pytest (backend) + Vitest/RTL (frontend).
+Entrega: proyecto corriendo en Replit con seed data, README y colección Postman.
+
+Permisos y roles (reutilizar modelo existente)
+
+admin_sistema (super admin)
+
+admin_empresa (gestiona empresa, obras, proveedores de su empresa)
+
+jefe_obra (ve/carga avances, equipos, inventario de su obra)
+
+compras (acceso a Marketplace, RFQ/órdenes, inventario)
+
+proveedor (nuevo): login propio, gestiona su catálogo, stock y precios.
+
+JWT debe incluir role, company_id, y opcional supplier_id.
+
+1) Módulo EQUIPOS
+Casos de uso
+
+Alta/edición de equipos (maquinaria, herramientas) por empresa.
+
+Asignación de equipos a obras y registro de uso (m², m³, horas).
+
+Carga de partes diarios por el equipo (operario, tiempo, avance).
+
+Mantenimiento: programado y correctivo, con checklists y adjuntos.
+
+Aprobación de horas/avances por jefe_obra/admin_empresa.
+
+DB (tablas nuevas)
+
+equipment (id, company_id, nombre, tipo, marca, modelo, nro_serie, costo_hora, estado, created_at)
+
+equipment_assignment (id, equipment_id, project_id, fecha_desde, fecha_hasta, estado)
+
+equipment_usage (id, equipment_id, project_id, fecha, horas, avance_m2, avance_m3, notas, user_id, estado: “pendiente/aprobado/rechazado”)
+
+maintenance_task (id, equipment_id, tipo: “programado/correctivo”, fecha_prog, fecha_real, costo, notas, status)
+
+maintenance_attachment (id, maintenance_task_id, file_url, filename)
+
+Endpoints (prefijo /api/equipos)
+
+POST / crear equipo
+
+GET / listar (filtros: proyecto, estado, tipo)
+
+PATCH /:id actualizar
+
+POST /:id/asignaciones asignar a obra
+
+GET /:id/uso listar usos
+
+POST /:id/uso crear parte de uso
+
+PATCH /uso/:uso_id/aprobar|rechazar
+
+POST /:id/mantenimiento crear tarea
+
+POST /mantenimiento/:id/adjuntos subir archivo
+
+UI (rutas)
+
+/equipos (lista + filtros + KPIs rápidos)
+
+/equipos/:id (ficha, asignaciones, uso, mantenimiento)
+
+Componente “Parte rápido” desde Dashboard/Obra.
+
+2) Módulo INVENTARIO
+Casos de uso
+
+Alta de items (materiales, insumos, repuestos).
+
+Depósitos por empresa y stocks por depósito.
+
+Movimientos (ingreso, egreso, transferencia).
+
+Reservas por obra y alertas de stock bajo.
+
+Conteo cíclico y ajuste.
+
+DB
+
+inventory_item (id, company_id, sku, nombre, categoria, unidad, min_stock, descripcion)
+
+warehouse (id, company_id, nombre, direccion)
+
+stock (id, item_id, warehouse_id, cantidad)
+
+stock_movement (id, item_id, tipo: ingreso/egreso/transferencia/ajuste, qty, origen_warehouse_id, destino_warehouse_id, project_id?, motivo, user_id, fecha)
+
+stock_reservation (id, item_id, project_id, qty, estado: activa/liberada/consumida)
+
+Endpoints /api/inventario
+
+POST /items, GET /items, PATCH /items/:id
+
+POST /warehouses, GET /warehouses
+
+GET /stock?warehouse_id=&item_id=
+
+POST /movimientos (validar reglas)
+
+POST /reservas, PATCH /reservas/:id (liberar/consumir)
+
+Alertas: GET /alertas/stock-bajo
+
+UI
+
+/inventario (items + filtros, botón “Movimiento”)
+
+/inventario/alertas
+
+/inventario/warehouses
+
+3) MARKETPLACES (tipo Mercado Libre)
+Objetivo
+
+Catálogo público interno, con proveedores que gestionan su cuenta, productos, stock, precios, variantes, imágenes; compradores (usuarios empresa) pueden buscar/filtrar, hacer carrito, RFQ (solicitud de cotización) o orden directa, mensajería Q&A y reviews. Más adelante se integra pago/envíos.
+
+Flujos
+
+Proveedor: registro/login → perfil → crea productos (categoría, atributos, variantes, imágenes) → gestiona stock/precios → recibe RFQ/órdenes → responde mensajes.
+
+Compras: navega catálogo → filtros facetados → ve ficha → agrega a carrito → crea Orden o RFQ (adjunta especificación/obra/deposito) → trackea estado.
+
+DB
+
+supplier (id, razon_social, cuit, email, phone, direccion, estado, verificado)
+
+supplier_user (id, supplier_id, email, hash, rol)
+
+category (id, nombre, parent_id)
+
+product (id, supplier_id, category_id, nombre, descripcion, estado, rating_prom)
+
+product_variant (id, product_id, sku, atributos_json, precio, stock, moneda)
+
+product_image (id, product_id, url, orden)
+
+product_qna (id, product_id, user_id?, pregunta, respuesta, created_at)
+
+cart (id, user_id, company_id)
+
+cart_item (id, cart_id, product_variant_id, qty, precio_snapshot)
+
+rfq (id, company_id, project_id?, supplier_id, estado, notas)
+
+rfq_item (id, rfq_id, product_variant_id, qty, unidad)
+
+order (id, company_id, supplier_id, estado, total, moneda, project_id?, warehouse_id?)
+
+order_item (id, order_id, product_variant_id, qty, precio_unit)
+
+review (id, product_id, user_id, rating, comentario)
+
+Endpoints /api/suppliers (auth proveedor)
+
+POST /auth/register|login
+
+GET /me (perfil), PATCH /me
+
+POST /products, PATCH /products/:id, GET /products?mine=1
+
+POST /products/:id/images
+
+POST /products/:id/variants, PATCH /variants/:id
+
+GET /rfqs, GET /orders, POST /qna/:id/responder
+
+Endpoints /api/market
+
+GET /categories (árbol)
+
+GET /search?q=&cat=&min=&max=&attrs= (búsqueda facetada)
+
+GET /product/:id (con variantes, imágenes, Q&A, reviews)
+
+POST /qna/:product_id (preguntar)
+
+Carrito: GET/POST /cart, POST /cart/items, PATCH /cart/items/:id, DELETE /cart/items/:id
+
+RFQ: POST /rfq (desde carrito o directo), GET /rfq/:id
+
+Orden: POST /order (checkout simulado), GET /order/:id
+
+Reviews: POST /reviews, GET /reviews?product_id=
+
+Nota: Dejar interfaces preparadas para integrar Mercado Pago y shipping (campos en order: payment_method, shipping_method, direccion_entrega).
+
+UI
+
+/market (home con categorías, buscador, destacados)
+
+/market/categoria/:id
+
+/market/producto/:id
+
+/market/carrito
+
+/market/rfq/:id y /market/orden/:id
+
+Portal Proveedor: /proveedor/login, /proveedor/productos, /proveedor/rfqs, /proveedor/ordenes, /proveedor/perfil
+
+4) REPORTES
+KPIs & vistas
+
+Dashboard: Costo total vs presupuesto, avance promedio, obras retrasadas, uso de equipos, stock bajo, órdenes por estado, top productos comprados, gastos por obra.
+
+Reportes descargables (PDF/CSV):
+
+Consumo de materiales por obra/etapa
+
+Uso de equipos (horas, m²/m³)
+
+Órdenes de compra por proveedor/mes
+
+Valorización de inventario por depósito
+
+Implementación
+
+Endpoints /api/reportes/* que devuelvan JSON + endpoints /api/reportes/*/pdf para exportar.
+
+Usar WeasyPrint o similar para PDFs (server-side).
+
+Front: tablas con filtros + botones Exportar PDF/CSV.
+
+5) DOCUMENTOS
+Casos de uso
+
+Repositorio por empresa/obra: carpetas (opcional), versiones, permisos.
+
+Tipos: planos, contratos, certificados, fotos de avance, comprobantes.
+
+Vista previa (PDF/imágenes), versionado, tags, búsqueda.
+
+Relación con entidades: project_id, equipment_id, order_id, etc.
+
+DB
+
+document (id, company_id, project_id?, related_type, related_id, nombre, version, mime, size, url, uploaded_by, created_at, tags[])
+
+document_share (id, document_id, role|user_id, permiso: read/write)
+
+Endpoints /api/documentos
+
+POST /upload (multipart, guarda metadata + archivo)
+
+GET /?project_id=&related_type=&q=
+
+GET /:id, PATCH /:id (nueva versión / metadatos)
+
+POST /:id/share (permisos)
+
+GET /:id/download
+
+UI
+
+/documentos (grid/lista + filtros + preview)
+
+Botones “Adjuntar” contextuales en Obra, Equipo, Orden, RFQ, Mantenimiento.
+
+Transversales
+
+Auditoría: tabla audit_log (user_id, action, entity, entity_id, payload, ts).
+
+Notificaciones: simple notification (user_id, tipo, payload, leída).
+
+Búsqueda: índices por texto en productos, documentos y Q&A.
+
+Seed data: 1 empresa demo, 2 obras, 1 proveedor demo, 20 productos ejemplo (cemento, hierro, ladrillos, mangueras, EPP), 2 depósitos y stock.
+
+Aceptación (DoD)
+
+CRUDs y flujos arriba descriptos funcionando y protegidos por rol.
+
+Listas con paginación, filtros y orden.
+
+Subida de archivos a local/S3 según STORAGE_BACKEND.
+
+Reportes exportan PDF y CSV.
+
+Marketplace: búsqueda facetada, carrito, RFQ, orden, Q&A, reviews, portal proveedor operativo.
+
+README con setup (env vars, migraciones, seeds) y rutas.
+
+Colección Postman incluida.
+
+Tests básicos (al menos rutas críticas + modelos).
+
+Variables de entorno (ejemplo)
+DATABASE_URL=postgresql+psycopg2://...
+JWT_SECRET=...
+STORAGE_BACKEND=local   # o s3
+S3_ENDPOINT=http://minio:9000
+S3_BUCKET=obyra
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+
+Extras (si hay tiempo)
+
+Importación CSV para catálogo de proveedor.
+
+Webhooks de stock para sincronizar con Inventario.
+
+Etiquetas/atributos por categoría (esquema dinámico tipo ML).
+
+Preview CAD/PDF si el mime lo permite (mínimo PDF/imágenes ahora).
