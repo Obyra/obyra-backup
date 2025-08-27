@@ -1055,3 +1055,330 @@ class StockReservation(db.Model):
     
     def __repr__(self):
         return f'<StockReservation {self.item.nombre} - {self.project.nombre}>'
+
+
+# ===== MODELOS DEL PORTAL DE PROVEEDORES =====
+
+class Supplier(db.Model):
+    __tablename__ = 'supplier'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    razon_social = db.Column(db.String(200), nullable=False)
+    cuit = db.Column(db.String(15), unique=True, nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20))
+    direccion = db.Column(db.Text)
+    descripcion = db.Column(db.Text)
+    ubicacion = db.Column(db.String(100))  # Ciudad/Provincia
+    estado = db.Column(db.Enum('activo', 'suspendido', name='supplier_estado'), default='activo')
+    verificado = db.Column(db.Boolean, default=False)
+    mp_collector_id = db.Column(db.String(50))  # Para Mercado Pago
+    logo_url = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    users = db.relationship('SupplierUser', back_populates='supplier', cascade='all, delete-orphan')
+    products = db.relationship('Product', back_populates='supplier', cascade='all, delete-orphan')
+    orders = db.relationship('Order', back_populates='supplier')
+    payouts = db.relationship('SupplierPayout', back_populates='supplier', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Supplier {self.razon_social}>'
+    
+    @property
+    def active_products_count(self):
+        return Product.query.filter_by(supplier_id=self.id, estado='publicado').count()
+    
+    @property
+    def total_orders_value(self):
+        total = db.session.query(func.sum(Order.total)).filter_by(
+            supplier_id=self.id, 
+            payment_status='approved'
+        ).scalar()
+        return total or 0
+
+
+class SupplierUser(db.Model):
+    __tablename__ = 'supplier_user'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    nombre = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    rol = db.Column(db.Enum('owner', 'editor', name='supplier_user_rol'), default='editor')
+    activo = db.Column(db.Boolean, default=True)
+    last_login = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    supplier = db.relationship('Supplier', back_populates='users')
+    
+    def __repr__(self):
+        return f'<SupplierUser {self.email}>'
+    
+    def check_password(self, password):
+        from werkzeug.security import check_password_hash
+        return check_password_hash(self.password_hash, password)
+    
+    def set_password(self, password):
+        from werkzeug.security import generate_password_hash
+        self.password_hash = generate_password_hash(password)
+    
+    @property
+    def is_owner(self):
+        return self.rol == 'owner'
+
+
+class Category(db.Model):
+    __tablename__ = 'category'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    parent = db.relationship('Category', remote_side=[id], backref='children')
+    products = db.relationship('Product', back_populates='category')
+    
+    def __repr__(self):
+        return f'<Category {self.nombre}>'
+    
+    @property
+    def full_path(self):
+        if self.parent:
+            return f"{self.parent.full_path} > {self.nombre}"
+        return self.nombre
+
+
+class Product(db.Model):
+    __tablename__ = 'product'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text)
+    estado = db.Column(db.Enum('borrador', 'publicado', 'pausado', name='product_estado'), default='borrador')
+    rating_prom = db.Column(db.Numeric(2, 1), default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relaciones
+    supplier = db.relationship('Supplier', back_populates='products')
+    category = db.relationship('Category', back_populates='products')
+    variants = db.relationship('ProductVariant', back_populates='product', cascade='all, delete-orphan')
+    images = db.relationship('ProductImage', back_populates='product', cascade='all, delete-orphan')
+    qnas = db.relationship('ProductQNA', back_populates='product', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Product {self.nombre}>'
+    
+    @property
+    def can_publish(self):
+        """Verifica si el producto puede ser publicado"""
+        has_visible_variant = any(v.visible and v.precio > 0 and v.stock > 0 for v in self.variants)
+        has_image = len(self.images) > 0
+        return has_visible_variant and has_image
+    
+    @property
+    def main_image(self):
+        """Obtiene la imagen principal (primera en orden)"""
+        return self.images[0] if self.images else None
+    
+    @property
+    def min_price(self):
+        """Precio mínimo de las variantes visibles"""
+        visible_variants = [v for v in self.variants if v.visible and v.precio > 0]
+        return min(v.precio for v in visible_variants) if visible_variants else 0
+
+
+class ProductVariant(db.Model):
+    __tablename__ = 'product_variant'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    sku = db.Column(db.String(100), unique=True, nullable=False)
+    atributos_json = db.Column(db.JSON)  # Ej: {"color": "rojo", "talla": "M"}
+    unidad = db.Column(db.String(20), nullable=False)  # kg, m, u, etc.
+    precio = db.Column(db.Numeric(12, 2), nullable=False)
+    moneda = db.Column(db.String(3), default='ARS')
+    stock = db.Column(db.Numeric(12, 2), default=0)
+    visible = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    product = db.relationship('Product', back_populates='variants')
+    order_items = db.relationship('OrderItem', back_populates='variant')
+    
+    def __repr__(self):
+        return f'<ProductVariant {self.sku}>'
+    
+    @property
+    def display_name(self):
+        """Nombre para mostrar incluyendo atributos"""
+        if self.atributos_json:
+            attrs = ", ".join(f"{k}: {v}" for k, v in self.atributos_json.items())
+            return f"{self.product.nombre} ({attrs})"
+        return self.product.nombre
+    
+    @property
+    def is_available(self):
+        return self.visible and self.stock > 0 and self.product.estado == 'publicado'
+
+
+class ProductImage(db.Model):
+    __tablename__ = 'product_image'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    url = db.Column(db.String(500), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    orden = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    product = db.relationship('Product', back_populates='images')
+    
+    def __repr__(self):
+        return f'<ProductImage {self.filename}>'
+
+
+class ProductQNA(db.Model):
+    __tablename__ = 'product_qna'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # Puede ser NULL para anónimos
+    pregunta = db.Column(db.Text, nullable=False)
+    respuesta = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    answered_at = db.Column(db.DateTime)
+    
+    # Relaciones
+    product = db.relationship('Product', back_populates='qnas')
+    user = db.relationship('Usuario', backref='product_questions')
+    
+    def __repr__(self):
+        return f'<ProductQNA {self.id}>'
+    
+    @property
+    def is_answered(self):
+        return self.respuesta is not None
+
+
+class Order(db.Model):
+    __tablename__ = 'order'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    total = db.Column(db.Numeric(12, 2), nullable=False)
+    moneda = db.Column(db.String(3), default='ARS')
+    estado = db.Column(db.Enum('pendiente', 'pagado', 'entregado', 'cancelado', name='order_estado'), default='pendiente')
+    payment_method = db.Column(db.Enum('online', 'offline', name='payment_method'))
+    payment_status = db.Column(db.Enum('init', 'approved', 'rejected', 'refunded', name='payment_status'), default='init')
+    payment_ref = db.Column(db.String(100))  # ID de pago de MP
+    buyer_invoice_url = db.Column(db.String(500))  # Factura del proveedor al comprador
+    supplier_invoice_number = db.Column(db.String(50))
+    supplier_invoice_url = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    company = db.relationship('Organizacion', backref='supplier_orders')
+    supplier = db.relationship('Supplier', back_populates='orders')
+    items = db.relationship('OrderItem', back_populates='order', cascade='all, delete-orphan')
+    commission = db.relationship('OrderCommission', back_populates='order', uselist=False, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Order {self.id}>'
+    
+    @property
+    def commission_amount(self):
+        """Calcula la comisión (2% del total)"""
+        rate = float(os.environ.get('PLATFORM_COMMISSION_RATE', '0.02'))
+        return round(float(self.total) * rate, 2)
+    
+    @property
+    def is_paid(self):
+        return self.payment_status == 'approved'
+
+
+class OrderItem(db.Model):
+    __tablename__ = 'order_item'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    product_variant_id = db.Column(db.Integer, db.ForeignKey('product_variant.id'), nullable=False)
+    qty = db.Column(db.Numeric(12, 2), nullable=False)
+    precio_unit = db.Column(db.Numeric(12, 2), nullable=False)
+    subtotal = db.Column(db.Numeric(12, 2), nullable=False)
+    
+    # Relaciones
+    order = db.relationship('Order', back_populates='items')
+    variant = db.relationship('ProductVariant', back_populates='order_items')
+    
+    def __repr__(self):
+        return f'<OrderItem {self.order_id}-{self.variant.sku}>'
+
+
+class OrderCommission(db.Model):
+    __tablename__ = 'order_commission'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    base = db.Column(db.Numeric(12, 2), nullable=False)  # Total del pedido
+    rate = db.Column(db.Numeric(5, 4), default=0.02)  # 2%
+    monto = db.Column(db.Numeric(12, 2), nullable=False)  # Comisión sin IVA
+    iva = db.Column(db.Numeric(12, 2), default=0)  # IVA sobre la comisión
+    total = db.Column(db.Numeric(12, 2), nullable=False)  # Comisión + IVA
+    status = db.Column(db.Enum('pendiente', 'facturado', 'cobrado', 'anulado', name='commission_status'), default='pendiente')
+    invoice_number = db.Column(db.String(50))
+    invoice_pdf_url = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    order = db.relationship('Order', back_populates='commission')
+    
+    def __repr__(self):
+        return f'<OrderCommission {self.order_id}>'
+    
+    @staticmethod
+    def compute_commission(base, rate=0.02, iva_included=False):
+        """Calcula la comisión con o sin IVA"""
+        monto = round(float(base) * rate, 2)
+        if iva_included:
+            # Aplicar gross-up para IVA (21%)
+            iva = round(monto * 0.21, 2)
+            total = monto + iva
+        else:
+            iva = 0
+            total = monto
+        
+        return {
+            'monto': monto,
+            'iva': iva,
+            'total': total
+        }
+
+
+class SupplierPayout(db.Model):
+    __tablename__ = 'supplier_payout'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'))  # Puede ser NULL
+    tipo = db.Column(db.Enum('ingreso', 'deuda', 'pago_comision', name='payout_tipo'), nullable=False)
+    monto = db.Column(db.Numeric(12, 2), nullable=False)
+    moneda = db.Column(db.String(3), default='ARS')
+    saldo_resultante = db.Column(db.Numeric(12, 2), nullable=False)
+    nota = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    supplier = db.relationship('Supplier', back_populates='payouts')
+    order = db.relationship('Order', backref='payouts')
+    
+    def __repr__(self):
+        return f'<SupplierPayout {self.supplier_id}-{self.tipo}>'

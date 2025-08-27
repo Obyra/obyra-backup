@@ -63,6 +63,11 @@ from planes import planes_bp
 from equipos_new import equipos_new_bp
 from inventario_new import inventario_new_bp
 
+# Importar blueprints del Portal de Proveedores
+from supplier_auth import supplier_auth_bp
+from supplier_portal import supplier_portal_bp
+from market import market_bp
+
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(obras_bp, url_prefix='/obras')
 app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
@@ -80,6 +85,11 @@ app.register_blueprint(planes_bp)  # Sistema de planes
 # Registrar nuevos blueprints mejorados
 app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
 app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
+
+# Registrar blueprints del Portal de Proveedores
+app.register_blueprint(supplier_auth_bp)  # Ya tiene prefix '/proveedor'
+app.register_blueprint(supplier_portal_bp)  # Ya tiene prefix '/proveedor'
+app.register_blueprint(market_bp)  # Ya tiene prefix '/market'
 
 # Funciones globales para templates
 @app.context_processor

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Marketplace - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header del Marketplace -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-gradient-success text-white">
+                <div class="card-body text-center">
+                    <h3 class="mb-2">
+                        <i class="fas fa-store me-2"></i>
+                        Marketplace OBYRA
+                    </h3>
+                    <p class="mb-0">Encuentra los mejores proveedores de materiales y servicios para construcción</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filtros de Búsqueda -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-filter me-2"></i>
+                        Filtros de Búsqueda
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Buscar</label>
+                            <input type="text" name="buscar" class="form-control" 
+                                   placeholder="Producto, empresa..." 
+                                   value="{{ filtros.buscar or '' }}">
+                        </div>
+                        
+                        <div class="col-md-2">
+                            <label class="form-label">Categoría</label>
+                            <select name="categoria" class="form-select">
+                                <option value="">Todas</option>
+                                {% for categoria in categorias %}
+                                    <option value="{{ categoria.id }}" 
+                                            {% if filtros.categoria == categoria.id|string %}selected{% endif %}>
+                                        {{ categoria.nombre }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-2">
+                            <label class="form-label">Ubicación</label>
+                            <select name="ubicacion" class="form-select">
+                                <option value="">Todas</option>
+                                {% for ubicacion in ubicaciones %}
+                                    <option value="{{ ubicacion }}" 
+                                            {% if filtros.ubicacion == ubicacion %}selected{% endif %}>
+                                        {{ ubicacion }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-2">
+                            <label class="form-label">Precio desde</label>
+                            <input type="number" name="precio_min" class="form-control" 
+                                   placeholder="Min" value="{{ filtros.precio_min or '' }}">
+                        </div>
+                        
+                        <div class="col-md-2">
+                            <label class="form-label">Precio hasta</label>
+                            <input type="number" name="precio_max" class="form-control" 
+                                   placeholder="Max" value="{{ filtros.precio_max or '' }}">
+                        </div>
+                        
+                        <div class="col-md-1">
+                            <label class="form-label">&nbsp;</label>
+                            <div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <div class="mt-3">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="verificado" value="1" 
+                                   {% if filtros.verificado == '1' %}checked{% endif %}>
+                            <label class="form-check-label">
+                                <i class="fas fa-check-circle text-success me-1"></i>
+                                Solo proveedores verificados
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Lista de Productos -->
+    <div class="row">
+        {% if productos %}
+            {% for producto in productos %}
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100">
+                        {% if producto.main_image %}
+                            <img src="{{ producto.main_image.url }}" class="card-img-top" 
+                                 style="height: 200px; object-fit: cover;" 
+                                 alt="{{ producto.nombre }}">
+                        {% else %}
+                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
+                                 style="height: 200px;">
+                                <i class="fas fa-image fa-3x text-muted"></i>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="card-body d-flex flex-column">
+                            <div class="mb-2">
+                                <span class="badge bg-secondary">{{ producto.category.nombre }}</span>
+                                {% if producto.supplier.verificado %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-check-circle me-1"></i>Verificado
+                                    </span>
+                                {% endif %}
+                            </div>
+                            
+                            <h6 class="card-title">{{ producto.nombre }}</h6>
+                            
+                            <p class="card-text text-muted small">
+                                {{ producto.descripcion[:100] }}{% if producto.descripcion|length > 100 %}...{% endif %}
+                            </p>
+                            
+                            <div class="mt-auto">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        {% if producto.min_price > 0 %}
+                                            <strong class="text-primary">
+                                                Desde ${{ "{:,.2f}".format(producto.min_price) }}
+                                            </strong>
+                                        {% else %}
+                                            <span class="text-muted">Consultar precio</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if producto.rating_prom > 0 %}
+                                        <div class="text-warning">
+                                            {% for i in range(5) %}
+                                                {% if i < producto.rating_prom %}
+                                                    <i class="fas fa-star"></i>
+                                                {% else %}
+                                                    <i class="far fa-star"></i>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <small class="text-muted d-block mb-2">
+                                    <i class="fas fa-store me-1"></i>
+                                    {{ producto.supplier.razon_social }}
+                                    {% if producto.supplier.ubicacion %}
+                                        · {{ producto.supplier.ubicacion }}
+                                    {% endif %}
+                                </small>
+                                
+                                <div class="d-grid">
+                                    <a href="{{ url_for('market.producto_detail', id=producto.id) }}" 
+                                       class="btn btn-primary">
+                                        <i class="fas fa-eye me-1"></i>
+                                        Ver Producto
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h5>No se encontraron productos</h5>
+                        <p class="text-muted">Prueba ajustando los filtros de búsqueda.</p>
+                        <a href="{{ url_for('market.index') }}" class="btn btn-primary">
+                            <i class="fas fa-refresh me-1"></i>
+                            Ver Todos los Productos
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Carrito flotante -->
+    {% if carrito_count > 0 %}
+        <div class="position-fixed bottom-0 end-0 m-4">
+            <a href="{{ url_for('market.carrito') }}" class="btn btn-success btn-lg rounded-circle position-relative">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    {{ carrito_count }}
+                </span>
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+// Auto-submit del formulario al cambiar verificado
+document.querySelector('input[name="verificado"]').addEventListener('change', function() {
+    this.form.submit();
+});
+</script>
+{% endblock %}
