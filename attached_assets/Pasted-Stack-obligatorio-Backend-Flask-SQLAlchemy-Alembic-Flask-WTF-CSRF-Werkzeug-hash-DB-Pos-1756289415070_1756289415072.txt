@@ -1,0 +1,489 @@
+Stack (obligatorio)
+
+Backend: Flask, SQLAlchemy, Alembic, Flask-WTF (CSRF), Werkzeug (hash)
+
+DB: PostgreSQL
+
+Renderizado: Jinja2 (SSR)
+
+Archivos: Local (static/uploads) o S3/MinIO por env
+
+PDF: WeasyPrint (para Factura de Comisión)
+
+Auth existente para usuarios de empresa (compradores); auth nueva para proveedores
+
+Objetivo
+
+Portal de Proveedores (self-service): registro/login, perfil, alta/edición de productos, variantes con precio/unidad/stock/atributos, gestión de imágenes, Q&A, RFQ y Órdenes.
+
+Cobro con comisión del 2% donde el proveedor factura directo al cliente:
+
+Opción A (recomendada): Mercado Pago split con application_fee = 2% (OBYRA cobra automático).
+
+Opción B (offline): proveedor marca pago recibido, sube su factura al cliente y OBYRA emite Factura de Comisión hasta cobrarla.
+
+Modelos (SQLAlchemy) y migración Alembic
+
+Nota importante: Usar Numeric(12,2) para importes/stock; no tipos de decimal como columna.
+En ProductVariant el campo correcto es atributos_json.
+
+# models.py (extracto)
+from sqlalchemy import Numeric, JSON
+
+class Supplier(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    razon_social = db.Column(db.String(160), nullable=False)
+    cuit = db.Column(db.String(32), nullable=False)
+    email = db.Column(db.String(160))
+    phone = db.Column(db.String(64))
+    direccion = db.Column(db.String(200))
+    descripcion = db.Column(db.Text)
+    ubicacion = db.Column(db.String(120))
+    estado = db.Column(db.Enum('activo','suspendido', name='supplier_estado'), default='activo')
+    verificado = db.Column(db.Boolean, default=False)
+    mp_collector_id = db.Column(db.String(64))  # para split
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+class SupplierUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    nombre = db.Column(db.String(120))
+    email = db.Column(db.String(160), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    rol = db.Column(db.Enum('owner','editor', name='supplier_user_rol'), default='owner')
+    activo = db.Column(db.Boolean, default=True)
+    last_login = db.Column(db.DateTime)
+
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(120), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+    nombre = db.Column(db.String(160), nullable=False)
+    descripcion = db.Column(db.Text)
+    estado = db.Column(db.Enum('borrador','publicado','pausado', name='product_estado'), default='borrador')
+    rating_prom = db.Column(Numeric(2,1))
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+    updated_at = db.Column(db.DateTime, onupdate=db.func.now())
+
+class ProductVariant(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    sku = db.Column(db.String(64), unique=True, nullable=False)
+    atributos_json = db.Column(JSON, default={})  # EJ: {"medida":"50kg","color":"gris"}
+    unidad = db.Column(db.String(16), nullable=False)  # u, kg, m, m2, etc.
+    precio = db.Column(Numeric(12,2), nullable=False)
+    moneda = db.Column(db.String(8), default='ARS')
+    stock = db.Column(Numeric(12,2), default=0)
+    visible = db.Column(db.Boolean, default=True)
+
+class ProductImage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    url = db.Column(db.String(255), nullable=False)
+    filename = db.Column(db.String(160))
+    orden = db.Column(db.Integer, default=0)
+
+class ProductQnA(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    user_id = db.Column(db.Integer) # comprador (si aplica)
+    pregunta = db.Column(db.Text, nullable=False)
+    respuesta = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer)         # empresa compradora (ya existe en el sistema)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    total = db.Column(Numeric(12,2), nullable=False)
+    moneda = db.Column(db.String(8), default='ARS')
+    estado = db.Column(db.Enum('pendiente','pagado','entregado','cancelado', name='order_estado'), default='pendiente')
+    payment_method = db.Column(db.Enum('online','offline', name='order_payment_method'))
+    payment_status = db.Column(db.Enum('init','approved','rejected','refunded', name='order_payment_status'), default='init')
+    payment_ref = db.Column(db.String(120))
+    buyer_invoice_url = db.Column(db.String(255))
+    supplier_invoice_number = db.Column(db.String(80))
+    supplier_invoice_url = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+class OrderItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    product_variant_id = db.Column(db.Integer, db.ForeignKey('product_variant.id'), nullable=False)
+    qty = db.Column(Numeric(12,2), nullable=False)
+    precio_unit = db.Column(Numeric(12,2), nullable=False)
+    subtotal = db.Column(Numeric(12,2), nullable=False)
+
+class OrderCommission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    base = db.Column(Numeric(12,2), nullable=False)
+    rate = db.Column(Numeric(5,4), default=0.02)  # 2%
+    monto = db.Column(Numeric(12,2), nullable=False)
+    iva = db.Column(Numeric(12,2), nullable=False)
+    total = db.Column(Numeric(12,2), nullable=False)
+    status = db.Column(db.Enum('pendiente','facturado','cobrado','anulado', name='commission_status'), default='pendiente')
+    invoice_number = db.Column(db.String(64))
+    invoice_pdf_url = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+
+Índices recomendados:
+
+supplier_user.email (UNIQUE)
+
+product (supplier_id, estado)
+
+product_variant.sku (UNIQUE)
+
+order (supplier_id, estado, payment_status)
+
+Blueprints y rutas
+Público (compradores)
+
+GET /market → lista/búsqueda (filtros: categoría, precio, proveedor verificado, ubicación)
+
+GET /market/producto/<id> → ficha con variantes, imágenes, Q&A
+
+Carrito/Orden: GET /market/carrito, POST /market/checkout → crea Order + OrderItem(s)
+
+GET /market/orden/<id> → ver estado, links de pago/adjuntos
+
+Autenticación proveedor (supplier_auth, prefijo /proveedor)
+
+GET/POST /proveedor/registro → crea Supplier + SupplierUser (owner) y redirige a login
+
+GET/POST /proveedor/login / POST /proveedor/logout
+
+Sesión: session['supplier_user_id'], session['supplier_id']
+
+Portal proveedor (supplier_portal, prefijo /proveedor) — login requerido
+
+GET /proveedor/ (dashboard: métricas, últimas órdenes, productos)
+
+GET/POST /proveedor/perfil
+
+Productos
+
+GET /proveedor/productos
+
+GET/POST /proveedor/productos/nuevo
+
+GET/POST /proveedor/productos/<id>/editar
+
+Variantes: POST /proveedor/productos/<id>/variantes/nueva, POST /proveedor/variantes/<var_id>/(editar|pausar|publicar|eliminar)
+
+Imágenes: POST /proveedor/productos/<id>/imagenes/subir, POST /proveedor/imagenes/<img_id>/(orden|eliminar)
+
+Estado: POST /proveedor/productos/<id>/(publicar|pausar|borrar)
+
+Q&A
+
+GET /proveedor/qna, POST /proveedor/qna/<qna_id>/responder
+
+RFQ / Órdenes
+
+GET /proveedor/rfqs, GET /proveedor/rfqs/<id>
+
+GET /proveedor/ordenes, GET /proveedor/ordenes/<id>
+
+En detalle de orden:
+
+Opción A (online): botón “Pagar con MP” (link a checkout) si corresponde.
+
+Opción B (offline): subir factura al cliente (adjunto), marcar pago recibido.
+
+Webhooks
+
+POST /webhooks/mp (Mercado Pago) → marca pago aprobado, genera Factura de Comisión PDF, envía comprobantes
+
+(Opcional) /webhooks/n8n para orquestaciones externas
+
+Comisión 2% — lógica y flujos
+Opción A — Mercado Pago split (recomendada)
+
+Crear checkout: POST /market/orden/<id>/checkout
+
+collector_id = supplier.mp_collector_id
+
+application_fee = round(order.total * PLATFORM_COMMISSION_RATE, 2) # 2%
+
+Guardar init_point y redirigir.
+
+Webhook /webhooks/mp (evento payment=approved):
+
+order.payment_status='approved', order.estado='pagado', set payment_ref
+
+Crear/actualizar OrderCommission con:
+
+base = order.total
+
+rate = PLATFORM_COMMISSION_RATE (env)
+
+monto = base * rate
+
+iva = monto * IVA_RATE (si corresponde)
+
+total = monto + iva
+
+status='facturado'
+
+Generar Factura de Comisión (PDF) OBYRA→Proveedor (WeasyPrint) y set invoice_pdf_url + invoice_number
+
+Enviar emails a comprador/proveedor con links a comprobantes.
+
+Opción B — Offline (conciliación)
+
+En /proveedor/ordenes/<id>:
+
+Botón “Marcar pago recibido” + subir factura del cliente
+
+Backend: crea/actualiza OrderCommission (como arriba) con status='pendiente'
+
+Mostrar “Pagar comisión ahora” (CBU/alias) o link a cobro MP simple por el monto de la comisión
+
+Admin: /admin/liquidaciones → “marcar cobrado” → status='cobrado'
+
+Cálculo utilitario
+from decimal import Decimal
+
+def compute_commission(base: Decimal, rate: Decimal, iva_rate: Decimal = Decimal('0.21'), iva_included=False):
+    monto = (base * rate).quantize(Decimal('0.01'))
+    if iva_included:
+        # si la tarifa es "IVA incluido", desglosar
+        total = monto
+        iva = (total - total / (Decimal('1.0') + iva_rate)).quantize(Decimal('0.01'))
+        monto = (total - iva).quantize(Decimal('0.01'))
+    else:
+        iva = (monto * iva_rate).quantize(Decimal('0.01'))
+        total = (monto + iva).quantize(Decimal('0.01'))
+    return monto, iva, total
+
+Snippets clave (mínimos para destrabar)
+1) Seed idempotente (no rompe si ya se corrió)
+# seed_suppliers.py
+from decimal import Decimal
+from app import db, create_app
+from models import Supplier, SupplierUser, Category, Product, ProductVariant
+from werkzeug.security import generate_password_hash
+
+app = create_app()
+
+def get_or_create(model, defaults=None, **kwargs):
+    inst = model.query.filter_by(**kwargs).first()
+    if inst: return inst, False
+    params = {**(defaults or {}), **kwargs}
+    inst = model(**params); db.session.add(inst); return inst, True
+
+with app.app_context():
+    sup, _ = get_or_create(Supplier, email="ventas@demo.com",
+        defaults=dict(razon_social="Proveedor Demo", cuit="30-70999999-7", verificado=True))
+    su, created = get_or_create(SupplierUser, email="owner@demo.com",
+        defaults=dict(supplier_id=sup.id, nombre="Owner", password_hash=generate_password_hash("demo123")))
+    cat, _ = get_or_create(Category, nombre="Materiales")
+    prod, _ = get_or_create(Product, supplier_id=sup.id, nombre="Cemento Portland",
+        defaults=dict(category_id=cat.id, descripcion="Bolsa 50kg", estado="publicado"))
+    _var, _ = get_or_create(ProductVariant, product_id=prod.id, sku="CEM-50KG",
+        defaults=dict(atributos_json={"presentacion":"50kg"}, unidad="u",
+                      precio=Decimal("9999.00"), moneda="ARS", stock=Decimal("100.00")))
+    db.session.commit(); print("Seed OK")
+
+2) Auth proveedor (blueprint)
+# blueprints/supplier_auth.py
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from werkzeug.security import generate_password_hash, check_password_hash
+from app import db
+from models import Supplier, SupplierUser
+
+bp = Blueprint("supplier_auth", __name__, url_prefix="/proveedor")
+
+@bp.get("/registro")
+def registro_form(): return render_template("proveedor/registro.html")
+
+@bp.post("/registro")
+def registro_post():
+    rs, cuit, email, pwd = map(request.form.get, ("razon_social","cuit","email","password"))
+    if SupplierUser.query.filter_by(email=email.lower()).first():
+        flash("Ese email ya está registrado", "warning"); return redirect(url_for(".registro_form"))
+    sup = Supplier(razon_social=rs, cuit=cuit, email=email, verificado=False)
+    db.session.add(sup); db.session.flush()
+    su = SupplierUser(supplier_id=sup.id, email=email.lower(), nombre=rs, password_hash=generate_password_hash(pwd))
+    db.session.add(su); db.session.commit()
+    flash("Cuenta creada. Iniciá sesión.", "success"); return redirect(url_for(".login_form"))
+
+@bp.get("/login")
+def login_form(): return render_template("proveedor/login.html")
+
+@bp.post("/login")
+def login_post():
+    email, pwd = request.form["email"].lower(), request.form["password"]
+    su = SupplierUser.query.filter_by(email=email, activo=True).first()
+    if not su or not check_password_hash(su.password_hash, pwd):
+        flash("Credenciales inválidas", "danger"); return redirect(url_for(".login_form"))
+    session["supplier_user_id"] = su.id; session["supplier_id"] = su.supplier_id
+    return redirect(url_for("supplier_portal.dashboard"))
+
+3) Portal proveedor (dashboard mínimo)
+# blueprints/supplier_portal.py
+from flask import Blueprint, render_template, session, redirect, url_for
+from models import Product
+
+bp = Blueprint("supplier_portal", __name__, url_prefix="/proveedor")
+
+def supplier_login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def w(*a, **k):
+        if not session.get("supplier_id"): return redirect(url_for("supplier_auth.login_form"))
+        return f(*a, **k)
+    return w
+
+@bp.get("/")
+@supplier_login_required
+def dashboard():
+    prods = Product.query.filter_by(supplier_id=session["supplier_id"]).all()
+    return render_template("proveedor/dashboard.html", productos=prods)
+
+4) Templates básicos (para probar ya)
+<!-- templates/proveedor/registro.html -->
+<form method="post">
+  {{ csrf_token() }}
+  <input name="razon_social" placeholder="Razón social" required>
+  <input name="cuit" placeholder="CUIT" required>
+  <input name="email" type="email" placeholder="Email" required>
+  <input name="password" type="password" placeholder="Contraseña" required>
+  <button type="submit">Crear cuenta</button>
+</form>
+
+<!-- templates/proveedor/login.html -->
+<form method="post">
+  {{ csrf_token() }}
+  <input name="email" type="email" placeholder="Email" required>
+  <input name="password" type="password" placeholder="Contraseña" required>
+  <button type="submit">Ingresar</button>
+</form>
+
+5) Mercado Pago — endpoints mínimos
+# blueprints/payments.py (extracto)
+@bp.post("/market/orden/<int:order_id>/checkout")
+def create_checkout(order_id):
+    # lookup order + supplier.mp_collector_id
+    # create preference with application_fee = total * PLATFORM_COMMISSION_RATE
+    # return redirect(init_point)
+    ...
+
+@bp.post("/webhooks/mp")
+def mp_webhook():
+    # validar evento (firma si usan), obtener paymentId
+    # mapear a order_id (por metadata)
+    # set order.payment_status='approved' / estado='pagado'
+    # crear/actualizar OrderCommission + generar PDF + enviar emails
+    ...
+
+6) Factura de Comisión (PDF)
+# services/commission.py
+from weasyprint import HTML
+from flask import render_template
+from decimal import Decimal
+from models import Order, OrderCommission
+from app import db
+
+def generate_commission_invoice(order_id, rate: Decimal, iva_rate: Decimal = Decimal("0.21")):
+    order = Order.query.get(order_id)
+    base = order.total; monto = (base * rate).quantize(Decimal("0.01"))
+    iva = (monto * iva_rate).quantize(Decimal("0.01"))
+    total = (monto + iva).quantize(Decimal("0.01"))
+
+    oc = OrderCommission.query.filter_by(order_id=order.id).first() or OrderCommission(order_id=order.id, rate=rate)
+    oc.base, oc.monto, oc.iva, oc.total, oc.status = base, monto, iva, total, 'facturado'
+    if not oc.invoice_number:
+        oc.invoice_number = f"OC-{order.id:06d}"
+    db.session.add(oc); db.session.commit()
+
+    html = render_template("pdf/commission_invoice.html", order=order, oc=oc, supplier=order.supplier)
+    pdf = HTML(string=html).write_pdf()
+    path = f"static/uploads/invoices/{oc.invoice_number}.pdf"
+    with open(path, "wb") as f: f.write(pdf)
+    oc.invoice_pdf_url = f"/{path}"; db.session.commit()
+    return oc
+
+
+Plantilla PDF mínima: templates/pdf/commission_invoice.html
+Campos: datos OBYRA, datos Proveedor, Orden, base, 2%, IVA, total, fecha, nro.
+
+Validaciones y políticas
+
+Publicar producto sólo si: tiene ≥1 variante visible con precio + unidad + stock y ≥1 imagen.
+
+SKU único global.
+
+Q&A: sólo proveedor dueño responde sus productos.
+
+Acceso: toda ruta de proveedor debe verificar session['supplier_id'] = dueño del recurso.
+
+Uploads: validar mime (jpg/jpeg/png/webp, máx 10 MB), carpeta por proveedor/producto.
+
+CSRF en todos los formularios (Flask-WTF).
+
+Redondeos a 2 decimales; idempotencia de webhooks por payment_id.
+
+Variables de entorno
+PLATFORM_COMMISSION_RATE=0.02
+STORAGE_BACKEND=local        # o s3
+S3_ENDPOINT=...
+S3_BUCKET=obyra
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+
+# Mercado Pago
+MP_ACCESS_TOKEN=...
+MP_WEBHOOK_SECRET=...        # si usan firma
+
+Tareas y orden de implementación (sugerido)
+
+Migraciones Alembic de todos los modelos arriba.
+
+Blueprints supplier_auth y supplier_portal + templates login/registro/dashboard.
+
+CRUD Productos + Variantes + Imágenes + publicar/pausar (con validación).
+
+Marketplace público (/market, /market/producto/<id>) con filtros.
+
+Checkout & Órdenes: crear orden + OrderItem(s).
+
+Pago
+
+A: POST /market/orden/<id>/checkout (MP split), POST /webhooks/mp.
+
+B: marcar pago recibido + subir factura del cliente.
+
+Comisión: OrderCommission + PDF (WeasyPrint) + enlaces visibles en portal proveedor y admin.
+
+Q&A + RFQ (si aplica) + vistas.
+
+README con setup, migraciones, env vars y colección Postman (rutas críticas).
+
+Criterios de aceptación (DoD)
+
+Portal proveedor: registro/login/perfil funcionando.
+
+Catálogo: crear/editar productos, variantes, imágenes, publicar/pausar con reglas.
+
+Marketplace: búsqueda/filtros, ficha con variantes e imágenes.
+
+Órdenes: flujo de creación y visualización por comprador y proveedor.
+
+Opción A: pago MP split con application_fee 2%, webhook que marca pagado y genera Factura de Comisión (PDF).
+
+Opción B: flujo offline, comisión pendiente → cobrada.
+
+Seguridad, CSRF, ownership y archivos validados.
+
+Seed idempotente y scripts reproducibles.
+
+Eso es todo. Con esto pueden implementarlo sin fricción y dejarlo en producción.

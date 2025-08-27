@@ -3,6 +3,7 @@
 Script para poblar la base de datos con datos demo del Portal de Proveedores
 """
 
+from decimal import Decimal
 from app import app, db
 from models import (
     Supplier, SupplierUser, Category, Product, ProductVariant, 
@@ -13,6 +14,16 @@ from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 import random
 import os
+
+def get_or_create(model, defaults=None, **kwargs):
+    """Utility function for idempotent seeding"""
+    instance = model.query.filter_by(**kwargs).first()
+    if instance:
+        return instance, False
+    params = {**(defaults or {}), **kwargs}
+    instance = model(**params)
+    db.session.add(instance)
+    return instance, True
 
 def seed_suppliers():
     """Función principal para poblar el Portal de Proveedores"""
@@ -164,8 +175,8 @@ def crear_productos(suppliers, categorias):
             "nombre": "Cemento Portland Tipo I",
             "descripcion": "Cemento Portland de alta calidad para construcción general. Cumple normas IRAM 50000.",
             "variantes": [
-                {"sku": "CEM-PORT-50", "unidad": "bolsa", "precio": 1250.00, "stock": 500, "atributos": {"peso": "50kg"}},
-                {"sku": "CEM-PORT-25", "unidad": "bolsa", "precio": 650.00, "stock": 200, "atributos": {"peso": "25kg"}}
+                {"sku": "CEM-PORT-50", "unidad": "bolsa", "precio": Decimal("1250.00"), "stock": Decimal("500"), "atributos": {"peso": "50kg"}},
+                {"sku": "CEM-PORT-25", "unidad": "bolsa", "precio": Decimal("650.00"), "stock": Decimal("200"), "atributos": {"peso": "25kg"}}
             ]
         },
         {
@@ -174,9 +185,9 @@ def crear_productos(suppliers, categorias):
             "nombre": "Hierro Aletado ADN 420",
             "descripcion": "Hierro de construcción aletado de alta resistencia, ideal para estructuras.",
             "variantes": [
-                {"sku": "HIE-ADN-8", "unidad": "kg", "precio": 890.00, "stock": 1000, "atributos": {"diametro": "8mm"}},
-                {"sku": "HIE-ADN-10", "unidad": "kg", "precio": 920.00, "stock": 800, "atributos": {"diametro": "10mm"}},
-                {"sku": "HIE-ADN-12", "unidad": "kg", "precio": 950.00, "stock": 600, "atributos": {"diametro": "12mm"}}
+                {"sku": "HIE-ADN-8", "unidad": "kg", "precio": Decimal("890.00"), "stock": Decimal("1000"), "atributos": {"diametro": "8mm"}},
+                {"sku": "HIE-ADN-10", "unidad": "kg", "precio": Decimal("920.00"), "stock": Decimal("800"), "atributos": {"diametro": "10mm"}},
+                {"sku": "HIE-ADN-12", "unidad": "kg", "precio": Decimal("950.00"), "stock": Decimal("600"), "atributos": {"diametro": "12mm"}}
             ]
         },
         
@@ -187,7 +198,7 @@ def crear_productos(suppliers, categorias):
             "nombre": "Hormigonera Autopropulsada",
             "descripcion": "Hormigonera autopropulsada de 400 litros con motor diésel. Ideal para obras medianas.",
             "variantes": [
-                {"sku": "HOR-AUTO-400", "unidad": "u", "precio": 2850000.00, "stock": 3, "atributos": {"capacidad": "400L", "motor": "Diesel"}}
+                {"sku": "HOR-AUTO-400", "unidad": "u", "precio": Decimal("2850000.00"), "stock": Decimal("3"), "atributos": {"capacidad": "400L", "motor": "Diesel"}}
             ]
         },
         {
@@ -196,7 +207,7 @@ def crear_productos(suppliers, categorias):
             "nombre": "Martillo Demoledor Neumático",
             "descripcion": "Martillo demoledor neumático para trabajos pesados de demolición.",
             "variantes": [
-                {"sku": "MAR-NEU-65", "unidad": "u", "precio": 185000.00, "stock": 5, "atributos": {"peso": "65kg", "tipo": "Neumático"}}
+                {"sku": "MAR-NEU-65", "unidad": "u", "precio": Decimal("185000.00"), "stock": Decimal("5"), "atributos": {"peso": "65kg", "tipo": "Neumático"}}
             ]
         },
         
@@ -207,9 +218,9 @@ def crear_productos(suppliers, categorias):
             "nombre": "Casco de Seguridad",
             "descripcion": "Casco de seguridad industrial con ajuste de carraca. Cumple normas ANSI.",
             "variantes": [
-                {"sku": "CAS-SEG-BLA", "unidad": "u", "precio": 3500.00, "stock": 100, "atributos": {"color": "Blanco"}},
-                {"sku": "CAS-SEG-AMA", "unidad": "u", "precio": 3500.00, "stock": 80, "atributos": {"color": "Amarillo"}},
-                {"sku": "CAS-SEG-AZU", "unidad": "u", "precio": 3500.00, "stock": 60, "atributos": {"color": "Azul"}}
+                {"sku": "CAS-SEG-BLA", "unidad": "u", "precio": Decimal("3500.00"), "stock": Decimal("100"), "atributos": {"color": "Blanco"}},
+                {"sku": "CAS-SEG-AMA", "unidad": "u", "precio": Decimal("3500.00"), "stock": Decimal("80"), "atributos": {"color": "Amarillo"}},
+                {"sku": "CAS-SEG-AZU", "unidad": "u", "precio": Decimal("3500.00"), "stock": Decimal("60"), "atributos": {"color": "Azul"}}
             ]
         },
         {
@@ -218,11 +229,11 @@ def crear_productos(suppliers, categorias):
             "nombre": "Botas de Seguridad con Puntera",
             "descripcion": "Botas de seguridad con puntera de acero y suela antideslizante.",
             "variantes": [
-                {"sku": "BOT-SEG-39", "unidad": "u", "precio": 12500.00, "stock": 25, "atributos": {"talla": "39"}},
-                {"sku": "BOT-SEG-40", "unidad": "u", "precio": 12500.00, "stock": 30, "atributos": {"talla": "40"}},
-                {"sku": "BOT-SEG-41", "unidad": "u", "precio": 12500.00, "stock": 28, "atributos": {"talla": "41"}},
-                {"sku": "BOT-SEG-42", "unidad": "u", "precio": 12500.00, "stock": 35, "atributos": {"talla": "42"}},
-                {"sku": "BOT-SEG-43", "unidad": "u", "precio": 12500.00, "stock": 22, "atributos": {"talla": "43"}}
+                {"sku": "BOT-SEG-39", "unidad": "u", "precio": Decimal("12500.00"), "stock": Decimal("25"), "atributos": {"talla": "39"}},
+                {"sku": "BOT-SEG-40", "unidad": "u", "precio": Decimal("12500.00"), "stock": Decimal("30"), "atributos": {"talla": "40"}},
+                {"sku": "BOT-SEG-41", "unidad": "u", "precio": Decimal("12500.00"), "stock": Decimal("28"), "atributos": {"talla": "41"}},
+                {"sku": "BOT-SEG-42", "unidad": "u", "precio": Decimal("12500.00"), "stock": Decimal("35"), "atributos": {"talla": "42"}},
+                {"sku": "BOT-SEG-43", "unidad": "u", "precio": Decimal("12500.00"), "stock": Decimal("22"), "atributos": {"talla": "43"}}
             ]
         }
     ]
@@ -254,7 +265,10 @@ def crear_productos(suppliers, categorias):
             variante = ProductVariant(
                 product_id=producto.id,
                 atributos_json=atributos,
-                **var_data
+                sku=var_data['sku'],
+                unidad=var_data['unidad'],
+                precio=var_data['precio'],
+                stock=var_data['stock']
             )
             db.session.add(variante)
         
@@ -297,22 +311,22 @@ def crear_orden_demo(suppliers, productos):
     orden = Order(
         company_id=org.id,
         supplier_id=supplier.id,
-        total=0,  # Se calculará después
+        total=Decimal('0'),  # Se calculará después
         payment_method='offline',
         created_at=datetime.now() - timedelta(days=2)
     )
     db.session.add(orden)
     db.session.flush()
     
-    total_orden = 0
+    total_orden = Decimal('0')
     
     # Agregar algunos items
     for i, producto in enumerate(productos_supplier[:2]):  # Solo los primeros 2 productos
         if producto.variants:
             variante = producto.variants[0]  # Primera variante
-            qty = random.uniform(1, 5)
+            qty = Decimal(str(random.uniform(1, 5))).quantize(Decimal('0.01'))
             precio_unit = variante.precio
-            subtotal = float(precio_unit) * qty
+            subtotal = precio_unit * qty
             
             order_item = OrderItem(
                 order_id=orden.id,

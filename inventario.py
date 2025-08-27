@@ -39,7 +39,7 @@ def lista():
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
     
-    items = query.filter_by(activo=True).order_by(ItemInventario.nombre).all()
+    items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
     categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
     
     return render_template('inventario/lista.html', 
