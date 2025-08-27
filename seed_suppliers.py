@@ -20,6 +20,23 @@ def seed_suppliers():
     with app.app_context():
         print("🏪 Iniciando seed del Portal de Proveedores...")
         
+        # Verificar si ya hay datos
+        existing_suppliers = Supplier.query.count()
+        if existing_suppliers > 0:
+            print(f"\n⚠️  Ya existen {existing_suppliers} proveedores. Recreando datos...")
+            # Limpiar datos existentes del portal de proveedores
+            OrderCommission.query.delete()
+            OrderItem.query.delete()
+            Order.query.delete()
+            ProductImage.query.delete()
+            ProductVariant.query.delete()
+            Product.query.delete()
+            SupplierUser.query.delete()
+            Supplier.query.delete()
+            Category.query.delete()
+            db.session.commit()
+            print("   🗑️  Datos anteriores eliminados")
+        
         # 1. Crear categorías
         print("\n📂 Creando categorías...")
         categorias = crear_categorias()
