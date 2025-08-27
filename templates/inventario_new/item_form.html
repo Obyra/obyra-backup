@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if item %}Editar Item{% else %}Nuevo Item{% endif %} - Inventario - OBYRA IA
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12 col-lg-8 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-{% if item %}edit{% else %}plus{% endif %} me-2"></i>
+                        {% if item %}Editar Item{% else %}Nuevo Item de Inventario{% endif %}
+                    </h5>
+                    <a href="{{ url_for('inventario_new.items') }}" class="btn btn-light btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i>
+                        Volver a Lista
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="sku" class="form-label">SKU *</label>
+                            <input type="text" class="form-control" id="sku" name="sku" 
+                                   value="{{ item.sku if item else request.form.get('sku', '') }}" 
+                                   {% if item %}readonly{% endif %} required>
+                            <div class="form-text">Código único del producto (ej: CEM-001, HIE-10MM)</div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="nombre" class="form-label">Nombre del Item *</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" 
+                                   value="{{ item.nombre if item else request.form.get('nombre', '') }}" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="categoria_id" class="form-label">Categoría *</label>
+                            <select class="form-select" id="categoria_id" name="categoria_id" required>
+                                <option value="">Seleccionar categoría...</option>
+                                {% for categoria in categorias %}
+                                    <option value="{{ categoria.id }}" 
+                                            {% if (item and item.categoria_id == categoria.id) or request.form.get('categoria_id') == categoria.id|string %}selected{% endif %}>
+                                        {{ categoria.full_path }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            {% if not categorias %}
+                                <div class="form-text text-warning">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Necesitas crear categorías primero
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="unidad" class="form-label">Unidad de Medida *</label>
+                            <select class="form-select" id="unidad" name="unidad" required>
+                                <option value="">Seleccionar unidad...</option>
+                                <option value="u" {% if (item and item.unidad == 'u') or request.form.get('unidad') == 'u' %}selected{% endif %}>Unidades (u)</option>
+                                <option value="kg" {% if (item and item.unidad == 'kg') or request.form.get('unidad') == 'kg' %}selected{% endif %}>Kilogramos (kg)</option>
+                                <option value="m" {% if (item and item.unidad == 'm') or request.form.get('unidad') == 'm' %}selected{% endif %}>Metros (m)</option>
+                                <option value="m2" {% if (item and item.unidad == 'm2') or request.form.get('unidad') == 'm2' %}selected{% endif %}>Metros cuadrados (m²)</option>
+                                <option value="m3" {% if (item and item.unidad == 'm3') or request.form.get('unidad') == 'm3' %}selected{% endif %}>Metros cúbicos (m³)</option>
+                                <option value="l" {% if (item and item.unidad == 'l') or request.form.get('unidad') == 'l' %}selected{% endif %}>Litros (l)</option>
+                                <option value="t" {% if (item and item.unidad == 't') or request.form.get('unidad') == 't' %}selected{% endif %}>Toneladas (t)</option>
+                                <option value="bolsa" {% if (item and item.unidad == 'bolsa') or request.form.get('unidad') == 'bolsa' %}selected{% endif %}>Bolsas</option>
+                                <option value="caja" {% if (item and item.unidad == 'caja') or request.form.get('unidad') == 'caja' %}selected{% endif %}>Cajas</option>
+                                <option value="palet" {% if (item and item.unidad == 'palet') or request.form.get('unidad') == 'palet' %}selected{% endif %}>Palets</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="min_stock" class="form-label">Stock Mínimo</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="min_stock" name="min_stock" 
+                                   value="{{ item.min_stock if item else request.form.get('min_stock', '0') }}">
+                            <div class="form-text">Cantidad mínima para generar alerta</div>
+                        </div>
+                        
+                        {% if item %}
+                        <div class="col-md-6">
+                            <label class="form-label">Stock Actual</label>
+                            <div class="form-control-plaintext">
+                                <span class="badge bg-{% if item.total_stock > 0 %}primary{% else %}danger{% endif %} fs-6">
+                                    {{ item.total_stock }} {{ item.unidad }}
+                                </span>
+                                {% if item.reserved_stock > 0 %}
+                                    <br><small class="text-warning">{{ item.reserved_stock }} {{ item.unidad }} reservado</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="col-12">
+                            <label for="descripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="3">{{ item.descripcion if item else request.form.get('descripcion', '') }}</textarea>
+                            <div class="form-text">Descripción detallada del item, especificaciones técnicas, etc.</div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Información:</strong> 
+                                {% if item %}
+                                    Los cambios se aplicarán inmediatamente. El stock actual se gestiona a través de movimientos de inventario.
+                                {% else %}
+                                    Una vez creado el item, podrás gestionar su stock a través de movimientos (ingresos, egresos, transferencias).
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-{% if item %}warning{% else %}success{% endif %}">
+                                    <i class="fas fa-save me-2"></i>
+                                    {% if item %}Actualizar Item{% else %}Crear Item{% endif %}
+                                </button>
+                                <a href="{{ url_for('inventario_new.items') }}" class="btn btn-secondary">
+                                    <i class="fas fa-times me-2"></i>
+                                    Cancelar
+                                </a>
+                                {% if not categorias %}
+                                    <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#categoriaModal">
+                                        <i class="fas fa-plus me-2"></i>
+                                        Crear Categoría
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para crear categoría rápida -->
+<div class="modal fade" id="categoriaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="categoriaForm">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nueva Categoría</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre de la Categoría</label>
+                        <input type="text" name="nombre" class="form-control" required
+                               placeholder="Ej: Materiales, Herramientas, EPP">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info">Crear Categoría</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Función para crear categoría via AJAX (simplificado)
+document.getElementById('categoriaForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    // Aquí iría la llamada AJAX para crear la categoría
+    // Por simplicidad, recargamos la página
+    alert('Para crear categorías, usa el módulo de configuración del inventario');
+    $('#categoriaModal').modal('hide');
+});
+</script>
+{% endblock %}

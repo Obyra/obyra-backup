@@ -50,6 +50,7 @@ from obras import obras_bp
 from presupuestos import presupuestos_bp
 from equipos import equipos_bp
 from inventario import inventario_bp
+from marketplaces import marketplaces_bp
 from reportes import reportes_bp
 from asistente_ia import asistente_bp
 from cotizacion_inteligente import cotizacion_bp
@@ -58,11 +59,16 @@ from seguridad_cumplimiento import seguridad_bp
 from agent_local import agent_bp  # 👈 nuestro mini agente local
 from planes import planes_bp
 
+# Importar nuevos blueprints mejorados
+from equipos_new import equipos_new_bp
+from inventario_new import inventario_new_bp
+
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(obras_bp, url_prefix='/obras')
 app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
 app.register_blueprint(equipos_bp, url_prefix='/equipos')
 app.register_blueprint(inventario_bp, url_prefix='/inventario')
+app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
 app.register_blueprint(reportes_bp, url_prefix='/reportes')
 app.register_blueprint(asistente_bp, url_prefix='/asistente')
 app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
@@ -70,6 +76,10 @@ app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 app.register_blueprint(agent_bp)  # Agente IA local sin prefijo
 app.register_blueprint(planes_bp)  # Sistema de planes
+
+# Registrar nuevos blueprints mejorados
+app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
+app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
 
 # Funciones globales para templates
 @app.context_processor

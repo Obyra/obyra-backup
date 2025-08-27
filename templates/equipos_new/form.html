@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if equipo %}Editar Equipo{% else %}Nuevo Equipo{% endif %} - OBYRA IA
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12 col-lg-8 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-{% if equipo %}edit{% else %}plus{% endif %} me-2"></i>
+                        {% if equipo %}Editar Equipo{% else %}Nuevo Equipo{% endif %}
+                    </h5>
+                    <a href="{{ url_for('equipos_new.lista') }}" class="btn btn-light btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i>
+                        Volver a Lista
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="nombre" class="form-label">Nombre del Equipo *</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" 
+                                   value="{{ equipo.nombre if equipo else request.form.get('nombre', '') }}" required>
+                            <div class="form-text">Ej: Hormigonera Grande, Martillo Demoledor</div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="tipo" class="form-label">Tipo de Equipo *</label>
+                            <select class="form-select" id="tipo" name="tipo" required>
+                                <option value="">Seleccionar tipo...</option>
+                                <option value="hormigonera" {% if (equipo and equipo.tipo == 'hormigonera') or request.form.get('tipo') == 'hormigonera' %}selected{% endif %}>Hormigonera</option>
+                                <option value="guinche" {% if (equipo and equipo.tipo == 'guinche') or request.form.get('tipo') == 'guinche' %}selected{% endif %}>Guinche</option>
+                                <option value="martillo" {% if (equipo and equipo.tipo == 'martillo') or request.form.get('tipo') == 'martillo' %}selected{% endif %}>Martillo Demoledor</option>
+                                <option value="compresor" {% if (equipo and equipo.tipo == 'compresor') or request.form.get('tipo') == 'compresor' %}selected{% endif %}>Compresor</option>
+                                <option value="soldadora" {% if (equipo and equipo.tipo == 'soldadora') or request.form.get('tipo') == 'soldadora' %}selected{% endif %}>Soldadora</option>
+                                <option value="generador" {% if (equipo and equipo.tipo == 'generador') or request.form.get('tipo') == 'generador' %}selected{% endif %}>Generador</option>
+                                <option value="escalera" {% if (equipo and equipo.tipo == 'escalera') or request.form.get('tipo') == 'escalera' %}selected{% endif %}>Escalera/Andamio</option>
+                                <option value="vehiculo" {% if (equipo and equipo.tipo == 'vehiculo') or request.form.get('tipo') == 'vehiculo' %}selected{% endif %}>Vehículo</option>
+                                <option value="otro" {% if (equipo and equipo.tipo == 'otro') or request.form.get('tipo') == 'otro' %}selected{% endif %}>Otro</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="marca" class="form-label">Marca</label>
+                            <input type="text" class="form-control" id="marca" name="marca" 
+                                   value="{{ equipo.marca if equipo else request.form.get('marca', '') }}">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="modelo" class="form-label">Modelo</label>
+                            <input type="text" class="form-control" id="modelo" name="modelo" 
+                                   value="{{ equipo.modelo if equipo else request.form.get('modelo', '') }}">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="nro_serie" class="form-label">Número de Serie</label>
+                            <input type="text" class="form-control" id="nro_serie" name="nro_serie" 
+                                   value="{{ equipo.nro_serie if equipo else request.form.get('nro_serie', '') }}">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="costo_hora" class="form-label">Costo por Hora ($)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="costo_hora" name="costo_hora" 
+                                   value="{{ equipo.costo_hora if equipo else request.form.get('costo_hora', '0') }}">
+                            <div class="form-text">Costo operativo por hora de uso</div>
+                        </div>
+                        
+                        {% if equipo %}
+                        <div class="col-md-6">
+                            <label for="estado" class="form-label">Estado</label>
+                            <select class="form-select" id="estado" name="estado">
+                                <option value="activo" {% if equipo.estado == 'activo' %}selected{% endif %}>Activo</option>
+                                <option value="mantenimiento" {% if equipo.estado == 'mantenimiento' %}selected{% endif %}>Mantenimiento</option>
+                                <option value="baja" {% if equipo.estado == 'baja' %}selected{% endif %}>Baja</option>
+                            </select>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Información:</strong> Una vez creado el equipo, podrás asignarlo a proyectos específicos y llevar un registro detallado de su uso y mantenimiento.
+                            </div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-{% if equipo %}warning{% else %}success{% endif %}">
+                                    <i class="fas fa-save me-2"></i>
+                                    {% if equipo %}Actualizar Equipo{% else %}Crear Equipo{% endif %}
+                                </button>
+                                <a href="{{ url_for('equipos_new.lista') }}" class="btn btn-secondary">
+                                    <i class="fas fa-times me-2"></i>
+                                    Cancelar
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

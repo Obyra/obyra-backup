@@ -1,8 +1,5 @@
 from app import app
-from marketplaces import marketplaces_bp
 
-# Registrar el blueprint de marketplaces
-app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
 from flask import render_template
 
 @app.route('/terminos')

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Equipos - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tools me-2"></i>
+                        Gestión de Equipos
+                    </h5>
+                    <a href="{{ url_for('equipos_new.nuevo') }}" class="btn btn-light btn-sm">
+                        <i class="fas fa-plus me-1"></i>
+                        Nuevo Equipo
+                    </a>
+                </div>
+                
+                <!-- Filtros -->
+                <div class="card-body border-bottom">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-3">
+                            <select name="proyecto" class="form-select">
+                                <option value="">Todos los proyectos</option>
+                                {% for project in projects %}
+                                    <option value="{{ project.id }}" 
+                                            {% if filtros.proyecto == project.id|string %}selected{% endif %}>
+                                        {{ project.nombre }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select name="estado" class="form-select">
+                                <option value="">Todos los estados</option>
+                                <option value="activo" {% if filtros.estado == 'activo' %}selected{% endif %}>Activo</option>
+                                <option value="mantenimiento" {% if filtros.estado == 'mantenimiento' %}selected{% endif %}>Mantenimiento</option>
+                                <option value="baja" {% if filtros.estado == 'baja' %}selected{% endif %}>Baja</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select name="tipo" class="form-select">
+                                <option value="">Todos los tipos</option>
+                                {% for tipo in tipos %}
+                                    <option value="{{ tipo }}" {% if filtros.tipo == tipo %}selected{% endif %}>
+                                        {{ tipo|title }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter me-1"></i>
+                                Filtrar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Lista de equipos -->
+                <div class="card-body">
+                    {% if equipos %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Equipo</th>
+                                        <th>Tipo</th>
+                                        <th>Estado</th>
+                                        <th>Asignación Actual</th>
+                                        <th>Costo/Hora</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for equipo in equipos %}
+                                        <tr>
+                                            <td>
+                                                <div>
+                                                    <strong>{{ equipo.nombre }}</strong>
+                                                    {% if equipo.marca %}
+                                                        <br><small class="text-muted">{{ equipo.marca }} {{ equipo.modelo }}</small>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">{{ equipo.tipo|title }}</span>
+                                            </td>
+                                            <td>
+                                                {% if equipo.estado == 'activo' %}
+                                                    <span class="badge bg-success">Activo</span>
+                                                {% elif equipo.estado == 'mantenimiento' %}
+                                                    <span class="badge bg-warning">Mantenimiento</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Baja</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if equipo.current_assignment %}
+                                                    <small class="text-success">
+                                                        <i class="fas fa-check-circle me-1"></i>
+                                                        {{ equipo.current_assignment.project.nombre }}
+                                                    </small>
+                                                {% else %}
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-minus-circle me-1"></i>
+                                                        Disponible
+                                                    </small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if equipo.costo_hora > 0 %}
+                                                    ${{ "{:,.2f}".format(equipo.costo_hora) }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{{ url_for('equipos_new.detalle', id=equipo.id) }}" 
+                                                       class="btn btn-outline-primary">
+                                                        <i class="fas fa-eye"></i>
+                                                    </a>
+                                                    <a href="{{ url_for('equipos_new.nuevo') }}?edit={{ equipo.id }}" 
+                                                       class="btn btn-outline-warning">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-tools fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No hay equipos registrados.</p>
+                            <a href="{{ url_for('equipos_new.nuevo') }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-1"></i>
+                                Crear Primer Equipo
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

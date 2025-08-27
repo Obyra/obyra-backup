@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Inventario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-boxes me-2"></i>
+                        Gestión de Inventario
+                    </h5>
+                    <div>
+                        <a href="{{ url_for('inventario_new.alertas') }}" class="btn btn-warning btn-sm me-2">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            Alertas de Stock
+                        </a>
+                        <a href="{{ url_for('inventario_new.nuevo_item') }}" class="btn btn-light btn-sm">
+                            <i class="fas fa-plus me-1"></i>
+                            Nuevo Item
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Filtros -->
+                <div class="card-body border-bottom">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-3">
+                            <select name="categoria" class="form-select">
+                                <option value="">Todas las categorías</option>
+                                {% for categoria in categorias %}
+                                    <option value="{{ categoria.id }}" 
+                                            {% if filtros.categoria == categoria.id|string %}selected{% endif %}>
+                                        {{ categoria.full_path }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" name="buscar" class="form-control" 
+                                   placeholder="Buscar por SKU o nombre..." 
+                                   value="{{ filtros.buscar or '' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="stock_bajo" value="1" 
+                                       {% if filtros.stock_bajo %}checked{% endif %}>
+                                <label class="form-check-label">
+                                    Solo stock bajo
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter me-1"></i>
+                                Filtrar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Lista de items -->
+                <div class="card-body">
+                    {% if items %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>SKU</th>
+                                        <th>Item</th>
+                                        <th>Categoría</th>
+                                        <th>Stock Total</th>
+                                        <th>Stock Mínimo</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in items %}
+                                        <tr {% if item.is_low_stock %}class="table-warning"{% endif %}>
+                                            <td>
+                                                <code>{{ item.sku }}</code>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <strong>{{ item.nombre }}</strong>
+                                                    {% if item.descripcion %}
+                                                        <br><small class="text-muted">{{ item.descripcion[:50] }}{% if item.descripcion|length > 50 %}...{% endif %}</small>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-{% if item.total_stock > 0 %}primary{% else %}danger{% endif %}">
+                                                    {{ item.total_stock }} {{ item.unidad }}
+                                                </span>
+                                                {% if item.reserved_stock > 0 %}
+                                                    <br><small class="text-warning">{{ item.reserved_stock }} {{ item.unidad }} reservado</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ item.min_stock }} {{ item.unidad }}</td>
+                                            <td>
+                                                {% if item.is_low_stock %}
+                                                    <span class="badge bg-warning">
+                                                        <i class="fas fa-exclamation-triangle"></i>
+                                                        Stock Bajo
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge bg-success">OK</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{{ url_for('inventario_new.detalle_item', id=item.id) }}" 
+                                                       class="btn btn-outline-primary">
+                                                        <i class="fas fa-eye"></i>
+                                                    </a>
+                                                    <a href="{{ url_for('inventario_new.nuevo_item') }}?edit={{ item.id }}" 
+                                                       class="btn btn-outline-warning">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No hay items en el inventario.</p>
+                            <a href="{{ url_for('inventario_new.nuevo_item') }}" class="btn btn-success">
+                                <i class="fas fa-plus me-1"></i>
+                                Crear Primer Item
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Links de acceso rápido -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <a href="{{ url_for('inventario_new.warehouses') }}" class="card text-decoration-none">
+                <div class="card-body text-center">
+                    <i class="fas fa-warehouse fa-2x text-info mb-2"></i>
+                    <h6>Depósitos</h6>
+                    <small class="text-muted">Gestionar ubicaciones</small>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="{{ url_for('inventario_new.movimientos') }}" class="card text-decoration-none">
+                <div class="card-body text-center">
+                    <i class="fas fa-exchange-alt fa-2x text-primary mb-2"></i>
+                    <h6>Movimientos</h6>
+                    <small class="text-muted">Ingresos y egresos</small>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="{{ url_for('inventario_new.reservas') }}" class="card text-decoration-none">
+                <div class="card-body text-center">
+                    <i class="fas fa-bookmark fa-2x text-warning mb-2"></i>
+                    <h6>Reservas</h6>
+                    <small class="text-muted">Stock reservado</small>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="{{ url_for('inventario_new.alertas') }}" class="card text-decoration-none">
+                <div class="card-body text-center">
+                    <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
+                    <h6>Alertas</h6>
+                    <small class="text-muted">Stock bajo</small>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
