@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}{{ producto.nombre }} - OBYRA IA Marketplace{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('marketplace.productos') }}">Marketplace</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('marketplace.productos', categoria=producto.category_id) }}">{{ producto.category.nombre }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ producto.nombre }}</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <!-- Imágenes del producto -->
+        <div class="col-md-6">
+            <div class="product-images">
+                {% if producto.images %}
+                <div id="productCarousel" class="carousel slide" data-bs-ride="carousel">
+                    <div class="carousel-inner">
+                        {% for imagen in producto.images %}
+                        <div class="carousel-item {% if loop.first %}active{% endif %}">
+                            <img src="{{ imagen.url }}" class="d-block w-100" alt="{{ producto.nombre }}"
+                                 style="height: 400px; object-fit: cover; border-radius: 8px;">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if producto.images|length > 1 %}
+                    <button class="carousel-control-prev" type="button" data-bs-target="#productCarousel" data-bs-slide="prev">
+                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">Anterior</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#productCarousel" data-bs-slide="next">
+                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">Siguiente</span>
+                    </button>
+                    {% endif %}
+                </div>
+                {% else %}
+                <img src="/static/img/product-placeholder.jpg" class="img-fluid" alt="{{ producto.nombre }}"
+                     style="height: 400px; width: 100%; object-fit: cover; border-radius: 8px;">
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Información del producto -->
+        <div class="col-md-6">
+            <div class="product-info">
+                <h1 class="h2 mb-3">{{ producto.nombre }}</h1>
+                
+                <!-- Información del proveedor -->
+                <div class="d-flex align-items-center mb-3 p-3 bg-light rounded">
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">
+                            <i class="fas fa-store"></i> {{ producto.supplier.razon_social }}
+                            {% if producto.supplier.verificado %}
+                            <span class="badge bg-success ms-2">
+                                <i class="fas fa-check-circle"></i> Verificado
+                            </span>
+                            {% endif %}
+                        </h6>
+                        {% if producto.supplier.ubicacion %}
+                        <small class="text-muted">
+                            <i class="fas fa-map-marker-alt"></i> {{ producto.supplier.ubicacion }}
+                        </small>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('marketplace.proveedor_tienda', supplier_id=producto.supplier_id) }}" 
+                       class="btn btn-outline-primary btn-sm">
+                        Ver tienda
+                    </a>
+                </div>
+
+                <!-- Descripción -->
+                {% if producto.descripcion %}
+                <div class="mb-4">
+                    <h5>Descripción</h5>
+                    <p class="text-muted">{{ producto.descripcion }}</p>
+                </div>
+                {% endif %}
+
+                <!-- Formulario de compra -->
+                {% if variantes %}
+                <form action="{{ url_for('cart.add_to_cart') }}" method="post" class="border p-4 rounded bg-light">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    
+                    <h5 class="mb-3">Seleccionar opción</h5>
+                    
+                    <!-- Selector de variantes -->
+                    <div class="mb-3">
+                        <label for="variant_id" class="form-label">Opciones disponibles</label>
+                        <select class="form-select" id="variant_id" name="variant_id" required>
+                            <option value="">Seleccionar opción...</option>
+                            {% for variante in variantes %}
+                            <option value="{{ variante.id }}" 
+                                    data-precio="{{ variante.precio }}" 
+                                    data-stock="{{ variante.stock }}"
+                                    data-unidad="{{ variante.unidad }}">
+                                {% if variante.atributos_json %}
+                                    {% for key, value in variante.atributos_json.items() %}
+                                        {{ key.title() }}: {{ value }}
+                                        {% if not loop.last %} | {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    {{ variante.unidad }}
+                                {% endif %}
+                                - ${{ "{:,.2f}".format(variante.precio) }} / {{ variante.unidad }}
+                                (Stock: {{ variante.stock }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Cantidad -->
+                    <div class="mb-3">
+                        <label for="qty" class="form-label">Cantidad</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="qty" name="qty" 
+                                   value="1" min="1" step="1" required>
+                            <span class="input-group-text" id="unidad-display">unidad</span>
+                        </div>
+                        <div class="form-text">
+                            <span id="stock-info">Selecciona una opción para ver el stock disponible</span>
+                        </div>
+                    </div>
+
+                    <!-- Precio total -->
+                    <div class="mb-3">
+                        <div class="h4 text-primary" id="precio-total">
+                            Selecciona una opción
+                        </div>
+                    </div>
+
+                    <!-- Botón de compra -->
+                    <button type="submit" class="btn btn-primary btn-lg w-100" id="btn-agregar" disabled>
+                        <i class="fas fa-cart-plus"></i> Agregar al Carrito
+                    </button>
+                </form>
+
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const variantSelect = document.getElementById('variant_id');
+                    const qtyInput = document.getElementById('qty');
+                    const stockInfo = document.getElementById('stock-info');
+                    const precioTotal = document.getElementById('precio-total');
+                    const unidadDisplay = document.getElementById('unidad-display');
+                    const btnAgregar = document.getElementById('btn-agregar');
+
+                    function updateInfo() {
+                        const selectedOption = variantSelect.options[variantSelect.selectedIndex];
+                        if (selectedOption.value) {
+                            const precio = parseFloat(selectedOption.dataset.precio);
+                            const stock = parseFloat(selectedOption.dataset.stock);
+                            const unidad = selectedOption.dataset.unidad;
+                            const qty = parseInt(qtyInput.value) || 1;
+
+                            stockInfo.textContent = `Stock disponible: ${stock} ${unidad}`;
+                            unidadDisplay.textContent = unidad;
+                            precioTotal.textContent = `$${(precio * qty).toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
+                            
+                            qtyInput.max = stock;
+                            btnAgregar.disabled = qty > stock || qty < 1;
+                            
+                            if (qty > stock) {
+                                stockInfo.textContent = `Stock insuficiente. Máximo: ${stock} ${unidad}`;
+                                stockInfo.className = 'form-text text-danger';
+                            } else {
+                                stockInfo.className = 'form-text text-muted';
+                            }
+                        } else {
+                            stockInfo.textContent = 'Selecciona una opción para ver el stock disponible';
+                            precioTotal.textContent = 'Selecciona una opción';
+                            btnAgregar.disabled = true;
+                        }
+                    }
+
+                    variantSelect.addEventListener('change', updateInfo);
+                    qtyInput.addEventListener('input', updateInfo);
+                });
+                </script>
+
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Este producto no tiene opciones disponibles en este momento.
+                </div>
+                {% endif %}
+
+                <!-- Estadísticas del producto -->
+                <div class="row mt-4 text-center">
+                    <div class="col-4">
+                        <div class="text-muted small">Categoría</div>
+                        <div class="fw-bold">{{ producto.category.nombre }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small">Visitas</div>
+                        <div class="fw-bold">{{ producto.visitas or 0 }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small">Opciones</div>
+                        <div class="fw-bold">{{ variantes|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preguntas y respuestas -->
+    {% if qnas %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h3>Preguntas y Respuestas</h3>
+            <div class="accordion" id="qnaAccordion">
+                {% for qna in qnas %}
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="heading{{ loop.index }}">
+                        <button class="accordion-button collapsed" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" 
+                                aria-expanded="false" aria-controls="collapse{{ loop.index }}">
+                            {{ qna.pregunta }}
+                        </button>
+                    </h2>
+                    <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" 
+                         aria-labelledby="heading{{ loop.index }}" data-bs-parent="#qnaAccordion">
+                        <div class="accordion-body">
+                            {% if qna.respuesta %}
+                            <strong>Respuesta:</strong> {{ qna.respuesta }}
+                            <small class="text-muted d-block mt-2">
+                                Respondido el {{ qna.answered_at.strftime('%d/%m/%Y') }}
+                            </small>
+                            {% else %}
+                            <em class="text-muted">Pendiente de respuesta</em>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Productos relacionados -->
+    {% if productos_relacionados %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h3>Productos Relacionados</h3>
+            <div class="row">
+                {% for relacionado in productos_relacionados %}
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <img src="{{ relacionado.cover_url }}" class="card-img-top" 
+                             alt="{{ relacionado.nombre }}" style="height: 150px; object-fit: cover;">
+                        <div class="card-body">
+                            <h6 class="card-title">{{ relacionado.nombre }}</h6>
+                            <p class="text-primary">Desde ${{ "{:,.2f}".format(relacionado.min_price) }}</p>
+                            <a href="{{ url_for('marketplace.producto_detalle', slug=relacionado.slug) }}" 
+                               class="btn btn-outline-primary btn-sm">Ver</a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

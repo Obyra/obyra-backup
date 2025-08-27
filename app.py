@@ -91,6 +91,15 @@ app.register_blueprint(supplier_auth_bp)  # Ya tiene prefix '/proveedor'
 app.register_blueprint(supplier_portal_bp)  # Ya tiene prefix '/proveedor'
 app.register_blueprint(market_bp)  # Ya tiene prefix '/market'
 
+# Registrar nuevos blueprints del marketplace mejorado
+from marketplace import marketplace_bp
+from cart import cart_bp
+from orders import orders_bp
+
+app.register_blueprint(marketplace_bp)  # Ya tiene prefix /market
+app.register_blueprint(cart_bp)  # Ya tiene prefix /cart
+app.register_blueprint(orders_bp)  # Ya tiene prefix /orders
+
 # Funciones globales para templates
 @app.context_processor
 def utility_processor():

@@ -1159,9 +1159,12 @@ class Product(db.Model):
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
+    slug = db.Column(db.String(220), unique=True, nullable=False)  # SEO friendly URL
     descripcion = db.Column(db.Text)
     estado = db.Column(db.Enum('borrador', 'publicado', 'pausado', name='product_estado'), default='borrador')
     rating_prom = db.Column(db.Numeric(2, 1), default=0)
+    published_at = db.Column(db.DateTime)  # Fecha de publicación
+    visitas = db.Column(db.Integer, default=0)  # Contador de visitas
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -1192,6 +1195,17 @@ class Product(db.Model):
         """Precio mínimo de las variantes visibles"""
         visible_variants = [v for v in self.variants if v.visible and v.precio > 0]
         return min(v.precio for v in visible_variants) if visible_variants else 0
+    
+    @property
+    def cover_url(self):
+        """URL de la imagen principal"""
+        main_image = self.main_image
+        return main_image.url if main_image else '/static/img/product-placeholder.jpg'
+    
+    def increment_visits(self):
+        """Incrementa el contador de visitas"""
+        self.visitas = (self.visitas or 0) + 1
+        db.session.commit()
 
 
 class ProductVariant(db.Model):
@@ -1361,6 +1375,62 @@ class OrderCommission(db.Model):
             'iva': iva,
             'total': total
         }
+
+
+# ===== CARRITO DE COMPRAS =====
+
+class Cart(db.Model):
+    __tablename__ = 'cart'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # Usuario logueado (opcional)
+    session_id = db.Column(db.String(64))  # Para usuarios anónimos
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relaciones
+    user = db.relationship('Usuario', backref='carts')
+    items = db.relationship('CartItem', back_populates='cart', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Cart {self.id}>'
+    
+    @property
+    def total_items(self):
+        return sum(item.qty for item in self.items)
+    
+    @property
+    def total_amount(self):
+        return sum(item.subtotal for item in self.items)
+    
+    def clear(self):
+        """Vacía el carrito"""
+        CartItem.query.filter_by(cart_id=self.id).delete()
+        db.session.commit()
+
+
+class CartItem(db.Model):
+    __tablename__ = 'cart_item'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    cart_id = db.Column(db.Integer, db.ForeignKey('cart.id'), nullable=False)
+    product_variant_id = db.Column(db.Integer, db.ForeignKey('product_variant.id'), nullable=False)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+    qty = db.Column(db.Numeric(12, 2), nullable=False)
+    precio_snapshot = db.Column(db.Numeric(12, 2), nullable=False)  # Precio al momento de agregar
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    cart = db.relationship('Cart', back_populates='items')
+    variant = db.relationship('ProductVariant', backref='cart_items')
+    supplier = db.relationship('Supplier', backref='cart_items')
+    
+    def __repr__(self):
+        return f'<CartItem {self.variant.sku} x{self.qty}>'
+    
+    @property
+    def subtotal(self):
+        return self.precio_snapshot * self.qty
 
 
 class SupplierPayout(db.Model):

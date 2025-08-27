@@ -9,6 +9,8 @@ from models import (
     Supplier, SupplierUser, Category, Product, ProductVariant, 
     ProductImage, Order, OrderItem, OrderCommission, Organizacion
 )
+from marketplace import generate_slug
+from datetime import datetime
 from sqlalchemy import func
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
@@ -248,8 +250,10 @@ def crear_productos(suppliers, categorias):
             supplier_id=supplier.id,
             category_id=categoria.id,
             nombre=data['nombre'],
+            slug=generate_slug(data['nombre']),
             descripcion=data['descripcion'],
-            estado='publicado'  # Solo publicamos los de suppliers verificados
+            estado='publicado',  # Solo publicamos los de suppliers verificados
+            published_at=datetime.now()
         )
         
         # Si el supplier no está verificado, dejar en borrador

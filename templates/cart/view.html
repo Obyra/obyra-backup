@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Mi Carrito - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="fas fa-shopping-cart"></i> Mi Carrito</h2>
+            
+            {% if items_by_supplier %}
+            <div class="row">
+                <div class="col-lg-8">
+                    <!-- Items agrupados por proveedor -->
+                    {% for supplier, items in items_by_supplier.items() %}
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-0">
+                                    <i class="fas fa-store"></i> {{ supplier.razon_social }}
+                                    {% if supplier.verificado %}
+                                    <span class="badge bg-success ms-2">
+                                        <i class="fas fa-check-circle"></i> Verificado
+                                    </span>
+                                    {% endif %}
+                                </h5>
+                                {% if supplier.ubicacion %}
+                                <small class="text-muted">{{ supplier.ubicacion }}</small>
+                                {% endif %}
+                            </div>
+                            <a href="{{ url_for('marketplace.proveedor_tienda', supplier_id=supplier.id) }}" 
+                               class="btn btn-outline-primary btn-sm">
+                                Ver tienda
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            {% set supplier_total = namespace(value=0) %}
+                            {% for item in items %}
+                            {% set supplier_total.value = supplier_total.value + item.subtotal %}
+                            <div class="row align-items-center border-bottom py-3">
+                                <div class="col-md-2">
+                                    <img src="{{ item.variant.product.cover_url }}" 
+                                         class="img-fluid rounded" alt="{{ item.variant.product.nombre }}"
+                                         style="height: 80px; width: 80px; object-fit: cover;">
+                                </div>
+                                <div class="col-md-4">
+                                    <h6 class="mb-1">{{ item.variant.product.nombre }}</h6>
+                                    {% if item.variant.atributos_json %}
+                                    <small class="text-muted">
+                                        {% for key, value in item.variant.atributos_json.items() %}
+                                            {{ key.title() }}: {{ value }}
+                                            {% if not loop.last %} | {% endif %}
+                                        {% endfor %}
+                                    </small>
+                                    {% endif %}
+                                    <br><small class="text-muted">SKU: {{ item.variant.sku }}</small>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <strong>${{ "{:,.2f}".format(item.precio_snapshot) }}</strong>
+                                    <br><small class="text-muted">por {{ item.variant.unidad }}</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <form action="{{ url_for('cart.update_cart') }}" method="post" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="item_id" value="{{ item.id }}">
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" class="form-control" name="qty" 
+                                                   value="{{ item.qty }}" min="0" max="{{ item.variant.stock }}"
+                                                   onchange="this.form.submit()">
+                                            <span class="input-group-text">{{ item.variant.unidad }}</span>
+                                        </div>
+                                    </form>
+                                    <small class="text-muted">Stock: {{ item.variant.stock }}</small>
+                                </div>
+                                <div class="col-md-1 text-center">
+                                    <strong class="text-primary">
+                                        ${{ "{:,.2f}".format(item.subtotal) }}
+                                    </strong>
+                                </div>
+                                <div class="col-md-1 text-center">
+                                    <form action="{{ url_for('cart.remove_item', item_id=item.id) }}" 
+                                          method="post" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-outline-danger btn-sm" 
+                                                onclick="return confirm('¿Eliminar este producto del carrito?')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            
+                            <!-- Total por proveedor -->
+                            <div class="row mt-3">
+                                <div class="col-12 text-end">
+                                    <h5>Subtotal: <span class="text-primary">${{ "{:,.2f}".format(supplier_total.value) }}</span></h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Resumen del carrito -->
+                <div class="col-lg-4">
+                    <div class="card position-sticky" style="top: 20px;">
+                        <div class="card-header">
+                            <h5><i class="fas fa-receipt"></i> Resumen del Pedido</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <span>Total de productos:</span>
+                                <strong>{{ cart.total_items|int }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Proveedores:</span>
+                                <strong>{{ items_by_supplier|length }}</strong>
+                            </div>
+                            <hr>
+                            <div class="d-flex justify-content-between mb-3">
+                                <h5>Total General:</h5>
+                                <h5 class="text-primary">${{ "{:,.2f}".format(total_general) }}</h5>
+                            </div>
+                            
+                            <div class="alert alert-info small">
+                                <i class="fas fa-info-circle"></i>
+                                Se creará una orden separada por cada proveedor.
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <a href="{{ url_for('cart.checkout') }}" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-credit-card"></i> Proceder al Checkout
+                                </a>
+                                <a href="{{ url_for('marketplace.productos') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left"></i> Seguir Comprando
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <form action="{{ url_for('cart.clear_cart') }}" method="post">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="btn btn-outline-danger btn-sm w-100"
+                                        onclick="return confirm('¿Vaciar todo el carrito?')">
+                                    <i class="fas fa-trash"></i> Vaciar Carrito
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% else %}
+            <!-- Carrito vacío -->
+            <div class="text-center py-5">
+                <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                <h4>Tu carrito está vacío</h4>
+                <p class="text-muted">Explora nuestro marketplace y encuentra los productos que necesitas</p>
+                <a href="{{ url_for('marketplace.productos') }}" class="btn btn-primary">
+                    <i class="fas fa-shopping-bag"></i> Ir al Marketplace
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.input-group-sm .form-control {
+    text-align: center;
+}
+</style>
+{% endblock %}

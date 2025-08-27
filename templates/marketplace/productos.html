@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Productos - OBYRA IA Marketplace{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Filtros laterales -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-filter"></i> Filtros</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get">
+                        <!-- Búsqueda por texto -->
+                        <div class="mb-3">
+                            <label for="q" class="form-label">Buscar</label>
+                            <input type="text" class="form-control" id="q" name="q" 
+                                   value="{{ filtros.q or '' }}" placeholder="Buscar productos...">
+                        </div>
+
+                        <!-- Categoría -->
+                        <div class="mb-3">
+                            <label for="categoria" class="form-label">Categoría</label>
+                            <select class="form-select" id="categoria" name="categoria">
+                                <option value="">Todas las categorías</option>
+                                {% for categoria in categorias %}
+                                <option value="{{ categoria.id }}" 
+                                        {% if filtros.categoria_id == categoria.id %}selected{% endif %}>
+                                    {{ categoria.nombre }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Rango de precio -->
+                        <div class="mb-3">
+                            <label class="form-label">Rango de precio</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <input type="number" class="form-control" name="precio_min" 
+                                           placeholder="Mín" value="{{ filtros.precio_min or '' }}">
+                                </div>
+                                <div class="col-6">
+                                    <input type="number" class="form-control" name="precio_max" 
+                                           placeholder="Máx" value="{{ filtros.precio_max or '' }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ubicación -->
+                        <div class="mb-3">
+                            <label for="ubicacion" class="form-label">Ubicación</label>
+                            <input type="text" class="form-control" id="ubicacion" name="ubicacion" 
+                                   value="{{ filtros.ubicacion or '' }}" placeholder="Ciudad, provincia...">
+                        </div>
+
+                        <!-- Solo verificados -->
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="verificado" 
+                                   name="verificado" value="1" {% if filtros.verificado %}checked{% endif %}>
+                            <label class="form-check-label" for="verificado">
+                                Solo proveedores verificados
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                        
+                        {% if filtros.q or filtros.categoria_id or filtros.precio_min or filtros.precio_max or filtros.ubicacion or filtros.verificado %}
+                        <a href="{{ url_for('marketplace.productos') }}" class="btn btn-outline-secondary w-100 mt-2">
+                            <i class="fas fa-times"></i> Limpiar filtros
+                        </a>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Listado de productos -->
+        <div class="col-md-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-shopping-bag"></i> Marketplace de Productos</h2>
+                <div class="text-muted">
+                    {{ pagination.total }} productos encontrados
+                </div>
+            </div>
+
+            {% if productos %}
+            <div class="row">
+                {% for producto in productos %}
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm product-card">
+                        <div class="position-relative">
+                            <img src="{{ producto.cover_url }}" class="card-img-top" 
+                                 alt="{{ producto.nombre }}" style="height: 200px; object-fit: cover;">
+                            {% if producto.supplier.verificado %}
+                            <span class="position-absolute top-0 end-0 badge bg-success m-2">
+                                <i class="fas fa-check-circle"></i> Verificado
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title">{{ producto.nombre }}</h5>
+                            <p class="card-text text-muted small flex-grow-1">
+                                {{ producto.descripcion[:100] }}{% if producto.descripcion|length > 100 %}...{% endif %}
+                            </p>
+                            
+                            <div class="mt-auto">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="h5 text-primary mb-0">
+                                        Desde ${{ "{:,.2f}".format(producto.min_price) }}
+                                    </span>
+                                    {% if producto.rating_prom %}
+                                    <div class="text-warning">
+                                        {% for i in range(producto.rating_prom|int) %}★{% endfor %}
+                                        <small>({{ producto.rating_prom }})</small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <small class="text-muted d-block mb-2">
+                                    <i class="fas fa-store"></i> {{ producto.supplier.razon_social }}
+                                    {% if producto.supplier.ubicacion %}
+                                    <br><i class="fas fa-map-marker-alt"></i> {{ producto.supplier.ubicacion }}
+                                    {% endif %}
+                                </small>
+                                
+                                <a href="{{ url_for('marketplace.producto_detalle', slug=producto.slug) }}" 
+                                   class="btn btn-primary w-100">
+                                    <i class="fas fa-eye"></i> Ver Producto
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Paginación -->
+            {% if pagination.pages > 1 %}
+            <nav aria-label="Paginación de productos">
+                <ul class="pagination justify-content-center">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('marketplace.productos', page=pagination.prev_num, **request.args) }}">
+                            Anterior
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in pagination.iter_pages() %}
+                    {% if page_num %}
+                        {% if page_num != pagination.page %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('marketplace.productos', page=page_num, **request.args) }}">
+                                {{ page_num }}
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">…</span>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                    
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('marketplace.productos', page=pagination.next_num, **request.args) }}">
+                            Siguiente
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h4>No se encontraron productos</h4>
+                <p class="text-muted">Intenta ajustar los filtros de búsqueda</p>
+                <a href="{{ url_for('marketplace.productos') }}" class="btn btn-primary">
+                    Ver todos los productos
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.product-card {
+    transition: transform 0.2s ease-in-out;
+}
+
+.product-card:hover {
+    transform: translateY(-5px);
+}
+</style>
+{% endblock %}
