@@ -1,23 +1,21 @@
 """
-Service para generación de reportes PDF del dashboard.
-Genera informes con KPIs, alertas recientes y obras activas.
+Dashboard PDF Report V2 Service - Professional reports with branding, KPIs, and charts.
+Reemplaza completamente la versión anterior del sistema de reportes.
 """
 
-from flask import Blueprint, request, jsonify, current_app, make_response
+from flask import Blueprint, request, jsonify, make_response
 from flask_login import login_required, current_user
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.graphics.shapes import Drawing, Rect
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics.charts.legends import Legend
+import weasyprint
+from jinja2 import Template
 from io import BytesIO
+import base64
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
 from datetime import datetime, timedelta
 import logging
 
-from models import Event, Obra, Presupuesto, ItemInventario, db
+from models import Event, Obra, Presupuesto, Usuario, Organizacion, db
 from sqlalchemy import func, desc
 
 # Blueprint para endpoints de reportes
@@ -31,12 +29,13 @@ logger = logging.getLogger(__name__)
 @login_required
 def generate_dashboard_report():
     """
-    Endpoint POST /api/reports/dashboard para generar reporte PDF del dashboard
+    Endpoint POST /api/reports/dashboard V2 - Reporte profesional con branding y gráficos
     Body JSON (opcional):
     {
       "range": "last_30d",
       "include_alerts": true,
       "project_ids": [1,2],
+      "compare_with_previous": true,
       "locale": "es-AR",
       "currency": "ARS"
     }
@@ -48,10 +47,11 @@ def generate_dashboard_report():
         
         data = request.get_json() or {}
         
-        # Parámetros con valores por defecto
+        # Parámetros con valores por defecto - V2
         date_range = data.get('range', 'last_30d')
         include_alerts = data.get('include_alerts', True)
         project_ids = data.get('project_ids', [])
+        compare_with_previous = data.get('compare_with_previous', True)
         locale = data.get('locale', 'es-AR')
         currency = data.get('currency', 'ARS')
         
@@ -79,15 +79,16 @@ def generate_dashboard_report():
             if len(valid_projects) != len(project_ids):
                 return jsonify({'error': 'Algunos proyectos no pertenecen a la organización'}), 400
         
-        # Generar el PDF
-        pdf_buffer = BytesIO()
-        pdf = generate_pdf_report(
-            pdf_buffer, current_user.organizacion, 
-            start_date, end_date, range_text,
-            include_alerts, project_ids, currency
-        )
-        
-        pdf_buffer.seek(0)
+        # Generar el PDF V2 con WeasyPrint
+        try:
+            pdf_buffer = generate_pdf_v2_report(
+                current_user.organizacion, 
+                start_date, end_date, range_text,
+                include_alerts, project_ids, currency, compare_with_previous
+            )
+        except Exception as pdf_error:
+            logger.error(f"Error en generación PDF V2: {pdf_error}")
+            return jsonify({'error': 'pdf_render_failed', 'details': str(pdf_error)}), 500
         
         # Crear respuesta con el PDF
         response = make_response(pdf_buffer.getvalue())
@@ -95,7 +96,7 @@ def generate_dashboard_report():
         response.headers['Content-Disposition'] = f'attachment; filename=obyra-dashboard-{datetime.now().strftime("%Y%m%d")}.pdf'
         response.headers['Cache-Control'] = 'no-cache'
         
-        logger.info(f"Reporte PDF generado por usuario {current_user.id} para organización {current_user.organizacion_id}")
+        logger.info(f"Reporte PDF V2 generado por usuario {current_user.id} para organización {current_user.organizacion_id}")
         
         return response
         
@@ -104,184 +105,191 @@ def generate_dashboard_report():
         return jsonify({'error': 'Error generando el reporte PDF'}), 500
 
 
-def generate_pdf_report(buffer, organizacion, start_date, end_date, range_text, include_alerts, project_ids, currency):
-    """Genera el PDF del reporte usando ReportLab"""
+def generate_pdf_v2_report(organizacion, start_date, end_date, range_text, include_alerts, project_ids, currency, compare_with_previous):
+    """Genera PDF Dashboard V2 con WeasyPrint - Profesional con branding, KPIs comparativos y gráficos"""
     
-    # Crear documento PDF
-    doc = SimpleDocTemplate(buffer, pagesize=A4, 
-                          rightMargin=72, leftMargin=72,
-                          topMargin=72, bottomMargin=18)
-    
-    # Estilos
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        spaceAfter=30,
-        alignment=1,  # Center
-        textColor=colors.HexColor('#2C3E50')
+    # Obtener datos para el reporte
+    report_data = gather_report_data_v2(
+        organizacion.id, start_date.date(), end_date.date(), 
+        project_ids, include_alerts, compare_with_previous
     )
     
-    subtitle_style = ParagraphStyle(
-        'CustomSubtitle',
-        parent=styles['Heading2'],
-        fontSize=16,
-        spaceAfter=20,
-        textColor=colors.HexColor('#34495E')
-    )
+    # Generar gráficos como imágenes base64
+    charts = generate_charts_v2(report_data, start_date.date(), end_date.date())
     
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=11,
-        spaceAfter=12
-    )
+    # Preparar contexto para el template
+    context = {
+        'organizacion': organizacion,
+        'range_text': range_text,
+        'start_date': start_date,
+        'end_date': end_date,
+        'current_date': datetime.now(),
+        'current_user': current_user,
+        'currency': currency,
+        'data': report_data,
+        'charts': charts,
+        'include_alerts': include_alerts
+    }
     
-    # Contenido del PDF
-    story = []
+    # Renderizar template HTML
+    with open('templates/reports/dashboard.html', 'r', encoding='utf-8') as f:
+        template_content = f.read()
     
-    # Portada
-    story.append(Paragraph("OBYRA IA", title_style))
-    story.append(Paragraph("Reporte del Dashboard", subtitle_style))
-    story.append(Spacer(1, 12))
+    template = Template(template_content)
+    html_content = template.render(**context)
     
-    story.append(Paragraph(f"<b>Organización:</b> {organizacion.nombre}", normal_style))
-    story.append(Paragraph(f"<b>Período:</b> {range_text}", normal_style))
-    story.append(Paragraph(f"<b>Fecha de generación:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
-    story.append(Paragraph(f"<b>Generado por:</b> {current_user.nombre} {current_user.apellido}", normal_style))
-    story.append(Spacer(1, 30))
+    # Convertir HTML a PDF con WeasyPrint
+    try:
+        pdf_document = weasyprint.HTML(string=html_content).write_pdf()
+        pdf_buffer = BytesIO(pdf_document)
+        pdf_buffer.seek(0)
+        return pdf_buffer
+    except Exception as render_error:
+        logger.error(f"WeasyPrint render error: {render_error}")
+        raise
+
+
+def gather_report_data_v2(org_id, fecha_desde, fecha_hasta, project_ids, include_alerts, compare_with_previous):
+    """Recopila datos para el reporte Dashboard V2 incluyendo comparativas"""
     
-    # KPIs principales
-    story.append(Paragraph("Métricas Clave (KPIs)", subtitle_style))
+    data = {
+        'kpis': [],
+        'obras_activas': [],
+        'alertas': [],
+        'alertas_stats': {}
+    }
     
-    kpis = calculate_report_kpis(organizacion.id, start_date.date(), end_date.date(), project_ids)
+    # Calcular período anterior para comparativas
+    periodo_dias = (fecha_hasta - fecha_desde).days
+    fecha_anterior_desde = fecha_desde - timedelta(days=periodo_dias)
+    fecha_anterior_hasta = fecha_desde - timedelta(days=1)
     
-    kpis_data = [
-        ['Métrica', 'Valor'],
-        ['Obras Activas', str(kpis.get('obras_activas', 0))],
-        ['Costo Total', f"${kpis.get('costo_total', 0):,.2f} {currency}"],
-        ['Avance Promedio', f"{kpis.get('avance_promedio', 0):.1f}%"],
-        ['Personal Activo', str(kpis.get('personal_activo', 0))],
-        ['Obras Nuevas (período)', str(kpis.get('obras_nuevas_periodo', 0))],
-        ['Presupuestos Creados', str(kpis.get('presupuestos_creados', 0))]
+    # === KPIs con comparativa ===
+    kpis_actuales = calculate_kpis_v2(org_id, fecha_desde, fecha_hasta, project_ids)
+    kpis_anteriores = calculate_kpis_v2(org_id, fecha_anterior_desde, fecha_anterior_hasta, project_ids) if compare_with_previous else {}
+    
+    # Formatear KPIs con deltas
+    kpi_definitions = [
+        {
+            'key': 'obras_activas',
+            'icon': '🏗️',
+            'label': 'Obras Activas',
+            'format': 'number'
+        },
+        {
+            'key': 'costo_total',
+            'icon': '💰',
+            'label': 'Costo Total (M)',
+            'format': 'currency_millions'
+        },
+        {
+            'key': 'avance_promedio',
+            'icon': '📈',
+            'label': 'Avance Promedio',
+            'format': 'percentage'
+        },
+        {
+            'key': 'personal_activo',
+            'icon': '👥',
+            'label': 'Personal Activo',
+            'format': 'number'
+        },
+        {
+            'key': 'obras_nuevas',
+            'icon': '🆕',
+            'label': 'Obras Nuevas',
+            'format': 'number'
+        },
+        {
+            'key': 'presupuestos_creados',
+            'icon': '📊',
+            'label': 'Presupuestos Creados',
+            'format': 'number'
+        }
     ]
     
-    kpis_table = Table(kpis_data, colWidths=[3*inch, 2*inch])
-    kpis_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    story.append(kpis_table)
-    story.append(Spacer(1, 30))
-    
-    # Alertas recientes (si se incluyen)
-    if include_alerts:
-        story.append(Paragraph("Alertas Recientes", subtitle_style))
+    for kpi_def in kpi_definitions:
+        key = kpi_def['key']
+        current_value = kpis_actuales.get(key, 0)
+        previous_value = kpis_anteriores.get(key, 0) if compare_with_previous else None
         
-        alertas = Event.query.filter(
-            Event.company_id == organizacion.id,
-            Event.severity.in_(['alta', 'critica']),
-            Event.created_at >= start_date
-        ).order_by(desc(Event.created_at)).limit(10).all()
-        
-        if alertas:
-            alertas_data = [['Severidad', 'Título', 'Descripción', 'Fecha']]
-            
-            for alerta in alertas:
-                alertas_data.append([
-                    alerta.severity.title(),
-                    alerta.title[:40] + '...' if len(alerta.title) > 40 else alerta.title,
-                    (alerta.description[:50] + '...') if alerta.description and len(alerta.description) > 50 else (alerta.description or ''),
-                    alerta.created_at.strftime('%d/%m/%Y %H:%M')
-                ])
-            
-            alertas_table = Table(alertas_data, colWidths=[1*inch, 2*inch, 2.5*inch, 1.5*inch])
-            alertas_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E74C3C')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('FONTSIZE', (0, 1), (-1, -1), 9),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#FADBD8')),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(alertas_table)
+        # Formatear valor
+        if kpi_def['format'] == 'currency_millions':
+            formatted_value = f"{current_value:.1f}M"
+        elif kpi_def['format'] == 'percentage':
+            formatted_value = f"{current_value:.1f}%"
         else:
-            story.append(Paragraph("No hay alertas de alta prioridad en el período seleccionado.", normal_style))
+            formatted_value = str(int(current_value))
         
-        story.append(Spacer(1, 30))
+        kpi_data = {
+            'icon': kpi_def['icon'],
+            'label': kpi_def['label'],
+            'value': formatted_value
+        }
+        
+        # Calcular delta si hay comparativa
+        if compare_with_previous and previous_value is not None and previous_value > 0:
+            delta_percent = ((current_value - previous_value) / previous_value) * 100
+            
+            if abs(delta_percent) < 0.1:
+                kpi_data.update({
+                    'delta': '0.0',
+                    'delta_symbol': '→',
+                    'delta_class': 'delta-neutral'
+                })
+            elif delta_percent > 0:
+                kpi_data.update({
+                    'delta': f"{delta_percent:.1f}",
+                    'delta_symbol': '↗',
+                    'delta_class': 'delta-positive'
+                })
+            else:
+                kpi_data.update({
+                    'delta': f"{abs(delta_percent):.1f}",
+                    'delta_symbol': '↘',
+                    'delta_class': 'delta-negative'
+                })
+        
+        data['kpis'].append(kpi_data)
     
-    # Obras activas
-    story.append(Paragraph("Obras Activas", subtitle_style))
-    
+    # === Obras Activas ===
     obras_query = Obra.query.filter(
-        Obra.organizacion_id == organizacion.id,
+        Obra.organizacion_id == org_id,
         Obra.estado.in_(['planificacion', 'en_curso'])
     )
     
     if project_ids:
         obras_query = obras_query.filter(Obra.id.in_(project_ids))
     
-    obras_activas = obras_query.order_by(desc(Obra.fecha_creacion)).limit(15).all()
+    # Ordenar por % avance descendente
+    data['obras_activas'] = obras_query.order_by(desc(Obra.progreso)).limit(15).all()
     
-    if obras_activas:
-        obras_data = [['Obra', 'Ubicación', 'Estado', '% Avance', 'Presupuesto']]
+    # === Alertas ===
+    if include_alerts:
+        alertas_query = Event.query.filter(
+            Event.company_id == org_id,
+            Event.created_at >= fecha_desde,
+            Event.created_at <= fecha_hasta
+        ).order_by(desc(Event.created_at)).limit(20)
         
-        for obra in obras_activas:
-            obras_data.append([
-                obra.nombre[:30] + '...' if len(obra.nombre) > 30 else obra.nombre,
-                (obra.direccion[:25] + '...') if obra.direccion and len(obra.direccion) > 25 else (obra.direccion or 'N/A'),
-                obra.estado.title(),
-                f"{obra.progreso or 0}%",
-                f"${obra.presupuesto_total or 0:,.0f}" if obra.presupuesto_total else 'N/A'
-            ])
+        data['alertas'] = alertas_query.all()
         
-        obras_table = Table(obras_data, colWidths=[2*inch, 2*inch, 1*inch, 1*inch, 1*inch])
-        obras_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27AE60')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('ALIGN', (3, 1), (4, -1), 'RIGHT'),  # Align percentage and budget to right
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#D5F5E3')),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
+        # Estadísticas de alertas por severidad
+        alertas_stats = db.session.query(
+            Event.severity, func.count(Event.id)
+        ).filter(
+            Event.company_id == org_id,
+            Event.created_at >= fecha_desde,
+            Event.created_at <= fecha_hasta
+        ).group_by(Event.severity).all()
         
-        story.append(obras_table)
-    else:
-        story.append(Paragraph("No hay obras activas en el período seleccionado.", normal_style))
+        data['alertas_stats'] = {severity: count for severity, count in alertas_stats}
     
-    story.append(Spacer(1, 30))
-    
-    # Footer con información adicional
-    story.append(PageBreak())
-    story.append(Paragraph("Información Adicional", subtitle_style))
-    story.append(Paragraph(f"Este reporte fue generado automáticamente por el sistema OBYRA IA el {datetime.now().strftime('%d de %B de %Y a las %H:%M')}.", normal_style))
-    story.append(Paragraph(f"Los datos mostrados corresponden al período: {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}", normal_style))
-    story.append(Paragraph("Para más información, contacta con el administrador del sistema.", normal_style))
-    
-    # Generar PDF
-    doc.build(story)
-    
-    return buffer
+    return data
 
 
-def calculate_report_kpis(org_id, fecha_desde, fecha_hasta, project_ids):
-    """Calcula KPIs específicos para el reporte"""
+def calculate_kpis_v2(org_id, fecha_desde, fecha_hasta, project_ids):
+    """Calcula KPIs para un período específico"""
     
     # Query base filtrada por organización
     obras_query = Obra.query.filter(Obra.organizacion_id == org_id)
@@ -289,24 +297,25 @@ def calculate_report_kpis(org_id, fecha_desde, fecha_hasta, project_ids):
     if project_ids:
         obras_query = obras_query.filter(Obra.id.in_(project_ids))
     
-    # Obras activas
+    # Obras activas al final del período
     obras_activas = obras_query.filter(
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).count()
     
     # Obras nuevas en el período
-    obras_nuevas_periodo = obras_query.filter(
+    obras_nuevas = obras_query.filter(
         Obra.fecha_creacion >= fecha_desde,
         Obra.fecha_creacion <= fecha_hasta
     ).count()
     
-    # Costo total de obras activas
+    # Costo total (en millones)
     costo_total = db.session.query(
         func.sum(Obra.presupuesto_total)
     ).filter(
         Obra.organizacion_id == org_id,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
+    costo_total_millones = float(costo_total) / 1000000 if costo_total else 0
     
     # Avance promedio
     avance_promedio = db.session.query(
@@ -317,8 +326,7 @@ def calculate_report_kpis(org_id, fecha_desde, fecha_hasta, project_ids):
         Obra.progreso.isnot(None)
     ).scalar() or 0
     
-    # Personal activo (usuarios activos de la organización)
-    from models import Usuario
+    # Personal activo
     personal_activo = Usuario.query.filter(
         Usuario.organizacion_id == org_id,
         Usuario.activo == True
@@ -333,9 +341,135 @@ def calculate_report_kpis(org_id, fecha_desde, fecha_hasta, project_ids):
     
     return {
         'obras_activas': obras_activas,
-        'obras_nuevas_periodo': obras_nuevas_periodo,
-        'costo_total': float(costo_total) if costo_total else 0,
+        'obras_nuevas': obras_nuevas,
+        'costo_total': costo_total_millones,
         'avance_promedio': float(avance_promedio) if avance_promedio else 0,
         'personal_activo': personal_activo,
         'presupuestos_creados': presupuestos_creados
     }
+
+
+def generate_charts_v2(report_data, fecha_desde, fecha_hasta):
+    """Genera gráficos como imágenes base64 para incluir en PDF"""
+    
+    charts = {}
+    
+    try:
+        # Configurar matplotlib para generar imágenes limpias
+        try:
+            plt.style.use('seaborn-v0_8')
+        except:
+            plt.style.use('default')  # Fallback to default style
+        
+        plt.rcParams.update({
+            'figure.facecolor': 'white',
+            'axes.facecolor': 'white',
+            'font.size': 10,
+            'figure.dpi': 100
+        })
+        
+        # === Gráfico 1: Alertas por Severidad (Barras) ===
+        if report_data['alertas_stats']:
+            fig, ax = plt.subplots(figsize=(8, 5))
+            
+            severities = ['critica', 'alta', 'media', 'baja']
+            colors = ['#e74c3c', '#f39c12', '#f1c40f', '#95a5a6']
+            values = [report_data['alertas_stats'].get(sev, 0) for sev in severities]
+            labels = ['Crítica', 'Alta', 'Media', 'Baja']
+            
+            bars = ax.bar(labels, values, color=colors, alpha=0.8)
+            ax.set_title('Distribución de Alertas por Severidad', fontsize=14, fontweight='bold', pad=20)
+            ax.set_ylabel('Cantidad de Alertas')
+            ax.grid(axis='y', alpha=0.3)
+            
+            # Agregar valores en las barras
+            for bar, value in zip(bars, values):
+                if value > 0:
+                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
+                           str(int(value)), ha='center', va='bottom', fontweight='bold')
+            
+            plt.tight_layout()
+            
+            # Convertir a base64
+            buffer = BytesIO()
+            plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white')
+            buffer.seek(0)
+            charts['alerts_by_severity'] = base64.b64encode(buffer.getvalue()).decode()
+            buffer.close()
+            plt.close()
+        
+        # === Gráfico 2: Progreso de Obras (Torta) ===
+        if report_data['obras_activas']:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            
+            # Categorizar obras por rango de progreso
+            progress_ranges = [
+                (0, 25, '0-25%', '#e74c3c'),
+                (26, 50, '26-50%', '#f39c12'),
+                (51, 75, '51-75%', '#f1c40f'),
+                (76, 100, '76-100%', '#27ae60')
+            ]
+            
+            range_counts = []
+            range_labels = []
+            range_colors = []
+            
+            for min_prog, max_prog, label, color in progress_ranges:
+                count = sum(1 for obra in report_data['obras_activas'] 
+                          if (obra.progreso or 0) >= min_prog and (obra.progreso or 0) <= max_prog)
+                if count > 0:
+                    range_counts.append(count)
+                    range_labels.append(f"{label}\n({count} obras)")
+                    range_colors.append(color)
+            
+            if range_counts:
+                wedges, texts, autotexts = ax.pie(range_counts, labels=range_labels, colors=range_colors,
+                                                 autopct='%1.1f%%', startangle=90)
+                ax.set_title('Distribución de Obras por Progreso', fontsize=14, fontweight='bold', pad=20)
+                
+                plt.tight_layout()
+                
+                buffer = BytesIO()
+                plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white')
+                buffer.seek(0)
+                charts['project_progress'] = base64.b64encode(buffer.getvalue()).decode()
+                buffer.close()
+            plt.close()
+        
+        # === Gráfico 3: Timeline de Presupuestos (Línea) ===
+        presupuestos_timeline = db.session.query(
+            func.date(Presupuesto.fecha_creacion).label('fecha'),
+            func.count(Presupuesto.id).label('cantidad')
+        ).filter(
+            Presupuesto.fecha_creacion >= fecha_desde,
+            Presupuesto.fecha_creacion <= fecha_hasta
+        ).group_by(func.date(Presupuesto.fecha_creacion)).order_by('fecha').all()
+        
+        if presupuestos_timeline:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            
+            fechas = [item.fecha for item in presupuestos_timeline]
+            cantidades = [item.cantidad for item in presupuestos_timeline]
+            
+            ax.plot(fechas, cantidades, marker='o', linewidth=2, markersize=6, color='#3498db')
+            ax.set_title('Presupuestos Creados en el Tiempo', fontsize=14, fontweight='bold', pad=20)
+            ax.set_xlabel('Fecha')
+            ax.set_ylabel('Cantidad de Presupuestos')
+            ax.grid(True, alpha=0.3)
+            
+            # Rotar etiquetas de fecha
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            
+            buffer = BytesIO()
+            plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white')
+            buffer.seek(0)
+            charts['budgets_timeline'] = base64.b64encode(buffer.getvalue()).decode()
+            buffer.close()
+            plt.close()
+            
+    except Exception as chart_error:
+        logger.warning(f"Error generando gráficos: {chart_error}")
+        # Continuar sin gráficos si hay error
+        
+    return charts

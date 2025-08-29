@@ -436,6 +436,16 @@
                     </div>
                     {% endif %}
 
+                    <!-- Comparativa con período anterior -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="compareWithPrevious" name="compare_with_previous" checked>
+                        <label class="form-check-label" for="compareWithPrevious">
+                            <i class="fas fa-chart-line text-info me-1"></i>
+                            Comparar con período anterior
+                        </label>
+                        <div class="form-text">Incluye variaciones (Δ) vs período anterior en los KPIs</div>
+                    </div>
+                    
                     <!-- Moneda -->
                     <div class="mb-3">
                         <label for="currency" class="form-label">Moneda</label>
@@ -806,6 +816,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = {
                 range: document.getElementById('dateRange').value,
                 include_alerts: document.getElementById('includeAlerts').checked,
+                compare_with_previous: document.getElementById('compareWithPrevious').checked,
                 currency: document.getElementById('currency').value,
                 locale: 'es-AR'
             };

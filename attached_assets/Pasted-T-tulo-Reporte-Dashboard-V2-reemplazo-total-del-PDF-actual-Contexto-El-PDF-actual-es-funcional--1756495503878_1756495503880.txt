@@ -1,0 +1,104 @@
+Título: Reporte Dashboard V2 – reemplazo total del PDF actual
+
+Contexto:
+El PDF actual es funcional pero plano. Queremos reemplazarlo por uno más profesional con branding de la empresa, gráficos y comparativas. No mantener dos versiones: la V2 reemplaza a la actual.
+
+Objetivo técnico (1 línea):
+Generar un PDF con nombre y logo de la empresa, KPIs con comparativa vs período anterior, gráficos (torta, barras, línea) y tablas estilizadas.
+
+Stack/ámbito: Backend (Flask + Jinja2 + WeasyPrint) + Frontend (modal existente) + DB (lectura).
+
+Cambios exactos
+
+Template y endpoint (reemplazo)
+
+Reemplazar el template templates/reports/dashboard.html por dashboard.html V2 (no crear un archivo nuevo paralelo).
+
+Mantener el mismo endpoint POST /api/reports/dashboard, pero aceptar nuevo parámetro:
+
+{"range":"last_30d","include_alerts":true,"project_ids":[],"compare_with_previous":true,"locale":"es-AR","currency":"ARS"}
+
+
+Si no se pasa compare_with_previous, default = true.
+
+Branding por empresa
+
+Título/encabezado: nombre de la empresa (company.nombre) y logo (company.logo_url).
+
+Si no hay logo: usar placeholder elegante (gris).
+
+Footer: “Generado por OBYRA IA para <company.nombre>”.
+
+Estilo general
+
+Layout con portada + secciones; tipografías consistentes; espaciado generoso.
+
+Paleta sobria (azules/grises) y badges de severidad (verde/amarillo/naranja/rojo).
+
+Tablas con zebra + cabecera fija.
+
+KPIs (tarjetas con ícono + delta)
+
+KPIs: Obras activas, Costo total, Avance promedio, Personal activo, Obras nuevas, Presupuestos creados.
+
+Debajo de cada KPI mostrar Δ vs período anterior (flecha ↑/↓ y %).
+
+Implementación: calcular período “previo” según range.
+
+Gráficos
+
+Barras: cantidad de alertas por severidad (últimos X días).
+
+Torta: distribución de % avance por obra.
+
+Línea temporal: presupuestos creados por día/semana en el período.
+
+Renderizar con Chart.js/Plotly a imagen (data URI) para WeasyPrint.
+
+Obras activas
+
+Tabla: Obra | Ubicación | Estado | % Avance (barra de progreso) | Presupuesto | Fecha estimada de fin (si existe).
+
+Orden default por % avance descendente.
+
+Alertas
+
+Tabla: Severidad (badge) | Título | Descripción | Responsable (si existe) | Estado (pendiente/resuelta) | Fecha.
+
+Encabezado con contadores: Críticas / Altas / Medias / Bajas.
+
+Seguridad & límites
+
+Solo datos de la company_id del usuario.
+
+Rate limit endpoint: 10/min por usuario.
+
+Timeout razonable del render (ej. 10s) y error pdf_render_failed con log.
+
+Aceptación (QA checklist)
+
+ El PDF muestra logo y nombre de la empresa en portada/encabezado.
+
+ KPIs en tarjetas con Δ vs período anterior correcto.
+
+ Gráficos (barras, torta, línea) visibles y legibles.
+
+ Tablas estilizadas; en Obras, barra de progreso y fecha estimada.
+
+ Alertas con responsable y estado (si existen); contadores por severidad.
+
+ Endpoint y modal actuales funcionan igual (mismo botón), sin versión vieja.
+
+ Archivo descarga como obyra-dashboard-YYYYMMDD.pdf.
+
+ Tests:
+
+Backend: genera PDF (200 + application/pdf), cálculo de comparativa correcto.
+
+Plantilla: render con empresa con/sin logo.
+
+Entregables
+
+PR con: template V2 (dashboard.html), servicio de datos actualizado, assets/estilos, y README con variables/instalación (WeasyPrint/fonts).
+
+Capturas/GIF del PDF final.

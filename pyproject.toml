@@ -23,4 +23,7 @@ dependencies = [
     "xlsxwriter>=3.2.5",
     "openai>=1.97.1",
     "pypdf2>=3.0.1",
+    "weasyprint>=66.0",
+    "matplotlib>=3.10.5",
+    "pillow>=11.3.0",
 ]
