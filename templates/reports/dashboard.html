@@ -127,6 +127,12 @@
             color: #3498db;
         }
         
+        .delta-no-data {
+            background: #f8f9fa;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
         .chart-container {
             text-align: center;
             margin: 30px 0;
@@ -242,6 +248,15 @@
         .stat-box.media { border-left-color: #f1c40f; }
         .stat-box.baja { border-left-color: #95a5a6; }
         
+        .stat-box.zero {
+            opacity: 0.4;
+            color: #6c757d;
+        }
+        
+        .stat-number.zero {
+            color: #adb5bd;
+        }
+        
         .stat-number {
             font-size: 24px;
             font-weight: 700;
@@ -351,35 +366,47 @@
     </div>
     
     <!-- Gráficos -->
-    {% if charts.alerts_by_severity %}
     <div class="section">
         <h2 class="section-title">📈 Análisis de Alertas</h2>
+        {% if charts.alerts_by_severity %}
         <div class="chart-container">
             <div class="chart-title">Distribución de Alertas por Severidad</div>
             <img src="data:image/png;base64,{{ charts.alerts_by_severity }}" class="chart-image" alt="Gráfico de alertas">
         </div>
+        {% elif charts.alerts_by_severity_placeholder %}
+        <div class="chart-container" style="text-align: center; padding: 40px; background: #f8f9fa; border-radius: 8px;">
+            <div style="color: #6c757d; font-style: italic; font-size: 16px;">— sin datos de alertas en el período —</div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
     
-    {% if charts.project_progress %}
     <div class="section">
         <h2 class="section-title">🏗️ Distribución de Progreso de Obras</h2>
+        {% if charts.project_progress %}
         <div class="chart-container">
             <div class="chart-title">Porcentaje de Avance por Obra Activa</div>
             <img src="data:image/png;base64,{{ charts.project_progress }}" class="chart-image" alt="Gráfico de progreso">
         </div>
+        {% elif charts.project_progress_placeholder %}
+        <div class="chart-container" style="text-align: center; padding: 40px; background: #f8f9fa; border-radius: 8px;">
+            <div style="color: #6c757d; font-style: italic; font-size: 16px;">— sin obras activas para mostrar —</div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
     
-    {% if charts.budgets_timeline %}
     <div class="section">
         <h2 class="section-title">💰 Evolución de Presupuestos</h2>
+        {% if charts.budgets_timeline %}
         <div class="chart-container">
             <div class="chart-title">Presupuestos Creados en el Tiempo</div>
             <img src="data:image/png;base64,{{ charts.budgets_timeline }}" class="chart-image" alt="Gráfico timeline">
         </div>
+        {% elif charts.budgets_timeline_placeholder %}
+        <div class="chart-container" style="text-align: center; padding: 40px; background: #f8f9fa; border-radius: 8px;">
+            <div style="color: #6c757d; font-style: italic; font-size: 16px;">— sin presupuestos en el período —</div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
     
     <!-- Obras Activas -->
     {% if data.obras_activas %}
@@ -428,20 +455,20 @@
         
         <!-- Contadores por severidad -->
         <div class="summary-stats">
-            <div class="stat-box critica">
-                <div class="stat-number">{{ data.alertas_stats.critica or 0 }}</div>
+            <div class="stat-box critica {{ 'zero' if (data.alertas_stats.critica or 0) == 0 else '' }}">
+                <div class="stat-number {{ 'zero' if (data.alertas_stats.critica or 0) == 0 else '' }}">{{ data.alertas_stats.critica or 0 }}</div>
                 <div class="stat-label">Críticas</div>
             </div>
-            <div class="stat-box alta">
-                <div class="stat-number">{{ data.alertas_stats.alta or 0 }}</div>
+            <div class="stat-box alta {{ 'zero' if (data.alertas_stats.alta or 0) == 0 else '' }}">
+                <div class="stat-number {{ 'zero' if (data.alertas_stats.alta or 0) == 0 else '' }}">{{ data.alertas_stats.alta or 0 }}</div>
                 <div class="stat-label">Altas</div>
             </div>
-            <div class="stat-box media">
-                <div class="stat-number">{{ data.alertas_stats.media or 0 }}</div>
+            <div class="stat-box media {{ 'zero' if (data.alertas_stats.media or 0) == 0 else '' }}">
+                <div class="stat-number {{ 'zero' if (data.alertas_stats.media or 0) == 0 else '' }}">{{ data.alertas_stats.media or 0 }}</div>
                 <div class="stat-label">Medias</div>
             </div>
-            <div class="stat-box baja">
-                <div class="stat-number">{{ data.alertas_stats.baja or 0 }}</div>
+            <div class="stat-box baja {{ 'zero' if (data.alertas_stats.baja or 0) == 0 else '' }}">
+                <div class="stat-number {{ 'zero' if (data.alertas_stats.baja or 0) == 0 else '' }}">{{ data.alertas_stats.baja or 0 }}</div>
                 <div class="stat-label">Bajas</div>
             </div>
         </div>

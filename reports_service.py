@@ -228,27 +228,35 @@ def gather_report_data_v2(org_id, fecha_desde, fecha_hasta, project_ids, include
         }
         
         # Calcular delta si hay comparativa
-        if compare_with_previous and previous_value is not None and previous_value > 0:
-            delta_percent = ((current_value - previous_value) / previous_value) * 100
-            
-            if abs(delta_percent) < 0.1:
+        if compare_with_previous:
+            if previous_value is None or previous_value == 0:
+                # Sin datos previos
                 kpi_data.update({
-                    'delta': '0.0',
-                    'delta_symbol': '→',
-                    'delta_class': 'delta-neutral'
-                })
-            elif delta_percent > 0:
-                kpi_data.update({
-                    'delta': f"{delta_percent:.1f}",
-                    'delta_symbol': '↗',
-                    'delta_class': 'delta-positive'
+                    'delta': 'sin datos previos',
+                    'delta_symbol': '—',
+                    'delta_class': 'delta-no-data'
                 })
             else:
-                kpi_data.update({
-                    'delta': f"{abs(delta_percent):.1f}",
-                    'delta_symbol': '↘',
-                    'delta_class': 'delta-negative'
-                })
+                delta_percent = ((current_value - previous_value) / previous_value) * 100
+                
+                if abs(delta_percent) < 0.1:
+                    kpi_data.update({
+                        'delta': '0.0',
+                        'delta_symbol': '→',
+                        'delta_class': 'delta-neutral'
+                    })
+                elif delta_percent > 0:
+                    kpi_data.update({
+                        'delta': f"{delta_percent:.1f}",
+                        'delta_symbol': '↗',
+                        'delta_class': 'delta-positive'
+                    })
+                else:
+                    kpi_data.update({
+                        'delta': f"{abs(delta_percent):.1f}",
+                        'delta_symbol': '↘',
+                        'delta_class': 'delta-negative'
+                    })
         
         data['kpis'].append(kpi_data)
     
@@ -369,45 +377,48 @@ def generate_charts_v2(report_data, fecha_desde, fecha_hasta):
         })
         
         # === Gráfico 1: Alertas por Severidad (Barras) ===
-        if report_data['alertas_stats']:
+        if report_data['alertas_stats'] and any(report_data['alertas_stats'].values()):
             fig, ax = plt.subplots(figsize=(8, 5))
             
             severities = ['critica', 'alta', 'media', 'baja']
-            colors = ['#e74c3c', '#f39c12', '#f1c40f', '#95a5a6']
+            colors = ['#dc3545', '#fd7e14', '#ffc107', '#6c757d']  # Colores más claros y consistentes
             values = [report_data['alertas_stats'].get(sev, 0) for sev in severities]
             labels = ['Crítica', 'Alta', 'Media', 'Baja']
             
-            bars = ax.bar(labels, values, color=colors, alpha=0.8)
+            bars = ax.bar(labels, values, color=colors, alpha=0.85, edgecolor='white', linewidth=1)
             ax.set_title('Distribución de Alertas por Severidad', fontsize=14, fontweight='bold', pad=20)
             ax.set_ylabel('Cantidad de Alertas')
-            ax.grid(axis='y', alpha=0.3)
+            ax.grid(axis='y', alpha=0.3, linestyle='--')
             
             # Agregar valores en las barras
             for bar, value in zip(bars, values):
                 if value > 0:
                     ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
-                           str(int(value)), ha='center', va='bottom', fontweight='bold')
+                           str(int(value)), ha='center', va='bottom', fontweight='bold', fontsize=11)
             
             plt.tight_layout()
             
             # Convertir a base64
             buffer = BytesIO()
-            plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white')
+            plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white', dpi=150)
             buffer.seek(0)
             charts['alerts_by_severity'] = base64.b64encode(buffer.getvalue()).decode()
             buffer.close()
             plt.close()
+        else:
+            # Placeholder para sin datos
+            charts['alerts_by_severity_placeholder'] = True
         
         # === Gráfico 2: Progreso de Obras (Torta) ===
         if report_data['obras_activas']:
             fig, ax = plt.subplots(figsize=(8, 6))
             
-            # Categorizar obras por rango de progreso
+            # Categorizar obras por rango de progreso - paleta de azules/verdes
             progress_ranges = [
-                (0, 25, '0-25%', '#e74c3c'),
-                (26, 50, '26-50%', '#f39c12'),
-                (51, 75, '51-75%', '#f1c40f'),
-                (76, 100, '76-100%', '#27ae60')
+                (0, 25, '0-25%', '#ff6b6b'),      # Rojo suave para bajo progreso
+                (26, 50, '26-50%', '#feca57'),    # Amarillo para progreso medio-bajo
+                (51, 75, '51-75%', '#48dbfb'),    # Azul para progreso medio-alto
+                (76, 100, '76-100%', '#0abde3')   # Azul fuerte para alto progreso
             ]
             
             range_counts = []
@@ -424,17 +435,27 @@ def generate_charts_v2(report_data, fecha_desde, fecha_hasta):
             
             if range_counts:
                 wedges, texts, autotexts = ax.pie(range_counts, labels=range_labels, colors=range_colors,
-                                                 autopct='%1.1f%%', startangle=90)
+                                                 autopct='%1.1f%%', startangle=90, 
+                                                 textprops={'fontsize': 10, 'fontweight': 'bold'})
                 ax.set_title('Distribución de Obras por Progreso', fontsize=14, fontweight='bold', pad=20)
+                
+                # Mejorar apariencia de los textos
+                for autotext in autotexts:
+                    autotext.set_color('white')
+                    autotext.set_fontweight('bold')
                 
                 plt.tight_layout()
                 
                 buffer = BytesIO()
-                plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white')
+                plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white', dpi=150)
                 buffer.seek(0)
                 charts['project_progress'] = base64.b64encode(buffer.getvalue()).decode()
                 buffer.close()
+            else:
+                charts['project_progress_placeholder'] = True
             plt.close()
+        else:
+            charts['project_progress_placeholder'] = True
         
         # === Gráfico 3: Timeline de Presupuestos (Línea) ===
         presupuestos_timeline = db.session.query(
@@ -445,28 +466,37 @@ def generate_charts_v2(report_data, fecha_desde, fecha_hasta):
             Presupuesto.fecha_creacion <= fecha_hasta
         ).group_by(func.date(Presupuesto.fecha_creacion)).order_by('fecha').all()
         
-        if presupuestos_timeline:
+        if presupuestos_timeline and len(presupuestos_timeline) > 0:
             fig, ax = plt.subplots(figsize=(10, 5))
             
             fechas = [item.fecha for item in presupuestos_timeline]
             cantidades = [item.cantidad for item in presupuestos_timeline]
             
-            ax.plot(fechas, cantidades, marker='o', linewidth=2, markersize=6, color='#3498db')
-            ax.set_title('Presupuestos Creados en el Tiempo', fontsize=14, fontweight='bold', pad=20)
-            ax.set_xlabel('Fecha')
-            ax.set_ylabel('Cantidad de Presupuestos')
-            ax.grid(True, alpha=0.3)
+            # Línea azul más marcada con gradiente
+            ax.plot(fechas, cantidades, marker='o', linewidth=3, markersize=8, 
+                   color='#2980b9', markerfacecolor='#3498db', markeredgecolor='white', 
+                   markeredgewidth=2, alpha=0.9)
             
-            # Rotar etiquetas de fecha
-            plt.xticks(rotation=45)
+            # Rellenar área bajo la curva
+            ax.fill_between(fechas, cantidades, alpha=0.2, color='#3498db')
+            
+            ax.set_title('Presupuestos Creados en el Tiempo', fontsize=14, fontweight='bold', pad=20)
+            ax.set_xlabel('Fecha', fontweight='bold')
+            ax.set_ylabel('Cantidad de Presupuestos', fontweight='bold')
+            ax.grid(True, alpha=0.3, linestyle='--')
+            
+            # Mejorar formato de fechas
+            plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             
             buffer = BytesIO()
-            plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white')
+            plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='white', dpi=150)
             buffer.seek(0)
             charts['budgets_timeline'] = base64.b64encode(buffer.getvalue()).decode()
             buffer.close()
             plt.close()
+        else:
+            charts['budgets_timeline_placeholder'] = True
             
     except Exception as chart_error:
         logger.warning(f"Error generando gráficos: {chart_error}")
