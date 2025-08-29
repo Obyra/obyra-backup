@@ -76,12 +76,24 @@ def dashboard():
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).order_by(desc(Obra.fecha_creacion)).limit(10).all()
     
-    # Alertas del sistema (ejemplo)
-    alertas = []
+    # Alertas del sistema - obtener eventos recientes
+    from models import Event
+    
+    # Feed de eventos para "Actividad Reciente" - últimos 25
+    eventos_recientes = Event.query.filter(
+        Event.company_id == current_user.organizacion_id
+    ).order_by(desc(Event.created_at)).limit(25).all()
+    
+    # Alertas de alta prioridad para el panel lateral
+    alertas = Event.query.filter(
+        Event.company_id == current_user.organizacion_id,
+        Event.severity.in_(['alta', 'critica'])
+    ).order_by(desc(Event.created_at)).limit(10).all()
     
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_activas=obras_activas,
+                         eventos_recientes=eventos_recientes,
                          alertas=alertas,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta)

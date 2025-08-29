@@ -1,8 +1,10 @@
 from datetime import datetime, date
 from flask_login import UserMixin
 from app import db
+from sqlalchemy import func
 import uuid
 import json
+import os
 
 
 class Organizacion(db.Model):
@@ -1452,3 +1454,239 @@ class SupplierPayout(db.Model):
     
     def __repr__(self):
         return f'<SupplierPayout {self.supplier_id}-{self.tipo}>'
+
+
+# ===== SISTEMA DE EVENTOS Y ACTIVIDAD =====
+
+class Event(db.Model):
+    """
+    Modelo para registrar eventos del sistema que alimentan el feed de actividad.
+    Incluye alertas, cambios de estado, hitos, etc.
+    """
+    __tablename__ = 'events'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)  # Nullable para eventos globales
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuario que generó el evento
+    
+    # Tipo de evento
+    type = db.Column(db.Enum(
+        'alert', 'milestone', 'delay', 'cost_overrun', 'stock_low', 
+        'status_change', 'budget_created', 'inventory_alert', 'custom',
+        name='event_type'
+    ), nullable=False)
+    
+    # Severidad del evento
+    severity = db.Column(db.Enum(
+        'baja', 'media', 'alta', 'critica',
+        name='event_severity'
+    ), nullable=True)
+    
+    # Contenido del evento
+    title = db.Column(db.Text, nullable=False)
+    description = db.Column(db.Text)
+    meta = db.Column(db.JSON)  # Metadata adicional del evento
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    
+    # Relaciones
+    company = db.relationship('Organizacion', backref='events')
+    project = db.relationship('Obra', backref='events')
+    user = db.relationship('Usuario', foreign_keys=[user_id], backref='generated_events')
+    creator = db.relationship('Usuario', foreign_keys=[created_by], backref='created_events')
+    
+    # Índices
+    __table_args__ = (
+        db.Index('idx_events_company_created', 'company_id', 'created_at'),
+        db.Index('idx_events_project', 'project_id'),
+        db.Index('idx_events_type', 'type'),
+    )
+    
+    @property
+    def type_icon(self):
+        """Retorna el icono FontAwesome correspondiente al tipo de evento"""
+        icons = {
+            'alert': 'fas fa-exclamation-triangle',
+            'milestone': 'fas fa-flag-checkered',
+            'delay': 'fas fa-clock',
+            'cost_overrun': 'fas fa-dollar-sign',
+            'stock_low': 'fas fa-boxes',
+            'status_change': 'fas fa-exchange-alt',
+            'budget_created': 'fas fa-calculator',
+            'inventory_alert': 'fas fa-warehouse',
+            'custom': 'fas fa-info-circle'
+        }
+        return icons.get(self.type, 'fas fa-bell')
+    
+    @property
+    def severity_badge_class(self):
+        """Retorna la clase CSS Bootstrap para el badge de severidad"""
+        classes = {
+            'critica': 'badge bg-danger',
+            'alta': 'badge bg-warning',
+            'media': 'badge bg-warning text-dark',
+            'baja': 'badge bg-secondary'
+        }
+        return classes.get(self.severity, 'badge bg-secondary')
+    
+    @property
+    def time_ago(self):
+        """Retorna tiempo transcurrido en formato legible"""
+        from datetime import datetime, timedelta
+        
+        now = datetime.utcnow()
+        diff = now - self.created_at
+        
+        if diff.days > 7:
+            return self.created_at.strftime('%d/%m/%Y')
+        elif diff.days > 0:
+            return f'hace {diff.days} día{"s" if diff.days > 1 else ""}'
+        elif diff.seconds > 3600:
+            hours = diff.seconds // 3600
+            return f'hace {hours} hora{"s" if hours > 1 else ""}'
+        elif diff.seconds > 60:
+            minutes = diff.seconds // 60
+            return f'hace {minutes} min'
+        else:
+            return 'hace un momento'
+
+    def __repr__(self):
+        return f'<Event {self.id}: {self.title}>'
+    
+    @property
+    def severity_badge_class(self):
+        """Retorna la clase CSS para el badge de severidad"""
+        severity_classes = {
+            'baja': 'badge bg-success',
+            'media': 'badge bg-warning text-dark',
+            'alta': 'badge bg-orange text-white',
+            'critica': 'badge bg-danger'
+        }
+        return severity_classes.get(self.severity, 'badge bg-secondary')
+    
+    @property
+    def type_icon(self):
+        """Retorna el ícono FontAwesome para el tipo de evento"""
+        type_icons = {
+            'alert': 'fas fa-exclamation-triangle',
+            'milestone': 'fas fa-flag-checkered',
+            'delay': 'fas fa-clock',
+            'cost_overrun': 'fas fa-dollar-sign',
+            'stock_low': 'fas fa-boxes',
+            'status_change': 'fas fa-exchange-alt',
+            'budget_created': 'fas fa-calculator',
+            'inventory_alert': 'fas fa-warehouse',
+            'custom': 'fas fa-info-circle'
+        }
+        return type_icons.get(self.type, 'fas fa-bell')
+    
+    @property
+    def time_ago(self):
+        """Retorna una representación amigable del tiempo transcurrido"""
+        now = datetime.utcnow()
+        diff = now - self.created_at
+        
+        if diff.days > 0:
+            return f"hace {diff.days} día{'s' if diff.days > 1 else ''}"
+        elif diff.seconds > 3600:
+            hours = diff.seconds // 3600
+            return f"hace {hours} hora{'s' if hours > 1 else ''}"
+        elif diff.seconds > 60:
+            minutes = diff.seconds // 60
+            return f"hace {minutes} minuto{'s' if minutes > 1 else ''}"
+        else:
+            return "hace unos segundos"
+    
+    @classmethod
+    def create_alert_event(cls, company_id, project_id, title, description, severity='media', user_id=None, meta=None):
+        """Factory method para crear eventos de alerta"""
+        event = cls(
+            company_id=company_id,
+            project_id=project_id,
+            user_id=user_id,
+            type='alert',
+            severity=severity,
+            title=title,
+            description=description,
+            meta=meta or {},
+            created_by=user_id
+        )
+        db.session.add(event)
+        return event
+    
+    @classmethod
+    def create_status_change_event(cls, company_id, project_id, old_status, new_status, user_id=None):
+        """Factory method para crear eventos de cambio de estado"""
+        title = f"Cambio de estado de obra"
+        description = f"Estado cambió de '{old_status}' a '{new_status}'"
+        meta = {
+            'old_status': old_status,
+            'new_status': new_status
+        }
+        
+        event = cls(
+            company_id=company_id,
+            project_id=project_id,
+            user_id=user_id,
+            type='status_change',
+            severity='media',
+            title=title,
+            description=description,
+            meta=meta,
+            created_by=user_id
+        )
+        db.session.add(event)
+        return event
+    
+    @classmethod
+    def create_budget_event(cls, company_id, project_id, budget_id, budget_total, user_id=None):
+        """Factory method para crear eventos de presupuesto"""
+        title = f"Nuevo presupuesto creado"
+        description = f"Presupuesto por ${budget_total:,.2f} creado para la obra"
+        meta = {
+            'budget_id': budget_id,
+            'budget_total': float(budget_total)
+        }
+        
+        event = cls(
+            company_id=company_id,
+            project_id=project_id,
+            user_id=user_id,
+            type='budget_created',
+            severity='baja',
+            title=title,
+            description=description,
+            meta=meta,
+            created_by=user_id
+        )
+        db.session.add(event)
+        return event
+    
+    @classmethod
+    def create_inventory_alert_event(cls, company_id, item_name, current_stock, min_stock, user_id=None):
+        """Factory method para crear eventos de stock bajo"""
+        title = f"Stock bajo: {item_name}"
+        description = f"Stock actual: {current_stock}, mínimo: {min_stock}"
+        severity = 'alta' if current_stock <= min_stock * 0.5 else 'media'
+        meta = {
+            'item_name': item_name,
+            'current_stock': float(current_stock),
+            'min_stock': float(min_stock)
+        }
+        
+        event = cls(
+            company_id=company_id,
+            project_id=None,  # Eventos de inventario son globales
+            user_id=user_id,
+            type='inventory_alert',
+            severity=severity,
+            title=title,
+            description=description,
+            meta=meta,
+            created_by=user_id
+        )
+        db.session.add(event)
+        return event

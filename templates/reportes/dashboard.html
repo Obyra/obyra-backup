@@ -143,15 +143,109 @@
             
             <!-- Actividad Reciente -->
             <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                     <h5 class="mb-0 fw-bold">Actividad Reciente</h5>
-                </div>
-                <div class="card-body">
-                    <div class="text-center py-4">
-                        <i class="fas fa-clock text-muted fa-3x mb-3"></i>
-                        <p class="text-muted">Sistema de actividad en desarrollo</p>
-                        <small class="text-muted">Próximamente podrás ver el feed de eventos de tus obras</small>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                id="filtroEventos" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-filter"></i> Filtrar
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="filtroEventos">
+                            <li><a class="dropdown-item" href="#" data-filter="all">Todos los eventos</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" data-filter="alert">
+                                <i class="fas fa-exclamation-triangle text-warning me-2"></i>Alertas
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" data-filter="status_change">
+                                <i class="fas fa-exchange-alt text-info me-2"></i>Cambios de estado
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" data-filter="budget_created">
+                                <i class="fas fa-calculator text-success me-2"></i>Presupuestos
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" data-filter="inventory_alert">
+                                <i class="fas fa-warehouse text-danger me-2"></i>Stock bajo
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" data-severity="alta">
+                                <span class="badge bg-warning me-2">Alta</span>Alta prioridad
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" data-severity="critica">
+                                <span class="badge bg-danger me-2">Crítica</span>Crítica únicamente
+                            </a></li>
+                        </ul>
                     </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if eventos_recientes %}
+                    <div id="activity-feed" class="activity-feed">
+                        {% for evento in eventos_recientes %}
+                        <div class="activity-item d-flex align-items-start p-3 border-bottom" 
+                             data-event-id="{{ evento.id }}"
+                             data-event-type="{{ evento.type }}"
+                             data-event-severity="{{ evento.severity or '' }}">
+                            <!-- Icono del evento -->
+                            <div class="activity-icon me-3 flex-shrink-0">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                     style="width: 40px; height: 40px; 
+                                     background-color: {% if evento.severity == 'critica' %}#dc3545{% elif evento.severity == 'alta' %}#fd7e14{% elif evento.severity == 'media' %}#ffc107{% else %}#6c757d{% endif %}20;">
+                                    <i class="{{ evento.type_icon }} text-{% if evento.severity == 'critica' %}danger{% elif evento.severity == 'alta' %}warning{% elif evento.severity == 'media' %}warning{% else %}secondary{% endif %}"></i>
+                                </div>
+                            </div>
+                            
+                            <!-- Contenido del evento -->
+                            <div class="activity-content flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <h6 class="mb-1 fw-bold">{{ evento.title }}</h6>
+                                    {% if evento.severity %}
+                                    <span class="{{ evento.severity_badge_class }}">
+                                        {{ evento.severity.title() }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if evento.description %}
+                                <p class="mb-1 text-muted small">{{ evento.description }}</p>
+                                {% endif %}
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="small text-muted">
+                                        {% if evento.project %}
+                                        <i class="fas fa-building me-1"></i>
+                                        <a href="{{ url_for('obras.detalle', id=evento.project_id) }}" 
+                                           class="text-decoration-none">{{ evento.project.nombre }}</a>
+                                        {% endif %}
+                                        {% if evento.user %}
+                                        <span class="ms-2">
+                                            <i class="fas fa-user me-1"></i>{{ evento.user.nombre }} {{ evento.user.apellido }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    <small class="text-muted">{{ evento.time_ago }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Botón cargar más -->
+                    <div class="text-center p-3">
+                        <button id="load-more-events" class="btn btn-sm btn-outline-primary"
+                                data-offset="{{ eventos_recientes|length }}">
+                            <i class="fas fa-refresh me-1"></i>Cargar más eventos
+                        </button>
+                    </div>
+                    
+                    {% else %}
+                    <!-- Estado vacío -->
+                    <div class="text-center py-5">
+                        <i class="fas fa-stream text-muted fa-3x mb-3"></i>
+                        <h6>No hay actividad reciente</h6>
+                        <p class="text-muted mb-3">Los eventos del sistema aparecerán aquí</p>
+                        <button id="create-test-events" class="btn btn-sm btn-primary">
+                            <i class="fas fa-plus me-1"></i>Generar eventos de prueba
+                        </button>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -189,13 +283,14 @@
                             </div>
                         </a>
                         
-                        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-warning d-flex align-items-center">
+                        <button type="button" class="btn btn-warning d-flex align-items-center" 
+                                data-bs-toggle="modal" data-bs-target="#reportModal">
                             <i class="fas fa-file-pdf me-3"></i>
                             <div class="text-start">
                                 <div class="fw-bold">Generar Reporte</div>
                                 <small>Exportar PDF</small>
                             </div>
-                        </a>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -209,15 +304,19 @@
                 <div class="card-body">
                     {% if alertas %}
                         {% for alerta in alertas %}
-                        <div class="alert alert-{{ alerta.nivel }} border-0 mb-3 p-3" style="background: linear-gradient(135deg, 
-                            {% if alerta.nivel == 'danger' %}#dc3545, #fd7e14{% elif alerta.nivel == 'warning' %}#fd7e14, #ffc107{% else %}#17a2b8, #6f42c1{% endif %});">
+                        <div class="alert-item mb-3 p-3 rounded" 
+                             data-event-id="{{ alerta.id }}"
+                             style="background: linear-gradient(135deg, 
+                             {% if alerta.severity == 'critica' %}#dc3545, #fd7e14{% elif alerta.severity == 'alta' %}#fd7e14, #ffc107{% else %}#17a2b8, #6f42c1{% endif %});">
                             <div class="d-flex align-items-start">
                                 <div class="flex-grow-1 text-white">
-                                    <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
-                                    <div class="small mb-1">{{ alerta.descripcion }}</div>
-                                    <div class="small opacity-75">{{ alerta.obra_nombre }}</div>
+                                    <div class="fw-bold mb-1">{{ alerta.title }}</div>
+                                    <div class="small mb-1">{{ alerta.description }}</div>
+                                    {% if alerta.project %}
+                                    <div class="small opacity-75">{{ alerta.project.nombre }}</div>
+                                    {% endif %}
                                 </div>
-                                <span class="badge bg-white text-dark">{{ alerta.nivel }}</span>
+                                <span class="badge bg-white text-dark">{{ alerta.severity }}</span>
                             </div>
                         </div>
                         {% endfor %}
@@ -277,6 +376,87 @@
     </div>
 </div>
 
+<!-- Modal para configurar el reporte PDF -->
+<div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reportModalLabel">
+                    <i class="fas fa-file-pdf me-2"></i>Generar Reporte PDF
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="reportForm">
+                    <!-- Rango de fechas -->
+                    <div class="mb-3">
+                        <label for="dateRange" class="form-label">Período del reporte</label>
+                        <select class="form-select" id="dateRange" name="range">
+                            <option value="last_7d">Últimos 7 días</option>
+                            <option value="last_30d" selected>Últimos 30 días</option>
+                            <option value="last_90d">Últimos 90 días</option>
+                        </select>
+                    </div>
+
+                    <!-- Incluir alertas -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="includeAlerts" name="include_alerts" checked>
+                        <label class="form-check-label" for="includeAlerts">
+                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                            Incluir alertas recientes
+                        </label>
+                        <div class="form-text">Incluye alertas de alta y crítica prioridad en el reporte</div>
+                    </div>
+
+                    <!-- Seleccionar obras -->
+                    {% if obras_activas %}
+                    <div class="mb-3">
+                        <label class="form-label">Obras a incluir</label>
+                        <div class="form-text mb-2">Deja vacío para incluir todas las obras activas</div>
+                        <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                            {% for obra in obras_activas %}
+                            <div class="form-check">
+                                <input class="form-check-input project-check" type="checkbox" 
+                                       value="{{ obra.id }}" id="project{{ obra.id }}">
+                                <label class="form-check-label small" for="project{{ obra.id }}">
+                                    {{ obra.nombre }}
+                                    <span class="text-muted">- {{ obra.direccion[:30] }}...</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllProjects">
+                                Seleccionar todas
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearAllProjects">
+                                Limpiar selección
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Moneda -->
+                    <div class="mb-3">
+                        <label for="currency" class="form-label">Moneda</label>
+                        <select class="form-select" id="currency" name="currency">
+                            <option value="ARS" selected>Peso Argentino (ARS)</option>
+                            <option value="USD">Dólar Estadounidense (USD)</option>
+                            <option value="EUR">Euro (EUR)</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="generateReportBtn">
+                    <i class="fas fa-download me-1"></i>Descargar PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 .card {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -294,5 +474,465 @@
 .btn:hover {
     transform: translateY(-1px);
 }
+
+/* Activity Feed Styles */
+.activity-feed {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.activity-item {
+    transition: background-color 0.2s ease;
+}
+
+.activity-item:hover {
+    background-color: #f8f9fa;
+}
+
+.activity-item.highlighted {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.alert-item {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.alert-item:hover {
+    transform: translateY(-2px);
+}
+
+.alert-item.connected {
+    opacity: 0.7;
+    transform: scale(0.98);
+}
+
+.severity-badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Variables globales
+    let currentFilter = 'all';
+    let currentSeverity = null;
+    let currentOffset = {{ eventos_recientes|length if eventos_recientes else 0 }};
+    
+    // Elementos del DOM
+    const activityFeed = document.getElementById('activity-feed');
+    const loadMoreBtn = document.getElementById('load-more-events');
+    const createTestBtn = document.getElementById('create-test-events');
+    const filterDropdown = document.querySelectorAll('[data-filter]');
+    const severityDropdown = document.querySelectorAll('[data-severity]');
+    const alertItems = document.querySelectorAll('.alert-item');
+    
+    // Función para filtrar eventos visibles
+    function filterEvents() {
+        if (!activityFeed) return;
+        
+        const events = activityFeed.querySelectorAll('.activity-item');
+        let visibleCount = 0;
+        
+        events.forEach(event => {
+            const eventType = event.dataset.eventType;
+            const eventSeverity = event.dataset.eventSeverity;
+            
+            let show = true;
+            
+            // Filtro por tipo
+            if (currentFilter !== 'all' && eventType !== currentFilter) {
+                show = false;
+            }
+            
+            // Filtro por severidad
+            if (currentSeverity && eventSeverity !== currentSeverity) {
+                show = false;
+            }
+            
+            event.style.display = show ? 'flex' : 'none';
+            if (show) visibleCount++;
+        });
+        
+        // Mostrar mensaje si no hay eventos visibles
+        const noEventsMsg = document.getElementById('no-events-message');
+        if (noEventsMsg) noEventsMsg.remove();
+        
+        if (visibleCount === 0 && events.length > 0) {
+            const msg = document.createElement('div');
+            msg.id = 'no-events-message';
+            msg.className = 'text-center py-4 text-muted';
+            msg.innerHTML = '<i class="fas fa-filter fa-2x mb-2"></i><br>No hay eventos que coincidan con los filtros seleccionados';
+            activityFeed.appendChild(msg);
+        }
+    }
+    
+    // Event listeners para filtros
+    filterDropdown.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentFilter = this.dataset.filter;
+            currentSeverity = null; // Reset severity filter
+            
+            // Update UI
+            document.getElementById('filtroEventos').innerHTML = 
+                '<i class="fas fa-filter"></i> ' + this.textContent.trim();
+            
+            filterEvents();
+        });
+    });
+    
+    severityDropdown.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentSeverity = this.dataset.severity;
+            currentFilter = 'all'; // Reset type filter
+            
+            // Update UI
+            document.getElementById('filtroEventos').innerHTML = 
+                '<i class="fas fa-filter"></i> ' + this.textContent.trim();
+            
+            filterEvents();
+        });
+    });
+    
+    // Cargar más eventos
+    if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cargando...';
+            
+            fetch(`/api/events?limit=10&offset=${currentOffset}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.events && data.events.length > 0) {
+                        data.events.forEach(event => {
+                            const eventHtml = createEventHtml(event);
+                            activityFeed.insertAdjacentHTML('beforeend', eventHtml);
+                        });
+                        currentOffset += data.events.length;
+                        
+                        if (!data.has_more) {
+                            btn.style.display = 'none';
+                        }
+                    } else {
+                        btn.textContent = 'No hay más eventos';
+                        btn.disabled = true;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error cargando eventos:', error);
+                    btn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Error al cargar';
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    if (btn.textContent.includes('Cargando')) {
+                        btn.innerHTML = '<i class="fas fa-refresh me-1"></i>Cargar más eventos';
+                    }
+                });
+        });
+    }
+    
+    // Crear eventos de prueba
+    if (createTestBtn) {
+        createTestBtn.addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
+            
+            // Crear algunos eventos de prueba
+            const testEvents = [
+                {
+                    title: 'Cambio de estado de obra',
+                    description: 'Estado cambió de "planificación" a "en curso"',
+                    type: 'status_change',
+                    severity: 'media'
+                },
+                {
+                    title: 'Stock bajo detectado',
+                    description: 'Cemento Portland: solo 3 bolsas restantes',
+                    type: 'inventory_alert',
+                    severity: 'alta'
+                },
+                {
+                    title: 'Nuevo presupuesto creado',
+                    description: 'Presupuesto por $125,000.00 creado',
+                    type: 'budget_created',
+                    severity: 'baja'
+                }
+            ];
+            
+            Promise.all(testEvents.map(event => 
+                fetch('/api/events/custom', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(event)
+                })
+            ))
+            .then(() => {
+                // Recargar la página para mostrar los nuevos eventos
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error creando eventos de prueba:', error);
+                btn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Error';
+                btn.disabled = false;
+            });
+        });
+    }
+    
+    // Conectar alertas con actividad
+    alertItems.forEach(alertItem => {
+        alertItem.addEventListener('click', function() {
+            const eventId = this.dataset.eventId;
+            highlightActivityEvent(eventId);
+        });
+    });
+    
+    // Función para resaltar evento en el feed de actividad
+    function highlightActivityEvent(eventId) {
+        // Remover highlight previo
+        document.querySelectorAll('.activity-item.highlighted')
+                .forEach(item => item.classList.remove('highlighted'));
+        
+        // Encontrar y resaltar el evento correspondiente
+        const eventElement = document.querySelector(`[data-event-id="${eventId}"]`);
+        if (eventElement && eventElement.classList.contains('activity-item')) {
+            eventElement.classList.add('highlighted');
+            eventElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+    
+    // Función para crear HTML de eventos (para cargar más)
+    function createEventHtml(event) {
+        const severityColors = {
+            'critica': '#dc3545',
+            'alta': '#fd7e14',
+            'media': '#ffc107',
+            'baja': '#6c757d'
+        };
+        
+        const severityTextColors = {
+            'critica': 'danger',
+            'alta': 'warning',
+            'media': 'warning',
+            'baja': 'secondary'
+        };
+        
+        const typeIcons = {
+            'alert': 'fas fa-exclamation-triangle',
+            'milestone': 'fas fa-flag-checkered',
+            'delay': 'fas fa-clock',
+            'cost_overrun': 'fas fa-dollar-sign',
+            'stock_low': 'fas fa-boxes',
+            'status_change': 'fas fa-exchange-alt',
+            'budget_created': 'fas fa-calculator',
+            'inventory_alert': 'fas fa-warehouse',
+            'custom': 'fas fa-info-circle'
+        };
+        
+        const bgColor = severityColors[event.severity] || '#6c757d';
+        const textColor = severityTextColors[event.severity] || 'secondary';
+        const icon = typeIcons[event.type] || 'fas fa-bell';
+        
+        return `
+            <div class="activity-item d-flex align-items-start p-3 border-bottom" 
+                 data-event-id="${event.id}"
+                 data-event-type="${event.type}"
+                 data-event-severity="${event.severity || ''}">
+                <div class="activity-icon me-3 flex-shrink-0">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center"
+                         style="width: 40px; height: 40px; background-color: ${bgColor}20;">
+                        <i class="${icon} text-${textColor}"></i>
+                    </div>
+                </div>
+                <div class="activity-content flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <h6 class="mb-1 fw-bold">${event.title}</h6>
+                        ${event.severity ? `<span class="badge bg-${textColor}">${event.severity.charAt(0).toUpperCase() + event.severity.slice(1)}</span>` : ''}
+                    </div>
+                    ${event.description ? `<p class="mb-1 text-muted small">${event.description}</p>` : ''}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="small text-muted">
+                            ${event.project ? `<i class="fas fa-building me-1"></i>${event.project.nombre}` : ''}
+                            ${event.user ? `<span class="ms-2"><i class="fas fa-user me-1"></i>${event.user.nombre}</span>` : ''}
+                        </div>
+                        <small class="text-muted">${event.time_ago}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // === FUNCIONALIDAD DE REPORTE PDF ===
+    
+    // Elementos del modal de reporte
+    const reportModal = document.getElementById('reportModal');
+    const generateReportBtn = document.getElementById('generateReportBtn');
+    const reportForm = document.getElementById('reportForm');
+    const selectAllBtn = document.getElementById('selectAllProjects');
+    const clearAllBtn = document.getElementById('clearAllProjects');
+    const projectChecks = document.querySelectorAll('.project-check');
+    
+    // Funcionalidad de selección de proyectos
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            projectChecks.forEach(check => check.checked = true);
+        });
+    }
+    
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', function() {
+            projectChecks.forEach(check => check.checked = false);
+        });
+    }
+    
+    // Generar reporte PDF
+    if (generateReportBtn) {
+        generateReportBtn.addEventListener('click', function() {
+            const btn = this;
+            const originalContent = btn.innerHTML;
+            
+            // Deshabilitar botón y mostrar loading
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generando PDF...';
+            
+            // Recopilar datos del formulario
+            const formData = {
+                range: document.getElementById('dateRange').value,
+                include_alerts: document.getElementById('includeAlerts').checked,
+                currency: document.getElementById('currency').value,
+                locale: 'es-AR'
+            };
+            
+            // Obtener proyectos seleccionados
+            const selectedProjects = [];
+            projectChecks.forEach(check => {
+                if (check.checked) {
+                    selectedProjects.push(parseInt(check.value));
+                }
+            });
+            
+            if (selectedProjects.length > 0) {
+                formData.project_ids = selectedProjects;
+            }
+            
+            // Realizar request para generar PDF
+            fetch('/api/reports/dashboard', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error en la respuesta del servidor');
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Crear URL para descargar el PDF
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `obyra-dashboard-${new Date().toISOString().split('T')[0]}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                // Cerrar modal y mostrar éxito
+                const modal = bootstrap.Modal.getInstance(reportModal);
+                modal.hide();
+                
+                // Toast de éxito (si tienes sistema de toasts)
+                showSuccessMessage('Reporte PDF descargado exitosamente');
+            })
+            .catch(error => {
+                console.error('Error generando reporte:', error);
+                showErrorMessage('Error generando el reporte PDF. Intenta nuevamente.');
+            })
+            .finally(() => {
+                // Restaurar botón
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            });
+        });
+    }
+    
+    // Funciones helper para mostrar mensajes
+    function showSuccessMessage(message) {
+        // Simple alert como fallback
+        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+            // Usar Bootstrap Toast si está disponible
+            const toastHtml = `
+                <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-check-circle me-2"></i>${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            showToast(toastHtml);
+        } else {
+            alert(message);
+        }
+    }
+    
+    function showErrorMessage(message) {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+            const toastHtml = `
+                <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-exclamation-triangle me-2"></i>${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            showToast(toastHtml);
+        } else {
+            alert(message);
+        }
+    }
+    
+    function showToast(toastHtml) {
+        // Crear container de toasts si no existe
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '9999';
+            document.body.appendChild(toastContainer);
+        }
+        
+        // Agregar toast
+        const toastElement = document.createElement('div');
+        toastElement.innerHTML = toastHtml;
+        toastContainer.appendChild(toastElement.firstElementChild);
+        
+        // Inicializar y mostrar toast
+        const toast = new bootstrap.Toast(toastContainer.lastElementChild, {
+            autohide: true,
+            delay: 4000
+        });
+        toast.show();
+        
+        // Remover elemento después de que se oculte
+        toastContainer.lastElementChild.addEventListener('hidden.bs.toast', function() {
+            this.remove();
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -58,6 +58,8 @@ from control_documentos import documentos_bp
 from seguridad_cumplimiento import seguridad_bp
 from agent_local import agent_bp  # 👈 nuestro mini agente local
 from planes import planes_bp
+from events_service import events_bp
+from reports_service import reports_bp
 
 # Importar nuevos blueprints mejorados
 from equipos_new import equipos_new_bp
@@ -99,6 +101,8 @@ from orders import orders_bp
 app.register_blueprint(marketplace_bp)  # Ya tiene prefix /market
 app.register_blueprint(cart_bp)  # Ya tiene prefix /cart
 app.register_blueprint(orders_bp)  # Ya tiene prefix /orders
+app.register_blueprint(events_bp)  # Sistema de eventos
+app.register_blueprint(reports_bp)  # Sistema de reportes PDF
 
 # Funciones globales para templates
 @app.context_processor
