@@ -231,36 +231,38 @@ def gather_report_data_v2(org_id, fecha_desde, fecha_hasta, project_ids, include
             'value': formatted_value
         }
         
-        # Calcular delta si hay comparativa
+        # Calcular delta si hay comparativa usando función auxiliar
         if compare_with_previous:
-            if previous_value is None or previous_value == 0:
+            delta_result = compute_delta(current_value, previous_value)
+            
+            if delta_result is None:
                 # Sin datos previos
                 kpi_data.update({
                     'delta': 'sin datos previos',
                     'delta_symbol': '—',
                     'delta_class': 'delta-no-data'
                 })
+            elif delta_result['direction'] == 'flat':
+                # Variación 0
+                kpi_data.update({
+                    'delta': f"{delta_result['pct']:.1f}",
+                    'delta_symbol': '→',
+                    'delta_class': 'delta-neutral'
+                })
+            elif delta_result['direction'] == 'up':
+                # Variación positiva
+                kpi_data.update({
+                    'delta': f"{delta_result['pct']:.1f}",
+                    'delta_symbol': '↗',
+                    'delta_class': 'delta-positive'
+                })
             else:
-                delta_percent = ((current_value - previous_value) / previous_value) * 100
-                
-                if abs(delta_percent) < 0.1:
-                    kpi_data.update({
-                        'delta': '0.0',
-                        'delta_symbol': '→',
-                        'delta_class': 'delta-neutral'
-                    })
-                elif delta_percent > 0:
-                    kpi_data.update({
-                        'delta': f"{delta_percent:.1f}",
-                        'delta_symbol': '↗',
-                        'delta_class': 'delta-positive'
-                    })
-                else:
-                    kpi_data.update({
-                        'delta': f"{abs(delta_percent):.1f}",
-                        'delta_symbol': '↘',
-                        'delta_class': 'delta-negative'
-                    })
+                # Variación negativa
+                kpi_data.update({
+                    'delta': f"{abs(delta_result['pct']):.1f}",
+                    'delta_symbol': '↘',
+                    'delta_class': 'delta-negative'
+                })
         
         data['kpis'].append(kpi_data)
     
@@ -507,3 +509,24 @@ def generate_charts_v2(report_data, fecha_desde, fecha_hasta):
         # Continuar sin gráficos si hay error
         
     return charts
+
+
+def compute_delta(curr, prev):
+    """Calcula la variación porcentual entre valores actuales y previos"""
+    try:
+        prev = float(prev) if prev not in (None, 0) else None
+    except:
+        prev = None
+    
+    try:
+        curr = float(curr) if curr is not None else 0.0
+    except:
+        curr = 0.0
+    
+    if prev is None:
+        return None
+    
+    pct = round(((curr - prev) / prev) * 100, 1)
+    direction = "flat" if pct == 0 else ("up" if pct > 0 else "down")
+    
+    return {"pct": pct, "direction": direction}
