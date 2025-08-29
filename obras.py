@@ -69,6 +69,12 @@ def seed_tareas_para_etapa(nueva_etapa):
         print(f"❌ ERROR en seed_tareas_para_etapa: {str(e)}")
         return 0
 
+@obras_bp.route("/obras")
+@login_required
+def obras_root():
+    """Redirect /obras to the map view"""
+    return redirect(url_for("obras.lista"))
+
 @obras_bp.route('/')
 @login_required
 def lista():

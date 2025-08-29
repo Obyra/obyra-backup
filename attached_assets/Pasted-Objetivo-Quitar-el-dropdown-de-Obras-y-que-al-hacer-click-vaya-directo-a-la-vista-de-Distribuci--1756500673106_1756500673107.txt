@@ -1,0 +1,86 @@
+Objetivo:
+
+Quitar el dropdown de “Obras” y que al hacer click vaya directo a la vista de Distribución de Obras por Zonas (la del mapa – imagen 2).
+
+Aclarar/ajustar los botones del header de esa página (“2 obras” y “Backfill Tareas”).
+
+1) Navegación: “Obras” sin menú, link directo al mapa
+
+Cambios exactos
+
+En el template del navbar (ej.: templates/_navbar.html o similar):
+
+Reemplazar el <li> con dropdown por un item simple:
+
+<!-- Antes: dropdown -->
+<!-- <li class="nav-item dropdown"> ... </li> -->
+
+<!-- Después: link directo -->
+<li class="nav-item">
+  <a class="nav-link" href="{{ url_for('obras.mapa') }}">Obras</a>
+</li>
+
+
+Eliminar las opciones “Ver Obras” y “Nueva Obra” del dropdown.
+
+En rutas Flask (blueprint obras):
+
+Asegurar que obras.mapa renderiza la vista del mapa (imagen 2).
+
+Si ya existe /obras/lista y /obras/mapa, agregar redirect para que /obras apunte al mapa:
+
+@obras_bp.route("/obras")
+def obras_root():
+    return redirect(url_for("obras.mapa"))
+
+
+QA
+
+Click en Obras (navbar) → abre directo la vista “Distribución de Obras por Zonas”.
+
+2) Header de la página (imagen 3): función de los botones
+
+Situación actual
+A la derecha aparecen: “2 obras”, “+ Nueva Obra”, “Backfill Tareas”.
+
+Requerido
+
+“2 obras”: no es una acción; que sea solo un badge informativo con el total filtrado, no clickable.
+
+Cambiar a:
+
+<span class="badge bg-slate-200 text-slate-700" title="Cantidad de obras que cumplen el filtro">
+  {{ obras_count }} obras
+</span>
+
+
+“+ Nueva Obra”: mantener como acción para abrir el formulario de alta.
+
+“Backfill Tareas”: es una utilidad técnica (seed/mantenimiento).
+
+Ocultar para todos los roles salvo admin_empresa o remover del UI.
+
+Si se mantiene, envolver en:
+
+{% if current_user.has_role('admin_empresa') %}
+  <a class="btn btn-warning">Backfill Tareas</a>
+{% endif %}
+
+
+QA
+
+El badge “N obras” se ve, no tiene hover de link ni mano de cursor.
+
+“+ Nueva Obra” funciona normal.
+
+“Backfill Tareas” no se ve para usuarios no admin (o fue eliminado, según lo que prefieran).
+
+Aceptación (checklist)
+
+ El ítem Obras del navbar no despliega menú y lleva directo al mapa.
+
+ El contador N obras es un badge informativo (no botón).
+
+ Backfill Tareas oculto salvo admin (o removido).
+
+ Sin cambios en el resto de la funcionalidad del mapa/filtros.
