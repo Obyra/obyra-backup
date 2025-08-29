@@ -117,10 +117,14 @@ def generate_pdf_v2_report(organizacion, start_date, end_date, range_text, inclu
     # Generar gráficos como imágenes base64
     charts = generate_charts_v2(report_data, start_date.date(), end_date.date())
     
+    # Calcular días del rango para el subtítulo
+    rango_dias = (end_date.date() - start_date.date()).days
+    
     # Preparar contexto para el template
     context = {
         'organizacion': organizacion,
         'range_text': range_text,
+        'rango_dias': rango_dias,
         'start_date': start_date,
         'end_date': end_date,
         'current_date': datetime.now(),

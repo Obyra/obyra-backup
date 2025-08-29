@@ -8,7 +8,9 @@
             size: A4;
             margin: 2cm 1.5cm 1.5cm 1.5cm;
             @top-center {
-                content: "{{ organizacion.nombre }} - Dashboard";
+                content: "OBYRA";
+                color: #6b7280;
+                font-size: 10pt;
             }
             @bottom-center {
                 content: "Página " counter(page) " de " counter(pages);
@@ -30,18 +32,7 @@
             border-bottom: 3px solid #3498db;
         }
         
-        .company-logo {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 20px;
-            background: #ecf0f1;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            color: #7f8c8d;
-        }
+
         
         .company-title {
             font-size: 32px;
@@ -123,8 +114,8 @@
         }
         
         .delta-neutral {
-            background: #ebf3fd;
-            color: #3498db;
+            background: #f8f9fa;
+            color: #6c757d;
         }
         
         .delta-no-data {
@@ -315,15 +306,8 @@
 <body>
     <!-- Portada -->
     <div class="header">
-        <div class="company-logo">
-            {% if organizacion.logo_url %}
-                <img src="{{ organizacion.logo_url }}" alt="Logo" style="max-width: 100%; max-height: 100%; border-radius: 50%;">
-            {% else %}
-                🏗️
-            {% endif %}
-        </div>
         <h1 class="company-title">{{ organizacion.nombre }}</h1>
-        <p class="report-subtitle">Reporte Dashboard - {{ range_text }}</p>
+        <p class="report-subtitle">Reporte Dashboard - Últimos {{ rango_dias }} días</p>
     </div>
     
     <!-- Información del reporte -->
@@ -356,8 +340,8 @@
                 <div class="kpi-value">{{ kpi.value }}</div>
                 <div class="kpi-label">{{ kpi.label }}</div>
                 {% if kpi.delta is defined %}
-                <div class="kpi-delta {{ kpi.delta_class }}">
-                    {{ kpi.delta_symbol }} {{ kpi.delta }}%
+                <div class="kpi-delta {{ kpi.delta_class }}" {% if kpi.delta_class == 'delta-neutral' %}title="sin variación vs. período anterior"{% endif %}>
+                    {{ kpi.delta_symbol }} {% if kpi.delta_class != 'delta-no-data' %}{{ kpi.delta }}%{% else %}{{ kpi.delta }}{% endif %}
                 </div>
                 {% endif %}
             </div>
