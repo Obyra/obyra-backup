@@ -231,7 +231,29 @@ with app.app_context():
 
     # Create all tables
     db.create_all()
+    # Initialize RBAC permissions
+    try:
+        from models import seed_default_role_permissions
+        seed_default_role_permissions()
+        print("🔐 RBAC permissions seeded successfully")
+    except Exception as e:
+        print(f"⚠️ RBAC seeding skipped: {e}")
+    
     print("📊 Database tables created successfully")
+
+
+# Error handlers to prevent unwanted redirects
+@app.errorhandler(403)
+def forbidden(error):
+    return render_template('errors/403.html'), 403
+
+@app.errorhandler(401)
+def unauthorized(error):
+    return redirect(url_for('auth.login'))
+
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('errors/404.html'), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,0 +1,116 @@
+FIX – EQUIPOS: “+ Nuevo usuario” redirige al dashboard
+
+Síntoma: al entrar a /equipos/usuarios/nuevo me manda al dashboard y no puedo crear.
+
+Hacer estos 5 checks (y aplicar los parches)
+1) Link del botón
+
+Asegurar que el botón apunte al endpoint correcto:
+
+<!-- templates/equipos/usuarios_admin.html (o lista) -->
+<a class="btn btn-primary" href="{{ url_for('equipos.usuarios_nuevo') }}">+ Nuevo usuario</a>
+
+
+Si apuntaba a auth.register u otro, cambiarlo por equipos.usuarios_nuevo.
+
+2) Ruta GET/POST sin redirecciones
+# equipos.py
+@equipos_bp.route("/equipos/usuarios/nuevo", methods=["GET","POST"])
+@login_required
+def usuarios_nuevo():
+    # ⚠️ NO redirigir al dashboard en GET
+    if request.method == "GET":
+        role = request.args.get("role", "operario")
+        role_perms = RoleModule.query.filter_by(role=role).all()
+        return render_template("equipos/invitar.html", role=role, role_perms=role_perms)
+
+    # POST: crear usuario
+    email = request.form.get("email")
+    role  = request.form.get("role")
+    customize = request.form.get("customize") == "on"
+
+    if not email or not role:
+        flash("Email y Rol son obligatorios.", "danger")
+        return redirect(url_for("equipos.usuarios_nuevo"))
+
+    user = Usuario.create_invited(email=email, role=role, company_id=current_user.company_id)
+
+    if customize:
+        for m in ["obras","presupuestos","equipos","inventario","marketplaces","reportes","documentos"]:
+            view = bool(request.form.get(f"modules[{m}][view]"))
+            edit = bool(request.form.get(f"modules[{m}][edit]"))
+            upsert_user_module(user.id, m, view, edit)
+
+    flash("Usuario creado", "success")
+    return redirect(url_for("equipos.usuarios_lista"))
+
+
+Importante: que no exista otro handler con la misma ruta que redirija al dashboard.
+
+3) Permisos (RBAC) no deben bloquear al admin
+
+Si usan un decorador tipo @require_module, aseguren paso libre para admin:
+
+def require_module(module, action="view"):
+    def wrap(fn):
+        @wraps(fn)
+        def inner(*args, **kwargs):
+            # Admines siempre pasan
+            if current_user.role in ("admin_empresa","superadmin"):
+                return fn(*args, **kwargs)
+            perms = get_allowed_modules(current_user) or {}
+            if not perms.get(module, {}).get(action, False):
+                abort(403)
+            return fn(*args, **kwargs)
+        return inner
+    return wrap
+
+
+Y que RoleModule tenga seed para admin:
+
+# admin con view+edit en TODOS los módulos
+for m in ["obras","presupuestos","equipos","inventario","marketplaces","reportes","documentos"]:
+    seed(role="admin_empresa", module=m, can_view=True, can_edit=True)
+
+
+Si require_module negaba acceso, probablemente el error 403 estaba siendo redirigido al dashboard (ver punto 4).
+
+4) Error 403 NO debe redirigir al dashboard
+
+Revisar handlers globales:
+
+# NO:
+# @app.errorhandler(403)
+# def forbidden(e): return redirect(url_for("dashboard"))
+
+# SÍ:
+@app.errorhandler(403)
+def forbidden(e):
+    return render_template("errors/403.html"), 403
+
+
+Si existía un 403→dashboard, eso explica tu redirección fantasma.
+
+5) CSRF en el formulario (para que el POST no rebote)
+
+En templates/equipos/invitar.html:
+
+<form method="POST" action="{{ url_for('equipos.usuarios_nuevo') }}">
+  {{ csrf_token() }}  {# o {{ form.csrf_token }} si usan WTForms #}
+  <!-- email, rol, toggle “personalizar” y la grilla de módulos -->
+</form>
+
+
+Un CSRF inválido a veces termina en un handler genérico que te lleva al dashboard.
+
+QA (aceptación)
+
+Entrar a /equipos/usuarios/nuevo → se ve el formulario (no redirige).
+
+Crear usuario → vuelve a /equipos/usuarios con “Usuario creado”.
+
+Con “Personalizar acceso” activado, se guardan los módulos limitados.
+
+Con usuario no-admin pegando la URL → 403 (página, no dashboard).
+
+Si después de esto aún te manda al dashboard, que impriman en consola los logs de Flask para ver si es un 302 por 403/401 o por un redirect en la vista. Te los leo y te digo exacto dónde está el loop.

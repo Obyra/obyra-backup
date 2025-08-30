@@ -15,7 +15,7 @@
                 <div class="card-body">
                     <form method="POST" action="{{ url_for('equipos.usuarios_nuevo') }}">
                         <!-- CSRF Token -->
-                        {{ csrf_token() }}
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         
                         <div class="mb-3">
                             <label for="email" class="form-label">Email del Usuario <span class="text-danger">*</span></label>

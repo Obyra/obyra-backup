@@ -52,7 +52,8 @@ def lista():
 @login_required
 def usuarios_nuevo():
     """Crear nuevo usuario desde Gestión de Usuarios con permisos RBAC"""
-    if not current_user.puede_acceder_modulo('equipos') or current_user.rol != 'administrador':
+    # Admins siempre pasan - NO redirigir al dashboard en GET
+    if current_user.rol not in ['administrador', 'admin_empresa', 'superadmin']:
         flash('No tienes permisos para crear usuarios.', 'danger')
         return redirect(url_for('auth.usuarios_admin'))
     
