@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Usuario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-plus me-2"></i>Crear Nuevo Usuario
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('equipos.usuarios_nuevo') }}">
+                        <!-- CSRF Token -->
+                        {{ csrf_token() }}
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email del Usuario <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                            <div class="form-text">El usuario utilizará este email para iniciar sesión.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="role" class="form-label">Rol Asignado <span class="text-danger">*</span></label>
+                            <select class="form-select" id="role" name="role" required>
+                                <option value="operario">Operario</option>
+                                <option value="tecnico">Técnico</option>
+                                <option value="jefe_obra">Jefe de Obra</option>
+                                <option value="compras">Compras</option>
+                                <option value="administrador">Administrador</option>
+                            </select>
+                        </div>
+
+                        <!-- Campos opcionales para información completa -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="nombre" class="form-label">Nombre</label>
+                                    <input type="text" class="form-control" id="nombre" name="nombre">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="apellido" class="form-label">Apellido</label>
+                                    <input type="text" class="form-control" id="apellido" name="apellido">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="telefono" class="form-label">Teléfono</label>
+                            <input type="tel" class="form-control" id="telefono" name="telefono">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Contraseña Temporal</label>
+                            <input type="password" class="form-control" id="password" name="password" value="temp123456">
+                            <div class="form-text">El usuario podrá cambiar su contraseña después del primer inicio de sesión.</div>
+                        </div>
+                        
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" id="customize" name="customize">
+                            <label class="form-check-label" for="customize">
+                                Personalizar acceso para este usuario
+                            </label>
+                        </div>
+
+                        <div id="modules-grid" class="mt-3" style="display:none;">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Permisos por Módulo</h6>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Módulo</th>
+                                                <th class="text-center">Ver</th>
+                                                <th class="text-center">Editar</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for m in ["obras","presupuestos","equipos","inventario","marketplaces","reportes","documentos"] %}
+                                            {% set rp = (role_perms | selectattr('module','equalto',m) | list | first) if role_perms else none %}
+                                            <tr>
+                                                <td>{{ m|title }}</td>
+                                                <td class="text-center">
+                                                    <input type="checkbox" name="modules[{{m}}][view]" class="form-check-input"
+                                                           {% if rp and rp.can_view %}checked{% endif %}>
+                                                </td>
+                                                <td class="text-center">
+                                                    <input type="checkbox" name="modules[{{m}}][edit]" class="form-check-input"
+                                                           {% if rp and rp.can_edit %}checked{% endif %}>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{{ url_for('auth.usuarios_admin') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>Volver
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-user-plus me-1"></i>Crear Usuario
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('customize').addEventListener('change', function(){
+    document.getElementById('modules-grid').style.display = this.checked ? 'block':'none';
+});
+
+// Auto-rellenar nombre y apellido basado en email
+document.getElementById('email').addEventListener('blur', function() {
+    const email = this.value;
+    const nombreField = document.getElementById('nombre');
+    const apellidoField = document.getElementById('apellido');
+    
+    if (email && !nombreField.value && !apellidoField.value) {
+        const localPart = email.split('@')[0];
+        const parts = localPart.split('.');
+        
+        if (parts.length >= 2) {
+            nombreField.value = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+            apellidoField.value = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+        } else {
+            nombreField.value = localPart.charAt(0).toUpperCase() + localPart.slice(1);
+        }
+    }
+});
+</script>
+{% endblock %}

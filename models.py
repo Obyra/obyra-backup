@@ -100,32 +100,39 @@ class Usuario(UserMixin, db.Model):
         return f"{self.nombre} {self.apellido}"
     
     def puede_acceder_modulo(self, modulo):
-        # Roles de dirección tienen acceso completo
+        """Verifica si el usuario puede acceder a un módulo usando RBAC"""
+        # Primero verificar si hay override específico de usuario
+        user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
+        if user_override:
+            return user_override.can_view
+        
+        # Si no hay override, usar permisos del rol
+        role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
+        if role_perm:
+            return role_perm.can_view
+        
+        # Fallback al sistema antiguo si no hay configuración RBAC
         roles_direccion = [
             'director_general', 'director_operaciones', 'director_proyectos', 
             'jefe_obra', 'jefe_produccion', 'coordinador_proyectos'
         ]
         
-        # Roles técnicos tienen acceso amplio 
         roles_tecnicos = [
             'ingeniero_civil', 'ingeniero_construcciones', 'arquitecto',
             'ingeniero_seguridad', 'ingeniero_electrico', 'ingeniero_sanitario',
             'ingeniero_mecanico', 'topografo', 'bim_manager', 'computo_presupuesto'
         ]
         
-        # Roles de supervisión tienen acceso medio
         roles_supervision = [
             'encargado_obra', 'supervisor_obra', 'inspector_calidad',
             'inspector_seguridad', 'supervisor_especialidades'
         ]
         
-        # Roles administrativos
         roles_administrativos = [
             'administrador_obra', 'comprador', 'logistica', 'recursos_humanos',
             'contador_finanzas'
         ]
         
-        # Roles operativos básicos
         roles_operativos = [
             'capataz', 'maestro_mayor_obra', 'oficial_albanil', 'oficial_plomero',
             'oficial_electricista', 'oficial_herrero', 'oficial_pintor', 'oficial_yesero',
@@ -134,7 +141,6 @@ class Usuario(UserMixin, db.Model):
         
         permisos = {}
         
-        # Asignar permisos por categoría de rol
         for rol in roles_direccion:
             permisos[rol] = ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
         
@@ -150,7 +156,6 @@ class Usuario(UserMixin, db.Model):
         for rol in roles_operativos:
             permisos[rol] = ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
         
-        # Mantener compatibilidad con roles antiguos
         permisos.update({
             'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
@@ -158,6 +163,24 @@ class Usuario(UserMixin, db.Model):
         })
         
         return modulo in permisos.get(self.rol, [])
+    
+    def puede_editar_modulo(self, modulo):
+        """Verifica si el usuario puede editar en un módulo usando RBAC"""
+        # Primero verificar si hay override específico de usuario
+        user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
+        if user_override:
+            return user_override.can_edit
+        
+        # Si no hay override, usar permisos del rol
+        role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
+        if role_perm:
+            return role_perm.can_edit
+        
+        # Fallback: admins y tecnicos pueden editar la mayoría
+        if self.rol in ['administrador', 'tecnico', 'jefe_obra']:
+            return True
+        
+        return False
     
     def es_admin_completo(self):
         """Verifica si el usuario es administrador con acceso completo sin restricciones de plan"""
@@ -1690,3 +1713,123 @@ class Event(db.Model):
         )
         db.session.add(event)
         return event
+
+
+# ===== MODELOS RBAC =====
+
+class RoleModule(db.Model):
+    """Permisos por defecto para cada rol en cada módulo"""
+    __tablename__ = 'role_modules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    role = db.Column(db.String(50), nullable=False)
+    module = db.Column(db.String(50), nullable=False)
+    can_view = db.Column(db.Boolean, default=False)
+    can_edit = db.Column(db.Boolean, default=False)
+    
+    __table_args__ = (db.UniqueConstraint('role', 'module', name='unique_role_module'),)
+    
+    def __repr__(self):
+        return f'<RoleModule {self.role}:{self.module} view={self.can_view} edit={self.can_edit}>'
+
+
+class UserModule(db.Model):
+    """Overrides de permisos por usuario específico"""
+    __tablename__ = 'user_modules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    module = db.Column(db.String(50), nullable=False)
+    can_view = db.Column(db.Boolean, default=False)
+    can_edit = db.Column(db.Boolean, default=False)
+    
+    __table_args__ = (db.UniqueConstraint('user_id', 'module', name='unique_user_module'),)
+    
+    # Relaciones
+    user = db.relationship('Usuario', backref='module_overrides')
+    
+    def __repr__(self):
+        return f'<UserModule user={self.user_id}:{self.module} view={self.can_view} edit={self.can_edit}>'
+
+
+# ===== FUNCIONES HELPER PARA RBAC =====
+
+def get_allowed_modules(user):
+    """Obtiene los módulos permitidos para un usuario"""
+    role_map = {rm.module: {"view": rm.can_view, "edit": rm.can_edit}
+                for rm in RoleModule.query.filter_by(role=user.rol)}
+    
+    # Overrides de usuario
+    for um in UserModule.query.filter_by(user_id=user.id):
+        role_map[um.module] = {"view": um.can_view, "edit": um.can_edit}
+    
+    return role_map
+
+
+def upsert_user_module(user_id, module, view, edit):
+    """Inserta o actualiza permisos de módulo para un usuario"""
+    um = UserModule.query.filter_by(user_id=user_id, module=module).first()
+    if not um:
+        um = UserModule(user_id=user_id, module=module)
+        db.session.add(um)
+    um.can_view = view
+    um.can_edit = edit
+    db.session.commit()
+
+
+def seed_default_role_permissions():
+    """Seed permisos por defecto para roles"""
+    default_permissions = {
+        'administrador': {
+            'obras': {'view': True, 'edit': True},
+            'presupuestos': {'view': True, 'edit': True},
+            'equipos': {'view': True, 'edit': True},
+            'inventario': {'view': True, 'edit': True},
+            'marketplaces': {'view': True, 'edit': True},
+            'reportes': {'view': True, 'edit': True},
+            'documentos': {'view': True, 'edit': True}
+        },
+        'tecnico': {
+            'obras': {'view': True, 'edit': True},
+            'presupuestos': {'view': True, 'edit': True},
+            'inventario': {'view': True, 'edit': True},
+            'marketplaces': {'view': True, 'edit': False},
+            'reportes': {'view': True, 'edit': False},
+            'documentos': {'view': True, 'edit': True}
+        },
+        'operario': {
+            'obras': {'view': True, 'edit': False},
+            'inventario': {'view': True, 'edit': False},
+            'marketplaces': {'view': True, 'edit': False},
+            'documentos': {'view': True, 'edit': False}
+        },
+        'jefe_obra': {
+            'obras': {'view': True, 'edit': True},
+            'presupuestos': {'view': True, 'edit': True},
+            'equipos': {'view': True, 'edit': False},
+            'inventario': {'view': True, 'edit': True},
+            'marketplaces': {'view': True, 'edit': True},
+            'reportes': {'view': True, 'edit': False},
+            'documentos': {'view': True, 'edit': True}
+        },
+        'compras': {
+            'inventario': {'view': True, 'edit': True},
+            'marketplaces': {'view': True, 'edit': True},
+            'presupuestos': {'view': True, 'edit': False},
+            'reportes': {'view': True, 'edit': False}
+        }
+    }
+    
+    for role, modules in default_permissions.items():
+        for module, perms in modules.items():
+            existing = RoleModule.query.filter_by(role=role, module=module).first()
+            if not existing:
+                rm = RoleModule(
+                    role=role,
+                    module=module,
+                    can_view=perms['view'],
+                    can_edit=perms['edit']
+                )
+                db.session.add(rm)
+    
+    db.session.commit()
