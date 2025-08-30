@@ -12,8 +12,11 @@
                     <small class="text-muted">{{ current_user.organizacion.nombre }}</small>
                 </div>
                 <div>
-                    <a href="{{ url_for('auth.invitar_usuario') }}" class="btn btn-primary me-2">
-                        <i class="fas fa-user-plus me-1"></i>Invitar Usuario
+                    <a href="{{ url_for('equipos.usuarios_nuevo') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-user-plus me-1"></i>Nuevo Usuario
+                    </a>
+                    <a href="{{ url_for('auth.invitar_usuario') }}" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-envelope me-1"></i>Invitar Usuario
                     </a>
                     <div class="badge bg-info">
                         <i class="fas fa-shield-alt me-1"></i>Solo Administradores

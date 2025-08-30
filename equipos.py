@@ -48,6 +48,77 @@ def lista():
                          buscar=buscar,
                          activo=activo)
 
+@equipos_bp.route('/usuarios/nuevo', methods=['GET', 'POST'])
+@login_required
+def usuarios_nuevo():
+    """Crear nuevo usuario desde Gestión de Usuarios"""
+    if not current_user.puede_acceder_modulo('equipos') or current_user.rol != 'administrador':
+        flash('No tienes permisos para crear usuarios.', 'danger')
+        return redirect(url_for('auth.usuarios_admin'))
+    
+    from roles_construccion import ROLES_DISPONIBLES
+    
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        apellido = request.form.get('apellido')
+        email = request.form.get('email')
+        telefono = request.form.get('telefono')
+        rol = request.form.get('rol')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Validaciones
+        if not all([nombre, apellido, email, rol, password]):
+            flash('Por favor, completa todos los campos obligatorios.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        # Validar formato de email
+        import re
+        if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+            flash('Por favor, ingresa un email válido.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        if password != confirm_password:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        if len(password) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        # Verificar que el email no exista
+        if Usuario.query.filter_by(email=email).first():
+            flash('Ya existe un usuario con ese email.', 'danger')
+            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+        
+        try:
+            from werkzeug.security import generate_password_hash
+            
+            # Crear nuevo usuario
+            nuevo_usuario = Usuario(
+                nombre=nombre,
+                apellido=apellido,
+                email=email.lower(),
+                telefono=telefono,
+                password_hash=generate_password_hash(password),
+                rol=rol,
+                auth_provider='manual',
+                activo=True,
+                organizacion_id=current_user.organizacion_id if current_user.organizacion_id else None
+            )
+            
+            db.session.add(nuevo_usuario)
+            db.session.commit()
+            
+            flash(f'Usuario {nombre} {apellido} creado exitosamente.', 'success')
+            return redirect(url_for('auth.usuarios_admin'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al crear el usuario. Por favor, intenta de nuevo.', 'danger')
+    
+    return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+
 @equipos_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
 def crear():
