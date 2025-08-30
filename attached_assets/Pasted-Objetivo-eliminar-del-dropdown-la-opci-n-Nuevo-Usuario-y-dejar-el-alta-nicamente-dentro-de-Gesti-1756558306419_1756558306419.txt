@@ -1,0 +1,59 @@
+Objetivo: eliminar del dropdown la opción “Nuevo Usuario” y dejar el alta únicamente dentro de Gestión de Usuarios.
+
+1) Template del navbar
+
+En templates/base.html (o templates/_navbar.html, templates/partials/navbar.html), buscar el dropdown “Equipos” y borrar el <a> de “Nuevo Usuario”.
+
+Antes (ejemplo típico)
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Equipos</a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="{{ url_for('equipos.ver_equipo') }}">Ver Equipo</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_nuevo') }}">Nuevo Usuario</a></li>  {# <-- QUITAR #}
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_lista') }}">Gestión de Usuarios</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
+  </ul>
+</li>
+
+Después (sin “Nuevo Usuario”)
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Equipos</a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="{{ url_for('equipos.ver_equipo') }}">Ver Equipo</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_lista') }}">Gestión de Usuarios</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
+  </ul>
+</li>
+
+
+Si usan un macro/partial de menú: buscar el texto literal “Nuevo Usuario” con la lupa del editor y sacarlo en ese archivo.
+
+2) Botón de alta dentro de Gestión
+
+En templates/equipos/usuarios_lista.html (o equivalente), asegurarse que exista el botón:
+
+<a class="btn btn-primary" href="{{ url_for('equipos.usuarios_nuevo') }}">+ Nuevo usuario</a>
+
+
+(El formulario y la ruta se mantienen, solo desaparece del menú principal.)
+
+3) Reinicio / cache
+
+Reiniciar la app para que tome el cambio de Jinja.
+
+Si hay CDN o cache de templates, limpiar.
+
+4) Aceptación
+
+ En el dropdown Equipos NO aparece “Nuevo Usuario”.
+
+ En Gestión de Usuarios sí está el botón + Nuevo usuario y funciona.
+
+Si por algún motivo no logran editar el template ya, plan B temporal (no ideal): ocultarlo por CSS en el layout principal:
+
+<style>
+  a.dropdown-item[href*="/equipos/usuarios/nuevo"] { display: none !important; }
+</style>
+
+
+(Pero lo correcto es eliminar la línea del template).

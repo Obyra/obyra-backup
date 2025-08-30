@@ -1,0 +1,96 @@
+RECTIFICACIÓN DE ALCANCE – MÓDULO EQUIPOS (NO tocar “Obras” en este ticket)
+
+Este ticket es exclusivamente sobre EQUIPOS.
+Por favor no hacer más cambios en “Obras”.
+
+✅ Lo que está bien hoy en EQUIPOS
+
+“Ver equipos” OK
+
+“Gestión de usuarios” OK
+
+❌ Lo que falta corregir (EQUIPOS)
+
+Quitar “Nuevo Usuario” del menú Equipos
+
+/equipos/usuarios/nuevo debe mostrar el formulario (GET) y crear el usuario (POST) sin redirigir al dashboard.
+
+El botón + Nuevo usuario debe estar dentro de Gestión de Usuarios.
+
+Cambios exactos
+1) Navbar (dropdown Equipos) — template
+
+Archivo: templates/base.html (o el partial de navbar)
+Eliminar el <li> de “Nuevo Usuario” dentro de Equipos.
+
+ANTES (ejemplo)
+
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Equipos</a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="{{ url_for('equipos.ver_equipo') }}">Ver Equipo</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_nuevo') }}">Nuevo Usuario</a></li>  {# QUITAR #}
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_lista') }}">Gestión de Usuarios</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
+  </ul>
+</li>
+
+
+DESPUÉS (sin “Nuevo Usuario”)
+
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Equipos</a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="{{ url_for('equipos.ver_equipo') }}">Ver Equipo</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_lista') }}">Gestión de Usuarios</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
+  </ul>
+</li>
+
+
+Si usan un partial/macro distinto: buscar “Nuevo Usuario” con la lupa y eliminar esa línea.
+
+2) Alta canónica de usuarios (ruta y formulario)
+
+Ruta (en equipos.py o blueprint equivalente):
+
+@equipos_bp.route("/equipos/usuarios/nuevo", methods=["GET","POST"])
+@login_required
+def usuarios_nuevo():
+    if request.method == "GET":
+        # Renderiza el FORM de alta (NO redirigir al dashboard)
+        return render_template("equipos/invitar.html", ...)
+    # POST: crear e invitar
+    # ... validar y crear usuario ...
+    flash("Usuario creado", "success")
+    return redirect(url_for("equipos.usuarios_lista"))
+
+
+Gestión de usuarios (lista) — botón visible:
+
+<a class="btn btn-primary" href="{{ url_for('equipos.usuarios_nuevo') }}">+ Nuevo usuario</a>
+
+
+Hardening:
+
+Asegurar que GET de /equipos/usuarios/nuevo no hace redirect(url_for('dashboard')).
+
+Si usan CSRF, que el template incluya {{ form.csrf_token }}.
+
+Validar login_required y permisos (si hay guard).
+
+QA de aceptación (por favor adjuntar capturas)
+
+ En el menú Equipos NO aparece “Nuevo Usuario”.
+
+ /equipos/usuarios/nuevo abre el formulario (no manda al dashboard).
+
+ Al guardar, vuelve a /equipos/usuarios con toast “Usuario creado”.
+
+ NO se tocaron vistas/rutas de Obras en este ticket.
+
+(Si por cualquier motivo necesitan un parche temporal, ocultar por CSS esa opción del menú hasta eliminarla del template:)
+
+<style>
+  a.dropdown-item[href*="/equipos/usuarios/nuevo"] { display:none!important; }
+</style>

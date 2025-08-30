@@ -1,0 +1,79 @@
+Este ticket es EXCLUSIVAMENTE de EQUIPOS.
+Por favor, no hagan más cambios en “Obras” dentro de este ticket y reviertan cualquier cambio colateral si lo hicieron.
+
+Objetivo del ticket (EQUIPOS)
+
+Eliminar “Nuevo Usuario” del menú Equipos.
+
+/equipos/usuarios/nuevo debe mostrar el formulario (GET) y crear el usuario (POST) sin redirigir al dashboard.
+
+El botón + Nuevo usuario queda dentro de Gestión de Usuarios.
+
+Cambios exactos
+1) Navbar (dropdown Equipos) — template
+
+Archivo: templates/base.html (o el partial del navbar).
+Eliminar el <li><a>Nuevo Usuario</a></li> bajo Equipos.
+
+<!-- DESPUÉS (sin “Nuevo Usuario”) -->
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">Equipos</a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="{{ url_for('equipos.ver_equipo') }}">Ver Equipo</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_lista') }}">Gestión de Usuarios</a></li>
+    <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
+  </ul>
+</li>
+
+
+Si usan otro partial/macro: BUSCAR “Nuevo Usuario” y borrar esa línea.
+
+2) Alta canónica (no mandar al dashboard)
+
+Archivo: equipos.py (o blueprint equivalente)
+
+@equipos_bp.route("/equipos/usuarios/nuevo", methods=["GET", "POST"])
+@login_required
+def usuarios_nuevo():
+    if request.method == "GET":
+        # Render del FORM de invitación/alta (NO redirigir al dashboard)
+        return render_template("equipos/invitar.html", ...)
+
+    # POST: crear usuario e invitar
+    # ... validaciones/creación ...
+    flash("Usuario creado", "success")
+    return redirect(url_for("equipos.usuarios_lista"))
+
+
+Gestión de Usuarios (lista)
+templates/equipos/usuarios_lista.html:
+
+<a class="btn btn-primary" href="{{ url_for('equipos.usuarios_nuevo') }}">+ Nuevo usuario</a>
+
+
+Hardening
+
+Asegurar que el GET de /equipos/usuarios/nuevo NO haga redirect(url_for('dashboard')).
+
+Incluir {{ form.csrf_token }} si usan CSRF.
+
+Verificar que los links apunten a url_for('equipos.usuarios_nuevo').
+
+QA (adjuntar capturas, por favor)
+
+ En el menú Equipos NO aparece “Nuevo Usuario”.
+
+ /equipos/usuarios/nuevo abre el formulario (no manda al dashboard).
+
+ Guardar crea el usuario y vuelve a /equipos/usuarios con toast “Usuario creado”.
+
+ No se modificó nada en “Obras” dentro de este ticket.
+
+Plan B temporal (si no pueden editar el template ya):
+
+<style>
+  a.dropdown-item[href*="/equipos/usuarios/nuevo"] { display: none !important; }
+</style>
+
+
+(Luego eliminar del template correctamente.)

@@ -1,0 +1,100 @@
+Por favor NO modificar nada más en “Obras” en este ticket.
+Revertir cualquier cambio colateral si fue necesario.
+Este pedido es exclusivamente del módulo Equipos.
+
+Ticket A — Navegación + Alta de usuarios (Equipos)
+
+Objetivo:
+
+Quitar “Nuevo Usuario” del menú de Equipos.
+
+El alta debe hacerse desde Gestión de Usuarios, sin redirigir al dashboard.
+
+Cambios exactos
+
+Navbar (dropdown Equipos) – Template
+
+Archivo: templates/base.html (o el partial del navbar).
+
+Eliminar el <li><a>Nuevo Usuario</a></li>.
+
+Dejar solo:
+
+Ver Equipo → url_for('equipos.ver_equipo')
+
+Gestión de Usuarios → url_for('equipos.usuarios_lista')
+
+Rendimiento → url_for('equipos.rendimiento')
+
+Ruta de alta canónica
+
+Asegurar endpoint GET/POST: /equipos/usuarios/nuevo
+
+@equipos_bp.route("/equipos/usuarios/nuevo", methods=["GET","POST"])
+@login_required
+@require_module("equipos","edit")   # si usan guard de permisos
+def usuarios_nuevo():
+    if request.method == "GET":
+        return render_template("equipos/invitar.html", ...)
+    # POST: crear usuario e invitar
+    # ...
+    flash("Usuario creado", "success")
+    return redirect(url_for("equipos.usuarios_lista"))
+
+
+No redirigir al dashboard en GET.
+
+Gestión de Usuarios – botón de alta
+
+Archivo: templates/equipos/usuarios_lista.html (o equivalente).
+
+Agregar un botón visible:
+
+<a class="btn btn-primary" href="{{ url_for('equipos.usuarios_nuevo') }}">+ Nuevo usuario</a>
+
+
+QA (aceptación)
+
+ En el menú Equipos no aparece “Nuevo Usuario”.
+
+ /equipos/usuarios/nuevo muestra el formulario (no manda al dashboard).
+
+ Al crear, vuelve a /equipos/usuarios con toast “Usuario creado”.
+
+ Ningún cambio en “Obras” dentro de este ticket.
+
+Ticket B — Invitación con módulos por rol (RBAC básico)
+
+Objetivo: al invitar, el rol define qué módulos ve/edita el usuario; opcionalmente se puede personalizar para ese usuario.
+
+DB
+
+role_modules(role, module, can_view bool, can_edit bool) – seed por rol.
+
+(Opcional overrides) user_modules(user_id, module, can_view, can_edit).
+
+Backend
+
+Helper current_user.can(module, action) y decorador @require_module("mod","view|edit").
+
+Las vistas/URLs de cada módulo deben usar este guard.
+
+UI – Invitar Usuario (equipos/invitar.html)
+
+Mantener Rol Asignado.
+
+Bloque “Acceso a módulos”:
+
+Toggle “Personalizar para este usuario”.
+
+OFF → muestra módulos del rol (solo lectura).
+
+ON → checkboxes Ver / Editar por módulo; guardar overrides.
+
+QA
+
+ Usuario invitado con rol ve solo los módulos de ese rol.
+
+ Si se personaliza, los overrides se respetan.
+
+ Menú oculta lo no permitido y backend responde 403 si se fuerza la URL.

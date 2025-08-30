@@ -1,0 +1,160 @@
+Objetivo:
+Cuando invito un usuario, elijo un rol y el sistema asigna módulos habilitados. Opcional: permitir personalizar los módulos solo para ese usuario. La UI oculta lo que no puede ver y el backend bloquea el acceso (no es solo visual).
+
+1) Modelo / DB
+a) Tabla de módulos por rol (recomendado)
+
+role_modules
+
+id (PK), role (enum: admin_empresa, jefe_obra, compras, operario, auditor, invitado), module (enum: obras, presupuestos, equipos, inventario, marketplaces, reportes, documentos, seguridad, configuracion), can_view bool, can_edit bool
+
+Índice único (role, module)
+
+b) Overrides por usuario (opcional)
+
+user_modules
+
+id, user_id (FK), module, can_view bool, can_edit bool
+
+Si existe registro para ese user_id+module, sobrescribe lo del rol.
+
+Si quieren algo aún más simple: en vez de user_modules, un JSON custom_modules en usuarios (nullable). Pero la tabla es más limpia.
+
+2) Servicio de permisos
+
+Helper en backend:
+
+def get_allowed_modules(user):
+    # 1) traer módulos por rol
+    role_perms = fetch_role_modules(user.role)
+    # 2) aplicar overrides si existen
+    user_over = fetch_user_modules(user.id)
+    return merge(role_perms, user_over)  # dict {module: {"view":bool, "edit":bool}}
+
+
+Decorador de guardia:
+
+def require_module(module, action="view"):
+    def wrapper(fn):
+        @wraps(fn)
+        def inner(*args, **kwargs):
+            perms = get_allowed_modules(current_user)
+            if not perms.get(module, {}).get(action, False):
+                return abort(403)
+            return fn(*args, **kwargs)
+        return inner
+    return wrapper
+
+
+Usar en endpoints y vistas:
+
+@bp.route("/inventario")
+@login_required
+@require_module("inventario", "view")
+def inventario_home(): ...
+
+3) UI – “Invitar Usuario”
+
+En la vista Invitar Usuario (la de tu captura):
+
+Mantener selector de Rol.
+
+Abajo, agregar bloque “Acceso a módulos”:
+
+Toggle: “Personalizar acceso para este usuario”.
+
+Si OFF → se muestran módulos pre-chequeados según el rol (solo lectura).
+
+Si ON → aparece un grid de checkboxes por módulo con 2 columnas: Ver y Editar (editar depende de ver).
+
+Guardar crea el usuario y persiste overrides solo si ON (sino, nada; se usa el mapping del rol).
+
+Listado de módulos a mostrar:
+
+Obras, Presupuestos, Equipos, Inventario, Marketplaces, Reportes, Documentos
+(Seguridad/Configuración solo para admin_empresa; pueden ocultarlos en la UI de invitación)
+
+4) Navbar / Menús / Páginas (Front)
+
+En Jinja, envolver cada item de menú:
+
+{% if current_user.can('obras','view') %}
+<li> ... Obras ... </li>
+{% endif %}
+
+
+En las páginas, si no tiene permiso → mostrar 403 con mensaje claro.
+
+Componentes “Acciones” (botones Editar/Eliminar): mostrar solo si can_edit del módulo.
+
+5) Defaults por rol (semillas)
+admin_empresa:
+  all modules: view+edit
+jefe_obra:
+  obras(view+edit), equipos(view+edit), inventario(view), documentos(view+edit), reportes(view)
+compras:
+  inventario(view+edit), marketplaces(view+edit), presupuestos(view+edit), documentos(view), reportes(view)
+operario:
+  equipos(view+edit), documentos(view+edit), obras(view), reportes(view)
+auditor:
+  reportes(view), documentos(view), obras(view)
+invitado:
+  obras(view), reportes(view)
+
+
+Si un módulo no figura, queda denegado por defecto.
+
+6) Backend – flujo de invitación
+
+POST /equipos/invitar body:
+
+{
+  "email": "user@dominio.com",
+  "role": "operario",
+  "customize": false,
+  "modules_override": [
+    {"module":"documentos","view":true,"edit":true},
+    {"module":"equipos","view":true,"edit":true}
+  ]
+}
+
+
+Lógica:
+
+Crear usuario con role.
+
+Si customize=true, upsert en user_modules cada override.
+
+Generar link de invitación como hoy.
+
+7) QA / Aceptación
+
+ Invitar usuario con rol → al loguear, solo ve los módulos asignados a ese rol.
+
+ Activando personalización, los módulos marcados se guardan y sobrescriben lo del rol.
+
+ Navbar y vistas ocultan lo que no tiene permiso; el backend devuelve 403 si se intenta URL directa.
+
+ Botones de edición aparecen solo cuando el usuario tiene edit en ese módulo.
+
+ Admin_empresa ve todo y puede editar permisos.
+
+8) Seguridad
+
+Chequeo de permisos en backend (no solo UI).
+
+Todo filtrado por company_id.
+
+Log cuando un admin cambia módulos de un usuario: quién, cuándo, qué módulos.
+
+9) Entregables
+
+Migraciones role_modules y user_modules + seeds de defaults por rol.
+
+Decorador require_module, helper current_user.can(module, action).
+
+Cambios en Invitar Usuario (toggle + grid).
+
+Guards en menús y vistas.
+
+2 tests: uno de 403 sin permiso y otro de override por usuario.
