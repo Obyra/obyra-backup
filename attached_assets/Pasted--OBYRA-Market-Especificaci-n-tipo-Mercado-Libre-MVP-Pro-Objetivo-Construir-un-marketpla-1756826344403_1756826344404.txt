@@ -1,0 +1,383 @@
+# OBYRA Market — Especificación tipo Mercado Libre (MVP → Pro)
+
+> Objetivo: Construir un marketplace B2B para construcción que funcione como ML (compra directa por artículo, carrito, checkout, reputación, Q\&A, envíos, comisiones), con Portal de Proveedores, Admin Backoffice y experiencia comprador empresarial.
+
+---
+
+## 1) Principios y Alcance
+
+* **Compra directa por artículo** (obligatoria en MVP): cada proveedor **publica productos individuales con precio** y stock (como ML).
+* **Seller masking (nuevo requisito)**: la **identidad del proveedor permanece oculta** hasta que la compra se confirme (pago aprobado). Antes de pagar, el comprador ve "Vendido por **OBYRA Partner**" y SLAs genéricos. Tras el pago, el sistema **emite OC** a cada proveedor con datos del cliente y muestra el nombre real del proveedor en el detalle de orden.
+* **Experiencia ML-like**: publicaciones, niveles de exposición, reputación del vendedor (visible post-compra), Q\&A en el detalle, carrito, checkout, órdenes, envíos.
+* **B2B-ready**: CUIT/razón social, factura A/B/C, percepciones, lista de precios por empresa (Pro), RFQ sólo como modo opcional por categoría (no por defecto).
+* **Modular**: pagos, envíos, comisiones, catálogo, reviews.
+* **Multi-tenant**: múltiples empresas proveedoras y múltiples empresas compradoras.
+
+---
+
+## 2) Roles y Permisos
+
+* **Buyer\_Admin / Buyer\_User**: compra, gestiona órdenes y facturas.
+* **Seller\_Admin / Seller\_Operator**: gestiona catálogo, stock, órdenes, envíos, finanzas.
+* **Backoffice\_Admin**: categorías/atributos, moderación, comisiones, disputas, liquidaciones.
+
+---
+
+## 3) Journeys principales
+
+**Comprador**: home → búsqueda/categoría → ficha de producto → agrega al carrito → checkout (datos facturación+envío) → pago → confirmación → seguimiento pedido → califica.
+
+**Proveedor**: registra tienda → completa datos fiscales/bancarios → crea productos (SKU) → publica (exposición/clásica-premium) → recibe orden → prepara y despacha → confirma entrega → cobra → responde preguntas y gestiona reclamos.
+
+**Backoffice**: aprueba tiendas (KYC), define categorías y atributos, comisiones por categoría, revisa publicaciones, resuelve disputas, liquida a proveedores.
+
+---
+
+## 4) Datos (Modelo DB inicial, Postgres)
+
+**Empresas y usuarios**
+
+* `companies(id, name, cuit, type[buyer|seller|both], iva_cond, billing_email)`
+* `users(id, company_id, name, email, role, pass_hash, is_active)`
+
+**Catálogo**
+
+* `categories(id, parent_id, name, slug, is_active)`
+* `attributes(id, category_id, name, code, data_type, is_required)`
+* `brands(id, name)`
+* `products(id, seller_company_id, name, brand_id, category_id, description_html, warranty_months, is_masked_seller default true)`
+* `product_images(id, product_id, url, position)`
+* `product_files(id, product_id, url, file_type[techsheet|manual])`
+* `product_variants(id, product_id, sku, gtin, price, currency, compare_at_price, tax_class, weight_kg, length_cm, width_cm, height_cm)`
+* `variant_attributes(id, variant_id, attr_id, value)`
+* `inventory_locations(id, seller_company_id, name, address_json)`
+* `inventories(id, variant_id, location_id, stock_on_hand, stock_reserved)`
+* `publications(id, product_id, exposure[clasica|premium], status[draft|active|paused|banned], start_at)`
+
+**Carrito / Checkout / Órdenes**
+
+* `carts(id, buyer_company_id, buyer_user_id)`
+* `cart_items(id, cart_id, variant_id, qty, price_snapshot, currency)`
+* `orders(id, buyer_company_id, buyer_user_id, status, total, currency, billing_json, shipping_json, payment_status, payment_method)`
+* `order_items(id, order_id, seller_company_id, variant_id, qty, unit_price, currency, tax_amount, commission_amount, seller_revealed boolean default false)`
+* `order_status_history(id, order_id, status, note, created_at, actor)`
+* **Nuevo – Órdenes de Compra (OC)**: `purchase_orders(id, order_id, seller_company_id, buyer_company_id, status[created|sent|ack|fulfilled], oc_number, pdf_url, sent_at)`
+
+**Envíos**
+
+* `shipments(id, order_id, seller_company_id, carrier, tracking_code, cost, status, label_url)`
+* `shipment_items(id, shipment_id, order_item_id, qty)`
+
+**Pagos y Comisiones**
+
+* `commissions(id, category_id, exposure, take_rate_pct)`
+* `fees(id, name, amount_fixed, amount_pct, applies_to)`
+* `payments(id, order_id, provider[mp|bank|manual], provider_ref, status, paid_at, amount, currency)`
+* `payouts(id, seller_company_id, cycle_month, total_gross, total_commissions, total_fees, total_net, status)`
+* `payout_items(id, payout_id, order_item_id, net_amount)`
+
+\*\*Engagement/
+
+## 5) API (REST) — rutas esenciales (Flask)
+
+**Catálogo y publicaciones**
+
+* `POST /api/sellers/{sellerId}/products` (crear producto + variantes)
+* `POST /api/products/{id}/images`
+* `POST /api/products/{id}/publish` (clasica|premium)
+* `GET /api/search?q=&cat=&brand=&attrs=&sort=` (resultado con facetas)
+* `GET /api/products/{id}` (detalle; Q\&A; reviews; reputación)
+
+**Carrito y órdenes**
+
+* `POST /api/cart/items` (variant\_id, qty)
+* `GET /api/cart` / `DELETE /api/cart/items/{id}`
+* `POST /api/checkout` (billing, shipping, method)
+* `POST /api/orders/{id}/confirm-payment` (webhook)
+* `GET /api/orders/{id}` (detalle y estado)
+
+**Envíos**
+
+* `POST /api/orders/{id}/shipments` (crear guía/envío)
+* `POST /api/shipments/{id}/tracking` (actualizar tracking)
+
+**Q\&A / Ratings**
+
+* `POST /api/products/{id}/questions`
+* `POST /api/questions/{id}/answer`
+* `POST /api/orders/{id}/rate`
+
+**Backoffice**
+
+* `POST /api/admin/categories` / `POST /api/admin/attributes`
+* `POST /api/admin/commissions` (por categoría y exposición)
+* `POST /api/admin/moderation/{publicationId}:ban|approve`
+
+**Pagos**
+
+* `POST /api/payments/mp/checkout` (crea preferencia)
+* `POST /api/payments/mp/webhook` (confirmación/estado)
+* `POST /api/admin/payouts/generate` (ciclo) / `POST /api/admin/payouts/{id}/close`
+
+---
+
+## 6) Eventos & Webhooks (event-driven)
+
+* `market.publication.created|activated|paused|banned`
+* `market.cart.updated`
+* `market.order.created|paid|cancelled|refunded`
+* `market.shipment.created|in_transit|delivered`
+* `market.rating.created`
+* `market.payout.closed`
+
+> Guardar en `event_log` y emitir vía webhook por empresa.
+
+---
+
+## 7) UX/UI (React + Tailwind + shadcn/ui)
+
+**Frontend comprador**
+
+* Home con buscador + categorías destacadas + carruseles.
+* Resultado con facetas (categoría, marca, atributos, precio, reputación, envío gratis, en 24/48h).
+* Ficha producto: galería, precio, cuotas, cálculo de envío, stock por sucursal, **vendedor oculto ("OBYRA Partner")**, Q\&A, especificaciones.
+* Carrito: items por vendedor (agrupados internamente), costos de envío separados si aplica **sin revelar proveedor**.
+* Checkout: datos empresa y facturación, dirección, método de envío, pago.
+* Mis compras: seguimiento, facturas, devoluciones, **muestra el proveedor real sólo después del pago**.
+
+**Portal Proveedor**
+
+* Dashboard: ventas, visitas, conversión, métricas de reputación.
+* Catálogo: alta/edición, **CSV bulk** (plantilla), variantes.
+* Publicaciones: estado, exposición, pausadas.
+* Órdenes: picking, impresión de etiqueta, SLA.
+* Envíos: integraciones y manual.
+* Finanzas: comisiones, liquidaciones, descargas.
+* Q\&A: bandeja, SLA de respuesta.
+
+**Backoffice**
+
+* Árbol de categorías y atributos (con previsualización de filtros).
+* Moderación de publicaciones y Q\&A.
+* Panel de comisiones y fees por categoría/exposición.
+* Disputas y devoluciones.
+* Liquidaciones a proveedores.
+
+---
+
+## 8) Comisiones y Fees (como ML, configurable)
+
+* **Por categoría y exposición**: `take_rate_pct` (p.ej., Maquinarias 8%, Materiales 12%).
+* **Exposición Premium**: +2\~4 pts porcentuales, mejor posicionamiento.
+* **Fees**: fijos por orden (p.ej., \$X) y/o % adicional para cuotas.
+* **Cálculo**: por `order_item` → sumar a `order` → descontar en `payout`.
+
+**Pseudocódigo**
+
+```text
+commission = unit_price * qty * take_rate_pct
+fee = fee_fixed + unit_price * qty * fee_pct
+net_to_seller = (unit_price * qty) - commission - fee - shipping_debit
+```
+
+---
+
+## 9) Envíos (MVP → Pro)
+
+* **MVP**: opciones "Retiro en sucursal", "Envío a cargo del comprador" y "Cálculo manual" por vendedor. Campos obligatorios: peso/dimensiones por variante.
+* **Pro**: integraciones (Andreani/OCA/Correo Argentino), tarifas en tiempo real, etiquetas desde portal, seguimiento automático, envío full (3PL) opcional.
+
+---
+
+## 10) Pagos (MVP → Pro)
+
+* **MVP**: integración con **Mercado Pago Checkout** (preferencias, webhook). OBYRA recibe el pago a su cuenta, **liquida** luego al proveedor (payout mensual/quincenal).
+* **Pro**: split automático por seller (si el proveedor tiene cuenta verificada), devoluciones parciales, conciliación bancaria.
+
+---
+
+## 11) Facturación (AR)
+
+* Datos fiscales en checkout (CUIT, IVA, IIBB).
+* Tipo de factura por seller (A/B/C).
+* Integración AFIP electrónica (pendiente; MVP con carga de factura PDF/manual).
+* Percepciones según provincia (Pro).
+
+---
+
+## 12) Búsqueda y Ranking
+
+* Indexar `publications` activas con campos: título, marca, atributos, precio, reputación, exposición, ventas.
+* **Ranking** (ponderado): relevancia texto + precio relativo + reputación + conversión + exposición + disponibilidad.
+* Facetas por categoría/atributos/marca/precio/envío.
+
+---
+
+## 13) Moderación y Calidad
+
+* Palabras prohibidas, contenido engañoso, duplicación de publicaciones.
+* SLA de respuesta en Q\&A (medido).
+* Métricas de vendedor (reputación color/escala ML-like) con límites para publicar Premium.
+
+---
+
+## 14) Seguridad & Cumplimiento
+
+* KYC de vendedores, validación bancaria, documentos.
+* Auditoría de cambios (quién, cuándo, qué).
+* Rate limiting en Q\&A y pujas de precio.
+
+---
+
+## 15) Roadmap (Hitos)
+
+**Fase 0 (2 semanas)**
+
+* Esqueleto Flask/React, auth JWT + OAuth Google, Postgres, migraciones.
+* Categorías/atributos/brands (backoffice), carga de productos y variantes, publicaciones.
+
+**Fase 1 (3–4 semanas)**
+
+* Búsqueda con facetas, ficha producto ML-like, Q\&A, carrito, checkout, MP webhook.
+* Órdenes multi-seller, comisiones básicas, portal vendedor, envíos manuales.
+
+**Fase 2 (3–4 semanas)**
+
+* Reputación, ratings, devoluciones, liquidaciones y reporte financiero.
+* CSV bulk, etiquetas de envío, mejora ranking, exposición Premium.
+
+**Fase 3 (Pro)**
+
+* Integración AFIP e integraciones de paquetería, split de pago, listas de precio por cliente, RFQ por categoría.
+
+---
+
+## 16) Criterios de Aceptación (MVP)
+
+* [ ] Un proveedor puede crear producto con variantes, imágenes, stock, peso y dimensiones.
+* [ ] Publicar en modo **Clásica** o **Premium**.
+* [ ] Un comprador busca, filtra y compra **múltiples items** (carrito) de **múltiples sellers**.
+* [ ] Pago confirmado vía webhook actualiza `orders.status = paid` y crea `payments`.
+* [ ] Se calculan comisiones por `order_item` y quedan pendientes de liquidación.
+* [ ] Portal vendedor permite marcar pedido como despachado y cargar tracking.
+* [ ] Comprador puede calificar producto y vendedor; Q\&A funciona con SLA.
+* [ ] Backoffice puede pausar/bloquear publicaciones y cambiar comisiones.
+
+---
+
+## 17) Semillas (seed) y datos de prueba
+
+* 10 categorías base (Cemento, Acero, Ladrillos, Herramientas, Maquinarias…).
+* 20 atributos comunes por categoría (p.ej., resistencia, formato, potencia, voltaje).
+* 3 sellers demo con stock realista.
+* 30 productos con 1–3 variantes cada uno, imágenes.
+
+---
+
+## 18) Plantilla CSV (bulk upload seller)
+
+```
+sku,name,brand,category,price,currency,stock,weight_kg,length_cm,width_cm,height_cm,image_urls,attr_resistencia_mpa,attr_formato
+ST-915-01,Rastreador ST-915,SinoTrack,Herramientas,79999,ARS,25,0.25,10,8,4,"url1;url2",-,-
+LO-420-MX,Proyectarte LO-420,Proyectarte,Maquinarias,15999999,ARS,2,120,120,80,100,"url1;url2","-","-"
+```
+
+---
+
+## 19) Ejemplo JSON — creación de producto
+
+```json
+{
+  "name": "Cemento Portland Bolsa 50kg",
+  "brand_id": 3,
+  "category_id": 12,
+  "description_html": "<ul><li>Alta resistencia</li><li>Obra gruesa</li></ul>",
+  "variants": [
+    {
+      "sku": "CEM50-AR-001",
+      "gtin": "779000000001",
+      "price": 12999.0,
+      "currency": "ARS",
+      "tax_class": "IVA_21",
+      "weight_kg": 50,
+      "length_cm": 60,
+      "width_cm": 40,
+      "height_cm": 15,
+      "attributes": {"resistencia_mpa": 32}
+    }
+  ],
+  "images": [
+    {"url": "https://.../cemento1.jpg", "position": 1},
+    {"url": "https://.../cemento2.jpg", "position": 2}
+  ]
+}
+```
+
+---
+
+## 20) Endpoints clave (detallados, borrador)
+
+**Search**
+
+* Query params: `q, category, brand, attrs[color=rojo;potencia=1200], price_min, price_max, sort[relevance|price_asc|price_desc|sales|rating]`.
+* Respuesta: items + facetas (counts por filtro) + paginación.
+
+**Checkout**
+
+* Entrada: carrito + `billing_json{razon_social,cuit,iva_cond}` + `shipping_json{tipo, dirección}` + `payment_method{mp, cuotas}`.
+* Salida: order\_id, payment\_url/qr.
+
+**MP Webhook**
+
+* Actualiza `payments.status`, `orders.payment_status` y `orders.status`.
+
+---
+
+## 21) Lógica de Liquidación (payout)
+
+* Cierre por ciclo (mensual/quincenal): agrupar `order_items` **entregados** – comisiones/fees → total neto por seller.
+* Generar reporte descargable (CSV/PDF) y estado `payout.closed`.
+* Conciliación: vincular pagos entrantes vs. órdenes.
+
+---
+
+## 22) Métricas y KPIs
+
+* Conversión (visita→compra), tiempo de respuesta Q\&A, cancel rate por seller, on-time delivery, ticket promedio, NPS, GMV, take rate, fill rate.
+
+---
+
+## 23) Backlog técnico (para pasar a Replit)
+
+* [ ] **Backend**: Flask app base, SQLAlchemy modelos según sección 4, Alembic migraciones.
+* [ ] Auth: JWT + Google OAuth; roles/claims por usuario.
+* [ ] Catálogo: CRUD categorías/atributos/brands; creación de producto/variantes; publicaciones.
+* [ ] Search: endpoint con filtros y facetas (usar Postgres + trigram o Elastic en Pro).
+* [ ] Carrito/Checkout/Órdenes multi-seller; cálculo de comisiones; MP preferencia + webhook.
+* [ ] Envíos manuales; impresión etiqueta simple.
+* [ ] Portal seller (React): catálogo, órdenes, envíos, finanzas; CSV import.
+* [ ] Backoffice: comisiones, moderación publicaciones/Q\&A.
+* [ ] Ratings/Reputación; Q\&A bandeja seller con SLA.
+* [ ] Liquidaciones (payouts) y reportes.
+
+---
+
+## 24) Notas de implementación
+
+* **Atributos por categoría**: definen facetas y validación en alta.
+* **Publicación Premium**: boost de ranking y badges.
+* **RFQ**: desactivado por defecto. Habilitar por categoría de alto ticket (p.ej., maquinarias).
+* **Precios ARS/USD**: almacenar en moneda nativa + tabla de tipos de cambio si hace falta.
+* **Escalabilidad**: colas (Celery/Redis) para indexar búsqueda, webhooks, emails, generación de etiquetas y conciliaciones.
+
+---
+
+## 25) Definición “hecho” (DoD)
+
+* Código con tests básicos (Pytest/Vitest), linters, `.env` y docs de despliegue.
+* Datos seed reproducibles.
+* Demo operativa: crear producto → publicar → comprar (checkout MP sandbox) → marca pago → genera orden → despacho → calificación → liquidación.
+
+---
+
+### Fin — Este documento es el blueprint vivo del módulo **OBYRA Market**. Ajustar comisiones, categorías y flujos según feedback real de proveedores y constructoras.
