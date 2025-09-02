@@ -70,6 +70,9 @@ from supplier_auth import supplier_auth_bp
 from supplier_portal import supplier_portal_bp
 from market import market_bp
 
+# MARKETPLACE MODULE - Following strict instructions
+from marketplace.routes import bp as marketplace_bp
+
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(obras_bp, url_prefix='/obras')
 app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
@@ -93,20 +96,8 @@ app.register_blueprint(supplier_auth_bp)  # Ya tiene prefix '/proveedor'
 app.register_blueprint(supplier_portal_bp)  # Ya tiene prefix '/proveedor'
 app.register_blueprint(market_bp)  # Ya tiene prefix '/market'
 
-# Registrar nuevos blueprints del marketplace mejorado
-from marketplace import marketplace_bp
-from cart import cart_bp
-from orders import orders_bp
-
-app.register_blueprint(marketplace_bp)  # Ya tiene prefix /market
-app.register_blueprint(cart_bp)  # Ya tiene prefix /cart
-app.register_blueprint(orders_bp)  # Ya tiene prefix /orders
-
-# Registrar nuevo marketplace completo
-from marketplace_new import marketplace_new_bp
-from marketplace_payments import payments_bp
-app.register_blueprint(marketplace_new_bp, url_prefix='/market')
-app.register_blueprint(payments_bp)
+# MARKETPLACE MODULE - Register as per strict instructions
+app.register_blueprint(marketplace_bp, url_prefix="/")
 app.register_blueprint(events_bp)  # Sistema de eventos
 app.register_blueprint(reports_bp)  # Sistema de reportes PDF
 
@@ -246,11 +237,52 @@ with app.app_context():
     except Exception as e:
         print(f"⚠️ RBAC seeding skipped: {e}")
     
-    # Initialize marketplace tables
+    # Initialize marketplace tables (isolated mk_ tables)
     try:
-        from init_marketplace import init_marketplace_db
-        init_marketplace_db()
-        print("🏪 Marketplace initialized successfully")
+        from marketplace.models import MkProduct, MkProductVariant, MkCart, MkCartItem, MkOrder, MkOrderItem, MkPayment, MkPurchaseOrder, MkCommission
+        
+        # Create marketplace tables only
+        MkProduct.__table__.create(db.engine, checkfirst=True)
+        MkProductVariant.__table__.create(db.engine, checkfirst=True)
+        MkCart.__table__.create(db.engine, checkfirst=True)
+        MkCartItem.__table__.create(db.engine, checkfirst=True)
+        MkOrder.__table__.create(db.engine, checkfirst=True)
+        MkOrderItem.__table__.create(db.engine, checkfirst=True)
+        MkPayment.__table__.create(db.engine, checkfirst=True)
+        MkPurchaseOrder.__table__.create(db.engine, checkfirst=True)
+        MkCommission.__table__.create(db.engine, checkfirst=True)
+        
+        # Seed basic marketplace data
+        if not MkCommission.query.first():
+            commission_rates = [
+                MkCommission(category_id=1, exposure='standard', take_rate_pct=10.0),
+                MkCommission(category_id=1, exposure='premium', take_rate_pct=12.0),
+            ]
+            for commission in commission_rates:
+                db.session.add(commission)
+            
+            # Demo products
+            demo_product = MkProduct(
+                seller_company_id=1,
+                name="Cemento Portland 50kg",
+                category_id=1,
+                description_html="<p>Cemento Portland de alta calidad</p>",
+                is_masked_seller=True
+            )
+            db.session.add(demo_product)
+            db.session.flush()
+            
+            demo_variant = MkProductVariant(
+                product_id=demo_product.id,
+                sku="CEM-PORT-50KG",
+                price=8999.0,
+                currency="ARS",
+                stock_qty=100
+            )
+            db.session.add(demo_variant)
+            db.session.commit()
+        
+        print("🏪 Marketplace tables created and seeded successfully")
     except Exception as e:
         print(f"⚠️ Marketplace initialization skipped: {e}")
     

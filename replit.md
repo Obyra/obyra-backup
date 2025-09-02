@@ -76,6 +76,15 @@ The platform adopts a modular, blueprint-based architecture built on Flask, emph
     - Comprehensive product catalog with variants, images, and specifications.
     - PDF purchase order generation using ReportLab with email notifications.
     - Role-based access (buyers, sellers, backoffice admin).
+- **OBYRA Marketplace - Complete B2B ML-like Implementation**:
+    - Isolated module in marketplace/ directory with mk_ prefixed tables
+    - Complete seller masking in public endpoints (shows "OBYRA Partner")
+    - Real seller information revealed only in cart/checkout/orders for authenticated users
+    - Commission calculation system with category-based rates
+    - PDF purchase order generation using ReportLab with automatic email notifications
+    - MercadoPago webhook integration for payment processing
+    - Multi-seller cart and checkout with automatic PO generation per seller
+    - Complete API contract implementation following ML specifications
 - **Interactive Map (Ongoing)**:
     - Integration attempts with Leaflet for project location visualization, currently facing rendering issues. Backend for coordinates and Open-Meteo API for weather data is functional.
 
