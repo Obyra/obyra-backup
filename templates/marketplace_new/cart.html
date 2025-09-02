@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Carrito de Compras - OBYRA Market{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">
+                <i class="fas fa-shopping-cart me-2"></i>Carrito de Compras
+            </h1>
+        </div>
+    </div>
+    
+    {% if cart.items %}
+    <div class="row">
+        <!-- Items del carrito -->
+        <div class="col-lg-8">
+            {% for seller_id, seller_items in items_by_seller.items() %}
+            {% set seller_company = seller_items[0].variant.product.seller %}
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-store me-2"></i>
+                            {% if seller_items[0].variant.product.is_masked_seller %}
+                            <strong>OBYRA Partner</strong>
+                            <small class="text-muted ms-2">Vendedor verificado</small>
+                            {% else %}
+                            <strong>{{ seller_company.name }}</strong>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">{{ seller_items|length }} producto{% if seller_items|length != 1 %}s{% endif %}</small>
+                    </div>
+                </div>
+                
+                <div class="card-body p-0">
+                    {% for item in seller_items %}
+                    <div class="cart-item p-4 {% if not loop.last %}border-bottom{% endif %}">
+                        <div class="row align-items-center">
+                            <!-- Imagen del producto -->
+                            <div class="col-2">
+                                <div class="product-image-small bg-light d-flex align-items-center justify-content-center rounded"
+                                     style="width: 80px; height: 80px;">
+                                    {% if item.variant.product.images %}
+                                    <img src="{{ item.variant.product.images[0].url }}" 
+                                         alt="{{ item.variant.product.name }}"
+                                         class="img-fluid" style="max-width: 100%; max-height: 100%; object-fit: cover;">
+                                    {% else %}
+                                    <i class="fas fa-image text-muted"></i>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Información del producto -->
+                            <div class="col-5">
+                                <h6 class="mb-1">
+                                    <a href="{{ url_for('marketplace_new.product_detail', product_id=item.variant.product.id) }}"
+                                       class="text-decoration-none">
+                                        {{ item.variant.product.name }}
+                                    </a>
+                                </h6>
+                                <small class="text-muted">SKU: {{ item.variant.sku }}</small>
+                                {% if item.variant.product.brand %}
+                                <div class="small text-muted">{{ item.variant.product.brand.name }}</div>
+                                {% endif %}
+                                
+                                <!-- Stock disponible -->
+                                <div class="mt-2">
+                                    {% if item.variant.available_stock >= item.qty %}
+                                    <small class="text-success">
+                                        <i class="fas fa-check-circle me-1"></i>Disponible
+                                    </small>
+                                    {% else %}
+                                    <small class="text-danger">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Stock limitado
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Cantidad -->
+                            <div class="col-2">
+                                <div class="quantity-controls">
+                                    <div class="input-group input-group-sm">
+                                        <button class="btn btn-outline-secondary" type="button"
+                                                onclick="updateQuantity({{ item.id }}, {{ item.qty - 1 }})">
+                                            <i class="fas fa-minus"></i>
+                                        </button>
+                                        <input type="number" class="form-control text-center" 
+                                               value="{{ item.qty }}" min="1" max="{{ item.variant.available_stock }}"
+                                               onchange="updateQuantity({{ item.id }}, this.value)">
+                                        <button class="btn btn-outline-secondary" type="button"
+                                                onclick="updateQuantity({{ item.id }}, {{ item.qty + 1 }})"
+                                                {% if item.qty >= item.variant.available_stock %}disabled{% endif %}>
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Precio -->
+                            <div class="col-2">
+                                <div class="text-end">
+                                    <div class="h6 mb-1">
+                                        ${{ "{:,.0f}".format(item.total_price) }}
+                                    </div>
+                                    <small class="text-muted">
+                                        ${{ "{:,.0f}".format(item.price_snapshot) }} c/u
+                                    </small>
+                                </div>
+                            </div>
+                            
+                            <!-- Acciones -->
+                            <div class="col-1">
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="removeFromCart({{ item.id }})"
+                                        title="Eliminar del carrito">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Continuar comprando -->
+            <div class="mb-4">
+                <a href="{{ url_for('marketplace_new.search') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left me-1"></i>Continuar Comprando
+                </a>
+            </div>
+        </div>
+        
+        <!-- Resumen del pedido -->
+        <div class="col-lg-4">
+            <div class="card position-sticky" style="top: 2rem;">
+                <div class="card-header">
+                    <h5 class="mb-0">Resumen del Pedido</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Items count -->
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Productos ({{ cart.items|length }})</span>
+                        <span>${{ "{:,.0f}".format(cart.total_amount) }}</span>
+                    </div>
+                    
+                    <!-- Shipping note -->
+                    <div class="alert alert-info small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Los costos de envío se calcularán en el checkout según el proveedor y destino.
+                    </div>
+                    
+                    <!-- Total -->
+                    <hr>
+                    <div class="d-flex justify-content-between mb-3">
+                        <strong>Total Estimado:</strong>
+                        <strong class="text-primary">${{ "{:,.0f}".format(cart.total_amount) }} ARS</strong>
+                    </div>
+                    
+                    <!-- Checkout button -->
+                    <a href="{{ url_for('marketplace_new.checkout') }}" class="btn btn-primary w-100 btn-lg">
+                        <i class="fas fa-credit-card me-2"></i>Proceder al Checkout
+                    </a>
+                    
+                    <!-- Security badges -->
+                    <div class="text-center mt-3">
+                        <small class="text-muted">
+                            <i class="fas fa-shield-alt me-1"></i>Compra 100% segura y protegida
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- Carrito vacío -->
+    <div class="row">
+        <div class="col-12">
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-shopping-cart fa-5x text-muted"></i>
+                </div>
+                <h4>Tu carrito está vacío</h4>
+                <p class="text-muted mb-4">Explora nuestros productos y encuentra lo que necesitas para tu proyecto.</p>
+                <a href="{{ url_for('marketplace_new.search') }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-search me-2"></i>Explorar Productos
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateQuantity(itemId, newQty) {
+    if (newQty < 1) {
+        removeFromCart(itemId);
+        return;
+    }
+    
+    // TODO: Implement quantity update API
+    console.log('Update quantity for item', itemId, 'to', newQty);
+}
+
+function removeFromCart(itemId) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este producto del carrito?')) {
+        return;
+    }
+    
+    fetch(`/market/api/cart/remove/${itemId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            // Reload page to update cart
+            window.location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al eliminar el producto del carrito');
+    });
+}
+
+// Auto-save quantity changes with debounce
+let quantityTimeout;
+function debounceQuantityUpdate(itemId, newQty) {
+    clearTimeout(quantityTimeout);
+    quantityTimeout = setTimeout(() => {
+        updateQuantity(itemId, newQty);
+    }, 500);
+}
+</script>
+
+<style>
+.cart-item:hover {
+    background-color: #f8f9fa;
+}
+
+.product-image-small {
+    background: linear-gradient(45deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%);
+    background-size: 10px 10px;
+}
+
+.quantity-controls input {
+    width: 60px;
+}
+
+.quantity-controls .input-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .cart-item .row {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .cart-item .col-2,
+    .cart-item .col-5,
+    .cart-item .col-1 {
+        flex: 0 0 auto;
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+}
+</style>
+{% endblock %}

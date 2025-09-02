@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Pago Exitoso - OBYRA Market{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card text-center">
+                <div class="card-body py-5">
+                    <!-- Success Icon -->
+                    <div class="success-icon mb-4">
+                        <i class="fas fa-check-circle fa-5x text-success"></i>
+                    </div>
+                    
+                    <!-- Title -->
+                    <h1 class="h3 text-success mb-3">¡Pago Exitoso!</h1>
+                    <p class="lead mb-4">Tu orden ha sido procesada correctamente</p>
+                    
+                    <!-- Order Details -->
+                    {% if order %}
+                    <div class="order-summary bg-light rounded p-4 mb-4">
+                        <div class="row text-start">
+                            <div class="col-sm-6">
+                                <strong>Número de Orden:</strong><br>
+                                <span class="text-primary">{{ order.order_number }}</span>
+                            </div>
+                            <div class="col-sm-6">
+                                <strong>Total Pagado:</strong><br>
+                                <span class="h5 text-success">${{ "{:,.0f}".format(order.total) }} {{ order.currency }}</span>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-3">
+                        
+                        <div class="row text-start">
+                            <div class="col-sm-6">
+                                <strong>Fecha:</strong><br>
+                                {{ order.created_at.strftime('%d/%m/%Y %H:%M') }}
+                            </div>
+                            <div class="col-sm-6">
+                                <strong>Estado:</strong><br>
+                                <span class="badge bg-success">Pagado</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Next Steps -->
+                    <div class="next-steps mb-4">
+                        <h5 class="mb-3">¿Qué sigue ahora?</h5>
+                        <div class="row text-start">
+                            <div class="col-12 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-file-invoice text-primary me-3 mt-1"></i>
+                                    <div>
+                                        <strong>Órdenes de Compra Generadas</strong><br>
+                                        <small class="text-muted">
+                                            Se han enviado automáticamente las órdenes de compra a cada proveedor con todos los detalles de tu pedido.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-envelope text-primary me-3 mt-1"></i>
+                                    <div>
+                                        <strong>Confirmación por Email</strong><br>
+                                        <small class="text-muted">
+                                            Recibirás un email de confirmación con todos los detalles de tu compra y las órdenes generadas.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-truck text-primary me-3 mt-1"></i>
+                                    <div>
+                                        <strong>Preparación del Envío</strong><br>
+                                        <small class="text-muted">
+                                            Los proveedores prepararán tu pedido y te contactarán para coordinar la entrega.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <a href="{{ url_for('marketplace_new.orders') }}" class="btn btn-primary btn-lg me-3">
+                            <i class="fas fa-list me-2"></i>Ver Mis Órdenes
+                        </a>
+                        <a href="{{ url_for('marketplace_new.home') }}" class="btn btn-outline-primary btn-lg">
+                            <i class="fas fa-home me-2"></i>Volver al Market
+                        </a>
+                    </div>
+                    
+                    <!-- Support Info -->
+                    <div class="support-info mt-5 pt-4 border-top">
+                        <h6 class="mb-3">¿Necesitas ayuda?</h6>
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-headset me-2"></i>
+                            Nuestro equipo de soporte está disponible 24/7 para ayudarte con cualquier consulta sobre tu pedido.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-confetti animation
+document.addEventListener('DOMContentLoaded', function() {
+    // Simple confetti effect (optional)
+    setTimeout(() => {
+        const successIcon = document.querySelector('.success-icon i');
+        successIcon.style.animation = 'pulse 1s ease-in-out';
+    }, 500);
+});
+</script>
+
+<style>
+.success-icon {
+    animation: fadeInScale 0.8s ease-out;
+}
+
+@keyframes fadeInScale {
+    0% {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.order-summary {
+    border-left: 4px solid var(--bs-success);
+}
+
+.next-steps .fas {
+    width: 20px;
+}
+
+.action-buttons .btn {
+    min-width: 180px;
+}
+
+@media (max-width: 576px) {
+    .action-buttons .btn {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    .action-buttons .btn:last-child {
+        margin-bottom: 0;
+    }
+}
+</style>
+{% endblock %}

@@ -26,4 +26,5 @@ dependencies = [
     "weasyprint>=66.0",
     "matplotlib>=3.10.5",
     "pillow>=11.3.0",
+    "mercadopago>=2.3.0",
 ]

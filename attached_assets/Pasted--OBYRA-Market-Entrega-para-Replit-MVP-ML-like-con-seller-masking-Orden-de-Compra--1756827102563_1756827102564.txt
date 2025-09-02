@@ -1,0 +1,530 @@
+# OBYRA Market — Entrega para Replit (MVP ML‑like con **seller masking** + **Orden de Compra**)
+
+> Documento técnico y paquete de trabajo para implementar **OBYRA Market** tipo Mercado Libre con **vendedor oculto hasta pago** y **emisión automática de OC por proveedor**. Incluye estructura de proyecto, variables, migraciones (Alembic), modelos (SQLAlchemy), endpoints (Flask), webhook de pago (Mercado Pago), generación de PDF de OC (ReportLab) y esqueleto de frontend (React + Vite + Tailwind + shadcn/ui).
+
+---
+
+## 0) Requisitos y Alcance (MVP)
+
+* **Compra directa con precio por artículo** (sin RFQ por defecto).
+* **Seller masking**: en *search/detalle/carrito/checkout* se muestra “**OBYRA Partner**”; el nombre real del proveedor se revela **sólo después del pago**.
+* **Pago** con **Mercado Pago Checkout** → al aprobarse: `orders.status = paid` + **OC** por seller (PDF) con datos de cliente y envío → email a proveedor y confirmación a comprador.
+* **Multi-seller** en una sola orden (carrito): se generan **N OCs** (una por proveedor).
+* **Comisiones** configurables por categoría/exposición. **Liquidación** (payout) fuera de alcance operativo en MVP, pero con tablas listas.
+
+---
+
+## 1) Variables de entorno (.env)
+
+```
+# Flask / DB
+FLASK_ENV=development
+SECRET_KEY=change_this
+DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/obyra
+CORS_ORIGINS=*
+
+# JWT
+JWT_SECRET_KEY=change_this_too
+
+# Mercado Pago
+MP_ACCESS_TOKEN=YOUR_MP_ACCESS_TOKEN
+MP_WEBHOOK_PUBLIC_URL=https://<ngrok_or_domain>/api/payments/mp/webhook
+
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=notificaciones@obyra.com
+SMTP_PASSWORD=app_password
+FROM_EMAIL=OBYRA <notificaciones@obyra.com>
+
+# Archivos
+STORAGE_DIR=./storage
+BASE_URL=http://localhost:5000
+```
+
+---
+
+## 2) Estructura de carpetas
+
+```
+obyra-market/
+├─ backend/
+│  ├─ app.py
+│  ├─ config.py
+│  ├─ extensions.py
+│  ├─ wsgi.py
+│  ├─ models/
+│  │  ├─ __init__.py
+│  │  ├─ core.py            # companies, users
+│  │  ├─ catalog.py         # categories, attributes, brands, products, variants
+│  │  ├─ commerce.py        # carts, orders, order_items, payments, commissions
+│  │  ├─ shipping.py        # shipments
+│  │  └─ accounting.py      # purchase_orders, payouts, invoices
+│  ├─ routes/
+│  │  ├─ catalog.py
+│  │  ├─ cart.py
+│  │  ├─ orders.py
+│  │  ├─ payments.py
+│  │  ├─ admin.py
+│  │  └─ qna.py
+│  ├─ services/
+│  │  ├─ search_service.py
+│  │  ├─ commission_service.py
+│  │  ├─ po_service.py      # genera PDF OC con ReportLab
+│  │  └─ email_service.py
+│  ├─ migrations/
+│  │  ├─ env.py
+│  │  ├─ script.py.mako
+│  │  └─ versions/
+│  │     └─ 2025_09_02_0001_initial.py
+│  ├─ seeds/
+│  │  └─ seed_demo.py
+│  ├─ utils/
+│  │  └─ json_utils.py
+│  ├─ requirements.txt
+│  └─ README.md
+└─ frontend/
+   ├─ index.html
+   ├─ package.json
+   ├─ vite.config.ts
+   └─ src/
+      ├─ main.tsx
+      ├─ App.tsx
+      ├─ lib/api.ts
+      ├─ store/
+      │  ├─ authStore.ts
+      │  └─ cartStore.ts
+      ├─ pages/
+      │  ├─ Home.tsx
+      │  ├─ Search.tsx
+      │  ├─ ProductDetail.tsx
+      │  ├─ Cart.tsx
+      │  ├─ Checkout.tsx
+      │  └─ Orders.tsx
+      └─ components/
+         ├─ ProductCard.tsx
+         └─ MaskedSeller.tsx
+```
+
+---
+
+## 3) requirements.txt (backend)
+
+```
+Flask==3.0.3
+Flask-CORS==4.0.0
+Flask-JWT-Extended==4.6.0
+SQLAlchemy==2.0.30
+psycopg[binary]==3.2.1
+alembic==1.13.2
+marshmallow==3.21.1
+mercadopago==2.2.3
+reportlab==4.2.2
+python-dotenv==1.0.1
+```
+
+---
+
+## 4) config.py
+
+```python
+import os
+
+class Config:
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+    SQLALCHEMY_ECHO = False
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change")
+    SECRET_KEY = os.getenv("SECRET_KEY", "change")
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+    STORAGE_DIR = os.getenv("STORAGE_DIR", "./storage")
+    BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
+
+    # MP
+    MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+    MP_WEBHOOK_PUBLIC_URL = os.getenv("MP_WEBHOOK_PUBLIC_URL")
+
+    # SMTP
+    SMTP_HOST = os.getenv("SMTP_HOST")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER = os.getenv("SMTP_USER")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+    FROM_EMAIL = os.getenv("FROM_EMAIL")
+```
+
+---
+
+## 5) extensions.py
+
+```python
+from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager
+from flask_cors import CORS
+
+db = SQLAlchemy()
+jwt = JWTManager()
+
+def init_extensions(app):
+    CORS(app, resources={r"/*": {"origins": app.config["CORS_ORIGINS"]}})
+    db.init_app(app)
+    jwt.init_app(app)
+```
+
+---
+
+## 6) app.py / wsgi.py
+
+```python
+from flask import Flask
+from config import Config
+from extensions import init_extensions, db
+from routes.catalog import bp as catalog_bp
+from routes.cart import bp as cart_bp
+from routes.orders import bp as orders_bp
+from routes.payments import bp as payments_bp
+from routes.admin import bp as admin_bp
+from routes.qna import bp as qna_bp
+import os
+
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    init_extensions(app)
+
+    # Blueprints
+    app.register_blueprint(catalog_bp, url_prefix="/api")
+    app.register_blueprint(cart_bp, url_prefix="/api")
+    app.register_blueprint(orders_bp, url_prefix="/api")
+    app.register_blueprint(payments_bp, url_prefix="/api")
+    app.register_blueprint(admin_bp, url_prefix="/api")
+    app.register_blueprint(qna_bp, url_prefix="/api")
+
+    # Crear storage
+    os.makedirs(app.config["STORAGE_DIR"], exist_ok=True)
+    os.makedirs(f"{app.config['STORAGE_DIR']}/po", exist_ok=True)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    return app
+
+app = create_app()
+```
+
+`wsgi.py`:
+
+```python
+from app import app as application
+```
+
+---
+
+## 7) Modelos (SQLAlchemy) — **core.py**
+
+```python
+from datetime import datetime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Integer, ForeignKey, Boolean, DateTime
+from extensions import db
+
+class Company(db.Model):
+    __tablename__ = "companies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    cuit: Mapped[str] = mapped_column(String(20))
+    type: Mapped[str] = mapped_column(String(10))  # buyer|seller|both
+    iva_cond: Mapped[str] = mapped_column(String(50), default="RI")
+    billing_email: Mapped[str] = mapped_column(String(200))
+
+class User(db.Model):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(200), unique=True)
+    role: Mapped[str] = mapped_column(String(40))
+    pass_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+```
+
+---
+
+## 8) Modelos — **catalog.py**
+
+```python
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Integer, ForeignKey, Boolean, Float, DateTime
+from extensions import db
+
+class Category(db.Model):
+    __tablename__ = "categories"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(160))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class Brand(db.Model):
+    __tablename__ = "brands"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+
+class Product(db.Model):
+    __tablename__ = "products"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    seller_company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id"), nullable=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    description_html: Mapped[str | None] = mapped_column()
+    warranty_months: Mapped[int] = mapped_column(Integer, default=0)
+    is_masked_seller: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class ProductVariant(db.Model):
+    __tablename__ = "product_variants"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    sku: Mapped[str] = mapped_column(String(80), unique=True)
+    gtin: Mapped[str | None] = mapped_column(String(40))
+    price: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(10), default="ARS")
+    tax_class: Mapped[str] = mapped_column(String(30), default="IVA_21")
+    weight_kg: Mapped[float | None] = mapped_column(Float)
+    length_cm: Mapped[float | None] = mapped_column(Float)
+    width_cm: Mapped[float | None] = mapped_column(Float)
+    height_cm: Mapped[float | None] = mapped_column(Float)
+
+class Publication(db.Model):
+    __tablename__ = "publications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    exposure: Mapped[str] = mapped_column(String(20), default="clasica")
+    status: Mapped[str] = mapped_column(String(20), default="active")  # draft|active|paused|banned
+```
+
+---
+
+## 9) Modelos — **commerce.py**
+
+```python
+from datetime import datetime
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Integer, ForeignKey, Boolean, Float, DateTime
+from extensions import db
+
+class Cart(db.Model):
+    __tablename__ = "carts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    buyer_company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    buyer_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+class CartItem(db.Model):
+    __tablename__ = "cart_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cart_id: Mapped[int] = mapped_column(ForeignKey("carts.id"))
+    variant_id: Mapped[int] = mapped_column(ForeignKey("product_variants.id"))
+    qty: Mapped[int] = mapped_column(Integer)
+    price_snapshot: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(10))
+
+class Order(db.Model):
+    __tablename__ = "orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    buyer_company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    buyer_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="created")  # created|paid|cancelled|fulfilled
+    total: Mapped[float] = mapped_column(Float, default=0)
+    currency: Mapped[str] = mapped_column(String(10), default="ARS")
+    billing_json: Mapped[str] = mapped_column()
+    shipping_json: Mapped[str] = mapped_column()
+    payment_status: Mapped[str] = mapped_column(String(20), default="pending")
+    payment_method: Mapped[str | None] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class OrderItem(db.Model):
+    __tablename__ = "order_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    seller_company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    variant_id: Mapped[int] = mapped_column(ForeignKey("product_variants.id"))
+    qty: Mapped[int] = mapped_column(Integer)
+    unit_price: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(10))
+    tax_amount: Mapped[float] = mapped_column(Float, default=0)
+    commission_amount: Mapped[float] = mapped_column(Float, default=0)
+    seller_revealed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class Payment(db.Model):
+    __tablename__ = "payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    provider: Mapped[str] = mapped_column(String(20), default="mp")
+    provider_ref: Mapped[str | None] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|approved|rejected
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    currency: Mapped[str] = mapped_column(String(10), default="ARS")
+```
+
+---
+
+## 10) Modelos — **accounting.py** (OC + Payout)
+
+```python
+from datetime import datetime
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Integer, ForeignKey, Float, DateTime
+from extensions import db
+
+class PurchaseOrder(db.Model):
+    __tablename__ = "purchase_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    seller_company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    buyer_company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    status: Mapped[str] = mapped_column(String(20), default="created")  # created|sent|ack|fulfilled
+    oc_number: Mapped[str] = mapped_column(String(30))
+    pdf_url: Mapped[str] = mapped_column(String(400))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+```
+
+---
+
+## 11) Migración Alembic — **versions/2025\_09\_02\_0001\_initial.py**
+
+> Crear todas las tablas mínimas del MVP.
+
+```python
+from alembic import op
+import sqlalchemy as sa
+
+# revision identifiers
+revision = '2025_09_02_0001'
+down_revision = None
+branch_labels = None
+depends_on = None
+
+def upgrade():
+    op.create_table('companies',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('name', sa.String(200)),
+        sa.Column('cuit', sa.String(20)),
+        sa.Column('type', sa.String(10)),
+        sa.Column('iva_cond', sa.String(50)),
+        sa.Column('billing_email', sa.String(200)),
+    )
+    op.create_table('users',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('name', sa.String(120)),
+        sa.Column('email', sa.String(200), unique=True),
+        sa.Column('role', sa.String(40)),
+        sa.Column('pass_hash', sa.String(255)),
+        sa.Column('is_active', sa.Boolean, default=True),
+        sa.Column('created_at', sa.DateTime),
+    )
+    op.create_table('categories',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('parent_id', sa.Integer, sa.ForeignKey('categories.id'), nullable=True),
+        sa.Column('name', sa.String(120)),
+        sa.Column('slug', sa.String(160)),
+        sa.Column('is_active', sa.Boolean, default=True),
+    )
+    op.create_table('brands',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('name', sa.String(120)),
+    )
+    op.create_table('products',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('seller_company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('name', sa.String(200)),
+        sa.Column('brand_id', sa.Integer, sa.ForeignKey('brands.id'), nullable=True),
+        sa.Column('category_id', sa.Integer, sa.ForeignKey('categories.id')),
+        sa.Column('description_html', sa.Text),
+        sa.Column('warranty_months', sa.Integer, server_default='0'),
+        sa.Column('is_masked_seller', sa.Boolean, server_default=sa.text('true')),
+    )
+    op.create_table('product_variants',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('product_id', sa.Integer, sa.ForeignKey('products.id')),
+        sa.Column('sku', sa.String(80), unique=True),
+        sa.Column('gtin', sa.String(40)),
+        sa.Column('price', sa.Float),
+        sa.Column('currency', sa.String(10), server_default='ARS'),
+        sa.Column('tax_class', sa.String(30), server_default='IVA_21'),
+        sa.Column('weight_kg', sa.Float),
+        sa.Column('length_cm', sa.Float),
+        sa.Column('width_cm', sa.Float),
+        sa.Column('height_cm', sa.Float),
+    )
+    op.create_table('publications',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('product_id', sa.Integer, sa.ForeignKey('products.id')),
+        sa.Column('exposure', sa.String(20), server_default='clasica'),
+        sa.Column('status', sa.String(20), server_default='active'),
+    )
+    op.create_table('carts',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('buyer_company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('buyer_user_id', sa.Integer, sa.ForeignKey('users.id')),
+    )
+    op.create_table('cart_items',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('cart_id', sa.Integer, sa.ForeignKey('carts.id')),
+        sa.Column('variant_id', sa.Integer, sa.ForeignKey('product_variants.id')),
+        sa.Column('qty', sa.Integer),
+        sa.Column('price_snapshot', sa.Float),
+        sa.Column('currency', sa.String(10)),
+    )
+    op.create_table('orders',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('buyer_company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('buyer_user_id', sa.Integer, sa.ForeignKey('users.id')),
+        sa.Column('status', sa.String(20), server_default='created'),
+        sa.Column('total', sa.Float, server_default='0'),
+        sa.Column('currency', sa.String(10), server_default='ARS'),
+        sa.Column('billing_json', sa.Text),
+        sa.Column('shipping_json', sa.Text),
+        sa.Column('payment_status', sa.String(20), server_default='pending'),
+        sa.Column('payment_method', sa.String(30)),
+        sa.Column('created_at', sa.DateTime),
+    )
+    op.create_table('order_items',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('order_id', sa.Integer, sa.ForeignKey('orders.id')),
+        sa.Column('seller_company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('variant_id', sa.Integer, sa.ForeignKey('product_variants.id')),
+        sa.Column('qty', sa.Integer),
+        sa.Column('unit_price', sa.Float),
+        sa.Column('currency', sa.String(10)),
+        sa.Column('tax_amount', sa.Float, server_default='0'),
+        sa.Column('commission_amount', sa.Float, server_default='0'),
+        sa.Column('seller_revealed', sa.Boolean, server_default=sa.text('false')),
+    )
+    op.create_table('payments',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('order_id', sa.Integer, sa.ForeignKey('orders.id')),
+        sa.Column('provider', sa.String(20), server_default='mp'),
+        sa.Column('provider_ref', sa.String(80)),
+        sa.Column('status', sa.String(20), server_default='pending'),
+        sa.Column('paid_at', sa.DateTime),
+        sa.Column('amount', sa.Float, server_default='0'),
+        sa.Column('currency', sa.String(10), server_default='ARS'),
+    )
+    op.create_table('purchase_orders',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('order_id', sa.Integer, sa.ForeignKey('orders.id')),
+        sa.Column('seller_company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('buyer_company_id', sa.Integer, sa.ForeignKey('companies.id')),
+        sa.Column('status', sa.String(20), server_default='created'),
+        sa.Column('oc_number', sa.String(30)),
+        sa.Column('pdf_url', sa.String(400)),
+        sa.Column('sent_at', sa.DateTime),
+    )
+
+def downgrade():
+    for t in [
+        'purchase_orders','payment
+```

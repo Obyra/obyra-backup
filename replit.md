@@ -67,11 +67,15 @@ The platform adopts a modular, blueprint-based architecture built on Flask, emph
 - **Predefined Tasks System**:
     - Comprehensive task definitions for 13 construction stages.
     - Automatic task creation when stages are added, with smart suggestions.
-- **Marketplaces Module**:
-    - Provider search and quotation management system.
-    - Advanced search functionality (category, location, rating).
-    - Real-time JSON API for provider search.
-    - Structured categories (materials, equipment, services, professionals).
+- **OBYRA Market - Comprehensive B2B Marketplace**:
+    - Complete ML-like B2B marketplace with seller masking until payment confirmation.
+    - Multi-seller cart and checkout system with automated purchase order generation.
+    - MercadoPago payment integration with webhook-based order confirmation.
+    - Commission system by category and exposure level (classic/premium).
+    - Q&A system for products with seller notifications.
+    - Comprehensive product catalog with variants, images, and specifications.
+    - PDF purchase order generation using ReportLab with email notifications.
+    - Role-based access (buyers, sellers, backoffice admin).
 - **Interactive Map (Ongoing)**:
     - Integration attempts with Leaflet for project location visualization, currently facing rendering issues. Backend for coordinates and Open-Meteo API for weather data is functional.
 

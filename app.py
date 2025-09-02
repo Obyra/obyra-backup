@@ -101,6 +101,12 @@ from orders import orders_bp
 app.register_blueprint(marketplace_bp)  # Ya tiene prefix /market
 app.register_blueprint(cart_bp)  # Ya tiene prefix /cart
 app.register_blueprint(orders_bp)  # Ya tiene prefix /orders
+
+# Registrar nuevo marketplace completo
+from marketplace_new import marketplace_new_bp
+from marketplace_payments import payments_bp
+app.register_blueprint(marketplace_new_bp, url_prefix='/market')
+app.register_blueprint(payments_bp)
 app.register_blueprint(events_bp)  # Sistema de eventos
 app.register_blueprint(reports_bp)  # Sistema de reportes PDF
 
@@ -231,6 +237,7 @@ with app.app_context():
 
     # Create all tables
     db.create_all()
+    
     # Initialize RBAC permissions
     try:
         from models import seed_default_role_permissions
@@ -238,6 +245,14 @@ with app.app_context():
         print("🔐 RBAC permissions seeded successfully")
     except Exception as e:
         print(f"⚠️ RBAC seeding skipped: {e}")
+    
+    # Initialize marketplace tables
+    try:
+        from init_marketplace import init_marketplace_db
+        init_marketplace_db()
+        print("🏪 Marketplace initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Marketplace initialization skipped: {e}")
     
     print("📊 Database tables created successfully")
 

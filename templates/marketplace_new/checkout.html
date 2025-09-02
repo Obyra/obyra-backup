@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block title %}Checkout - OBYRA Market{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">
+                <i class="fas fa-credit-card me-2"></i>Finalizar Compra
+            </h1>
+        </div>
+    </div>
+    
+    <form id="checkoutForm">
+        <div class="row">
+            <!-- Formulario de checkout -->
+            <div class="col-lg-8">
+                <!-- Datos de facturación -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-invoice me-2"></i>Datos de Facturación
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Razón Social *</label>
+                                <input type="text" name="company_name" class="form-control" 
+                                       value="{{ current_user.company.name if hasattr(current_user, 'company') }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">CUIT *</label>
+                                <input type="text" name="cuit" class="form-control" 
+                                       value="{{ current_user.company.cuit if hasattr(current_user, 'company') }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Condición ante IVA *</label>
+                                <select name="iva_condition" class="form-select" required>
+                                    <option value="RI">Responsable Inscripto</option>
+                                    <option value="RM">Responsable Monotributo</option>
+                                    <option value="EX">Exento</option>
+                                    <option value="CF">Consumidor Final</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email de Facturación *</label>
+                                <input type="email" name="billing_email" class="form-control" 
+                                       value="{{ current_user.email }}" required>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Dirección de Facturación *</label>
+                                <input type="text" name="billing_address" class="form-control" 
+                                       placeholder="Calle, número, piso, depto" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Ciudad *</label>
+                                <input type="text" name="billing_city" class="form-control" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Provincia *</label>
+                                <select name="billing_province" class="form-select" required>
+                                    <option value="">Seleccionar</option>
+                                    <option value="CABA">CABA</option>
+                                    <option value="Buenos Aires">Buenos Aires</option>
+                                    <option value="Córdoba">Córdoba</option>
+                                    <option value="Santa Fe">Santa Fe</option>
+                                    <option value="Mendoza">Mendoza</option>
+                                    <!-- Add more provinces -->
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Código Postal *</label>
+                                <input type="text" name="billing_postal_code" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Datos de entrega -->
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-truck me-2"></i>Datos de Entrega
+                        </h5>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="sameAsBilling" checked>
+                            <label class="form-check-label" for="sameAsBilling">
+                                Misma dirección que facturación
+                            </label>
+                        </div>
+                    </div>
+                    <div class="card-body" id="shippingFields" style="display: none;">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Nombre de Contacto *</label>
+                                <input type="text" name="shipping_contact" class="form-control" 
+                                       value="{{ current_user.name }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Teléfono *</label>
+                                <input type="tel" name="shipping_phone" class="form-control">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Dirección de Entrega *</label>
+                                <input type="text" name="shipping_address" class="form-control" 
+                                       placeholder="Calle, número, piso, depto">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Ciudad *</label>
+                                <input type="text" name="shipping_city" class="form-control">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Provincia *</label>
+                                <select name="shipping_province" class="form-select">
+                                    <option value="">Seleccionar</option>
+                                    <option value="CABA">CABA</option>
+                                    <option value="Buenos Aires">Buenos Aires</option>
+                                    <option value="Córdoba">Córdoba</option>
+                                    <option value="Santa Fe">Santa Fe</option>
+                                    <option value="Mendoza">Mendoza</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Código Postal *</label>
+                                <input type="text" name="shipping_postal_code" class="form-control">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Instrucciones Especiales</label>
+                                <textarea name="shipping_instructions" class="form-control" rows="2"
+                                          placeholder="Horarios de entrega, referencias adicionales, etc."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Método de pago -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-credit-card me-2"></i>Método de Pago
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="payment-methods">
+                            <div class="form-check payment-option">
+                                <input class="form-check-input" type="radio" name="payment_method" 
+                                       id="mercadopago" value="mercadopago" checked>
+                                <label class="form-check-label d-flex align-items-center" for="mercadopago">
+                                    <img src="https://http2.mlstatic.com/frontend-assets/ui-navigation/5.22.2/mercadolibre/logo_large_25years.png" 
+                                         alt="Mercado Pago" height="30" class="me-2">
+                                    <div>
+                                        <div class="fw-bold">Mercado Pago</div>
+                                        <small class="text-muted">Tarjetas de crédito, débito y efectivo</small>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <small>
+                                El pago se procesa de forma segura a través de Mercado Pago. 
+                                Después de confirmar el pago, se generarán automáticamente las órdenes de compra 
+                                para cada proveedor.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Resumen del pedido -->
+            <div class="col-lg-4">
+                <div class="card position-sticky" style="top: 2rem;">
+                    <div class="card-header">
+                        <h5 class="mb-0">Resumen del Pedido</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Items por vendedor (enmascarados) -->
+                        {% for seller_id, seller_items in cart.items_by_seller.items() %}
+                        <div class="seller-summary mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-store me-1"></i>
+                                    {% if seller_items[0].variant.product.is_masked_seller %}
+                                    OBYRA Partner
+                                    {% else %}
+                                    {{ seller_items[0].variant.product.seller.name }}
+                                    {% endif %}
+                                </small>
+                                <small class="text-muted">{{ seller_items|length }} items</small>
+                            </div>
+                            
+                            {% for item in seller_items %}
+                            <div class="d-flex justify-content-between mb-1">
+                                <div class="flex-grow-1">
+                                    <small>{{ item.variant.product.name }}</small>
+                                    <br>
+                                    <small class="text-muted">{{ item.qty }} x ${{ "{:,.0f}".format(item.price_snapshot) }}</small>
+                                </div>
+                                <small class="fw-bold">${{ "{:,.0f}".format(item.total_price) }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                        
+                        <!-- Totales -->
+                        <div class="totals-section">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Subtotal:</span>
+                                <span>${{ "{:,.0f}".format(cart.total_amount) }}</span>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between text-muted mb-2">
+                                <small>Envío:</small>
+                                <small>A calcular</small>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between text-muted mb-3">
+                                <small>IVA incluido:</small>
+                                <small>${{ "{:,.0f}".format(cart.total_amount * 0.21) }}</small>
+                            </div>
+                            
+                            <hr>
+                            <div class="d-flex justify-content-between mb-4">
+                                <strong>Total:</strong>
+                                <strong class="text-primary h5">${{ "{:,.0f}".format(cart.total_amount) }} ARS</strong>
+                            </div>
+                        </div>
+                        
+                        <!-- Botón de pago -->
+                        <button type="submit" class="btn btn-primary w-100 btn-lg" id="checkoutBtn">
+                            <i class="fas fa-lock me-2"></i>Confirmar y Pagar
+                        </button>
+                        
+                        <!-- Seguridad -->
+                        <div class="security-info mt-3 text-center">
+                            <small class="text-muted">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                Tus datos están protegidos con encriptación SSL
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sameAsBillingCheck = document.getElementById('sameAsBilling');
+    const shippingFields = document.getElementById('shippingFields');
+    
+    // Toggle shipping fields visibility
+    sameAsBillingCheck.addEventListener('change', function() {
+        if (this.checked) {
+            shippingFields.style.display = 'none';
+            // Clear shipping form requirements
+            shippingFields.querySelectorAll('input, select').forEach(field => {
+                field.removeAttribute('required');
+            });
+        } else {
+            shippingFields.style.display = 'block';
+            // Add shipping form requirements
+            shippingFields.querySelectorAll('input[name*="shipping"], select[name*="shipping"]').forEach(field => {
+                if (!field.name.includes('instructions')) {
+                    field.setAttribute('required', 'required');
+                }
+            });
+        }
+    });
+    
+    // Form submission
+    const checkoutForm = document.getElementById('checkoutForm');
+    checkoutForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const checkoutBtn = document.getElementById('checkoutBtn');
+        const originalText = checkoutBtn.innerHTML;
+        
+        // Disable button and show loading
+        checkoutBtn.disabled = true;
+        checkoutBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Procesando...';
+        
+        // Collect form data
+        const formData = new FormData(checkoutForm);
+        
+        // Prepare billing data
+        const billingData = {
+            company_name: formData.get('company_name'),
+            cuit: formData.get('cuit'),
+            iva_condition: formData.get('iva_condition'),
+            email: formData.get('billing_email'),
+            address: formData.get('billing_address'),
+            city: formData.get('billing_city'),
+            province: formData.get('billing_province'),
+            postal_code: formData.get('billing_postal_code')
+        };
+        
+        // Prepare shipping data
+        let shippingData;
+        if (sameAsBillingCheck.checked) {
+            shippingData = {
+                contact_name: '{{ current_user.name }}',
+                phone: '',
+                address: billingData.address,
+                city: billingData.city,
+                province: billingData.province,
+                postal_code: billingData.postal_code,
+                instructions: ''
+            };
+        } else {
+            shippingData = {
+                contact_name: formData.get('shipping_contact'),
+                phone: formData.get('shipping_phone'),
+                address: formData.get('shipping_address'),
+                city: formData.get('shipping_city'),
+                province: formData.get('shipping_province'),
+                postal_code: formData.get('shipping_postal_code'),
+                instructions: formData.get('shipping_instructions') || ''
+            };
+        }
+        
+        // Create order
+        fetch('/market/api/orders/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                billing: billingData,
+                shipping: shippingData,
+                payment_method: formData.get('payment_method')
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Create Mercado Pago preference
+            return fetch('/api/payments/mp/create-preference', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    order_id: data.order_id
+                })
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Redirect to Mercado Pago
+            window.location.href = data.init_point;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar el checkout: ' + error.message);
+            
+            // Restore button
+            checkoutBtn.disabled = false;
+            checkoutBtn.innerHTML = originalText;
+        });
+    });
+});
+</script>
+
+<style>
+.payment-option {
+    border: 2px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.2s ease;
+}
+
+.payment-option:hover,
+.payment-option:has(input:checked) {
+    border-color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+.seller-summary {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+}
+
+.security-info {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+}
+
+@media (max-width: 992px) {
+    .position-sticky {
+        position: static !important;
+    }
+}
+</style>
+{% endblock %}

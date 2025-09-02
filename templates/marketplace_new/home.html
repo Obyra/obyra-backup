@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}OBYRA Market - Marketplace B2B{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Hero Section -->
+    <div class="row bg-primary text-white py-5 mb-4">
+        <div class="col-12">
+            <div class="text-center">
+                <h1 class="display-4 mb-3">
+                    <i class="fas fa-store me-3"></i>OBYRA Market
+                </h1>
+                <p class="lead mb-4">El marketplace B2B líder para la industria de la construcción</p>
+                
+                <!-- Search Bar -->
+                <div class="row justify-content-center">
+                    <div class="col-md-8 col-lg-6">
+                        <form method="GET" action="{{ url_for('marketplace_new.search') }}">
+                            <div class="input-group input-group-lg">
+                                <input type="text" name="q" class="form-control" 
+                                       placeholder="Buscar productos, marcas, categorías..." 
+                                       style="border-top-right-radius: 0; border-bottom-right-radius: 0;">
+                                <button class="btn btn-light" type="submit">
+                                    <i class="fas fa-search"></i> Buscar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Categories Section -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <h2 class="h3 mb-4">
+                <i class="fas fa-th-large me-2"></i>Categorías Principales
+            </h2>
+            
+            <div class="row">
+                {% for category in categories %}
+                <div class="col-6 col-md-4 col-lg-3 mb-3">
+                    <a href="{{ url_for('marketplace_new.search', category=category.id) }}" 
+                       class="card category-card h-100 text-decoration-none">
+                        <div class="card-body text-center">
+                            <div class="category-icon mb-3">
+                                <i class="fas fa-tools fa-2x text-primary"></i>
+                            </div>
+                            <h6 class="card-title text-dark">{{ category.name }}</h6>
+                        </div>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Featured Products -->
+    {% if featured_products %}
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="h3 mb-0">
+                    <i class="fas fa-star me-2 text-warning"></i>Productos Destacados
+                </h2>
+                <a href="{{ url_for('marketplace_new.search', sort='premium') }}" 
+                   class="btn btn-outline-primary">Ver todos</a>
+            </div>
+            
+            <div class="row">
+                {% for product in featured_products[:8] %}
+                <div class="col-6 col-md-4 col-lg-3 mb-4">
+                    <div class="card product-card h-100">
+                        <div class="card-img-top product-image-placeholder bg-light d-flex align-items-center justify-content-center" 
+                             style="height: 200px;">
+                            <i class="fas fa-image fa-3x text-muted"></i>
+                        </div>
+                        
+                        <div class="card-body d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-warning text-dark">Premium</span>
+                                {% if product.brand %}
+                                <small class="text-muted">{{ product.brand.name }}</small>
+                                {% endif %}
+                            </div>
+                            
+                            <h6 class="card-title">{{ product.name }}</h6>
+                            
+                            <p class="text-muted small mb-2">
+                                <i class="fas fa-store me-1"></i>{{ product.masked_seller_name }}
+                            </p>
+                            
+                            {% set first_variant = product.variants[0] if product.variants else None %}
+                            {% if first_variant %}
+                            <div class="price-section mt-auto">
+                                <div class="h5 text-primary mb-1">
+                                    ${{ "{:,.0f}".format(first_variant.price) }}
+                                </div>
+                                <div class="small text-muted">
+                                    {{ first_variant.currency }}
+                                    {% if first_variant.compare_at_price and first_variant.compare_at_price > first_variant.price %}
+                                    <span class="text-decoration-line-through ms-1">
+                                        ${{ "{:,.0f}".format(first_variant.compare_at_price) }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <a href="{{ url_for('marketplace_new.product_detail', product_id=product.id) }}" 
+                               class="btn btn-primary btn-sm mt-2">
+                                <i class="fas fa-eye me-1"></i>Ver Detalles
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Benefits Section -->
+    <div class="row bg-light py-5">
+        <div class="col-12">
+            <h2 class="text-center mb-5">¿Por qué elegir OBYRA Market?</h2>
+            
+            <div class="row">
+                <div class="col-md-4 text-center mb-4">
+                    <div class="benefit-icon mb-3">
+                        <i class="fas fa-shield-alt fa-3x text-primary"></i>
+                    </div>
+                    <h5>Compra Segura</h5>
+                    <p class="text-muted">
+                        Todos los pagos están protegidos y los proveedores son verificados.
+                    </p>
+                </div>
+                
+                <div class="col-md-4 text-center mb-4">
+                    <div class="benefit-icon mb-3">
+                        <i class="fas fa-truck fa-3x text-primary"></i>
+                    </div>
+                    <h5>Envío Confiable</h5>
+                    <p class="text-muted">
+                        Seguimiento en tiempo real y opciones de entrega flexibles.
+                    </p>
+                </div>
+                
+                <div class="col-md-4 text-center mb-4">
+                    <div class="benefit-icon mb-3">
+                        <i class="fas fa-headset fa-3x text-primary"></i>
+                    </div>
+                    <h5>Soporte 24/7</h5>
+                    <p class="text-muted">
+                        Equipo especializado en construcción listo para ayudarte.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Hover effects for category cards
+document.addEventListener('DOMContentLoaded', function() {
+    const categoryCards = document.querySelectorAll('.category-card');
+    
+    categoryCards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-5px)';
+            this.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+        });
+        
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        });
+    });
+});
+</script>
+
+<style>
+.category-card {
+    transition: all 0.3s ease;
+    border: 1px solid #dee2e6;
+}
+
+.category-card:hover {
+    border-color: var(--bs-primary);
+    text-decoration: none !important;
+}
+
+.product-card {
+    transition: transform 0.2s ease;
+    border: 1px solid #dee2e6;
+}
+
+.product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.product-image-placeholder {
+    background: linear-gradient(45deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%);
+    background-size: 20px 20px;
+}
+
+.price-section {
+    border-top: 1px solid #dee2e6;
+    padding-top: 0.75rem;
+}
+</style>
+{% endblock %}

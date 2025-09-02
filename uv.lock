@@ -924,6 +924,18 @@ wheels = [
 ]
 
 [[package]]
+name = "mercadopago"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7d/f6/d50dfcf959ba35de795e54f39ee1814b364ad5772fde1a058276275adf4f/mercadopago-2.3.0.tar.gz", hash = "sha256:8537e9de5d987b545841b05bb35675553b22e661b96ffc4fb178ffba846ff2d7", size = 24015 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/be/f23a9ace6327ecd246cbc2068b72c21ffde743e00f4985668617e30730b7/mercadopago-2.3.0-py3-none-any.whl", hash = "sha256:2502cb005ab90343d60e577107b422daeff27511f85c45a7bf0784ac2083f2c7", size = 35713 },
+]
+
+[[package]]
 name = "numpy"
 version = "2.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1340,6 +1352,7 @@ dependencies = [
     { name = "gunicorn" },
     { name = "jinja2" },
     { name = "matplotlib" },
+    { name = "mercadopago" },
     { name = "oauthlib" },
     { name = "openai" },
     { name = "openpyxl" },
@@ -1366,6 +1379,7 @@ requires-dist = [
     { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "matplotlib", specifier = ">=3.10.5" },
+    { name = "mercadopago", specifier = ">=2.3.0" },
     { name = "oauthlib", specifier = ">=3.3.1" },
     { name = "openai", specifier = ">=1.97.1" },
     { name = "openpyxl", specifier = ">=3.1.5" },

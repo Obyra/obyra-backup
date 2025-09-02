@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - OBYRA Market{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('marketplace_new.home') }}">Market</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('marketplace_new.search', category=product.category_id) }}">
+                    {{ product.category.name }}
+                </a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">{{ product.name }}</li>
+        </ol>
+    </nav>
+    
+    <div class="row">
+        <!-- Imágenes del producto -->
+        <div class="col-md-6">
+            <div class="product-images">
+                {% if product.images %}
+                <div class="main-image mb-3">
+                    <img src="{{ product.images[0].url }}" 
+                         alt="{{ product.name }}"
+                         class="img-fluid rounded main-product-image"
+                         id="mainProductImage">
+                </div>
+                
+                {% if product.images|length > 1 %}
+                <div class="image-thumbnails">
+                    <div class="row g-2">
+                        {% for image in product.images[:4] %}
+                        <div class="col-3">
+                            <img src="{{ image.url }}" 
+                                 alt="{{ product.name }}"
+                                 class="img-fluid thumbnail-image {% if loop.index == 1 %}active{% endif %}"
+                                 onclick="changeMainImage('{{ image.url }}', this)">
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% else %}
+                <div class="product-image-placeholder bg-light d-flex align-items-center justify-content-center rounded" 
+                     style="height: 400px;">
+                    <i class="fas fa-image fa-5x text-muted"></i>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Información del producto -->
+        <div class="col-md-6">
+            <div class="product-info">
+                <!-- Premium Badge -->
+                {% if publication.exposure == 'premium' %}
+                <span class="badge bg-warning text-dark mb-2">Premium</span>
+                {% endif %}
+                
+                <!-- Marca -->
+                {% if product.brand %}
+                <div class="text-muted mb-2">{{ product.brand.name }}</div>
+                {% endif %}
+                
+                <!-- Título -->
+                <h1 class="h3 mb-3">{{ product.name }}</h1>
+                
+                <!-- Seller (enmascarado) -->
+                <div class="seller-info mb-3">
+                    <small class="text-muted">
+                        <i class="fas fa-store me-1"></i>Vendido por: 
+                        <strong>{{ product.masked_seller_name }}</strong>
+                    </small>
+                    {% if not product.is_masked_seller and avg_rating %}
+                    <div class="rating mt-1">
+                        {% for i in range(1, 6) %}
+                        <i class="fas fa-star {% if i <= avg_rating %}text-warning{% else %}text-muted{% endif %}"></i>
+                        {% endfor %}
+                        <span class="ms-2">{{ avg_rating }}/5</span>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Precio y variantes -->
+                {% if variants %}
+                <div class="variants-section mb-4">
+                    {% if variants|length == 1 %}
+                    {% set variant = variants[0] %}
+                    <div class="price-display mb-3">
+                        <div class="h4 text-primary mb-1">
+                            ${{ "{:,.0f}".format(variant.price) }}
+                            <small class="text-muted">{{ variant.currency }}</small>
+                        </div>
+                        
+                        {% if variant.compare_at_price and variant.compare_at_price > variant.price %}
+                        <div class="text-muted text-decoration-line-through">
+                            ${{ "{:,.0f}".format(variant.compare_at_price) }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Stock -->
+                    <div class="stock-info mb-3">
+                        {% if variant.available_stock > 0 %}
+                        <span class="badge bg-success">
+                            <i class="fas fa-check-circle me-1"></i>{{ variant.available_stock }} disponibles
+                        </span>
+                        {% else %}
+                        <span class="badge bg-danger">
+                            <i class="fas fa-times-circle me-1"></i>Sin stock
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Agregar al carrito -->
+                    {% if variant.available_stock > 0 %}
+                    <div class="add-to-cart mb-3">
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <input type="number" class="form-control" 
+                                       id="quantity" min="1" max="{{ variant.available_stock }}" value="1">
+                            </div>
+                            <div class="col-8">
+                                <button class="btn btn-primary w-100" 
+                                        onclick="addToCart({{ variant.id }})">
+                                    <i class="fas fa-cart-plus me-1"></i>Agregar al Carrito
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% else %}
+                    <!-- Múltiples variantes -->
+                    <div class="variant-selector mb-3">
+                        <label class="form-label">Seleccionar variante:</label>
+                        <select class="form-select" id="variantSelector" onchange="updateVariantInfo()">
+                            {% for variant in variants %}
+                            <option value="{{ variant.id }}" 
+                                    data-price="{{ variant.price }}"
+                                    data-stock="{{ variant.available_stock }}"
+                                    data-sku="{{ variant.sku }}">
+                                {{ variant.sku }} - ${{ "{:,.0f}".format(variant.price) }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div id="selectedVariantInfo">
+                        <!-- Se actualiza con JavaScript -->
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- Garantía -->
+                {% if product.warranty_months > 0 %}
+                <div class="warranty-info mb-3">
+                    <small class="text-muted">
+                        <i class="fas fa-shield-alt me-1"></i>Garantía: {{ product.warranty_months }} meses
+                    </small>
+                </div>
+                {% endif %}
+                
+                <!-- Descripción -->
+                {% if product.description_html %}
+                <div class="product-description">
+                    <h5>Descripción</h5>
+                    <div class="description-content">
+                        {{ product.description_html|safe }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tabs con información adicional -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <ul class="nav nav-tabs" id="productTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="specs-tab" data-bs-toggle="tab" 
+                            data-bs-target="#specs" type="button" role="tab">
+                        Especificaciones
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="qa-tab" data-bs-toggle="tab" 
+                            data-bs-target="#qa" type="button" role="tab">
+                        Preguntas ({{ questions|length }})
+                    </button>
+                </li>
+                {% if product.files %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="files-tab" data-bs-toggle="tab" 
+                            data-bs-target="#files" type="button" role="tab">
+                        Documentación
+                    </button>
+                </li>
+                {% endif %}
+            </ul>
+            
+            <div class="tab-content" id="productTabsContent">
+                <!-- Especificaciones -->
+                <div class="tab-pane fade show active" id="specs" role="tabpanel">
+                    <div class="p-4">
+                        <div class="row">
+                            {% if variants %}
+                            {% set variant = variants[0] %}
+                            <div class="col-md-6">
+                                <h6>Información del Producto</h6>
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>SKU:</strong></td>
+                                        <td>{{ variant.sku }}</td>
+                                    </tr>
+                                    {% if variant.gtin %}
+                                    <tr>
+                                        <td><strong>Código de Barras:</strong></td>
+                                        <td>{{ variant.gtin }}</td>
+                                    </tr>
+                                    {% endif %}
+                                    <tr>
+                                        <td><strong>Categoría:</strong></td>
+                                        <td>{{ product.category.name }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>Dimensiones y Peso</h6>
+                                <table class="table table-sm">
+                                    {% if variant.weight_kg %}
+                                    <tr>
+                                        <td><strong>Peso:</strong></td>
+                                        <td>{{ variant.weight_kg }} kg</td>
+                                    </tr>
+                                    {% endif %}
+                                    {% if variant.length_cm %}
+                                    <tr>
+                                        <td><strong>Dimensiones:</strong></td>
+                                        <td>{{ variant.length_cm }} x {{ variant.width_cm }} x {{ variant.height_cm }} cm</td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Preguntas y Respuestas -->
+                <div class="tab-pane fade" id="qa" role="tabpanel">
+                    <div class="p-4">
+                        <!-- Hacer pregunta -->
+                        {% if current_user.is_authenticated %}
+                        <div class="ask-question mb-4">
+                            <h6>Hacer una pregunta</h6>
+                            <form id="questionForm">
+                                <div class="mb-3">
+                                    <textarea class="form-control" name="question" rows="3" 
+                                              placeholder="Escribe tu pregunta sobre este producto..."></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-question-circle me-1"></i>Enviar Pregunta
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Lista de preguntas -->
+                        <div class="questions-list">
+                            {% if questions %}
+                            {% for question in questions %}
+                            <div class="question-item mb-4 p-3 border rounded">
+                                <div class="question mb-2">
+                                    <strong>P:</strong> {{ question.question }}
+                                </div>
+                                <div class="answer text-primary">
+                                    <strong>R:</strong> {{ question.answer }}
+                                </div>
+                                <small class="text-muted">
+                                    {{ question.created_at.strftime('%d/%m/%Y') }}
+                                </small>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <p class="text-muted">No hay preguntas sobre este producto aún.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Archivos -->
+                {% if product.files %}
+                <div class="tab-pane fade" id="files" role="tabpanel">
+                    <div class="p-4">
+                        <h6>Documentación Técnica</h6>
+                        <div class="list-group">
+                            {% for file in product.files %}
+                            <a href="{{ file.url }}" target="_blank" class="list-group-item list-group-item-action">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-file-pdf me-2"></i>{{ file.filename }}
+                                    </div>
+                                    <small class="text-muted">{{ file.file_type|title }}</small>
+                                </div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function changeMainImage(imageUrl, thumbnail) {
+    document.getElementById('mainProductImage').src = imageUrl;
+    
+    // Update active thumbnail
+    document.querySelectorAll('.thumbnail-image').forEach(img => {
+        img.classList.remove('active');
+    });
+    thumbnail.classList.add('active');
+}
+
+function updateVariantInfo() {
+    const selector = document.getElementById('variantSelector');
+    const selectedOption = selector.options[selector.selectedIndex];
+    
+    const price = selectedOption.getAttribute('data-price');
+    const stock = parseInt(selectedOption.getAttribute('data-stock'));
+    const sku = selectedOption.getAttribute('data-sku');
+    
+    const infoDiv = document.getElementById('selectedVariantInfo');
+    
+    let stockBadge = '';
+    let addToCartButton = '';
+    
+    if (stock > 0) {
+        stockBadge = `<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>${stock} disponibles</span>`;
+        addToCartButton = `
+            <div class="add-to-cart mt-3">
+                <div class="row g-2">
+                    <div class="col-4">
+                        <input type="number" class="form-control" id="quantity" min="1" max="${stock}" value="1">
+                    </div>
+                    <div class="col-8">
+                        <button class="btn btn-primary w-100" onclick="addToCart(${selector.value})">
+                            <i class="fas fa-cart-plus me-1"></i>Agregar al Carrito
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        stockBadge = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Sin stock</span>';
+    }
+    
+    infoDiv.innerHTML = `
+        <div class="price-display mb-3">
+            <div class="h4 text-primary">$${parseFloat(price).toLocaleString()} ARS</div>
+        </div>
+        <div class="stock-info mb-3">${stockBadge}</div>
+        ${addToCartButton}
+    `;
+}
+
+function addToCart(variantId) {
+    const quantity = document.getElementById('quantity').value;
+    
+    fetch('/market/api/cart/add', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            variant_id: variantId,
+            qty: parseInt(quantity)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            // Mostrar mensaje de éxito
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 end-0 m-3';
+            alert.style.zIndex = '9999';
+            alert.innerHTML = `
+                <i class="fas fa-check-circle me-2"></i>Producto agregado al carrito
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 3000);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al agregar al carrito');
+    });
+}
+
+// Form submission for questions
+document.addEventListener('DOMContentLoaded', function() {
+    const questionForm = document.getElementById('questionForm');
+    if (questionForm) {
+        questionForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(questionForm);
+            const questionText = formData.get('question').trim();
+            
+            if (!questionText) {
+                alert('Por favor ingresa tu pregunta');
+                return;
+            }
+            
+            fetch('/market/api/products/{{ product.id }}/questions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    question: questionText
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    alert('Pregunta enviada correctamente. El vendedor responderá a la brevedad.');
+                    questionForm.reset();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al enviar la pregunta');
+            });
+        });
+    }
+    
+    // Initialize variant selector if multiple variants
+    const variantSelector = document.getElementById('variantSelector');
+    if (variantSelector) {
+        updateVariantInfo();
+    }
+});
+</script>
+
+<style>
+.thumbnail-image {
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 0.375rem;
+    transition: border-color 0.2s ease;
+}
+
+.thumbnail-image:hover {
+    border-color: var(--bs-primary);
+}
+
+.thumbnail-image.active {
+    border-color: var(--bs-primary);
+}
+
+.main-product-image {
+    max-height: 400px;
+    width: 100%;
+    object-fit: contain;
+    border: 1px solid #dee2e6;
+}
+
+.product-image-placeholder {
+    background: linear-gradient(45deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%);
+    background-size: 20px 20px;
+}
+
+.question-item {
+    background-color: #f8f9fa;
+}
+
+.price-display {
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 1rem;
+}
+</style>
+{% endblock %}

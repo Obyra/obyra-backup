@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Error en el Pago - OBYRA Market{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card text-center">
+                <div class="card-body py-5">
+                    <!-- Error Icon -->
+                    <div class="error-icon mb-4">
+                        <i class="fas fa-times-circle fa-5x text-danger"></i>
+                    </div>
+                    
+                    <!-- Title -->
+                    <h1 class="h3 text-danger mb-3">Error en el Pago</h1>
+                    <p class="lead mb-4">No pudimos procesar tu pago</p>
+                    
+                    <!-- Error Message -->
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>El pago no se pudo completar.</strong>
+                        Esto puede deberse a fondos insuficientes, datos incorreos de la tarjeta, 
+                        o un problema temporal con el sistema de pagos.
+                    </div>
+                    
+                    <!-- What to do next -->
+                    <div class="next-steps mb-4">
+                        <h5 class="mb-3">¿Qué puedes hacer?</h5>
+                        <div class="row text-start">
+                            <div class="col-12 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-redo text-primary me-3 mt-1"></i>
+                                    <div>
+                                        <strong>Intentar Nuevamente</strong><br>
+                                        <small class="text-muted">
+                                            Verifica los datos de tu tarjeta y vuelve a intentar el pago.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-credit-card text-primary me-3 mt-1"></i>
+                                    <div>
+                                        <strong>Cambiar Método de Pago</strong><br>
+                                        <small class="text-muted">
+                                            Prueba con otra tarjeta o método de pago disponible.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-phone text-primary me-3 mt-1"></i>
+                                    <div>
+                                        <strong>Contactar a tu Banco</strong><br>
+                                        <small class="text-muted">
+                                            Tu banco puede haber bloqueado la transacción por seguridad.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <a href="{{ url_for('marketplace_new.checkout') }}" class="btn btn-primary btn-lg me-3">
+                            <i class="fas fa-redo me-2"></i>Intentar de Nuevo
+                        </a>
+                        <a href="{{ url_for('marketplace_new.cart') }}" class="btn btn-outline-primary btn-lg">
+                            <i class="fas fa-shopping-cart me-2"></i>Ver Carrito
+                        </a>
+                    </div>
+                    
+                    <!-- Support Info -->
+                    <div class="support-info mt-5 pt-4 border-top">
+                        <h6 class="mb-3">¿Necesitas ayuda?</h6>
+                        <p class="text-muted mb-3">
+                            Si el problema persiste, nuestro equipo de soporte puede ayudarte.
+                        </p>
+                        <a href="mailto:soporte@obyra.com" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-envelope me-1"></i>Contactar Soporte
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Animation for error icon
+    const errorIcon = document.querySelector('.error-icon i');
+    errorIcon.style.animation = 'shake 0.5s ease-in-out';
+});
+</script>
+
+<style>
+.error-icon {
+    animation: fadeInScale 0.8s ease-out;
+}
+
+@keyframes fadeInScale {
+    0% {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.next-steps .fas {
+    width: 20px;
+}
+
+.action-buttons .btn {
+    min-width: 180px;
+}
+
+@media (max-width: 576px) {
+    .action-buttons .btn {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    .action-buttons .btn:last-child {
+        margin-bottom: 0;
+    }
+}
+</style>
+{% endblock %}
