@@ -86,13 +86,18 @@ def calcular_materiales():
 def paso_revision():
     """Paso 3: Revisión del presupuesto calculado por IA"""
     from flask import session
+    from models import Obra
+    
     datos = session.get('presupuesto_datos')
     
     if not datos:
         flash('No hay datos de presupuesto para revisar. Comience el proceso nuevamente.', 'warning')
         return redirect(url_for('cotizacion.calculadora_inteligente'))
     
-    return render_template('cotizacion/revision.html', datos=datos)
+    # Obtener obras existentes para el selector
+    obras = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).order_by(Obra.nombre).all()
+    
+    return render_template('cotizacion/revision.html', datos=datos, obras=obras)
 
 @cotizacion_bp.route('/generar-pdf')
 @login_required

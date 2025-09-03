@@ -1074,3 +1074,97 @@ def confirmar_como_obra(id):
         db.session.rollback()
         flash(f'Error al confirmar obra: {str(e)}', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route("/guardar", methods=["POST"])
+@login_required
+def guardar_presupuesto():
+    """Guarda presupuesto con opción de crear obra nueva o usar existente"""
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'error': 'Sin permisos'}), 403
+    
+    data = request.form or request.json
+    
+    obra_id = data.get("obra_id")  # id si seleccionó obra existente
+    crear_nueva = data.get("crear_nueva_obra") == "1"
+    
+    try:
+        if crear_nueva:
+            # Crear nueva obra con los datos del formulario
+            obra = Obra(
+                nombre = data.get("obra_nombre") or "Obra sin nombre",
+                organizacion_id = current_user.organizacion_id,  # Usar organizacion_id del sistema actual
+                cliente_nombre = data.get("cliente_nombre"),
+                cliente_email  = data.get("cliente_email"),
+                cliente_telefono = data.get("cliente_telefono"),
+                direccion = data.get("direccion"),
+                ciudad    = data.get("ciudad"),
+                provincia = data.get("provincia"),
+                pais      = data.get("pais") or "Argentina",
+                codigo_postal = data.get("codigo_postal"),
+                referencia = data.get("referencia"),
+                notas = data.get("obra_notas"),
+                estado = 'planificacion'
+            )
+            db.session.add(obra)
+            db.session.flush()   # obtiene obra.id
+            obra_id = obra.id
+        else:
+            obra = Obra.query.get(obra_id) if obra_id else None
+        
+        # Generar número de presupuesto único
+        ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
+        if ultimo_numero and ultimo_numero.startswith('PRES-'):
+            try:
+                siguiente_num = int(ultimo_numero.split('-')[1]) + 1
+            except:
+                siguiente_num = 1
+        else:
+            siguiente_num = 1
+        
+        # Asegurar que el número sea único
+        while True:
+            numero = f"PRES-{siguiente_num:04d}"
+            existe = Presupuesto.query.filter_by(numero=numero).first()
+            if not existe:
+                break
+            siguiente_num += 1
+        
+        # Crear presupuesto asociado
+        p = Presupuesto(
+            obra_id = obra_id,
+            numero = numero,
+            organizacion_id = current_user.organizacion_id,
+            observaciones = data.get("observaciones"),
+            iva_porcentaje = 21.0,
+            estado = 'borrador'
+        )
+        
+        # Agregar campos adicionales si están disponibles
+        if data.get("superficie"):
+            try:
+                superficie_float = float(data.get("superficie"))
+                p.observaciones = f"{p.observaciones or ''} | Superficie: {superficie_float} m²"
+            except ValueError:
+                pass
+        
+        if data.get("tipo_construccion"):
+            p.observaciones = f"{p.observaciones or ''} | Tipo: {data.get('tipo_construccion')}"
+        
+        if data.get("calculo_json"):
+            p.datos_proyecto = data.get("calculo_json")
+        
+        if data.get("total_estimado"):
+            try:
+                p.total_con_iva = float(data.get("total_estimado"))
+            except ValueError:
+                pass
+        
+        db.session.add(p)
+        db.session.commit()
+        
+        return jsonify({"ok": True, "presupuesto_id": p.id, "obra_id": obra_id})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500

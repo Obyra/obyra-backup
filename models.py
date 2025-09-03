@@ -230,6 +230,21 @@ class Obra(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     
+    # Datos de cliente adicionales (según especificaciones)
+    cliente_nombre = db.Column(db.String(120))
+    cliente_email = db.Column(db.String(120))
+    cliente_telefono = db.Column(db.String(50))
+    
+    # Ubicación detallada
+    ciudad = db.Column(db.String(100))
+    provincia = db.Column(db.String(100))
+    pais = db.Column(db.String(100))
+    codigo_postal = db.Column(db.String(20))
+    referencia = db.Column(db.String(200))   # piso, entrecalles, etc.
+    
+    # Notas adicionales
+    notas = db.Column(db.Text)
+    
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='obras')
     etapas = db.relationship('EtapaObra', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')

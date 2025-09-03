@@ -1,0 +1,282 @@
+Objetivo
+
+En el bloque “Obra Destino (Opcional)” agregar un conmutador:
+
+Elegir obra existente (select como ya tenés)
+
+Crear nueva obra (muestra formulario rápido: cliente, dirección, etc.)
+
+Al presionar Guardar Presupuesto, si se eligió “crear nueva”, primero crear la obra con esos datos y asociar el presupuesto a esa obra.
+
+Luego, la obra se puede editar desde /presupuestos o /obras/:id.
+
+A) DB (SQLAlchemy) — campos recomendados
+
+Pedido al agente:
+
+En el modelo Obra agregar campos:
+
+# models.py
+class Obra(db.Model):
+    __tablename__ = "obras"
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(120), nullable=False)         # ej: “Edificio Lavalle 123”
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+
+    # Datos de cliente
+    cliente_nombre = db.Column(db.String(120))
+    cliente_email  = db.Column(db.String(120))
+    cliente_telefono = db.Column(db.String(50))
+
+    # Ubicación
+    direccion = db.Column(db.String(200))
+    ciudad    = db.Column(db.String(100))
+    provincia = db.Column(db.String(100))
+    pais      = db.Column(db.String(100))
+    codigo_postal = db.Column(db.String(20))
+    referencia = db.Column(db.String(200))   # piso, entrecalles, etc.
+
+    # Notas
+    notas = db.Column(db.Text)
+
+    # relaciones
+    presupuestos = db.relationship("Presupuesto", backref="obra", lazy=True)
+
+
+Si no usan Alembic, pedirle que corra una migración simple:
+
+# run_once_add_columns.py  (crear un script y ejecutarlo una vez)
+from app import db
+from models import Obra
+from sqlalchemy import inspect, Column, String, Text
+
+engine = db.engine
+insp = inspect(engine)
+cols = [c['name'] for c in insp.get_columns('obras')]
+
+with engine.connect() as conn:
+    def add(colname, coltype):
+        if colname not in cols:
+            conn.execute(f'ALTER TABLE obras ADD COLUMN {colname} {coltype};')
+
+    add('cliente_nombre', 'VARCHAR(120)')
+    add('cliente_email', 'VARCHAR(120)')
+    add('cliente_telefono', 'VARCHAR(50)')
+    add('direccion', 'VARCHAR(200)')
+    add('ciudad', 'VARCHAR(100)')
+    add('provincia', 'VARCHAR(100)')
+    add('pais', 'VARCHAR(100)')
+    add('codigo_postal', 'VARCHAR(20)')
+    add('referencia', 'VARCHAR(200)')
+    add('notas', 'TEXT')
+
+B) Backend — guardar presupuesto + crear obra si corresponde
+
+Pedido al agente:
+
+En el handler que guarda el presupuesto (ej. @presupuestos_bp.route("/guardar", methods=["POST"])) aceptar los nuevos campos:
+
+from flask import request, jsonify
+from models import db, Obra, Presupuesto
+
+@presupuestos_bp.route("/guardar", methods=["POST"])
+def guardar_presupuesto():
+    data = request.form or request.json
+
+    obra_id = data.get("obra_id")  # id si seleccionó obra existente
+    crear_nueva = data.get("crear_nueva_obra") == "1"
+
+    if crear_nueva:
+        obra = Obra(
+            nombre = data.get("obra_nombre") or "Obra sin nombre",
+            company_id = current_user.company_id,
+            cliente_nombre = data.get("cliente_nombre"),
+            cliente_email  = data.get("cliente_email"),
+            cliente_telefono = data.get("cliente_telefono"),
+            direccion = data.get("direccion"),
+            ciudad    = data.get("ciudad"),
+            provincia = data.get("provincia"),
+            pais      = data.get("pais"),
+            codigo_postal = data.get("codigo_postal"),
+            referencia = data.get("referencia"),
+            notas = data.get("obra_notas"),
+        )
+        db.session.add(obra)
+        db.session.flush()   # obtiene obra.id
+        obra_id = obra.id
+    else:
+        obra = Obra.query.get(obra_id) if obra_id else None
+
+    # Crear presupuesto asociado
+    p = Presupuesto(
+        obra_id = obra_id,
+        superficie = data.get("superficie"),
+        tipo_construccion = data.get("tipo_construccion"),
+        calculo_json = data.get("calculo_json"),   # materiales, cantidades, etc.
+        observaciones = data.get("observaciones"),
+        moneda = data.get("moneda","ARS"),
+        total_estimado = data.get("total_estimado", 0),
+        creado_por = current_user.id,
+    )
+    db.session.add(p)
+    db.session.commit()
+
+    return jsonify({"ok": True, "presupuesto_id": p.id, "obra_id": obra_id})
+
+C) Frontend (Jinja) — UI en la sección “Obra Destino”
+
+Pedido al agente:
+
+Reemplazar el bloque actual por este formulario.
+
+Radio para seleccionar “crear nueva” o “usar existente”.
+
+Si “crear nueva”, mostrar los campos.
+
+En el submit enviar crear_nueva_obra=1 o 0.
+
+<div class="card mt-3">
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6">
+        <h5 class="card-title">🏗️ Obra Destino</h5>
+
+        <div class="mb-2">
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="modo_obra" id="obra_existente" value="existente" checked>
+            <label class="form-check-label" for="obra_existente">Usar obra existente</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="modo_obra" id="obra_nueva" value="nueva">
+            <label class="form-check-label" for="obra_nueva">Crear nueva obra</label>
+          </div>
+        </div>
+
+        <!-- selector obra existente -->
+        <div id="block_obra_existente" class="mb-3">
+          <select class="form-select" name="obra_id">
+            <option value="">Crear nueva obra automáticamente</option>
+            {% for o in obras %}
+              <option value="{{ o.id }}">{{ o.nombre }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Si no seleccionás una obra, se creará automáticamente.</div>
+        </div>
+
+        <!-- formulario obra nueva -->
+        <div id="block_obra_nueva" class="mb-3" style="display:none;">
+          <div class="row g-2">
+            <div class="col-md-12">
+              <label class="form-label">Nombre de la obra</label>
+              <input class="form-control" name="obra_nombre" placeholder="Ej: Edificio Lavalle 123">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Cliente</label>
+              <input class="form-control" name="cliente_nombre" placeholder="Nombre y apellido / Empresa">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Email</label>
+              <input class="form-control" name="cliente_email" type="email">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Teléfono</label>
+              <input class="form-control" name="cliente_telefono">
+            </div>
+
+            <div class="col-md-8">
+              <label class="form-label">Dirección</label>
+              <input class="form-control" name="direccion" placeholder="Calle y número">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Ciudad</label>
+              <input class="form-control" name="ciudad">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Provincia</label>
+              <input class="form-control" name="provincia">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">País</label>
+              <input class="form-control" name="pais" value="Argentina">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Código postal</label>
+              <input class="form-control" name="codigo_postal">
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label">Referencia / Notas</label>
+              <input class="form-control" name="referencia" placeholder="Piso, entrecalles, acceso, etc.">
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Notas internas</label>
+              <textarea class="form-control" name="obra_notas" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <h5 class="card-title">📝 Observaciones</h5>
+        <textarea class="form-control" name="observaciones" placeholder="Observaciones adicionales..."></textarea>
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-save"></i> Guardar Presupuesto
+      </button>
+      <button type="button" class="btn btn-outline-secondary" id="btn-export-excel">Exportar Excel</button>
+      <a href="{{ url_for('presupuestos.nuevo') }}" class="btn btn-outline-primary">Nuevo Cálculo</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  const rExist = document.getElementById('obra_existente');
+  const rNueva = document.getElementById('obra_nueva');
+  const bExist = document.getElementById('block_obra_existente');
+  const bNueva = document.getElementById('block_obra_nueva');
+
+  function toggleObra() {
+    if (rNueva.checked) {
+      bNueva.style.display = '';
+      bExist.style.display = 'none';
+    } else {
+      bNueva.style.display = 'none';
+      bExist.style.display = '';
+    }
+  }
+  rExist.addEventListener('change', toggleObra);
+  rNueva.addEventListener('change', toggleObra);
+  toggleObra();
+
+  // Al enviar, marcar flag crear_nueva_obra
+  document.querySelector('form').addEventListener('submit', (e) => {
+    const form = e.target;
+    let flag = form.querySelector('input[name="crear_nueva_obra"]');
+    if (!flag) {
+      flag = document.createElement('input');
+      flag.type = 'hidden';
+      flag.name = 'crear_nueva_obra';
+      form.appendChild(flag);
+    }
+    flag.value = rNueva.checked ? '1' : '0';
+  });
+</script>
+
+D) Listado/edición posterior
+
+En /presupuestos mostrar columna “Obra” con link a /obras/:id.
+
+En /obras/:id/editar incluir los nuevos campos (cliente/dirección).
+
+Asegurar permisos por company_id.
+
+E) Validaciones mínimas
+
+Si “crear nueva obra”: obra_nombre requerido.
+
+Emails válidos con WTForms/Flask-WTF o validación simple.
+
+Longitudes máximas (para evitar overflow).
