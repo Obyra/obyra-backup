@@ -1,0 +1,71 @@
+Objetivo: mostrar el cartel arriba de “Materiales Calculados” y que NO se borre cuando mostrarResultados() reescribe la tabla.
+
+1) Template (ambos por las dudas)
+
+Agregar el contenedor del aviso fuera del bloque que el JS reemplaza (antes del card/lista de materiales):
+
+templates/cotizacion/calculadora.html
+
+templates/presupuestos/calculadora.html ← aplicar en este también
+
+<!-- AVISO APROXIMADO: fuera del contenedor dinámico -->
+<div id="warn-aprox" class="alert alert-warning alert-dismissible fade show mt-3 d-none" role="alert">
+  ⚠️ Los precios, artículos, materiales y cantidades son <strong>aproximados</strong> y pueden variar según mercado, proveedor y condiciones de obra.
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+
+<!-- Ancla para materiales: el JS NO debe reemplazar esto -->
+<div id="materiales-wrapper">
+  <!-- aquí va el card "Materiales Calculados" -->
+  <!-- dentro de este card, la tabla debe tener <tbody id="tbody-materiales"> -->
+</div>
+
+
+Importante: NO uses innerHTML = ... sobre #materiales-wrapper. Solo actualizar #tbody-materiales.
+
+2) JS (mostrarResultados() o donde se arma la tabla)
+
+Mostrar el aviso.
+
+Actualizar solo el tbody, no todo el wrapper.
+
+function mostrarResultados(data) {
+  // 1) asegurar que el aviso quede visible
+  const warn = document.getElementById('warn-aprox');
+  if (warn) warn.classList.remove('d-none');
+
+  // 2) pintar solo el cuerpo de la tabla
+  const tbody = document.getElementById('tbody-materiales');
+  if (!tbody) return console.error('Falta <tbody id="tbody-materiales">');
+  tbody.innerHTML = data.materiales.map(m => `
+    <tr>
+      <td>${m.nombre}</td>
+      <td class="text-end">${m.cantidad_formateada}</td>
+      <td>${m.unidad}</td>
+    </tr>
+  `).join('');
+}
+
+3) Si hoy reescriben todo el card con innerHTML
+
+Parche rápido mientras migran a tbody:
+
+// después de renderizar la tabla:
+const anchor = document.getElementById('materiales-wrapper');
+if (anchor && !document.getElementById('warn-aprox')) {
+  const div = document.createElement('div');
+  div.id = 'warn-aprox';
+  div.className = 'alert alert-warning alert-dismissible fade show mt-3';
+  div.role = 'alert';
+  div.innerHTML = `⚠️ Los precios, artículos y cantidades son <strong>aproximados</strong> y pueden variar según mercado, proveedor y condiciones de obra.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+  anchor.parentNode.insertBefore(div, anchor); // lo inserta arriba del card
+}
+
+4) Aceptación
+
+Ver el aviso con cálculo manual y con PDF.
+
+Cambiar el tipo de construcción o recalcular y el aviso permanece.
+
+Hard reload: Ctrl+F5 (o “Clear cache and hard reload” en el navegador).

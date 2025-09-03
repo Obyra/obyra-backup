@@ -86,6 +86,12 @@
                             Resultados del Cálculo Inteligente
                         </h4>
                         
+                        <!-- AVISO APROXIMADO: fuera del contenedor dinámico -->
+                        <div id="warn-aprox" class="alert alert-warning alert-dismissible fade show mt-3 d-none" role="alert">
+                            ⚠️ Los precios, artículos, materiales y cantidades son <strong>aproximados</strong> y pueden variar según mercado, proveedor y condiciones de obra.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        
                         <div class="row" id="resultados-content">
                             <!-- Los resultados se cargarán aquí -->
                         </div>
@@ -150,121 +156,151 @@ function iniciarCalculoIA() {
 }
 
 function mostrarResultados(calculo) {
+    // 1) Asegurar que el aviso quede visible
+    const warn = document.getElementById('warn-aprox');
+    if (warn) warn.classList.remove('d-none');
+    
     const container = document.getElementById('resultados-content');
     
-    container.innerHTML = `
-        <!-- Resumen de Costos -->
-        <div class="col-12 mb-4">
-            <div class="card border-success">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Resumen de Costos</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row text-center">
-                        <div class="col-md-3">
-                            <h6 class="text-muted">Materiales</h6>
-                            <h4 class="text-primary">$${calculo.total_materiales.toLocaleString('es-AR')}</h4>
-                        </div>
-                        <div class="col-md-3">
-                            <h6 class="text-muted">Mano de Obra</h6>
-                            <h4 class="text-warning">$${calculo.total_mano_obra.toLocaleString('es-AR')}</h4>
-                        </div>
-                        <div class="col-md-3">
-                            <h6 class="text-muted">Subtotal</h6>
-                            <h4 class="text-info">$${(calculo.total_materiales + calculo.total_mano_obra).toLocaleString('es-AR')}</h4>
-                        </div>
-                        <div class="col-md-3">
-                            <h6 class="text-muted">Total Final</h6>
-                            <h4 class="text-success fw-bold">$${calculo.total_general.toLocaleString('es-AR')}</h4>
-                        </div>
+    // Si es la primera vez, crear la estructura completa
+    if (container.innerHTML.trim() === '') {
+        container.innerHTML = `
+            <!-- Resumen de Costos -->
+            <div class="col-12 mb-4">
+                <div class="card border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Resumen de Costos</h5>
+                    </div>
+                    <div class="card-body" id="resumen-costos">
+                        <!-- Se actualizará dinámicamente -->
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Advertencia sobre aproximación de datos -->
-        <div class="col-12 mb-3">
-            <div class="alert alert-warning" role="alert">
-                ⚠️ Los precios, artículos y cantidades son aproximados y pueden variar según mercado, proveedor y condiciones de obra.
-            </div>
-        </div>
-        
-        <!-- Materiales -->
-        <div class="col-md-6 mb-4">
-            <div class="card border-primary">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Materiales Necesarios</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Material</th>
-                                    <th>Cantidad</th>
-                                    <th>Costo</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${calculo.materiales.map(material => `
+            
+            <!-- Materiales -->
+            <div class="col-md-6 mb-4" id="materiales-wrapper">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Materiales Calculados</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
                                     <tr>
-                                        <td>${material.material}</td>
-                                        <td>${material.cantidad} ${material.unidad}</td>
-                                        <td>$${material.total.toLocaleString('es-AR')}</td>
+                                        <th>Material</th>
+                                        <th>Cantidad</th>
+                                        <th>Costo</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody id="tbody-materiales">
+                                    <!-- Se actualizará dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Mano de Obra -->
-        <div class="col-md-6 mb-4">
-            <div class="card border-warning">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Mano de Obra</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Especialidad</th>
-                                    <th>Días</th>
-                                    <th>Costo</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${calculo.mano_obra.map(mo => `
+            
+            <!-- Mano de Obra -->
+            <div class="col-md-6 mb-4">
+                <div class="card border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="fas fa-users me-2"></i>Mano de Obra</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
                                     <tr>
-                                        <td>${mo.tipo}</td>
-                                        <td>${mo.dias}</td>
-                                        <td>$${mo.total.toLocaleString('es-AR')}</td>
+                                        <th>Especialidad</th>
+                                        <th>Días</th>
+                                        <th>Costo</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody id="tbody-mano-obra">
+                                    <!-- Se actualizará dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Recomendaciones -->
-        <div class="col-12">
-            <div class="card border-info">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Recomendaciones IA</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="mb-0">
-                        ${calculo.recomendaciones.map(rec => `<li>${rec}</li>`).join('')}
-                    </ul>
+            
+            <!-- Recomendaciones -->
+            <div class="col-12">
+                <div class="card border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Recomendaciones IA</h5>
+                    </div>
+                    <div class="card-body" id="recomendaciones-content">
+                        <!-- Se actualizará dinámicamente -->
+                    </div>
                 </div>
             </div>
-        </div>
-    `;
+        `;
+    }
+    
+    // 2) Actualizar solo el contenido dinámico
+    
+    // Actualizar resumen de costos
+    const resumenCostos = document.getElementById('resumen-costos');
+    if (resumenCostos) {
+        resumenCostos.innerHTML = `
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <h6 class="text-muted">Materiales</h6>
+                    <h4 class="text-primary">$${calculo.total_materiales.toLocaleString('es-AR')}</h4>
+                </div>
+                <div class="col-md-3">
+                    <h6 class="text-muted">Mano de Obra</h6>
+                    <h4 class="text-warning">$${calculo.total_mano_obra.toLocaleString('es-AR')}</h4>
+                </div>
+                <div class="col-md-3">
+                    <h6 class="text-muted">Subtotal</h6>
+                    <h4 class="text-info">$${(calculo.total_materiales + calculo.total_mano_obra).toLocaleString('es-AR')}</h4>
+                </div>
+                <div class="col-md-3">
+                    <h6 class="text-muted">Total Final</h6>
+                    <h4 class="text-success fw-bold">$${calculo.total_general.toLocaleString('es-AR')}</h4>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Actualizar solo el tbody de materiales
+    const tbodyMateriales = document.getElementById('tbody-materiales');
+    if (tbodyMateriales) {
+        tbodyMateriales.innerHTML = calculo.materiales.map(material => `
+            <tr>
+                <td>${material.material}</td>
+                <td>${material.cantidad} ${material.unidad}</td>
+                <td>$${material.total.toLocaleString('es-AR')}</td>
+            </tr>
+        `).join('');
+    }
+    
+    // Actualizar solo el tbody de mano de obra
+    const tbodyManoObra = document.getElementById('tbody-mano-obra');
+    if (tbodyManoObra) {
+        tbodyManoObra.innerHTML = calculo.mano_obra.map(mo => `
+            <tr>
+                <td>${mo.tipo}</td>
+                <td>${mo.dias}</td>
+                <td>$${mo.total.toLocaleString('es-AR')}</td>
+            </tr>
+        `).join('');
+    }
+    
+    // Actualizar recomendaciones
+    const recomendacionesContent = document.getElementById('recomendaciones-content');
+    if (recomendacionesContent) {
+        recomendacionesContent.innerHTML = `
+            <ul class="mb-0">
+                ${calculo.recomendaciones.map(rec => `<li>${rec}</li>`).join('')}
+            </ul>
+        `;
+    }
     
     document.getElementById('resultados-calculo').classList.remove('d-none');
 }
