@@ -1,3 +1,4 @@
+<!-- TEMPLATE FLAG: cotizacion/calculadora.html v1 -->
 {% extends "base.html" %}
 
 {% block title %}Presupuesto Estimado Automático - OBYRA IA{% endblock %}
@@ -69,10 +70,16 @@
                         </div>
                         
                         <div class="col-md-6 mb-3">
+                            <div class="form-check my-2">
+                                <input class="form-check-input" type="checkbox" id="chk-ok-cliente">
+                                <label class="form-check-label" for="chk-ok-cliente">
+                                    El cliente entiende que <strong>el presupuesto es estimado</strong> y da su OK para calcular.
+                                </label>
+                            </div>
                             <div class="d-flex align-items-end h-100">
-                                <button type="button" class="btn btn-primary btn-lg w-100" onclick="iniciarCalculoIA()">
+                                <button type="button" id="btn-calcular" class="btn btn-primary btn-lg w-100" onclick="iniciarCalculoIA()">
                                     <i class="fas fa-arrow-right me-2"></i>
-                                    Avanzar al Paso 2: Cálculos IA
+                                    🧠 Calcular con IA
                                 </button>
                             </div>
                         </div>
@@ -86,9 +93,10 @@
                             Resultados del Cálculo Inteligente
                         </h4>
                         
-                        <!-- AVISO APROXIMADO: fuera del contenedor dinámico -->
-                        <div id="warn-aprox" class="alert alert-warning alert-dismissible fade show mt-3 d-none" role="alert">
-                            ⚠️ Los precios, artículos, materiales y cantidades son <strong>aproximados</strong> y pueden variar según mercado, proveedor y condiciones de obra.
+                        <!-- FLAG: calculadora cartel v1 -->
+                        <div id="aviso-estimado" class="alert alert-warning alert-dismissible fade show mt-3" role="alert">
+                            ⚠️ <strong>ESTE PRESUPUESTO ES ESTIMADO*</strong> Tomar como referencia.
+                            El cálculo final se realizará una vez que el cliente dé su <strong>OK</strong>.
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         
@@ -156,9 +164,9 @@ function iniciarCalculoIA() {
 }
 
 function mostrarResultados(calculo) {
-    // 1) Asegurar que el aviso quede visible
-    const warn = document.getElementById('warn-aprox');
-    if (warn) warn.classList.remove('d-none');
+    // asegurar que el aviso esté visible
+    const aviso = document.getElementById('aviso-estimado');
+    if (aviso) aviso.style.display = ''; // por si algún estilo lo escondió
     
     const container = document.getElementById('resultados-content');
     
@@ -177,8 +185,8 @@ function mostrarResultados(calculo) {
                 </div>
             </div>
             
-            <!-- Materiales -->
-            <div class="col-md-6 mb-4" id="materiales-wrapper">
+            <!-- NO reescribir este wrapper por JS -->
+            <div class="col-md-6 mb-4" id="materiales-card">
                 <div class="card border-primary">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Materiales Calculados</h5>
@@ -241,8 +249,6 @@ function mostrarResultados(calculo) {
         `;
     }
     
-    // 2) Actualizar solo el contenido dinámico
-    
     // Actualizar resumen de costos
     const resumenCostos = document.getElementById('resumen-costos');
     if (resumenCostos) {
@@ -268,17 +274,16 @@ function mostrarResultados(calculo) {
         `;
     }
     
-    // Actualizar solo el tbody de materiales
-    const tbodyMateriales = document.getElementById('tbody-materiales');
-    if (tbodyMateriales) {
-        tbodyMateriales.innerHTML = calculo.materiales.map(material => `
-            <tr>
-                <td>${material.material}</td>
-                <td>${material.cantidad} ${material.unidad}</td>
-                <td>$${material.total.toLocaleString('es-AR')}</td>
-            </tr>
-        `).join('');
-    }
+    // pintar SOLO el cuerpo de la tabla
+    const tbody = document.getElementById('tbody-materiales');
+    if (!tbody) { console.error('Falta <tbody id="tbody-materiales">'); return; }
+    tbody.innerHTML = calculo.materiales.map(m => `
+        <tr>
+            <td>${m.material}</td>
+            <td class="text-end">${m.cantidad} ${m.unidad}</td>
+            <td>$${m.total.toLocaleString('es-AR')}</td>
+        </tr>
+    `).join('');
     
     // Actualizar solo el tbody de mano de obra
     const tbodyManoObra = document.getElementById('tbody-mano-obra');
@@ -304,6 +309,17 @@ function mostrarResultados(calculo) {
     
     document.getElementById('resultados-calculo').classList.remove('d-none');
 }
+
+// JS para bloquear/desbloquear botón hasta que se marque OK del cliente
+(function(){
+  const btn = document.getElementById('btn-calcular');
+  const chk = document.getElementById('chk-ok-cliente');
+  if (!btn || !chk) return;
+
+  function sync(){ btn.disabled = !chk.checked; }
+  chk.addEventListener('change', sync);
+  sync(); // estado inicial: deshabilitado hasta tildar
+})();
 </script>
 
 <style>
