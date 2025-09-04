@@ -491,11 +491,6 @@
                         <input type="text" class="form-control" name="nombre" 
                                placeholder="Ej: Excavación de zanjas" required>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Descripción</label>
-                        <textarea class="form-control" name="descripcion" rows="2" 
-                                  placeholder="Descripción de la tarea..."></textarea>
-                    </div>
                     <!-- Fechas planificadas -->
                     <div class="row">
                         <div class="col-md-6">
@@ -733,19 +728,45 @@
 </style>
 <script>
 function abrirModalTarea(etapaId, nombreEtapa) {
-    document.getElementById('formNuevaTarea').action = `/obras/etapa/${etapaId}/tarea`;
+    // Configurar acción del formulario para usar el nuevo endpoint  
+    const form = document.getElementById('formNuevaTarea');
+    form.action = '/obras/tareas/crear';
+    
+    // Agregar campos ocultos para etapa_id y obra_id
+    let etapaIdInput = form.querySelector('input[name="etapa_id"]');
+    if (!etapaIdInput) {
+        etapaIdInput = document.createElement('input');
+        etapaIdInput.type = 'hidden';
+        etapaIdInput.name = 'etapa_id';
+        form.appendChild(etapaIdInput);
+    }
+    etapaIdInput.value = etapaId;
+    
+    // Obtener obra_id del contexto (asumiendo que está en algún lugar)
+    let obraIdInput = form.querySelector('input[name="obra_id"]');
+    if (!obraIdInput) {
+        obraIdInput = document.createElement('input');
+        obraIdInput.type = 'hidden';
+        obraIdInput.name = 'obra_id';
+        form.appendChild(obraIdInput);
+    }
+    // Extraer obra_id de la URL actual o de algún elemento
+    const currentUrl = window.location.pathname;
+    const obraIdMatch = currentUrl.match(/\/obras\/(\d+)/);
+    if (obraIdMatch) {
+        obraIdInput.value = obraIdMatch[1];
+    }
+    
     document.getElementById('nombreEtapa').textContent = nombreEtapa;
     
     // Limpiar campos previos
     const tareasInput = document.querySelector('#nuevaTareaModal input[name="nombre"]');
-    const descripcionTextarea = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
     const horasInput = document.querySelector('#nuevaTareaModal input[name="horas_estimadas"]');
     const responsableSelect = document.querySelector('#nuevaTareaModal select[name="responsable_id"]');
     const fechaInicioInput = document.querySelector('#nuevaTareaModal input[name="fecha_inicio_plan"]');
     const fechaFinInput = document.querySelector('#nuevaTareaModal input[name="fecha_fin_plan"]');
     
     tareasInput.value = '';
-    descripcionTextarea.value = '';
     if (horasInput) horasInput.value = '';
     if (responsableSelect) responsableSelect.value = '';
     if (fechaInicioInput) fechaInicioInput.value = '';
@@ -762,10 +783,8 @@ function abrirModalTarea(etapaId, nombreEtapa) {
         // Mostrar y cargar tareas sugeridas
         mostrarTareasSugeridas(tareasDisponibles, nombreEtapa);
         tareasInput.placeholder = `Ej: ${tareasDisponibles[0].nombre || 'Nueva tarea'}`;
-        descripcionTextarea.placeholder = `Ej: ${tareasDisponibles[0].descripcion || 'Descripción de la tarea'}`;
     } else {
         tareasInput.placeholder = 'Nombre de la tarea';
-        descripcionTextarea.placeholder = 'Descripción de la tarea...';
     }
     
     // Habilitar campo nombre inicialmente
@@ -797,11 +816,14 @@ function mostrarTareasSugeridas(tareas, nombreEtapa) {
     
     etapaSpan.textContent = nombreEtapa;
     
-    // Generar checkboxes para cada tarea sugerida
+    // Generar checkboxes para cada tarea sugerida usando ID numérico
     const checkboxesHTML = tareas.map((tarea, index) => `
         <div class="form-check mb-2">
-            <input class="form-check-input tarea-sugerida-check" type="checkbox" 
-                   value="${index}" id="tareaCheck${index}" 
+            <input class="form-check-input" type="checkbox" 
+                   name="sugeridas[]" 
+                   value="${index}" 
+                   id="tareaCheck${index}" 
+                   data-nombre="${tarea.nombre}"
                    onchange="actualizarSeleccionSugeridas()">
             <label class="form-check-label" for="tareaCheck${index}">
                 <strong>${tarea.nombre}</strong><br>
@@ -810,7 +832,11 @@ function mostrarTareasSugeridas(tareas, nombreEtapa) {
         </div>
     `).join('');
     
-    listaTareas.innerHTML = checkboxesHTML;
+    listaTareas.innerHTML = checkboxesHTML + `
+        <div class="form-text mt-2">
+            <i class="fas fa-info-circle"></i> Si seleccionás varias sugeridas, se crearán varias tareas con el mismo responsable, horas y fechas.
+        </div>
+    `;
     container.style.display = 'block';
     
     // Guardar referencia a las tareas
@@ -818,9 +844,8 @@ function mostrarTareasSugeridas(tareas, nombreEtapa) {
 }
 
 function actualizarSeleccionSugeridas() {
-    const checkboxes = document.querySelectorAll('.tarea-sugerida-check:checked');
+    const checkboxes = document.querySelectorAll('input[name="sugeridas[]"]:checked');
     const tareasInput = document.querySelector('#nuevaTareaModal input[name="nombre"]');
-    const descripcionTextarea = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
     
     const cantidadSeleccionadas = checkboxes.length;
     
@@ -829,22 +854,18 @@ function actualizarSeleccionSugeridas() {
         tareasInput.disabled = false;
         tareasInput.value = '';
         tareasInput.placeholder = 'Nombre de la tarea';
-        descripcionTextarea.value = '';
-        descripcionTextarea.placeholder = 'Descripción de la tarea...';
     } else if (cantidadSeleccionadas === 1) {
         // 1 sugerida: autocompletar pero editable
         const index = checkboxes[0].value;
         const tarea = window.tareasActuales[index];
         tareasInput.disabled = false;
         tareasInput.value = tarea.nombre;
-        descripcionTextarea.value = tarea.descripcion || '';
         console.log(`✅ Tarea predefinida seleccionada: ${tarea.nombre}`);
     } else {
         // 2+ sugeridas: deshabilitar nombre, se crearán múltiples tareas
         tareasInput.disabled = true;
         tareasInput.value = `${cantidadSeleccionadas} tareas seleccionadas`;
-        descripcionTextarea.value = '';
-        descripcionTextarea.placeholder = 'Las descripciones se tomarán de cada tarea sugerida';
+        tareasInput.placeholder = `${cantidadSeleccionadas} tareas seleccionadas`;
     }
 }
 
@@ -1765,61 +1786,51 @@ function eliminarTarea(tareaId) {
   updateBtn(); // Inicializar contador
 })();
 
-// Handler para el formulario de nueva tarea con múltiples sugeridas
+// Handler para el formulario de nueva tarea según especificación
 document.addEventListener('DOMContentLoaded', function() {
-    const formNuevaTarea = document.getElementById('formNuevaTarea');
+    const form = document.querySelector('#nuevaTareaModal form');
     
-    if (formNuevaTarea) {
-        formNuevaTarea.addEventListener('submit', async function(e) {
+    if (form) {
+        form.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const formData = new FormData(this);
+            const fd = new FormData(form);
             
-            // Obtener tareas sugeridas seleccionadas
-            const checkboxesSugeridas = document.querySelectorAll('.tarea-sugerida-check:checked');
-            const tareasSeleccionadas = Array.from(checkboxesSugeridas).map(checkbox => {
-                const index = checkbox.value;
-                return window.tareasActuales[index];
-            });
+            // Normalizar array de sugeridas (IDs)
+            fd.delete('sugeridas');
             
-            // Agregar tareas sugeridas al FormData
-            tareasSeleccionadas.forEach((tarea, i) => {
-                formData.append(`sugeridas[${i}][nombre]`, tarea.nombre);
-                formData.append(`sugeridas[${i}][descripcion]`, tarea.descripcion || '');
-            });
+            // Volver a armar desde checkboxes
+            const checks = [...document.querySelectorAll('[name="sugeridas[]"]:checked')];
+            checks.forEach(c => fd.append('sugeridas[]', c.value));
+            
+            // Si hay 2+ sugeridas, deshabilitar nombre (se ignora en el backend)
+            const nombreIpt = form.querySelector('[name="nombre"]');
+            if (checks.length >= 2 && nombreIpt) {
+                nombreIpt.disabled = true;
+            }
             
             try {
-                const response = await fetch(this.action, {
-                    method: 'POST',
-                    body: formData
+                const resp = await fetch('/obras/tareas/crear', { 
+                    method: 'POST', 
+                    body: fd 
                 });
+                const data = await resp.json();
                 
-                if (response.ok) {
-                    // Intentar parsear JSON para ver si hay información sobre cuántas tareas se crearon
-                    try {
-                        const result = await response.json();
-                        if (result.ok) {
-                            const cantidadCreadas = result.created || 1;
-                            const mensaje = cantidadCreadas > 1 
-                                ? `${cantidadCreadas} tareas creadas exitosamente`
-                                : 'Tarea creada exitosamente';
-                            
-                            // Cerrar modal y recargar
-                            const modal = bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal'));
-                            modal.hide();
-                            location.reload();
-                        } else {
-                            alert(result.error || 'Error al crear las tareas');
-                        }
-                    } catch (jsonError) {
-                        // Si no es JSON, asumimos que es un redirect exitoso
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal'));
-                        modal.hide();
-                        location.reload();
-                    }
-                } else {
-                    alert('Error al crear las tareas');
+                if (!data.ok) {
+                    alert(data.error || 'Error al crear las tareas múltiples');
+                    return;
                 }
+                
+                // Éxito - opcional: toast con data.created
+                if (data.created > 1) {
+                    console.log(`✅ ${data.created} tareas creadas exitosamente`);
+                }
+                
+                // Cerrar modal y recargar
+                const modal = bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal'));
+                modal.hide();
+                location.reload();
+                
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error al crear las tareas: ' + error.message);

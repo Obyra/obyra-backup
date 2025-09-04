@@ -482,6 +482,112 @@ def agregar_etapa(id):
     
     return redirect(url_for('obras.detalle', id=id))
 
+@obras_bp.route("/tareas/crear", methods=['POST'])
+@login_required
+def crear_tareas():
+    """Nuevo endpoint para crear una o múltiples tareas según especificación"""
+    try:
+        obra_id = request.form.get("obra_id", type=int)
+        etapa_id = request.form.get("etapa_id", type=int)
+        horas = request.form.get("horas_estimadas", type=float)
+        resp_id = request.form.get("responsable_id", type=int) or None
+        fi = parse_date(request.form.get("fecha_inicio_plan"))
+        ff = parse_date(request.form.get("fecha_fin_plan"))
+
+        sugeridas = request.form.getlist("sugeridas[]")  # Array de IDs numéricos
+
+        # Validación básica
+        if not etapa_id:
+            return jsonify(ok=False, error="Falta el ID de etapa"), 400
+
+        # Verificar que la etapa existe y pertenece al usuario
+        etapa = EtapaObra.query.get_or_404(etapa_id)
+        if etapa.obra.organizacion_id != current_user.organizacion_id:
+            return jsonify(ok=False, error="Sin permisos"), 403
+
+        # Caso simple: sin sugeridas
+        if not sugeridas:
+            nombre = request.form.get("nombre", "").strip()
+            if not nombre:
+                return jsonify(ok=False, error="Falta el nombre"), 400
+            
+            t = TareaEtapa(
+                etapa_id=etapa_id,
+                nombre=nombre,
+                responsable_id=resp_id,
+                horas_estimadas=horas,
+                fecha_inicio_plan=fi,
+                fecha_fin_plan=ff
+            )
+            db.session.add(t)
+            db.session.commit()
+            return jsonify(ok=True, created=1)
+
+        # Caso múltiple: con sugeridas
+        created = 0
+        for sid in sugeridas:
+            try:
+                # sid es el índice en el array de tareas predefinidas
+                index = int(sid)
+                # Obtener tareas predefinidas para esta etapa
+                nombre_etapa = etapa.nombre
+                tareas_disponibles = TAREAS_POR_ETAPA.get(nombre_etapa, [])
+                
+                if index >= len(tareas_disponibles):
+                    continue
+                    
+                tarea_data = tareas_disponibles[index]
+                
+                # Manejar formato string o diccionario
+                if isinstance(tarea_data, str):
+                    nombre_tarea = tarea_data
+                elif isinstance(tarea_data, dict):
+                    nombre_tarea = tarea_data.get("nombre", "")
+                else:
+                    continue
+                
+                if not nombre_tarea:
+                    continue
+                
+                t = TareaEtapa(
+                    etapa_id=etapa_id,
+                    nombre=nombre_tarea,
+                    responsable_id=resp_id,
+                    horas_estimadas=horas,
+                    fecha_inicio_plan=fi,
+                    fecha_fin_plan=ff
+                )
+                db.session.add(t)
+                created += 1
+                
+            except (ValueError, IndexError):
+                continue
+
+        if created == 0:
+            db.session.rollback()
+            return jsonify(ok=False, error="No se pudo crear ninguna tarea"), 400
+
+        db.session.commit()
+        return jsonify(ok=True, created=created)
+
+    except Exception as e:
+        print(f"❌ Error en crear_tareas: {str(e)}")
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+def parse_date(s):
+    """Función auxiliar para parsear fechas en múltiples formatos"""
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except:
+            pass
+    return None
+
+
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
 @login_required
 def agregar_tarea(id):
