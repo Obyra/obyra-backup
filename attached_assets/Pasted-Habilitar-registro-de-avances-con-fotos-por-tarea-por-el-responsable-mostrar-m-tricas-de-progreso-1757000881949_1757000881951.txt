@@ -1,0 +1,254 @@
+Habilitar registro de avances con fotos por tarea (por el responsable), mostrar métricas de progreso y respetar fechas planificadas (inicio/fin) definidas por admin.
+
+1) Migración (aditiva)
+-- TAREAS: datos de planificación y unidad/volumen
+ALTER TABLE tareas
+  ADD COLUMN IF NOT EXISTS responsable_id INT NULL REFERENCES usuarios(id),
+  ADD COLUMN IF NOT EXISTS unidad VARCHAR(10),                   -- 'm2','ml','u','m3','hrs'
+  ADD COLUMN IF NOT EXISTS cantidad_planificada NUMERIC,         -- total esperado
+  ADD COLUMN IF NOT EXISTS fecha_inicio_plan DATE,
+  ADD COLUMN IF NOT EXISTS fecha_fin_plan DATE,
+  ADD COLUMN IF NOT EXISTS fecha_inicio_real TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS fecha_fin_real TIMESTAMP;
+
+-- AVANCES (log)
+CREATE TABLE IF NOT EXISTS tarea_avances (
+  id SERIAL PRIMARY KEY,
+  tarea_id INT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+  user_id INT NULL REFERENCES usuarios(id),
+  fecha DATE DEFAULT CURRENT_DATE,
+  cantidad NUMERIC NOT NULL,
+  unidad VARCHAR(10),              -- por default usar unidad de la tarea
+  notas TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- FOTOS ligadas al avance (si ya existe tarea_adjuntos, sólo agrega la FK)
+ALTER TABLE tarea_adjuntos
+  ADD COLUMN IF NOT EXISTS avance_id INT NULL REFERENCES tarea_avances(id);
+
+
+Si ya tenés tarea_adjuntos, sólo agregá avance_id.
+
+2) Modelos (SQLAlchemy) — aditivos
+class TareaAvance(db.Model):
+    __tablename__ = "tarea_avances"
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas.id"), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    fecha = db.Column(db.Date, default=date.today)
+    cantidad = db.Column(db.Numeric, nullable=False)
+    unidad = db.Column(db.String(10))
+    notas = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+Helper para métricas:
+
+def resumen_tarea(t):
+    plan = float(t.cantidad_planificada or 0)
+    ejec = float(db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+                 .filter(TareaAvance.tarea_id==t.id).scalar() or 0)
+    pct = (ejec/plan*100.0) if plan>0 else 0.0
+    restante = max(plan - ejec, 0.0)
+    atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
+    return {"plan": plan, "ejec": ejec, "pct": pct, "restante": restante, "atrasada": atrasada}
+
+3) Endpoints
+(A) Registrar avance + fotos (responsable o admin)
+@tareas_bp.post("/<int:tarea_id>/avances")
+@login_required
+def crear_avance(tarea_id):
+    t = Tarea.query.get_or_404(tarea_id)
+
+    # Permisos: responsable o admin
+    if not (current_user.is_admin or t.responsable_id == current_user.id):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    cantidad = request.form.get("cantidad", type=float)
+    unidad = request.form.get("unidad") or t.unidad
+    notas = request.form.get("notas")
+    if not cantidad or cantidad <= 0:
+        return jsonify(ok=False, error="Cantidad inválida"), 400
+
+    av = TareaAvance(tarea_id=t.id, user_id=current_user.id,
+                     cantidad=cantidad, unidad=unidad, notas=notas)
+    db.session.add(av)
+
+    # Fecha real de inicio si es el primer avance
+    if not t.fecha_inicio_real:
+        t.fecha_inicio_real = datetime.utcnow()
+
+    # FOTOS (opcional)
+    files = request.files.getlist("fotos")
+    if files:
+        base = Path(current_app.static_folder) / "uploads" / "obras" / str(t.obra_id) / "tareas" / str(t.id)
+        base.mkdir(parents=True, exist_ok=True)
+        for f in files:
+            fname = secure_filename(f.filename)
+            save_path = base / fname
+            f.save(save_path)
+            db.session.add(TareaAdjunto(
+                tarea_id=t.id, avance_id=av.id, uploaded_by=current_user.id,
+                path=f"/static/uploads/obras/{t.obra_id}/tareas/{t.id}/{fname}"
+            ))
+
+    db.session.commit()
+    return jsonify(ok=True)
+
+(B) Completar tarea (auto o admin)
+@tareas_bp.post("/<int:tarea_id>/complete")
+@login_required
+def completar_tarea(tarea_id):
+    t = Tarea.query.get_or_404(tarea_id)
+
+    # responsable o admin
+    if not (current_user.is_admin or t.responsable_id == current_user.id):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    m = resumen_tarea(t)
+    if m["restante"] > 0:
+        return jsonify(ok=False, error="Aún faltan cantidades por ejecutar"), 400
+
+    t.estado = "completada"
+    t.fecha_fin_real = datetime.utcnow()
+    db.session.commit()
+    return jsonify(ok=True)
+
+4) UI (plantilla de Detalle de Obra)
+(A) En el modal “Nueva/Editar Tarea” agregar campos:
+<div class="row g-2">
+  <div class="col-md-4">
+    <label class="form-label">Unidad</label>
+    <select name="unidad" class="form-select" required>
+      <option value="m2">m²</option><option value="ml">ml</option>
+      <option value="u">unid.</option><option value="m3">m³</option>
+      <option value="hrs">hrs</option>
+    </select>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Cantidad planificada</label>
+    <input type="number" step="0.01" name="cantidad_planificada" class="form-control" required>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Responsable</label>
+    <!-- tu select de usuarios -->
+  </div>
+  <div class="col-md-6">
+    <label class="form-label">Inicio planificado</label>
+    <input type="date" name="fecha_inicio_plan" class="form-control">
+  </div>
+  <div class="col-md-6">
+    <label class="form-label">Fin planificado</label>
+    <input type="date" name="fecha_fin_plan" class="form-control">
+  </div>
+</div>
+
+(B) En cada tarea (lista dentro de la etapa) mostrar progreso y acciones:
+<!-- dentro de la fila de tarea -->
+<div class="d-flex align-items-center gap-3">
+  <span class="badge bg-light text-dark">👤 {{ tarea.responsable.nombre_corto or 'Sin asignar' }}</span>
+
+  <div class="progress" style="width:180px; height:8px;">
+    <div class="progress-bar" style="width: {{ tarea.metrics.pct|round(1) }}%;"></div>
+  </div>
+  <small class="text-muted">
+    {{ tarea.metrics.ejec|round(2) }}/{{ tarea.cantidad_planificada|default(0) }} {{ tarea.unidad }}
+    {% if tarea.metrics.atrasada %}<span class="badge bg-danger ms-2">Atrasada</span>{% endif %}
+  </small>
+
+  <button class="btn btn-outline-primary btn-sm"
+          onclick="openAvanceModal({{tarea.id}}, '{{tarea.unidad}}')">
+    Registrar avance
+  </button>
+  <button class="btn btn-success btn-sm"
+          onclick="completarTarea({{tarea.id}})">
+    Marcar completada
+  </button>
+</div>
+
+
+En el servidor, antes de renderizar, setear tarea.metrics = resumen_tarea(tarea).
+
+(C) Modal “Registrar avance”
+<div class="modal fade" id="modalAvance" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Registrar avance</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    <form id="frm-avance" enctype="multipart/form-data">
+      <div class="modal-body">
+        <input type="hidden" name="tarea_id" id="av-tarea-id">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Cantidad</label>
+            <input name="cantidad" step="0.01" type="number" class="form-control" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Unidad</label>
+            <input name="unidad" id="av-unidad" class="form-control" readonly>
+          </div>
+        </div>
+        <label class="form-label mt-2">Notas</label>
+        <textarea name="notas" rows="2" class="form-control"></textarea>
+
+        <label class="form-label mt-2">Fotos (opcional)</label>
+        <input type="file" name="fotos" accept="image/*" multiple class="form-control">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Guardar avance</button>
+      </div>
+    </form>
+  </div></div>
+</div>
+
+<script>
+let avanceModal;
+function openAvanceModal(tid, unidad){
+  document.getElementById('av-tarea-id').value = tid;
+  document.getElementById('av-unidad').value = unidad || '';
+  avanceModal = avanceModal || new bootstrap.Modal(document.getElementById('modalAvance'));
+  avanceModal.show();
+}
+
+document.getElementById('frm-avance')?.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const tid = document.getElementById('av-tarea-id').value;
+  const r = await fetch(`/tareas/${tid}/avances`, { method:'POST', body: fd });
+  const j = await r.json();
+  if (j.ok) location.reload(); else alert(j.error || 'No se pudo guardar');
+});
+
+async function completarTarea(tid){
+  if(!confirm('¿Marcar tarea como completada?')) return;
+  const r = await fetch(`/tareas/${tid}/complete`, {method:'POST'});
+  const j = await r.json();
+  if (j.ok) location.reload(); else alert(j.error || 'No se pudo completar');
+}
+</script>
+
+5) Reglas de negocio
+
+Quién puede cargar avances: responsable_id de la tarea o admin.
+
+Inicio real se fija en el primer avance.
+
+Fin real al completar (cuando ejec >= plan).
+
+Atrasada si hoy > fecha_fin_plan y restante > 0.
+
+Reportes: sumar tarea_avances.cantidad por etapa/obra para % ejecutado.
+
+6) QA de aceptación
+
+Admin setea unidad, cantidad planificada, fechas plan y responsable al crear/editar tarea.
+
+Responsable entra a la obra → “Registrar avance” → carga cantidad + fotos → progreso y barra se actualizan.
+
+Cuando ejecutado ≥ planificado → puede “Marcar completada”; se guarda fecha_fin_real.
+
+Si pasa la fecha_fin_plan con pendiente > 0 → aparece badge “Atrasada”.
+
+En reportes por etapa/obra se refleja el %.

@@ -1635,14 +1635,41 @@ function eliminarTarea(tareaId) {
     const ids = selectedIds();
     if (!ids.length) return;
     if (!confirm(`¿Eliminar ${ids.length} etapas seleccionadas?\n\nEsta acción también eliminará todas las tareas asociadas y no se puede deshacer.`)) return;
-    const r = await fetch('/obras/etapas/bulk_delete', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ ids })
-    });
-    const j = await r.json();
-    if (j.ok) location.reload(); 
-    else alert(j.error || 'No se pudo eliminar.');
+    
+    try {
+      const r = await fetch('/obras/etapas/bulk_delete', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ ids })
+      });
+      
+      // Verificar si la respuesta es exitosa
+      if (!r.ok) {
+        console.error('Error HTTP:', r.status, r.statusText);
+        alert(`Error del servidor: ${r.status} ${r.statusText}`);
+        return;
+      }
+      
+      // Verificar que la respuesta sea JSON
+      const contentType = r.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Respuesta no es JSON:', contentType);
+        const text = await r.text();
+        console.error('Contenido de respuesta:', text);
+        alert('Error: El servidor no devolvió una respuesta JSON válida');
+        return;
+      }
+      
+      const j = await r.json();
+      if (j.ok) {
+        location.reload(); 
+      } else {
+        alert(j.error || 'No se pudo eliminar.');
+      }
+    } catch (error) {
+      console.error('Error en la solicitud:', error);
+      alert('Error de conexión: ' + error.message);
+    }
   });
   
   updateBtn(); // Inicializar contador
