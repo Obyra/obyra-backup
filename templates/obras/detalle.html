@@ -84,9 +84,6 @@
                                 </div>
                                 {% if current_user.rol in ['administrador', 'tecnico'] %}
                                 <div class="d-flex gap-2">
-                                    <button id="btn-stage-cancel" class="btn btn-outline-secondary btn-sm">
-                                        Cancelar selección
-                                    </button>
                                     <button id="btn-stage-delete" class="btn btn-danger btn-sm" disabled>
                                         Eliminar seleccionadas (0)
                                     </button>
@@ -99,15 +96,9 @@
                             
                             {% if etapas %}
                                 {% for etapa in etapas %}
-                                <div class="etapa-item border-bottom py-2 d-flex align-items-center justify-content-between" data-etapa-id="{{ etapa.id }}">
-                                    <!-- Checkbox de selección múltiple de ETAPAS -->
-                                    <label class="form-check me-2 stage-toggle d-none">
-                                        <input type="checkbox" class="form-check-input stage-check" value="{{ etapa.id }}">
-                                    </label>
-                                    
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div class="flex-grow-1">
+                                <div class="border-bottom py-2">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
                                             <div class="d-flex align-items-center">
                                                 <span class="badge bg-primary me-2">{{ etapa.orden }}</span>
                                                 <h6 class="mb-1 cursor-pointer" onclick="toggleTareasEtapa({{ etapa.id }})">
@@ -138,57 +129,65 @@
                                                 <i class="fas fa-plus me-1"></i>Agregar Tarea
                                             </button>
                                             {% endif %}
-                                            </div>
-                                            
-                                            <div class="text-end">
-                                            <!-- Dropdown para cambiar estado -->
-                                            <div class="dropdown mb-2">
-                                                <button class="btn btn-sm badge {{ etapa.estado|estado_badge }} dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                                    {{ etapa.estado.replace('_', ' ').title() }}
+                                        </div>
+                                        
+                                        <div class="text-end">
+                                            <div class="stage-actions d-flex align-items-center gap-2">
+                                                <!-- Checkbox fijo para selección múltiple de ETAPAS -->
+                                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                                <label class="form-check m-0">
+                                                    <input type="checkbox" class="form-check-input stage-check" value="{{ etapa.id }}">
+                                                </label>
+                                                {% endif %}
+                                                
+                                                <!-- Dropdown para cambiar estado -->
+                                                <div class="dropdown mb-2">
+                                                    <button class="btn btn-sm badge {{ etapa.estado|estado_badge }} dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                        {{ etapa.estado.replace('_', ' ').title() }}
+                                                    </button>
+                                                    <ul class="dropdown-menu">
+                                                        <li>
+                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                                <input type="hidden" name="estado" value="pendiente">
+                                                                <button class="dropdown-item" type="submit">
+                                                                    <span class="badge bg-secondary me-2">Pendiente</span>
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                                <input type="hidden" name="estado" value="en_curso">
+                                                                <button class="dropdown-item" type="submit">
+                                                                    <span class="badge bg-primary me-2">En Curso</span>
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                                <input type="hidden" name="estado" value="pausada">
+                                                                <button class="dropdown-item" type="submit">
+                                                                    <span class="badge bg-warning me-2">Pausada</span>
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                                                                <input type="hidden" name="estado" value="finalizada">
+                                                                <button class="dropdown-item" type="submit">
+                                                                    <span class="badge bg-success me-2">Finalizada</span>
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                                
+                                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                                <button class="btn btn-sm btn-outline-danger" 
+                                                        onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
+                                                        title="Eliminar etapa">
+                                                    <i class="fas fa-trash fa-xs"></i>
                                                 </button>
-                                                <ul class="dropdown-menu">
-                                                    <li>
-                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                                                            <input type="hidden" name="estado" value="pendiente">
-                                                            <button class="dropdown-item" type="submit">
-                                                                <span class="badge bg-secondary me-2">Pendiente</span>
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                    <li>
-                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                                                            <input type="hidden" name="estado" value="en_curso">
-                                                            <button class="dropdown-item" type="submit">
-                                                                <span class="badge bg-primary me-2">En Curso</span>
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                    <li>
-                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                                                            <input type="hidden" name="estado" value="pausada">
-                                                            <button class="dropdown-item" type="submit">
-                                                                <span class="badge bg-warning me-2">Pausada</span>
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                    <li>
-                                                        <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                                                            <input type="hidden" name="estado" value="finalizada">
-                                                            <button class="dropdown-item" type="submit">
-                                                                <span class="badge bg-success me-2">Finalizada</span>
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                            {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                            <br>
-                                            <button class="btn btn-sm btn-outline-danger" 
-                                                    onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
-                                                    title="Eliminar etapa">
-                                                <i class="fas fa-trash fa-xs"></i>
-                                            </button>
-                                            {% endif %}
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>
@@ -1613,63 +1612,40 @@ function eliminarTarea(tareaId) {
     });
 })();
 
-// Sistema de selección múltiple para ETAPAS
+// Sistema de selección múltiple para ETAPAS (simplificado)
 (function(){
-  const $ = (sel, ctx=document)=>ctx.querySelector(sel);
-  const $$ = (sel, ctx=document)=>Array.from(ctx.querySelectorAll(sel));
-
-  const btnCancel = $('#btn-stage-cancel');
-  const btnDelete = $('#btn-stage-delete');
-
-  function toggles(){ return $$('.stage-toggle'); }
-  function checks(){ return $$('.stage-check'); }
+  const btnDelete = document.getElementById('btn-stage-delete');
+  
+  function checks(){ return Array.from(document.querySelectorAll('.stage-check')); }
   function selectedIds(){ return checks().filter(c=>c.checked).map(c=>c.value); }
   function updateBtn(){
     const n = selectedIds().length;
-    btnDelete.textContent = `Eliminar seleccionadas (${n})`;
-    btnDelete.disabled = n === 0;
+    if (btnDelete) {
+      btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+      btnDelete.disabled = n === 0;
+    }
   }
-
-  // Entrar en modo selección: mostrar las cajitas
-  function enterSelectMode(){
-    toggles().forEach(t => t.classList.remove('d-none'));
-    updateBtn();
-  }
-  // Salir de selección
-  function exitSelectMode(){
-    toggles().forEach(t => t.classList.add('d-none'));
-    checks().forEach(c => c.checked = false);
-    updateBtn();
-  }
-
-  // Inicializar: activar modo selección apenas existan los botones
-  if (btnCancel && btnDelete) {
-    enterSelectMode();
-  }
-
+  
   document.addEventListener('change', e=>{
-    if (e.target && e.target.classList.contains('stage-check')) updateBtn();
+    if (e.target?.classList?.contains('stage-check')) updateBtn();
   });
-
-  btnCancel?.addEventListener('click', e=>{
-    e.preventDefault();
-    exitSelectMode();
-  });
-
-  btnDelete?.addEventListener('click', async e=>{
+  
+  btnDelete?.addEventListener('click', async (e)=>{
     e.preventDefault();
     const ids = selectedIds();
     if (!ids.length) return;
     if (!confirm(`¿Eliminar ${ids.length} etapas seleccionadas?\n\nEsta acción también eliminará todas las tareas asociadas y no se puede deshacer.`)) return;
     const r = await fetch('/etapas/bulk_delete', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ ids })
     });
     const j = await r.json();
-    if (j.ok) location.reload();
+    if (j.ok) location.reload(); 
     else alert(j.error || 'No se pudo eliminar.');
   });
+  
+  updateBtn(); // Inicializar contador
 })();
 </script>
 {% endblock %}
