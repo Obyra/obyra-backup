@@ -591,6 +591,73 @@ def obtener_tareas_etapa(etapa_id):
         'etapa_nombre': etapa.nombre
     })
 
+@obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
+@login_required
+def eliminar_tarea(tarea_id):
+    """Eliminar una tarea específica"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+    
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Verificar que la tarea pertenezca a la organización del usuario
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+    
+    try:
+        obra = tarea.etapa.obra
+        db.session.delete(tarea)
+        
+        # Recalcular progreso automático de la obra
+        obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@obras_bp.route('/tareas/bulk_delete', methods=['POST'])
+@login_required
+def tareas_bulk_delete():
+    """Eliminar múltiples tareas en lote"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'Sin permisos', 'ok': False}), 403
+    
+    data = request.get_json() or {}
+    ids = data.get("ids") or []
+    
+    if not ids:
+        return jsonify({'error': 'IDs requeridos', 'ok': False}), 400
+
+    try:
+        # Obtener tareas y verificar permisos
+        tareas = TareaEtapa.query.filter(TareaEtapa.id.in_(ids)).all()
+        
+        # Verificar que todas las tareas pertenezcan a la organización del usuario
+        obras_a_actualizar = set()
+        for tarea in tareas:
+            if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                return jsonify({'error': 'Sin permisos para algunas tareas', 'ok': False}), 403
+            obras_a_actualizar.add(tarea.etapa.obra)
+        
+        # Eliminar tareas
+        deleted = 0
+        for tarea in tareas:
+            db.session.delete(tarea)
+            deleted += 1
+        
+        # Recalcular progreso para todas las obras afectadas
+        for obra in obras_a_actualizar:
+            obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        return jsonify({'ok': True, 'deleted': deleted})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e), 'ok': False}), 500
+
 @obras_bp.route('/geocodificar-todas', methods=['POST'])
 @login_required
 def geocodificar_todas():

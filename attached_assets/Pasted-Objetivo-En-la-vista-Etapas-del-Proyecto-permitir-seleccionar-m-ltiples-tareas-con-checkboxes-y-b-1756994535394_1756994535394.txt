@@ -1,0 +1,140 @@
+Objetivo: En la vista “Etapas del Proyecto” permitir seleccionar múltiples tareas con checkboxes y borrarlas en una sola acción. Mantener el botón rojo actual para borrado unitario.
+
+Alcance
+
+UI: Toggle “Seleccionar” que muestre checkboxes en cada tarea.
+
+Botón “Eliminar seleccionadas (N)” con confirmación.
+
+Backend: endpoint bulk que reciba ids y elimine en lote (ideal: soft-delete; si no, el mismo delete actual).
+
+Sin refactors. Sin tocar cálculo de progreso.
+
+1) Template (la vista de Detalle de Obra donde se listan etapas/tareas)
+
+En el header de “Etapas del Proyecto”, al lado de “+ Agregar”, agregar:
+
+<button id="btn-select-multi" class="btn btn-outline-secondary btn-sm ms-2">
+  Seleccionar
+</button>
+<button id="btn-delete-selected" class="btn btn-danger btn-sm ms-2 d-none" disabled>
+  Eliminar seleccionadas (0)
+</button>
+
+
+En el render de cada tarea (dentro del loop for tarea in ...), agregar el checkbox oculto por defecto:
+
+<input type="checkbox" class="task-check form-check-input me-2 d-none" value="{{ tarea.id }}">
+
+
+Colocarlo al inicio de la fila de la tarea (izquierda del título), sin romper el layout.
+Asegurarse de que cada fila tenga el tarea.id disponible (si no, añadir data-task-id="{{ tarea.id }}").
+
+2) JS mínimo (al final del template)
+<script>
+(function(){
+  let selecting = false;
+  const btnToggle = document.getElementById('btn-select-multi');
+  const btnDelete = document.getElementById('btn-delete-selected');
+
+  function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
+  function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
+  function updateDeleteBtn(){
+    const n = selectedIds().length;
+    btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+    btnDelete.disabled = n === 0;
+  }
+
+  btnToggle?.addEventListener('click', () => {
+    selecting = !selecting;
+    checks().forEach(c => {
+      c.classList.toggle('d-none', !selecting);
+      if (!selecting) c.checked = false;
+    });
+    btnDelete.classList.toggle('d-none', !selecting);
+    btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
+    updateDeleteBtn();
+  });
+
+  document.addEventListener('change', (e) => {
+    if (e.target?.classList?.contains('task-check')) updateDeleteBtn();
+  });
+
+  btnDelete?.addEventListener('click', async () => {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (!confirm(`¿Eliminar ${ids.length} tareas seleccionadas?`)) return;
+
+    const r = await fetch('/tareas/bulk_delete', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ids })
+    });
+    const res = await r.json();
+    if (res.ok){
+      // remover del DOM rápido o recargar
+      checks().forEach(c => { if (c.checked) c.closest('.tarea-item')?.remove(); }); // .tarea-item = contenedor de la fila
+      location.reload(); // simple y seguro para refrescar contadores/progreso
+    } else {
+      alert(res.error || 'No se pudo eliminar.');
+    }
+  });
+})();
+</script>
+
+
+Nota: si el contenedor de cada tarea usa otra clase, reemplazar .tarea-item por la correcta.
+
+3) Backend (Flask) — endpoint bulk
+
+Soft-delete recomendado: setear deleted_at=now() y ocultarlas de los listados.
+
+Si aún no hay soft-delete, usar la misma lógica del endpoint unitario pero en lote.
+
+@tareas_bp.post("/bulk_delete")
+@login_required
+def tareas_bulk_delete():
+    data = request.get_json() or {}
+    ids = data.get("ids") or []
+    if not ids:
+        return jsonify(error="ids requeridos"), 400
+
+    # Seguridad: filtrar por empresa/obra del usuario si aplica
+    q = Tarea.query.filter(Tarea.id.in_(ids))
+
+    # Opción A: soft delete
+    # for t in q.all():
+    #     t.deleted_at = datetime.utcnow()
+    # db.session.commit()
+    # return jsonify(ok=True, deleted=len(ids))
+
+    # Opción B: hard delete (igual que el delete actual, pero en lote)
+    deleted = q.delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify(ok=True, deleted=deleted, ok=True)
+
+
+Si existen restricciones (p.ej., no borrar tareas completadas o con certificaciones asociadas), agregar:
+
+q = q.filter(Tarea.estado != "completada")
+
+
+y devolver skipped con los IDs que no se pudieron borrar.
+
+4) QA (aceptación)
+
+Click Seleccionar → aparecen checkboxes en todas las tareas y botón rojo “Eliminar seleccionadas (0)”.
+
+Tildar varias → contador sube; Eliminar pide confirmación → borra en una llamada → recarga.
+
+Borrado unitario (ícono rojo) sigue funcionando.
+
+No errores en consola.
+
+5) “Modo ahorro”
+
+Una sola edición: agregar los 2 botones, el input.checkbox en cada fila, el bloque JS y el endpoint nuevo.
+
+No reiniciar/deploy salvo que el framework lo exija.
+
+No tocar estilos más que d-none y me-2; nada de refactors.

@@ -83,9 +83,17 @@
                                     <h6 class="mb-0">Etapas del Proyecto</h6>
                                 </div>
                                 {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
-                                    <i class="fas fa-plus me-1"></i>Agregar
-                                </button>
+                                <div class="d-flex gap-2">
+                                    <button id="btn-select-multi" class="btn btn-outline-secondary btn-sm">
+                                        Seleccionar
+                                    </button>
+                                    <button id="btn-delete-selected" class="btn btn-danger btn-sm d-none" disabled>
+                                        Eliminar seleccionadas (0)
+                                    </button>
+                                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
+                                        <i class="fas fa-plus me-1"></i>Agregar
+                                    </button>
+                                </div>
                                 {% endif %}
                             </div>
                             
@@ -823,14 +831,20 @@ function cargarTareasEtapa(etapaId) {
                     data.tareas.forEach(tarea => {
                         const badgeClass = getBadgeClass(tarea.estado);
                         html += `
-                            <div class="ms-3 mt-2 p-2 bg-light rounded">
+                            <div class="tarea-item ms-3 mt-2 p-2 bg-light rounded" data-task-id="${tarea.id}">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <div>
+                                    <div class="d-flex align-items-center">
+                                        <input type="checkbox" class="task-check form-check-input me-2 d-none" value="${tarea.id}">
                                         <i class="fas fa-tasks me-1"></i>
                                         <strong>${tarea.nombre}</strong>
                                         ${tarea.responsable ? `<small class="text-muted">(${tarea.responsable})</small>` : ''}
                                     </div>
-                                    <span class="badge ${badgeClass}">${tarea.estado}</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge ${badgeClass}">${tarea.estado}</span>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarTarea(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')" title="Eliminar tarea">
+                                            <i class="fas fa-trash fa-xs"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 ${tarea.descripcion ? `<small class="text-muted d-block mt-1">${tarea.descripcion}</small>` : ''}
                             </div>
@@ -1514,5 +1528,84 @@ function eliminarEtapa(etapaId) {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Función para confirmar eliminación de tarea unitaria
+function confirmarEliminarTarea(tareaId, nombreTarea) {
+    if (confirm(`¿Estás seguro de que deseas eliminar la tarea "${nombreTarea}"?\n\nEsta acción no se puede deshacer.`)) {
+        eliminarTarea(tareaId);
+    }
+}
+
+// Función para eliminar tarea unitaria
+function eliminarTarea(tareaId) {
+    fetch(`/tareas/eliminar/${tareaId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Recargar la página para actualizar el progreso
+            location.reload();
+        } else {
+            alert(data.error || 'Error al eliminar la tarea');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al eliminar la tarea');
+    });
+}
+
+// Sistema de selección múltiple para tareas
+(function(){
+    let selecting = false;
+    const btnToggle = document.getElementById('btn-select-multi');
+    const btnDelete = document.getElementById('btn-delete-selected');
+
+    function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
+    function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
+    function updateDeleteBtn(){
+        const n = selectedIds().length;
+        btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+        btnDelete.disabled = n === 0;
+    }
+
+    btnToggle?.addEventListener('click', () => {
+        selecting = !selecting;
+        checks().forEach(c => {
+            c.classList.toggle('d-none', !selecting);
+            if (!selecting) c.checked = false;
+        });
+        btnDelete.classList.toggle('d-none', !selecting);
+        btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
+        updateDeleteBtn();
+    });
+
+    document.addEventListener('change', (e) => {
+        if (e.target?.classList?.contains('task-check')) updateDeleteBtn();
+    });
+
+    btnDelete?.addEventListener('click', async () => {
+        const ids = selectedIds();
+        if (!ids.length) return;
+        if (!confirm(`¿Eliminar ${ids.length} tareas seleccionadas?`)) return;
+
+        const r = await fetch('/tareas/bulk_delete', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ ids })
+        });
+        const res = await r.json();
+        if (res.ok){
+            // Recargar página para actualizar progreso
+            location.reload();
+        } else {
+            alert(res.error || 'No se pudo eliminar.');
+        }
+    });
+})();
 </script>
 {% endblock %}
