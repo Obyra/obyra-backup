@@ -808,32 +808,61 @@ def tareas_bulk_delete():
         return jsonify({'error': 'IDs requeridos', 'ok': False}), 400
 
     try:
+        # Convertir IDs a enteros para evitar problemas de tipo
+        task_ids = []
+        for task_id in ids:
+            try:
+                task_ids.append(int(task_id))
+            except (ValueError, TypeError):
+                continue
+                
+        if not task_ids:
+            return jsonify({'error': 'IDs inválidos', 'ok': False}), 400
+        
         # Obtener tareas y verificar permisos
-        tareas = TareaEtapa.query.filter(TareaEtapa.id.in_(ids)).all()
+        tareas = TareaEtapa.query.filter(TareaEtapa.id.in_(task_ids)).all()
+        
+        if not tareas:
+            return jsonify({'error': 'No se encontraron tareas', 'ok': False}), 404
         
         # Verificar que todas las tareas pertenezcan a la organización del usuario
         obras_a_actualizar = set()
         for tarea in tareas:
-            if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
-                return jsonify({'error': 'Sin permisos para algunas tareas', 'ok': False}), 403
-            obras_a_actualizar.add(tarea.etapa.obra)
+            try:
+                if tarea.etapa and tarea.etapa.obra and tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                    return jsonify({'error': 'Sin permisos para algunas tareas', 'ok': False}), 403
+                if tarea.etapa and tarea.etapa.obra:
+                    obras_a_actualizar.add(tarea.etapa.obra)
+            except AttributeError as e:
+                print(f"⚠️ Error accediendo a relaciones de tarea {tarea.id}: {str(e)}")
+                continue
         
         # Eliminar tareas
         deleted = 0
         for tarea in tareas:
-            db.session.delete(tarea)
-            deleted += 1
+            try:
+                db.session.delete(tarea)
+                deleted += 1
+            except Exception as e:
+                print(f"⚠️ Error eliminando tarea {tarea.id}: {str(e)}")
+                continue
         
         # Recalcular progreso para todas las obras afectadas
         for obra in obras_a_actualizar:
-            obra.calcular_progreso_automatico()
+            try:
+                obra.calcular_progreso_automatico()
+            except Exception as e:
+                print(f"⚠️ Error recalculando progreso para obra {obra.id}: {str(e)}")
+                continue
         
         db.session.commit()
+        print(f"✅ Eliminadas {deleted} tareas exitosamente")
         return jsonify({'ok': True, 'deleted': deleted})
         
     except Exception as e:
+        print(f"❌ Error en tareas_bulk_delete: {str(e)}")
         db.session.rollback()
-        return jsonify({'error': str(e), 'ok': False}), 500
+        return jsonify({'error': 'Error interno del servidor', 'ok': False}), 500
 
 @obras_bp.route('/etapas/bulk_delete', methods=['POST'])
 @login_required
