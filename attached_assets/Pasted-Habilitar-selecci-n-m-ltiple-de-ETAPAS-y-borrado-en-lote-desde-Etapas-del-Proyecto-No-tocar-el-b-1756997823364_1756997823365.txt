@@ -1,0 +1,126 @@
+Habilitar selección múltiple de ETAPAS y borrado en lote desde “Etapas del Proyecto”.
+(No tocar el borrado individual. Nada de refactors.)
+
+1) Template de etapas (donde se hace {% for etapa in etapas %})
+
+Agregar el checkbox visible sólo en modo selección:
+
+<div class="etapa-item d-flex align-items-center justify-content-between"
+     data-etapa-id="{{ etapa.id }}">
+  <!-- Checkbox de selección múltiple de ETAPAS -->
+  <label class="form-check me-2 stage-toggle d-none">
+    <input type="checkbox" class="form-check-input stage-check" value="{{ etapa.id }}">
+  </label>
+
+  <!-- Contenido existente de la cabecera de la etapa -->
+  <div class="flex-grow-1">
+    <strong>{{ loop.index }} {{ etapa.nombre }}</strong>
+    <div class="text-muted small">{{ etapa.descripcion }}</div>
+  </div>
+
+  <!-- Botones existentes (Agregar Tarea, estado, papelera, etc.) -->
+  <!-- ... -->
+</div>
+
+
+Nota: clases clave que usará el JS:
+
+wrapper: .stage-toggle (tiene d-none por defecto)
+
+input: .stage-check
+
+fila: .etapa-item[data-etapa-id]
+
+2) Botones superiores (ya los tengo visibles)
+
+Asegurar IDs:
+
+<button id="btn-stage-cancel" class="btn btn-outline-secondary">Cancelar selección</button>
+<button id="btn-stage-delete" class="btn btn-danger" disabled>Eliminar seleccionadas (0)</button>
+
+3) JS mínimo (mostrar cajitas, contar, enviar al backend)
+
+Insertar al final del template de detalle de obra:
+
+<script>
+(function(){
+  const $ = (sel, ctx=document)=>ctx.querySelector(sel);
+  const $$ = (sel, ctx=document)=>Array.from(ctx.querySelectorAll(sel));
+
+  const btnCancel = $('#btn-stage-cancel');
+  const btnDelete = $('#btn-stage-delete');
+
+  function toggles(){ return $$('.stage-toggle'); }
+  function checks(){ return $$('.stage-check'); }
+  function selectedIds(){ return checks().filter(c=>c.checked).map(c=>c.value); }
+  function updateBtn(){
+    const n = selectedIds().length;
+    btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+    btnDelete.disabled = n === 0;
+  }
+
+  // Entrar en modo selección: mostrar las cajitas
+  function enterSelectMode(){
+    toggles().forEach(t => t.classList.remove('d-none'));
+    updateBtn();
+  }
+  // Salir de selección
+  function exitSelectMode(){
+    toggles().forEach(t => t.classList.add('d-none'));
+    checks().forEach(c => c.checked = false);
+    updateBtn();
+  }
+
+  // Inicializar: activar modo selección apenas existan los botones
+  enterSelectMode();
+
+  document.addEventListener('change', e=>{
+    if (e.target && e.target.classList.contains('stage-check')) updateBtn();
+  });
+
+  btnCancel?.addEventListener('click', e=>{
+    e.preventDefault();
+    exitSelectMode();
+  });
+
+  btnDelete?.addEventListener('click', async e=>{
+    e.preventDefault();
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (!confirm(`¿Eliminar ${ids.length} etapas seleccionadas?`)) return;
+    const r = await fetch('/etapas/bulk_delete', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ids })
+    });
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else alert(j.error || 'No se pudo eliminar.');
+  });
+})();
+</script>
+
+4) Backend simple (Flask)
+
+Crear endpoint de borrado en lote de etapas:
+
+@etapas_bp.post("/bulk_delete")
+@login_required
+def etapas_bulk_delete():
+    data = request.get_json(force=True) or {}
+    ids = data.get("ids") or []
+    if not ids:
+        return jsonify(error="ids requeridos"), 400
+
+    # Seguridad: filtrar por obra actual/empresa si aplica
+    deleted = Etapa.query.filter(Etapa.id.in_(ids)).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify(ok=True, deleted=deleted)
+
+5) QA rápido
+
+Ver las cajitas a la izquierda de cada etapa.
+
+Tildar 2–3 → el botón muestra “Eliminar seleccionadas (3)”.
+
+Confirmar → se borran en una sola llamada → recarga.

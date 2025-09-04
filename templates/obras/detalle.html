@@ -84,10 +84,10 @@
                                 </div>
                                 {% if current_user.rol in ['administrador', 'tecnico'] %}
                                 <div class="d-flex gap-2">
-                                    <button id="btn-select-multi" class="btn btn-outline-secondary btn-sm">
-                                        Seleccionar
+                                    <button id="btn-stage-cancel" class="btn btn-outline-secondary btn-sm">
+                                        Cancelar selección
                                     </button>
-                                    <button id="btn-delete-selected" class="btn btn-danger btn-sm d-none" disabled>
+                                    <button id="btn-stage-delete" class="btn btn-danger btn-sm" disabled>
                                         Eliminar seleccionadas (0)
                                     </button>
                                     <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
@@ -99,9 +99,15 @@
                             
                             {% if etapas %}
                                 {% for etapa in etapas %}
-                                <div class="border-bottom py-2">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div class="flex-grow-1">
+                                <div class="etapa-item border-bottom py-2 d-flex align-items-center justify-content-between" data-etapa-id="{{ etapa.id }}">
+                                    <!-- Checkbox de selección múltiple de ETAPAS -->
+                                    <label class="form-check me-2 stage-toggle d-none">
+                                        <input type="checkbox" class="form-check-input stage-check" value="{{ etapa.id }}">
+                                    </label>
+                                    
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
                                             <div class="d-flex align-items-center">
                                                 <span class="badge bg-primary me-2">{{ etapa.orden }}</span>
                                                 <h6 class="mb-1 cursor-pointer" onclick="toggleTareasEtapa({{ etapa.id }})">
@@ -132,9 +138,9 @@
                                                 <i class="fas fa-plus me-1"></i>Agregar Tarea
                                             </button>
                                             {% endif %}
-                                        </div>
-                                        
-                                        <div class="text-end">
+                                            </div>
+                                            
+                                            <div class="text-end">
                                             <!-- Dropdown para cambiar estado -->
                                             <div class="dropdown mb-2">
                                                 <button class="btn btn-sm badge {{ etapa.estado|estado_badge }} dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -183,6 +189,7 @@
                                                 <i class="fas fa-trash fa-xs"></i>
                                             </button>
                                             {% endif %}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1604,6 +1611,65 @@ function eliminarTarea(tareaId) {
         if (res.ok) location.reload();
         else alert(res.error || 'No se pudo eliminar.');
     });
+})();
+
+// Sistema de selección múltiple para ETAPAS
+(function(){
+  const $ = (sel, ctx=document)=>ctx.querySelector(sel);
+  const $$ = (sel, ctx=document)=>Array.from(ctx.querySelectorAll(sel));
+
+  const btnCancel = $('#btn-stage-cancel');
+  const btnDelete = $('#btn-stage-delete');
+
+  function toggles(){ return $$('.stage-toggle'); }
+  function checks(){ return $$('.stage-check'); }
+  function selectedIds(){ return checks().filter(c=>c.checked).map(c=>c.value); }
+  function updateBtn(){
+    const n = selectedIds().length;
+    btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+    btnDelete.disabled = n === 0;
+  }
+
+  // Entrar en modo selección: mostrar las cajitas
+  function enterSelectMode(){
+    toggles().forEach(t => t.classList.remove('d-none'));
+    updateBtn();
+  }
+  // Salir de selección
+  function exitSelectMode(){
+    toggles().forEach(t => t.classList.add('d-none'));
+    checks().forEach(c => c.checked = false);
+    updateBtn();
+  }
+
+  // Inicializar: activar modo selección apenas existan los botones
+  if (btnCancel && btnDelete) {
+    enterSelectMode();
+  }
+
+  document.addEventListener('change', e=>{
+    if (e.target && e.target.classList.contains('stage-check')) updateBtn();
+  });
+
+  btnCancel?.addEventListener('click', e=>{
+    e.preventDefault();
+    exitSelectMode();
+  });
+
+  btnDelete?.addEventListener('click', async e=>{
+    e.preventDefault();
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (!confirm(`¿Eliminar ${ids.length} etapas seleccionadas?\n\nEsta acción también eliminará todas las tareas asociadas y no se puede deshacer.`)) return;
+    const r = await fetch('/etapas/bulk_delete', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ids })
+    });
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else alert(j.error || 'No se pudo eliminar.');
+  });
 })();
 </script>
 {% endblock %}

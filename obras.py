@@ -658,6 +658,47 @@ def tareas_bulk_delete():
         db.session.rollback()
         return jsonify({'error': str(e), 'ok': False}), 500
 
+@obras_bp.route('/etapas/bulk_delete', methods=['POST'])
+@login_required
+def etapas_bulk_delete():
+    """Eliminar múltiples etapas en lote"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'Sin permisos', 'ok': False}), 403
+    
+    data = request.get_json() or {}
+    ids = data.get("ids") or []
+    
+    if not ids:
+        return jsonify({'error': 'IDs requeridos', 'ok': False}), 400
+
+    try:
+        # Obtener etapas y verificar permisos
+        etapas = EtapaObra.query.filter(EtapaObra.id.in_(ids)).all()
+        
+        # Verificar que todas las etapas pertenezcan a la organización del usuario
+        obras_a_actualizar = set()
+        for etapa in etapas:
+            if etapa.obra.organizacion_id != current_user.organizacion_id:
+                return jsonify({'error': 'Sin permisos para algunas etapas', 'ok': False}), 403
+            obras_a_actualizar.add(etapa.obra)
+        
+        # Eliminar etapas (y sus tareas en cascada)
+        deleted = 0
+        for etapa in etapas:
+            db.session.delete(etapa)
+            deleted += 1
+        
+        # Recalcular progreso para todas las obras afectadas
+        for obra in obras_a_actualizar:
+            obra.calcular_progreso_automatico()
+        
+        db.session.commit()
+        return jsonify({'ok': True, 'deleted': deleted})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e), 'ok': False}), 500
+
 @obras_bp.route('/geocodificar-todas', methods=['POST'])
 @login_required
 def geocodificar_todas():
