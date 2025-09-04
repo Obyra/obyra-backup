@@ -4,7 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
 import requests
 from app import db
-from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance
+from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
@@ -576,13 +576,25 @@ def obtener_tareas_etapa(etapa_id):
     
     tareas = []
     for tarea in etapa.tareas:
+        # Obtener usuarios asignados a esta tarea
+        usuarios_asignados = []
+        for asignacion in tarea.asignaciones:
+            usuarios_asignados.append({
+                'id': asignacion.usuario.id,
+                'nombre': asignacion.usuario.nombre_completo,
+                'nombre_corto': f"{asignacion.usuario.nombre[0]}{asignacion.usuario.apellido[0]}",
+                'rol': asignacion.usuario.rol
+            })
+        
         tareas.append({
             'id': tarea.id,
             'nombre': tarea.nombre,
             'descripcion': tarea.descripcion,
             'estado': tarea.estado,
             'responsable': tarea.responsable.nombre_completo if tarea.responsable else None,
-            'horas_estimadas': tarea.horas_estimadas
+            'responsable_id': tarea.responsable_id,
+            'horas_estimadas': tarea.horas_estimadas,
+            'usuarios_asignados': usuarios_asignados
         })
     
     return jsonify({
@@ -877,6 +889,18 @@ def actualizar_estado_tarea(id):
     tarea = TareaEtapa.query.get_or_404(id)
     obra = tarea.etapa.obra
     
+    # Verificar permisos: admin, técnico, responsable titular o usuario asignado
+    is_admin = getattr(current_user, 'is_admin', False) or current_user.rol in ['administrador', 'tecnico']
+    is_responsible = tarea.responsable_id == current_user.id
+    
+    # Verificar si el usuario está asignado a esta tarea
+    asignado = db.session.query(TareaResponsables.id)\
+        .filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
+    
+    if not (is_admin or is_responsible or asignado):
+        flash('No tienes permisos para actualizar esta tarea.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra.id))
+    
     nuevo_estado = request.form.get('estado')
     porcentaje_avance = request.form.get('porcentaje_avance')
     
@@ -910,6 +934,42 @@ def actualizar_estado_tarea(id):
         flash(f'Error al actualizar tarea: {str(e)}', 'danger')
     
     return redirect(url_for('obras.detalle', id=obra.id))
+
+
+@obras_bp.route('/tareas/<int:tarea_id>/asignar', methods=['POST'])
+@login_required
+def tarea_asignar(tarea_id):
+    """Asignar múltiples usuarios a una tarea"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Verificar que la tarea pertenezca a la organización del usuario
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    data = request.get_json(force=True) or {}
+    user_ids = list({int(x) for x in data.get("user_ids", [])})
+
+    try:
+        # Limpiar asignaciones existentes y volver a grabar
+        TareaResponsables.query.filter_by(tarea_id=tarea.id).delete()
+        
+        # Crear nuevas asignaciones
+        for uid in user_ids:
+            # Verificar que el usuario exista y pertenezca a la misma organización
+            usuario = Usuario.query.filter_by(id=uid, organizacion_id=current_user.organizacion_id).first()
+            if usuario:
+                asignacion = TareaResponsables(tarea_id=tarea.id, user_id=uid)
+                db.session.add(asignacion)
+
+        db.session.commit()
+        return jsonify(ok=True, count=len(user_ids))
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
 
 
 @obras_bp.route('/<int:id>/certificaciones')

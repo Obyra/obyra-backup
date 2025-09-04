@@ -360,9 +360,30 @@ class TareaEtapa(db.Model):
     etapa = db.relationship('EtapaObra', back_populates='tareas')
     responsable = db.relationship('Usuario')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='tarea', lazy='dynamic')
+    asignaciones = db.relationship('TareaResponsables', back_populates='tarea', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<TareaEtapa {self.nombre}>'
+
+
+class TareaResponsables(db.Model):
+    """Modelo para asignaciones múltiples de usuarios a tareas"""
+    __tablename__ = 'tarea_responsables'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey('tareas_etapa.id'), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), index=True, nullable=False)
+    cuota_planificada = db.Column(db.Numeric)  # opcional para futuras funcionalidades
+    
+    # Relaciones
+    tarea = db.relationship('TareaEtapa', back_populates='asignaciones')
+    usuario = db.relationship('Usuario')
+    
+    # Constraint de unicidad
+    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='unique_tarea_user'),)
+    
+    def __repr__(self):
+        return f'<TareaResponsables tarea_id={self.tarea_id} user_id={self.user_id}>'
 
 
 class AsignacionObra(db.Model):

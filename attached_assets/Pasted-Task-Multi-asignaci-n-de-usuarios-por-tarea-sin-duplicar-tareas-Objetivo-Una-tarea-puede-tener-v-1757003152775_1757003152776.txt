@@ -1,0 +1,136 @@
+Task: Multi-asignación de usuarios por tarea (sin duplicar tareas)
+Objetivo
+
+Una tarea puede tener varios usuarios asignados.
+
+Cualquier asignado puede registrar avances (cantidad + fotos).
+
+El progreso total de la tarea = suma de todos los avances.
+
+(Opcional, no obligatorio ahora) ver mis avances por usuario.
+
+1) Migración (aditiva, idempotente)
+
+No romper nada existente. Mantener tareas.responsable_id como “titular” si ya existe.
+
+-- Asignaciones muchos-a-muchos (tarea ↔ usuarios)
+CREATE TABLE IF NOT EXISTS tarea_responsables (
+  id SERIAL PRIMARY KEY,
+  tarea_id INT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+  user_id  INT NOT NULL REFERENCES usuarios(id),
+  cuota_planificada NUMERIC NULL,   -- OPCIONAL (por ahora no usar)
+  UNIQUE (tarea_id, user_id)
+);
+
+
+(Las migraciones de “avances con fotos” ya las tenemos; no cambiarlas.)
+
+2) Modelos (SQLAlchemy)
+class TareaResponsables(db.Model):
+    __tablename__ = "tarea_responsables"
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas.id"), index=True, nullable=False)
+    user_id  = db.Column(db.Integer, db.ForeignKey("usuarios.id"), index=True, nullable=False)
+    cuota_planificada = db.Column(db.Numeric)  # opcional
+
+3) Permisos (actualizar endpoints de avances)
+
+Prefijo del blueprint: /obras
+
+En crear avance y completar tarea, además del check is_admin y t.responsable_id, habilitar si el usuario está en tarea_responsables.
+
+asignado = db.session.query(TareaResponsables.id)\
+    .filter_by(tarea_id=t.id, user_id=current_user.id).first()
+
+if not (getattr(current_user, "is_admin", False) or t.responsable_id == current_user.id or asignado):
+    return jsonify(ok=False, error="Sin permiso"), 403
+
+
+Incluir este asignado en:
+
+POST /obras/tareas/<int:tarea_id>/avances
+
+POST /obras/tareas/<int:tarea_id>/complete
+
+(El resto de la lógica de avances/fotos queda igual.)
+
+4) Endpoint simple para guardar asignaciones
+
+Para no tocar mucho los forms existentes, agregamos un endpoint JSON que setea toda la lista de asignados de una tarea.
+
+@obras_bp.post("/tareas/<int:tarea_id>/asignar")
+@login_required
+def tarea_asignar(tarea_id):
+    if not current_user.is_admin:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    t = Tarea.query.get_or_404(tarea_id)
+
+    data = request.get_json(force=True) or {}
+    user_ids = list({int(x) for x in data.get("user_ids", [])})
+
+    # limpiar y volver a grabar
+    TareaResponsables.query.filter_by(tarea_id=t.id).delete()
+    for uid in user_ids:
+        db.session.add(TareaResponsables(tarea_id=t.id, user_id=uid))
+
+    db.session.commit()
+    return jsonify(ok=True, count=len(user_ids))
+
+
+(Si preferís, también podés procesar asignados[] desde el POST del form de crear/editar tarea. Esta vía JSON es más barata y aislada.)
+
+5) UI mínima
+
+En el modal Crear/Editar tarea: agregar un multiselect “Asignados”.
+
+Fuente: lista de usuarios activos.
+
+Al guardar, llamar al endpoint POST /obras/tareas/<id>/asignar con { user_ids: [..] }.
+
+En la fila de tarea: mostrar chips/avatares de los usuarios asignados (opcionalmente el “responsable titular” distinto).
+
+No cambiamos el botón “Registrar avance” ni el modal de avances: el permiso ya deja usarlo a cualquier asignado.
+
+(Opcional) si el que mira está asignado, debajo mostrar “Mis avances: X {{unidad}}”.
+
+JS ejemplo para guardar asignados (después de crear/editar tarea)
+async function guardarAsignados(tareaId, userIds){
+  const r = await fetch(`/obras/tareas/${tareaId}/asignar`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ user_ids: userIds })
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'No se pudieron asignar usuarios');
+}
+
+6) Métricas (sin cambios)
+
+El helper resumen_tarea(t) ya suma todos los avances y calcula % y restante.
+
+(Opcional) para “mis avances”:
+
+def resumen_tarea_usuario(t, user_id):
+    ejec_user = float(db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+                      .filter(TareaAvance.tarea_id==t.id, TareaAvance.user_id==user_id).scalar() or 0)
+    return {"ejec_user": ejec_user}
+
+7) QA / Aceptación
+
+Admin edita una tarea → selecciona 2–3 usuarios → guarda asignación (200 OK).
+
+Cada asignado puede abrir “Registrar avance”, cargar cantidad y fotos → responde {ok:true} y el progreso total sube.
+
+Completar solo cuando lo ejecutado total ≥ plan.
+
+Si pasa fecha_fin_plan y queda pendiente → badge Atrasada (ya implementado por el helper).
+
+Notas de implementación
+
+Todo es aditivo: no rompemos lo que ya existe.
+
+Usamos el prefijo /obras en todas las rutas.
+
+Mantener tareas.responsable_id para compat y para tener un “titular” si lo usás en listados.
+
+Las cuotas por usuario se dejan para más adelante (campo ya previsto).
