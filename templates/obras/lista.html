@@ -18,6 +18,8 @@
                     </a>
                     {% endif %}
                     
+                    {# alternativa reversible: ocultar botón Backfill Tareas #}
+                    {% if false %}
                     {% if current_user.rol == 'administrador' and current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
                     <form method="POST" action="{{ url_for('obras.admin_backfill_tareas') }}" style="display: inline;" 
                           onsubmit="return confirm('¿Estás segura de ejecutar el backfill de tareas predefinidas? Esto agregará tareas a etapas existentes que tengan menos de 5 tareas.')">
@@ -25,6 +27,7 @@
                             <i class="fas fa-magic me-1"></i>Backfill Tareas
                         </button>
                     </form>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
