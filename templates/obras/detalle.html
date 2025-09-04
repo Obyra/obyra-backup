@@ -1548,7 +1548,7 @@ function confirmarEliminarTarea(tareaId, nombreTarea) {
 
 // Función para eliminar tarea unitaria
 function eliminarTarea(tareaId) {
-    fetch(`/tareas/eliminar/${tareaId}`, {
+    fetch(`/obras/tareas/eliminar/${tareaId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1601,7 +1601,7 @@ function eliminarTarea(tareaId) {
         const ids = selectedIds();
         if (!ids.length) return;
         if (!confirm(`¿Eliminar ${ids.length} tareas seleccionadas?`)) return;
-        const r = await fetch('/tareas/bulk_delete', {
+        const r = await fetch('/obras/tareas/bulk_delete', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ ids })
@@ -1635,7 +1635,7 @@ function eliminarTarea(tareaId) {
     const ids = selectedIds();
     if (!ids.length) return;
     if (!confirm(`¿Eliminar ${ids.length} etapas seleccionadas?\n\nEsta acción también eliminará todas las tareas asociadas y no se puede deshacer.`)) return;
-    const r = await fetch('/etapas/bulk_delete', {
+    const r = await fetch('/obras/etapas/bulk_delete', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ ids })
