@@ -831,22 +831,26 @@ function cargarTareasEtapa(etapaId) {
                     data.tareas.forEach(tarea => {
                         const badgeClass = getBadgeClass(tarea.estado);
                         html += `
-                            <div class="tarea-item ms-3 mt-2 p-2 bg-light rounded" data-task-id="${tarea.id}">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div class="d-flex align-items-center">
-                                        <input type="checkbox" class="task-check form-check-input me-2 d-none" value="${tarea.id}">
-                                        <i class="fas fa-tasks me-1"></i>
-                                        <strong>${tarea.nombre}</strong>
-                                        ${tarea.responsable ? `<small class="text-muted">(${tarea.responsable})</small>` : ''}
+                            <div class="tarea-item d-flex align-items-center ms-3 mt-2 p-2 bg-light rounded" data-tarea-id="${tarea.id}">
+                                <label class="form-check me-2 bulk-toggle d-none">
+                                    <input type="checkbox" class="form-check-input task-check" value="${tarea.id}">
+                                </label>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-tasks me-1"></i>
+                                            <strong>${tarea.nombre}</strong>
+                                            ${tarea.responsable ? `<small class="text-muted">(${tarea.responsable})</small>` : ''}
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge ${badgeClass}">${tarea.estado}</span>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarTarea(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')" title="Eliminar tarea">
+                                                <i class="fas fa-trash fa-xs"></i>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge ${badgeClass}">${tarea.estado}</span>
-                                        <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarTarea(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')" title="Eliminar tarea">
-                                            <i class="fas fa-trash fa-xs"></i>
-                                        </button>
-                                    </div>
+                                    ${tarea.descripcion ? `<small class="text-muted d-block mt-1">${tarea.descripcion}</small>` : ''}
                                 </div>
-                                ${tarea.descripcion ? `<small class="text-muted d-block mt-1">${tarea.descripcion}</small>` : ''}
                             </div>
                         `;
                     });
@@ -1566,6 +1570,7 @@ function eliminarTarea(tareaId) {
     const btnDelete = document.getElementById('btn-delete-selected');
 
     function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
+    function toggles(){ return Array.from(document.querySelectorAll('.bulk-toggle')); }
     function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
     function updateDeleteBtn(){
         const n = selectedIds().length;
@@ -1575,16 +1580,14 @@ function eliminarTarea(tareaId) {
 
     btnToggle?.addEventListener('click', () => {
         selecting = !selecting;
-        checks().forEach(c => {
-            c.classList.toggle('d-none', !selecting);
-            if (!selecting) c.checked = false;
-        });
-        btnDelete.classList.toggle('d-none', !selecting);
-        btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
+        toggles().forEach(t => t.classList.toggle('d-none', !selecting));
+        if (!selecting) checks().forEach(c => c.checked = false);
         updateDeleteBtn();
+        btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
+        btnDelete.classList.toggle('d-none', !selecting);
     });
 
-    document.addEventListener('change', (e) => {
+    document.addEventListener('change', e => {
         if (e.target?.classList?.contains('task-check')) updateDeleteBtn();
     });
 
@@ -1592,19 +1595,14 @@ function eliminarTarea(tareaId) {
         const ids = selectedIds();
         if (!ids.length) return;
         if (!confirm(`¿Eliminar ${ids.length} tareas seleccionadas?`)) return;
-
         const r = await fetch('/tareas/bulk_delete', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ ids })
         });
         const res = await r.json();
-        if (res.ok){
-            // Recargar página para actualizar progreso
-            location.reload();
-        } else {
-            alert(res.error || 'No se pudo eliminar.');
-        }
+        if (res.ok) location.reload();
+        else alert(res.error || 'No se pudo eliminar.');
     });
 })();
 </script>

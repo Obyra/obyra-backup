@@ -1,0 +1,92 @@
+Fix: mostrar y usar checkboxes para borrado múltiple
+1) Template de filas de tarea (el loop donde se rinde cada tarea)
+
+Agregá el checkbox al inicio de cada fila y dejalo oculto por defecto:
+
+<!-- contenedor de la fila de tarea -->
+<div class="tarea-item d-flex align-items-center" data-tarea-id="{{ tarea.id }}">
+  <!-- ⬇⬇ checkbox para selección múltiple -->
+  <label class="form-check me-2 bulk-toggle d-none">
+    <input type="checkbox"
+           class="form-check-input task-check"
+           value="{{ tarea.id }}">
+  </label>
+
+  <!-- resto del contenido (título, chips, botones, etc.) -->
+  <div class="flex-grow-1">
+    <strong>{{ tarea.nombre }}</strong>
+    <!-- ... -->
+  </div>
+  <!-- ... -->
+</div>
+
+
+Importante:
+
+Usar class="task-check" (el JS la usa).
+
+Mantener bulk-toggle d-none en el <label> para poder mostrar/ocultar en bloque.
+
+Asegurate que la fila tenga data-tarea-id="{{ tarea.id }}".
+
+2) JS de selección (ajustar selectores y mostrar/ocultar)
+
+Reemplazá/ajustá el bloque para que, al entrar en modo selección, saque d-none y cuente los tildados:
+
+(function(){
+  let selecting = false;
+  const btnToggle = document.getElementById('btn-select-multi');       // el botón que ahora dice "Cancelar selección"
+  const btnDelete = document.getElementById('btn-delete-selected');
+
+  function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
+  function toggles(){ return Array.from(document.querySelectorAll('.bulk-toggle')); }
+  function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
+  function updateDeleteBtn(){
+    const n = selectedIds().length;
+    btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+    btnDelete.disabled = n === 0;
+  }
+
+  btnToggle?.addEventListener('click', () => {
+    selecting = !selecting;
+    toggles().forEach(t => t.classList.toggle('d-none', !selecting));
+    if (!selecting) checks().forEach(c => c.checked = false);
+    updateDeleteBtn();
+    btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
+    btnDelete.classList.toggle('d-none', !selecting);
+  });
+
+  document.addEventListener('change', e => {
+    if (e.target?.classList?.contains('task-check')) updateDeleteBtn();
+  });
+
+  btnDelete?.addEventListener('click', async () => {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (!confirm(`¿Eliminar ${ids.length} tareas seleccionadas?`)) return;
+    const r = await fetch('/tareas/bulk_delete', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ids })
+    });
+    const res = await r.json();
+    if (res.ok) location.reload();
+    else alert(res.error || 'No se pudo eliminar.');
+  });
+})();
+
+3) Chequeo rápido (devtools)
+
+$$('.task-check').length → debe ser > 0.
+
+Tocá “Seleccionar” → $$('.bulk-toggle.d-none').length debe bajar.
+
+Tildá → el contador en “Eliminar seleccionadas (N)” sube.
+
+Posibles causas de que no veas los checks hoy
+
+No se agregó el <input class="task-check"> en la fila.
+
+Se agregó con otra clase (p. ej., .task-checkbox) y el JS busca .task-check.
+
+Está dentro de un contenedor con d-none que el JS no remueve (por eso usamos .bulk-toggle como wrapper).
