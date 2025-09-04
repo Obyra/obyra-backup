@@ -496,6 +496,22 @@
                         <textarea class="form-control" name="descripcion" rows="2" 
                                   placeholder="Descripción de la tarea..."></textarea>
                     </div>
+                    <!-- Fechas planificadas -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Inicio Planificado</label>
+                                <input type="date" class="form-control" name="fecha_inicio_plan">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Fin Planificado</label>
+                                <input type="date" class="form-control" name="fecha_fin_plan">
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -518,18 +534,16 @@
                         </div>
                     </div>
                     
-                    <!-- Usuarios asignados (multiselect) -->
-                    <div class="mb-3">
+                    <!-- Tareas sugeridas (multiselect) -->
+                    <div class="mb-3" id="tareasSuperidasContainer" style="display: none;">
                         <label class="form-label">
-                            <i class="fas fa-users text-primary"></i> Usuarios Asignados
+                            <i class="fas fa-lightbulb text-warning"></i> Tareas sugeridas para <span id="etapaSeleccionada"></span>
                         </label>
-                        <select class="form-select" id="usuariosAsignados" multiple size="4">
-                            {% for asignacion in asignaciones %}
-                            <option value="{{ asignacion.usuario.id }}">{{ asignacion.usuario.nombre_completo }} ({{ asignacion.usuario.rol }})</option>
-                            {% endfor %}
-                        </select>
+                        <div id="listaTareasSugeridas" class="border rounded p-3 bg-light">
+                            <!-- Se llenan dinámicamente con JavaScript -->
+                        </div>
                         <div class="form-text">
-                            <i class="fas fa-info-circle"></i> Mantén presionado Ctrl/Cmd para seleccionar múltiples usuarios que pueden registrar avances en esta tarea
+                            <i class="fas fa-info-circle"></i> Si seleccionás varias sugeridas, se crearán varias tareas con el mismo responsable y fechas.
                         </div>
                     </div>
                 </div>
@@ -727,31 +741,35 @@ function abrirModalTarea(etapaId, nombreEtapa) {
     const descripcionTextarea = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
     const horasInput = document.querySelector('#nuevaTareaModal input[name="horas_estimadas"]');
     const responsableSelect = document.querySelector('#nuevaTareaModal select[name="responsable_id"]');
-    const usuariosAsignados = document.getElementById('usuariosAsignados');
+    const fechaInicioInput = document.querySelector('#nuevaTareaModal input[name="fecha_inicio_plan"]');
+    const fechaFinInput = document.querySelector('#nuevaTareaModal input[name="fecha_fin_plan"]');
     
     tareasInput.value = '';
     descripcionTextarea.value = '';
     if (horasInput) horasInput.value = '';
     if (responsableSelect) responsableSelect.value = '';
-    if (usuariosAsignados) {
-        Array.from(usuariosAsignados.options).forEach(option => option.selected = false);
-    }
+    if (fechaInicioInput) fechaInicioInput.value = '';
+    if (fechaFinInput) fechaFinInput.value = '';
+    
+    // Limpiar tareas sugeridas previas
+    document.getElementById('listaTareasSugeridas').innerHTML = '';
+    document.getElementById('tareasSuperidasContainer').style.display = 'none';
     
     // Obtener tareas predefinidas para esta etapa
     const tareasDisponibles = obtenerTareasPredefinidas(nombreEtapa);
     
     if (tareasDisponibles && tareasDisponibles.length > 0) {
-        // Sugerir la primera tarea disponible
-        const primeraTarea = tareasDisponibles[0];
-        tareasInput.placeholder = `Ej: ${primeraTarea.nombre || 'Nueva tarea'}`;
-        descripcionTextarea.placeholder = `Ej: ${primeraTarea.descripcion || 'Descripción de la tarea'}`;
-        
-        // Agregar lista de sugerencias
-        mostrarSugerenciasTareas(tareasDisponibles, tareasInput, descripcionTextarea);
+        // Mostrar y cargar tareas sugeridas
+        mostrarTareasSugeridas(tareasDisponibles, nombreEtapa);
+        tareasInput.placeholder = `Ej: ${tareasDisponibles[0].nombre || 'Nueva tarea'}`;
+        descripcionTextarea.placeholder = `Ej: ${tareasDisponibles[0].descripcion || 'Descripción de la tarea'}`;
     } else {
         tareasInput.placeholder = 'Nombre de la tarea';
         descripcionTextarea.placeholder = 'Descripción de la tarea...';
     }
+    
+    // Habilitar campo nombre inicialmente
+    tareasInput.disabled = false;
     
     new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
 }
@@ -770,42 +788,68 @@ function obtenerTareasPredefinidas(nombreEtapa) {
     }
 }
 
-function mostrarSugerenciasTareas(tareas, inputNombre, textareaDescripcion) {
-    // Crear dropdown de sugerencias
-    const modalBody = document.querySelector('#nuevaTareaModal .modal-body');
-    
-    // Limpiar dropdown previo si existe
-    const dropdownPrevio = modalBody.querySelector('#dropdownTareas');
-    if (dropdownPrevio) dropdownPrevio.remove();
-    
+function mostrarTareasSugeridas(tareas, nombreEtapa) {
     if (!tareas || tareas.length === 0) return;
     
-    // Crear nuevo dropdown
-    const dropdown = document.createElement('div');
-    dropdown.id = 'dropdownTareas';
-    dropdown.className = 'mb-3';
-    dropdown.innerHTML = `
-        <label class="form-label">
-            <i class="fas fa-lightbulb text-warning"></i> Tareas sugeridas para ${document.getElementById('nombreEtapa').textContent}
-        </label>
-        <select class="form-select" onchange="seleccionarTareaPredefinida(this.value)">
-            <option value="">-- Seleccionar tarea predefinida --</option>
-            ${tareas.map((tarea, index) => 
-                `<option value="${index}">${tarea.nombre || ''}</option>`
-            ).join('')}
-        </select>
-        <small class="form-text text-muted">Selecciona una tarea predefinida o escribe una personalizada</small>
-    `;
+    const container = document.getElementById('tareasSuperidasContainer');
+    const listaTareas = document.getElementById('listaTareasSugeridas');
+    const etapaSpan = document.getElementById('etapaSeleccionada');
     
-    // Insertar después del primer input
-    const primerInput = modalBody.querySelector('.mb-3');
-    primerInput.insertAdjacentElement('afterend', dropdown);
+    etapaSpan.textContent = nombreEtapa;
     
-    // Guardar referencia a las tareas para la función de selección
+    // Generar checkboxes para cada tarea sugerida
+    const checkboxesHTML = tareas.map((tarea, index) => `
+        <div class="form-check mb-2">
+            <input class="form-check-input tarea-sugerida-check" type="checkbox" 
+                   value="${index}" id="tareaCheck${index}" 
+                   onchange="actualizarSeleccionSugeridas()">
+            <label class="form-check-label" for="tareaCheck${index}">
+                <strong>${tarea.nombre}</strong><br>
+                <small class="text-muted">${tarea.descripcion || 'Sin descripción'}</small>
+            </label>
+        </div>
+    `).join('');
+    
+    listaTareas.innerHTML = checkboxesHTML;
+    container.style.display = 'block';
+    
+    // Guardar referencia a las tareas
     window.tareasActuales = tareas;
 }
 
+function actualizarSeleccionSugeridas() {
+    const checkboxes = document.querySelectorAll('.tarea-sugerida-check:checked');
+    const tareasInput = document.querySelector('#nuevaTareaModal input[name="nombre"]');
+    const descripcionTextarea = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
+    
+    const cantidadSeleccionadas = checkboxes.length;
+    
+    if (cantidadSeleccionadas === 0) {
+        // 0 sugeridas: campo manual
+        tareasInput.disabled = false;
+        tareasInput.value = '';
+        tareasInput.placeholder = 'Nombre de la tarea';
+        descripcionTextarea.value = '';
+        descripcionTextarea.placeholder = 'Descripción de la tarea...';
+    } else if (cantidadSeleccionadas === 1) {
+        // 1 sugerida: autocompletar pero editable
+        const index = checkboxes[0].value;
+        const tarea = window.tareasActuales[index];
+        tareasInput.disabled = false;
+        tareasInput.value = tarea.nombre;
+        descripcionTextarea.value = tarea.descripcion || '';
+        console.log(`✅ Tarea predefinida seleccionada: ${tarea.nombre}`);
+    } else {
+        // 2+ sugeridas: deshabilitar nombre, se crearán múltiples tareas
+        tareasInput.disabled = true;
+        tareasInput.value = `${cantidadSeleccionadas} tareas seleccionadas`;
+        descripcionTextarea.value = '';
+        descripcionTextarea.placeholder = 'Las descripciones se tomarán de cada tarea sugerida';
+    }
+}
+
 function seleccionarTareaPredefinida(index) {
+    // Función obsoleta, mantenida por compatibilidad
     if (!index || !window.tareasActuales) return;
     
     const tarea = window.tareasActuales[index];
@@ -1721,7 +1765,7 @@ function eliminarTarea(tareaId) {
   updateBtn(); // Inicializar contador
 })();
 
-// Handler para el formulario de nueva tarea con asignaciones
+// Handler para el formulario de nueva tarea con múltiples sugeridas
 document.addEventListener('DOMContentLoaded', function() {
     const formNuevaTarea = document.getElementById('formNuevaTarea');
     
@@ -1730,33 +1774,55 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             
             const formData = new FormData(this);
-            const usuariosAsignados = document.getElementById('usuariosAsignados');
-            const selectedUserIds = Array.from(usuariosAsignados.selectedOptions).map(opt => opt.value);
+            
+            // Obtener tareas sugeridas seleccionadas
+            const checkboxesSugeridas = document.querySelectorAll('.tarea-sugerida-check:checked');
+            const tareasSeleccionadas = Array.from(checkboxesSugeridas).map(checkbox => {
+                const index = checkbox.value;
+                return window.tareasActuales[index];
+            });
+            
+            // Agregar tareas sugeridas al FormData
+            tareasSeleccionadas.forEach((tarea, i) => {
+                formData.append(`sugeridas[${i}][nombre]`, tarea.nombre);
+                formData.append(`sugeridas[${i}][descripcion]`, tarea.descripcion || '');
+            });
             
             try {
-                // 1. Crear la tarea normalmente
                 const response = await fetch(this.action, {
                     method: 'POST',
                     body: formData
                 });
                 
                 if (response.ok) {
-                    // La respuesta probablemente sea un redirect, pero si llegamos aquí la tarea se creó
-                    
-                    // 2. Si hay usuarios seleccionados, asignarlos (necesitamos el ID de la tarea)
-                    // Como no tenemos el ID inmediatamente después de crear, haremos el reload
-                    // La asignación se puede hacer posteriormente via UI
-                    
-                    // Cerrar modal y recargar
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal'));
-                    modal.hide();
-                    location.reload();
+                    // Intentar parsear JSON para ver si hay información sobre cuántas tareas se crearon
+                    try {
+                        const result = await response.json();
+                        if (result.ok) {
+                            const cantidadCreadas = result.created || 1;
+                            const mensaje = cantidadCreadas > 1 
+                                ? `${cantidadCreadas} tareas creadas exitosamente`
+                                : 'Tarea creada exitosamente';
+                            
+                            // Cerrar modal y recargar
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal'));
+                            modal.hide();
+                            location.reload();
+                        } else {
+                            alert(result.error || 'Error al crear las tareas');
+                        }
+                    } catch (jsonError) {
+                        // Si no es JSON, asumimos que es un redirect exitoso
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal'));
+                        modal.hide();
+                        location.reload();
+                    }
                 } else {
-                    alert('Error al crear la tarea');
+                    alert('Error al crear las tareas');
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error al crear la tarea: ' + error.message);
+                alert('Error al crear las tareas: ' + error.message);
             }
         });
     }

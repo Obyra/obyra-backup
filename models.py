@@ -355,6 +355,8 @@ class TareaEtapa(db.Model):
     horas_reales = db.Column(db.Numeric(8, 2), default=0)
     porcentaje_avance = db.Column(db.Numeric(5, 2), default=0)  # Para control granular del avance
     responsable_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    fecha_inicio_plan = db.Column(db.Date)  # Fecha planificada de inicio
+    fecha_fin_plan = db.Column(db.Date)     # Fecha planificada de fin
     
     # Relaciones
     etapa = db.relationship('EtapaObra', back_populates='tareas')

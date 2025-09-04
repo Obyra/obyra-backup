@@ -491,32 +491,91 @@ def agregar_tarea(id):
     
     etapa = EtapaObra.query.get_or_404(id)
     
-    nombre = request.form.get('nombre')
-    descripcion = request.form.get('descripcion')
+    # Obtener datos comunes
     horas_estimadas = request.form.get('horas_estimadas')
     responsable_id = request.form.get('responsable_id')
+    fecha_inicio_plan = request.form.get('fecha_inicio_plan')
+    fecha_fin_plan = request.form.get('fecha_fin_plan')
     
-    if not nombre:
-        flash('El nombre de la tarea es obligatorio.', 'danger')
+    # Convertir fechas si están presentes
+    fecha_inicio_plan_date = None
+    fecha_fin_plan_date = None
+    if fecha_inicio_plan:
+        try:
+            fecha_inicio_plan_date = datetime.strptime(fecha_inicio_plan, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    if fecha_fin_plan:
+        try:
+            fecha_fin_plan_date = datetime.strptime(fecha_fin_plan, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    
+    # Verificar si hay tareas sugeridas múltiples
+    tareas_sugeridas = []
+    form_keys = list(request.form.keys())
+    for key in form_keys:
+        if key.startswith('sugeridas[') and key.endswith('][nombre]'):
+            index = key.split('[')[1].split(']')[0]
+            nombre_sugerida = request.form.get(f'sugeridas[{index}][nombre]')
+            descripcion_sugerida = request.form.get(f'sugeridas[{index}][descripcion]', '')
+            if nombre_sugerida:
+                tareas_sugeridas.append({
+                    'nombre': nombre_sugerida,
+                    'descripcion': descripcion_sugerida
+                })
+    
+    # Si hay tareas sugeridas, crear múltiples tareas
+    if tareas_sugeridas:
+        tareas_creadas = 0
+        try:
+            for tarea_data in tareas_sugeridas:
+                nueva_tarea = TareaEtapa(
+                    etapa_id=id,
+                    nombre=tarea_data['nombre'],
+                    descripcion=tarea_data['descripcion'],
+                    horas_estimadas=float(horas_estimadas) if horas_estimadas else None,
+                    responsable_id=int(responsable_id) if responsable_id else None,
+                    fecha_inicio_plan=fecha_inicio_plan_date,
+                    fecha_fin_plan=fecha_fin_plan_date
+                )
+                db.session.add(nueva_tarea)
+                tareas_creadas += 1
+            
+            db.session.commit()
+            return jsonify({'ok': True, 'created': tareas_creadas})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'ok': False, 'error': 'Error al crear las tareas múltiples'})
+    
+    # Si no hay tareas sugeridas, crear una tarea individual
+    else:
+        nombre = request.form.get('nombre')
+        descripcion = request.form.get('descripcion')
+        
+        if not nombre:
+            flash('El nombre de la tarea es obligatorio.', 'danger')
+            return redirect(url_for('obras.detalle', id=etapa.obra_id))
+        
+        nueva_tarea = TareaEtapa(
+            etapa_id=id,
+            nombre=nombre,
+            descripcion=descripcion,
+            horas_estimadas=float(horas_estimadas) if horas_estimadas else None,
+            responsable_id=int(responsable_id) if responsable_id else None,
+            fecha_inicio_plan=fecha_inicio_plan_date,
+            fecha_fin_plan=fecha_fin_plan_date
+        )
+        
+        try:
+            db.session.add(nueva_tarea)
+            db.session.commit()
+            flash(f'Tarea "{nombre}" agregada exitosamente.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al agregar la tarea.', 'danger')
+        
         return redirect(url_for('obras.detalle', id=etapa.obra_id))
-    
-    nueva_tarea = TareaEtapa(
-        etapa_id=id,
-        nombre=nombre,
-        descripcion=descripcion,
-        horas_estimadas=float(horas_estimadas) if horas_estimadas else None,
-        responsable_id=int(responsable_id) if responsable_id else None
-    )
-    
-    try:
-        db.session.add(nueva_tarea)
-        db.session.commit()
-        flash(f'Tarea "{nombre}" agregada exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al agregar la tarea.', 'danger')
-    
-    return redirect(url_for('obras.detalle', id=etapa.obra_id))
 
 
 @obras_bp.route('/admin/backfill_tareas', methods=['POST'])
