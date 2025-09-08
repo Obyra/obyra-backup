@@ -1069,26 +1069,82 @@ function cargarTareasEtapa(etapaId) {
                             usuariosChips = `<div class="mt-1"><small class="text-muted"><i class="fas fa-user-shield"></i> Responsable: <strong>${tarea.responsable}</strong></small></div>`;
                         }
                         
+                        // Generar métricas visuales
+                        let progressBar = '';
+                        let metricas = '';
+                        
+                        if (tarea.cantidad_planificada && tarea.cantidad_planificada > 0) {
+                            const porcentajeAvance = ((tarea.cantidad_ejecutada || 0) / tarea.cantidad_planificada) * 100;
+                            const claseProgreso = porcentajeAvance >= 100 ? 'bg-success' : porcentajeAvance >= 50 ? 'bg-warning' : 'bg-info';
+                            
+                            progressBar = `
+                                <div class="mt-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="text-muted">Avance: ${tarea.cantidad_ejecutada || 0} / ${tarea.cantidad_planificada} ${tarea.unidad || ''}</small>
+                                        <small class="fw-bold">${Math.round(porcentajeAvance)}%</small>
+                                    </div>
+                                    <div class="progress" style="height: 4px;">
+                                        <div class="progress-bar ${claseProgreso}" style="width: ${Math.min(porcentajeAvance, 100)}%"></div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            metricas = `
+                                <div class="mt-2 d-flex gap-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-chart-line me-1"></i>
+                                        ${tarea.total_avances || 0} registros
+                                    </small>
+                                    ${tarea.dias_transcurridos ? `<small class="text-muted"><i class="fas fa-calendar-day me-1"></i>${tarea.dias_transcurridos} días</small>` : ''}
+                                </div>
+                            `;
+                        }
+                        
+                        // Generar acciones rápidas
+                        let acciones = '';
+                        if (tarea.estado !== 'completada') {
+                            acciones = `
+                                <div class="btn-group btn-group-sm mt-2" role="group">
+                                    <button class="btn btn-outline-success btn-sm" onclick="abrirModalAvanceDetalle(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}', '${tarea.unidad || ''}')" title="Registrar avance">
+                                        <i class="fas fa-plus fa-xs"></i> Avance
+                                    </button>
+                                    ${tarea.cantidad_planificada && tarea.cantidad_ejecutada >= tarea.cantidad_planificada ? 
+                                        `<button class="btn btn-outline-primary btn-sm" onclick="completarTarea(${tarea.id})" title="Marcar como completada">
+                                            <i class="fas fa-check fa-xs"></i> Completar
+                                        </button>` : ''
+                                    }
+                                </div>
+                            `;
+                        }
+
                         html += `
-                            <div class="tarea-item d-flex align-items-center ms-3 mt-2 p-2 bg-light rounded" data-tarea-id="${tarea.id}">
-                                <label class="form-check me-2 bulk-toggle d-none">
-                                    <input type="checkbox" class="form-check-input task-check" value="${tarea.id}">
-                                </label>
-                                <div class="flex-grow-1">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-tasks me-1"></i>
-                                            <strong>${tarea.nombre}</strong>
-                                        </div>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="badge ${badgeClass}">${tarea.estado}</span>
-                                            <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarTarea(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')" title="Eliminar tarea">
-                                                <i class="fas fa-trash fa-xs"></i>
-                                            </button>
+                            <div class="tarea-item ms-3 mt-2 p-3 bg-light rounded border" data-tarea-id="${tarea.id}">
+                                <div class="d-flex align-items-start">
+                                    <label class="form-check me-3 bulk-toggle d-none">
+                                        <input type="checkbox" class="form-check-input task-check" value="${tarea.id}">
+                                    </label>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex align-items-center mb-1">
+                                                    <i class="fas fa-tasks me-2 text-primary"></i>
+                                                    <strong class="text-dark">${tarea.nombre}</strong>
+                                                </div>
+                                                
+                                                ${tarea.horas_estimadas ? `<small class="text-muted d-block"><i class="fas fa-clock me-1"></i> ${tarea.horas_estimadas}h estimadas</small>` : ''}
+                                                ${usuariosChips}
+                                                ${progressBar}
+                                                ${metricas}
+                                                ${acciones}
+                                            </div>
+                                            <div class="d-flex flex-column align-items-end gap-1">
+                                                <span class="badge ${badgeClass}">${tarea.estado}</span>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarTarea(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')" title="Eliminar tarea">
+                                                    <i class="fas fa-trash fa-xs"></i>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                    ${tarea.horas_estimadas ? `<small class="text-muted d-block mt-1"><i class="fas fa-clock"></i> ${tarea.horas_estimadas}h estimadas</small>` : ''}
-                                    ${usuariosChips}
                                 </div>
                             </div>
                         `;
@@ -1922,6 +1978,32 @@ function abrirModalAvanceDetalle(tareaId, tareaNombre, unidad) {
     
     const modal = new bootstrap.Modal(document.getElementById('modalAvanceDetalle'));
     modal.show();
+}
+
+// Función para completar tarea
+async function completarTarea(tareaId) {
+    if (!confirm('¿Marcar esta tarea como completada?')) return;
+    
+    try {
+        const response = await fetch(`/obras/tareas/${tareaId}/completar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+            // Recargar página para mostrar cambios
+            location.reload();
+        } else {
+            alert(result.error || 'Error al completar la tarea');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al completar la tarea');
+    }
 }
 
 // Manejar envío de avance
