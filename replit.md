@@ -31,7 +31,7 @@ The platform adopts a modular, blueprint-based architecture built on Flask, emph
 - **Primary Database**: SQLite for development, PostgreSQL recommended for production.
 - **ORM**: SQLAlchemy declarative base model.
 - **Connection Management**: Configured with connection pooling and pre-ping.
-- **Data Model**: Includes modules for User Management, Projects (Obras), Budgets (Presupuestos), Inventory (Inventario), Time Tracking, Organizations, Providers, and Quotation Requests.
+- **Data Model**: Includes modules for User Management, Projects (Obras), Budgets (Presupuestos), Inventory (Inventario), Time Tracking, Organizations, Providers, Quotation Requests, and Advanced Task Management with member assignments and progress tracking.
 - **Multi-Tenancy**: Organization-based multi-tenancy with data isolation (`organizacion_id` in core tables).
 - **Data Types**: Consistent use of Decimal types for monetary fields.
 
@@ -64,9 +64,15 @@ The platform adopts a modular, blueprint-based architecture built on Flask, emph
 - **Intelligent Project Configuration**:
     - Location-based pricing adjustments.
     - Automated project setup with stages, tasks, and AI recommendations.
-- **Predefined Tasks System**:
+- **Advanced Task Management System**:
     - Comprehensive task definitions for 13 construction stages.
     - Automatic task creation when stages are added, with smart suggestions.
+    - Multi-user task assignment with quotas and progress tracking.
+    - Bulk operations for task assignment and management.
+    - Real-time progress tracking with photo uploads and quantity metrics.
+    - Individual "Mis Tareas" dashboard for user-specific task management.
+    - Visual progress indicators with completion percentages and metrics.
+    - Task completion workflows with automated status updates.
 - **OBYRA Market - Comprehensive B2B Marketplace**:
     - Complete ML-like B2B marketplace with seller masking until payment confirmation.
     - Multi-seller cart and checkout system with automated purchase order generation.
