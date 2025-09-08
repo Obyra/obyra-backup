@@ -348,8 +348,8 @@ class TareaEtapa(db.Model):
     descripcion = db.Column(db.Text)
     fecha_inicio_estimada = db.Column(db.Date)
     fecha_fin_estimada = db.Column(db.Date)
-    fecha_inicio_real = db.Column(db.Date)
-    fecha_fin_real = db.Column(db.Date)
+    fecha_inicio_real = db.Column(db.DateTime)  # Cambiado a DateTime para timestamp
+    fecha_fin_real = db.Column(db.DateTime)    # Cambiado a DateTime para timestamp
     estado = db.Column(db.String(20), default='pendiente')  # pendiente, en_curso, completada, cancelada
     horas_estimadas = db.Column(db.Numeric(8, 2))
     horas_reales = db.Column(db.Numeric(8, 2), default=0)
@@ -357,15 +357,87 @@ class TareaEtapa(db.Model):
     responsable_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     fecha_inicio_plan = db.Column(db.Date)  # Fecha planificada de inicio
     fecha_fin_plan = db.Column(db.Date)     # Fecha planificada de fin
+    unidad = db.Column(db.String(10))       # 'm2','ml','u','m3','hrs'
+    cantidad_planificada = db.Column(db.Numeric)
     
     # Relaciones
     etapa = db.relationship('EtapaObra', back_populates='tareas')
+    miembros = db.relationship('TareaMiembro', back_populates='tarea', cascade='all, delete-orphan')
+    avances = db.relationship('TareaAvance', back_populates='tarea', cascade='all, delete-orphan')
+    adjuntos = db.relationship('TareaAdjunto', back_populates='tarea', cascade='all, delete-orphan')
     responsable = db.relationship('Usuario')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='tarea', lazy='dynamic')
     asignaciones = db.relationship('TareaResponsables', back_populates='tarea', lazy='dynamic', cascade='all, delete-orphan')
     
+    @property 
+    def metrics(self):
+        """Calcula métricas de la tarea"""
+        return resumen_tarea(self)
+    
     def __repr__(self):
         return f'<TareaEtapa {self.nombre}>'
+
+
+class TareaMiembro(db.Model):
+    """Usuarios asignados a una tarea que pueden reportar avances"""
+    __tablename__ = "tarea_miembros"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id"), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), index=True, nullable=False)
+    cuota_objetivo = db.Column(db.Numeric)
+    
+    # Relaciones
+    tarea = db.relationship('TareaEtapa', back_populates='miembros')
+    usuario = db.relationship('Usuario')
+    
+    # Constraint de unicidad
+    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='unique_tarea_user'),)
+    
+    def __repr__(self):
+        return f'<TareaMiembro tarea_id={self.tarea_id} user_id={self.user_id}>'
+
+
+class TareaAvance(db.Model):
+    """Registro de avances en las tareas"""
+    __tablename__ = "tarea_avances"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id"), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    fecha = db.Column(db.Date, default=date.today)
+    cantidad = db.Column(db.Numeric, nullable=False)
+    unidad = db.Column(db.String(10))
+    notas = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    tarea = db.relationship('TareaEtapa', back_populates='avances')
+    usuario = db.relationship('Usuario')
+    adjuntos = db.relationship('TareaAdjunto', back_populates='avance', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<TareaAvance tarea_id={self.tarea_id} cantidad={self.cantidad}>'
+
+
+class TareaAdjunto(db.Model):
+    """Archivos adjuntos de tareas y avances"""
+    __tablename__ = "tarea_adjuntos"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id"), nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    path = db.Column(db.String(500), nullable=False)
+    avance_id = db.Column(db.Integer, db.ForeignKey("tarea_avances.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    tarea = db.relationship('TareaEtapa', back_populates='adjuntos')
+    usuario = db.relationship('Usuario')
+    avance = db.relationship('TareaAvance', back_populates='adjuntos')
+    
+    def __repr__(self):
+        return f'<TareaAdjunto tarea_id={self.tarea_id} path={self.path}>'
 
 
 class TareaResponsables(db.Model):
@@ -1813,6 +1885,19 @@ def upsert_user_module(user_id, module, view, edit):
     um.can_view = view
     um.can_edit = edit
     db.session.commit()
+
+
+# ===== FUNCIONES HELPER PARA TAREAS =====
+
+def resumen_tarea(t):
+    """Helper para calcular métricas de una tarea"""
+    plan = float(t.cantidad_planificada or 0)
+    ejec = float(db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+                 .filter(TareaAvance.tarea_id==t.id).scalar() or 0)
+    pct = (ejec/plan*100.0) if plan>0 else 0.0
+    restante = max(plan - ejec, 0.0)
+    atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
+    return {"plan": plan, "ejec": ejec, "pct": pct, "restante": restante, "atrasada": atrasada}
 
 
 def seed_default_role_permissions():
