@@ -588,6 +588,145 @@ def parse_date(s):
     return None
 
 
+@obras_bp.route("/tareas/bulk_asignar", methods=['POST'])
+@login_required
+def bulk_asignar():
+    """Asignar usuarios a múltiples tareas"""
+    if current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    tarea_ids = request.form.getlist("tarea_ids[]")
+    user_ids = request.form.getlist("user_ids[]")
+    cuota = request.form.get("cuota_objetivo", type=float)
+    
+    if not tarea_ids or not user_ids:
+        return jsonify(ok=False, error="Faltan IDs de tareas o usuarios"), 400
+    
+    try:
+        asignaciones_creadas = 0
+        for tid in tarea_ids:
+            tarea = TareaEtapa.query.get(int(tid))
+            if not tarea or tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                continue
+                
+            for uid in set(user_ids):  # set() para evitar duplicados
+                # Verificar si ya existe la asignación
+                existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=int(uid)).first()
+                if not existing:
+                    from models import TareaMiembro
+                    asignacion = TareaMiembro(
+                        tarea_id=int(tid), 
+                        user_id=int(uid), 
+                        cuota_objetivo=cuota
+                    )
+                    db.session.add(asignacion)
+                    asignaciones_creadas += 1
+        
+        db.session.commit()
+        return jsonify(ok=True, asignaciones=asignaciones_creadas)
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error en bulk_asignar: {str(e)}")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
+@login_required
+def crear_avance(tarea_id):
+    """Registrar avance con fotos"""
+    from models import TareaMiembro, TareaAvance, TareaAdjunto
+    from werkzeug.utils import secure_filename
+    from pathlib import Path
+    
+    t = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Verificar permisos: admin o miembro de la tarea
+    es_miembro = TareaMiembro.query.filter_by(tarea_id=t.id, user_id=current_user.id).first()
+    if current_user.rol not in ['administrador', 'tecnico'] and not es_miembro:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    cantidad = request.form.get("cantidad", type=float)
+    if not cantidad or cantidad <= 0: 
+        return jsonify(ok=False, error="Cantidad inválida"), 400
+    
+    unidad = request.form.get("unidad") or t.unidad
+    notas = request.form.get("notas")
+
+    try:
+        # Crear avance
+        av = TareaAvance(
+            tarea_id=t.id, 
+            user_id=current_user.id, 
+            cantidad=cantidad, 
+            unidad=unidad, 
+            notas=notas
+        )
+        db.session.add(av)
+        
+        # Si es el primer avance, marcar fecha de inicio real
+        if not t.fecha_inicio_real: 
+            t.fecha_inicio_real = datetime.utcnow()
+
+        # Manejar fotos
+        uploaded_files = request.files.getlist("fotos")
+        for f in uploaded_files:
+            if f.filename:
+                fname = secure_filename(f.filename)
+                base = Path(current_app.static_folder) / "uploads" / "obras" / str(t.etapa.obra_id) / "tareas" / str(t.id)
+                base.mkdir(parents=True, exist_ok=True)
+                file_path = base / fname
+                f.save(file_path)
+                
+                # Crear registro de adjunto
+                adjunto = TareaAdjunto(
+                    tarea_id=t.id,
+                    avance_id=av.id,
+                    uploaded_by=current_user.id,
+                    path=f"/static/uploads/obras/{t.etapa.obra_id}/tareas/{t.id}/{fname}"
+                )
+                db.session.add(adjunto)
+
+        db.session.commit()
+        return jsonify(ok=True)
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error en crear_avance: {str(e)}")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route("/tareas/<int:tarea_id>/complete", methods=['POST'])
+@login_required
+def completar_tarea(tarea_id):
+    """Completar tarea - solo admin si restante = 0"""
+    from models import resumen_tarea
+    
+    t = TareaEtapa.query.get_or_404(tarea_id)
+    
+    if current_user.rol not in ['administrador', 'tecnico']: 
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    # Verificar que la tarea pertenezca a la organización
+    if t.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    try:
+        m = resumen_tarea(t)
+        if m["restante"] > 0: 
+            return jsonify(ok=False, error="Aún faltan cantidades"), 400
+        
+        t.estado = "completada"
+        t.fecha_fin_real = datetime.utcnow()
+        db.session.commit()
+        return jsonify(ok=True)
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error en completar_tarea: {str(e)}")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
 @login_required
 def agregar_tarea(id):
