@@ -94,6 +94,24 @@
                                 {% endif %}
                             </div>
                             
+                            <!-- Controles para selección múltiple de tareas -->
+                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <button id="btn-select-multi" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-check-square me-1"></i>
+                                    Seleccionar
+                                </button>
+                                <button id="btn-delete-selected" class="btn btn-sm btn-outline-danger d-none" disabled>
+                                    <i class="fas fa-trash me-1"></i>
+                                    Eliminar seleccionadas (0)
+                                </button>
+                                <button id="btn-assign-selected" class="btn btn-sm btn-outline-success d-none" disabled data-bs-toggle="modal" data-bs-target="#asignacionMasivaModal">
+                                    <i class="fas fa-user-plus me-1"></i>
+                                    Asignar usuarios (0)
+                                </button>
+                            </div>
+                            {% endif %}
+                            
                             {% if etapas %}
                                 {% for etapa in etapas %}
                                 <div class="border-bottom py-2">
@@ -551,6 +569,112 @@
     </div>
 </div>
 
+<!-- Modal Asignación Masiva de Usuarios a Tareas -->
+<div class="modal fade" id="asignacionMasivaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="formAsignacionMasiva">
+                <div class="modal-header">
+                    <h5 class="modal-title">Asignar Usuarios a Tareas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Tareas seleccionadas</label>
+                        <div id="tareas-seleccionadas-info" class="form-control-plaintext text-muted">
+                            <!-- Se llena dinámicamente -->
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Usuarios a asignar *</label>
+                        <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                            {% for asignacion in asignaciones %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="user_ids[]" 
+                                       value="{{ asignacion.usuario.id }}" 
+                                       id="user_{{ asignacion.usuario.id }}">
+                                <label class="form-check-label" for="user_{{ asignacion.usuario.id }}">
+                                    {{ asignacion.usuario.nombre_completo }} 
+                                    <small class="text-muted">({{ asignacion.usuario.rol }})</small>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-text">Selecciona uno o más usuarios para asignar a las tareas.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Cuota objetivo (opcional)</label>
+                        <input type="number" class="form-control" name="cuota_objetivo" 
+                               step="0.01" min="0" placeholder="Ej: 50.5">
+                        <div class="form-text">Cantidad específica que cada usuario debe ejecutar.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Asignar Usuarios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Avance -->
+<div class="modal fade" id="modalAvanceDetalle" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Registrar Avance</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formAvanceDetalle" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" id="avance_tarea_id_detalle" name="tarea_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Tarea</label>
+                        <p id="avance_tarea_nombre_detalle" class="form-control-plaintext text-muted"></p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_cantidad_detalle" class="form-label">Cantidad ejecutada *</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="avance_cantidad_detalle" name="cantidad" 
+                                   step="0.01" min="0" required>
+                            <span class="input-group-text" id="avance_unidad_display_detalle"></span>
+                        </div>
+                        <input type="hidden" id="avance_unidad_detalle" name="unidad">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_notas_detalle" class="form-label">Notas (opcional)</label>
+                        <textarea class="form-control" id="avance_notas_detalle" name="notas" rows="3" 
+                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc."></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_fotos_detalle" class="form-label">Fotos del avance (opcional)</label>
+                        <input type="file" class="form-control" id="avance_fotos_detalle" name="fotos" 
+                               multiple accept="image/*">
+                        <div class="form-text">Puedes seleccionar múltiples fotos del progreso.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>
+                        Registrar Avance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Asignar Usuario -->
 <div class="modal fade" id="asignarUsuarioModal" tabindex="-1">
     <div class="modal-dialog">
@@ -875,11 +999,9 @@ function seleccionarTareaPredefinida(index) {
     
     const tarea = window.tareasActuales[index];
     const inputNombre = document.querySelector('#nuevaTareaModal input[name="nombre"]');
-    const textareaDescripcion = document.querySelector('#nuevaTareaModal textarea[name="descripcion"]');
     const horasInput = document.querySelector('#nuevaTareaModal input[name="horas_estimadas"]');
     
     inputNombre.value = tarea.nombre || '';
-    textareaDescripcion.value = tarea.descripcion || '';
     if (horasInput && tarea.horas) {
         horasInput.value = tarea.horas;
     }
@@ -965,7 +1087,7 @@ function cargarTareasEtapa(etapaId) {
                                             </button>
                                         </div>
                                     </div>
-                                    ${tarea.descripcion ? `<small class="text-muted d-block mt-1">${tarea.descripcion}</small>` : ''}
+                                    ${tarea.horas_estimadas ? `<small class="text-muted d-block mt-1"><i class="fas fa-clock"></i> ${tarea.horas_estimadas}h estimadas</small>` : ''}
                                     ${usuariosChips}
                                 </div>
                             </div>
@@ -1685,27 +1807,35 @@ function eliminarTarea(tareaId) {
     let selecting = false;
     const btnToggle = document.getElementById('btn-select-multi');
     const btnDelete = document.getElementById('btn-delete-selected');
+    const btnAssign = document.getElementById('btn-assign-selected');
 
     function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
     function toggles(){ return Array.from(document.querySelectorAll('.bulk-toggle')); }
     function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
-    function updateDeleteBtn(){
+    function updateButtons(){
         const n = selectedIds().length;
-        btnDelete.textContent = `Eliminar seleccionadas (${n})`;
-        btnDelete.disabled = n === 0;
+        if (btnDelete) {
+            btnDelete.textContent = `Eliminar seleccionadas (${n})`;
+            btnDelete.disabled = n === 0;
+        }
+        if (btnAssign) {
+            btnAssign.textContent = `Asignar usuarios (${n})`;
+            btnAssign.disabled = n === 0;
+        }
     }
 
     btnToggle?.addEventListener('click', () => {
         selecting = !selecting;
         toggles().forEach(t => t.classList.toggle('d-none', !selecting));
         if (!selecting) checks().forEach(c => c.checked = false);
-        updateDeleteBtn();
+        updateButtons();
         btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
-        btnDelete.classList.toggle('d-none', !selecting);
+        btnDelete?.classList.toggle('d-none', !selecting);
+        btnAssign?.classList.toggle('d-none', !selecting);
     });
 
     document.addEventListener('change', e => {
-        if (e.target?.classList?.contains('task-check')) updateDeleteBtn();
+        if (e.target?.classList?.contains('task-check')) updateButtons();
     });
 
     btnDelete?.addEventListener('click', async () => {
@@ -1721,7 +1851,109 @@ function eliminarTarea(tareaId) {
         if (res.ok) location.reload();
         else alert(res.error || 'No se pudo eliminar.');
     });
+
+    // Preparar modal de asignación masiva
+    btnAssign?.addEventListener('click', () => {
+        const ids = selectedIds();
+        const tareasInfo = document.getElementById('tareas-seleccionadas-info');
+        tareasInfo.textContent = `${ids.length} tareas seleccionadas`;
+        
+        // Limpiar selecciones previas de usuarios
+        document.querySelectorAll('#asignacionMasivaModal input[name="user_ids[]"]').forEach(cb => {
+            cb.checked = false;
+        });
+    });
 })();
+
+// Manejar envío de asignación masiva
+document.getElementById('formAsignacionMasiva')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const selectedTasks = Array.from(document.querySelectorAll('.task-check:checked')).map(c => c.value);
+    const selectedUsers = Array.from(document.querySelectorAll('#asignacionMasivaModal input[name="user_ids[]"]:checked')).map(c => c.value);
+    
+    if (!selectedTasks.length || !selectedUsers.length) {
+        alert('Debes seleccionar al menos una tarea y un usuario');
+        return;
+    }
+    
+    const formData = new FormData();
+    selectedTasks.forEach(id => formData.append('tarea_ids[]', id));
+    selectedUsers.forEach(id => formData.append('user_ids[]', id));
+    
+    const cuota = document.querySelector('#asignacionMasivaModal input[name="cuota_objetivo"]').value;
+    if (cuota) formData.append('cuota_objetivo', cuota);
+    
+    try {
+        const response = await fetch('/obras/tareas/bulk_asignar', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+            // Cerrar modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('asignacionMasivaModal'));
+            modal.hide();
+            
+            // Recargar página para mostrar asignaciones
+            location.reload();
+        } else {
+            alert(result.error || 'Error al asignar usuarios');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al asignar usuarios');
+    }
+});
+
+// Funciones para modal de avance
+function abrirModalAvanceDetalle(tareaId, tareaNombre, unidad) {
+    document.getElementById('avance_tarea_id_detalle').value = tareaId;
+    document.getElementById('avance_tarea_nombre_detalle').textContent = tareaNombre;
+    document.getElementById('avance_unidad_detalle').value = unidad || '';
+    document.getElementById('avance_unidad_display_detalle').textContent = unidad || 'unidad';
+    
+    // Limpiar formulario
+    document.getElementById('formAvanceDetalle').reset();
+    document.getElementById('avance_tarea_id_detalle').value = tareaId;
+    document.getElementById('avance_unidad_detalle').value = unidad || '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalAvanceDetalle'));
+    modal.show();
+}
+
+// Manejar envío de avance
+document.getElementById('formAvanceDetalle')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const tareaId = document.getElementById('avance_tarea_id_detalle').value;
+    const formData = new FormData(this);
+    
+    try {
+        const response = await fetch(`/obras/tareas/${tareaId}/avances`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+            // Cerrar modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalAvanceDetalle'));
+            modal.hide();
+            
+            // Recargar página para mostrar nuevo avance
+            location.reload();
+        } else {
+            alert(result.error || 'Error al registrar el avance');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al registrar el avance');
+    }
+});
 
 // Sistema de selección múltiple para ETAPAS (simplificado)
 (function(){
