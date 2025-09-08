@@ -1,0 +1,230 @@
+{% extends "layout.html" %}
+
+{% block title %}Mis Tareas - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-tasks text-primary me-2"></i>
+                        Mis Tareas Asignadas
+                    </h1>
+                    <p class="text-muted">Total: {{ total_tareas }} tareas</p>
+                </div>
+                <a href="{{ url_for('obras.lista') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>
+                    Volver a Obras
+                </a>
+            </div>
+
+            {% if not tareas_asignadas %}
+            <div class="text-center py-5">
+                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No tienes tareas asignadas</h4>
+                <p class="text-muted">Cuando se te asignen tareas aparecerán aquí.</p>
+            </div>
+            {% else %}
+            
+            <div class="row">
+                {% for item in tareas_asignadas %}
+                <div class="col-lg-6 col-xl-4 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0 text-truncate">
+                                <i class="fas fa-building text-secondary me-1"></i>
+                                {{ item.obra.nombre }}
+                            </h6>
+                            <small class="text-muted">{{ item.etapa.nombre }}</small>
+                        </div>
+                        <div class="card-body">
+                            <h5 class="card-title text-truncate">{{ item.tarea.nombre }}</h5>
+                            
+                            <!-- Estado -->
+                            <div class="mb-2">
+                                {% if item.tarea.estado == 'completada' %}
+                                    <span class="badge bg-success">Completada</span>
+                                {% elif item.tarea.estado == 'en_curso' %}
+                                    <span class="badge bg-warning">En Curso</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Pendiente</span>
+                                {% endif %}
+                                
+                                {% if item.metrics.atrasada %}
+                                    <span class="badge bg-danger ms-1">Atrasada</span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Progreso -->
+                            {% if item.tarea.cantidad_planificada %}
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted">Progreso</small>
+                                    <small class="text-muted">{{ "%.1f"|format(item.metrics.pct) }}%</small>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar" 
+                                         style="width: {{ item.metrics.pct|round(0) }}%"
+                                         role="progressbar"></div>
+                                </div>
+                                <small class="text-muted">
+                                    {{ "%.2f"|format(item.metrics.ejec) }}/{{ item.tarea.cantidad_planificada or 0 }} {{ item.tarea.unidad or '' }}
+                                </small>
+                            </div>
+                            {% endif %}
+
+                            <!-- Fechas planificadas -->
+                            {% if item.tarea.fecha_inicio_plan or item.tarea.fecha_fin_plan %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    {% if item.tarea.fecha_inicio_plan %}
+                                        Inicio: {{ item.tarea.fecha_inicio_plan.strftime('%d/%m/%Y') }}
+                                    {% endif %}
+                                    {% if item.tarea.fecha_fin_plan %}
+                                        {% if item.tarea.fecha_inicio_plan %} - {% endif %}
+                                        Fin: {{ item.tarea.fecha_fin_plan.strftime('%d/%m/%Y') }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            {% endif %}
+
+                            <!-- Cuota objetivo si está definida -->
+                            {% if item.cuota_objetivo %}
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-target me-1"></i>
+                                    Cuota objetivo: {{ item.cuota_objetivo }}
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="card-footer bg-white">
+                            <div class="d-flex gap-2">
+                                <!-- Botón registrar avance -->
+                                <button class="btn btn-primary btn-sm flex-fill" 
+                                        onclick="abrirModalAvance({{ item.tarea.id }}, '{{ item.tarea.nombre }}', '{{ item.tarea.unidad or '' }}')">
+                                    <i class="fas fa-plus me-1"></i>
+                                    Registrar Avance
+                                </button>
+                                
+                                <!-- Botón ver obra -->
+                                <a href="{{ url_for('obras.detalle', id=item.obra.id) }}" 
+                                   class="btn btn-outline-secondary btn-sm">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Avance -->
+<div class="modal fade" id="modalAvance" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Registrar Avance</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formAvance" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" id="avance_tarea_id" name="tarea_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Tarea</label>
+                        <p id="avance_tarea_nombre" class="form-control-plaintext text-muted"></p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_cantidad" class="form-label">Cantidad ejecutada *</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="avance_cantidad" name="cantidad" 
+                                   step="0.01" min="0" required>
+                            <span class="input-group-text" id="avance_unidad_display"></span>
+                        </div>
+                        <input type="hidden" id="avance_unidad" name="unidad">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_notas" class="form-label">Notas (opcional)</label>
+                        <textarea class="form-control" id="avance_notas" name="notas" rows="3" 
+                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc."></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_fotos" class="form-label">Fotos del avance (opcional)</label>
+                        <input type="file" class="form-control" id="avance_fotos" name="fotos" 
+                               multiple accept="image/*">
+                        <div class="form-text">Puedes seleccionar múltiples fotos del progreso.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>
+                        Registrar Avance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Función para abrir modal de avance
+function abrirModalAvance(tareaId, tareaNombre, unidad) {
+    document.getElementById('avance_tarea_id').value = tareaId;
+    document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
+    document.getElementById('avance_unidad').value = unidad || '';
+    document.getElementById('avance_unidad_display').textContent = unidad || 'unidad';
+    
+    // Limpiar formulario
+    document.getElementById('formAvance').reset();
+    document.getElementById('avance_tarea_id').value = tareaId;
+    document.getElementById('avance_unidad').value = unidad || '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalAvance'));
+    modal.show();
+}
+
+// Manejar envío de avance
+document.getElementById('formAvance').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const tareaId = document.getElementById('avance_tarea_id').value;
+    const formData = new FormData(this);
+    
+    try {
+        const response = await fetch(`/obras/tareas/${tareaId}/avances`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+            // Cerrar modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalAvance'));
+            modal.hide();
+            
+            // Recargar página para mostrar nuevo avance
+            location.reload();
+        } else {
+            alert(result.error || 'Error al registrar el avance');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al registrar el avance');
+    }
+});
+</script>
+{% endblock %}

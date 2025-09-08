@@ -727,6 +727,34 @@ def completar_tarea(tarea_id):
         return jsonify(ok=False, error="Error interno"), 500
 
 
+@obras_bp.route('/mis-tareas')
+@login_required  
+def mis_tareas():
+    """Página simple que lista las tareas asignadas al usuario actual"""
+    from models import TareaMiembro
+    
+    # Obtener tareas donde el usuario está asignado
+    mis_asignaciones = TareaMiembro.query.filter_by(user_id=current_user.id).all()
+    
+    tareas_asignadas = []
+    for asignacion in mis_asignaciones:
+        tarea = asignacion.tarea
+        if tarea and tarea.etapa and tarea.etapa.obra:
+            # Verificar que pertenezca a la organización
+            if tarea.etapa.obra.organizacion_id == current_user.organizacion_id:
+                tareas_asignadas.append({
+                    'tarea': tarea,
+                    'obra': tarea.etapa.obra,
+                    'etapa': tarea.etapa,
+                    'metrics': tarea.metrics,
+                    'cuota_objetivo': asignacion.cuota_objetivo
+                })
+    
+    return render_template('obras/mis_tareas.html', 
+                         tareas_asignadas=tareas_asignadas,
+                         total_tareas=len(tareas_asignadas))
+
+
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
 @login_required
 def agregar_tarea(id):
