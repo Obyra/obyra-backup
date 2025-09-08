@@ -1,0 +1,349 @@
+Objetivo
+
+Modal “Nueva Tarea”:
+
+Sin “Descripción”.
+
+Inicio/Fin planificado.
+
+“Tareas sugeridas” con checkboxes → si tildo varias, se crean varias tareas de una.
+
+Asignar usuarios a tareas (bulk).
+
+Usuarios asignados pueden registrar avances (cantidad, fotos, notas) solo en sus tareas.
+
+Métricas de tarea: % ejecutado, restante, “Atrasada”.
+
+Admin puede completar una tarea (si restante = 0).
+
+Listado simple “Mis Tareas” (tareas donde el usuario está asignado).
+
+Prefijo de rutas: todos los endpoints bajo /obras.
+
+1) BD (migración aditiva)
+-- Planificación y tracking básico en tareas
+ALTER TABLE tareas
+  ADD COLUMN IF NOT EXISTS responsable_id INT NULL REFERENCES usuarios(id),
+  ADD COLUMN IF NOT EXISTS unidad VARCHAR(10),                  -- 'm2','ml','u','m3','hrs'
+  ADD COLUMN IF NOT EXISTS cantidad_planificada NUMERIC,
+  ADD COLUMN IF NOT EXISTS fecha_inicio_plan DATE,
+  ADD COLUMN IF NOT EXISTS fecha_fin_plan DATE,
+  ADD COLUMN IF NOT EXISTS fecha_inicio_real TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS fecha_fin_real TIMESTAMP;
+
+-- Quiénes pueden reportar avances en cada tarea
+CREATE TABLE IF NOT EXISTS tarea_miembros (
+  id SERIAL PRIMARY KEY,
+  tarea_id INT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+  user_id INT NOT NULL REFERENCES usuarios(id),
+  cuota_objetivo NUMERIC NULL,
+  UNIQUE (tarea_id, user_id)
+);
+
+-- Avances (log)
+CREATE TABLE IF NOT EXISTS tarea_avances (
+  id SERIAL PRIMARY KEY,
+  tarea_id INT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+  user_id INT NULL REFERENCES usuarios(id),
+  fecha DATE DEFAULT CURRENT_DATE,
+  cantidad NUMERIC NOT NULL,
+  unidad VARCHAR(10),
+  notas TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Fotos de avances (si ya existe, solo agregar)
+ALTER TABLE tarea_adjuntos
+  ADD COLUMN IF NOT EXISTS avance_id INT NULL REFERENCES tarea_avances(id);
+
+2) Modelos (SQLAlchemy)
+class TareaMiembro(db.Model):
+    __tablename__ = "tarea_miembros"
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas.id"), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), index=True, nullable=False)
+    cuota_objetivo = db.Column(db.Numeric)
+
+class TareaAvance(db.Model):
+    __tablename__ = "tarea_avances"
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas.id"), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    fecha = db.Column(db.Date, default=date.today)
+    cantidad = db.Column(db.Numeric, nullable=False)
+    unidad = db.Column(db.String(10))
+    notas = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+Helper de métricas (usarlo al render en cada tarea como tarea.metrics):
+
+def resumen_tarea(t):
+    plan = float(t.cantidad_planificada or 0)
+    ejec = float(db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+                 .filter(TareaAvance.tarea_id==t.id).scalar() or 0)
+    pct = (ejec/plan*100.0) if plan>0 else 0.0
+    restante = max(plan - ejec, 0.0)
+    atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
+    return {"plan": plan, "ejec": ejec, "pct": pct, "restante": restante, "atrasada": atrasada}
+
+3) Endpoints (backend, blueprint obras_bp)
+3.1 Crear tarea(s) desde el modal — POST /obras/tareas/crear
+
+Acepta ambos casos:
+
+0 sugeridas → crea 1 tarea con nombre.
+
+1 sugerida → idem, autocompletando nombre.
+
+2+ sugeridas → crea N tareas (una por id).
+
+from datetime import datetime
+
+def parse_date(s):
+    if not s: return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try: return datetime.strptime(s, fmt).date()
+        except: pass
+    return None
+
+@obras_bp.post("/tareas/crear")
+@login_required
+def crear_tareas():
+    try:
+        obra_id  = request.form.get("obra_id", type=int)
+        etapa_id = request.form.get("etapa_id", type=int)
+        horas    = request.form.get("horas_estimadas", type=float)
+        resp_id  = request.form.get("responsable_id", type=int) or None
+        fi = parse_date(request.form.get("fecha_inicio_plan"))
+        ff = parse_date(request.form.get("fecha_fin_plan"))
+        sugeridas = request.form.getlist("sugeridas[]")  # IDs numéricos
+
+        if not sugeridas:
+            nombre = request.form.get("nombre", "").strip()
+            if not nombre:
+                return jsonify(ok=False, error="Falta el nombre"), 400
+            t = Tarea(
+                obra_id=obra_id, etapa_id=etapa_id, nombre=nombre,
+                responsable_id=resp_id, horas_estimadas=horas,
+                fecha_inicio_plan=fi, fecha_fin_plan=ff
+            )
+            db.session.add(t)
+            db.session.commit()
+            return jsonify(ok=True, created=1)
+
+        created = 0
+        for sid in sugeridas:
+            sug = TareaSugerida.query.get(int(sid))
+            if not sug: continue
+            t = Tarea(
+                obra_id=obra_id, etapa_id=etapa_id, nombre=sug.nombre,
+                responsable_id=resp_id, horas_estimadas=horas,
+                fecha_inicio_plan=fi, fecha_fin_plan=ff
+            )
+            db.session.add(t); created += 1
+
+        if created == 0:
+            db.session.rollback()
+            return jsonify(ok=False, error="No se pudo crear ninguna tarea"), 400
+
+        db.session.commit()
+        return jsonify(ok=True, created=created)
+
+    except Exception as e:
+        current_app.logger.exception("crear_tareas")
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 400
+
+3.2 Asignar usuarios a múltiples tareas — POST /obras/tareas/bulk_asignar
+
+Body: tarea_ids[], user_ids[], cuota_objetivo (opcional).
+
+@obras_bp.post("/tareas/bulk_asignar")
+@login_required
+def bulk_asignar():
+    if not current_user.is_admin:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    tarea_ids = request.form.getlist("tarea_ids[]")
+    user_ids = request.form.getlist("user_ids[]")
+    cuota = request.form.get("cuota_objetivo", type=float)
+    for tid in tarea_ids:
+        for uid in set(user_ids):
+            if not db.session.query(TareaMiembro).filter_by(tarea_id=tid, user_id=uid).first():
+                db.session.add(TareaMiembro(tarea_id=int(tid), user_id=int(uid), cuota_objetivo=cuota))
+    db.session.commit()
+    return jsonify(ok=True)
+
+3.3 Registrar avance con fotos — POST /obras/tareas/<int:tarea_id>/avances
+@obras_bp.post("/tareas/<int:tarea_id>/avances")
+@login_required
+def crear_avance(tarea_id):
+    t = Tarea.query.get_or_404(tarea_id)
+    es_miembro = db.session.query(TareaMiembro.id).filter_by(tarea_id=t.id, user_id=current_user.id).first()
+    if not (current_user.is_admin or es_miembro):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    cantidad = request.form.get("cantidad", type=float)
+    if not cantidad or cantidad <= 0: return jsonify(ok=False, error="Cantidad inválida"), 400
+    unidad = request.form.get("unidad") or t.unidad
+    notas = request.form.get("notas")
+
+    av = TareaAvance(tarea_id=t.id, user_id=current_user.id, cantidad=cantidad, unidad=unidad, notas=notas)
+    db.session.add(av)
+    if not t.fecha_inicio_real: t.fecha_inicio_real = datetime.utcnow()
+
+    # fotos
+    for f in request.files.getlist("fotos"):
+        fname = secure_filename(f.filename)
+        base = Path(current_app.static_folder) / "uploads" / "obras" / str(t.obra_id) / "tareas" / str(t.id)
+        base.mkdir(parents=True, exist_ok=True)
+        f.save(base / fname)
+        db.session.add(TareaAdjunto(
+            tarea_id=t.id, avance_id=av.id, uploaded_by=current_user.id,
+            path=f"/static/uploads/obras/{t.obra_id}/tareas/{t.id}/{fname}"
+        ))
+
+    db.session.commit()
+    return jsonify(ok=True)
+
+3.4 Completar tarea — POST /obras/tareas/<int:tarea_id>/complete
+@obras_bp.post("/tareas/<int:tarea_id>/complete")
+@login_required
+def completar_tarea(tarea_id):
+    t = Tarea.query.get_or_404(tarea_id)
+    if not current_user.is_admin: return jsonify(ok=False, error="Sin permiso"), 403
+    m = resumen_tarea(t)
+    if m["restante"] > 0: return jsonify(ok=False, error="Aún faltan cantidades"), 400
+    t.estado = "completada"
+    t.fecha_fin_real = datetime.utcnow()
+    db.session.commit()
+    return jsonify(ok=True)
+
+4) Frontend (templates/obras/detalle.html)
+4.1 Modal “Nueva Tarea”
+
+Eliminar bloque de “Descripción” (no enviarlo ni guardarlo).
+
+Mantener: nombre, horas_estimadas, responsable_id, fecha_inicio_plan, fecha_fin_plan.
+
+Sugeridas en checkboxes:
+
+<input type="checkbox" name="sugeridas[]" value="{{sug.id}}" data-nombre="{{sug.nombre}}">
+
+
+JS envío (usar prefijo /obras/tareas/crear):
+
+const form = document.querySelector('#nuevaTareaModal form');
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
+
+  // normalizar array de sugeridas
+  fd.delete('sugeridas'); fd.delete('sugeridas[]');
+  document.querySelectorAll('[name="sugeridas[]"]:checked')
+    .forEach(c => fd.append('sugeridas[]', c.value));
+
+  const checks = document.querySelectorAll('[name="sugeridas[]"]:checked');
+  const nombre = form.querySelector('[name="nombre"]');
+  if (checks.length >= 2 && nombre) nombre.disabled = true;
+
+  const r = await fetch('/obras/tareas/crear', { method:'POST', body: fd });
+  const j = await r.json();
+  if (!j.ok) return alert(j.error || 'Error al crear tareas');
+  location.reload();
+});
+
+4.2 Asignar usuarios (en lista de tareas)
+
+Dejar los checkboxes de selección de tareas (ya están).
+
+Botón “Asignar usuarios” (enabled si hay seleccionadas).
+
+Modal con multi-select de usuarios + campo “cuota objetivo” (opcional).
+
+Enviar a POST /obras/tareas/bulk_asignar con tarea_ids[] y user_ids[].
+
+4.3 En cada tarea mostrar
+
+Chips de usuarios asignados (nombre corto/iniciales).
+
+Barra de progreso:
+
+<div class="progress" style="width:180px;height:8px">
+  <div class="progress-bar" style="width: {{ tarea.metrics.pct|round(0) }}%;"></div>
+</div>
+<small>{{ tarea.metrics.ejec|round(2) }}/{{ tarea.cantidad_planificada or 0 }} {{ tarea.unidad }}
+  {% if tarea.metrics.atrasada %}<span class="badge bg-danger ms-2">Atrasada</span>{% endif %}
+</small>
+
+
+Botones:
+
+Registrar avance (visible si admin o miembro) → abre modal Avance.
+
+Completar (solo admin; permitido si restante=0).
+
+4.4 Modal “Registrar avance”
+
+Campos:
+
+Cantidad (required)
+
+Unidad (readonly de la tarea)
+
+Notas (opcional)
+
+Fotos (multiple)
+→ POST /obras/tareas/<id>/avances
+
+5) Página “Mis Tareas” (simple)
+
+Ruta: GET /obras/mis-tareas.
+
+Lista de tareas donde current_user ∈ tarea_miembros.
+
+Acciones: Registrar avance / Ver obra.
+
+6) Permisos
+
+Admin: ver todo, asignar, completar, borrar.
+
+Miembro de tarea: ver su tarea y registrar avances.
+
+Otros: sin acceso a avances/acciones.
+
+7) QA / Aceptación
+
+Modal Nueva Tarea:
+
+No hay “Descripción”.
+
+0/1/2+ sugeridas funcionan (created = 1 / N).
+
+Asignar usuarios a varias tareas → aparecen chips.
+
+Usuario asignado puede cargar avances (cantidad + fotos) solo en sus tareas.
+
+Progreso se actualiza (% y restante); “Atrasada” si pasó fin plan.
+
+Admin puede completar una vez restante = 0.
+
+“Mis Tareas” lista solo las asignadas al usuario.
+
+Orden sugerido (rápido y barato)
+
+Migración BD.
+
+Modelos + resumen_tarea.
+
+Endpoints (/obras/tareas/crear, bulk_asignar, avances, complete).
+
+UI modal Nueva Tarea (sin descripción + checkboxes).
+
+Botón Asignar usuarios + modal + chips + barra.
+
+Modal Avance.
+
+Página Mis Tareas.
+
+Pruebas (Network: ver sugeridas[] con IDs; Responses {ok:true}).
