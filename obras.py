@@ -61,9 +61,22 @@ def es_miembro_obra(obra_id, user_id):
     # Admin/PM siempre tienen acceso
     if is_pm_global():
         return True
+    
     from models import ObraMiembro
-    return db.session.query(ObraMiembro.id)\
-        .filter_by(obra_id=obra_id, user_id=user_id).first() is not None
+    # Verificar membresía directa en la obra
+    miembro = db.session.query(ObraMiembro.id)\
+        .filter_by(obra_id=obra_id, user_id=user_id).first()
+    if miembro:
+        return True
+    
+    # Para operarios, también verificar si tienen tareas asignadas en la obra
+    tiene_tareas = (db.session.query(TareaMiembro.id)
+                   .join(TareaEtapa, TareaMiembro.tarea_id == TareaEtapa.id)
+                   .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
+                   .filter(EtapaObra.obra_id == obra_id, 
+                          TareaMiembro.user_id == user_id)
+                   .first())
+    return tiene_tareas is not None
 
 def resumen_tarea(t):
     """Calcular métricas de una tarea a prueba de nulos"""
