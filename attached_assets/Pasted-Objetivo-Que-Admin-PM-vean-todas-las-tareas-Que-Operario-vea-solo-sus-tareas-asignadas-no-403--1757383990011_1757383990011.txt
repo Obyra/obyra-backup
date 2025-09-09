@@ -1,0 +1,97 @@
+Objetivo
+
+Que Admin/PM vean todas las tareas.
+
+Que Operario vea solo sus tareas asignadas (no 403).
+
+Evitar 500 por campos removidos en to_dict().
+
+Cambios
+
+Permisos + filtro por rol en el endpoint JSON de tareas
+(ajusta el nombre/ubicación al tuyo; a modo de ejemplo)
+
+# obras.py
+from flask import jsonify
+from flask_login import login_required, current_user
+from utils.permissions import is_admin_or_pm
+from models import Obra, Etapa, TareaEtapa, TareaMiembro, db
+
+def es_miembro_obra(obra_id, user_id):
+    from models import ObraMiembro
+    return db.session.query(ObraMiembro.id)\
+        .filter_by(obra_id=obra_id, user_id=user_id).first() is not None
+
+@obras_bp.get("/<int:obra_id>/tareas_json")
+@login_required
+def tareas_json(obra_id):
+    obra = Obra.query.get_or_404(obra_id)
+
+    q = (TareaEtapa.query
+         .join(Etapa, TareaEtapa.etapa_id == Etapa.id)
+         .filter(Etapa.obra_id == obra_id)
+         .order_by(Etapa.orden, TareaEtapa.id))
+
+    # Admin/PM: ven todo. Operario: solo las suyas (TareaMiembro)
+    if not is_admin_or_pm():
+        # Si no es admin/pm, debe ser operario y miembro de la obra
+        if not es_miembro_obra(obra_id, current_user.id):
+            return jsonify(ok=False, error="Sin permiso"), 403
+        q = (q.join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+               .filter(TareaMiembro.user_id == current_user.id))
+
+    tareas = q.all()
+    return jsonify(ok=True, data=[t.to_dict() for t in tareas])
+
+
+Serializer seguro (si quitaste descripcion, no la referencies):
+
+# models.py
+class TareaEtapa(db.Model):
+    # ...
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "estado": self.estado,
+            "horas_estimadas": float(self.horas_estimadas or 0),
+            "unidad": self.unidad,
+            "cantidad_planificada": float(self.cantidad_planificada or 0),
+            "responsable_id": self.responsable_id,
+            "etapa_id": self.etapa_id,
+            # agrega solo campos existentes
+        }
+
+
+Frontend
+El mensaje “Error al cargar tareas” ya lo muestra el JS cuando el fetch falla. Con el cambio de backend debería desaparecer; si alguna vez llega 403, ya no será el caso porque al operario se le filtran sus tareas en el mismo endpoint.
+
+B) Bloquear Documentos a operarios (dejarlo solo para Admin/PM)
+
+1) Ocultar en el menú (templates/base.html)
+
+{% if current_user.is_authenticated and (current_user.role in ['admin','pm'] or current_user.rol in ['admin','pm']) %}
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+    <i class="fa fa-folder-open me-1"></i> Documentos
+  </a>
+  <!-- submenú -->
+</li>
+{% endif %}
+
+
+2) Guardar el blueprint
+
+# documentos.py
+from flask import abort
+from flask_login import login_required
+from utils.permissions import user_role
+
+@documentos_bp.before_request
+@login_required
+def _block_operario_docs():
+    if user_role() == "operario":
+        abort(403)  # o redirect(url_for("obras.mis_tareas"))
+
+
+Importante: no tocar los endpoints de fotos que se suben desde Registrar Avance; esos deben seguir accesibles para el operario en sus tareas.

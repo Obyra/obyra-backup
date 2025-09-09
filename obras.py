@@ -56,6 +56,12 @@ def can_log_avance(tarea):
     ).first()
     return miembro is not None
 
+def es_miembro_obra(obra_id, user_id):
+    """Verificar si el usuario es miembro de la obra (cualquier rol)"""
+    from models import ObraMiembro
+    return db.session.query(ObraMiembro.id)\
+        .filter_by(obra_id=obra_id, user_id=user_id).first() is not None
+
 def D(x):
     """Helper para conversión segura a Decimal"""
     if x is None:
@@ -977,8 +983,32 @@ def obtener_tareas_etapa(etapa_id):
     if etapa.obra.organizacion_id != current_user.organizacion_id:
         return jsonify({'success': False, 'error': 'Sin permisos'}), 403
     
+    # Filtrar tareas según rol del usuario
+    if is_pm_global():
+        # Admin/PM ven todas las tareas de la etapa
+        tareas_query = etapa.tareas
+    else:
+        # Operarios solo ven tareas donde están asignados
+        if not es_miembro_obra(etapa.obra_id, current_user.id):
+            return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+        
+        # Filtrar por tareas asignadas (responsable o miembro)
+        tareas_asignadas = []
+        for tarea in etapa.tareas:
+            es_responsable = tarea.responsable_id == current_user.id
+            es_miembro = any(asig.user_id == current_user.id for asig in tarea.asignaciones)
+            es_miembro_tarea = TareaMiembro.query.filter_by(
+                tarea_id=tarea.id, 
+                user_id=current_user.id
+            ).first() is not None
+            
+            if es_responsable or es_miembro or es_miembro_tarea:
+                tareas_asignadas.append(tarea)
+        
+        tareas_query = tareas_asignadas
+    
     tareas = []
-    for tarea in etapa.tareas:
+    for tarea in tareas_query:
         # Obtener usuarios asignados a esta tarea
         usuarios_asignados = []
         for asignacion in tarea.asignaciones:
