@@ -11,6 +11,10 @@ reportes_bp = Blueprint('reportes', __name__)
 @reportes_bp.route('/dashboard')
 @login_required
 def dashboard():
+    # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
+    if getattr(current_user, "role", None) == "operario":
+        return redirect(url_for("obras.mis_tareas"))
+    # Admin y PM siguen viendo el dashboard
     # Obtener fecha de filtro
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')

@@ -142,6 +142,9 @@ def verificar_periodo_prueba():
 def index():
     """Redirigir automáticamente al dashboard después del login"""
     if current_user.is_authenticated:
+        # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
+        if getattr(current_user, "role", None) == "operario":
+            return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
     return redirect(url_for('auth.login'))
 
@@ -149,6 +152,9 @@ def index():
 @app.route('/dashboard')
 def dashboard():
     if current_user.is_authenticated:
+        # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
+        if getattr(current_user, "role", None) == "operario":
+            return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
     return redirect(url_for('auth.login'))
 
