@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
@@ -250,7 +250,9 @@ def detalle(id):
                          usuarios_disponibles=usuarios_disponibles,
                          etapas_disponibles=etapas_disponibles,
                          roles_por_categoria=obtener_roles_por_categoria(),
-                         TAREAS_POR_ETAPA=TAREAS_POR_ETAPA)
+                         TAREAS_POR_ETAPA=TAREAS_POR_ETAPA,
+                         can_manage=can_manage_obra(obra),
+                         current_user_id=current_user.id)
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
@@ -705,22 +707,17 @@ def crear_avance(tarea_id):
     
     from pathlib import Path
     
-    # Verificar permisos: admin o miembro de la tarea
-    es_miembro = TareaMiembro.query.filter_by(tarea_id=t.id, user_id=current_user.id).first()
-    if current_user.rol not in ['administrador', 'tecnico'] and not es_miembro:
-        return jsonify(ok=False, error="Sin permiso"), 403
-
     cantidad = request.form.get("cantidad", type=float)
     if not cantidad or cantidad <= 0: 
         return jsonify(ok=False, error="Cantidad inválida"), 400
     
-    unidad = request.form.get("unidad") or t.unidad
+    unidad = request.form.get("unidad") or tarea.unidad
     notas = request.form.get("notas")
 
     try:
         # Crear avance
         av = TareaAvance(
-            tarea_id=t.id, 
+            tarea_id=tarea.id, 
             user_id=current_user.id, 
             cantidad=cantidad, 
             unidad=unidad, 
@@ -729,25 +726,25 @@ def crear_avance(tarea_id):
         db.session.add(av)
         
         # Si es el primer avance, marcar fecha de inicio real
-        if not t.fecha_inicio_real: 
-            t.fecha_inicio_real = datetime.utcnow()
+        if not tarea.fecha_inicio_real: 
+            tarea.fecha_inicio_real = datetime.utcnow()
 
         # Manejar fotos
         uploaded_files = request.files.getlist("fotos")
         for f in uploaded_files:
             if f.filename:
                 fname = secure_filename(f.filename)
-                base = Path(current_app.static_folder) / "uploads" / "obras" / str(t.etapa.obra_id) / "tareas" / str(t.id)
+                base = Path(current_app.static_folder) / "uploads" / "obras" / str(tarea.etapa.obra_id) / "tareas" / str(tarea.id)
                 base.mkdir(parents=True, exist_ok=True)
                 file_path = base / fname
                 f.save(file_path)
                 
                 # Crear registro de adjunto
                 adjunto = TareaAdjunto(
-                    tarea_id=t.id,
+                    tarea_id=tarea.id,
                     avance_id=av.id,
                     uploaded_by=current_user.id,
-                    path=f"/static/uploads/obras/{t.etapa.obra_id}/tareas/{t.id}/{fname}"
+                    path=f"/static/uploads/obras/{tarea.etapa.obra_id}/tareas/{tarea.id}/{fname}"
                 )
                 db.session.add(adjunto)
 
@@ -773,22 +770,17 @@ def completar_tarea(tarea_id):
     if not can_manage_obra(obra):
         return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
     
-    t = TareaEtapa.query.get_or_404(tarea_id)
-    
-    if current_user.rol not in ['administrador', 'tecnico']: 
-        return jsonify(ok=False, error="Sin permiso"), 403
-    
     # Verificar que la tarea pertenezca a la organización
-    if t.etapa.obra.organizacion_id != current_user.organizacion_id:
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
         return jsonify(ok=False, error="Sin permiso"), 403
     
     try:
-        m = resumen_tarea(t)
+        m = resumen_tarea(tarea)
         if m["restante"] > 0: 
             return jsonify(ok=False, error="Aún faltan cantidades"), 400
         
-        t.estado = "completada"
-        t.fecha_fin_real = datetime.utcnow()
+        tarea.estado = "completada"
+        tarea.fecha_fin_real = datetime.utcnow()
         db.session.commit()
         return jsonify(ok=True)
         

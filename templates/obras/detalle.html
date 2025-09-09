@@ -82,7 +82,7 @@
                                     </div>
                                     <h6 class="mb-0">Etapas del Proyecto</h6>
                                 </div>
-                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                {% if can_manage %}
                                 <div class="d-flex gap-2">
                                     <button id="btn-stage-delete" class="btn btn-danger btn-sm" disabled>
                                         Eliminar seleccionadas (0)
@@ -95,7 +95,7 @@
                             </div>
                             
                             <!-- Controles para selección múltiple de tareas -->
-                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            {% if can_manage %}
                             <div class="d-flex align-items-center gap-2 mb-3">
                                 <button id="btn-select-multi" class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-check-square me-1"></i>
@@ -141,7 +141,7 @@
                                                 </div>
                                             </div>
 
-                                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                            {% if can_manage %}
                                             <button class="btn btn-sm btn-outline-success mt-2" 
                                                     onclick="abrirModalTarea({{ etapa.id }}, '{{ etapa.nombre }}')">
                                                 <i class="fas fa-plus me-1"></i>Agregar Tarea
@@ -152,7 +152,7 @@
                                         <div class="text-end">
                                             <div class="stage-actions d-flex align-items-center gap-2">
                                                 <!-- Checkbox fijo para selección múltiple de ETAPAS -->
-                                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                                {% if can_manage %}
                                                 <label class="form-check m-0">
                                                     <input type="checkbox" class="form-check-input stage-check" value="{{ etapa.id }}">
                                                 </label>
@@ -199,7 +199,7 @@
                                                     </ul>
                                                 </div>
                                                 
-                                                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                                {% if can_manage %}
                                                 <button class="btn btn-sm btn-outline-danger" 
                                                         onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
                                                         title="Eliminar etapa">
@@ -215,7 +215,7 @@
                                 <div class="text-center py-4">
                                     <i class="fas fa-list-ul fa-2x text-muted mb-3"></i>
                                     <p class="text-muted mb-3">No hay etapas definidas para esta obra.</p>
-                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    {% if can_manage %}
                                     <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
                                         <i class="fas fa-tasks me-1"></i>Seleccionar Etapas
                                     </button>
@@ -238,7 +238,7 @@
                             <i class="fas fa-clock me-2"></i>
                             <span class="fw-bold">Progreso</span>
                         </div>
-                        {% if current_user.rol in ['administrador', 'tecnico'] %}
+                        {% if can_manage %}
                         <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal">
                             <i class="fas fa-camera"></i>
                         </button>
@@ -319,7 +319,7 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Equipo Asignado</h5>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% if can_manage %}
                     <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#asignarUsuarioModal">
                         <i class="fas fa-user-plus me-1"></i>Asignar Usuario
                     </button>
@@ -359,7 +359,7 @@
 </div>
 
 <!-- Modales -->
-{% if current_user.rol in ['administrador', 'tecnico'] %}
+{% if can_manage %}
 
 <!-- Modal Editar Obra -->
 <div class="modal fade" id="editarObraModal" tabindex="-1">
@@ -1100,29 +1100,48 @@ function cargarTareasEtapa(etapaId) {
                             `;
                         }
                         
-                        // Generar acciones rápidas
+                        // Verificar si el usuario está asignado a la tarea
+                        const yoAsignado = (tarea.responsable_id === {{ current_user_id }}) || 
+                                         (tarea.usuarios_asignados && tarea.usuarios_asignados.some(u => u.id === {{ current_user_id }}));
+                        
+                        // Generar acciones rápidas según permisos
                         let acciones = '';
                         if (tarea.estado !== 'completada') {
-                            acciones = `
-                                <div class="btn-group btn-group-sm mt-2" role="group">
-                                    <button class="btn btn-outline-success btn-sm" onclick="abrirModalAvanceDetalle(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}', '${tarea.unidad || ''}')" title="Registrar avance">
-                                        <i class="fas fa-plus fa-xs"></i> Avance
-                                    </button>
-                                    ${tarea.cantidad_planificada && tarea.cantidad_ejecutada >= tarea.cantidad_planificada ? 
-                                        `<button class="btn btn-outline-primary btn-sm" onclick="completarTarea(${tarea.id})" title="Marcar como completada">
-                                            <i class="fas fa-check fa-xs"></i> Completar
-                                        </button>` : ''
-                                    }
-                                </div>
-                            `;
+                            acciones = '<div class="btn-group btn-group-sm mt-2" role="group">';
+                            
+                            // Botón de avance: para admin/PM o usuarios asignados
+                            {% if can_manage %}
+                            acciones += `<button class="btn btn-outline-success btn-sm" onclick="abrirModalAvanceDetalle(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}', '${tarea.unidad || ''}')" title="Registrar avance">
+                                <i class="fas fa-plus fa-xs"></i> Avance
+                            </button>`;
+                            {% else %}
+                            if (yoAsignado) {
+                                acciones += `<button class="btn btn-outline-success btn-sm" onclick="abrirModalAvanceDetalle(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}', '${tarea.unidad || ''}')" title="Registrar avance">
+                                    <i class="fas fa-plus fa-xs"></i> Avance
+                                </button>`;
+                            }
+                            {% endif %}
+                            
+                            // Botón de completar: solo para admin/PM
+                            {% if can_manage %}
+                            if (tarea.cantidad_planificada && tarea.cantidad_ejecutada >= tarea.cantidad_planificada) {
+                                acciones += `<button class="btn btn-outline-primary btn-sm" onclick="completarTarea(${tarea.id})" title="Marcar como completada">
+                                    <i class="fas fa-check fa-xs"></i> Completar
+                                </button>`;
+                            }
+                            {% endif %}
+                            
+                            acciones += '</div>';
                         }
 
                         html += `
                             <div class="tarea-item ms-3 mt-2 p-3 bg-light rounded border" data-tarea-id="${tarea.id}">
                                 <div class="d-flex align-items-start">
+                                    {% if can_manage %}
                                     <label class="form-check me-3 bulk-toggle d-none">
                                         <input type="checkbox" class="form-check-input task-check" value="${tarea.id}">
                                     </label>
+                                    {% endif %}
                                     <div class="flex-grow-1">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div class="flex-grow-1">
@@ -1139,9 +1158,11 @@ function cargarTareasEtapa(etapaId) {
                                             </div>
                                             <div class="d-flex flex-column align-items-end gap-1">
                                                 <span class="badge ${badgeClass}">${tarea.estado}</span>
+                                                {% if can_manage %}
                                                 <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarTarea(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')" title="Eliminar tarea">
                                                     <i class="fas fa-trash fa-xs"></i>
                                                 </button>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>
@@ -1859,6 +1880,7 @@ function eliminarTarea(tareaId) {
 }
 
 // Sistema de selección múltiple para tareas
+{% if can_manage %}
 (function(){
     let selecting = false;
     const btnToggle = document.getElementById('btn-select-multi');
@@ -1920,8 +1942,10 @@ function eliminarTarea(tareaId) {
         });
     });
 })();
+{% endif %}
 
 // Manejar envío de asignación masiva
+{% if can_manage %}
 document.getElementById('formAsignacionMasiva')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -1963,6 +1987,7 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
         alert('Error de conexión al asignar usuarios');
     }
 });
+{% endif %}
 
 // Funciones para modal de avance
 function abrirModalAvanceDetalle(tareaId, tareaNombre, unidad) {
