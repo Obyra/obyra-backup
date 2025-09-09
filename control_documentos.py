@@ -4,7 +4,7 @@ Gestión digital de documentos, control de versiones y data management
 para proyectos de construcción.
 """
 
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, send_file
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, send_file, abort
 from flask_login import login_required, current_user
 from datetime import datetime, date
 import json
@@ -15,6 +15,13 @@ from models import *
 from utils import *
 
 documentos_bp = Blueprint('documentos', __name__)
+
+@documentos_bp.before_request
+@login_required
+def _block_operario_docs():
+    """Bloquear acceso a documentos para operarios"""
+    if getattr(current_user, 'role', None) == 'operario':
+        abort(403)
 
 class TipoDocumento(db.Model):
     __tablename__ = 'tipos_documento'
