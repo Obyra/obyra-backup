@@ -1,0 +1,157 @@
+arreglar asignación de usuarios a tareas y visibilidad en “Mis Tareas”
+Problema
+
+Desde el modal “Asignar usuarios (N)” confirmo la asignación, pero:
+
+En las tarjetas de tareas sigue apareciendo “Asignados:” vacío (no se ven nombres).
+
+Como operario, en /obras/mis-tareas aparece “No tienes tareas asignadas”.
+
+O sea, no se persiste la asignación o /mis-tareas no filtra bien por el usuario.
+
+Objetivo
+
+Persistir la relación Tarea ↔ Usuario (con cuota opcional).
+
+Mostrar los asignados en cada tarjeta de tarea.
+
+En /obras/mis-tareas, el operario debe ver solo sus tareas y poder usar + Avance.
+
+Lo que hay que implementar/verificar
+1) Modelo y tabla de relación (si no existen o están incompletos)
+
+Tabla (o revisar que tenga unique):
+
+CREATE TABLE IF NOT EXISTS tarea_miembros (
+  id SERIAL PRIMARY KEY,
+  tarea_id INT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+  user_id  INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  cuota NUMERIC NULL,
+  UNIQUE (tarea_id, user_id)
+);
+
+
+SQLAlchemy:
+
+# models.py
+class TareaMiembro(db.Model):
+    __tablename__ = "tarea_miembros"
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas.id"), index=True, nullable=False)
+    user_id  = db.Column(db.Integer, db.ForeignKey("usuarios.id"), index=True, nullable=False)
+    cuota    = db.Column(db.Numeric)
+
+class TareaEtapa(db.Model):
+    __tablename__ = "tareas"
+    # ...
+    miembros = db.relationship("TareaMiembro", backref="tarea",
+                               cascade="all, delete-orphan", lazy="selectin")
+
+class Usuario(db.Model):
+    __tablename__ = "usuarios"
+    # ...
+    tareas_asignadas = db.relationship("TareaMiembro", backref="usuario",
+                                       cascade="all, delete-orphan", lazy="selectin")
+
+2) Endpoint para asignación en lote
+
+Ruta: POST /obras/tareas/bulk_asignar
+Body JSON:
+
+{
+  "tarea_ids": [1,2,3],
+  "user_ids": [10,11],
+  "cuota": 100
+}
+
+
+Lógica (upsert por (tarea_id, user_id)):
+
+@obras_bp.post("/tareas/bulk_asignar")
+@login_required
+def bulk_asignar():
+    data = request.get_json() or {}
+    tarea_ids = data.get("tarea_ids") or []
+    user_ids  = data.get("user_ids")  or []
+    cuota     = data.get("cuota")
+
+    if not tarea_ids or not user_ids:
+        return jsonify(ok=False, error="Faltan ids"), 400
+
+    created = 0
+    for tid in tarea_ids:
+        for uid in user_ids:
+            tm = TareaMiembro.query.filter_by(tarea_id=tid, user_id=uid).first()
+            if not tm:
+                tm = TareaMiembro(tarea_id=tid, user_id=uid, cuota=cuota)
+                db.session.add(tm)
+                created += 1
+            else:
+                tm.cuota = cuota
+    db.session.commit()
+    return jsonify(ok=True, assigned=created)
+
+
+Nota: Mantener los chequeos de permisos (admin/pm o miembros de la obra, según corresponda).
+
+3) Endpoint que lista tareas de la etapa
+
+En /obras/etapas/<int:etapa_id>/tareas incluir los asignados (nombres):
+
+tareas = (TareaEtapa.query
+          .filter_by(etapa_id=etapa_id)
+          .options(db.joinedload(TareaEtapa.miembros)
+                   .joinedload(TareaMiembro.usuario))
+          .all())
+
+# Para el template:
+for t in tareas:
+    t.asignados = [tm.usuario for tm in t.miembros]
+
+
+Y en el template _tareas_lista.html, renderizar chips con t.asignados.
+
+4) Página /obras/mis-tareas (operario)
+
+Filtrar por el usuario logueado:
+
+@obras_bp.get("/mis-tareas")
+@login_required
+def mis_tareas():
+    uid = current_user.id
+    q = (db.session.query(TareaEtapa)
+         .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+         .filter(TareaMiembro.user_id == uid)
+         .options(db.joinedload(TareaEtapa.etapa).joinedload(Etapa.obra))
+    )
+    tareas = q.all()
+    return render_template("obras/mis_tareas.html", tareas=tareas)
+
+5) Frontend – envío del modal “Asignar usuarios”
+
+Asegurar que el JS envíe el JSON correcto al endpoint:
+
+const body = {
+  tarea_ids: getSelectedTaskIds(),  // array
+  user_ids:  getSelectedUserIds(),  // array
+  cuota: Number(document.getElementById('cuota').value) || null
+};
+await fetch('/obras/tareas/bulk_asignar', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify(body)
+});
+
+✅ Criterios de aceptación
+
+Asigno a “momi giardina” 2 tareas en “Revoque Fino”.
+→ Al refrescar, cada tarjeta muestra Asignados: momi giardina.
+
+Inicio sesión como operario momi.
+→ En /obras/mis-tareas aparecen solo esas tareas.
+
+En cada tarjeta de “Mis Tareas”, el botón + Avance abre el modal y guarda OK.
+
+Repetir asignación no duplica (idempotente); actualiza cuota si la cambio.
+
+Sin errores 500 en Network y sin “Asignados:” vacío.
