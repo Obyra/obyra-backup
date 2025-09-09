@@ -532,6 +532,11 @@ def crear_tareas():
     """Nuevo endpoint para crear una o múltiples tareas según especificación"""
     try:
         obra_id = request.form.get("obra_id", type=int)
+        obra = Obra.query.get_or_404(obra_id)
+        
+        # Verificar permisos
+        if not can_manage_obra(obra):
+            return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
         etapa_id = request.form.get("etapa_id", type=int)
         horas = request.form.get("horas_estimadas", type=float)
         resp_id = request.form.get("responsable_id", type=int) or None
@@ -636,8 +641,18 @@ def parse_date(s):
 @login_required
 def bulk_asignar():
     """Asignar usuarios a múltiples tareas"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify(ok=False, error="Sin permiso"), 403
+    # Obtener obra a través de las tareas para verificar permisos
+    tarea_ids = request.form.getlist('tarea_ids[]')
+    if not tarea_ids:
+        return jsonify(ok=False, error="No se seleccionaron tareas"), 400
+    
+    primera_tarea = TareaEtapa.query.get(tarea_ids[0])
+    if not primera_tarea:
+        return jsonify(ok=False, error="Tarea no encontrada"), 404
+    
+    obra = primera_tarea.etapa.obra
+    if not can_manage_obra(obra):
+        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
     
     tarea_ids = request.form.getlist("tarea_ids[]")
     user_ids = request.form.getlist("user_ids[]")
@@ -681,9 +696,14 @@ def crear_avance(tarea_id):
     """Registrar avance con fotos"""
     from models import TareaMiembro, TareaAvance, TareaAdjunto
     from werkzeug.utils import secure_filename
-    from pathlib import Path
     
-    t = TareaEtapa.query.get_or_404(tarea_id)
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Verificar permisos para registrar avance
+    if not can_log_avance(tarea):
+        return jsonify(ok=False, error="Sin permisos para registrar avances en esta tarea"), 403
+    
+    from pathlib import Path
     
     # Verificar permisos: admin o miembro de la tarea
     es_miembro = TareaMiembro.query.filter_by(tarea_id=t.id, user_id=current_user.id).first()
@@ -745,6 +765,13 @@ def crear_avance(tarea_id):
 def completar_tarea(tarea_id):
     """Completar tarea - solo admin si restante = 0"""
     from models import resumen_tarea
+    
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra
+    
+    # Verificar permisos para completar tarea
+    if not can_manage_obra(obra):
+        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
     
     t = TareaEtapa.query.get_or_404(tarea_id)
     
@@ -983,8 +1010,11 @@ def obtener_tareas_etapa(etapa_id):
 @login_required
 def eliminar_tarea(tarea_id):
     """Eliminar una tarea específica"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra
+    
+    if not can_manage_obra(obra):
+        return jsonify({'success': False, 'error': 'Sin permisos para gestionar esta obra'}), 403
     
     tarea = TareaEtapa.query.get_or_404(tarea_id)
     
@@ -1009,8 +1039,20 @@ def eliminar_tarea(tarea_id):
 @login_required
 def tareas_bulk_delete():
     """Eliminar múltiples tareas en lote"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'Sin permisos', 'ok': False}), 403
+    data = request.get_json()
+    ids = data.get('ids', [])
+    
+    if not ids:
+        return jsonify({'error': 'No se proporcionaron IDs', 'ok': False}), 400
+    
+    # Verificar permisos en la primera tarea
+    primera_tarea = TareaEtapa.query.get(ids[0])
+    if not primera_tarea:
+        return jsonify({'error': 'Tarea no encontrada', 'ok': False}), 404
+    
+    obra = primera_tarea.etapa.obra
+    if not can_manage_obra(obra):
+        return jsonify({'error': 'Sin permisos para gestionar esta obra', 'ok': False}), 403
     
     data = request.get_json() or {}
     ids = data.get("ids") or []
@@ -1079,8 +1121,20 @@ def tareas_bulk_delete():
 @login_required
 def etapas_bulk_delete():
     """Eliminar múltiples etapas en lote"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'Sin permisos', 'ok': False}), 403
+    data = request.get_json()
+    ids = data.get('ids', [])
+    
+    if not ids:
+        return jsonify({'error': 'No se proporcionaron IDs', 'ok': False}), 400
+    
+    # Verificar permisos en la primera etapa
+    primera_etapa = EtapaObra.query.get(ids[0])
+    if not primera_etapa:
+        return jsonify({'error': 'Etapa no encontrada', 'ok': False}), 404
+    
+    obra = primera_etapa.obra
+    if not can_manage_obra(obra):
+        return jsonify({'error': 'Sin permisos para gestionar esta obra', 'ok': False}), 403
     
     data = request.get_json() or {}
     ids = data.get("ids") or []
