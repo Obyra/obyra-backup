@@ -54,6 +54,7 @@ class Usuario(UserMixin, db.Model):
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
     rol = db.Column(db.String(50), nullable=False, default='ayudante')  # Expandido para roles específicos de construcción
+    role = db.Column(db.String(20), nullable=False, default='operario')  # Nuevo sistema de roles: admin, pm, operario
     puede_pausar_obras = db.Column(db.Boolean, default=False)  # Permiso especial para pausar obras
     activo = db.Column(db.Boolean, default=True)
     auth_provider = db.Column(db.String(20), nullable=False, default='manual')  # manual, google
@@ -478,6 +479,26 @@ class AsignacionObra(db.Model):
     
     def __repr__(self):
         return f'<AsignacionObra {self.usuario.nombre} en {self.obra.nombre}>'
+
+
+class ObraMiembro(db.Model):
+    """Miembros específicos por obra para permisos granulares"""
+    __tablename__ = 'obra_miembros'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    rol = db.Column(db.String(20), nullable=False, default='pm')
+    
+    # Relaciones
+    obra = db.relationship('Obra')
+    usuario = db.relationship('Usuario', backref='obras_como_miembro')
+    
+    # Constraint de unicidad
+    __table_args__ = (db.UniqueConstraint('obra_id', 'user_id', name='uq_obra_user'),)
+    
+    def __repr__(self):
+        return f'<ObraMiembro Obra:{self.obra_id} Usuario:{self.user_id}>'
 
 
 class Presupuesto(db.Model):
