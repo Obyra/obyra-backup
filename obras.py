@@ -157,7 +157,8 @@ def obras_root():
 @obras_bp.route('/')
 @login_required
 def lista():
-    if not current_user.puede_acceder_modulo('obras'):
+    # Operarios pueden acceder para ver sus obras asignadas
+    if not current_user.puede_acceder_modulo('obras') and current_user.rol != 'operario':
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
@@ -713,9 +714,15 @@ def bulk_asignar():
     
     try:
         asignaciones_creadas = 0
+        print(f"🎯 DEBUG bulk_asignar: tarea_ids={tarea_ids}, user_ids={user_ids}, cuota={cuota}")
+        
         for tid in tarea_ids:
             tarea = TareaEtapa.query.get(int(tid))
-            if not tarea or tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+            if not tarea:
+                print(f"❌ Tarea {tid} no encontrada")
+                continue
+            if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                print(f"❌ Tarea {tid} no pertenece a la organizacion del usuario")
                 continue
                 
             for uid in set(user_ids):  # set() para evitar duplicados
@@ -730,11 +737,14 @@ def bulk_asignar():
                     )
                     db.session.add(asignacion)
                     asignaciones_creadas += 1
+                    print(f"✅ Creando asignación: tarea_id={tid}, user_id={uid}")
                 else:
                     # Actualizar cuota si existe
                     existing.cuota_objetivo = cuota
+                    print(f"🔄 Actualizando cuota existente: tarea_id={tid}, user_id={uid}")
         
         db.session.commit()
+        print(f"✅ Commit exitoso: {asignaciones_creadas} asignaciones creadas")
         return jsonify(ok=True, asignaciones=asignaciones_creadas)
         
     except Exception as e:
