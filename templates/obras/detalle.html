@@ -1037,7 +1037,7 @@ function toggleTareasEtapa(etapaId) {
 function cargarTareasEtapa(etapaId) {
     const container = document.getElementById(`tareas-container-${etapaId}`);
     
-    fetch(`/obras/etapa/${etapaId}/tareas`)
+    fetch(`/obras/etapas/${etapaId}/tareas`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -2218,7 +2218,7 @@ async function guardarAsignados(tareaId, userIds) {
 // Función para mostrar avances pendientes con botones de aprobar/rechazar
 function mostrarAvancesPendientes(tareaId, tareaNombre) {
     // Obtener datos de la tarea desde el DOM o hacer nueva llamada AJAX
-    fetch(`/obras/etapa/0/tareas`)  // Necesitaríamos otro endpoint específico, pero por ahora simulamos
+    fetch(`/obras/etapas/0/tareas`)  // Necesitaríamos otro endpoint específico, pero por ahora simulamos
         .then(response => response.json())
         .then(data => {
             const tarea = data.tareas.find(t => t.id === tareaId);
