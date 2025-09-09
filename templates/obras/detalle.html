@@ -1098,6 +1098,20 @@ function cargarTareasEtapa(etapaId) {
                                     ${tarea.dias_transcurridos ? `<small class="text-muted"><i class="fas fa-calendar-day me-1"></i>${tarea.dias_transcurridos} días</small>` : ''}
                                 </div>
                             `;
+                            
+                            // Mostrar chip de avances pendientes para PM/Admin
+                            let avancesPendientesChip = '';
+                            if (tarea.avances_pendientes && tarea.avances_pendientes.length > 0) {
+                                avancesPendientesChip = `
+                                    <div class="mt-2">
+                                        <span class="badge bg-warning text-dark me-2" style="cursor: pointer;" 
+                                              onclick="mostrarAvancesPendientes(${tarea.id}, '${tarea.nombre.replace(/'/g, "\\'")}')">
+                                            <i class="fas fa-hourglass-half me-1"></i>
+                                            ⚑ Pendientes (${tarea.avances_pendientes.length})
+                                        </span>
+                                    </div>
+                                `;
+                            }
                         }
                         
                         // Verificar si el usuario está asignado a la tarea
@@ -1154,6 +1168,7 @@ function cargarTareasEtapa(etapaId) {
                                                 ${usuariosChips}
                                                 ${progressBar}
                                                 ${metricas}
+                                                ${avancesPendientesChip}
                                                 ${acciones}
                                             </div>
                                             <div class="d-flex flex-column align-items-end gap-1">
@@ -2200,5 +2215,128 @@ async function guardarAsignados(tareaId, userIds) {
         throw error;
     }
 }
+// Función para mostrar avances pendientes con botones de aprobar/rechazar
+function mostrarAvancesPendientes(tareaId, tareaNombre) {
+    // Obtener datos de la tarea desde el DOM o hacer nueva llamada AJAX
+    fetch(`/obras/etapa/0/tareas`)  // Necesitaríamos otro endpoint específico, pero por ahora simulamos
+        .then(response => response.json())
+        .then(data => {
+            const tarea = data.tareas.find(t => t.id === tareaId);
+            if (!tarea || !tarea.avances_pendientes) return;
+            
+            const modal = document.getElementById('modalAvancesPendientes') || crearModalAvancesPendientes();
+            document.getElementById('modalAvancesPendientesTitle').textContent = `Avances Pendientes - ${tareaNombre}`;
+            
+            let html = '';
+            tarea.avances_pendientes.forEach(avance => {
+                html += `
+                    <div class="card mb-3 border-warning">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="card-title mb-1">
+                                        <i class="fas fa-user me-1"></i>
+                                        ${avance.usuario}
+                                    </h6>
+                                    <p class="mb-2">
+                                        <strong>${avance.cantidad} ${avance.unidad || ''}</strong>
+                                        - ${avance.fecha}
+                                    </p>
+                                    ${avance.notas ? `<p class="text-muted small mb-2">${avance.notas}</p>` : ''}
+                                    ${avance.fotos_count > 0 ? `<small class="text-info"><i class="fas fa-camera me-1"></i>${avance.fotos_count} foto(s)</small>` : ''}
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-success btn-sm" onclick="aprobarAvance(${avance.id}, ${tareaId})">
+                                        <i class="fas fa-check me-1"></i>Aprobar
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="rechazarAvance(${avance.id}, ${tareaId})">
+                                        <i class="fas fa-times me-1"></i>Rechazar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('avancesPendientesContent').innerHTML = html;
+            new bootstrap.Modal(modal).show();
+        });
+}
+
+// Función para crear el modal de avances pendientes si no existe
+function crearModalAvancesPendientes() {
+    const modalHtml = `
+        <div class="modal fade" id="modalAvancesPendientes" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title text-dark" id="modalAvancesPendientesTitle">Avances Pendientes</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="avancesPendientesContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    return document.getElementById('modalAvancesPendientes');
+}
+
+// Función para aprobar avance
+async function aprobarAvance(avanceId, tareaId) {
+    if (!confirm('¿Aprobar este avance?')) return;
+    
+    try {
+        const response = await fetch(`/obras/avances/${avanceId}/aprobar`, {
+            method: 'POST',
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+            // Cerrar modal y recargar tareas
+            bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
+            location.reload(); // Recargar para actualizar métricas
+        } else {
+            alert(result.error || 'Error al aprobar el avance');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al aprobar el avance');
+    }
+}
+
+// Función para rechazar avance
+async function rechazarAvance(avanceId, tareaId) {
+    const motivo = prompt('Motivo del rechazo (opcional):');
+    if (motivo === null) return; // Usuario canceló
+    
+    try {
+        const formData = new FormData();
+        if (motivo) formData.append('motivo', motivo);
+        
+        const response = await fetch(`/obras/avances/${avanceId}/rechazar`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+            // Cerrar modal y recargar tareas
+            bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
+            location.reload(); // Recargar para actualizar métricas
+        } else {
+            alert(result.error || 'Error al rechazar el avance');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al rechazar el avance');
+    }
+}
+
 </script>
 {% endblock %}

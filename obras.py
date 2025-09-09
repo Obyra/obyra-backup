@@ -989,6 +989,29 @@ def obtener_tareas_etapa(etapa_id):
                 'rol': asignacion.usuario.rol
             })
         
+        # Obtener información de avances para esta tarea
+        avances_pendientes = []
+        avances_count = {'total': 0, 'pendientes': 0, 'aprobados': 0, 'rechazados': 0}
+        
+        for avance in tarea.avances:
+            avances_count['total'] += 1
+            avances_count[avance.status] += 1
+            
+            # Solo incluir avances pendientes para PM/Admin
+            if avance.status == 'pendiente' and getattr(current_user, 'role', None) in ('admin', 'pm'):
+                avances_pendientes.append({
+                    'id': avance.id,
+                    'cantidad': float(avance.cantidad),
+                    'unidad': avance.unidad,
+                    'notas': avance.notas,
+                    'usuario': avance.usuario.nombre_completo if avance.usuario else 'Desconocido',
+                    'fecha': avance.fecha.strftime('%d/%m/%Y') if avance.fecha else None,
+                    'fotos_count': len(avance.adjuntos) if avance.adjuntos else 0
+                })
+        
+        # Calcular métricas de progreso (solo aprobados)
+        metricas = tarea.metrics if hasattr(tarea, 'metrics') else {}
+
         tareas.append({
             'id': tarea.id,
             'nombre': tarea.nombre,
@@ -997,7 +1020,13 @@ def obtener_tareas_etapa(etapa_id):
             'responsable': tarea.responsable.nombre_completo if tarea.responsable else None,
             'responsable_id': tarea.responsable_id,
             'horas_estimadas': tarea.horas_estimadas,
-            'usuarios_asignados': usuarios_asignados
+            'usuarios_asignados': usuarios_asignados,
+            'cantidad_planificada': float(tarea.cantidad_planificada) if tarea.cantidad_planificada else 0,
+            'cantidad_ejecutada': metricas.get('ejec', 0),
+            'unidad': tarea.unidad,
+            'total_avances': avances_count['total'],
+            'avances_pendientes': avances_pendientes,
+            'avances_count': avances_count
         })
     
     return jsonify({
