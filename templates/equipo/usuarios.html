@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Usuarios{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h4 class="mb-3">Gestión de Usuarios</h4>
+
+    <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+        + Nuevo Usuario
+    </button>
+
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.nombre }} {{ u.apellido }}</td>
+                <td>{{ u.email }}</td>
+                <td>
+                    <form class="d-flex gap-2" onsubmit="return setRol(event, {{u.id}})">
+                        <select class="form-select form-select-sm" name="role">
+                            <option value="operario" {{'selected' if u.role=='operario'}}>Operario</option>
+                            <option value="pm" {{'selected' if u.role=='pm'}}>PM</option>
+                            <option value="admin" {{'selected' if u.role=='admin'}}>Admin</option>
+                        </select>
+                        <button class="btn btn-sm btn-outline-secondary">Guardar</button>
+                    </form>
+                </td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Modal nuevo -->
+    <div class="modal fade" id="modalNuevo" tabindex="-1">
+        <div class="modal-dialog">
+            <form class="modal-content" id="frmNuevo">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nuevo usuario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <input class="form-control" name="nombre" placeholder="Nombre" required>
+                        </div>
+                        <div class="col-md-6">
+                            <input class="form-control" name="apellido" placeholder="Apellido">
+                        </div>
+                        <div class="col-12">
+                            <input class="form-control" type="email" name="email" placeholder="Email" required>
+                        </div>
+                        <div class="col-12">
+                            <input class="form-control" type="password" name="password" placeholder="Contraseña" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Rol</label>
+                            <select class="form-select" name="role">
+                                <option value="operario" selected>Operario</option>
+                                <option value="pm">PM</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+                    <button class="btn btn-primary" type="submit">Crear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+async function setRol(e, uid){
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const r = await fetch(`/equipo/usuarios/${uid}/rol`, {method:'POST', body:fd});
+    const j = await r.json();
+    if(!j.ok) return alert(j.error||'Error');
+    location.reload();
+}
+
+document.getElementById('frmNuevo')?.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const r = await fetch('/equipo/usuarios', {method:'POST', body:fd});
+    const j = await r.json();
+    if(!j.ok) return alert(j.error||'No se pudo crear');
+    location.reload();
+});
+</script>
+{% endblock %}
