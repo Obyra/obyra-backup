@@ -991,11 +991,12 @@ def obtener_tareas_etapa(etapa_id):
         
         # Obtener información de avances para esta tarea
         avances_pendientes = []
-        avances_count = {'total': 0, 'pendientes': 0, 'aprobados': 0, 'rechazados': 0}
+        avances_count = {'total': 0, 'pendiente': 0, 'aprobado': 0, 'rechazado': 0}
         
         for avance in tarea.avances:
             avances_count['total'] += 1
-            avances_count[avance.status] += 1
+            if avance.status in avances_count:
+                avances_count[avance.status] += 1
             
             # Solo incluir avances pendientes para PM/Admin
             if avance.status == 'pendiente' and getattr(current_user, 'role', None) in ('admin', 'pm'):
