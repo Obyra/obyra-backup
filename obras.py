@@ -698,6 +698,11 @@ def parse_date(s):
 @login_required
 def bulk_asignar():
     """Asignar usuarios a múltiples tareas"""
+    print(f"🔍 bulk_asignar called by user: {current_user.id} ({current_user.rol})")
+    print(f"🔍 request.content_type: {request.content_type}")
+    print(f"🔍 request.form keys: {list(request.form.keys())}")
+    print(f"🔍 request.get_json(): {request.get_json()}")
+    
     # Obtener datos del JSON o formulario
     data = request.get_json() or {}
     if not data:
@@ -710,6 +715,8 @@ def bulk_asignar():
         tarea_ids = data.get("tarea_ids", [])
         user_ids = data.get("user_ids", [])
         cuota = data.get("cuota")
+    
+    print(f"🔍 Final parsed data - tarea_ids: {tarea_ids}, user_ids: {user_ids}, cuota: {cuota}")
     
     if not tarea_ids:
         return jsonify(ok=False, error="No se seleccionaron tareas"), 400
