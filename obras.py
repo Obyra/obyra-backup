@@ -678,8 +678,19 @@ def parse_date(s):
 @login_required
 def bulk_asignar():
     """Asignar usuarios a múltiples tareas"""
-    # Obtener obra a través de las tareas para verificar permisos
-    tarea_ids = request.form.getlist('tarea_ids[]')
+    # Obtener datos del JSON o formulario
+    data = request.get_json() or {}
+    if not data:
+        # Fallback para datos de formulario
+        tarea_ids = request.form.getlist('tarea_ids[]')
+        user_ids = request.form.getlist('user_ids[]')
+        cuota = request.form.get("cuota_objetivo", type=float)
+    else:
+        # Datos JSON
+        tarea_ids = data.get("tarea_ids", [])
+        user_ids = data.get("user_ids", [])
+        cuota = data.get("cuota")
+    
     if not tarea_ids:
         return jsonify(ok=False, error="No se seleccionaron tareas"), 400
     
@@ -691,12 +702,8 @@ def bulk_asignar():
     if not can_manage_obra(obra):
         return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
     
-    tarea_ids = request.form.getlist("tarea_ids[]")
-    user_ids = request.form.getlist("user_ids[]")
-    cuota = request.form.get("cuota_objetivo", type=float)
-    
-    if not tarea_ids or not user_ids:
-        return jsonify(ok=False, error="Faltan IDs de tareas o usuarios"), 400
+    if not user_ids:
+        return jsonify(ok=False, error="Faltan IDs de usuarios"), 400
     
     try:
         asignaciones_creadas = 0
@@ -717,6 +724,9 @@ def bulk_asignar():
                     )
                     db.session.add(asignacion)
                     asignaciones_creadas += 1
+                else:
+                    # Actualizar cuota si existe
+                    existing.cuota_objetivo = cuota
         
         db.session.commit()
         return jsonify(ok=True, asignaciones=asignaciones_creadas)
