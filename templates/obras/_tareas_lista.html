@@ -3,7 +3,7 @@
         {% set m = tarea.metrics or {'pct':0,'ejec':0,'restante':0,'atrasada':False} %}
         <div class="tarea-item ms-3 mt-2 p-3 bg-light rounded border" data-tarea-id="{{ tarea.id }}">
             <div class="d-flex align-items-start">
-                {% if can_manage %}
+                {% if current_user.role in ['admin', 'pm'] %}
                 <label class="form-check me-3 bulk-toggle d-none">
                     <input type="checkbox" class="form-check-input task-check" value="{{ tarea.id }}">
                 </label>
@@ -88,7 +88,7 @@
                             {% if tarea.estado != 'completada' %}
                             <div class="btn-group btn-group-sm mt-2" role="group">
                                 <!-- Botón de avance: para admin/PM o usuarios asignados -->
-                                {% if can_manage %}
+                                {% if current_user.role in ['admin', 'pm'] %}
                                 <button class="btn btn-outline-success btn-sm" 
                                         onclick="abrirModalAvanceDetalle({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or '' }}')" 
                                         title="Registrar avance">
@@ -120,7 +120,7 @@
                         <div class="d-flex flex-column align-items-end gap-1">
                             {% set badge_class = 'bg-success' if tarea.estado == 'completada' else ('bg-warning' if tarea.estado == 'en_progreso' else ('bg-secondary' if tarea.estado == 'pausada' else 'bg-info')) %}
                             <span class="badge {{ badge_class }}">{{ tarea.estado }}</span>
-                            {% if can_manage %}
+                            {% if current_user.role in ['admin', 'pm'] %}
                             <button class="btn btn-sm btn-outline-danger" 
                                     onclick="confirmarEliminarTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')" 
                                     title="Eliminar tarea">

@@ -836,29 +836,21 @@ def completar_tarea(tarea_id):
 @obras_bp.route('/mis-tareas')
 @login_required  
 def mis_tareas():
-    """Página simple que lista las tareas asignadas al usuario actual"""
-    from models import TareaMiembro
+    """Página que lista las tareas asignadas al usuario actual (operarios)"""
+    # Query optimizada para obtener tareas asignadas con información de obra y etapa
+    q = (db.session.query(TareaEtapa)
+         .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
+         .join(Obra, EtapaObra.obra_id == Obra.id)
+         .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+         .filter(TareaMiembro.user_id == current_user.id))
     
-    # Obtener tareas donde el usuario está asignado
-    mis_asignaciones = TareaMiembro.query.filter_by(user_id=current_user.id).all()
+    tareas = q.order_by(Obra.nombre.asc(), EtapaObra.orden.asc(), TareaEtapa.id.asc()).all()
     
-    tareas_asignadas = []
-    for asignacion in mis_asignaciones:
-        tarea = asignacion.tarea
-        if tarea and tarea.etapa and tarea.etapa.obra:
-            # Verificar que pertenezca a la organización
-            if tarea.etapa.obra.organizacion_id == current_user.organizacion_id:
-                tareas_asignadas.append({
-                    'tarea': tarea,
-                    'obra': tarea.etapa.obra,
-                    'etapa': tarea.etapa,
-                    'metrics': tarea.metrics,
-                    'cuota_objetivo': asignacion.cuota_objetivo
-                })
+    # Calcular métricas para cada tarea
+    for t in tareas:
+        t.metrics = resumen_tarea(t)
     
-    return render_template('obras/mis_tareas.html', 
-                         tareas_asignadas=tareas_asignadas,
-                         total_tareas=len(tareas_asignadas))
+    return render_template('obras/mis_tareas.html', tareas=tareas)
 
 
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
