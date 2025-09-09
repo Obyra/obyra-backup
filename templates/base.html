@@ -140,7 +140,8 @@
                     </li>
                     {% endif %}
                     
-                    <!-- Documentos -->
+                    <!-- Documentos - Solo para Admin/PM -->
+                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-folder me-1"></i>Documentos
@@ -163,6 +164,7 @@
                             {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     
                     <!-- Seguridad -->
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
