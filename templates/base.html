@@ -66,8 +66,8 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('equipos.lista') }}">Ver Equipo</a></li>
-                            {% if current_user.rol == 'administrador' %}
-                            <li><a class="dropdown-item" href="{{ url_for('auth.usuarios_admin') }}">
+                            {% if current_user.role in ['admin', 'pm'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_listar') }}">
                                 <i class="fas fa-users-cog me-2"></i>Gestión de Usuarios
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
