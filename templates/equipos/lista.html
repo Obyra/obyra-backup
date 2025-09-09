@@ -108,7 +108,7 @@
                             </div>
                             <div class="col-6">
                                 <strong class="text-success d-block">
-                                    {{ usuario.fecha_creacion.strftime('%d/%m/%Y') }}
+                                    {{ usuario.fecha_creacion.strftime('%d/%m/%Y') if usuario.fecha_creacion else 'N/A' }}
                                 </strong>
                                 <small class="text-muted">Registrado</small>
                             </div>
