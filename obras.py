@@ -723,10 +723,18 @@ def crear_avance(tarea_id):
             unidad=unidad, 
             notas=notas
         )
+        
+        # Regla barata: Operario necesita aprobación, PM/Admin auto-aprueban
+        if getattr(current_user, 'role', None) in ("admin", "pm"):
+            av.status = "aprobado"
+            av.confirmed_by = current_user.id
+            av.confirmed_at = datetime.utcnow()
+        # else: status = "pendiente" (default)
+        
         db.session.add(av)
         
-        # Si es el primer avance, marcar fecha de inicio real
-        if not tarea.fecha_inicio_real: 
+        # Si es el primer avance APROBADO, marcar fecha de inicio real
+        if not tarea.fecha_inicio_real and av.status == "aprobado": 
             tarea.fecha_inicio_real = datetime.utcnow()
 
         # Manejar fotos
@@ -1535,3 +1543,64 @@ def cambiar_estado_etapa(etapa_id):
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
 
 # Función duplicada eliminada - usando admin_backfill_tareas arriba
+
+
+# ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
+
+@obras_bp.route("/avances/<int:avance_id>/aprobar", methods=['POST'])
+@login_required
+def aprobar_avance(avance_id):
+    """Aprobar un avance pendiente (solo PM/Admin)"""
+    from utils.permissions import can_approve_avance
+    
+    av = TareaAvance.query.get_or_404(avance_id)
+    
+    if not can_approve_avance(current_user, av):
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    if av.status == "aprobado":
+        return jsonify(ok=True)  # idempotente
+
+    try:
+        av.status = "aprobado"
+        av.confirmed_by = current_user.id
+        av.confirmed_at = datetime.utcnow()
+
+        # Si es el primer aprobado de la tarea → fecha inicio real
+        t = TareaEtapa.query.get(av.tarea_id)
+        if t and not t.fecha_inicio_real:
+            t.fecha_inicio_real = datetime.utcnow()
+
+        db.session.commit()
+        return jsonify(ok=True)
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error en aprobar_avance: {str(e)}")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route("/avances/<int:avance_id>/rechazar", methods=['POST'])
+@login_required
+def rechazar_avance(avance_id):
+    """Rechazar un avance pendiente (solo PM/Admin)"""
+    from utils.permissions import can_approve_avance
+    
+    av = TareaAvance.query.get_or_404(avance_id)
+    
+    if not can_approve_avance(current_user, av):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    try:
+        av.status = "rechazado"
+        av.reject_reason = request.form.get("motivo")  # opcional
+        av.confirmed_by = current_user.id
+        av.confirmed_at = datetime.utcnow()
+        
+        db.session.commit()
+        return jsonify(ok=True)
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error en rechazar_avance: {str(e)}")
+        return jsonify(ok=False, error="Error interno"), 500
