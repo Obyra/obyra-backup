@@ -1,0 +1,140 @@
+{% if tareas %}
+    {% for tarea in tareas %}
+        {% set m = tarea.metrics or {'pct':0,'ejec':0,'restante':0,'atrasada':False} %}
+        <div class="tarea-item ms-3 mt-2 p-3 bg-light rounded border" data-tarea-id="{{ tarea.id }}">
+            <div class="d-flex align-items-start">
+                {% if can_manage %}
+                <label class="form-check me-3 bulk-toggle d-none">
+                    <input type="checkbox" class="form-check-input task-check" value="{{ tarea.id }}">
+                </label>
+                {% endif %}
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-tasks me-2 text-primary"></i>
+                                <strong class="text-dark">{{ tarea.nombre }}</strong>
+                            </div>
+                            
+                            {% if tarea.horas_estimadas %}
+                            <small class="text-muted d-block">
+                                <i class="fas fa-clock me-1"></i> {{ tarea.horas_estimadas }}h estimadas
+                            </small>
+                            {% endif %}
+                            
+                            <!-- Usuarios asignados -->
+                            {% if tarea.responsable %}
+                            <div class="mt-1">
+                                <small class="text-muted me-2">
+                                    <i class="fas fa-user-shield"></i> Responsable: <strong>{{ tarea.responsable.nombre_completo }}</strong>
+                                </small>
+                            </div>
+                            {% endif %}
+                            
+                            {% if tarea.asignaciones %}
+                            <div class="mt-1">
+                                <small class="text-muted"><i class="fas fa-users"></i> Asignados: </small>
+                                {% for asignacion in tarea.asignaciones %}
+                                    {% set bg_color = "hsl({}, 45%, 75%)".format((asignacion.usuario.id * 137.508) % 360) %}
+                                    <span class="badge rounded-pill me-1" 
+                                          style="background-color: {{ bg_color }}; color: #333;" 
+                                          title="{{ asignacion.usuario.nombre_completo }} ({{ asignacion.usuario.rol }})">
+                                        {{ asignacion.usuario.nombre[0] }}{{ asignacion.usuario.apellido[0] }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Barra de progreso -->
+                            {% if tarea.cantidad_planificada and tarea.cantidad_planificada > 0 %}
+                            <div class="mt-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted">Avance: {{ (m.ejec or 0)|round(2) }} / {{ tarea.cantidad_planificada or 0 }} {{ tarea.unidad or '' }}</small>
+                                    <small class="fw-bold">{{ (m.pct or 0)|round(1) }}%</small>
+                                </div>
+                                <div class="progress" style="height: 4px;">
+                                    {% set progress_class = 'bg-success' if m.pct >= 100 else ('bg-warning' if m.pct >= 50 else 'bg-info') %}
+                                    <div class="progress-bar {{ progress_class }}" style="width: {{ (m.pct or 0)|round(1) }}%"></div>
+                                </div>
+                                {% if m.atrasada %}
+                                <span class="badge bg-danger mt-1">Atrasada</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Métricas adicionales -->
+                            <div class="mt-2 d-flex gap-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-chart-line me-1"></i>
+                                    {{ tarea.avances|length or 0 }} registros
+                                </small>
+                            </div>
+                            
+                            <!-- Avances pendientes (solo para PM/Admin) -->
+                            {% if current_user.role in ['admin', 'pm'] %}
+                                {% set avances_pendientes = tarea.avances|selectattr('status', 'equalto', 'pendiente')|list %}
+                                {% if avances_pendientes %}
+                                <div class="mt-2">
+                                    <span class="badge bg-warning text-dark me-2" style="cursor: pointer;" 
+                                          onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')">
+                                        <i class="fas fa-hourglass-half me-1"></i>
+                                        ⚑ Pendientes ({{ avances_pendientes|length }})
+                                    </span>
+                                </div>
+                                {% endif %}
+                            {% endif %}
+                            
+                            <!-- Acciones rápidas -->
+                            {% if tarea.estado != 'completada' %}
+                            <div class="btn-group btn-group-sm mt-2" role="group">
+                                <!-- Botón de avance: para admin/PM o usuarios asignados -->
+                                {% if can_manage %}
+                                <button class="btn btn-outline-success btn-sm" 
+                                        onclick="abrirModalAvanceDetalle({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or '' }}')" 
+                                        title="Registrar avance">
+                                    <i class="fas fa-plus fa-xs"></i> Avance
+                                </button>
+                                {% else %}
+                                    {% set es_responsable = tarea.responsable_id == current_user.id %}
+                                    {% set es_asignado = tarea.asignaciones|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}
+                                    {% if es_responsable or es_asignado %}
+                                    <button class="btn btn-outline-success btn-sm" 
+                                            onclick="abrirModalAvanceDetalle({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or '' }}')" 
+                                            title="Registrar avance">
+                                        <i class="fas fa-plus fa-xs"></i> Avance
+                                    </button>
+                                    {% endif %}
+                                {% endif %}
+                                
+                                <!-- Botón de completar: solo para admin/PM -->
+                                {% if can_manage and tarea.cantidad_planificada and m.ejec >= tarea.cantidad_planificada %}
+                                <button class="btn btn-outline-primary btn-sm" 
+                                        onclick="completarTarea({{ tarea.id }})" 
+                                        title="Marcar como completada">
+                                    <i class="fas fa-check fa-xs"></i> Completar
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex flex-column align-items-end gap-1">
+                            {% set badge_class = 'bg-success' if tarea.estado == 'completada' else ('bg-warning' if tarea.estado == 'en_progreso' else ('bg-secondary' if tarea.estado == 'pausada' else 'bg-info')) %}
+                            <span class="badge {{ badge_class }}">{{ tarea.estado }}</span>
+                            {% if can_manage %}
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    onclick="confirmarEliminarTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')" 
+                                    title="Eliminar tarea">
+                                <i class="fas fa-trash fa-xs"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="text-center py-2">
+        <small class="text-muted">No hay tareas definidas</small>
+    </div>
+{% endif %}

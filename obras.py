@@ -1002,98 +1002,40 @@ def admin_backfill_tareas():
     
     return redirect(url_for('obras.lista'))
 
-@obras_bp.route('/etapa/<int:etapa_id>/tareas')
+@obras_bp.route('/etapas/<int:etapa_id>/tareas')
 @login_required
-def obtener_tareas_etapa(etapa_id):
-    """Obtener tareas de una etapa específica - AJAX endpoint"""
+def api_listar_tareas(etapa_id):
+    """API para listar tareas de una etapa con filtrado por rol"""
     etapa = EtapaObra.query.get_or_404(etapa_id)
     
     # Verificar que la etapa pertenezca a la organización del usuario
     if etapa.obra.organizacion_id != current_user.organizacion_id:
-        return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
     
     # Filtrar tareas según rol del usuario
     if is_pm_global():
         # Admin/PM ven todas las tareas de la etapa
-        tareas_query = etapa.tareas
+        q = TareaEtapa.query.filter(TareaEtapa.etapa_id == etapa_id)
     else:
         # Operarios solo ven tareas donde están asignados
         if not es_miembro_obra(etapa.obra_id, current_user.id):
-            return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
         
-        # Filtrar por tareas asignadas (responsable o miembro)
-        tareas_asignadas = []
-        for tarea in etapa.tareas:
-            es_responsable = tarea.responsable_id == current_user.id
-            es_miembro = any(asig.user_id == current_user.id for asig in tarea.asignaciones)
-            es_miembro_tarea = TareaMiembro.query.filter_by(
-                tarea_id=tarea.id, 
-                user_id=current_user.id
-            ).first() is not None
-            
-            if es_responsable or es_miembro or es_miembro_tarea:
-                tareas_asignadas.append(tarea)
-        
-        tareas_query = tareas_asignadas
+        # JOIN con tarea_miembros para filtrar solo las asignadas
+        q = (TareaEtapa.query
+             .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+             .filter(TareaEtapa.etapa_id == etapa_id,
+                     TareaMiembro.user_id == current_user.id))
     
-    tareas = []
-    for tarea in tareas_query:
-        # Obtener usuarios asignados a esta tarea
-        usuarios_asignados = []
-        for asignacion in tarea.asignaciones:
-            usuarios_asignados.append({
-                'id': asignacion.usuario.id,
-                'nombre': asignacion.usuario.nombre_completo,
-                'nombre_corto': f"{asignacion.usuario.nombre[0]}{asignacion.usuario.apellido[0]}",
-                'rol': asignacion.usuario.rol
-            })
-        
-        # Obtener información de avances para esta tarea
-        avances_pendientes = []
-        avances_count = {'total': 0, 'pendiente': 0, 'aprobado': 0, 'rechazado': 0}
-        
-        for avance in tarea.avances:
-            avances_count['total'] += 1
-            if avance.status in avances_count:
-                avances_count[avance.status] += 1
-            
-            # Solo incluir avances pendientes para PM/Admin
-            if avance.status == 'pendiente' and getattr(current_user, 'role', None) in ('admin', 'pm'):
-                avances_pendientes.append({
-                    'id': avance.id,
-                    'cantidad': float(avance.cantidad),
-                    'unidad': avance.unidad,
-                    'notas': avance.notas,
-                    'usuario': avance.usuario.nombre_completo if avance.usuario else 'Desconocido',
-                    'fecha': avance.fecha.strftime('%d/%m/%Y') if avance.fecha else None,
-                    'fotos_count': len(avance.adjuntos) if avance.adjuntos else 0
-                })
-        
-        # Calcular métricas de progreso (solo aprobados)
-        metricas = tarea.metrics if hasattr(tarea, 'metrics') else {}
-
-        tareas.append({
-            'id': tarea.id,
-            'nombre': tarea.nombre,
-            'descripcion': tarea.descripcion,
-            'estado': tarea.estado,
-            'responsable': tarea.responsable.nombre_completo if tarea.responsable else None,
-            'responsable_id': tarea.responsable_id,
-            'horas_estimadas': tarea.horas_estimadas,
-            'usuarios_asignados': usuarios_asignados,
-            'cantidad_planificada': float(tarea.cantidad_planificada) if tarea.cantidad_planificada else 0,
-            'cantidad_ejecutada': metricas.get('ejec', 0),
-            'unidad': tarea.unidad,
-            'total_avances': avances_count['total'],
-            'avances_pendientes': avances_pendientes,
-            'avances_count': avances_count
-        })
+    tareas = q.order_by(TareaEtapa.id.asc()).all()
     
-    return jsonify({
-        'success': True,
-        'tareas': tareas,
-        'etapa_nombre': etapa.nombre
-    })
+    # Calcular métricas para cada tarea
+    for t in tareas:
+        t.metrics = resumen_tarea(t)
+    
+    # Renderizar template parcial
+    html = render_template('obras/_tareas_lista.html', tareas=tareas)
+    return jsonify({'ok': True, 'html': html})
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
 @login_required
