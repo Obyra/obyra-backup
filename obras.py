@@ -4,13 +4,57 @@ from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
 import requests
 from app import db
-from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables
+from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 
 obras_bp = Blueprint('obras', __name__)
+
+# Helpers de permisos
+def is_admin():
+    """Verifica si el usuario actual es admin"""
+    return getattr(current_user, "role", "") == "admin"
+
+def is_pm_global():
+    """Verifica si el usuario actual es admin o PM global"""
+    return getattr(current_user, "role", "") in ("admin", "pm")
+
+def can_manage_obra(obra):
+    """Verifica si el usuario puede gestionar la obra (crear/editar/eliminar etapas y tareas)"""
+    if is_admin():
+        return True
+    if is_pm_global():
+        return True
+    
+    # Verificar si es miembro PM específico de esta obra
+    miembro = ObraMiembro.query.filter_by(
+        obra_id=obra.id, 
+        user_id=current_user.id, 
+        rol='pm'
+    ).first()
+    return miembro is not None
+
+def can_log_avance(tarea):
+    """Verifica si el usuario puede registrar avances en una tarea"""
+    if is_admin():
+        return True
+    
+    # PM puede registrar correcciones si es necesario
+    if getattr(current_user, "role", "") == "pm":
+        return True
+    
+    # Operario: debe ser responsable o estar asignado en tarea_miembros
+    if tarea.responsable_id == current_user.id:
+        return True
+    
+    # Verificar si está en tarea_miembros
+    miembro = TareaMiembro.query.filter_by(
+        tarea_id=tarea.id,
+        user_id=current_user.id
+    ).first()
+    return miembro is not None
 
 def D(x):
     """Helper para conversión segura a Decimal"""
