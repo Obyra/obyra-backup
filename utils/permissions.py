@@ -13,3 +13,7 @@ def get_home_route_for_user(user):
     if is_operario(user):
         return "obras.mis_tareas"
     return "reportes.dashboard"  # Admin y PM van al dashboard
+
+def can_approve_avance(user, avance):
+    """Verificar si el usuario puede aprobar un avance"""
+    return is_admin_or_pm(user) and user.id != avance.user_id

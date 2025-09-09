@@ -1918,10 +1918,13 @@ def upsert_user_module(user_id, module, view, edit):
 # ===== FUNCIONES HELPER PARA TAREAS =====
 
 def resumen_tarea(t):
-    """Helper para calcular métricas de una tarea"""
+    """Helper para calcular métricas de una tarea (solo suma aprobados)"""
     plan = float(t.cantidad_planificada or 0)
-    ejec = float(db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
-                 .filter(TareaAvance.tarea_id==t.id).scalar() or 0)
+    ejec = float(
+        db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+        .filter(TareaAvance.tarea_id == t.id, TareaAvance.status == "aprobado")
+        .scalar() or 0
+    )
     pct = (ejec/plan*100.0) if plan>0 else 0.0
     restante = max(plan - ejec, 0.0)
     atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
