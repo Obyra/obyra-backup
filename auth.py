@@ -68,6 +68,9 @@ def login():
                 next_page = request.args.get('next')
                 if next_page:
                     return redirect(next_page)
+                # Redirección post-login por rol (UX prolija)
+                if current_user.role == "operario":
+                    return redirect(url_for("obras.mis_tareas"))
                 return redirect(url_for('reportes.dashboard'))
             elif usuario.auth_provider == 'google':
                 flash('Esta cuenta está vinculada con Google. Use "Iniciar sesión con Google".', 'warning')
@@ -226,6 +229,9 @@ def google_callback():
                 db.session.commit()
                 login_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
+                # Redirección post-login por rol (UX prolija)
+                if current_user.role == "operario":
+                    return redirect(url_for("obras.mis_tareas"))
                 return redirect(url_for('reportes.dashboard'))
             else:
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
@@ -299,6 +305,9 @@ def google_callback():
                 
                 login_user(nuevo_usuario)
                 flash(mensaje, 'success')
+                # Redirección post-login por rol (UX prolija)
+                if current_user.role == "operario":
+                    return redirect(url_for("obras.mis_tareas"))
                 return redirect(url_for('reportes.dashboard'))
                 
             except Exception as e:
