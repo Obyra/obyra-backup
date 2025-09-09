@@ -31,15 +31,15 @@
                             </div>
                             {% endif %}
                             
-                            {% if tarea.asignaciones %}
+                            {% if tarea.miembros %}
                             <div class="mt-1">
                                 <small class="text-muted"><i class="fas fa-users"></i> Asignados: </small>
-                                {% for asignacion in tarea.asignaciones %}
-                                    {% set bg_color = "hsl({}, 45%, 75%)".format((asignacion.usuario.id * 137.508) % 360) %}
+                                {% for miembro in tarea.miembros %}
+                                    {% set bg_color = "hsl({}, 45%, 75%)".format((miembro.usuario.id * 137.508) % 360) %}
                                     <span class="badge rounded-pill me-1" 
                                           style="background-color: {{ bg_color }}; color: #333;" 
-                                          title="{{ asignacion.usuario.nombre_completo }} ({{ asignacion.usuario.rol }})">
-                                        {{ asignacion.usuario.nombre[0] }}{{ asignacion.usuario.apellido[0] }}
+                                          title="{{ miembro.usuario.nombre_completo }} ({{ miembro.usuario.rol }})">
+                                        {{ miembro.usuario.nombre[0] }}{{ miembro.usuario.apellido[0] }}
                                     </span>
                                 {% endfor %}
                             </div>
@@ -96,7 +96,7 @@
                                 </button>
                                 {% else %}
                                     {% set es_responsable = tarea.responsable_id == current_user.id %}
-                                    {% set es_asignado = tarea.asignaciones|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}
+                                    {% set es_asignado = tarea.miembros|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}
                                     {% if es_responsable or es_asignado %}
                                     <button class="btn btn-outline-success btn-sm" 
                                             onclick="abrirModalAvanceDetalle({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or '' }}')" 

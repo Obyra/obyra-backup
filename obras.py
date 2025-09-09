@@ -1004,7 +1004,9 @@ def api_listar_tareas(etapa_id):
     # Filtrar tareas según rol del usuario
     if is_pm_global():
         # Admin/PM ven todas las tareas de la etapa
-        q = TareaEtapa.query.filter(TareaEtapa.etapa_id == etapa_id)
+        q = (TareaEtapa.query
+             .filter(TareaEtapa.etapa_id == etapa_id)
+             .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
     else:
         # Operarios solo ven tareas donde están asignados
         if not es_miembro_obra(etapa.obra_id, current_user.id):
@@ -1014,7 +1016,8 @@ def api_listar_tareas(etapa_id):
         q = (TareaEtapa.query
              .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
              .filter(TareaEtapa.etapa_id == etapa_id,
-                     TareaMiembro.user_id == current_user.id))
+                     TareaMiembro.user_id == current_user.id)
+             .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
     
     tareas = q.order_by(TareaEtapa.id.asc()).all()
     
