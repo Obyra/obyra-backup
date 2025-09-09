@@ -1,7 +1,9 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from app import db
 from models import Usuario, AsignacionObra, Obra, RegistroTiempo
+from werkzeug.security import generate_password_hash
+from sqlalchemy.exc import IntegrityError
 
 equipos_bp = Blueprint('equipos', __name__)
 
@@ -329,3 +331,62 @@ def rendimiento():
     estadisticas.sort(key=lambda x: x['total_horas'], reverse=True)
     
     return render_template('equipos/rendimiento.html', estadisticas=estadisticas)
+
+
+# ===== NUEVAS RUTAS PARA GESTIÓN DE USUARIOS =====
+
+@equipos_bp.route('/equipo/usuarios')
+@login_required
+def usuarios_listar():
+    """Listado de usuarios para gestión administrativa"""
+    # Verificar permisos admin/pm
+    if current_user.role not in ['admin', 'pm']:
+        flash('No tienes permisos para gestionar usuarios.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+    
+    users = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id).order_by(Usuario.id.desc()).all()
+    return render_template('equipo/usuarios.html', users=users)
+
+@equipos_bp.route('/equipo/usuarios', methods=['POST'])
+@login_required
+def usuarios_crear():
+    """Crear nuevo usuario con role específico"""
+    # Verificar permisos admin/pm
+    if current_user.role not in ['admin', 'pm']:
+        return jsonify(ok=False, error="Sin permisos"), 403
+    
+    f = request.form
+    role = (f.get('role') or 'operario').strip()
+    org_id = getattr(current_user, 'organizacion_id', None)
+    
+    u = Usuario(
+        nombre=f.get('nombre', '').strip(),
+        apellido=f.get('apellido', '').strip(),
+        email=f.get('email', '').lower().strip(),
+        role=role,
+        rol='operario',  # Mantener rol legado por compatibilidad
+        organizacion_id=org_id,
+        password_hash=generate_password_hash(f.get('password', '').strip()),
+        auth_provider='manual',
+    )
+    
+    db.session.add(u)
+    try:
+        db.session.commit()
+        return jsonify(ok=True)
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify(ok=False, error="El email ya existe"), 400
+
+@equipos_bp.route('/equipo/usuarios/<int:uid>/rol', methods=['POST'])
+@login_required
+def usuarios_cambiar_rol(uid):
+    """Cambiar rol de usuario específico"""
+    # Verificar permisos admin/pm
+    if current_user.role not in ['admin', 'pm']:
+        return jsonify(ok=False, error="Sin permisos"), 403
+    
+    u = Usuario.query.get_or_404(uid)
+    u.role = request.form.get('role', 'operario')
+    db.session.commit()
+    return jsonify(ok=True)
