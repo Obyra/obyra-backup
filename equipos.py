@@ -335,7 +335,7 @@ def rendimiento():
 
 # ===== NUEVAS RUTAS PARA GESTIÓN DE USUARIOS =====
 
-@equipos_bp.route('/equipo/usuarios')
+@equipos_bp.route('/usuarios')
 @login_required
 def usuarios_listar():
     """Listado de usuarios para gestión administrativa"""
@@ -347,7 +347,7 @@ def usuarios_listar():
     users = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id).order_by(Usuario.id.desc()).all()
     return render_template('equipo/usuarios.html', users=users)
 
-@equipos_bp.route('/equipo/usuarios', methods=['POST'])
+@equipos_bp.route('/usuarios', methods=['POST'])
 @login_required
 def usuarios_crear():
     """Crear nuevo usuario con role específico"""
@@ -378,7 +378,7 @@ def usuarios_crear():
         db.session.rollback()
         return jsonify(ok=False, error="El email ya existe"), 400
 
-@equipos_bp.route('/equipo/usuarios/<int:uid>/rol', methods=['POST'])
+@equipos_bp.route('/usuarios/<int:uid>/rol', methods=['POST'])
 @login_required
 def usuarios_cambiar_rol(uid):
     """Cambiar rol de usuario específico"""

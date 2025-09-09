@@ -85,7 +85,7 @@
 async function setRol(e, uid){
     e.preventDefault();
     const fd = new FormData(e.target);
-    const r = await fetch(`/equipo/usuarios/${uid}/rol`, {method:'POST', body:fd});
+    const r = await fetch(`/equipos/usuarios/${uid}/rol`, {method:'POST', body:fd});
     const j = await r.json();
     if(!j.ok) return alert(j.error||'Error');
     location.reload();
@@ -94,7 +94,7 @@ async function setRol(e, uid){
 document.getElementById('frmNuevo')?.addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const r = await fetch('/equipo/usuarios', {method:'POST', body:fd});
+    const r = await fetch('/equipos/usuarios', {method:'POST', body:fd});
     const j = await r.json();
     if(!j.ok) return alert(j.error||'No se pudo crear');
     location.reload();
