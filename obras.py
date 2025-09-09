@@ -846,10 +846,7 @@ def mis_tareas():
     
     tareas = q.order_by(Obra.nombre.asc(), EtapaObra.orden.asc(), TareaEtapa.id.asc()).all()
     
-    # Calcular métricas para cada tarea
-    for t in tareas:
-        t.metrics = resumen_tarea(t)
-    
+    # Las métricas se calculan automáticamente via property
     return render_template('obras/mis_tareas.html', tareas=tareas)
 
 
@@ -1021,11 +1018,7 @@ def api_listar_tareas(etapa_id):
     
     tareas = q.order_by(TareaEtapa.id.asc()).all()
     
-    # Calcular métricas para cada tarea
-    for t in tareas:
-        t.metrics = resumen_tarea(t)
-    
-    # Renderizar template parcial
+    # Renderizar template parcial (las métricas se calculan automáticamente via property)
     html = render_template('obras/_tareas_lista.html', tareas=tareas)
     return jsonify({'ok': True, 'html': html})
 
