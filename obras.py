@@ -58,9 +58,38 @@ def can_log_avance(tarea):
 
 def es_miembro_obra(obra_id, user_id):
     """Verificar si el usuario es miembro de la obra (cualquier rol)"""
+    # Admin/PM siempre tienen acceso
+    if is_pm_global():
+        return True
     from models import ObraMiembro
     return db.session.query(ObraMiembro.id)\
         .filter_by(obra_id=obra_id, user_id=user_id).first() is not None
+
+def resumen_tarea(t):
+    """Calcular métricas de una tarea a prueba de nulos"""
+    plan = float(t.cantidad_planificada or 0)
+    
+    # Obtener suma de avances aprobados
+    ejec = float(
+        db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+        .filter(TareaAvance.tarea_id == t.id, TareaAvance.status == 'aprobado')
+        .scalar() or 0
+    )
+    
+    pct = (ejec/plan*100.0) if plan > 0 else 0.0
+    restante = max(plan - ejec, 0.0)
+    
+    # Verificar si está atrasada
+    from datetime import date
+    atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
+    
+    return {
+        'plan': plan, 
+        'ejec': ejec, 
+        'pct': pct, 
+        'restante': restante, 
+        'atrasada': atrasada
+    }
 
 def D(x):
     """Helper para conversión segura a Decimal"""
