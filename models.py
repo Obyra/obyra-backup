@@ -411,10 +411,17 @@ class TareaAvance(db.Model):
     unidad = db.Column(db.String(10))
     notas = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Campos de aprobación 
+    status = db.Column(db.String(12), default="pendiente")  # pendiente/aprobado/rechazado
+    confirmed_by = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
+    confirmed_at = db.Column(db.DateTime)
+    reject_reason = db.Column(db.Text)
     
     # Relaciones
     tarea = db.relationship('TareaEtapa', back_populates='avances')
-    usuario = db.relationship('Usuario')
+    usuario = db.relationship('Usuario', foreign_keys=[user_id])
+    confirmado_por = db.relationship('Usuario', foreign_keys=[confirmed_by])
     adjuntos = db.relationship('TareaAdjunto', back_populates='avance', cascade='all, delete-orphan')
     
     def __repr__(self):
