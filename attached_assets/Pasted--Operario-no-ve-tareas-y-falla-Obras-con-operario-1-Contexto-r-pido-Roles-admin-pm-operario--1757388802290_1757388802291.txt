@@ -1,0 +1,146 @@
+“Operario no ve tareas y falla Obras con operario”
+1) Contexto rápido
+
+Roles: admin, pm, operario.
+
+Asignación de tareas: vía endpoint de “Asignar usuarios” (crea tarea_miembros).
+
+Visibilidad esperada:
+
+Admin/PM: ven todas las tareas.
+
+Operario: sólo tareas asignadas (por tarea_miembros) y puede registrar avances.
+
+RBAC: Documentos ya está bloqueado a operario; Dashboard redirige a “Mis Tareas”.
+
+2) Problemas actuales
+A) “Mis Tareas” (operario) aparece vacío
+
+Repro:
+
+Como admin/pm: seleccionar tareas de una etapa → “Asignar usuarios” → elegir operario y guardar.
+
+Cerrar sesión e ingresar como operario → ir a /obras/mis-tareas.
+
+Resultado actual: “No tienes tareas asignadas”.
+
+Esperado: listar sólo esas tareas asignadas, con botón + Avance.
+
+Sospechas:
+
+No se están insertando filas en tarea_miembros (o insert, pero el query de “Mis Tareas” no hace el join correcto).
+
+La lógica de filtro por rol en /obras/mis-tareas o en /obras/etapas/<etapa_id>/tareas no está aplicando JOIN TareaMiembro con user_id = current_user.id.
+
+Verificaciones:
+
+SQL rápido:
+
+-- Ver asignaciones creadas
+SELECT * FROM tarea_miembros ORDER BY id DESC LIMIT 20;
+-- Contar asignaciones del operario X
+SELECT COUNT(*) FROM tarea_miembros tm WHERE tm.user_id = :operario_id;
+
+
+Si hay filas, revisar el query de mis_tareas y/o del endpoint que arma las tarjetas de tareas en la etapa:
+
+# Pseudocódigo correcto
+if current_user.role == 'operario':
+    q = (db.session.query(TareaEtapa)
+         .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+         .filter(TareaMiembro.user_id == current_user.id))
+else:
+    q = db.session.query(TareaEtapa)
+
+
+En /obras/mis-tareas asegurarse que:
+
+# Incluye info de Obra y Etapa para render, pero filtrado por TareaMiembro si operario
+db.session.query(TareaEtapa, Etapa, Obra) \
+  .join(Etapa, Etapa.id==TareaEtapa.etapa_id) \
+  .join(Obra, Obra.id==Etapa.obra_id) \
+  .join(TareaMiembro, TareaMiembro.tarea_id==TareaEtapa.id) \
+  .filter(TareaMiembro.user_id==current_user.id)
+
+B) Error al entrar al módulo Obras con operario
+
+Repro:
+
+Logueado como operario, ir a /obras o abrir una obra.
+
+Da “Error al cargar tareas” o 500 en la llamada a /obras/etapas/<id>/tareas.
+
+Sospechas:
+
+Bloqueo de permisos muy restrictivo (e.g. is_admin_or_pm() en before_request).
+
+El endpoint /obras/etapas/<id>/tareas asume admin/pm y no contempla operario miembro de la obra.
+
+Cuando operario pega a /obras/etapas/<id>/tareas, el filtro devuelve 0 (o rompe) al no hacer join correcto con tarea_miembros.
+
+Fix esperado:
+
+Permiso de lectura: Operario puede ver obra y etapa si es miembro de la obra (o de alguna tarea de esa obra).
+
+# helper
+def es_miembro_obra(obra_id):
+    return (current_user.role in ('admin','pm')) or (
+        db.session.query(TareaMiembro)
+          .join(TareaEtapa, TareaMiembro.tarea_id==TareaEtapa.id)
+          .join(Etapa, Etapa.id==TareaEtapa.etapa_id)
+          .filter(TareaMiembro.user_id==current_user.id,
+                  Etapa.obra_id==obra_id)
+          .first() is not None
+    )
+
+
+En /obras/<obra_id>: permitir GET si es_miembro_obra(obra_id) (esconder botones admin).
+
+En /obras/etapas/<etapa_id>/tareas:
+
+Chequear que el operario sea miembro de esa obra/etapa.
+
+Si es operario, filtrar tareas:
+
+.join(TareaMiembro, TareaMiembro.tarea_id==TareaEtapa.id)
+.filter(TareaMiembro.user_id==current_user.id)
+
+3) Cambios concretos a aplicar
+
+bulk_asignar
+
+Confirmar que inserta en tarea_miembros (tarea_id, user_id, cuota) y usar ON CONFLICT DO NOTHING/unique(tarea_id,user_id) para evitar duplicados.
+
+/obras/mis-tareas
+
+Reescribir query con JOIN a tarea_miembros si role=operario (ver pseudocódigo de arriba).
+
+/obras/<obra_id> (GET)
+
+Permitir si es_miembro_obra(obra_id); ocultar acciones admin en el template.
+
+/obras/etapas/<etapa_id>/tareas (GET)
+
+Si operario: JOIN a tarea_miembros + filtro user_id=current_user.id.
+
+Si admin/pm: todas las tareas.
+
+Logs y pruebas
+
+Agregar logs DEBUG en bulk_asignar, /mis-tareas y /etapas/<id>/tareas con {user_id, role, etapa_id, obra_id, total_rows}.
+
+QA:
+
+Asignar 1–2 tareas a operario → verlas en Mis Tareas y en la etapa (sólo esas).
+
+Operario entra a /obras/<obra_id> sin errores y sin botones de admin.
+
+Registrar avance (+ fotos) funciona.
+
+4) Definición de “Listo”
+
+Operario ve sólo sus tareas en “Mis Tareas” y dentro de cada etapa.
+
+Operario puede abrir Obras sin error si es miembro, y registrar avances.
+
+Admin/PM ven todo sin cambios.

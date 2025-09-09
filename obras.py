@@ -266,8 +266,14 @@ def crear():
 @obras_bp.route('/<int:id>')
 @login_required
 def detalle(id):
-    if not current_user.puede_acceder_modulo('obras'):
+    # Operarios pueden acceder si son miembros de la obra
+    if not current_user.puede_acceder_modulo('obras') and current_user.rol != 'operario':
         flash('No tienes permisos para ver obras.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+    
+    # Para operarios, verificar membresía en la obra
+    if current_user.rol == 'operario' and not es_miembro_obra(id, current_user.id):
+        flash('No tienes permisos para ver esta obra.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
     obra = Obra.query.get_or_404(id)
