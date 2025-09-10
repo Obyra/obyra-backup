@@ -1094,11 +1094,15 @@ def api_listar_tareas(etapa_id):
                      TareaMiembro.user_id == current_user.id)
              .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
     
-    tareas = q.order_by(TareaEtapa.id.asc()).all()
-    
-    # Renderizar template parcial (las métricas se calculan automáticamente via property)
-    html = render_template('obras/_tareas_lista.html', tareas=tareas)
-    return jsonify({'ok': True, 'html': html})
+    try:
+        tareas = q.order_by(TareaEtapa.id.asc()).all()
+        
+        # Renderizar template parcial (las métricas se calculan automáticamente via property)
+        html = render_template('obras/_tareas_lista.html', tareas=tareas)
+        return jsonify({'ok': True, 'html': html})
+    except Exception as e:
+        app.logger.error(f"Error al listar tareas de etapa {etapa_id}: {e}")
+        return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
 @login_required
