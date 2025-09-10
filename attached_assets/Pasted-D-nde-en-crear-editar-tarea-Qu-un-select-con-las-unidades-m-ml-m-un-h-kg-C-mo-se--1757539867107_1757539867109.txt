@@ -1,0 +1,114 @@
+Dónde: en crear/editar tarea.
+
+Qué: un <select> con las unidades (m², ml, m³, un, h, kg…).
+
+Cómo se usa: el operario no elige unidad al cargar avances; siempre carga en la unidad de la tarea.
+
+Ventaja: simple, consistente y menos errores.
+
+Pedido al agente (copiar/pegar):
+
+Agregar un <select name="unidad"> en el formulario de tarea y guardar en TareaEtapa.unidad.
+En el modal Registrar Avance, mostrar la etiqueta “Cantidad ejecutada ({{ tarea.unidad }})” y el chip con esa unidad. El operario no puede cambiarla.
+
+<!-- Form crear/editar tarea -->
+<label>Unidad</label>
+<select name="unidad" class="form-select" required>
+  <option value="m2">m²</option>
+  <option value="ml">ml (metro lineal)</option>
+  <option value="m3">m³</option>
+  <option value="un">un (unidad)</option>
+  <option value="h">h (hora)</option>
+  <option value="kg">kg</option>
+</select>
+
+<!-- Modal Registrar Avance -->
+<label for="cantidad" class="form-label">
+  Cantidad ejecutada ({{ tarea.unidad }}) *
+</label>
+<div class="input-group">
+  <input id="cantidad" name="cantidad" type="number" step="0.01" min="0" class="form-control" required>
+  <span class="input-group-text">{{ tarea.unidad }}</span>
+</div>
+
+
+Criterios de aceptación
+
+La tarea guarda unidad = m2|ml|m3|un|h|kg.
+
+El modal muestra esa unidad en la etiqueta y chip (nada de “unidad” genérico).
+
+El % de avance usa sum(cantidad aprobada) en esa unidad.
+
+Opción 2 (más flexible): Dropdown en el modal con conversión
+
+Para qué: si alguien quiere cargar en otra unidad equivalente (ej: m en vez de ml —ojo, en obra “ml” = metro lineal—; o m² en cm²).
+
+Cómo: definimos familias de unidades y conversión a una unidad base por familia.
+
+Guardado: normalizamos a la unidad base de la tarea para calcular %.
+
+Pedido al agente (si querés esta flexibilidad):
+
+Agregar en el modal un <select id="unidad_ingresada"> limitado a la misma familia de la tarea. Convertir a la unidad base de la tarea antes de guardar. Guardar además la unidad y cantidad ingresada para auditoría.
+
+{# Solo si la tarea permite conversión (misma familia) #}
+<label>Unidad</label>
+<select id="unidad_ingresada" class="form-select">
+  {% if tarea.unidad in ['m2'] %}
+    <option value="m2">m²</option>
+    <option value="cm2">cm²</option>
+  {% elif tarea.unidad in ['ml','m'] %}
+    <option value="ml">ml</option>
+    <option value="m">m</option>
+  {% elif tarea.unidad == 'm3' %}
+    <option value="m3">m³</option>
+    <option value="litro">L</option>
+  {% else %}
+    <option value="{{ tarea.unidad }}">{{ tarea.unidad }}</option>
+  {% endif %}
+</select>
+
+<script>
+const FACTORES = {
+  // a unidad base
+  area:   { m2:1, cm2:0.0001 },
+  long:   { ml:1, m:1 },           // ml ≈ m (metro lineal) para obra
+  vol:    { m3:1, litro:0.001 },
+  count:  { un:1 },
+  time:   { h:1 },
+  weight: { kg:1 }
+};
+// mapear unidad a familia
+const FAM = { m2:'area', cm2:'area', ml:'long', m:'long', m3:'vol', litro:'vol', un:'count', h:'time', kg:'weight' };
+
+function toBase(unidad, valor){
+  const fam = FAM[unidad];
+  const k = FACTORES[fam]?.[unidad];
+  return (fam && k) ? valor * k : valor;
+}
+
+// al enviar el form:
+form.addEventListener('submit', (e) => {
+  const uSel = document.getElementById('unidad_ingresada')?.value || '{{ tarea.unidad }}';
+  const cant = parseFloat(document.getElementById('cantidad').value || 0);
+  const cantBase = toBase(uSel, cant); // convertir a base de la familia
+  // enviar cantBase al backend y además {cantidad_ingresada, unidad_ingresada} para auditoría
+});
+</script>
+
+
+Backend (simple):
+
+# AvanceTarea
+cantidad_base = db.Column(db.Float)      # para % de avance
+unidad_base   = db.Column(db.String(10)) # = tarea.unidad
+cantidad_ingresada = db.Column(db.Float, nullable=True)
+unidad_ingresada   = db.Column(db.String(10), nullable=True)
+
+
+Criterios
+
+El operario puede elegir solo unidades compatibles.
+
+El sistema guarda cantidad_base en la unidad de la tarea y usa eso para el %.
