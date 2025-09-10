@@ -1834,26 +1834,33 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
     if (cuota) formData.append('cuota_objetivo', cuota);
     
     try {
-        const response = await fetch('/obras/tareas/bulk_asignar', {
+        const response = await fetch('/obras/asignar-usuarios', {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'include'
         });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
         
         const result = await response.json();
         
-        if (result.ok) {
-            // Cerrar modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('asignacionMasivaModal'));
-            modal.hide();
-            
-            // Recargar página para mostrar asignaciones
-            location.reload();
-        } else {
-            alert(result.error || 'Error al asignar usuarios');
+        if (result.ok === false) {
+            throw new Error(result.error || 'Error desconocido');
         }
+        
+        // Cerrar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('asignacionMasivaModal'));
+        modal.hide();
+        
+        // Recargar página para mostrar asignaciones
+        location.reload();
+        
     } catch (error) {
-        console.error('Error:', error);
-        alert('Error de conexión al asignar usuarios');
+        console.error('Error en asignación:', error);
+        alert('Error de conexión al asignar usuarios: ' + error.message);
     }
 });
 {% endif %}

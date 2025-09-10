@@ -694,40 +694,34 @@ def parse_date(s):
     return None
 
 
-@obras_bp.route("/tareas/bulk_asignar", methods=['POST'])
+@obras_bp.route("/asignar-usuarios", methods=['POST'])
 @login_required
 def bulk_asignar():
     """Asignar usuarios a múltiples tareas"""
-    print(f"🔍 bulk_asignar called by user: {current_user.id} ({current_user.rol})")
-    print(f"🔍 request.content_type: {request.content_type}")
-    print(f"🔍 request.form keys: {list(request.form.keys())}")
-    print(f"🔍 request.get_json(): {request.get_json()}")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"bulk_asignar user={current_user.id} rol={current_user.rol}")
     
-    # Obtener datos según el tipo de contenido
     try:
-        if request.content_type and 'application/json' in request.content_type:
-            # Datos JSON
-            data = request.get_json() or {}
-            tarea_ids = data.get("tarea_ids", [])
-            user_ids = data.get("user_ids", [])
-            cuota = data.get("cuota")
-            print("🔍 Processing JSON data")
-        else:
-            # Datos de formulario
-            tarea_ids = request.form.getlist('tarea_ids[]')
-            user_ids = request.form.getlist('user_ids[]')
-            cuota = request.form.get("cuota_objetivo", type=float)
-            print("🔍 Processing form data")
+        # Leer datos de formulario multipart
+        tarea_ids = request.form.getlist('tarea_ids[]')
+        user_ids = request.form.getlist('user_ids[]')
+        cuota = request.form.get('cuota_objetivo', type=int)
         
-        print(f"🔍 Final parsed data - tarea_ids: {tarea_ids}, user_ids: {user_ids}, cuota: {cuota}")
+        logger.info(f"bulk_asignar tareas={tarea_ids} users={user_ids} cuota={cuota}")
+        
     except Exception as e:
-        print(f"❌ Error parsing request data: {str(e)}")
+        logger.exception("Error parsing form data")
         return jsonify(ok=False, error=f"Error parsing request: {str(e)}"), 400
     
     if not tarea_ids:
         return jsonify(ok=False, error="No se seleccionaron tareas"), 400
     
-    primera_tarea = TareaEtapa.query.get(tarea_ids[0])
+    if not tarea_ids or not user_ids:
+        return jsonify(ok=False, error='Faltan tareas o usuarios'), 400
+    
+    # Verificar permisos en la primera tarea
+    primera_tarea = TareaEtapa.query.get(int(tarea_ids[0]))
     if not primera_tarea:
         return jsonify(ok=False, error="Tarea no encontrada"), 404
     
@@ -735,24 +729,19 @@ def bulk_asignar():
     if not can_manage_obra(obra):
         return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
     
-    if not user_ids:
-        return jsonify(ok=False, error="Faltan IDs de usuarios"), 400
-    
     try:
+        
+        # Realizar upsert de asignaciones
         asignaciones_creadas = 0
-        print(f"🎯 DEBUG bulk_asignar: tarea_ids={tarea_ids}, user_ids={user_ids}, cuota={cuota}")
         
         for tid in tarea_ids:
             tarea = TareaEtapa.query.get(int(tid))
-            if not tarea:
-                print(f"❌ Tarea {tid} no encontrada")
-                continue
-            if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
-                print(f"❌ Tarea {tid} no pertenece a la organizacion del usuario")
+            if not tarea or tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                logger.warning(f"Skipping invalid task {tid}")
                 continue
                 
-            for uid in set(user_ids):  # set() para evitar duplicados
-                # Verificar si ya existe la asignación
+            for uid in set(user_ids):  # set() evita duplicados
+                # Upsert: verificar si existe, crear si no
                 existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=int(uid)).first()
                 if not existing:
                     from models import TareaMiembro
@@ -763,20 +752,20 @@ def bulk_asignar():
                     )
                     db.session.add(asignacion)
                     asignaciones_creadas += 1
-                    print(f"✅ Creando asignación: tarea_id={tid}, user_id={uid}")
+                    logger.info(f"Created assignment: task={tid}, user={uid}")
                 else:
                     # Actualizar cuota si existe
                     existing.cuota_objetivo = cuota
-                    print(f"🔄 Actualizando cuota existente: tarea_id={tid}, user_id={uid}")
+                    logger.info(f"Updated assignment: task={tid}, user={uid}")
         
         db.session.commit()
-        print(f"✅ Commit exitoso: {asignaciones_creadas} asignaciones creadas")
-        return jsonify(ok=True, asignaciones=asignaciones_creadas)
+        logger.info(f"bulk_asignar success: created={asignaciones_creadas}")
+        return jsonify(ok=True, creados=asignaciones_creadas)
         
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Error en bulk_asignar: {str(e)}")
-        return jsonify(ok=False, error="Error interno"), 500
+        logger.exception('bulk_asignar error')
+        return jsonify(ok=False, error=str(e)), 500
 
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
