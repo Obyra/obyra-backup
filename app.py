@@ -231,6 +231,10 @@ def from_json_filter(json_str):
 # Create tables and initial data
 with app.app_context():
     from models import Usuario, Organizacion
+    
+    # Run startup migrations before creating tables
+    from migrations_runtime import ensure_avance_audit_columns
+    ensure_avance_audit_columns()
 
     # Create all tables
     db.create_all()
