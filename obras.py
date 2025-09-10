@@ -703,20 +703,26 @@ def bulk_asignar():
     print(f"🔍 request.form keys: {list(request.form.keys())}")
     print(f"🔍 request.get_json(): {request.get_json()}")
     
-    # Obtener datos del JSON o formulario
-    data = request.get_json() or {}
-    if not data:
-        # Fallback para datos de formulario
-        tarea_ids = request.form.getlist('tarea_ids[]')
-        user_ids = request.form.getlist('user_ids[]')
-        cuota = request.form.get("cuota_objetivo", type=float)
-    else:
-        # Datos JSON
-        tarea_ids = data.get("tarea_ids", [])
-        user_ids = data.get("user_ids", [])
-        cuota = data.get("cuota")
-    
-    print(f"🔍 Final parsed data - tarea_ids: {tarea_ids}, user_ids: {user_ids}, cuota: {cuota}")
+    # Obtener datos según el tipo de contenido
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            # Datos JSON
+            data = request.get_json() or {}
+            tarea_ids = data.get("tarea_ids", [])
+            user_ids = data.get("user_ids", [])
+            cuota = data.get("cuota")
+            print("🔍 Processing JSON data")
+        else:
+            # Datos de formulario
+            tarea_ids = request.form.getlist('tarea_ids[]')
+            user_ids = request.form.getlist('user_ids[]')
+            cuota = request.form.get("cuota_objetivo", type=float)
+            print("🔍 Processing form data")
+        
+        print(f"🔍 Final parsed data - tarea_ids: {tarea_ids}, user_ids: {user_ids}, cuota: {cuota}")
+    except Exception as e:
+        print(f"❌ Error parsing request data: {str(e)}")
+        return jsonify(ok=False, error=f"Error parsing request: {str(e)}"), 400
     
     if not tarea_ids:
         return jsonify(ok=False, error="No se seleccionaron tareas"), 400
