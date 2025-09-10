@@ -3,11 +3,8 @@
         {% set m = tarea.metrics or {'pct':0,'ejec':0,'restante':0,'atrasada':False} %}
         <div class="tarea-item ms-3 mt-2 p-3 bg-light rounded border" data-tarea-id="{{ tarea.id }}">
             <div class="d-flex align-items-start">
-                {% if current_user.role in ['admin', 'pm'] %}
-                <label class="form-check me-3 bulk-toggle d-none">
-                    <input type="checkbox" class="form-check-input task-check" value="{{ tarea.id }}">
-                </label>
-                {% endif %}
+                <!-- Checkbox siempre presente, inicialmente oculto -->
+                <input type="checkbox" class="task-select d-none me-3" data-tarea-id="{{ tarea.id }}" value="{{ tarea.id }}">
                 <div class="flex-grow-1">
                     <div class="d-flex justify-content-between align-items-start">
                         <div class="flex-grow-1">

@@ -4,13 +4,8 @@
 
 {% block extra_css %}
 <style>
-/* CSS para control de visibilidad de checkboxes */
-.task-card input[type="checkbox"] { 
-    display: none; 
-}
-.select-mode .task-card input[type="checkbox"] { 
-    display: inline-block; 
-}
+/* Simple CSS para control de checkboxes */
+.d-none { display: none !important; }
 </style>
 {% endblock %}
 
@@ -113,13 +108,17 @@
                                     <i class="fas fa-check-square me-1"></i>
                                     Seleccionar
                                 </button>
+                                <button id="btn-cancel-selection" class="btn btn-sm btn-outline-secondary" style="display:none;">
+                                    <i class="fas fa-times me-1"></i>
+                                    Cancelar selección
+                                </button>
                                 <button id="btn-delete-selected" class="btn btn-sm btn-outline-danger d-none" disabled>
                                     <i class="fas fa-trash me-1"></i>
-                                    Eliminar seleccionadas (0)
+                                    Eliminar seleccionadas (<span id="btn-eliminar-count">0</span>)
                                 </button>
                                 <button id="btn-assign-selected" class="btn btn-sm btn-outline-success d-none" disabled data-bs-toggle="modal" data-bs-target="#asignacionMasivaModal">
                                     <i class="fas fa-user-plus me-1"></i>
-                                    Asignar usuarios (0)
+                                    Asignar usuarios (<span id="btn-asignar-count">0</span>)
                                 </button>
                             </div>
                             {% endif %}
@@ -1760,63 +1759,53 @@ function eliminarTarea(tareaId) {
     });
 }
 
-// Sistema de selección múltiple para tareas
+// Sistema de selección múltiple para tareas - Simple y robusto
 {% if can_manage %}
 (function(){
-    let selecting = false;
-    const btnToggle = document.getElementById('btn-select-multi');
+    const btnSel = document.getElementById('btn-select-multi');
+    const btnCancel = document.getElementById('btn-cancel-selection'); 
     const btnDelete = document.getElementById('btn-delete-selected');
     const btnAssign = document.getElementById('btn-assign-selected');
-    const root = document.querySelector('#etapas-container') || document.body;
 
-    function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
-    function toggles(){ return Array.from(document.querySelectorAll('.bulk-toggle')); }
-    function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
-    
-    function updateSelectedCount(n){
-        if (btnDelete) {
-            btnDelete.textContent = `Eliminar seleccionadas (${n})`;
-            btnDelete.disabled = n === 0;
-        }
-        if (btnAssign) {
-            btnAssign.textContent = `Asignar usuarios (${n})`;
-            btnAssign.disabled = n === 0;
-        }
+    function updateCounts() {
+        const n = document.querySelectorAll('.task-select:not(.d-none):checked').length;
+        const deleteCount = document.getElementById('btn-eliminar-count');
+        const assignCount = document.getElementById('btn-asignar-count');
+        
+        if (deleteCount) deleteCount.textContent = n;
+        if (assignCount) assignCount.textContent = n;
+        
+        // Habilitar/deshabilitar botones
+        if (btnDelete) btnDelete.disabled = n === 0;
+        if (btnAssign) btnAssign.disabled = n === 0;
     }
 
-    // Al hacer click en "Seleccionar"
-    btnToggle?.addEventListener('click', () => {
-        selecting = !selecting;
-        
-        if (selecting) {
-            // Entrar en modo selección
-            root.classList.add('select-mode');
-            document.querySelectorAll('.task-card input[type="checkbox"]').forEach(cb => {
-                cb.hidden = false;
-                cb.style.display = 'inline-block';
-            });
-            btnToggle.textContent = 'Cancelar selección';
-        } else {
-            // Salir de modo selección  
-            root.classList.remove('select-mode');
-            document.querySelectorAll('.task-card input[type="checkbox"]').forEach(cb => {
-                cb.checked = false;
-                cb.hidden = true;
-                cb.style.display = 'none';
-            });
-            btnToggle.textContent = 'Seleccionar';
-            updateSelectedCount(0);
-        }
-        
-        btnDelete?.classList.toggle('d-none', !selecting);
-        btnAssign?.classList.toggle('d-none', !selecting);
+    // Mostrar checkboxes al seleccionar
+    btnSel?.addEventListener('click', () => {
+        document.querySelectorAll('.task-select').forEach(cb => cb.classList.remove('d-none'));
+        btnSel.style.display = 'none';
+        btnCancel.style.display = 'inline-block';
+        btnDelete?.classList.remove('d-none');
+        btnAssign?.classList.remove('d-none');
+        updateCounts();
     });
 
-    document.addEventListener('change', e => {
-        if (e.target?.classList?.contains('task-check')) {
-            const n = checks().filter(c => c.checked).length;
-            updateSelectedCount(n);
-        }
+    // Ocultar checkboxes al cancelar
+    btnCancel?.addEventListener('click', () => {
+        document.querySelectorAll('.task-select').forEach(cb => {
+            cb.checked = false;
+            cb.classList.add('d-none');
+        });
+        btnSel.style.display = 'inline-block';
+        btnCancel.style.display = 'none';
+        btnDelete?.classList.add('d-none');
+        btnAssign?.classList.add('d-none');
+        updateCounts();
+    });
+
+    // Actualizar contadores cuando cambian checkboxes
+    document.addEventListener('change', (e) => {
+        if (e.target.matches('.task-select')) updateCounts();
     });
 
     btnDelete?.addEventListener('click', async () => {
@@ -1852,7 +1841,7 @@ function eliminarTarea(tareaId) {
 document.getElementById('formAsignacionMasiva')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    const selectedTasks = Array.from(document.querySelectorAll('.task-check:checked')).map(c => c.value);
+    const selectedTasks = Array.from(document.querySelectorAll('.task-select:checked')).map(c => c.value);
     const selectedUsers = Array.from(document.querySelectorAll('#asignacionMasivaModal input[name="user_ids[]"]:checked')).map(c => c.value);
     
     if (!selectedTasks.length || !selectedUsers.length) {
