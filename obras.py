@@ -796,7 +796,8 @@ def crear_avance(tarea_id):
     if not cantidad or cantidad <= 0: 
         return jsonify(ok=False, error="Cantidad inválida"), 400
     
-    unidad = request.form.get("unidad") or tarea.unidad
+    unidad = tarea.unidad or 'un'  # Always use server-side unit, ignore client value
+    horas = request.form.get("horas", type=float)  # Optional hours worked
     notas = request.form.get("notas")
 
     try:
@@ -806,6 +807,7 @@ def crear_avance(tarea_id):
             user_id=current_user.id, 
             cantidad=cantidad, 
             unidad=unidad, 
+            horas=horas,
             notas=notas
         )
         

@@ -358,8 +358,10 @@ class TareaEtapa(db.Model):
     responsable_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     fecha_inicio_plan = db.Column(db.Date)  # Fecha planificada de inicio
     fecha_fin_plan = db.Column(db.Date)     # Fecha planificada de fin
-    unidad = db.Column(db.String(10))       # 'm2','ml','u','m3','hrs'
+    unidad = db.Column(db.String(10), default='un')       # 'm2','ml','u','m3','hrs'
     cantidad_planificada = db.Column(db.Numeric)
+    objetivo = db.Column(db.Numeric, nullable=True)  # Physical target (e.g. 500 m2)
+    rendimiento = db.Column(db.Numeric(8, 2), nullable=True)  # Optional: quantity per hour (e.g. 20 m2/h)
     
     # Relaciones
     etapa = db.relationship('EtapaObra', back_populates='tareas')
@@ -409,6 +411,7 @@ class TareaAvance(db.Model):
     fecha = db.Column(db.Date, default=date.today)
     cantidad = db.Column(db.Numeric, nullable=False)
     unidad = db.Column(db.String(10))
+    horas = db.Column(db.Numeric(8, 2), nullable=True)  # Time worked (optional)
     notas = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

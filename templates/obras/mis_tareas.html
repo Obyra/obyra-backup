@@ -93,7 +93,7 @@
                             <div class="d-flex gap-2">
                                 <!-- Botón registrar avance -->
                                 <button class="btn btn-primary btn-sm flex-fill" 
-                                        onclick="abrirModalAvance({{ t.id }}, '{{ t.nombre }}', '{{ t.unidad or '' }}')">
+                                        onclick="abrirModalAvance({{ t.id }}, '{{ t.nombre }}', '{{ t.unidad or 'un' }}', {{ t.rendimiento or 'null' }})">
                                     <i class="fas fa-plus me-1"></i>
                                     Registrar Avance
                                 </button>
@@ -125,6 +125,8 @@
             <form id="formAvance" enctype="multipart/form-data">
                 <div class="modal-body">
                     <input type="hidden" id="avance_tarea_id" name="tarea_id">
+                    <input type="hidden" id="avance_unidad" name="unidad">
+                    <input type="hidden" id="avance_rendimiento">
                     
                     <div class="mb-3">
                         <label class="form-label">Tarea</label>
@@ -132,13 +134,24 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="avance_cantidad" class="form-label">Cantidad ejecutada *</label>
+                        <label for="avance_cantidad" class="form-label">Cantidad ejecutada (<span id="avance_unidad_label">un</span>) *</label>
                         <div class="input-group">
                             <input type="number" class="form-control" id="avance_cantidad" name="cantidad" 
                                    step="0.01" min="0" required>
-                            <span class="input-group-text" id="avance_unidad_display"></span>
+                            <span class="input-group-text" id="avance_unidad_display">un</span>
                         </div>
-                        <input type="hidden" id="avance_unidad" name="unidad">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_horas" class="form-label">Horas trabajadas (opcional)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="avance_horas" name="horas" 
+                                   step="0.01" min="0">
+                            <span class="input-group-text">h</span>
+                        </div>
+                        <div class="form-text" id="avance_rendimiento_info" style="display: none;">
+                            Rendimiento: <span id="avance_rendimiento_display"></span>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -168,19 +181,72 @@
 
 <script>
 // Función para abrir modal de avance
-function abrirModalAvance(tareaId, tareaNombre, unidad) {
-    document.getElementById('avance_tarea_id').value = tareaId;
-    document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
-    document.getElementById('avance_unidad').value = unidad || '';
-    document.getElementById('avance_unidad_display').textContent = unidad || 'unidad';
-    
+function abrirModalAvance(tareaId, tareaNombre, unidad, rendimiento) {
     // Limpiar formulario
     document.getElementById('formAvance').reset();
+    
+    // Set form data
     document.getElementById('avance_tarea_id').value = tareaId;
-    document.getElementById('avance_unidad').value = unidad || '';
+    document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
+    document.getElementById('avance_unidad').value = unidad || 'un';
+    document.getElementById('avance_rendimiento').value = rendimiento || '';
+    
+    // Update unit display
+    const displayUnit = unidad || 'un';
+    document.getElementById('avance_unidad_label').textContent = displayUnit;
+    document.getElementById('avance_unidad_display').textContent = displayUnit;
+    
+    // Show/hide rendimiento info
+    const rendimientoInfo = document.getElementById('avance_rendimiento_info');
+    const rendimientoDisplay = document.getElementById('avance_rendimiento_display');
+    
+    if (rendimiento && rendimiento > 0) {
+        rendimientoDisplay.textContent = `${rendimiento} ${displayUnit}/h`;
+        rendimientoInfo.style.display = 'block';
+        setupAutoConversion(rendimiento, displayUnit);
+    } else {
+        rendimientoInfo.style.display = 'none';
+    }
     
     const modal = new bootstrap.Modal(document.getElementById('modalAvance'));
     modal.show();
+}
+
+// Global conversion handlers (to allow proper removeEventListener)
+let currentCantidadHandler = null;
+let currentHorasHandler = null;
+
+// Auto-conversion setup
+function setupAutoConversion(rendimiento, unidad) {
+    const cantidadInput = document.getElementById('avance_cantidad');
+    const horasInput = document.getElementById('avance_horas');
+    
+    // Remove existing handlers if any
+    if (currentCantidadHandler) {
+        cantidadInput.removeEventListener('input', currentCantidadHandler);
+    }
+    if (currentHorasHandler) {
+        horasInput.removeEventListener('input', currentHorasHandler);
+    }
+    
+    // Create new handlers with proper closure
+    const rendimientoNum = Number(rendimiento);
+    
+    currentCantidadHandler = function() {
+        if (cantidadInput.value && !horasInput.value) {
+            horasInput.value = (parseFloat(cantidadInput.value) / rendimientoNum).toFixed(2);
+        }
+    };
+    
+    currentHorasHandler = function() {
+        if (horasInput.value && !cantidadInput.value) {
+            cantidadInput.value = (parseFloat(horasInput.value) * rendimientoNum).toFixed(2);
+        }
+    };
+    
+    // Attach new handlers
+    cantidadInput.addEventListener('input', currentCantidadHandler);
+    horasInput.addEventListener('input', currentHorasHandler);
 }
 
 // Manejar envío de avance
