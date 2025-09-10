@@ -912,7 +912,8 @@ def mis_tareas():
         .order_by(Obra.nombre, EtapaObra.orden, TareaEtapa.id.desc())
     )
     tareas = q.all()
-    current_app.logger.info("mis_tareas user=%s ids=%s", current_user.id, [t.id for t in tareas])
+    current_app.logger.info("mis_tareas user=%s unidades=%s",
+                            current_user.id, [(t.id, t.unidad, t.rendimiento) for t in tareas])
     return render_template('obras/mis_tareas.html', tareas=tareas)
 
 

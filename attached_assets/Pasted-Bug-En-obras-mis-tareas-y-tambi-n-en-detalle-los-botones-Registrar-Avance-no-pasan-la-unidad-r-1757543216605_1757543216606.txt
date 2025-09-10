@@ -1,0 +1,49 @@
+Bug: En /obras/mis-tareas (y también en detalle) los botones “Registrar Avance” no pasan la unidad real; todos vienen con data-unidad="un". Por eso el modal muestra “un”.
+
+Acciones requeridas:
+
+Corregir el botón en las plantillas para pasar la unidad y rendimiento de cada tarea (usar el nombre real de la variable del bucle: t o tarea):
+
+<button type="button" class="btn btn-primary btn-avance"
+        data-bs-toggle="modal" data-bs-target="#modalAvance"
+        data-tarea-id="{{ t.id }}"
+        data-unidad="{{ t.unidad or 'un' }}"
+        data-rendimiento="{{ t.rendimiento or '' }}"
+        data-tarea-nombre="{{ t.nombre|e }}">
+  + Registrar Avance
+</button>
+
+
+Hacerlo en templates/obras/mis_tareas.html y templates/obras/_tareas_lista.html (o donde exista el botón).
+
+Verificar la ruta que arma tareas (mis_tareas y detalle): debe devolver objetos TareaEtapa completos (no with_entities parciales). Ejemplo:
+
+q = (db.session.query(TareaEtapa)
+     .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+     .join(EtapaObra, EtapaObra.id == TareaEtapa.etapa_id)
+     .join(Obra, Obra.id == EtapaObra.obra_id)
+     .filter(TareaMiembro.user_id == current_user.id)
+     .filter(Obra.organizacion_id == current_user.organizacion_id))
+tareas = q.all()
+current_app.logger.info("mis_tareas user=%s unidades=%s",
+                        current_user.id, [(t.id, t.unidad, t.rendimiento) for t in tareas])
+
+
+Si la consulta devuelve tuplas o alias, t.unidad quedará vacío y el template terminará poniendo 'un'.
+
+Mantener el JS del modal con show.bs.modal (ya implementado). No hace falta tocarlo: al corregir data-unidad, el modal mostrará la unidad correcta.
+
+Criterios de aceptación:
+
+En consola, este snippet debe mostrar la unidad real (m2, ml, m3, etc.) para cada botón:
+
+[...document.querySelectorAll('button, a')]
+  .filter(b => b.textContent.trim().includes('Registrar Avance'))
+  .forEach((b,i)=>console.log(i, 'unidad=', b.dataset.unidad, 'rendimiento=', b.dataset.rendimiento));
+
+
+Al abrir el modal de una tarea con m², se ve “Cantidad ejecutada (m²)” y chip m².
+
+Si la unidad de la tarea cambia a ml, el botón refleja data-unidad="ml" y el modal muestra ml sin cambios de JS.
+
+El backend sigue usando la unidad del servidor al guardar el avance.
