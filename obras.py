@@ -617,19 +617,27 @@ def crear_tareas():
             if not nombre:
                 return jsonify(ok=False, error="Falta el nombre"), 400
             
+            # Validate unit against whitelist
+            VALID_UNITS = {'m2', 'ml', 'm3', 'un', 'h', 'kg'}
+            unidad_input = request.form.get("unidad", "un").lower()
+            unidad = unidad_input if unidad_input in VALID_UNITS else "un"
+            
             t = TareaEtapa(
                 etapa_id=etapa_id,
                 nombre=nombre,
                 responsable_id=resp_id,
                 horas_estimadas=horas,
                 fecha_inicio_plan=fi,
-                fecha_fin_plan=ff
+                fecha_fin_plan=ff,
+                unidad=unidad
             )
             db.session.add(t)
             db.session.commit()
             return jsonify(ok=True, created=1)
 
-        # Caso múltiple: con sugeridas
+        # Caso múltiple: con sugeridas  
+        # Note: For suggested tasks, we let them keep their natural units from TAREAS_POR_ETAPA
+        # Only custom tasks use the form's unit selection
         created = 0
         for sid in sugeridas:
             try:
@@ -647,8 +655,10 @@ def crear_tareas():
                 # Manejar formato string o diccionario
                 if isinstance(tarea_data, str):
                     nombre_tarea = tarea_data
+                    tarea_unidad = "un"  # Default for string format
                 elif isinstance(tarea_data, dict):
                     nombre_tarea = tarea_data.get("nombre", "")
+                    tarea_unidad = tarea_data.get("unidad", "un")  # Use task's natural unit
                 else:
                     continue
                 
@@ -661,7 +671,8 @@ def crear_tareas():
                     responsable_id=resp_id,
                     horas_estimadas=horas,
                     fecha_inicio_plan=fi,
-                    fecha_fin_plan=ff
+                    fecha_fin_plan=ff,
+                    unidad=tarea_unidad  # Use task's natural unit, not form unit
                 )
                 db.session.add(t)
                 created += 1

@@ -546,6 +546,23 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
+                                <label class="form-label">Unidad</label>
+                                <select name="unidad" class="form-select" required>
+                                    <option value="m2">m²</option>
+                                    <option value="ml">ml (metro lineal)</option>
+                                    <option value="m3">m³</option>
+                                    <option value="un" selected>un (unidad)</option>
+                                    <option value="h">h (hora)</option>
+                                    <option value="kg">kg</option>
+                                </select>
+                                <div class="form-text">Unidad para medir el progreso de esta tarea</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
                                 <label class="form-label">Responsable</label>
                                 <select class="form-select" name="responsable_id">
                                     <option value="">Sin asignar</option>
