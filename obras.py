@@ -695,47 +695,46 @@ def parse_date(s):
 
 
 @obras_bp.route("/asignar-usuarios", methods=['POST'])
-@login_required
 def asignar_usuarios():
-    """Asignar usuarios a múltiples tareas"""
-    from models import TareaMiembro  # Import at top to avoid scoping issues
-    import logging
-    from flask import current_app
-    
+    """Asignar usuarios a múltiples tareas - Always returns JSON"""
     try:
-        tarea_ids = request.form.getlist('tarea_ids[]')
-        user_ids = request.form.getlist('user_ids[]')
-        cuota = request.form.get('cuota_objetivo', type=int)
+        from models import TareaMiembro, Usuario
+        from flask import current_app
         
-        current_app.logger.info(f"asignar_usuarios user={current_user.id} tareas={tarea_ids} users={user_ids} cuota={cuota}")
+        # Check authentication first and return JSON error if not authenticated
+        if not current_user.is_authenticated:
+            return jsonify(ok=False, error="Usuario no autenticado"), 401
         
-    except Exception as e:
-        current_app.logger.exception("Error parsing form data")
-        return jsonify(ok=False, error=f"Error parsing request: {str(e)}"), 400
-    
-    if not tarea_ids:
-        return jsonify(ok=False, error="No se seleccionaron tareas"), 400
-    
-    if not tarea_ids or not user_ids:
-        return jsonify(ok=False, error='Faltan tareas o usuarios'), 400
-    
-    # Verificar permisos en la primera tarea
-    primera_tarea = TareaEtapa.query.get(int(tarea_ids[0]))
-    if not primera_tarea:
-        return jsonify(ok=False, error="Tarea no encontrada"), 404
-    
-    obra = primera_tarea.etapa.obra
-    if not can_manage_obra(obra):
-        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
-    
-    # Verificar que todos los usuarios pertenecen a la misma organización
-    from models import User
-    for uid in user_ids:
-        user = User.query.get(int(uid))
-        if not user or user.organizacion_id != current_user.organizacion_id:
-            return jsonify(ok=False, error=f"Usuario {uid} no pertenece a la organización"), 403
-    
-    try:
+        # Parse form data
+        try:
+            tarea_ids = request.form.getlist('tarea_ids[]')
+            user_ids = request.form.getlist('user_ids[]')
+            cuota = request.form.get('cuota_objetivo', type=int)
+            
+            current_app.logger.info(f"asignar_usuarios user={current_user.id} tareas={tarea_ids} users={user_ids} cuota={cuota}")
+            
+        except Exception as e:
+            current_app.logger.exception("Error parsing form data")
+            return jsonify(ok=False, error=f"Error parsing request: {str(e)}"), 400
+        
+        # Validate inputs
+        if not tarea_ids or not user_ids:
+            return jsonify(ok=False, error='Faltan tareas o usuarios'), 400
+        
+        # Verificar permisos en la primera tarea
+        primera_tarea = TareaEtapa.query.get(int(tarea_ids[0]))
+        if not primera_tarea:
+            return jsonify(ok=False, error="Tarea no encontrada"), 404
+        
+        obra = primera_tarea.etapa.obra
+        if not can_manage_obra(obra):
+            return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
+        
+        # Verificar que todos los usuarios pertenecen a la misma organización
+        for uid in user_ids:
+            user = Usuario.query.get(int(uid))
+            if not user or user.organizacion_id != current_user.organizacion_id:
+                return jsonify(ok=False, error=f"Usuario {uid} no pertenece a la organización"), 403
         
         # Realizar upsert de asignaciones
         asignaciones_creadas = 0
@@ -768,9 +767,14 @@ def asignar_usuarios():
         return jsonify(ok=True, creados=asignaciones_creadas)
         
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception('asignar_usuarios error')
-        return jsonify(ok=False, error=str(e)), 500
+        # Catch-all for any unexpected errors to ensure JSON response
+        try:
+            db.session.rollback()
+            from flask import current_app
+            current_app.logger.exception('Unexpected error in asignar_usuarios')
+        except:
+            pass
+        return jsonify(ok=False, error="Error interno del servidor"), 500
 
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
