@@ -696,22 +696,21 @@ def parse_date(s):
 
 @obras_bp.route("/asignar-usuarios", methods=['POST'])
 @login_required
-def bulk_asignar():
+def asignar_usuarios():
     """Asignar usuarios a múltiples tareas"""
+    from models import TareaMiembro  # Import at top to avoid scoping issues
     import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"bulk_asignar user={current_user.id} rol={current_user.rol}")
+    from flask import current_app
     
     try:
-        # Leer datos de formulario multipart
         tarea_ids = request.form.getlist('tarea_ids[]')
         user_ids = request.form.getlist('user_ids[]')
         cuota = request.form.get('cuota_objetivo', type=int)
         
-        logger.info(f"bulk_asignar tareas={tarea_ids} users={user_ids} cuota={cuota}")
+        current_app.logger.info(f"asignar_usuarios user={current_user.id} tareas={tarea_ids} users={user_ids} cuota={cuota}")
         
     except Exception as e:
-        logger.exception("Error parsing form data")
+        current_app.logger.exception("Error parsing form data")
         return jsonify(ok=False, error=f"Error parsing request: {str(e)}"), 400
     
     if not tarea_ids:
@@ -729,6 +728,13 @@ def bulk_asignar():
     if not can_manage_obra(obra):
         return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
     
+    # Verificar que todos los usuarios pertenecen a la misma organización
+    from models import User
+    for uid in user_ids:
+        user = User.query.get(int(uid))
+        if not user or user.organizacion_id != current_user.organizacion_id:
+            return jsonify(ok=False, error=f"Usuario {uid} no pertenece a la organización"), 403
+    
     try:
         
         # Realizar upsert de asignaciones
@@ -737,34 +743,33 @@ def bulk_asignar():
         for tid in tarea_ids:
             tarea = TareaEtapa.query.get(int(tid))
             if not tarea or tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
-                logger.warning(f"Skipping invalid task {tid}")
+                current_app.logger.warning(f"Skipping invalid task {tid}")
                 continue
                 
             for uid in set(user_ids):  # set() evita duplicados
                 # Upsert: verificar si existe, crear si no
                 existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=int(uid)).first()
                 if not existing:
-                    from models import TareaMiembro
-                    asignacion = TareaMiembro(
+                    nueva_asignacion = TareaMiembro(
                         tarea_id=int(tid), 
                         user_id=int(uid), 
                         cuota_objetivo=cuota
                     )
-                    db.session.add(asignacion)
+                    db.session.add(nueva_asignacion)
                     asignaciones_creadas += 1
-                    logger.info(f"Created assignment: task={tid}, user={uid}")
+                    current_app.logger.info(f"Created assignment: task={tid}, user={uid}")
                 else:
                     # Actualizar cuota si existe
                     existing.cuota_objetivo = cuota
-                    logger.info(f"Updated assignment: task={tid}, user={uid}")
+                    current_app.logger.info(f"Updated assignment: task={tid}, user={uid}")
         
         db.session.commit()
-        logger.info(f"bulk_asignar success: created={asignaciones_creadas}")
+        current_app.logger.info(f"asignar_usuarios success: created={asignaciones_creadas}")
         return jsonify(ok=True, creados=asignaciones_creadas)
         
     except Exception as e:
         db.session.rollback()
-        logger.exception('bulk_asignar error')
+        current_app.logger.exception('asignar_usuarios error')
         return jsonify(ok=False, error=str(e)), 500
 
 

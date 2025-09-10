@@ -2,6 +2,18 @@
 
 {% block title %}{{ obra.nombre }} - OBYRA IA{% endblock %}
 
+{% block extra_css %}
+<style>
+/* CSS para control de visibilidad de checkboxes */
+.task-card input[type="checkbox"] { 
+    display: none; 
+}
+.select-mode .task-card input[type="checkbox"] { 
+    display: inline-block; 
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <!-- Header -->
@@ -1755,12 +1767,13 @@ function eliminarTarea(tareaId) {
     const btnToggle = document.getElementById('btn-select-multi');
     const btnDelete = document.getElementById('btn-delete-selected');
     const btnAssign = document.getElementById('btn-assign-selected');
+    const root = document.querySelector('#etapas-container') || document.body;
 
     function checks(){ return Array.from(document.querySelectorAll('.task-check')); }
     function toggles(){ return Array.from(document.querySelectorAll('.bulk-toggle')); }
     function selectedIds(){ return checks().filter(c => c.checked).map(c => c.value); }
-    function updateButtons(){
-        const n = selectedIds().length;
+    
+    function updateSelectedCount(n){
         if (btnDelete) {
             btnDelete.textContent = `Eliminar seleccionadas (${n})`;
             btnDelete.disabled = n === 0;
@@ -1771,18 +1784,39 @@ function eliminarTarea(tareaId) {
         }
     }
 
+    // Al hacer click en "Seleccionar"
     btnToggle?.addEventListener('click', () => {
         selecting = !selecting;
-        toggles().forEach(t => t.classList.toggle('d-none', !selecting));
-        if (!selecting) checks().forEach(c => c.checked = false);
-        updateButtons();
-        btnToggle.textContent = selecting ? 'Cancelar selección' : 'Seleccionar';
+        
+        if (selecting) {
+            // Entrar en modo selección
+            root.classList.add('select-mode');
+            document.querySelectorAll('.task-card input[type="checkbox"]').forEach(cb => {
+                cb.hidden = false;
+                cb.style.display = 'inline-block';
+            });
+            btnToggle.textContent = 'Cancelar selección';
+        } else {
+            // Salir de modo selección  
+            root.classList.remove('select-mode');
+            document.querySelectorAll('.task-card input[type="checkbox"]').forEach(cb => {
+                cb.checked = false;
+                cb.hidden = true;
+                cb.style.display = 'none';
+            });
+            btnToggle.textContent = 'Seleccionar';
+            updateSelectedCount(0);
+        }
+        
         btnDelete?.classList.toggle('d-none', !selecting);
         btnAssign?.classList.toggle('d-none', !selecting);
     });
 
     document.addEventListener('change', e => {
-        if (e.target?.classList?.contains('task-check')) updateButtons();
+        if (e.target?.classList?.contains('task-check')) {
+            const n = checks().filter(c => c.checked).length;
+            updateSelectedCount(n);
+        }
     });
 
     btnDelete?.addEventListener('click', async () => {
@@ -1840,16 +1874,13 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
             credentials: 'include'
         });
         
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const data = await response.json();
+        if (!response.ok || data.ok === false) {
+            throw new Error(data.error || `HTTP ${response.status}`);
         }
         
-        const result = await response.json();
-        
-        if (result.ok === false) {
-            throw new Error(result.error || 'Error desconocido');
-        }
+        // Mostrar mensaje de éxito
+        alert(`✅ ${data.creados} asignaciones creadas exitosamente`);
         
         // Cerrar modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('asignacionMasivaModal'));
