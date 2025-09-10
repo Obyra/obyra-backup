@@ -1920,40 +1920,23 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
 });
 {% endif %}
 
-// Unit families and conversion system for detalle
+// Simple modal setup for detalle - preselect unit and setup auto-conversion
 (() => {
-  const FACT = {
-    area:   { m2: 1 },
-    long:   { ml: 1 },
-    vol:    { m3: 1 },
-    count:  { un: 1 },
-    time:   { h: 1 },
-    weight: { kg: 1 }
-  };
-  const FAM = { m2: 'area', ml: 'long', m3: 'vol', un: 'count', h: 'time', kg: 'weight' };
-
-  function sameFamily(u1, u2) { 
-    return FAM[u1] && FAM[u1] === FAM[u2]; 
-  }
-
-  // Bootstrap modal event listener
   const modalDetalle = document.getElementById('modalAvanceDetalle');
-  modalDetalle.addEventListener('show.bs.modal', (event) => {
-    const btn = event.relatedTarget; // botón que abrió el modal
+  modalDetalle.addEventListener('show.bs.modal', (ev) => {
+    const btn = ev.relatedTarget;
     const base = btn?.dataset?.unidad || 'un';
-    const r = btn?.dataset?.rendimiento || '';
-    const tareaId = btn?.dataset?.tareaId || '';
+    const r    = btn?.dataset?.rendimiento || '';
+    const id   = btn?.dataset?.tareaId || '';
     const tareaNombre = btn?.dataset?.tareaNombre || '';
 
-    // Set base unit and select default
     document.getElementById('unidad_base').value = base;
-    const sel = document.getElementById('unidad_ingresada');
-    // Default: keep base unit of task selected
-    if ([...sel.options].some(o => o.value === base)) sel.value = base;
-
+    document.getElementById('tarea_id').value    = id;
     document.getElementById('rendimiento').value = r;
-    document.getElementById('tarea_id').value = tareaId;
     document.getElementById('avance_tarea_nombre_detalle').textContent = tareaNombre;
+
+    const sel = document.getElementById('unidad_ingresada');
+    if ([...sel.options].some(o => o.value === base)) sel.value = base;
 
     // autoconversión cantidad↔horas si hay rendimiento
     const qty = document.getElementById('cantidad');
@@ -1965,9 +1948,6 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
       qty.oninput = () => { if (qty.value && !hrs.value) hrs.value = (parseFloat(qty.value)/rr).toFixed(2); };
     }
   });
-
-  // Make sameFamily available globally for form handler
-  window.sameFamilyDetalle = sameFamily;
 })();
 
 // Función para completar tarea
@@ -2000,19 +1980,8 @@ async function completarTarea(tareaId) {
 document.getElementById('formAvanceDetalle')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    // Unit validation
-    const base = document.getElementById('unidad_base').value;
-    const selU = document.getElementById('unidad_ingresada').value;
-    if (!window.sameFamilyDetalle(base, selU)) {
-        alert('La unidad elegida es incompatible con la unidad de la tarea (' + base + ').');
-        return;
-    }
-    
     const tareaId = document.getElementById('tarea_id').value;
     const formData = new FormData(this);
-    
-    // Add unit information to form data
-    formData.append('unidad_ingresada', selU);
     
     try {
         const response = await fetch(`/obras/tareas/${tareaId}/avances`, {
