@@ -1,0 +1,110 @@
+Objetivo: En el modal, reemplazar el chip “un” por un <select> con unidades (m², ml, m³, un, h, kg). Al enviar, convertir a la unidad base de la tarea (tarea.unidad). Si la unidad elegida es incompatible, mostrar error.
+
+1) Template (detalle y mis_tareas)
+<label for="cantidad" class="form-label">Cantidad ejecutada *</label>
+<div class="input-group">
+  <input id="cantidad" name="cantidad" type="number" step="0.01" min="0" class="form-control" required>
+  <select id="unidad_ingresada" class="form-select" style="max-width:120px">
+    <option value="m2">m²</option>
+    <option value="ml">ml</option>
+    <option value="m3">m³</option>
+    <option value="un">un</option>
+    <option value="h">h</option>
+    <option value="kg">kg</option>
+  </select>
+</div>
+
+<input type="hidden" id="unidad_base" value="{{ t.unidad or tarea.unidad or 'un' }}">
+<input type="hidden" id="tarea_id"   name="tarea_id" value="{{ t.id if t else tarea.id }}">
+<input type="hidden" id="rendimiento" value="{{ (t.rendimiento if t else tarea.rendimiento) or '' }}">
+
+
+En el handler show.bs.modal setear #unidad_base y #unidad_ingresada.value = unidad base.
+
+2) JS (conversión y autocalculo horas↔cantidad)
+<script>
+(()=> {
+  const FACT = {
+    area:   { m2:1 },
+    long:   { ml:1 },
+    vol:    { m3:1 },
+    count:  { un:1 },
+    time:   { h:1 },
+    weight: { kg:1 }
+  };
+  const FAM = { m2:'area', ml:'long', m3:'vol', un:'count', h:'time', kg:'weight' };
+
+  function sameFamily(u1,u2){ return FAM[u1] && FAM[u1]===FAM[u2]; }
+
+  const modal = document.getElementById('modalAvance');
+  modal.addEventListener('show.bs.modal', (ev)=>{
+    const btn = ev.relatedTarget;
+    const base = btn?.dataset?.unidad || 'un';
+    document.getElementById('unidad_base').value = base;
+    const sel = document.getElementById('unidad_ingresada');
+    // default: que quede seleccionada la unidad base de la tarea
+    if ([...sel.options].some(o=>o.value===base)) sel.value = base;
+
+    // autoconversión con rendimiento (si existe)
+    const r = parseFloat(btn?.dataset?.rendimiento || '');
+    const qty = document.getElementById('cantidad');
+    const hrs = document.getElementById('horas');
+    qty.oninput = hrs.oninput = null;
+    if (!Number.isNaN(r) && r>0) {
+      hrs.oninput = ()=>{ if(hrs.value && !qty.value) qty.value=(parseFloat(hrs.value)*r).toFixed(2); };
+      qty.oninput = ()=>{ if(qty.value && !hrs.value) hrs.value=(parseFloat(qty.value)/r).toFixed(2); };
+    }
+  });
+
+  // al enviar el form, convertir a la unidad base
+  document.getElementById('form-avance')?.addEventListener('submit', (e)=>{
+    const base = document.getElementById('unidad_base').value;
+    const selU = document.getElementById('unidad_ingresada').value;
+    if (!sameFamily(base, selU)) {
+      e.preventDefault();
+      alert('La unidad elegida es incompatible con la unidad de la tarea ('+base+').');
+    }
+    // si fueran necesarias conversiones reales (ej cm²→m²), acá iría el factor
+    // como de momento usamos base=1 para cada familia, no hace falta cambiar el valor.
+    // Sugerencia: enviar también unidad_ingresada y cantidad_ingresada para auditoría.
+  });
+})();
+</script>
+
+3) Backend (Flask) — guardar normalizado y auditar
+# crear_avance (resumen)
+cantidad_ing = request.form.get('cantidad', type=float)
+unidad_ing   = request.form.get('unidad_ingresada', type=str)
+tarea        = TareaEtapa.query.get(tarea_id)
+unidad_base  = tarea.unidad  # SIEMPRE del servidor
+
+# validar familia (misma categoría)
+if not same_family(unidad_ing, unidad_base):  # implementado server-side también
+    return jsonify(ok=False, error="Unidad incompatible con la tarea"), 400
+
+# convertir a base (por ahora factor=1; si agregan cm2/L/etc, aplicar factor)
+cantidad_base = convert_to_base(unidad_ing, unidad_base, cantidad_ing)
+
+avance = AvanceTarea(
+    tarea_id=tarea.id, user_id=current_user.id,
+    cantidad=cantidad_base, unidad=unidad_base,
+    cantidad_ingresada=cantidad_ing, unidad_ingresada=unidad_ing,
+    horas=request.form.get('horas', type=float), notas=notas, estado='pendiente'
+)
+db.session.add(avance); db.session.commit()
+return jsonify(ok=True)
+
+
+Importante: el % de avance se calcula con sum(cantidad aprobada) en unidad base de la tarea. Las horas no cambian el %.
+
+4) Aceptación
+
+El modal muestra un select de unidades.
+
+Default = unidad de la tarea.
+
+Si elijo otra de la misma familia (p.ej. ml ↔ ml), guarda convertido a la base de la tarea.
+
+Si elijo una incompatible (p.ej. m² con h), bloquea con error claro.
+
+El backend guarda también unidad_ingresada/cantidad_ingresada para auditoría.

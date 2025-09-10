@@ -668,11 +668,18 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="cantidad" id="lbl-cantidad" class="form-label">Cantidad ejecutada (un) *</label>
+                        <label for="cantidad" class="form-label">Cantidad ejecutada *</label>
                         <div class="input-group">
                             <input type="number" class="form-control" id="cantidad" name="cantidad" 
                                    step="0.01" min="0" required>
-                            <span class="input-group-text" id="chip-unidad">un</span>
+                            <select id="unidad_ingresada" class="form-select" style="max-width:120px">
+                                <option value="m2">m²</option>
+                                <option value="ml">ml</option>
+                                <option value="m3">m³</option>
+                                <option value="un">un</option>
+                                <option value="h">h</option>
+                                <option value="kg">kg</option>
+                            </select>
                         </div>
                     </div>
                     
@@ -685,8 +692,9 @@
                         </div>
                     </div>
                     
-                    <input type="hidden" id="rendimiento" value="">
+                    <input type="hidden" id="unidad_base" value="">
                     <input type="hidden" id="tarea_id" name="tarea_id" value="">
+                    <input type="hidden" id="rendimiento" value="">
                     
                     <div class="mb-3">
                         <label for="notas" class="form-label">Notas (opcional)</label>
@@ -1912,31 +1920,55 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
 });
 {% endif %}
 
-// Bootstrap modal event listener
-const modalDetalle = document.getElementById('modalAvanceDetalle');
-modalDetalle.addEventListener('show.bs.modal', (event) => {
-  const btn = event.relatedTarget; // botón que abrió el modal
-  const u = btn?.dataset?.unidad || 'un';
-  const r = btn?.dataset?.rendimiento || '';
-  const tareaId = btn?.dataset?.tareaId || '';
-  const tareaNombre = btn?.dataset?.tareaNombre || '';
+// Unit families and conversion system for detalle
+(() => {
+  const FACT = {
+    area:   { m2: 1 },
+    long:   { ml: 1 },
+    vol:    { m3: 1 },
+    count:  { un: 1 },
+    time:   { h: 1 },
+    weight: { kg: 1 }
+  };
+  const FAM = { m2: 'area', ml: 'long', m3: 'vol', un: 'count', h: 'time', kg: 'weight' };
 
-  document.getElementById('lbl-cantidad').textContent = `Cantidad ejecutada (${u}) *`;
-  document.getElementById('chip-unidad').textContent = u;
-  document.getElementById('rendimiento').value = r;
-  document.getElementById('tarea_id').value = tareaId;
-  document.getElementById('avance_tarea_nombre_detalle').textContent = tareaNombre;
-
-  // autoconversión cantidad↔horas si hay rendimiento
-  const qty = document.getElementById('cantidad');
-  const hrs = document.getElementById('horas');
-  const rr = parseFloat(r);
-  qty.oninput = hrs.oninput = null; // evitar handlers duplicados
-  if (!isNaN(rr) && rr > 0) {
-    hrs.oninput = () => { if (hrs.value && !qty.value) qty.value = (parseFloat(hrs.value)*rr).toFixed(2); };
-    qty.oninput = () => { if (qty.value && !hrs.value) hrs.value = (parseFloat(qty.value)/rr).toFixed(2); };
+  function sameFamily(u1, u2) { 
+    return FAM[u1] && FAM[u1] === FAM[u2]; 
   }
-});
+
+  // Bootstrap modal event listener
+  const modalDetalle = document.getElementById('modalAvanceDetalle');
+  modalDetalle.addEventListener('show.bs.modal', (event) => {
+    const btn = event.relatedTarget; // botón que abrió el modal
+    const base = btn?.dataset?.unidad || 'un';
+    const r = btn?.dataset?.rendimiento || '';
+    const tareaId = btn?.dataset?.tareaId || '';
+    const tareaNombre = btn?.dataset?.tareaNombre || '';
+
+    // Set base unit and select default
+    document.getElementById('unidad_base').value = base;
+    const sel = document.getElementById('unidad_ingresada');
+    // Default: keep base unit of task selected
+    if ([...sel.options].some(o => o.value === base)) sel.value = base;
+
+    document.getElementById('rendimiento').value = r;
+    document.getElementById('tarea_id').value = tareaId;
+    document.getElementById('avance_tarea_nombre_detalle').textContent = tareaNombre;
+
+    // autoconversión cantidad↔horas si hay rendimiento
+    const qty = document.getElementById('cantidad');
+    const hrs = document.getElementById('horas');
+    const rr = parseFloat(r);
+    qty.oninput = hrs.oninput = null; // evitar handlers duplicados
+    if (!isNaN(rr) && rr > 0) {
+      hrs.oninput = () => { if (hrs.value && !qty.value) qty.value = (parseFloat(hrs.value)*rr).toFixed(2); };
+      qty.oninput = () => { if (qty.value && !hrs.value) hrs.value = (parseFloat(qty.value)/rr).toFixed(2); };
+    }
+  });
+
+  // Make sameFamily available globally for form handler
+  window.sameFamilyDetalle = sameFamily;
+})();
 
 // Función para completar tarea
 async function completarTarea(tareaId) {
@@ -1968,8 +2000,19 @@ async function completarTarea(tareaId) {
 document.getElementById('formAvanceDetalle')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
+    // Unit validation
+    const base = document.getElementById('unidad_base').value;
+    const selU = document.getElementById('unidad_ingresada').value;
+    if (!window.sameFamilyDetalle(base, selU)) {
+        alert('La unidad elegida es incompatible con la unidad de la tarea (' + base + ').');
+        return;
+    }
+    
     const tareaId = document.getElementById('tarea_id').value;
     const formData = new FormData(this);
+    
+    // Add unit information to form data
+    formData.append('unidad_ingresada', selU);
     
     try {
         const response = await fetch(`/obras/tareas/${tareaId}/avances`, {
