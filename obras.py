@@ -788,10 +788,21 @@ def asignar_usuarios():
         return jsonify(ok=False, error="Error interno del servidor"), 500
 
 
+def same_family(u1, u2):
+    """Check if two units belong to the same family"""
+    FAM = {'m2': 'area', 'ml': 'long', 'm3': 'vol', 'un': 'count', 'h': 'time', 'kg': 'weight'}
+    return FAM.get(u1) and FAM.get(u1) == FAM.get(u2)
+
+def convert_to_base(unidad_ing, unidad_base, cantidad_ing):
+    """Convert quantity from input unit to base unit (for now factor=1 within families)"""
+    # For now, we keep factor=1 within families as specified
+    # Future: could implement actual conversion factors (cm²→m², L→m³, etc.)
+    return cantidad_ing
+
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
 @login_required
 def crear_avance(tarea_id):
-    """Registrar avance con fotos"""
+    """Registrar avance con fotos y conversión de unidades"""
     from models import TareaMiembro, TareaAvance, TareaAdjunto
     from werkzeug.utils import secure_filename
     
@@ -803,11 +814,20 @@ def crear_avance(tarea_id):
     
     from pathlib import Path
     
-    cantidad = request.form.get("cantidad", type=float)
-    if not cantidad or cantidad <= 0: 
+    cantidad_ing = request.form.get("cantidad", type=float)
+    unidad_ing = request.form.get("unidad_ingresada", type=str)
+    unidad_base = tarea.unidad or 'un'  # SIEMPRE del servidor
+    
+    if not cantidad_ing or cantidad_ing <= 0: 
         return jsonify(ok=False, error="Cantidad inválida"), 400
     
-    unidad = tarea.unidad or 'un'  # Always use server-side unit, ignore client value
+    # Validar familia (misma categoría)
+    if unidad_ing and not same_family(unidad_ing, unidad_base):
+        return jsonify(ok=False, error="Unidad incompatible con la tarea"), 400
+    
+    # Convertir a base (por ahora factor=1; si agregan cm2/L/etc, aplicar factor)
+    cantidad_base = convert_to_base(unidad_ing, unidad_base, cantidad_ing)
+    
     horas = request.form.get("horas", type=float)  # Optional hours worked
     notas = request.form.get("notas")
 
@@ -816,10 +836,12 @@ def crear_avance(tarea_id):
         av = TareaAvance(
             tarea_id=tarea.id, 
             user_id=current_user.id, 
-            cantidad=cantidad, 
-            unidad=unidad, 
+            cantidad=cantidad_base,  # Cantidad convertida a unidad base
+            unidad=unidad_base,      # Unidad base de la tarea
             horas=horas,
-            notas=notas
+            notas=notas,
+            cantidad_ingresada=cantidad_ing,  # Audit: cantidad original
+            unidad_ingresada=unidad_ing      # Audit: unidad original
         )
         
         # Regla barata: Operario necesita aprobación, PM/Admin auto-aprueban

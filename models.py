@@ -414,6 +414,10 @@ class TareaAvance(db.Model):
     horas = db.Column(db.Numeric(8, 2), nullable=True)  # Time worked (optional)
     notas = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Audit fields for unit conversion tracking
+    cantidad_ingresada = db.Column(db.Numeric, nullable=True)  # Original quantity entered
+    unidad_ingresada = db.Column(db.String(10), nullable=True)  # Original unit entered
 
     # Campos de aprobación 
     status = db.Column(db.String(12), default="pendiente")  # pendiente/aprobado/rechazado
