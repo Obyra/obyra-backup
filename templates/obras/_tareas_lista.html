@@ -86,8 +86,13 @@
                             <div class="btn-group btn-group-sm mt-2" role="group">
                                 <!-- Botón de avance: para admin/PM o usuarios asignados -->
                                 {% if current_user.role in ['admin', 'pm'] %}
-                                <button class="btn btn-outline-success btn-sm" 
-                                        onclick="abrirModalAvanceDetalle({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or '' }}')" 
+                                <button class="btn btn-outline-success btn-sm btn-avance" 
+                                        data-tarea-id="{{ tarea.id }}"
+                                        data-tarea-nombre="{{ tarea.nombre }}"
+                                        data-unidad="{{ tarea.unidad or 'un' }}"
+                                        data-rendimiento="{{ tarea.rendimiento or '' }}"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalAvanceDetalle"
                                         title="Registrar avance">
                                     <i class="fas fa-plus fa-xs"></i> Avance
                                 </button>
@@ -95,8 +100,13 @@
                                     {% set es_responsable = tarea.responsable_id == current_user.id %}
                                     {% set es_asignado = tarea.miembros|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}
                                     {% if es_responsable or es_asignado %}
-                                    <button class="btn btn-outline-success btn-sm" 
-                                            onclick="abrirModalAvanceDetalle({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or '' }}')" 
+                                    <button class="btn btn-outline-success btn-sm btn-avance" 
+                                            data-tarea-id="{{ tarea.id }}"
+                                            data-tarea-nombre="{{ tarea.nombre }}"
+                                            data-unidad="{{ tarea.unidad or 'un' }}"
+                                            data-rendimiento="{{ tarea.rendimiento or '' }}"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalAvanceDetalle"
                                             title="Registrar avance">
                                         <i class="fas fa-plus fa-xs"></i> Avance
                                     </button>

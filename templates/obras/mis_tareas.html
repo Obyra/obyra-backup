@@ -92,8 +92,13 @@
                         <div class="card-footer bg-white">
                             <div class="d-flex gap-2">
                                 <!-- Botón registrar avance -->
-                                <button class="btn btn-primary btn-sm flex-fill" 
-                                        onclick="abrirModalAvance({{ t.id }}, '{{ t.nombre }}', '{{ t.unidad or 'un' }}', {{ t.rendimiento or 'null' }})">
+                                <button class="btn btn-primary btn-sm flex-fill btn-avance" 
+                                        data-tarea-id="{{ t.id }}"
+                                        data-tarea-nombre="{{ t.nombre }}"
+                                        data-unidad="{{ t.unidad or 'un' }}"
+                                        data-rendimiento="{{ t.rendimiento or '' }}"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalAvance">
                                     <i class="fas fa-plus me-1"></i>
                                     Registrar Avance
                                 </button>
@@ -180,37 +185,49 @@
 </div>
 
 <script>
-// Función para abrir modal de avance
-function abrirModalAvance(tareaId, tareaNombre, unidad, rendimiento) {
-    // Limpiar formulario
-    document.getElementById('formAvance').reset();
-    
-    // Set form data
-    document.getElementById('avance_tarea_id').value = tareaId;
-    document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
-    document.getElementById('avance_unidad').value = unidad || 'un';
-    document.getElementById('avance_rendimiento').value = rendimiento || '';
-    
-    // Update unit display
-    const displayUnit = unidad || 'un';
-    document.getElementById('avance_unidad_label').textContent = displayUnit;
-    document.getElementById('avance_unidad_display').textContent = displayUnit;
-    
-    // Show/hide rendimiento info
-    const rendimientoInfo = document.getElementById('avance_rendimiento_info');
-    const rendimientoDisplay = document.getElementById('avance_rendimiento_display');
-    
-    if (rendimiento && rendimiento > 0) {
-        rendimientoDisplay.textContent = `${rendimiento} ${displayUnit}/h`;
+// Event listener for modal opening using data attributes  
+(() => {
+  const lbl  = document.getElementById('avance_unidad_label');
+  const chip = document.getElementById('avance_unidad_display');
+  const rInp = document.getElementById('avance_rendimiento');
+  const tInp = document.getElementById('avance_tarea_id');
+  const uInp = document.getElementById('avance_unidad');
+
+  // Event listener for all btn-avance buttons
+  document.querySelectorAll('.btn-avance').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const u = btn.dataset.unidad || 'un';
+      const r = btn.dataset.rendimiento || '';
+      const tareaId = btn.dataset.tareaId;
+      const tareaNombre = btn.dataset.tareaNombre || '';
+
+      // Reset form to prevent stale data
+      document.getElementById('formAvance').reset();
+      
+      // Populate form fields
+      lbl.textContent = u;
+      chip.textContent = u;
+      rInp.value = r;
+      tInp.value = tareaId;
+      uInp.value = u;
+      document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
+
+      // Auto-conversión cantidad↔horas si hay rendimiento
+      const rendimientoInfo = document.getElementById('avance_rendimiento_info');
+      const rendimientoDisplay = document.getElementById('avance_rendimiento_display');
+      
+      const rr = parseFloat(r);
+      if (!isNaN(rr) && rr > 0) {
+        rendimientoDisplay.textContent = `${rr} ${u}/h`;
         rendimientoInfo.style.display = 'block';
-        setupAutoConversion(rendimiento, displayUnit);
-    } else {
+        setupAutoConversion(rr, u);
+      } else {
+        // sin rendimiento, no autocalculamos
         rendimientoInfo.style.display = 'none';
-    }
-    
-    const modal = new bootstrap.Modal(document.getElementById('modalAvance'));
-    modal.show();
-}
+      }
+    });
+  });
+})();
 
 // Global conversion handlers (to allow proper removeEventListener)
 let currentCantidadHandler = null;

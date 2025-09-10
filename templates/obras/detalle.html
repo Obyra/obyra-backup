@@ -661,7 +661,6 @@
             </div>
             <form id="formAvanceDetalle" enctype="multipart/form-data">
                 <div class="modal-body">
-                    <input type="hidden" id="avance_tarea_id_detalle" name="tarea_id">
                     
                     <div class="mb-3">
                         <label class="form-label">Tarea</label>
@@ -669,14 +668,28 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="avance_cantidad_detalle" class="form-label">Cantidad ejecutada *</label>
+                        <label for="avance_cantidad_detalle" id="lbl-cantidad-detalle" class="form-label">Cantidad ejecutada (un) *</label>
                         <div class="input-group">
                             <input type="number" class="form-control" id="avance_cantidad_detalle" name="cantidad" 
                                    step="0.01" min="0" required>
-                            <span class="input-group-text" id="avance_unidad_display_detalle"></span>
+                            <span class="input-group-text" id="chip-unidad-detalle">un</span>
                         </div>
-                        <input type="hidden" id="avance_unidad_detalle" name="unidad">
                     </div>
+                    
+                    <div class="mb-3">
+                        <label for="avance_horas_detalle" class="form-label">Horas trabajadas (opcional)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="avance_horas_detalle" name="horas" 
+                                   step="0.01" min="0">
+                            <span class="input-group-text">h</span>
+                        </div>
+                        <div class="form-text" id="avance_rendimiento_info_detalle" style="display: none;">
+                            Rendimiento: <span id="avance_rendimiento_display_detalle"></span>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" id="rendimiento-detalle" value="">
+                    <input type="hidden" id="tarea_id_detalle" name="tarea_id" value="">
                     
                     <div class="mb-3">
                         <label for="avance_notas_detalle" class="form-label">Notas (opcional)</label>
@@ -1902,21 +1915,55 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
 });
 {% endif %}
 
-// Funciones para modal de avance
-function abrirModalAvanceDetalle(tareaId, tareaNombre, unidad) {
-    document.getElementById('avance_tarea_id_detalle').value = tareaId;
-    document.getElementById('avance_tarea_nombre_detalle').textContent = tareaNombre;
-    document.getElementById('avance_unidad_detalle').value = unidad || '';
-    document.getElementById('avance_unidad_display_detalle').textContent = unidad || 'unidad';
-    
-    // Limpiar formulario
-    document.getElementById('formAvanceDetalle').reset();
-    document.getElementById('avance_tarea_id_detalle').value = tareaId;
-    document.getElementById('avance_unidad_detalle').value = unidad || '';
-    
-    const modal = new bootstrap.Modal(document.getElementById('modalAvanceDetalle'));
-    modal.show();
-}
+// Event listener for modal opening using data attributes
+(() => {
+  const lbl  = document.getElementById('lbl-cantidad-detalle');
+  const chip = document.getElementById('chip-unidad-detalle');
+  const rInp = document.getElementById('rendimiento-detalle');
+  const tInp = document.getElementById('tarea_id_detalle');
+
+  // Event listener for all btn-avance buttons
+  document.querySelectorAll('.btn-avance').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const u = btn.dataset.unidad || 'un';
+      const r = btn.dataset.rendimiento || '';
+      const tareaId = btn.dataset.tareaId;
+      const tareaNombre = btn.dataset.tareaNombre || '';
+
+      // Reset form to prevent stale data
+      document.getElementById('formAvanceDetalle').reset();
+      
+      // Populate form fields
+      lbl.textContent = `Cantidad ejecutada (${u}) *`;
+      chip.textContent = u;
+      rInp.value = r;
+      tInp.value = tareaId;
+      document.getElementById('avance_tarea_nombre_detalle').textContent = tareaNombre;
+
+      // Auto-conversión cantidad↔horas si hay rendimiento
+      const qty = document.getElementById('avance_cantidad_detalle');
+      const horas = document.getElementById('avance_horas_detalle');
+      const rendimientoInfo = document.getElementById('avance_rendimiento_info_detalle');
+      const rendimientoDisplay = document.getElementById('avance_rendimiento_display_detalle');
+      
+      const rr = parseFloat(r);
+      if (!isNaN(rr) && rr > 0) {
+        rendimientoDisplay.textContent = `${rr} ${u}/h`;
+        rendimientoInfo.style.display = 'block';
+        
+        const onHoras = () => { if (horas.value && !qty.value) qty.value = (parseFloat(horas.value)*rr).toFixed(2); };
+        const onQty   = () => { if (qty.value && !horas.value) horas.value = (parseFloat(qty.value)/rr).toFixed(2); };
+        horas.oninput = onHoras;  // evitar handlers acumulados
+        qty.oninput   = onQty;
+      } else {
+        // sin rendimiento, no autocalculamos
+        rendimientoInfo.style.display = 'none';
+        horas.oninput = null;
+        qty.oninput = null;
+      }
+    });
+  });
+})();
 
 // Función para completar tarea
 async function completarTarea(tareaId) {
