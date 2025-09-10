@@ -883,14 +883,22 @@ def completar_tarea(tarea_id):
 @login_required  
 def mis_tareas():
     """Página que lista las tareas asignadas al usuario actual (operarios)"""
+    print(f"🔍 mis_tareas called by user: {current_user.id} ({current_user.nombre} {current_user.apellido})")
+    
     # Query optimizada para obtener tareas asignadas con información de obra y etapa
     q = (db.session.query(TareaEtapa)
          .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
          .join(Obra, EtapaObra.obra_id == Obra.id)
          .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
-         .filter(TareaMiembro.user_id == current_user.id))
+         .filter(TareaMiembro.user_id == current_user.id)
+         .filter(Obra.organizacion_id == current_user.organizacion_id))  # Add organization filter
     
+    print(f"🔍 Query SQL: {q}")
     tareas = q.order_by(Obra.nombre.asc(), EtapaObra.orden.asc(), TareaEtapa.id.asc()).all()
+    print(f"🔍 Found {len(tareas)} tareas for user {current_user.id}")
+    
+    for tarea in tareas:
+        print(f"🔍 Tarea: {tarea.id} - {tarea.nombre} (Etapa: {tarea.etapa.nombre}, Obra: {tarea.etapa.obra.nombre})")
     
     # Las métricas se calculan automáticamente via property
     return render_template('obras/mis_tareas.html', tareas=tareas)
