@@ -1,0 +1,44 @@
+Lo que te pasa es de “definición de unidad”. Hoy el modal dice Cantidad ejecutada pero la unidad no está clara (sale “unidad”). Si la tarea la pensaste “por hora”, después no sabés cómo cargar m². La forma prolija es separar progreso físico de tiempo.
+
+Qué conviene hacer (funcional)
+
+Cada tarea tiene una unidad base → m², m³, ml, un, h, etc.
+
+Cantidad ejecutada siempre se carga en la unidad base de la tarea (si la tarea es de revoque: m²).
+
+Horas trabajadas van en un campo aparte (opcional).
+
+Opcional: si definís un rendimiento (p. ej. 20 m²/h), podés permitir que el operario ingrese horas o m² y el sistema convierte.
+
+Mensaje corto para el agente (barato y claro)
+
+Objetivo: que el modal “Registrar Avance” muestre y guarde la unidad real de la tarea (m²/m³/etc.) y que las horas se carguen aparte.
+
+En el modelo TareaEtapa asegurar/añadir:
+
+# TareaEtapa
+unidad = db.Column(db.String(10), default='m2')   # 'm2','m3','ml','un','h'
+objetivo = db.Column(db.Float)                    # meta física (p.ej. 500 m2)
+rendimiento = db.Column(db.Float, nullable=True)  # opcional: cantidad por hora (p.ej. 20 m2/h)
+
+
+En el modelo de avances:
+
+# AvanceTarea
+cantidad = db.Column(db.Float, nullable=True)     # progreso físico
+unidad   = db.Column(db.String(10))               # copiar de TareaEtapa.unidad al crear
+horas    = db.Column(db.Float, nullable=True)     # tiempo trabajado (opcional)
+notas, fotos...
+
+
+En el modal:
+
+Cambiar la etiqueta a: “Cantidad ejecutada ({{ tarea.unidad }})” y que el chip de la derecha muestre esa unidad (no “unidad” genérico).
+
+Agregar debajo un campo “Horas trabajadas (opcional)”.
+
+Si tarea.rendimiento existe y el usuario completa horas pero deja cantidad vacía ⇒ calcular cantidad = horas * rendimiento. Si completa cantidad y deja horas vacía ⇒ horas = cantidad / rendimiento.
+
+Cálculo de avance de la tarea: usar sum(cantidad) / tarea.objetivo. Las horas no afectan el % físico (sirven para costos/productividad).
+
+Validar que al crear/editar una tarea de revoque/colocación, la unidad base sea m2. Para tareas puras de tiempo (reunión, preparación) la unidad puede ser h.
