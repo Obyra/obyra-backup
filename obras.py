@@ -12,6 +12,23 @@ from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 
 obras_bp = Blueprint('obras', __name__)
 
+# Error handlers for AJAX requests to return JSON instead of HTML
+@obras_bp.errorhandler(404)
+def handle_404(error):
+    # Check if this is an AJAX request (common indicators)
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'Recurso no encontrado'}), 404
+    # For regular web requests, let Flask handle it normally
+    raise error
+
+@obras_bp.errorhandler(500)  
+def handle_500(error):
+    # Check if this is an AJAX request
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
+    # For regular web requests, let Flask handle it normally
+    raise error
+
 # Helpers de permisos
 def is_admin():
     """Verifica si el usuario actual es admin"""
