@@ -524,7 +524,14 @@ def obra_asignar_usuario(obra_id):
         return [int(v) for v in vals if str(v).strip().isdigit()]
 
     try:
+        # Support both new format (user_ids[]) and legacy format (usuario_id)
         user_ids = _list("user_ids[]")
+        if not user_ids:
+            # Fallback to single user format for current form
+            single_user_id = data.get("usuario_id")
+            if single_user_id and str(single_user_id).strip().isdigit():
+                user_ids = [int(single_user_id)]
+        
         if not user_ids:
             return jsonify(ok=False, error="Seleccioná al menos 1 usuario"), 400
 
