@@ -5,6 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import requests
 from app import db
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto, TareaAvanceFoto
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
@@ -545,9 +546,9 @@ def asignar_usuario(obra_id):
         for u in usuarios:
             result = db.session.execute(
                 text("""
-                INSERT INTO obra_miembros (obra_id, usuario_id)
+                INSERT INTO obra_miembros (obra_id, user_id)
                 VALUES (:o, :u)
-                ON CONFLICT (obra_id, usuario_id) DO NOTHING
+                ON CONFLICT (obra_id, user_id) DO NOTHING
                 RETURNING id
                 """), {"o": obra_id, "u": u.id}
             )
@@ -558,7 +559,11 @@ def asignar_usuario(obra_id):
         return jsonify(ok=True, creados=creados)
         
     except Exception as e:
+        from sqlalchemy.exc import ProgrammingError
+        current_app.logger.exception("obra_miembros insert error obra_id=%s", obra_id)
         db.session.rollback()
+        if isinstance(e, ProgrammingError):
+            return jsonify(ok=False, error="Esquema obra_miembros no coincide con el código"), 500
         return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
 
 @obras_bp.route('/<int:id>/etapa', methods=['POST'])
