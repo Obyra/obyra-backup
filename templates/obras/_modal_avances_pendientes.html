@@ -1,0 +1,149 @@
+<!-- Modal para gestionar avances pendientes con fotos -->
+<div class="modal fade" id="modalAvancesPendientes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="fas fa-hourglass-half me-2"></i>
+                    Avances Pendientes - <span id="tarea-nombre-pendiente"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loading-avances" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <div class="mt-2">Cargando avances pendientes...</div>
+                </div>
+                
+                <div id="avances-container" style="display: none;">
+                    <!-- Los avances se cargarán dinámicamente aquí -->
+                </div>
+                
+                <div id="no-avances" class="text-center py-4" style="display: none;">
+                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                    <h5>No hay avances pendientes</h5>
+                    <p class="text-muted">Todos los avances han sido procesados.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template para renderizar cada avance pendiente -->
+<template id="avance-pendiente-template">
+    <div class="avance-item card mb-3" data-avance-id="">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="card-title mb-3">
+                        <i class="fas fa-user-clock me-2 text-primary"></i>
+                        <span class="operario-nombre"></span>
+                        <small class="text-muted fecha-registro ms-2"></small>
+                    </h6>
+                    
+                    <div class="avance-detalles">
+                        <div class="mb-2">
+                            <strong>Cantidad:</strong> 
+                            <span class="cantidad-valor"></span>
+                            <span class="unidad-texto"></span>
+                        </div>
+                        <div class="mb-2 horas-container" style="display: none;">
+                            <strong>Horas trabajadas:</strong> 
+                            <span class="horas-valor"></span>h
+                        </div>
+                        <div class="notas-container" style="display: none;">
+                            <strong>Notas:</strong>
+                            <div class="bg-light p-2 rounded mt-1">
+                                <span class="notas-texto"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="fotos-container" style="display: none;">
+                        <h6 class="mb-2">
+                            <i class="fas fa-camera me-2"></i>
+                            Fotos de evidencia (<span class="fotos-count">0</span>)
+                        </h6>
+                        <div class="fotos-thumbnails row g-2">
+                            <!-- Fotos se cargarán aquí dinámicamente -->
+                        </div>
+                    </div>
+                    
+                    <div class="sin-fotos text-muted text-center py-3" style="display: none;">
+                        <i class="fas fa-camera-slash fa-2x mb-2 opacity-50"></i>
+                        <div>Sin fotos adjuntas</div>
+                    </div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <div class="acciones-aprovacion d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-success" onclick="aprobarAvance(this)" data-avance-id="">
+                    <i class="fas fa-check me-1"></i>
+                    Aprobar
+                </button>
+                <button type="button" class="btn btn-danger" onclick="rechazarAvance(this)" data-avance-id="">
+                    <i class="fas fa-times me-1"></i>
+                    Rechazar
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Modal para rechazar avance -->
+<div class="modal fade" id="modalRechazarAvance" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-times-circle me-2"></i>
+                    Rechazar Avance
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-rechazar-avance">
+                    <div class="mb-3">
+                        <label for="motivo-rechazo" class="form-label">
+                            <strong>Motivo del rechazo:</strong>
+                        </label>
+                        <textarea class="form-control" id="motivo-rechazo" name="motivo" rows="3" 
+                                  placeholder="Explique por qué se rechaza este avance..." required></textarea>
+                        <div class="form-text">Este motivo será visible para el operario.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmarRechazo()">
+                    <i class="fas fa-times me-1"></i>
+                    Confirmar Rechazo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para ver foto ampliada -->
+<div class="modal fade" id="modalFotoAmpliada" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-camera me-2"></i>
+                    Foto de evidencia
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="foto-ampliada" src="" alt="Foto de evidencia" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>

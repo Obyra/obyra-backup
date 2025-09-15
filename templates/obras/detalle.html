@@ -887,6 +887,9 @@
     </div>
 </div>
 
+<!-- Modal para gestionar avances pendientes -->
+{% include 'obras/_modal_avances_pendientes.html' %}
+
 {% block scripts %}
 <style>
 .cursor-pointer {
@@ -2146,108 +2149,233 @@ async function guardarAsignados(tareaId, userIds) {
         throw error;
     }
 }
+// Global variable to store the current avance being rejected
+let currentAvanceToReject = null;
+
 // Función para mostrar avances pendientes con botones de aprobar/rechazar
-function mostrarAvancesPendientes(tareaId, tareaNombre) {
-    // Obtener datos de la tarea desde el DOM o hacer nueva llamada AJAX
-    fetch(`/obras/etapas/0/tareas`)  // Necesitaríamos otro endpoint específico, pero por ahora simulamos
-        .then(response => response.json())
-        .then(data => {
-            const tarea = data.tareas.find(t => t.id === tareaId);
-            if (!tarea || !tarea.avances_pendientes) return;
+async function mostrarAvancesPendientes(tareaId, tareaNombre) {
+    const modal = new bootstrap.Modal(document.getElementById('modalAvancesPendientes'));
+    
+    // Show modal with loading state
+    document.getElementById('tarea-nombre-pendiente').textContent = tareaNombre;
+    document.getElementById('loading-avances').style.display = 'block';
+    document.getElementById('avances-container').style.display = 'none';
+    document.getElementById('no-avances').style.display = 'none';
+    
+    modal.show();
+    
+    try {
+        const response = await fetch(`/obras/api/tareas/${tareaId}/avances-pendientes`);
+        const data = await response.json();
+        
+        // Hide loading
+        document.getElementById('loading-avances').style.display = 'none';
+        
+        if (!data.ok) {
+            console.error('Error:', data.error);
+            document.getElementById('no-avances').style.display = 'block';
+            return;
+        }
+        
+        if (data.avances.length === 0) {
+            document.getElementById('no-avances').style.display = 'block';
+            return;
+        }
+        
+        // Show avances container and render avances
+        document.getElementById('avances-container').style.display = 'block';
+        renderAvancesPendientes(data.avances);
+        
+    } catch (error) {
+        console.error('Error loading pending avances:', error);
+        document.getElementById('loading-avances').style.display = 'none';
+        document.getElementById('no-avances').style.display = 'block';
+        
+        // Show error message
+        document.querySelector('#no-avances h5').textContent = 'Error al cargar avances';
+        document.querySelector('#no-avances p').textContent = 'No se pudieron cargar los avances pendientes. Inténtalo de nuevo.';
+    }
+}
+
+// Function to render pending avances with photo thumbnails
+function renderAvancesPendientes(avances) {
+    const container = document.getElementById('avances-container');
+    const template = document.getElementById('avance-pendiente-template');
+    
+    container.innerHTML = ''; // Clear container
+    
+    avances.forEach(avance => {
+        // Clone template
+        const avanceElement = template.content.cloneNode(true);
+        const avanceDiv = avanceElement.querySelector('.avance-item');
+        
+        // Set avance ID
+        avanceDiv.setAttribute('data-avance-id', avance.id);
+        
+        // Fill data
+        avanceElement.querySelector('.operario-nombre').textContent = avance.operario.nombre;
+        avanceElement.querySelector('.fecha-registro').textContent = avance.fecha;
+        avanceElement.querySelector('.cantidad-valor').textContent = avance.cantidad;
+        avanceElement.querySelector('.unidad-texto').textContent = avance.unidad || '';
+        
+        // Show hours if available
+        if (avance.horas > 0) {
+            const horasContainer = avanceElement.querySelector('.horas-container');
+            horasContainer.style.display = 'block';
+            avanceElement.querySelector('.horas-valor').textContent = avance.horas;
+        }
+        
+        // Show notes if available
+        if (avance.notas.trim()) {
+            const notasContainer = avanceElement.querySelector('.notas-container');
+            notasContainer.style.display = 'block';
+            avanceElement.querySelector('.notas-texto').textContent = avance.notas;
+        }
+        
+        // Handle photos
+        if (avance.fotos.length > 0) {
+            const fotosContainer = avanceElement.querySelector('.fotos-container');
+            const sinFotos = avanceElement.querySelector('.sin-fotos');
+            const thumbnailsContainer = avanceElement.querySelector('.fotos-thumbnails');
             
-            const modal = document.getElementById('modalAvancesPendientes') || crearModalAvancesPendientes();
-            document.getElementById('modalAvancesPendientesTitle').textContent = `Avances Pendientes - ${tareaNombre}`;
+            fotosContainer.style.display = 'block';
+            sinFotos.style.display = 'none';
+            avanceElement.querySelector('.fotos-count').textContent = avance.fotos.length;
             
-            let html = '';
-            tarea.avances_pendientes.forEach(avance => {
-                html += `
-                    <div class="card mb-3 border-warning">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <h6 class="card-title mb-1">
-                                        <i class="fas fa-user me-1"></i>
-                                        ${avance.usuario}
-                                    </h6>
-                                    <p class="mb-2">
-                                        <strong>${avance.cantidad} ${avance.unidad || ''}</strong>
-                                        - ${avance.fecha}
-                                    </p>
-                                    ${avance.notas ? `<p class="text-muted small mb-2">${avance.notas}</p>` : ''}
-                                    ${avance.fotos_count > 0 ? `<small class="text-info"><i class="fas fa-camera me-1"></i>${avance.fotos_count} foto(s)</small>` : ''}
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button class="btn btn-success btn-sm" onclick="aprobarAvance(${avance.id}, ${tareaId})">
-                                        <i class="fas fa-check me-1"></i>Aprobar
-                                    </button>
-                                    <button class="btn btn-danger btn-sm" onclick="rechazarAvance(${avance.id}, ${tareaId})">
-                                        <i class="fas fa-times me-1"></i>Rechazar
-                                    </button>
-                                </div>
-                            </div>
+            // Render photo thumbnails
+            avance.fotos.forEach(foto => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'col-6 col-md-4 col-lg-3';
+                
+                colDiv.innerHTML = `
+                    <div class="photo-thumbnail" style="cursor: pointer;" onclick="mostrarFotoAmpliada('${foto.url}')">
+                        <img src="${foto.thumbnail_url}" 
+                             alt="Foto evidencia" 
+                             class="img-fluid rounded border"
+                             style="aspect-ratio: 1; object-fit: cover; max-height: 80px;"
+                             loading="lazy">
+                        <div class="text-center mt-1">
+                            <small class="text-muted">${foto.width}x${foto.height}</small>
                         </div>
                     </div>
                 `;
+                
+                thumbnailsContainer.appendChild(colDiv);
             });
-            
-            document.getElementById('avancesPendientesContent').innerHTML = html;
-            new bootstrap.Modal(modal).show();
-        });
+        } else {
+            avanceElement.querySelector('.fotos-container').style.display = 'none';
+            avanceElement.querySelector('.sin-fotos').style.display = 'block';
+        }
+        
+        // Set button data attributes
+        const approveBtn = avanceElement.querySelector('button[onclick*="aprobarAvance"]');
+        const rejectBtn = avanceElement.querySelector('button[onclick*="rechazarAvance"]');
+        
+        approveBtn.setAttribute('data-avance-id', avance.id);
+        rejectBtn.setAttribute('data-avance-id', avance.id);
+        
+        // Add to container
+        container.appendChild(avanceElement);
+    });
 }
 
-// Función para crear el modal de avances pendientes si no existe
-function crearModalAvancesPendientes() {
-    const modalHtml = `
-        <div class="modal fade" id="modalAvancesPendientes" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-warning">
-                        <h5 class="modal-title text-dark" id="modalAvancesPendientesTitle">Avances Pendientes</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="avancesPendientesContent"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    return document.getElementById('modalAvancesPendientes');
+// Function to show enlarged photo
+function mostrarFotoAmpliada(fotoUrl) {
+    document.getElementById('foto-ampliada').src = fotoUrl;
+    new bootstrap.Modal(document.getElementById('modalFotoAmpliada')).show();
 }
 
-// Función para aprobar avance
-async function aprobarAvance(avanceId, tareaId) {
-    if (!confirm('¿Aprobar este avance?')) return;
+// Función para aprobar avance (called from template button)
+async function aprobarAvance(button) {
+    const avanceId = button.getAttribute('data-avance-id');
+    
+    if (!confirm('¿Está seguro de aprobar este avance?')) return;
+    
+    // Disable button during request
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aprobando...';
     
     try {
         const response = await fetch(`/obras/avances/${avanceId}/aprobar`, {
             method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
         });
         
         const result = await response.json();
         
         if (result.ok) {
-            // Cerrar modal y recargar tareas
-            bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
-            location.reload(); // Recargar para actualizar métricas
+            // Remove avance from DOM
+            const avanceItem = button.closest('.avance-item');
+            avanceItem.style.opacity = '0.5';
+            
+            // Show success message
+            const successDiv = document.createElement('div');
+            successDiv.className = 'alert alert-success mt-2';
+            successDiv.innerHTML = '<i class="fas fa-check me-2"></i>Avance aprobado correctamente';
+            avanceItem.appendChild(successDiv);
+            
+            // Remove after delay
+            setTimeout(() => {
+                avanceItem.remove();
+                
+                // Check if no more avances and close modal
+                const remainingAvances = document.querySelectorAll('.avance-item');
+                if (remainingAvances.length === 0) {
+                    bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
+                    location.reload(); // Reload to update metrics
+                }
+            }, 1500);
         } else {
-            alert(result.error || 'Error al aprobar el avance');
+            throw new Error(result.error || 'Error al aprobar el avance');
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('Error de conexión al aprobar el avance');
+        alert('Error al aprobar el avance: ' + error.message);
+        
+        // Restore button
+        button.disabled = false;
+        button.innerHTML = originalText;
     }
 }
 
-// Función para rechazar avance
-async function rechazarAvance(avanceId, tareaId) {
-    const motivo = prompt('Motivo del rechazo (opcional):');
-    if (motivo === null) return; // Usuario canceló
+// Función para rechazar avance (called from template button)
+function rechazarAvance(button) {
+    const avanceId = button.getAttribute('data-avance-id');
+    currentAvanceToReject = { avanceId, button };
+    
+    // Clear previous reason
+    document.getElementById('motivo-rechazo').value = '';
+    
+    // Show reject modal
+    new bootstrap.Modal(document.getElementById('modalRechazarAvance')).show();
+}
+
+// Function to confirm rejection with reason
+async function confirmarRechazo() {
+    if (!currentAvanceToReject) return;
+    
+    const motivo = document.getElementById('motivo-rechazo').value.trim();
+    if (!motivo) {
+        alert('Por favor ingrese un motivo para el rechazo');
+        return;
+    }
+    
+    const { avanceId, button } = currentAvanceToReject;
+    
+    // Hide reject modal
+    bootstrap.Modal.getInstance(document.getElementById('modalRechazarAvance')).hide();
+    
+    // Disable button during request
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Rechazando...';
     
     try {
         const formData = new FormData();
-        if (motivo) formData.append('motivo', motivo);
+        formData.append('motivo', motivo);
         
         const response = await fetch(`/obras/avances/${avanceId}/rechazar`, {
             method: 'POST',
@@ -2257,15 +2385,39 @@ async function rechazarAvance(avanceId, tareaId) {
         const result = await response.json();
         
         if (result.ok) {
-            // Cerrar modal y recargar tareas
-            bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
-            location.reload(); // Recargar para actualizar métricas
+            // Remove avance from DOM
+            const avanceItem = button.closest('.avance-item');
+            avanceItem.style.opacity = '0.5';
+            
+            // Show success message
+            const successDiv = document.createElement('div');
+            successDiv.className = 'alert alert-danger mt-2';
+            successDiv.innerHTML = '<i class="fas fa-times me-2"></i>Avance rechazado: ' + motivo;
+            avanceItem.appendChild(successDiv);
+            
+            // Remove after delay
+            setTimeout(() => {
+                avanceItem.remove();
+                
+                // Check if no more avances and close modal
+                const remainingAvances = document.querySelectorAll('.avance-item');
+                if (remainingAvances.length === 0) {
+                    bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
+                    location.reload(); // Reload to update metrics
+                }
+            }, 2000);
         } else {
-            alert(result.error || 'Error al rechazar el avance');
+            throw new Error(result.error || 'Error al rechazar el avance');
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('Error de conexión al rechazar el avance');
+        alert('Error al rechazar el avance: ' + error.message);
+        
+        // Restore button
+        button.disabled = false;
+        button.innerHTML = originalText;
+    } finally {
+        currentAvanceToReject = null;
     }
 }
 

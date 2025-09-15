@@ -4,7 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
 import requests
 from app import db
-from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto
+from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto, TareaAvanceFoto
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
@@ -1152,6 +1152,76 @@ def mis_tareas():
     current_app.logger.info("mis_tareas user=%s unidades=%s",
                             current_user.id, [(t.id, t.unidad, t.rendimiento) for t in tareas])
     return render_template('obras/mis_tareas.html', tareas=tareas)
+
+
+@obras_bp.route('/api/tareas/<int:tarea_id>/avances-pendientes')
+@login_required
+def obtener_avances_pendientes(tarea_id):
+    """API endpoint para obtener avances pendientes de una tarea con fotos"""
+    from utils.permissions import is_admin_or_pm
+    
+    # Solo admin/PM pueden ver avances pendientes
+    if not is_admin_or_pm(current_user):
+        return jsonify(ok=False, error="Sin permisos"), 403
+    
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Verificar permisos de organización
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    try:
+        # Obtener avances pendientes con fotos
+        avances_pendientes = (
+            TareaAvance.query
+            .filter_by(tarea_id=tarea_id, status='pendiente')
+            .order_by(TareaAvance.created_at.desc())
+            .all()
+        )
+        
+        avances_data = []
+        for avance in avances_pendientes:
+            # Obtener fotos del avance
+            fotos = []
+            for foto in avance.fotos:
+                fotos.append({
+                    'id': foto.id,
+                    'url': f"/media/{foto.file_path}",  # URL autenticada
+                    'thumbnail_url': f"/media/{foto.file_path}",  # Podríamos crear thumbnails después
+                    'width': foto.width,
+                    'height': foto.height,
+                    'mime_type': foto.mime_type
+                })
+            
+            avances_data.append({
+                'id': avance.id,
+                'cantidad': float(avance.cantidad),
+                'unidad': avance.unidad,
+                'horas': float(avance.horas or 0),
+                'notas': avance.notas or '',
+                'fecha': avance.created_at.strftime('%d/%m/%Y %H:%M'),
+                'operario': {
+                    'id': avance.usuario.id,
+                    'nombre': avance.usuario.nombre_completo
+                },
+                'fotos': fotos,
+                'fotos_count': len(fotos)
+            })
+        
+        return jsonify({
+            'ok': True,
+            'tarea': {
+                'id': tarea.id,
+                'nombre': tarea.nombre,
+                'unidad': tarea.unidad
+            },
+            'avances': avances_data,
+            'total': len(avances_data)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error al obtener avances pendientes: {str(e)}")
+        return jsonify(ok=False, error="Error interno"), 500
 
 
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
