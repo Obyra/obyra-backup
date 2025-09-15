@@ -2423,17 +2423,23 @@ async function confirmarRechazo() {
 
 // Handle user assignment form submission with AJAX (exact user specification)
 document.addEventListener('DOMContentLoaded', function() {
-    // Target the submit button in the modal (user wanted btnAsignarObra)
-    const submitBtn = document.querySelector('#asignarUsuarioModal button[type="submit"]');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', async (e) => {
+    console.log('🔧 Setting up assignment form handler...');
+    
+    // Target the form itself to intercept submission
+    const assignForm = document.querySelector('#asignarUsuarioModal form');
+    if (assignForm) {
+        console.log('✅ Found assignment form, attaching handler');
+        assignForm.addEventListener('submit', async function(e) {
             e.preventDefault();
+            console.log('🚀 Form submit intercepted!');
             
             const obraId = {{ obra.id }};
-            // User specification adapted to actual HTML elements
+            // User specification adapted to actual HTML elements  
             const usuario = document.querySelector('#asignarUsuarioModal select[name="usuario_id"]')?.value;
             const rol     = document.querySelector('#asignarUsuarioModal select[name="rol_en_obra"]')?.value;
             const etapa   = document.querySelector('#asignarUsuarioModal select[name="etapa_id"]')?.value;
+
+            console.log('📋 Form data:', { usuario, rol, etapa });
 
             if (!usuario) { alert('Seleccioná un usuario'); return; }
 
@@ -2442,18 +2448,29 @@ document.addEventListener('DOMContentLoaded', function() {
             if (rol)   fd.append('rol', rol);
             if (etapa) fd.append('etapa_id', etapa);
 
-            const res = await fetch(`/obras/${obraId}/asignar_usuario`, { 
-                method: 'POST', 
-                body: fd, 
-                credentials: 'include' 
-            });
-            const data = await res.json();
+            console.log('📤 Sending POST to:', `/obras/${obraId}/asignar_usuario`);
 
-            if (!data.ok) { alert(data.error || 'No se pudo asignar'); return; }
-            
-            // User specification: simple reload option
-            window.location.reload();
+            try {
+                const res = await fetch(`/obras/${obraId}/asignar_usuario`, { 
+                    method: 'POST', 
+                    body: fd, 
+                    credentials: 'include' 
+                });
+                const data = await res.json();
+                
+                console.log('📥 Response:', data);
+
+                if (!data.ok) { alert(data.error || 'No se pudo asignar'); return; }
+                
+                // User specification: simple reload option
+                window.location.reload();
+            } catch (error) {
+                console.error('❌ Error:', error);
+                alert('Error de conexión: ' + error.message);
+            }
         });
+    } else {
+        console.log('❌ Assignment form not found!');
     }
 });
 
