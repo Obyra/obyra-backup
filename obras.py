@@ -1329,6 +1329,8 @@ def api_listar_tareas(etapa_id):
         # Renderizar template parcial (las métricas se calculan automáticamente via property)
         html = render_template('obras/_tareas_lista.html', tareas=tareas)
         return jsonify({'ok': True, 'html': html})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
 
 
 @obras_bp.route('/api/tareas/<int:tarea_id>/curva-s')
@@ -1391,9 +1393,6 @@ def api_curva_s_tarea(tarea_id):
         
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Error al calcular curva S: {str(e)}'}), 500
-    except Exception as e:
-        app.logger.error(f"Error al listar tareas de etapa {etapa_id}: {e}")
-        return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
 @login_required

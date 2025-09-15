@@ -1,0 +1,158 @@
+🔒 Fase 0 — Estabilizar lo básico (antes de EVM)
+
+Objetivo: que el admin vea avances (con fotos) y % por tarea/etapa/obra.
+No tocar nada de EVM hasta que esto esté ✅.
+
+Tareas
+
+/media autenticado y rutas relativas en DB
+
+Guardar file_path como avances/<avance_id>/<uuid>.jpg.
+
+Endpoint:
+
+@app.get("/media/<path:p>"); @login_required
+def media(p): return send_from_directory(BASE_MEDIA, p)
+
+
+En Admin usar <img src="/media/{{ f.file_path }}">.
+
+Listar avances en Admin (con fotos)
+
+Query:
+
+avances = (TareaAvance.query
+  .options(joinedload(TareaAvance.fotos), joinedload(TareaAvance.usuario))
+  .filter_by(tarea_id=tarea_id)
+  .order_by(TareaAvance.creado_at.desc())).all()
+
+
+Vista: grid de miniaturas + link al original.
+
+Aprobación de avances
+
+TareaAvance.estado: pendiente_aprobacion|aprobado|rechazado.
+
+Al aprobar:
+
+recalcular % de la tarea:
+% = min(100, (Σ cantidad_aprobada / cantidad_objetivo)*100)
+
+(si cargan horas) acumular HH y costo real.
+
+% Etapa/Obra
+
+Ponderado por cantidad_objetivo.
+
+Mostrar badge en etapa y panel “Progreso de obra”.
+
+QA de salida
+
+Operario carga avance con fotos desde /mis-tareas → Admin ve miniaturas y puede Aprobar/Rechazar.
+
+Al aprobar sube % tarea, y se refleja en etapa y obra.
+
+🟡 Fase 1 — Encender EVM con feature flag
+
+Objetivo: agregar calendario (inicio/fin), plan semanal, PV/EV/AC, pero sin romper lo anterior.
+
+Flag
+
+.env → EVM_ENABLED=true/false
+
+Por obra: campo obra.evm_enabled (default false).
+Mostrar UI EVM solo si está encendido.
+
+DB mínima
+ALTER TABLE tareas
+  ADD COLUMN IF NOT EXISTS fecha_inicio DATE,
+  ADD COLUMN IF NOT EXISTS fecha_fin DATE,
+  ADD COLUMN IF NOT EXISTS presupuesto_mo NUMERIC;
+
+CREATE TABLE IF NOT EXISTS tarea_plan_semanal (
+  id SERIAL PRIMARY KEY,
+  tarea_id INT REFERENCES tareas(id) ON DELETE CASCADE,
+  semana DATE NOT NULL,            -- lunes ISO
+  qty_plan NUMERIC DEFAULT 0,
+  pv_mo NUMERIC DEFAULT 0,
+  UNIQUE(tarea_id, semana)
+);
+
+
+El agregado semanal de avances podés calcularlo “on the fly”; materializalo después si hace falta.
+
+Servicios
+
+Generar plan lineal al guardar/editar tarea con fechas:
+
+Distribuir cantidad_objetivo y presupuesto_mo parejo por semanas [inicio, fin].
+
+Curva S (acumulada) por tarea:
+
+PV = Σ pv_mo hasta semana.
+
+AC = Σ (horas_trabajadas_aprobadas * tarifa_hora) hasta semana.
+
+EV = presupuesto_mo * (cantidad_real_acum / cantidad_objetivo).
+
+CPI = EV/AC; SPI = EV/PV.
+
+Alertas diarias (cron):
+
+Abrir alerta si CPI < 0.9 o SPI < 0.9 o vencida (hoy > fecha_fin y %<100).
+
+Endpoints
+
+POST /api/tareas/<id>/plan/generar (lineal)
+
+GET /api/tareas/<id>/curva-s?desde&hasta
+
+GET /api/obras/<id>/curva-s (agregado)
+
+GET /api/alertas | POST /api/alertas/<id>/cerrar
+
+UI
+
+En Tarea (Admin): campos Inicio/Fin/Presupuesto MO + botón “Generar plan”.
+
+Gráfico PV/EV/AC (líneas) + CPI/SPI.
+
+En Etapa/Obra: curva S agregada y listado de alertas.
+
+QA de salida
+
+Con flag on y fechas cargadas:
+
+Se genera plan semanal.
+
+Curva S devuelve series coherentes (PV lineal, EV/AC según avances).
+
+Al aprobar avances, cambian EV/AC y KPI; si CPI<0.9, aparece alerta.
+
+🧭 Roles (para no marearse)
+
+Operario: solo /mis-tareas, carga cantidad/horas/fotos.
+
+Admin: nunca usa /mis-tareas. Planifica, ve fotos, aprueba avances y mira KPIs / curva S.
+
+🧪 Smoke tests rápidos
+
+Admin crea tarea con cantidad_objetivo=100 m2, inicio= lunes, fin= 4 semanas, presupuesto_mo=1.000.000.
+→ Generar plan → /curva-s devuelve PV creciente ~250k/sem.
+
+Operario carga 20 m2 y 15 h (pendiente) + fotos → Admin aprueba →
+% tarea = 20%, EV = 200k, AC = 15h*tarifa, CPI = EV/AC.
+
+Apagar flag → la UI EVM desaparece; fotos y % básico siguen intactos.
+
+🧱 Orden de implementación (corto y seguro)
+
+Fase 0 (fotos + % + aprobación) ✅
+
+Agregar flag y campos de fechas/presupuesto ✅
+
+Generar plan lineal ✔
+
+Curva S por tarea ✔ → etapa/obra ✔
+
+Alertas ✔
