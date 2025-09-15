@@ -139,33 +139,28 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="cantidad" class="form-label">Cantidad ejecutada *</label>
+                        <label for="cantidad_ingresada" class="form-label">Cantidad ejecutada *</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="cantidad" name="cantidad" 
+                            <input type="number" class="form-control" id="cantidad_ingresada" name="cantidad_ingresada" 
                                    step="0.01" min="0" required>
-                            <select id="unidad_ingresada" name="unidad_ingresada" class="form-select" style="max-width:120px">
-                                <option value="m2">m²</option>
-                                <option value="ml">ml</option>
-                                <option value="m3">m³</option>
-                                <option value="un">un</option>
-                                <option value="h">h</option>
-                                <option value="kg">kg</option>
-                            </select>
+                            <input type="text" id="unidad_display" class="form-control" style="max-width:120px" readonly>
+                            <input type="hidden" id="unidad_ingresada" name="unidad_ingresada">
                         </div>
+                        <div class="form-text">Unidad fija según la tarea (no se puede cambiar)</div>
                     </div>
                     
                     <div class="mb-3">
-                        <label for="horas" class="form-label">Horas trabajadas (opcional)</label>
+                        <label for="horas_trabajadas" class="form-label">Horas trabajadas (opcional)</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="horas" name="horas" 
+                            <input type="number" class="form-control" id="horas_trabajadas" name="horas_trabajadas" 
                                    step="0.01" min="0">
                             <span class="input-group-text">h</span>
                         </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label for="avance_notas" class="form-label">Notas (opcional)</label>
-                        <textarea class="form-control" id="avance_notas" name="notas" rows="3" 
+                        <label for="nota" class="form-label">Notas (opcional)</label>
+                        <textarea class="form-control" id="nota" name="nota" rows="3" 
                                   placeholder="Describir el trabajo realizado, materiales utilizados, etc."></textarea>
                     </div>
                     
@@ -204,13 +199,15 @@
     document.getElementById('rendimiento').value = r;
     document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
 
-    const sel = document.getElementById('unidad_ingresada');
-    if ([...sel.options].some(o => o.value === base)) sel.value = base;
-    sel.disabled = true; // Disable unit selection - use task's fixed unit
+    // Set readonly unit display and hidden value
+    const unitDisplay = document.getElementById('unidad_display');
+    const unitHidden = document.getElementById('unidad_ingresada');
+    unitDisplay.value = base;
+    unitHidden.value = base;
 
     // autoconversión cantidad↔horas si hay rendimiento
-    const qty = document.getElementById('cantidad');
-    const hrs = document.getElementById('horas');
+    const qty = document.getElementById('cantidad_ingresada');
+    const hrs = document.getElementById('horas_trabajadas');
     const rr = parseFloat(r);
     qty.oninput = hrs.oninput = null; // evitar handlers duplicados
     if (!isNaN(rr) && rr > 0) {
@@ -220,34 +217,64 @@
   });
 })();
 
-// Manejar envío de avance
+// Manejar envío de avance - NEW API VERSION
 document.getElementById('formAvance').addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const tareaId = document.getElementById('tarea_id').value;
+    if (!tareaId) {
+        alert('Error: No se pudo identificar la tarea');
+        return;
+    }
+    
+    // Crear FormData con todos los campos
     const formData = new FormData(this);
     
+    // Mostrar loading
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardando...';
+    submitBtn.disabled = true;
+    
     try {
-        const response = await fetch(`/obras/tareas/${tareaId}/avances`, {
+        // Use new API endpoint with required header for operarios
+        const response = await fetch(`/obras/api/tareas/${tareaId}/avances`, {
             method: 'POST',
+            headers: {
+                'X-From-Dashboard': '1'  // Required header for operarios
+            },
             body: formData
         });
         
         const result = await response.json();
         
         if (result.ok) {
+            // Show success with percentage update
+            let mensaje = '✅ Avance registrado exitosamente';
+            if (result.porcentaje_actualizado !== undefined) {
+                mensaje += `\n📊 Porcentaje de tarea actualizado: ${result.porcentaje_actualizado}%`;
+            }
+            
             // Cerrar modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('modalAvance'));
             modal.hide();
             
-            // Recargar página para mostrar nuevo avance
-            location.reload();
+            // Limpiar formulario
+            this.reset();
+            
+            // Mostrar éxito con porcentaje y recargar
+            alert(mensaje);
+            window.location.reload();
         } else {
-            alert(result.error || 'Error al registrar el avance');
+            alert('❌ Error: ' + (result.error || 'Error al registrar el avance'));
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('Error de conexión al registrar el avance');
+        alert('❌ Error al registrar el avance. Inténtalo nuevamente.');
+    } finally {
+        // Restaurar botón
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
     }
 });
 </script>

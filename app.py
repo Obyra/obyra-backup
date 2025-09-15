@@ -1,8 +1,8 @@
 import os
 import logging
-from flask import Flask, render_template, redirect, url_for, flash
+from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, current_user
+from flask_login import LoginManager, login_required, current_user
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
