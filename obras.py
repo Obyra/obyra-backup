@@ -506,7 +506,7 @@ def agregar_etapas(id):
 
 @obras_bp.route('/<int:obra_id>/asignar_usuario', methods=['POST'])
 @login_required
-def obra_asignar_usuario(obra_id):
+def asignar_usuario(obra_id):
     """Asignar usuarios a obra - Implementación según especificación del usuario"""
     if current_user.rol != 'administrador':
         return jsonify(ok=False, error="Solo admin"), 403

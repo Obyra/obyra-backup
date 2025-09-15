@@ -1,0 +1,68 @@
+Asunto: Sigue 500 en GET /obras/18 (detalle de obra) — Fase 0 bloqueada
+
+Repro: Entrar a GET /obras/18 → pantalla “Internal Server Error”.
+
+Necesito ahora
+
+Stacktrace completo de esa request (últimas 50 líneas de logs).
+
+Confirmar qué template renderiza la ruta y el código de la vista.
+
+Fix mínimo para que no explote (aplicar YA):
+
+Backend (vista de detalle)
+
+@app.get("/obras/<int:obra_id>")
+@login_required
+def obra_detalle(obra_id):
+    obra = Obra.query.get_or_404(obra_id)
+    ctx = {"obra": obra}
+
+    try:
+        # cargar etapas, tareas, métricas básicas
+        # (no usar EVM acá hasta que Fase 0 esté OK)
+        ctx["evm_enabled"] = bool(getattr(obra, "evm_enabled", False))
+        # cualquier cálculo ir dentro del try
+        ...
+    except Exception as e:
+        app.logger.exception("obra_detalle error obra_id=%s", obra_id)
+        # fallback seguro: seguimos renderizando sin EVM
+        ctx["evm_enabled"] = False
+
+    return render_template("obras/detalle.html", **ctx)
+
+
+Template (templates/obras/detalle.html) — usar defaults seguros
+
+{% set evm_on = obra.evm_enabled|default(false) %}
+{{ tarea.cantidad_objetivo|default(0) }}
+{{ tarea.unidad|default('') }}
+{{ tarea.presupuesto_mo|default(0) }}
+{{ tarea.fecha_inicio|default('') }}
+{{ tarea.fecha_fin|default('') }}
+
+{# envolver cualquier bloque EVM #}
+{% if evm_on %}
+  {# curva S, PV/EV/AC, etc. #}
+{% endif %}
+
+
+Chequeos a revisar (causas típicas del 500)
+
+Cambiaron id→obra_id en la ruta, pero en el template hay links que siguen usando el nombre viejo.
+
+El template referencia campos nuevos (EVM) que no existen en DB.
+
+Algún None sin |default (ej.: NoneType has no attribute ...).
+
+Import/try-except mal cerrado en obras.py.
+
+Criterio de aceptación
+
+GET /obras/<id> renderiza sin 500 (aunque EVM quede oculto).
+
+Luego puedo abrir el modal Asignar Usuario y asignar un usuario a la obra.
+
+Después asigno a tareas y pruebo Fase 0 (operario carga fotos → admin aprueba → sube %).
+
+Si vuelve a 500: pegame el stacktrace exacto de GET /obras/18 y lo corregimos línea por línea.
