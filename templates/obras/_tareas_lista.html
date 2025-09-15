@@ -96,7 +96,7 @@
                                         title="Registrar avance">
                                     <i class="fas fa-plus fa-xs"></i> Avance
                                 </button>
-                                {% elif current_user.role == 'operario' and request.path == '/obras/mis-tareas' %}
+                                {% elif current_user.rol == 'operario' and request.endpoint == 'obras.mis_tareas' %}
                                     <!-- Operarios solo pueden registrar avances desde su dashboard -->
                                     {% set es_responsable = tarea.responsable_id == current_user.id %}
                                     {% set es_asignado = tarea.miembros|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}

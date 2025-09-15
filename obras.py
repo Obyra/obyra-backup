@@ -817,10 +817,11 @@ UNIT_MAP = {
 }
 
 def normalize_unit(unit):
-    """Normalize unit to standard form"""
-    if not unit:
-        return "un"  # default
-    return UNIT_MAP.get(unit.strip().lower(), unit.strip().lower())
+    """Normalize unit to standard form - defensive against None/empty values"""
+    if not unit or not str(unit).strip():
+        return "un"  # safe default
+    unit_clean = str(unit).strip().lower()
+    return UNIT_MAP.get(unit_clean, unit_clean)
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
 @login_required
@@ -858,29 +859,22 @@ def crear_avance(tarea_id):
     except (ValueError, TypeError):
         return jsonify(ok=False, error="Cantidad inválida"), 400
     
-    # Unit normalization and validation
-    unidad_ing = request.form.get("unidad_ingresada", type=str)
-    unidad_ing_norm = normalize_unit(unidad_ing)
-    unidad_tarea_norm = normalize_unit(tarea.unidad)
-    
-    if unidad_ing_norm != unidad_tarea_norm:
-        return jsonify(ok=False, error=f"Unidad incompatible: {unidad_tarea_norm} requerida"), 409
-    
-    unidad = tarea.unidad or 'un'  # Always use server-side unit
+    # Always use task's unit (ignore client input for security)
+    unidad = normalize_unit(tarea.unidad)  # normalize_unit already handles None safely
     horas = request.form.get("horas", type=float)  # Optional hours worked
     notas = request.form.get("notas", "")
 
     try:
-        # Crear avance
+        # Crear avance (always using task's normalized unit)
         av = TareaAvance(
             tarea_id=tarea.id, 
             user_id=current_user.id, 
-            cantidad=cantidad,       # Cantidad ingresada (sin conversiones)
-            unidad=unidad,          # Unidad de la tarea
+            cantidad=cantidad,       
+            unidad=unidad,          # Always task's normalized unit
             horas=horas,
             notas=notas,
-            cantidad_ingresada=cantidad,    # Audit: cantidad original (igual que cantidad)
-            unidad_ingresada=unidad_ing    # Audit: unidad seleccionada
+            cantidad_ingresada=cantidad,    # Audit: cantidad original 
+            unidad_ingresada=unidad        # Audit: task's unit (not client input)
         )
         
         # Regla barata: Operario necesita aprobación, PM/Admin auto-aprueban

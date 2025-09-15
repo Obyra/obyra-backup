@@ -1,0 +1,112 @@
+1) Modal “+ Avance” (unidad bloqueada + fotos múltiples)
+<!-- Modal -->
+<div id="modal-avance" class="hidden">
+  <form id="form-avance" enctype="multipart/form-data">
+    <input type="hidden" name="tarea_id" id="tareaId" />
+    <label>Cantidad</label>
+    <input type="number" step="0.01" min="0.01" name="cantidad_ingresada" id="cantidad" required />
+
+    <label>Unidad</label>
+    <input type="text" name="unidad_ingresada" id="unidad" readonly />
+
+    <label>Notas (opcional)</label>
+    <textarea name="nota" id="nota" rows="3"></textarea>
+
+    <label>Fotos del avance (opcional)</label>
+    <input type="file" name="fotos" id="fotos" accept="image/*" multiple />
+
+    <button type="button" id="btn-cancel">Cancelar</button>
+    <button type="submit" id="btn-save">Registrar Avance</button>
+  </form>
+</div>
+
+// abrir modal (desde tarjeta de tarea)
+function abrirModalAvance(tarea) {
+  document.getElementById('tareaId').value = tarea.id;
+  document.getElementById('unidad').value = (tarea.unidad || 'u'); // m2, m3, u, etc.
+  document.getElementById('cantidad').value = '';
+  document.getElementById('nota').value = '';
+  document.getElementById('fotos').value = '';
+  document.getElementById('modal-avance').classList.remove('hidden');
+}
+
+document.getElementById('btn-cancel').onclick = () =>
+  document.getElementById('modal-avance').classList.add('hidden');
+
+document.getElementById('form-avance').onsubmit = async (e) => {
+  e.preventDefault();
+  const tareaId = document.getElementById('tareaId').value;
+  const fd = new FormData(e.target); // incluye cantidad/unidad/nota
+  // agregar múltiples fotos con el mismo nombre "fotos"
+  const files = document.getElementById('fotos').files;
+  for (const f of files) fd.append('fotos', f);
+
+  const res = await fetch(`/api/tareas/${tareaId}/avances`, {
+    method: 'POST',
+    body: fd,
+    credentials: 'include'
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    alert(data.error || 'No se pudo registrar el avance');
+    return;
+  }
+  document.getElementById('modal-avance').classList.add('hidden');
+  // refrescar tarjeta de tarea
+  location.reload();
+};
+
+2) Admin: ver miniaturas y abrir foto grande
+{# dentro del detalle de tarea o listado de avances #}
+{% for a in avances %}
+  <div class="avance-item">
+    <div><b>{{ a.cantidad_ingresada }} {{ a.unidad_ingresada }}</b> — {{ a.usuario.nombre }} — {{ a.creado_at.strftime('%d/%m/%Y %H:%M') }}</div>
+    {% if a.nota %}<div class="text-muted">{{ a.nota }}</div>{% endif %}
+    {% if a.fotos %}
+      <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px;">
+        {% for f in a.fotos %}
+          <a href="/media/{{ f.file_path }}" target="_blank" rel="noopener">
+            <img src="/media/{{ f.file_path | replace('.jpg','.thumb.jpg') | replace('.jpeg','.thumb.jpeg') | replace('.png','.thumb.png') }}"
+                 alt="foto avance"
+                 loading="lazy" style="width:100%;height:120px;object-fit:cover;border-radius:8px;">
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}
+
+3) Guardrails del backend (ya los tenés, pero check rápido)
+
+Endpoint POST /api/tareas/<id>/avances:
+
+Permiso: admin o operario asignado.
+
+Normalización de unidad y comparación con tarea.unidad.
+Si difiere → 409 con mensaje “Unidad incompatible: %{unidad_requerida} requerida”.
+
+FormData y request.files.getlist('fotos') para múltiples.
+
+Límite de tamaño (MAX_CONTENT_LENGTH) > 10 MB.
+
+4) Si vuelve a fallar, probá este script de prueba (rápido)
+
+Tarea con unidad m2.
+
+Cargar cantidad 10 y ver que el input unidad dice m2 y está readonly.
+
+Adjuntar 2–3 imágenes (JPG/PNG).
+
+Enviar → debe devolver {ok:true, avance_id} y ver miniaturas en Admin.
+
+Repetir cambiando cantidad a 0 → debe rechazar con “mayor a 0”.
+
+Cambiar unidad desde devtools al vuelo a u → backend debe rechazar con 409.
+
+5) Extra útil
+
+Índices:
+
+CREATE INDEX IF NOT EXISTS idx_tarea_avances_tarea ON tarea_avances(tarea_id);
+CREATE INDEX IF NOT EXISTS idx_tarea_avances_usuario ON tarea_avances(usuario_id);
