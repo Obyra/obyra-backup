@@ -299,6 +299,17 @@ with app.app_context():
     print("📊 Database tables created successfully")
 
 
+# === MEDIA SERVING ENDPOINT ===
+
+@app.route("/media/<path:relpath>")
+@login_required
+def serve_media(relpath):
+    """Serve authenticated media files from /media/ directory"""
+    from pathlib import Path
+    media_dir = Path(app.instance_path) / "media"
+    return send_from_directory(media_dir, relpath)
+
+
 # Error handlers to prevent unwanted redirects
 @app.errorhandler(403)
 def forbidden(error):

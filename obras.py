@@ -980,6 +980,126 @@ def crear_avance(tarea_id):
         return jsonify(ok=False, error="Error interno"), 500
 
 
+# NEW API ENDPOINT - Specification Compliant Version with Photos
+@obras_bp.route("/api/tareas/<int:tarea_id>/avances", methods=['POST'])
+@login_required
+def api_crear_avance_fotos(tarea_id):
+    """Create progress entry with multiple photos - specification compliant"""
+    from werkzeug.utils import secure_filename
+    from pathlib import Path
+    import uuid
+    import os
+    
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Authorization check - admin or assigned operario
+    if not can_log_avance(tarea):
+        return jsonify(ok=False, error="Sin permisos para registrar avance en esta tarea"), 403
+    
+    # Operarios MUST register from dashboard with X-From-Dashboard header
+    if current_user.rol == 'operario':
+        from_dashboard = request.headers.get('X-From-Dashboard') == '1'
+        if not from_dashboard:
+            return jsonify(ok=False, error="Los operarios solo pueden registrar avances desde su dashboard"), 403
+    
+    # Organization validation
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+    
+    # Parse and validate input - server ignores unit, always uses task's unit
+    cantidad_str = str(request.form.get("cantidad_ingresada", "")).replace(",", ".")
+    try:
+        cantidad = float(cantidad_str)
+        if cantidad <= 0:
+            return jsonify(ok=False, error="La cantidad debe ser mayor a 0"), 400
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error="Cantidad inválida"), 400
+    
+    # Server always uses task's normalized unit (ignores client input completely)
+    unidad_servidor = normalize_unit(tarea.unidad)
+    horas_trabajadas = request.form.get("horas_trabajadas", type=float)
+    notas = request.form.get("nota", "")
+
+    try:
+        # Create progress record
+        avance = TareaAvance(
+            tarea_id=tarea.id, 
+            user_id=current_user.id, 
+            cantidad=cantidad,       
+            unidad=unidad_servidor,          # Always task's normalized unit
+            horas=horas_trabajadas,
+            notas=notas,
+            cantidad_ingresada=cantidad,     # Audit field
+            unidad_ingresada=unidad_servidor, # Server's unit (not client input)
+            horas_trabajadas=horas_trabajadas
+        )
+        
+        # Auto-approve for admin/PM, operarios need approval
+        if current_user.rol in ['administrador', 'tecnico']:
+            avance.status = "aprobado"
+            avance.confirmed_by = current_user.id
+            avance.confirmed_at = datetime.utcnow()
+        # else: status = "pendiente" (default)
+        
+        db.session.add(avance)
+        db.session.flush()  # Get avance.id for photos
+        
+        # Mark task start if first approved progress
+        if not tarea.fecha_inicio_real and avance.status == "aprobado": 
+            tarea.fecha_inicio_real = datetime.utcnow()
+
+        # Handle multiple photo uploads using new TareaAvanceFoto model
+        media_base = Path(current_app.instance_path) / "media"
+        media_base.mkdir(exist_ok=True)
+        
+        uploaded_files = request.files.getlist("fotos")
+        for foto_file in uploaded_files:
+            if foto_file.filename:
+                # Generate unique filename
+                extension = Path(foto_file.filename).suffix.lower()
+                unique_name = f"{uuid.uuid4()}{extension}"
+                
+                # Create directory structure: media/avances/{avance_id}/
+                avance_dir = media_base / "avances" / str(avance.id)
+                avance_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Save file
+                file_path = avance_dir / unique_name
+                foto_file.save(file_path)
+                
+                # Get image dimensions if possible
+                width, height = None, None
+                try:
+                    from PIL import Image
+                    with Image.open(file_path) as img:
+                        width, height = img.size
+                except Exception:
+                    pass  # Skip if can't get dimensions
+                
+                # Create photo record with relative path for database
+                relative_path = f"avances/{avance.id}/{unique_name}"
+                foto = TareaAvanceFoto(
+                    avance_id=avance.id,
+                    file_path=relative_path,
+                    mime_type=foto_file.content_type,
+                    width=width,
+                    height=height
+                )
+                db.session.add(foto)
+
+        db.session.commit()
+        
+        # Recalculate task percentage after saving progress
+        recalc_tarea_pct(tarea.id)
+        
+        return jsonify(ok=True, avance_id=avance.id, porcentaje_actualizado=tarea.porcentaje_avance)
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error creating progress with photos: {str(e)}")
+        return jsonify(ok=False, error="Error interno del servidor"), 500
+
+
 @obras_bp.route("/tareas/<int:tarea_id>/complete", methods=['POST'])
 @login_required
 def completar_tarea(tarea_id):
