@@ -2421,49 +2421,38 @@ async function confirmarRechazo() {
     }
 }
 
-// Handle user assignment form submission with AJAX
+// Handle user assignment form submission with AJAX (exact user specification)
 document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('#asignarUsuarioModal form');
-    if (form) {
-        form.addEventListener('submit', async function(e) {
+    // Target the submit button in the modal (user wanted btnAsignarObra)
+    const submitBtn = document.querySelector('#asignarUsuarioModal button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
             const obraId = {{ obra.id }};
-            const usuarioSel = document.querySelector('#asignarUsuarioModal select[name="usuario_id"]');
-            const rolSel = document.querySelector('#asignarUsuarioModal select[name="rol_en_obra"]');
-            const etapaSel = document.querySelector('#asignarUsuarioModal select[name="etapa_id"]');
-            
-            const uid = usuarioSel?.value;
-            if (!uid) { 
-                alert('Seleccioná un usuario'); 
-                return; 
-            }
+            // User specification adapted to actual HTML elements
+            const usuario = document.querySelector('#asignarUsuarioModal select[name="usuario_id"]')?.value;
+            const rol     = document.querySelector('#asignarUsuarioModal select[name="rol_en_obra"]')?.value;
+            const etapa   = document.querySelector('#asignarUsuarioModal select[name="etapa_id"]')?.value;
+
+            if (!usuario) { alert('Seleccioná un usuario'); return; }
 
             const fd = new FormData();
-            fd.append('user_ids[]', uid);
-            if (rolSel?.value) fd.append('rol', rolSel.value);
-            if (etapaSel?.value) fd.append('etapa_id', etapaSel.value);
+            fd.append('user_ids[]', usuario);
+            if (rol)   fd.append('rol', rol);
+            if (etapa) fd.append('etapa_id', etapa);
 
-            try {
-                const res = await fetch(`/obras/${obraId}/asignar_usuario`, {
-                    method: 'POST',
-                    body: fd,
-                    credentials: 'include'
-                });
-                const data = await res.json();
-                
-                if (!data.ok) { 
-                    alert(data.error || 'Error al asignar'); 
-                    return; 
-                }
-                
-                // Success - close modal and reload page
-                bootstrap.Modal.getInstance(document.getElementById('asignarUsuarioModal')).hide();
-                window.location.reload();
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error de conexión al asignar usuario');
-            }
+            const res = await fetch(`/obras/${obraId}/asignar_usuario`, { 
+                method: 'POST', 
+                body: fd, 
+                credentials: 'include' 
+            });
+            const data = await res.json();
+
+            if (!data.ok) { alert(data.error || 'No se pudo asignar'); return; }
+            
+            // User specification: simple reload option
+            window.location.reload();
         });
     }
 });

@@ -543,6 +543,7 @@ def asignar_usuario(obra_id):
 
         # Insertar evitando duplicados usando raw SQL
         creados = 0
+        ya_existian = 0
         for u in usuarios:
             result = db.session.execute(
                 text("""
@@ -554,9 +555,11 @@ def asignar_usuario(obra_id):
             )
             if result.fetchone():
                 creados += 1
+            else:
+                ya_existian += 1
                     
         db.session.commit()
-        return jsonify(ok=True, creados=creados)
+        return jsonify(ok=True, creados=creados, ya_existian=ya_existian)
         
     except Exception as e:
         from sqlalchemy.exc import ProgrammingError
