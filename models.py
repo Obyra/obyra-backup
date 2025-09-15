@@ -418,6 +418,7 @@ class TareaAvance(db.Model):
     # Audit fields for unit conversion tracking
     cantidad_ingresada = db.Column(db.Numeric, nullable=True)  # Original quantity entered
     unidad_ingresada = db.Column(db.String(10), nullable=True)  # Original unit entered
+    horas_trabajadas = db.Column(db.Numeric(8, 2), nullable=True)  # Hours worked on this progress
 
     # Campos de aprobación 
     status = db.Column(db.String(12), default="pendiente")  # pendiente/aprobado/rechazado
@@ -430,9 +431,29 @@ class TareaAvance(db.Model):
     usuario = db.relationship('Usuario', foreign_keys=[user_id])
     confirmado_por = db.relationship('Usuario', foreign_keys=[confirmed_by])
     adjuntos = db.relationship('TareaAdjunto', back_populates='avance', cascade='all, delete-orphan')
+    fotos = db.relationship('TareaAvanceFoto', back_populates='avance', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<TareaAvance tarea_id={self.tarea_id} cantidad={self.cantidad}>'
+
+
+class TareaAvanceFoto(db.Model):
+    """Fotos de evidencia de avances de tareas"""
+    __tablename__ = "tarea_avance_fotos"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    avance_id = db.Column(db.Integer, db.ForeignKey("tarea_avances.id", ondelete='CASCADE'), nullable=False)
+    file_path = db.Column(db.String(255), nullable=False)  # Relative path like "avances/123/uuid.jpg"
+    mime_type = db.Column(db.String(64))
+    width = db.Column(db.Integer)
+    height = db.Column(db.Integer) 
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    avance = db.relationship('TareaAvance', back_populates='fotos')
+    
+    def __repr__(self):
+        return f'<TareaAvanceFoto avance_id={self.avance_id} path={self.file_path}>'
 
 
 class TareaAdjunto(db.Model):

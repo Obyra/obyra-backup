@@ -805,6 +805,68 @@ def asignar_usuarios():
         return jsonify(ok=False, error="Error interno del servidor"), 500
 
 
+# === PERCENTAGE CALCULATION FUNCTIONS ===
+
+def suma_ejecutado(tarea_id):
+    """Calculate total executed quantity for a task"""
+    from sqlalchemy import func
+    from models import TareaAvance
+    total = db.session.query(func.coalesce(func.sum(TareaAvance.cantidad_ingresada), 0)).filter_by(tarea_id=tarea_id).scalar()
+    return float(total or 0)
+
+def recalc_tarea_pct(tarea_id):
+    """Recalculate and update task percentage"""
+    from models import TareaEtapa
+    tarea = TareaEtapa.query.get(tarea_id)
+    if not tarea:
+        return 0
+    
+    meta = float(tarea.cantidad_planificada or 0)
+    if meta <= 0:
+        tarea.porcentaje_avance = 0
+    else:
+        ejecutado = suma_ejecutado(tarea_id)
+        tarea.porcentaje_avance = min(100, round((ejecutado / meta) * 100, 2))
+    
+    db.session.commit()
+    return float(tarea.porcentaje_avance or 0)
+
+def pct_etapa(etapa):
+    """Calculate stage percentage (weighted average by cantidad_planificada)"""
+    tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else etapa.tareas
+    if not tareas:
+        return 0
+    
+    total_meta = sum((float(t.cantidad_planificada or 0) for t in tareas))
+    if total_meta <= 0:
+        # Simple average if no quantities defined
+        return round(sum((float(t.porcentaje_avance or 0) for t in tareas)) / max(len(tareas), 1), 2)
+    
+    weighted_sum = sum((float(t.cantidad_planificada or 0) * float(t.porcentaje_avance or 0) / 100 for t in tareas))
+    return round((weighted_sum / total_meta) * 100, 2)
+
+def pct_obra(obra):
+    """Calculate project percentage (weighted average across stages)"""
+    etapas = obra.etapas.all() if hasattr(obra.etapas, 'all') else obra.etapas
+    if not etapas:
+        return 0
+    
+    total_meta = 0
+    total_ejecutado = 0
+    
+    for etapa in etapas:
+        etapa_meta = sum((float(t.cantidad_planificada or 0) for t in etapa.tareas))
+        etapa_pct = pct_etapa(etapa)
+        total_meta += etapa_meta
+        total_ejecutado += etapa_meta * (etapa_pct / 100)
+    
+    if total_meta > 0:
+        return round((total_ejecutado / total_meta) * 100, 2)
+    else:
+        # Simple average if no quantities defined
+        etapa_pcts = [pct_etapa(e) for e in etapas]
+        return round(sum(etapa_pcts) / max(len(etapa_pcts), 1), 2)
+
 # Unit normalization mapping
 UNIT_MAP = {
     "m2": "m2", "m²": "m2", "M2": "m2", "metro2": "m2",
