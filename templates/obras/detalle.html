@@ -725,7 +725,7 @@
 <div class="modal fade" id="asignarUsuarioModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('obras.asignar_usuario', id=obra.id) }}">
+            <form method="POST" action="{{ url_for('obras.asignar_usuario', obra_id=obra.id) }}">
                 <div class="modal-header">
                     <h5 class="modal-title">Asignar Usuario</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
