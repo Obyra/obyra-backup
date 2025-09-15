@@ -1,0 +1,112 @@
+Que el operario cargue avances solo desde su Dashboard
+
+Frontend (plantillas):
+
+En las vistas de obra/proyecto, ocultá el botón “+ Avance” si no estamos en /obras/mis-tareas:
+
+{# en tarjetas de tarea fuera del dashboard del operario #}
+{% if request.path.startswith('/obras/mis-tareas') and current_user.rol == 'OPERARIO' %}
+  <button ...>+ Registrar Avance</button>
+{% endif %}
+
+
+Backend (seguridad “cinturón y tiradores”):
+
+El endpoint acepta POST desde cualquier lado, pero exige:
+
+rol OPERARIO y pertenencia a la tarea o admin.
+
+if (not current_user.is_admin) and current_user.rol != 'OPERARIO':
+    return {"ok": False, "error": "Solo operarios pueden registrar avances"}, 403
+if (not current_user.is_admin) and current_user.id not in [m.usuario_id for m in t.miembros]:
+    return {"ok": False, "error": "No estás asignado a esta tarea"}, 403
+
+B) Arreglar la unidad incompatible (m² vs un)
+
+La solución buena es no pedirle la unidad al operario si la tarea ya la define. Dos cambios:
+
+1) UI: bloquear la unidad al valor de la tarea
+
+Cuando abrís el modal, seteá la unidad desde el JSON de la tarea y deshabilitá el <select>.
+
+// al abrir modal
+unidadInput.value = tarea.unidad || 'u';
+unidadInput.disabled = true;
+
+
+Opcional: si una tarea admite más de una unidad (ej. m² o m³), mostrás solo esas opciones.
+
+2) Backend: normalizar y validar “sin sorpresas”
+
+Mapear sinónimos ("u","un","unidad" → "u", "m2","m²" → "m2").
+
+Comparar contra tarea.unidad.
+
+Si querés permitir conversión, definimos reglas; si no, rechazamos con error claro.
+
+UNIT_MAP = {
+    "m2": "m2", "m²": "m2", "M2": "m2",
+    "m3": "m3", "m³": "m3",
+    "m": "m",
+    "u": "u", "un": "u", "unidad": "u", "uni": "u",
+    "kg": "kg", "lts": "lt", "lt": "lt",
+}
+
+def norm_unit(u):
+    if not u: return None
+    return UNIT_MAP.get(u.strip().lower(), u.strip().lower())
+
+@app.post("/api/tareas/<int:tarea_id>/avances")
+@login_required
+def crear_avance(tarea_id):
+    t = Tarea.query.get_or_404(tarea_id)
+    # permisos como antes...
+
+    data = request.form or request.get_json(silent=True) or {}
+    unidad_in = norm_unit(data.get("unidad_ingresada") or t.unidad or "u")
+    unidad_tarea = norm_unit(getattr(t, "unidad", None) or "u")
+
+    # si la UI la trae deshabilitada, igual controlamos
+    if unidad_in != unidad_tarea:
+        return {"ok": False, "error": f"Unidad incompatible: {unidad_tarea} requerida"}, 409
+
+    # cantidad
+    try:
+        cantidad = float(str(data.get("cantidad_ingresada")).replace(",", "."))
+    except Exception:
+        return {"ok": False, "error": "Cantidad inválida"}, 400
+    if cantidad <= 0:
+        return {"ok": False, "error": "La cantidad debe ser mayor a 0"}, 400
+
+    av = TareaAvance(
+        tarea_id=t.id,
+        usuario_id=current_user.id,
+        cantidad_ingresada=cantidad,
+        unidad_ingresada=unidad_tarea,
+        nota=(data.get("nota") or "").strip()
+    )
+    db.session.add(av); db.session.flush()
+    _guardar_fotos_para_avance(av.id, request.files.getlist("fotos"))
+    db.session.commit()
+    return {"ok": True, "avance_id": av.id}
+
+
+Si preferís permitir que el operario cargue un cuando la tarea está en m², decime y te agrego un conversor por tarea (ej: 1 “unidad” = X m² configurado en la tarea), pero por ahora lo más seguro para obra es que coincidan.
+
+C) Múltiples fotos y que se vean en Admin
+
+(Esto lo dejé listo en la respuesta anterior, pero lo resumo para que lo copies tal cual.)
+
+Input con multiple y FormData() en el fetch.
+
+Guardar en /media/avances/<avance_id>/... (crear miniatura).
+
+Endpoint /media/<path> autenticado para servirlas.
+
+En Admin, joinedload(TareaAvance.fotos) y un grid de miniaturas que linkean al original.
+
+Si ya pegaste ese bloque y aún no ves las imágenes en Admin:
+
+Revisá que el src apunte a /media/ y no a static/.
+
+Verificá permisos: si probás con usuario operario no-admin y tu endpoint media exige admin, no las va a mostrar; para Admin debe funcionar siempre.

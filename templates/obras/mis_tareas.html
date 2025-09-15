@@ -206,6 +206,7 @@
 
     const sel = document.getElementById('unidad_ingresada');
     if ([...sel.options].some(o => o.value === base)) sel.value = base;
+    sel.disabled = true; // Disable unit selection - use task's fixed unit
 
     // autoconversión cantidad↔horas si hay rendimiento
     const qty = document.getElementById('cantidad');

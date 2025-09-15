@@ -84,7 +84,7 @@
                             <!-- Acciones rápidas -->
                             {% if tarea.estado != 'completada' %}
                             <div class="btn-group btn-group-sm mt-2" role="group">
-                                <!-- Botón de avance: para admin/PM o usuarios asignados -->
+                                <!-- Botón de avance: Admin/PM siempre pueden, operarios solo desde su dashboard -->
                                 {% if current_user.role in ['admin', 'pm'] %}
                                 <button class="btn btn-outline-success btn-sm btn-avance" 
                                         data-tarea-id="{{ tarea.id }}"
@@ -96,7 +96,8 @@
                                         title="Registrar avance">
                                     <i class="fas fa-plus fa-xs"></i> Avance
                                 </button>
-                                {% else %}
+                                {% elif current_user.role == 'operario' and request.path == '/obras/mis-tareas' %}
+                                    <!-- Operarios solo pueden registrar avances desde su dashboard -->
                                     {% set es_responsable = tarea.responsable_id == current_user.id %}
                                     {% set es_asignado = tarea.miembros|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}
                                     {% if es_responsable or es_asignado %}

@@ -805,34 +805,70 @@ def asignar_usuarios():
         return jsonify(ok=False, error="Error interno del servidor"), 500
 
 
+# Unit normalization mapping
+UNIT_MAP = {
+    "m2": "m2", "m²": "m2", "M2": "m2", "metro2": "m2",
+    "m3": "m3", "m³": "m3", "M3": "m3", "metro3": "m3", 
+    "ml": "ml", "m": "ml", "metro": "ml",
+    "u": "un", "un": "un", "unidad": "un", "uni": "un", "unidades": "un",
+    "kg": "kg", "kilo": "kg", "kilos": "kg",
+    "h": "h", "hr": "h", "hora": "h", "horas": "h", "hs": "h",
+    "lt": "lt", "l": "lt", "lts": "lt", "litro": "lt", "litros": "lt"
+}
+
+def normalize_unit(unit):
+    """Normalize unit to standard form"""
+    if not unit:
+        return "un"  # default
+    return UNIT_MAP.get(unit.strip().lower(), unit.strip().lower())
+
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
 @login_required
 def crear_avance(tarea_id):
-    """Registrar avance con fotos"""
+    """Registrar avance con fotos - Operarios solo desde su dashboard"""
     from models import TareaMiembro, TareaAvance, TareaAdjunto
     from werkzeug.utils import secure_filename
     
     tarea = TareaEtapa.query.get_or_404(tarea_id)
     
-    # Verificar permisos para registrar avance
+    # Role validation: Only operarios and admins/PMs can register progress
+    user_role = getattr(current_user, "role", "")
+    if user_role not in ["admin", "pm", "operario"]:
+        return jsonify(ok=False, error="Solo operarios pueden registrar avances"), 403
+    
+    # Operarios must be assigned to the task
+    if user_role == "operario":
+        is_responsible = tarea.responsable_id == current_user.id
+        is_assigned = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
+        if not (is_responsible or is_assigned):
+            return jsonify(ok=False, error="No estás asignado a esta tarea"), 403
+    
+    # Additional permission check
     if not can_log_avance(tarea):
         return jsonify(ok=False, error="Sin permisos para registrar avances en esta tarea"), 403
     
     from pathlib import Path
     
-    cantidad = request.form.get("cantidad", type=float)
-    unidad_ing = request.form.get("unidad_ingresada", type=str)
-    
-    if not cantidad or cantidad <= 0: 
+    # Parse quantity
+    cantidad_str = str(request.form.get("cantidad", "")).replace(",", ".")
+    try:
+        cantidad = float(cantidad_str)
+        if cantidad <= 0:
+            return jsonify(ok=False, error="La cantidad debe ser mayor a 0"), 400
+    except (ValueError, TypeError):
         return jsonify(ok=False, error="Cantidad inválida"), 400
     
-    # Simple unit validation: selected unit must match task unit (no conversions)
-    if unidad_ing and unidad_ing != tarea.unidad:
-        return jsonify(ok=False, error=f"Unidad incompatible: {unidad_ing} vs {tarea.unidad}"), 400
+    # Unit normalization and validation
+    unidad_ing = request.form.get("unidad_ingresada", type=str)
+    unidad_ing_norm = normalize_unit(unidad_ing)
+    unidad_tarea_norm = normalize_unit(tarea.unidad)
+    
+    if unidad_ing_norm != unidad_tarea_norm:
+        return jsonify(ok=False, error=f"Unidad incompatible: {unidad_tarea_norm} requerida"), 409
     
     unidad = tarea.unidad or 'un'  # Always use server-side unit
     horas = request.form.get("horas", type=float)  # Optional hours worked
-    notas = request.form.get("notas")
+    notas = request.form.get("notas", "")
 
     try:
         # Crear avance
