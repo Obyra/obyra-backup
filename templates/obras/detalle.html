@@ -2421,58 +2421,8 @@ async function confirmarRechazo() {
     }
 }
 
-// Handle user assignment form submission with AJAX (exact user specification)
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔧 Setting up assignment form handler...');
-    
-    // Target the form itself to intercept submission
-    const assignForm = document.querySelector('#asignarUsuarioModal form');
-    if (assignForm) {
-        console.log('✅ Found assignment form, attaching handler');
-        assignForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            console.log('🚀 Form submit intercepted!');
-            
-            const obraId = {{ obra.id }};
-            // User specification adapted to actual HTML elements  
-            const usuario = document.querySelector('#asignarUsuarioModal select[name="usuario_id"]')?.value;
-            const rol     = document.querySelector('#asignarUsuarioModal select[name="rol_en_obra"]')?.value;
-            const etapa   = document.querySelector('#asignarUsuarioModal select[name="etapa_id"]')?.value;
-
-            console.log('📋 Form data:', { usuario, rol, etapa });
-
-            if (!usuario) { alert('Seleccioná un usuario'); return; }
-
-            const fd = new FormData();
-            fd.append('user_ids[]', usuario);
-            if (rol)   fd.append('rol', rol);
-            if (etapa) fd.append('etapa_id', etapa);
-
-            console.log('📤 Sending POST to:', `/obras/${obraId}/asignar_usuario`);
-
-            try {
-                const res = await fetch(`/obras/${obraId}/asignar_usuario`, { 
-                    method: 'POST', 
-                    body: fd, 
-                    credentials: 'include' 
-                });
-                const data = await res.json();
-                
-                console.log('📥 Response:', data);
-
-                if (!data.ok) { alert(data.error || 'No se pudo asignar'); return; }
-                
-                // User specification: simple reload option
-                window.location.reload();
-            } catch (error) {
-                console.error('❌ Error:', error);
-                alert('Error de conexión: ' + error.message);
-            }
-        });
-    } else {
-        console.log('❌ Assignment form not found!');
-    }
-});
+// HOTFIX: Temporarily disabled AJAX - using traditional form submission
+// Will fix AJAX in Step 2 after basic functionality works
 
 </script>
 {% endblock %}

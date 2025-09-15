@@ -508,38 +508,39 @@ def agregar_etapas(id):
 @obras_bp.route('/<int:obra_id>/asignar_usuario', methods=['POST'])
 @login_required
 def asignar_usuario(obra_id):
-    """Asignar usuarios a obra - Implementación según especificación del usuario"""
-    if current_user.rol != 'administrador':
-        return jsonify(ok=False, error="Solo admin"), 403
-
-    data = request.get_json(silent=True) or request.form
+    """HOTFIX: Asignar usuarios a obra - Traditional form submission + AJAX support"""
+    from flask import flash, redirect, url_for
     
-    # Función helper para manejar arrays desde FormData o JSON
-    def _list(name):
-        if hasattr(data, "getlist"):
-            vals = data.getlist(name)
-        else:
-            vals = data.get(name) or []
-        if isinstance(vals, str):
-            vals = [v.strip() for v in vals.split(",") if v.strip()]
-        return [int(v) for v in vals if str(v).strip().isdigit()]
+    if current_user.rol != 'administrador':
+        flash('Solo administradores pueden asignar usuarios', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+    # Detect if this is an AJAX request
+    is_ajax = request.headers.get('Content-Type') == 'application/json' or 'XMLHttpRequest' in str(request.headers.get('X-Requested-With', ''))
 
     try:
-        # Support both new format (user_ids[]) and legacy format (usuario_id)
-        user_ids = _list("user_ids[]")
+        # HOTFIX: Support both formats as specified
+        user_ids = request.form.getlist('user_ids[]')
         if not user_ids:
-            # Fallback to single user format for current form
-            single_user_id = data.get("usuario_id")
-            if single_user_id and str(single_user_id).strip().isdigit():
-                user_ids = [int(single_user_id)]
+            uid = request.form.get('usuario_id')
+            if uid:
+                user_ids = [uid]
         
         if not user_ids:
-            return jsonify(ok=False, error="Seleccioná al menos 1 usuario"), 400
+            if is_ajax:
+                return jsonify({"ok": False, "error": "Seleccioná al menos un usuario"}), 400
+            else:
+                flash('Seleccioná al menos un usuario', 'danger')
+                return redirect(url_for('obras.detalle', id=obra_id))
 
         # Validar que los usuarios existen
         usuarios = Usuario.query.filter(Usuario.id.in_(user_ids)).all()
         if not usuarios:
-            return jsonify(ok=False, error="Usuarios inválidos"), 400
+            if is_ajax:
+                return jsonify({"ok": False, "error": "Usuarios inválidos"}), 400
+            else:
+                flash('Usuarios inválidos', 'danger')
+                return redirect(url_for('obras.detalle', id=obra_id))
 
         # Insertar evitando duplicados usando raw SQL
         creados = 0
@@ -559,15 +560,29 @@ def asignar_usuario(obra_id):
                 ya_existian += 1
                     
         db.session.commit()
-        return jsonify(ok=True, creados=creados, ya_existian=ya_existian)
+        
+        # HOTFIX: Different responses for AJAX vs traditional
+        if is_ajax:
+            return jsonify({"ok": True, "creados": creados, "ya_existian": ya_existian})
+        else:
+            if creados > 0:
+                flash(f'✅ Se asignaron {creados} usuarios a la obra', 'success')
+            if ya_existian > 0:
+                flash(f'ℹ️ {ya_existian} usuarios ya estaban asignados', 'info')
+            return redirect(url_for('obras.detalle', id=obra_id))
         
     except Exception as e:
         from sqlalchemy.exc import ProgrammingError
         current_app.logger.exception("obra_miembros insert error obra_id=%s", obra_id)
         db.session.rollback()
-        if isinstance(e, ProgrammingError):
-            return jsonify(ok=False, error="Esquema obra_miembros no coincide con el código"), 500
-        return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
+        
+        if is_ajax:
+            if isinstance(e, ProgrammingError):
+                return jsonify({"ok": False, "error": "Error de esquema de base de datos"}), 500
+            return jsonify({"ok": False, "error": f"Error interno: {str(e)}"}), 500
+        else:
+            flash(f'Error al asignar usuarios: {str(e)}', 'danger')
+            return redirect(url_for('obras.detalle', id=obra_id))
 
 @obras_bp.route('/<int:id>/etapa', methods=['POST'])
 @login_required
