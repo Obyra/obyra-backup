@@ -386,6 +386,37 @@ class TareaEtapa(db.Model):
         """Calcula métricas de la tarea"""
         return resumen_tarea(self)
     
+    @property
+    def pct_completado(self):
+        """Calculate completion percentage based on actual vs planned quantities"""
+        # Get total planned quantity from planning tables
+        from sqlalchemy import func
+        qty_plan_total = (db.session.query(func.sum(TareaPlanSemanal.qty_plan))
+                         .filter(TareaPlanSemanal.tarea_id == self.id)
+                         .scalar()) or 0
+        
+        if qty_plan_total <= 0:
+            # Fallback to objetivo or cantidad_planificada if no EVM planning
+            qty_plan_total = float(self.objetivo or self.cantidad_planificada or 0)
+            if qty_plan_total <= 0:
+                return 0
+        
+        # Get total actual quantity from approved advances
+        qty_real_total = (db.session.query(func.sum(TareaAvance.cantidad_ingresada))
+                         .filter(
+                             TareaAvance.tarea_id == self.id,
+                             TareaAvance.estado == 'aprobado'
+                         )
+                         .scalar()) or 0
+        
+        # Calculate percentage with safe division
+        return min(100.0, (float(qty_real_total) / float(qty_plan_total)) * 100.0)
+    
+    @property
+    def cantidad_objetivo(self):
+        """Alias for objetivo field to maintain backward compatibility"""
+        return self.objetivo
+    
     def __repr__(self):
         return f'<TareaEtapa {self.nombre}>'
 
