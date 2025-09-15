@@ -2421,5 +2421,52 @@ async function confirmarRechazo() {
     }
 }
 
+// Handle user assignment form submission with AJAX
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('#asignarUsuarioModal form');
+    if (form) {
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const obraId = {{ obra.id }};
+            const usuarioSel = document.querySelector('#asignarUsuarioModal select[name="usuario_id"]');
+            const rolSel = document.querySelector('#asignarUsuarioModal select[name="rol_en_obra"]');
+            const etapaSel = document.querySelector('#asignarUsuarioModal select[name="etapa_id"]');
+            
+            const uid = usuarioSel?.value;
+            if (!uid) { 
+                alert('Seleccioná un usuario'); 
+                return; 
+            }
+
+            const fd = new FormData();
+            fd.append('user_ids[]', uid);
+            if (rolSel?.value) fd.append('rol', rolSel.value);
+            if (etapaSel?.value) fd.append('etapa_id', etapaSel.value);
+
+            try {
+                const res = await fetch(`/obras/${obraId}/asignar_usuario`, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                if (!data.ok) { 
+                    alert(data.error || 'Error al asignar'); 
+                    return; 
+                }
+                
+                // Success - close modal and reload page
+                bootstrap.Modal.getInstance(document.getElementById('asignarUsuarioModal')).hide();
+                window.location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error de conexión al asignar usuario');
+            }
+        });
+    }
+});
+
 </script>
 {% endblock %}
