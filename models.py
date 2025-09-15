@@ -363,6 +363,11 @@ class TareaEtapa(db.Model):
     objetivo = db.Column(db.Numeric, nullable=True)  # Physical target (e.g. 500 m2)
     rendimiento = db.Column(db.Numeric(8, 2), nullable=True)  # Optional: quantity per hour (e.g. 20 m2/h)
     
+    # EVM fields (nuevas columnas para planificación y seguimiento)
+    fecha_inicio = db.Column(db.Date)              # Fecha de inicio planificada
+    fecha_fin = db.Column(db.Date)                 # Fecha de fin planificada  
+    presupuesto_mo = db.Column(db.Numeric)         # Presupuesto de mano de obra para EV/PV
+    
     # Relaciones
     etapa = db.relationship('EtapaObra', back_populates='tareas')
     miembros = db.relationship('TareaMiembro', back_populates='tarea', cascade='all, delete-orphan')
@@ -371,6 +376,10 @@ class TareaEtapa(db.Model):
     responsable = db.relationship('Usuario')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='tarea', lazy='dynamic')
     asignaciones = db.relationship('TareaResponsables', back_populates='tarea', lazy='dynamic', cascade='all, delete-orphan')
+    
+    # EVM relationships
+    plan_semanal = db.relationship('TareaPlanSemanal', back_populates='tarea', cascade='all, delete-orphan')
+    avance_semanal = db.relationship('TareaAvanceSemanal', back_populates='tarea', cascade='all, delete-orphan')
     
     @property 
     def metrics(self):
@@ -454,6 +463,47 @@ class TareaAvanceFoto(db.Model):
     
     def __repr__(self):
         return f'<TareaAvanceFoto avance_id={self.avance_id} path={self.file_path}>'
+
+
+class TareaPlanSemanal(db.Model):
+    """Weekly planning distribution for EVM (S-curve)"""
+    __tablename__ = "tarea_plan_semanal"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id", ondelete='CASCADE'), nullable=False)
+    semana = db.Column(db.Date, nullable=False)  # Monday of ISO week
+    qty_plan = db.Column(db.Numeric, default=0)  # Planned quantity for this week
+    pv_mo = db.Column(db.Numeric, default=0)     # Planned Value for labor this week
+    
+    # Relationships
+    tarea = db.relationship('TareaEtapa', back_populates='plan_semanal')
+    
+    # Unique constraint
+    __table_args__ = (db.UniqueConstraint('tarea_id', 'semana', name='unique_tarea_semana_plan'),)
+    
+    def __repr__(self):
+        return f'<TareaPlanSemanal tarea_id={self.tarea_id} semana={self.semana} qty_plan={self.qty_plan}>'
+
+
+class TareaAvanceSemanal(db.Model):
+    """Weekly progress aggregation for EVM calculations"""
+    __tablename__ = "tarea_avance_semanal"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tarea_id = db.Column(db.Integer, db.ForeignKey("tareas_etapa.id", ondelete='CASCADE'), nullable=False)
+    semana = db.Column(db.Date, nullable=False)  # Monday of ISO week
+    qty_real = db.Column(db.Numeric, default=0)  # Actual quantity completed this week
+    ac_mo = db.Column(db.Numeric, default=0)     # Actual Cost for labor this week
+    ev_mo = db.Column(db.Numeric, default=0)     # Earned Value this week (calculated)
+    
+    # Relationships
+    tarea = db.relationship('TareaEtapa', back_populates='avance_semanal')
+    
+    # Unique constraint
+    __table_args__ = (db.UniqueConstraint('tarea_id', 'semana', name='unique_tarea_semana_avance'),)
+    
+    def __repr__(self):
+        return f'<TareaAvanceSemanal tarea_id={self.tarea_id} semana={self.semana} qty_real={self.qty_real}>'
 
 
 class TareaAdjunto(db.Model):
