@@ -506,9 +506,9 @@ def agregar_etapas(id):
 
 @obras_bp.route('/<int:obra_id>/asignar_usuario', methods=['POST'])
 @login_required
-def asignar_usuario(obra_id):
-    """Asignar operarios a tareas - Implementación según especificación del usuario"""
-    if not current_user.is_admin:
+def obra_asignar_usuario(obra_id):
+    """Asignar usuarios a obra - Implementación según especificación del usuario"""
+    if current_user.rol != 'administrador':
         return jsonify(ok=False, error="Solo admin"), 403
 
     data = request.get_json(silent=True) or request.form
@@ -521,40 +521,31 @@ def asignar_usuario(obra_id):
             vals = data.get(name) or []
         if isinstance(vals, str):
             vals = [v.strip() for v in vals.split(",") if v.strip()]
-        return [int(v) for v in vals]
+        return [int(v) for v in vals if str(v).strip().isdigit()]
 
     try:
-        tarea_ids = _list("tarea_ids[]")
         user_ids = _list("user_ids[]")
+        if not user_ids:
+            return jsonify(ok=False, error="Seleccioná al menos 1 usuario"), 400
 
-        if not tarea_ids or not user_ids:
-            return jsonify(ok=False, error="Seleccioná tareas y usuarios"), 400
-
-        cuota = (data.get("cuota_objetivo") or "").strip()
-        try:
-            cuota_val = float(cuota.replace(",", ".")) if cuota else None
-        except Exception:
-            return jsonify(ok=False, error="Cuota inválida"), 400
-
-        # Solo operarios
-        operarios = {u.id for u in Usuario.query.filter(Usuario.id.in_(user_ids), Usuario.rol=="operario")}
-        if not operarios:
-            return jsonify(ok=False, error="Usuarios deben ser OPERARIO"), 400
+        # Validar que los usuarios existen
+        usuarios = Usuario.query.filter(Usuario.id.in_(user_ids)).all()
+        if not usuarios:
+            return jsonify(ok=False, error="Usuarios inválidos"), 400
 
         # Insertar evitando duplicados usando raw SQL
         creados = 0
-        for t_id in tarea_ids:
-            for u_id in operarios:
-                result = db.session.execute(
-                    text("""
-                    INSERT INTO tarea_responsables (tarea_id, user_id, cuota_planificada)
-                    VALUES (:t, :u, :c)
-                    ON CONFLICT (tarea_id, user_id) DO NOTHING
-                    RETURNING id
-                    """), {"t": t_id, "u": u_id, "c": cuota_val}
-                )
-                if result.fetchone():
-                    creados += 1
+        for u in usuarios:
+            result = db.session.execute(
+                text("""
+                INSERT INTO obra_miembros (obra_id, usuario_id)
+                VALUES (:o, :u)
+                ON CONFLICT (obra_id, usuario_id) DO NOTHING
+                RETURNING id
+                """), {"o": obra_id, "u": u.id}
+            )
+            if result.fetchone():
+                creados += 1
                     
         db.session.commit()
         return jsonify(ok=True, creados=creados)
