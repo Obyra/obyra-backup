@@ -1329,6 +1329,68 @@ def api_listar_tareas(etapa_id):
         # Renderizar template parcial (las métricas se calculan automáticamente via property)
         html = render_template('obras/_tareas_lista.html', tareas=tareas)
         return jsonify({'ok': True, 'html': html})
+
+
+@obras_bp.route('/api/tareas/<int:tarea_id>/curva-s')
+@login_required
+def api_curva_s_tarea(tarea_id):
+    """API para obtener datos de curva S (PV/EV/AC) de una tarea"""
+    from evm_utils import curva_s_tarea
+    from datetime import datetime
+    
+    # Obtener la tarea y verificar permisos
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    
+    # Verificar que la tarea pertenezca a la organización del usuario
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+    
+    # Para operarios, verificar que esté asignado a la tarea
+    if current_user.rol == 'operario':
+        es_miembro = TareaMiembro.query.filter_by(
+            tarea_id=tarea_id, 
+            user_id=current_user.id
+        ).first()
+        if not es_miembro:
+            return jsonify({'ok': False, 'error': 'Sin permisos para esta tarea'}), 403
+    
+    # Obtener parámetros de fecha opcionales
+    desde_str = request.args.get('desde')  # YYYY-MM-DD
+    hasta_str = request.args.get('hasta')  # YYYY-MM-DD
+    
+    desde = hasta = None
+    try:
+        if desde_str:
+            desde = datetime.strptime(desde_str, '%Y-%m-%d').date()
+        if hasta_str:
+            hasta = datetime.strptime(hasta_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'Formato de fecha inválido. Use YYYY-MM-DD'}), 400
+    
+    try:
+        # Obtener datos de curva S
+        curve_data = curva_s_tarea(tarea_id, desde, hasta)
+        
+        # Información adicional de la tarea
+        task_info = {
+            'id': tarea.id,
+            'nombre': tarea.nombre,
+            'fecha_inicio': tarea.fecha_inicio.isoformat() if tarea.fecha_inicio else None,
+            'fecha_fin': tarea.fecha_fin.isoformat() if tarea.fecha_fin else None,
+            'presupuesto_mo': float(tarea.presupuesto_mo) if tarea.presupuesto_mo else 0,
+            'unidad': tarea.unidad,
+            'pct_completado': round(tarea.pct_completado, 2)
+        }
+        
+        return jsonify({
+            'ok': True,
+            'tarea': task_info,
+            'curva_s': curve_data,
+            'fecha_consulta': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Error al calcular curva S: {str(e)}'}), 500
     except Exception as e:
         app.logger.error(f"Error al listar tareas de etapa {etapa_id}: {e}")
         return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500

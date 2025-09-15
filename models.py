@@ -405,7 +405,7 @@ class TareaEtapa(db.Model):
         qty_real_total = (db.session.query(func.sum(TareaAvance.cantidad_ingresada))
                          .filter(
                              TareaAvance.tarea_id == self.id,
-                             TareaAvance.estado == 'aprobado'
+                             TareaAvance.status == 'aprobado'
                          )
                          .scalar()) or 0
         

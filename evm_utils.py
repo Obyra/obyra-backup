@@ -86,8 +86,8 @@ def recalcular_avance_semanal(tarea_id):
     approved_advances = (TareaAvance.query
         .filter(
             TareaAvance.tarea_id == tarea_id,
-            TareaAvance.estado == 'aprobado',
-            TareaAvance.approved_at.isnot(None)
+            TareaAvance.status == 'aprobado',
+            TareaAvance.confirmed_at.isnot(None)
         )
         .all())
     
@@ -95,7 +95,7 @@ def recalcular_avance_semanal(tarea_id):
     weekly_data = {}
     for avance in approved_advances:
         # Convert to Monday of the week
-        semana = lunes_iso(avance.approved_at.date())
+        semana = lunes_iso(avance.confirmed_at.date())
         
         if semana not in weekly_data:
             weekly_data[semana] = {
@@ -164,25 +164,30 @@ def curva_s_tarea(tarea_id, desde=None, hasta=None):
     for semana in all_weeks:
         # Planned Value (PV) this week
         pv_semana = plan_data[semana].pv_mo if semana in plan_data else 0
-        pv_acum += float(pv_semana)
+        pv_acum += float(pv_semana or 0)
         
         # Actual quantities and costs this week
         if semana in real_data:
-            qty_real_semana = real_data[semana].qty_real
-            ac_semana = real_data[semana].ac_mo
+            qty_real_semana = float(real_data[semana].qty_real or 0)
+            ac_semana = float(real_data[semana].ac_mo or 0)
         else:
             qty_real_semana = 0
             ac_semana = 0
         
-        qty_real_acum += float(qty_real_semana)
-        ac_acum += float(ac_semana)
+        qty_real_acum += qty_real_semana
+        ac_acum += ac_semana
         
         # Earned Value (EV) calculation - based on actual quantity completed
-        ev_acum = presup_total * (qty_real_acum / qty_plan_total)
+        # Use max to avoid division by zero
+        ev_acum = presup_total * (qty_real_acum / max(qty_plan_total, 1e-9))
         
-        # Performance indicators
+        # Performance indicators with safe division
         cpi = (ev_acum / ac_acum) if ac_acum > 0 else None
         spi = (ev_acum / pv_acum) if pv_acum > 0 else None
+        
+        # Calculate cumulative planned quantity for this week
+        qty_plan_acum = sum((float(plan_data[w].qty_plan or 0) 
+                           for w in all_weeks if w <= semana and w in plan_data))
         
         results.append({
             'semana': semana.isoformat(),
@@ -191,7 +196,7 @@ def curva_s_tarea(tarea_id, desde=None, hasta=None):
             'ac': round(ac_acum, 2),
             'cpi': round(cpi, 3) if cpi else None,
             'spi': round(spi, 3) if spi else None,
-            'qty_plan_acum': round(sum((plan_data[w].qty_plan if w in plan_data else 0) for w in all_weeks if w <= semana), 2),
+            'qty_plan_acum': round(qty_plan_acum, 2),
             'qty_real_acum': round(qty_real_acum, 2)
         })
     
