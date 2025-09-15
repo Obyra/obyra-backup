@@ -1,0 +1,136 @@
+ASUNTO: Fase 0 – Arreglar asignación de operarios y flujo de avances (fotos + %). Hay 500 en /obras/<id>/asignar_usuario.
+
+Qué pasa hoy
+
+Al abrir Asignar usuarios y confirmar, la app muestra Internal Server Error en
+POST /obras/18/asignar_usuario.
+
+No puedo asignar operarios → el operario no ve tareas en /obras/mis-tareas → no puedo probar avances.
+
+En Fase 0 sólo necesito: asignar operarios, cargar avances con fotos, aprobar desde Admin y ver %.
+
+1) Arreglar endpoint de asignación (evitar 500)
+
+Requisito: aceptar POST (FormData o JSON) y validar todo.
+Contrato sugerido (usar este):
+
+URL: POST /obras/<obra_id>/asignar_usuario
+
+Body (FormData):
+
+tarea_ids[] (lista de IDs)
+
+user_ids[] (lista de IDs de usuarios OPERARIO)
+
+cuota_objetivo (opcional, float)
+
+Respuesta: { ok: true, creados: <int> } o { ok:false, error:"..." } (400/403)
+
+Ejemplo sólido (back):
+
+@app.post("/obras/<int:obra_id>/asignar_usuario")
+@login_required
+def asignar_usuario(obra_id):
+    if not current_user.is_admin:
+        return jsonify(ok=False, error="Solo admin"), 403
+
+    data = request.get_json(silent=True) or request.form
+    # recibir arrays desde formdata
+    def _list(name):
+        if hasattr(data, "getlist"):
+            vals = data.getlist(name)
+        else:
+            vals = data.get(name) or []
+        if isinstance(vals, str):
+            vals = [v.strip() for v in vals.split(",") if v.strip()]
+        return [int(v) for v in vals]
+
+    tarea_ids = _list("tarea_ids[]")
+    user_ids  = _list("user_ids[]")
+
+    if not tarea_ids or not user_ids:
+        return jsonify(ok=False, error="Seleccioná tareas y usuarios"), 400
+
+    cuota = (data.get("cuota_objetivo") or "").strip()
+    try:
+        cuota_val = float(cuota.replace(",", ".")) if cuota else None
+    except Exception:
+        return jsonify(ok=False, error="Cuota inválida"), 400
+
+    # sólo operarios
+    operarios = {u.id for u in Usuario.query.filter(Usuario.id.in_(user_ids), Usuario.rol=="OPERARIO")}
+    if not operarios:
+        return jsonify(ok=False, error="Usuarios deben ser OPERARIO"), 400
+
+    # insertar evitando duplicados
+    creados = 0
+    for t_id in tarea_ids:
+        for u_id in operarios:
+            db.session.execute(
+              text("""
+              INSERT INTO tarea_miembros (tarea_id, usuario_id, cuota_objetivo)
+              VALUES (:t,:u,:c)
+              ON CONFLICT (tarea_id, usuario_id) DO NOTHING
+              """), {"t": t_id, "u": u_id, "c": cuota_val}
+            )
+            creados += 1
+    db.session.commit()
+    return jsonify(ok=True, creados=creados)
+
+
+DB (evitar duplicados):
+
+ALTER TABLE tarea_miembros
+  ADD CONSTRAINT IF NOT EXISTS uq_tarea_usuario UNIQUE (tarea_id, usuario_id);
+
+
+Front (modal):
+
+const fd = new FormData();
+tareaIds.forEach(id => fd.append("tarea_ids[]", id));
+userIds.forEach(id => fd.append("user_ids[]", id));
+if (cuota) fd.append("cuota_objetivo", cuota);
+
+const res = await fetch(`/obras/${obraId}/asignar_usuario`, { method:"POST", body: fd, credentials:"include" });
+const data = await res.json();
+if (!data.ok) { alert(data.error); return; }
+
+
+IMPORTANTE: si hoy el modal hace GET o la ruta espera GET, cambialo a POST. El 500 no debe existir: devolver 400/403 con jsonify cuando falten datos.
+
+Si vuelve a fallar: pasame stacktrace de server de ese request (últimas 50 líneas).
+
+2) Asegurar datos mínimos de la tarea (para %)
+
+Cada tarea debe tener unidad y cantidad_objetivo > 0.
+
+En Admin, al crear/editar la tarea, guardar esos campos.
+
+3) Operario → cargar avances (FormData + fotos)
+
+En /obras/mis-tareas (sólo rol OPERARIO) permitir:
+
+cantidad_ingresada (obligatorio)
+
+horas_trabajadas (opcional)
+
+nota (opcional)
+
+fotos (multiple)
+
+Enviar FormData a POST /api/tareas/<id>/avances con header X-From-Dashboard: 1.
+
+Backend debe ignorar unidad del cliente y usar la unidad de la tarea.
+
+4) Admin → aprobar y ver fotos
+
+Vista de tarea debe listar avances pendientes con miniaturas (/media/<file_path>).
+
+Botones Aprobar / Rechazar:
+
+Al aprobar: set estado='aprobado', timestamp y recalcular %:
+
+porcentaje = min(100, sum_aprobado / cantidad_objetivo * 100)
+
+
+/media debe estar autenticado y servir rutas relativas guardadas en DB (ej: avances/15/uuid.jpg).

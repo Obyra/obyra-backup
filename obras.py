@@ -4,6 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
 import requests
 from app import db
+from sqlalchemy import text
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto, TareaAvanceFoto
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
@@ -503,58 +504,64 @@ def agregar_etapas(id):
     return redirect(url_for('obras.detalle', id=id))
 
 
-@obras_bp.route('/<int:id>/asignar_usuario', methods=['POST'])
+@obras_bp.route('/<int:obra_id>/asignar_usuario', methods=['POST'])
 @login_required
-def asignar_usuario(id):
-    """Asignar usuario a obra con etapa específica"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para gestionar asignaciones.', 'danger')
-        return redirect(url_for('obras.detalle', id=id))
+def asignar_usuario(obra_id):
+    """Asignar operarios a tareas - Implementación según especificación del usuario"""
+    if not current_user.is_admin:
+        return jsonify(ok=False, error="Solo admin"), 403
+
+    data = request.get_json(silent=True) or request.form
     
-    obra = Obra.query.get_or_404(id)
-    usuario_id = request.form.get('usuario_id')
-    etapa_id = request.form.get('etapa_id')  # Puede ser None para asignación general
-    rol_en_obra = request.form.get('rol_en_obra', 'operario')
-    
-    if not usuario_id:
-        flash('Selecciona un usuario.', 'warning')
-        return redirect(url_for('obras.detalle', id=id))
-    
-    # Verificar si ya existe asignación
-    asignacion_existente = AsignacionObra.query.filter_by(
-        obra_id=obra.id,
-        usuario_id=usuario_id,
-        etapa_id=etapa_id,
-        activo=True
-    ).first()
-    
-    if asignacion_existente:
-        flash('El usuario ya está asignado a esta obra/etapa.', 'warning')
-        return redirect(url_for('obras.detalle', id=id))
-    
+    # Función helper para manejar arrays desde FormData o JSON
+    def _list(name):
+        if hasattr(data, "getlist"):
+            vals = data.getlist(name)
+        else:
+            vals = data.get(name) or []
+        if isinstance(vals, str):
+            vals = [v.strip() for v in vals.split(",") if v.strip()]
+        return [int(v) for v in vals]
+
     try:
-        nueva_asignacion = AsignacionObra(
-            obra_id=obra.id,
-            usuario_id=usuario_id,
-            etapa_id=etapa_id if etapa_id else None,
-            rol_en_obra=rol_en_obra
-        )
-        
-        db.session.add(nueva_asignacion)
+        tarea_ids = _list("tarea_ids[]")
+        user_ids = _list("user_ids[]")
+
+        if not tarea_ids or not user_ids:
+            return jsonify(ok=False, error="Seleccioná tareas y usuarios"), 400
+
+        cuota = (data.get("cuota_objetivo") or "").strip()
+        try:
+            cuota_val = float(cuota.replace(",", ".")) if cuota else None
+        except Exception:
+            return jsonify(ok=False, error="Cuota inválida"), 400
+
+        # Solo operarios
+        operarios = {u.id for u in Usuario.query.filter(Usuario.id.in_(user_ids), Usuario.rol=="operario")}
+        if not operarios:
+            return jsonify(ok=False, error="Usuarios deben ser OPERARIO"), 400
+
+        # Insertar evitando duplicados usando raw SQL
+        creados = 0
+        for t_id in tarea_ids:
+            for u_id in operarios:
+                result = db.session.execute(
+                    text("""
+                    INSERT INTO tarea_responsables (tarea_id, user_id, cuota_planificada)
+                    VALUES (:t, :u, :c)
+                    ON CONFLICT (tarea_id, user_id) DO NOTHING
+                    RETURNING id
+                    """), {"t": t_id, "u": u_id, "c": cuota_val}
+                )
+                if result.fetchone():
+                    creados += 1
+                    
         db.session.commit()
+        return jsonify(ok=True, creados=creados)
         
-        usuario = Usuario.query.get(usuario_id)
-        etapa_nombre = ""
-        if etapa_id:
-            etapa = EtapaObra.query.get(etapa_id)
-            etapa_nombre = f" - Etapa: {etapa.nombre}"
-            
-        flash(f'Usuario {usuario.nombre_completo} asignado exitosamente{etapa_nombre}.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al asignar usuario: {str(e)}', 'danger')
-    
-    return redirect(url_for('obras.detalle', id=id))
+        return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
 
 @obras_bp.route('/<int:id>/etapa', methods=['POST'])
 @login_required
