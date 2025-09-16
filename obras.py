@@ -129,7 +129,7 @@ def D(x):
         return Decimal('0')
     return x if isinstance(x, Decimal) else Decimal(str(x))
 
-def seed_tareas_para_etapa(nueva_etapa):
+def seed_tareas_para_etapa(nueva_etapa, auto_commit=True):
     """Función idempotente para crear tareas predefinidas en una etapa"""
     try:
         tareas = TAREAS_POR_ETAPA.get(nueva_etapa.nombre, [])
@@ -172,7 +172,8 @@ def seed_tareas_para_etapa(nueva_etapa):
             print(f"✅ Tarea creada: {nombre_tarea}")
         
         print(f"🎯 Total tareas creadas para {nueva_etapa.nombre}: {tareas_creadas}")
-        db.session.commit()
+        if auto_commit:
+            db.session.commit()
         return tareas_creadas
         
     except Exception as e:
@@ -2306,7 +2307,108 @@ def wizard_crear_tareas(obra_id):
         return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
 
 
-# Etapa Management API Endpoints
+# Catalog API Endpoints (for the new wizard)
+
+@obras_bp.route('/api/catalogo/etapas', methods=['GET'])
+@login_required  
+def get_catalogo_etapas():
+    """Get complete etapas catalog"""
+    try:
+        from etapas_predefinidas import obtener_etapas_disponibles
+        catalogo = obtener_etapas_disponibles()
+        return jsonify({"etapas_catalogo": catalogo})
+    except Exception as e:
+        current_app.logger.exception("Error obteniendo catálogo de etapas")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@obras_bp.route('/api/wizard-tareas/etapas', methods=['GET'])
+@login_required
+def get_wizard_etapas():
+    """Get catalog + existing etapas for obra (wizard Step 1)"""
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        if not obra_id:
+            return jsonify({"error": "obra_id es requerido"}), 400
+            
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos para gestionar esta obra"}), 403
+        
+        # Obtener catálogo completo
+        from etapas_predefinidas import obtener_etapas_disponibles
+        catalogo = obtener_etapas_disponibles()
+        
+        # Obtener etapas ya creadas en la obra
+        etapas_creadas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
+        etapas_creadas_data = [
+            {"id": e.id, "slug": None, "nombre": e.nombre} for e in etapas_creadas
+        ]
+        
+        # Mapear etapas creadas con slugs del catálogo si es posible
+        for etapa_creada in etapas_creadas_data:
+            etapa_catalogo = next((c for c in catalogo if c['nombre'] == etapa_creada['nombre']), None)
+            if etapa_catalogo:
+                etapa_creada['slug'] = etapa_catalogo['slug']
+        
+        return jsonify({
+            "etapas_catalogo": catalogo,
+            "etapas_creadas": etapas_creadas_data
+        })
+        
+    except Exception as e:
+        current_app.logger.exception("Error obteniendo etapas para wizard")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@obras_bp.route('/<int:obra_id>/etapas/bulk_from_catalog', methods=['POST'])
+@login_required
+def bulk_create_etapas_from_catalog(obra_id):
+    """Create etapas in obra from catalog IDs (idempotent)"""
+    try:
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos para gestionar esta obra"}), 403
+        
+        data = request.get_json()
+        catalogo_ids = data.get("catalogo_ids", [])
+        
+        if not catalogo_ids:
+            return jsonify({"error": "Se requiere al menos un ID del catálogo"}), 400
+        
+        # Atomic transaction: create etapas and seed tasks together
+        from etapas_predefinidas import crear_etapas_desde_catalogo
+        
+        try:
+            creadas, existentes = crear_etapas_desde_catalogo(obra_id, catalogo_ids)
+            
+            # Crear tareas predefinidas para las etapas nuevas (usar función local)
+            for etapa_data in creadas:
+                etapa = EtapaObra.query.get(etapa_data['id'])
+                if etapa:
+                    seed_tareas_para_etapa(etapa, auto_commit=False)  # Don't commit individually
+            
+            # Single commit for both etapas and tasks
+            db.session.commit()
+            
+        except Exception as e:
+            db.session.rollback()
+            raise  # Re-raise to be caught by outer try-catch
+        
+        return jsonify({
+            "creadas": creadas,
+            "existentes": existentes
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Error creando etapas desde catálogo para obra {obra_id}")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+# Etapa Management API Endpoints (existing)
 
 @obras_bp.route('/<int:obra_id>/etapas', methods=['GET'])
 @login_required

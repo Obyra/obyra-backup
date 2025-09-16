@@ -4,85 +4,123 @@ Etapas predefinidas para proyectos de construcción - OBYRA IA
 
 ETAPAS_CONSTRUCCION = [
     {
-        'nombre': 'Excavación',
-        'descripcion': 'Movimiento de suelos y preparación del terreno',
-        'orden': 1
+        "id": 1, 
+        "slug": "excavacion", 
+        "nombre": "Excavación", 
+        "descripcion": "Movimiento de suelos y preparación del terreno", 
+        "orden": 10
     },
     {
-        'nombre': 'Fundaciones',
-        'descripcion': 'Construcción de cimientos y estructuras de base',
-        'orden': 2
+        "id": 2, 
+        "slug": "fundaciones", 
+        "nombre": "Fundaciones", 
+        "descripcion": "Cimientos y estructuras de base", 
+        "orden": 20
     },
     {
-        'nombre': 'Estructura',
-        'descripcion': 'Construcción de estructura principal (hormigón, acero)',
-        'orden': 3
+        "id": 3, 
+        "slug": "estructura", 
+        "nombre": "Estructura", 
+        "descripcion": "Hormigón / acero", 
+        "orden": 30
     },
     {
-        'nombre': 'Mampostería',
-        'descripcion': 'Construcción de muros y paredes',
-        'orden': 4
+        "id": 4, 
+        "slug": "mamposteria", 
+        "nombre": "Mampostería", 
+        "descripcion": "Muros y paredes", 
+        "orden": 40
     },
     {
-        'nombre': 'Techos',
-        'descripcion': 'Construcción e impermeabilización de techos',
-        'orden': 5
+        "id": 5, 
+        "slug": "techos", 
+        "nombre": "Techos", 
+        "descripcion": "Cubiertas e impermeabilización", 
+        "orden": 50
     },
     {
-        'nombre': 'Instalaciones Eléctricas',
-        'descripcion': 'Instalación del sistema eléctrico',
-        'orden': 6
+        "id": 6, 
+        "slug": "instalaciones-electricas", 
+        "nombre": "Instalaciones Eléctricas", 
+        "descripcion": "Sistema eléctrico", 
+        "orden": 60
     },
     {
-        'nombre': 'Instalaciones Sanitarias',
-        'descripcion': 'Instalación de sistemas de agua y desagües',
-        'orden': 7
+        "id": 7, 
+        "slug": "instalaciones-sanitarias", 
+        "nombre": "Instalaciones Sanitarias", 
+        "descripcion": "Agua y desagües", 
+        "orden": 70
     },
     {
-        'nombre': 'Instalaciones de Gas',
-        'descripcion': 'Instalación del sistema de gas natural',
-        'orden': 8
+        "id": 8, 
+        "slug": "instalaciones-gas", 
+        "nombre": "Instalaciones de Gas", 
+        "descripcion": "Sistema de gas natural", 
+        "orden": 80
     },
     {
-        'nombre': 'Revoque Grueso',
-        'descripcion': 'Aplicación de revoque base en paredes',
-        'orden': 9
+        "id": 9, 
+        "slug": "revoque-grueso", 
+        "nombre": "Revoque Grueso", 
+        "descripcion": "Base en paredes", 
+        "orden": 90
     },
     {
-        'nombre': 'Revoque Fino',
-        'descripcion': 'Aplicación de revoque terminación',
-        'orden': 10
+        "id": 10, 
+        "slug": "revoque-fino", 
+        "nombre": "Revoque Fino", 
+        "descripcion": "Terminación", 
+        "orden": 100
     },
     {
-        'nombre': 'Pisos',
-        'descripcion': 'Colocación de pisos y revestimientos',
-        'orden': 11
+        "id": 11, 
+        "slug": "pisos", 
+        "nombre": "Pisos", 
+        "descripcion": "Colocación y revestimientos", 
+        "orden": 110
     },
     {
-        'nombre': 'Carpintería',
-        'descripcion': 'Instalación de puertas, ventanas y muebles',
-        'orden': 12
+        "id": 12, 
+        "slug": "carpinteria", 
+        "nombre": "Carpintería", 
+        "descripcion": "Puertas, ventanas, muebles", 
+        "orden": 120
     },
     {
-        'nombre': 'Pintura',
-        'descripcion': 'Trabajos de pintura interior y exterior',
-        'orden': 13
+        "id": 13, 
+        "slug": "pintura", 
+        "nombre": "Pintura", 
+        "descripcion": "Interior y exterior", 
+        "orden": 130
     },
     {
-        'nombre': 'Instalaciones Complementarias',
-        'descripcion': 'Aire acondicionado, calefacción, etc.',
-        'orden': 14
+        "id": 14, 
+        "slug": "instalaciones-complementarias", 
+        "nombre": "Instalaciones Complementarias", 
+        "descripcion": "A/A, calefacción, etc.", 
+        "orden": 140
     },
     {
-        'nombre': 'Limpieza Final',
-        'descripcion': 'Limpieza y acondicionamiento final',
-        'orden': 15
+        "id": 15, 
+        "slug": "limpieza-final", 
+        "nombre": "Limpieza Final", 
+        "descripcion": "Acondicionamiento final", 
+        "orden": 150
     }
 ]
 
 def obtener_etapas_disponibles():
     """Retorna lista de etapas predefinidas"""
     return ETAPAS_CONSTRUCCION
+
+def obtener_etapa_por_id(catalog_id):
+    """Retorna etapa del catalogo por ID"""
+    return next((e for e in ETAPAS_CONSTRUCCION if e['id'] == catalog_id), None)
+
+def obtener_etapa_por_slug(slug):
+    """Retorna etapa del catalogo por slug"""
+    return next((e for e in ETAPAS_CONSTRUCCION if e['slug'] == slug), None)
 
 def crear_etapas_para_obra(obra_id, etapas_seleccionadas):
     """Crea las etapas seleccionadas para una obra específica"""
@@ -109,3 +147,56 @@ def crear_etapas_para_obra(obra_id, etapas_seleccionadas):
     
     db.session.commit()
     return etapas_creadas
+
+def crear_etapas_desde_catalogo(obra_id, catalogo_ids):
+    """Crea etapas en la obra basadas en IDs del catálogo (idempotente)"""
+    from app import db
+    from models import EtapaObra
+    
+    creadas = []
+    existentes = []
+    
+    for catalog_id in catalogo_ids:
+        etapa_catalogo = obtener_etapa_por_id(catalog_id)
+        if not etapa_catalogo:
+            continue
+            
+        # Verificar si ya existe por slug o nombre
+        from sqlalchemy import or_
+        etapa_existente = EtapaObra.query.filter(
+            EtapaObra.obra_id == obra_id
+        ).filter(
+            or_(
+                EtapaObra.nombre == etapa_catalogo['nombre'],
+                # Comparación flexible de slug si ya hay etapas con slug-like names
+                EtapaObra.nombre.ilike(f"%{etapa_catalogo['slug'].replace('-', '%')}%")
+            )
+        ).first()
+        
+        if etapa_existente:
+            existentes.append({
+                'id': etapa_existente.id,
+                'slug': etapa_catalogo['slug'],
+                'nombre': etapa_existente.nombre
+            })
+        else:
+            nueva_etapa = EtapaObra(
+                obra_id=obra_id,
+                nombre=etapa_catalogo['nombre'],
+                descripcion=etapa_catalogo['descripcion'],
+                orden=etapa_catalogo['orden'],
+                estado='pendiente'
+            )
+            
+            db.session.add(nueva_etapa)
+            db.session.flush()  # Para obtener el ID
+            
+            creadas.append({
+                'id': nueva_etapa.id,
+                'slug': etapa_catalogo['slug'],
+                'nombre': nueva_etapa.nombre
+            })
+    
+    # Don't commit here - let the caller handle the transaction
+    db.session.flush()  # Ensure IDs are available for task creation
+    return creadas, existentes

@@ -1,0 +1,99 @@
+Objetivo: En el Paso 1 del Wizard quiero ver el catálogo de etapas predefinidas (Excavación, Fundaciones, etc.), poder tildarlas, crear las seleccionadas en la obra si aún no existen y recién ahí pasar al Paso 2 (preview).
+No quiero depender de que ya existan etapas en la obra.
+
+1) Backend – Endpoints nuevos
+
+GET /api/catalogo/etapas
+Devuelve el catálogo completo:
+
+{
+  "etapas_catalogo": [
+    {"id": 1, "slug":"excavacion", "nombre":"Excavación", "descripcion":"Movimiento de suelos y preparación del terreno", "orden":10},
+    {"id": 2, "slug":"fundaciones", "nombre":"Fundaciones", "descripcion":"Cimientos y estructuras de base", "orden":20},
+    {"id": 3, "slug":"estructura", "nombre":"Estructura", "descripcion":"Hormigón / acero", "orden":30},
+    {"id": 4, "slug":"mamposteria", "nombre":"Mampostería", "descripcion":"Muros y paredes", "orden":40},
+    {"id": 5, "slug":"techos", "nombre":"Techos", "descripcion":"Cubiertas e impermeabilización", "orden":50},
+    {"id": 6, "slug":"instalaciones-electricas", "nombre":"Instalaciones Eléctricas", "descripcion":"Sistema eléctrico", "orden":60},
+    {"id": 7, "slug":"instalaciones-sanitarias", "nombre":"Instalaciones Sanitarias", "descripcion":"Agua y desagües", "orden":70},
+    {"id": 8, "slug":"instalaciones-gas", "nombre":"Instalaciones de Gas", "descripcion":"Sistema de gas natural", "orden":80},
+    {"id": 9, "slug":"revoque-grueso", "nombre":"Revoque Grueso", "descripcion":"Base en paredes", "orden":90},
+    {"id":10, "slug":"revoque-fino", "nombre":"Revoque Fino", "descripcion":"Terminación", "orden":100},
+    {"id":11, "slug":"pisos", "nombre":"Pisos", "descripcion":"Colocación y revestimientos", "orden":110},
+    {"id":12, "slug":"carpinteria", "nombre":"Carpintería", "descripcion":"Puertas, ventanas, muebles", "orden":120},
+    {"id":13, "slug":"pintura", "nombre":"Pintura", "descripcion":"Interior y exterior", "orden":130},
+    {"id":14, "slug":"instalaciones-complementarias", "nombre":"Instalaciones Complementarias", "descripcion":"A/A, calefacción, etc.", "orden":140},
+    {"id":15, "slug":"limpieza-final", "nombre":"Limpieza Final", "descripcion":"Acondicionamiento final", "orden":150}
+  ]
+}
+
+
+Si existe tabla etapas_catalogo, sacarlo de ahí ordenado por orden.
+
+Si no existe, usar seed en memoria o crear migración simple con esos campos.
+
+GET /api/wizard-tareas/etapas?obra_id=<ID>
+Devuelve catálogo + etapas ya creadas para esa obra:
+
+{
+  "etapas_catalogo": [...],
+  "etapas_creadas": [{"id": 101, "slug":"excavacion", "nombre":"Excavación"}]
+}
+
+
+POST /api/obras/<obra_id>/etapas/bulk_from_catalog
+Crea en la obra las etapas seleccionadas del catálogo (si no existen) y devuelve todas las resultantes (nuevas y existentes):
+
+// body
+{ "catalogo_ids": [1,2,10] }
+
+// response
+{
+  "creadas": [{"id":201,"slug":"fundaciones","nombre":"Fundaciones"}],
+  "existentes": [{"id":101,"slug":"excavacion","nombre":"Excavación"}]
+}
+
+
+Idempotente: si ya existe por obra_id + slug o obra_id + nombre, no duplicar.
+
+Nota: mantener permisos por obra y manejar errores con JSON.
+
+2) Frontend – Paso 1 del Wizard
+
+Al abrir el wizard, llamar solo a GET /api/wizard-tareas/etapas?obra_id=....
+
+Renderizar un grid/accordion como el selector viejo, con:
+
+Checkbox por etapa.
+
+Botones “Seleccionar Todas / Deseleccionar Todas”.
+
+Botón “Agregar Etapas Seleccionadas” → hace POST /api/obras/<obra_id>/etapas/bulk_from_catalog con los catalogo_ids marcados.
+
+Luego de crear, marcar esas etapas como seleccionadas en el estado del wizard (window.WIZARD.etapa_ids) y habilitar “Siguiente”.
+
+Si ya había etapas creadas, mostrarlas tildadas de entrada.
+
+Al tocar “Siguiente”: llamar a POST /api/wizard-tareas/preview con:
+
+{ "obra_id": <ID>, "etapa_ids": [<ids_de_etapas_creadas_en_esta_obra>] }
+
+
+y pasar al Paso 2.
+
+3) Criterios de aceptación (lo pruebo así)
+
+Abrir wizard sin etapas en la obra → veo todo el catálogo (como el screenshot viejo).
+
+Tildo 3 etapas, “Agregar Etapas Seleccionadas” → se crean en la obra y quedan tildadas.
+
+“Siguiente” → Paso 2 muestra solo esas 3 etapas en el acordeón.
+
+Si reabro el wizard, esas 3 ya aparecen tildadas.
+
+Repetir creación con las mismas → no duplica (responde como “existentes”).
+
+4) Extras (si ayuda)
+
+Si ya tienen un modal/JSON usado por el selector viejo, pueden reutilizar esa fuente para GET /api/catalogo/etapas.
+
+Mantener slug estable para mapear catálogo ↔ etapas de obra.
