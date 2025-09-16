@@ -3146,9 +3146,9 @@ class WizardTareas {
                     <div class="card ${estaCreada ? 'border-success' : 'border-light'} h-100">
                         <div class="card-body p-3">
                             <div class="form-check">
-                                <input class="form-check-input catalog-checkbox" type="checkbox" 
+                                <input class="form-check-input catalog-checkbox etp" type="checkbox" 
                                        value="${etapa.id}" id="catalogEtapa${etapa.id}"
-                                       data-slug="${etapa.slug}" data-nombre="${etapa.nombre}"
+                                       data-catalog-id="${etapa.id}" data-slug="${etapa.slug}" data-nombre="${etapa.nombre}"
                                        ${estaCreada ? 'checked' : ''} 
                                        onchange="actualizarContadorSeleccionadas()">
                                 <label class="form-check-label w-100" for="catalogEtapa${etapa.id}">
@@ -3242,7 +3242,10 @@ function deseleccionarTodasLasEtapas() {
     actualizarContadorSeleccionadas();
 }
 
-// Robust fetch helper as specified
+const PREF = '/obras';
+window.obraId = window.obraId ?? +location.pathname.split('/').pop();
+
+// helper robusto (no MÁS '<DOCTYPE')
 async function fetchJSON(url, opts){
   const r = await fetch(url, opts);
   const txt = await r.text();
@@ -3252,62 +3255,78 @@ async function fetchJSON(url, opts){
   return JSON.parse(txt);
 }
 
-// Replace handler as specified
-const PREF = '/obras'; // prefijo real del blueprint
-const $err = document.getElementById('step1-error'); // span/div rojo de error si existe
-const $ok  = document.getElementById('step1-success');  // span/div verde de ok si existe
+function getCatalogoIds(){
+  return [...document.querySelectorAll('.etp:checked, .catalog-checkbox:checked')]
+    .map(el => Number(el.dataset.catalogId || el.value))
+    .filter(Boolean);
+}
 
-async function agregarEtapasSeleccionadas(){
-  $err && ($err.textContent = '');
-  $ok  && ($ok.textContent  = '');
+let autoTimer=null, busy=false;
 
-  const checks = [...document.querySelectorAll('.catalog-checkbox:checked')];
-  const catalogoIds = checks.map(i => Number(i.value)).filter(Boolean);
+async function autoAddAndNext(){
+  if (busy) return;
+  const catalogoIds = getCatalogoIds();
+  if (!catalogoIds.length) { showErr('Seleccioná al menos una etapa del catálogo.'); return; }
 
-  if(!catalogoIds.length){
-    $err && ($err.textContent = 'Seleccioná al menos una etapa del catálogo.');
-    return;
-  }
+  try{
+    busy = true;
+    disablePaso1(true);
 
-  try {
-    const url = `${PREF}/api/obras/${window.wizardTareas.obra_id}/etapas/bulk_from_catalog`;
-    console.log('POST bulk_from_catalog', url, catalogoIds);
-    const res = await fetchJSON(url, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+    // 1) Crear/recuperar etapas de la obra
+    const bulk = await fetchJSON(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ catalogo_ids: catalogoIds })
     });
+    if (bulk.ok === false) throw new Error(bulk.error || 'Error en bulk_from_catalog');
 
-    if(res.ok === false){
-      throw new Error(res.error || 'Error desconocido del servidor');
-    }
-    if(!res || (!res.creadas && !res.existentes)){
-      throw new Error('Respuesta inválida del servidor');
-    }
-
-    const etapaIds = [...(res.creadas||[]), ...(res.existentes||[])].map(e => e.id).filter(Boolean);
-    if(!etapaIds.length){
-      throw new Error('No se devolvieron IDs de etapas de la obra');
-    }
+    const etapaIds = [...(bulk.creadas||[]), ...(bulk.existentes||[])].map(e=>+e.id).filter(Boolean);
+    if (!etapaIds.length) throw new Error('No se devolvieron IDs de etapas');
 
     window.WIZARD = window.WIZARD || {};
     window.WIZARD.etapa_ids = etapaIds;
 
-    $ok && ($ok.textContent = `Agregadas ${res.creadas?.length||0} | Existentes ${res.existentes?.length||0}`);
-    // habilitar Siguiente si estaba deshabilitado
-    const btnSig = document.getElementById('wizardBtnSiguiente');
-    btnSig && btnSig.removeAttribute('disabled');
-  } catch (e){
-    console.error('Wizard Paso1 bulk error:', e);
-    $err && ($err.textContent = `Error: ${e.message}`);
-    alert(`Error al agregar etapas: ${e.message}`); // opcional, si quieren pop-up
+    // 2) Preview filtrado y salto a Paso 2
+    const body = { obra_id: window.obraId, etapa_ids: etapaIds };
+    window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+
+    gotoPaso(2);
+  }catch(e){
+    console.error('Wizard Paso1 autoAddAndNext:', e);
+    showErr(`Error: ${e.message}`);
+  }finally{
+    busy = false;
+    disablePaso1(false);
   }
 }
 
-// Asegurar el binding y global variables
-window.obraId = window.wizardTareas ? window.wizardTareas.obra_id : null;
-const btnAgregar = document.getElementById('btnAgregarEtapasSel');
-if(btnAgregar) btnAgregar.onclick = agregarEtapasSeleccionadas;
+// Botón "Agregar Etapas Seleccionadas" → hace todo y avanza
+document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', (e)=>{
+  e.preventDefault(); autoAddAndNext();
+});
+
+// Botón "Siguiente" en Paso 1 → si no agregó, agrega y avanza
+document.getElementById('wizardBtnSiguiente')?.addEventListener('click', async (e)=>{
+  if (window.wizardPasoActual !== 1) return;  // otros pasos siguen normal
+  e.preventDefault(); autoAddAndNext();
+});
+
+// Auto-avance al tildar (con debounce para no spamear el backend)
+document.querySelectorAll('.etp, .catalog-checkbox').forEach(cb=>{
+  cb.addEventListener('change', ()=>{
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(autoAddAndNext, 350);
+  });
+});
+
+// helpers visuales
+function disablePaso1(flag){
+  document.querySelectorAll('.etp, .catalog-checkbox, #btnAgregarEtapasSel, #wizardBtnSiguiente')
+    .forEach(el => flag ? el.setAttribute('disabled','') : el.removeAttribute('disabled'));
+  document.getElementById('wizardInfo')?.classList.toggle('d-none', !flag);
+}
+function showErr(msg){ const n = document.getElementById('wizardError'); if(n) n.textContent = msg; else alert(msg); }
 
 function mostrarErrorPaso1(mensaje) {
     const errorDiv = document.getElementById('step1-error');
