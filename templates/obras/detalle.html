@@ -97,6 +97,9 @@
                                     <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
                                         <i class="fas fa-plus me-1"></i>Agregar
                                     </button>
+                                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+                                        <i class="fas fa-magic me-1"></i>Wizard Tareas
+                                    </button>
                                 </div>
                                 {% endif %}
                             </div>
@@ -834,6 +837,118 @@
                     <button type="submit" class="btn btn-success">Agregar Etapas Seleccionadas</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Wizard Tareas - Issue #2 Frontend -->
+<div class="modal fade" id="wizardTareasModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">🧙‍♂️ Wizard: Crear Tareas en Lote</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Progress bar -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="wizard-step" data-step="1">1. Etapas</span>
+                        <span class="wizard-step" data-step="2">2. Tareas</span>
+                        <span class="wizard-step" data-step="3">3. Datos</span>
+                        <span class="wizard-step" data-step="4">4. Confirmar</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar" id="wizardProgressBar" style="width: 25%"></div>
+                    </div>
+                </div>
+
+                <!-- Paso 1: Seleccionar Etapas -->
+                <div id="wizardStep1" class="wizard-content">
+                    <h6>Paso 1: Seleccionar Etapas</h6>
+                    <p class="text-muted">Selecciona las etapas donde quieres crear tareas:</p>
+                    <div class="row">
+                        {% for etapa in etapas %}
+                        <div class="col-md-6 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input etapa-wizard-check" type="checkbox" 
+                                       value="{{ etapa.id }}" id="wizardEtapa{{ etapa.id }}">
+                                <label class="form-check-label" for="wizardEtapa{{ etapa.id }}">
+                                    {{ etapa.nombre }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Paso 2: Tildar Tareas Sugeridas -->
+                <div id="wizardStep2" class="wizard-content d-none">
+                    <h6>Paso 2: Seleccionar Tareas</h6>
+                    <p class="text-muted">Marca las tareas que quieres crear para cada etapa:</p>
+                    <div id="tareasWizardContainer">
+                        <!-- Se llena dinámicamente con JS -->
+                    </div>
+                </div>
+
+                <!-- Paso 3: Completar Datos -->
+                <div id="wizardStep3" class="wizard-content d-none">
+                    <h6>Paso 3: Completar Datos de Tareas</h6>
+                    <p class="text-muted">Completa los detalles para cada tarea seleccionada:</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm" id="tablaDatosWizard">
+                            <thead>
+                                <tr>
+                                    <th>Tarea</th>
+                                    <th>Inicio</th>
+                                    <th>Fin</th>
+                                    <th>Horas</th>
+                                    <th>Unidad</th>
+                                    <th>Responsable</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Se llena dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Paso 4: Resumen y Confirmar -->
+                <div id="wizardStep4" class="wizard-content d-none">
+                    <h6>Paso 4: Confirmar Creación</h6>
+                    <p class="text-muted">Revisa el resumen antes de crear las tareas:</p>
+                    <div id="resumenWizard">
+                        <!-- Se llena dinámicamente -->
+                    </div>
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="evitarDuplicados" checked>
+                        <label class="form-check-label" for="evitarDuplicados">
+                            Evitar duplicados (actualizar si ya existe)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Loading state -->
+                <div id="wizardLoading" class="text-center d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Creando tareas...</span>
+                    </div>
+                    <p class="mt-2">Creando tareas, por favor espera...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-outline-secondary" id="wizardBtnAnterior" style="display:none;">
+                    <i class="fas fa-arrow-left me-1"></i>Anterior
+                </button>
+                <button type="button" class="btn btn-primary" id="wizardBtnSiguiente">
+                    Siguiente <i class="fas fa-arrow-right ms-1"></i>
+                </button>
+                <button type="button" class="btn btn-success" id="wizardBtnConfirmar" style="display:none;">
+                    <i class="fas fa-check me-1"></i>Crear Tareas
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -2430,6 +2545,384 @@ async function confirmarRechazo() {
 // After traditional form works, can optionally re-add AJAX
 
 console.log('🔧 HOTFIX: Traditional form submission enabled (no AJAX interference)');
+
+// Issue #2 - Frontend: Wizard Tareas JavaScript Implementation
+class WizardTareas {
+    constructor() {
+        this.currentStep = 1;
+        this.selectedEtapas = [];
+        this.selectedTareas = [];
+        this.tareasData = [];
+        this.responsables = {{ responsables|tojson|safe }};
+        
+        this.initializeEventListeners();
+        this.loadTareasSugeridas();
+    }
+    
+    initializeEventListeners() {
+        document.getElementById('wizardBtnSiguiente')?.addEventListener('click', () => this.nextStep());
+        document.getElementById('wizardBtnAnterior')?.addEventListener('click', () => this.previousStep());
+        document.getElementById('wizardBtnConfirmar')?.addEventListener('click', () => this.confirmarCreacion());
+        
+        // Reset wizard when modal opens
+        document.getElementById('wizardTareasModal')?.addEventListener('show.bs.modal', () => this.resetWizard());
+    }
+    
+    loadTareasSugeridas() {
+        // Load predefined tasks from backend data
+        this.tareasPredefinidas = {{ TAREAS_POR_ETAPA|tojson|safe }};
+        console.log('🧙‍♂️ WIZARD: Tareas predefinidas cargadas', this.tareasPredefinidas);
+    }
+    
+    resetWizard() {
+        this.currentStep = 1;
+        this.selectedEtapas = [];
+        this.selectedTareas = [];
+        this.tareasData = [];
+        
+        // Reset UI
+        this.updateStepDisplay();
+        this.updateProgressBar();
+        this.clearStepContent();
+        
+        // Reset form inputs
+        document.querySelectorAll('.etapa-wizard-check').forEach(cb => cb.checked = false);
+    }
+    
+    nextStep() {
+        if (!this.validateCurrentStep()) return;
+        
+        if (this.currentStep < 4) {
+            this.currentStep++;
+            this.updateStepDisplay();
+            this.updateProgressBar();
+            this.populateStepContent();
+        }
+    }
+    
+    previousStep() {
+        if (this.currentStep > 1) {
+            this.currentStep--;
+            this.updateStepDisplay();
+            this.updateProgressBar();
+            this.populateStepContent();
+        }
+    }
+    
+    validateCurrentStep() {
+        switch (this.currentStep) {
+            case 1:
+                this.selectedEtapas = Array.from(document.querySelectorAll('.etapa-wizard-check:checked')).map(cb => parseInt(cb.value));
+                if (this.selectedEtapas.length === 0) {
+                    alert('Selecciona al menos una etapa');
+                    return false;
+                }
+                return true;
+                
+            case 2:
+                this.selectedTareas = Array.from(document.querySelectorAll('.tarea-wizard-check:checked')).map(cb => JSON.parse(cb.dataset.tarea));
+                if (this.selectedTareas.length === 0) {
+                    alert('Selecciona al menos una tarea');
+                    return false;
+                }
+                return true;
+                
+            case 3:
+                // Validate all required fields in the data table
+                const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+                let valid = true;
+                
+                rows.forEach(row => {
+                    const nombre = row.querySelector('.tarea-nombre')?.textContent;
+                    const inicio = row.querySelector('.fecha-inicio').value;
+                    const fin = row.querySelector('.fecha-fin').value;
+                    const horas = row.querySelector('.horas-estimadas').value;
+                    
+                    if (!inicio || !fin) {
+                        alert(`Fechas requeridas para la tarea: ${nombre}`);
+                        valid = false;
+                        return;
+                    }
+                    
+                    if (!horas || parseFloat(horas) <= 0) {
+                        alert(`Horas estimadas debe ser mayor a 0 para: ${nombre}`);
+                        valid = false;
+                        return;
+                    }
+                });
+                
+                return valid;
+        }
+        return true;
+    }
+    
+    updateStepDisplay() {
+        // Hide all steps
+        document.querySelectorAll('.wizard-content').forEach(step => step.classList.add('d-none'));
+        
+        // Show current step
+        document.getElementById(`wizardStep${this.currentStep}`)?.classList.remove('d-none');
+        
+        // Update step indicators
+        document.querySelectorAll('.wizard-step').forEach((step, index) => {
+            step.classList.toggle('text-primary', index + 1 === this.currentStep);
+            step.classList.toggle('fw-bold', index + 1 === this.currentStep);
+        });
+        
+        // Update buttons
+        const btnAnterior = document.getElementById('wizardBtnAnterior');
+        const btnSiguiente = document.getElementById('wizardBtnSiguiente');
+        const btnConfirmar = document.getElementById('wizardBtnConfirmar');
+        
+        btnAnterior.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
+        btnSiguiente.style.display = this.currentStep < 4 ? 'inline-block' : 'none';
+        btnConfirmar.style.display = this.currentStep === 4 ? 'inline-block' : 'none';
+    }
+    
+    updateProgressBar() {
+        const progress = (this.currentStep / 4) * 100;
+        document.getElementById('wizardProgressBar').style.width = `${progress}%`;
+    }
+    
+    clearStepContent() {
+        document.getElementById('tareasWizardContainer').innerHTML = '';
+        document.querySelector('#tablaDatosWizard tbody').innerHTML = '';
+        document.getElementById('resumenWizard').innerHTML = '';
+    }
+    
+    populateStepContent() {
+        switch (this.currentStep) {
+            case 2:
+                this.populateTareasSugeridas();
+                break;
+            case 3:
+                this.populateTablaEditable();
+                break;
+            case 4:
+                this.populateResumen();
+                break;
+        }
+    }
+    
+    populateTareasSugeridas() {
+        const container = document.getElementById('tareasWizardContainer');
+        container.innerHTML = '';
+        
+        this.selectedEtapas.forEach(etapaId => {
+            const etapaNombre = document.querySelector(`label[for="wizardEtapa${etapaId}"]`).textContent;
+            const etapaDiv = document.createElement('div');
+            etapaDiv.className = 'mb-4';
+            
+            // Find suggested tasks for this stage
+            let tareasEtapa = [];
+            if (this.tareasPredefinidas && this.tareasPredefinidas[etapaId]) {
+                tareasEtapa = this.tareasPredefinidas[etapaId];
+            } else {
+                // Default tasks if no predefined ones
+                tareasEtapa = [
+                    { nombre: `Tarea principal - ${etapaNombre}`, descripcion: 'Tarea principal de la etapa' },
+                    { nombre: `Control de calidad - ${etapaNombre}`, descripcion: 'Control y verificación' }
+                ];
+            }
+            
+            etapaDiv.innerHTML = `
+                <h6 class="mb-2">📋 ${etapaNombre}</h6>
+                <div class="row">
+                    ${tareasEtapa.map(tarea => `
+                        <div class="col-md-6 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input tarea-wizard-check" type="checkbox" 
+                                       data-tarea='{"etapa_id": ${etapaId}, "nombre": "${tarea.nombre}", "descripcion": "${tarea.descripcion || ''}"}' 
+                                       id="wizardTarea${etapaId}_${tarea.nombre.replace(/\\s+/g, '')}">
+                                <label class="form-check-label" for="wizardTarea${etapaId}_${tarea.nombre.replace(/\\s+/g, '')}">
+                                    ${tarea.nombre}
+                                </label>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            container.appendChild(etapaDiv);
+        });
+    }
+    
+    populateTablaEditable() {
+        const tbody = document.querySelector('#tablaDatosWizard tbody');
+        tbody.innerHTML = '';
+        
+        this.selectedTareas.forEach((tarea, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="tarea-nombre">${tarea.nombre}</td>
+                <td><input type="date" class="form-control form-control-sm fecha-inicio" required></td>
+                <td><input type="date" class="form-control form-control-sm fecha-fin" required></td>
+                <td><input type="number" class="form-control form-control-sm horas-estimadas" min="0.1" step="0.1" placeholder="8.0" required></td>
+                <td>
+                    <select class="form-select form-select-sm unidad">
+                        <option value="h">Horas</option>
+                        <option value="dias">Días</option>
+                        <option value="m2">m²</option>
+                        <option value="m3">m³</option>
+                        <option value="unidad">Unidad</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm responsable">
+                        <option value="">Sin asignar</option>
+                        ${this.responsables.map(resp => `
+                            <option value="${resp.usuario.id}">${resp.usuario.nombre_completo}</option>
+                        `).join('')}
+                    </select>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+    
+    populateResumen() {
+        const container = document.getElementById('resumenWizard');
+        const resumenHtml = `
+            <div class="alert alert-info">
+                <h6>📊 Resumen de Tareas a Crear</h6>
+                <ul class="mb-0">
+                    <li><strong>Etapas seleccionadas:</strong> ${this.selectedEtapas.length}</li>
+                    <li><strong>Tareas a crear:</strong> ${this.selectedTareas.length}</li>
+                    <li><strong>Con responsables asignados:</strong> ${this.contarTareasConResponsable()}</li>
+                </ul>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Tarea</th><th>Fechas</th><th>Horas</th><th>Responsable</th></tr>
+                    </thead>
+                    <tbody>
+                        ${this.generarFilasResumen()}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.innerHTML = resumenHtml;
+    }
+    
+    contarTareasConResponsable() {
+        return document.querySelectorAll('#tablaDatosWizard .responsable').length;
+    }
+    
+    generarFilasResumen() {
+        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+        let html = '';
+        
+        rows.forEach(row => {
+            const nombre = row.querySelector('.tarea-nombre').textContent;
+            const inicio = row.querySelector('.fecha-inicio').value;
+            const fin = row.querySelector('.fecha-fin').value;
+            const horas = row.querySelector('.horas-estimadas').value;
+            const responsableSelect = row.querySelector('.responsable');
+            const responsableName = responsableSelect.options[responsableSelect.selectedIndex].text;
+            
+            html += `
+                <tr>
+                    <td>${nombre}</td>
+                    <td>${inicio} → ${fin}</td>
+                    <td>${horas}h</td>
+                    <td>${responsableName}</td>
+                </tr>
+            `;
+        });
+        
+        return html;
+    }
+    
+    async confirmarCreacion() {
+        // Collect all data for API call
+        const payload = {
+            etapas: [],
+            evitar_duplicados: document.getElementById('evitarDuplicados').checked
+        };
+        
+        // Build payload from table data
+        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+        const etapasMap = {};
+        
+        rows.forEach((row, index) => {
+            const tarea = this.selectedTareas[index];
+            const inicio = row.querySelector('.fecha-inicio').value;
+            const fin = row.querySelector('.fecha-fin').value;
+            const horas = parseFloat(row.querySelector('.horas-estimadas').value);
+            const unidad = row.querySelector('.unidad').value;
+            const responsableId = parseInt(row.querySelector('.responsable').value) || null;
+            
+            if (!etapasMap[tarea.etapa_id]) {
+                etapasMap[tarea.etapa_id] = {
+                    etapa_id: tarea.etapa_id,
+                    tareas: []
+                };
+            }
+            
+            etapasMap[tarea.etapa_id].tareas.push({
+                nombre: tarea.nombre,
+                inicio: inicio,
+                fin: fin,
+                horas_estimadas: horas,
+                unidad: unidad,
+                responsable_id: responsableId
+            });
+        });
+        
+        payload.etapas = Object.values(etapasMap);
+        
+        console.log('🧙‍♂️ WIZARD: Enviando payload', payload);
+        
+        // Show loading
+        document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
+        document.getElementById('wizardLoading').classList.remove('d-none');
+        document.querySelector('.modal-footer').style.display = 'none';
+        
+        try {
+            const response = await fetch(`/obras/{{ obra.id }}/wizard/tareas`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const result = await response.json();
+            console.log('🧙‍♂️ WIZARD: Respuesta', result);
+            
+            if (result.ok) {
+                alert(`✅ Éxito: ${result.creadas} tareas creadas, ${result.ya_existian} ya existían, ${result.asignaciones_creadas} asignaciones realizadas`);
+                
+                // Close modal and refresh page
+                const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
+                modal.hide();
+                window.location.reload();
+            } else {
+                alert(`❌ Error: ${result.error}`);
+                this.showStep4(); // Go back to confirmation
+            }
+        } catch (error) {
+            console.error('❌ WIZARD: Error', error);
+            alert(`❌ Error de conexión: ${error.message}`);
+            this.showStep4(); // Go back to confirmation
+        }
+    }
+    
+    showStep4() {
+        document.getElementById('wizardLoading').classList.add('d-none');
+        document.getElementById('wizardStep4').classList.remove('d-none');
+        document.querySelector('.modal-footer').style.display = 'block';
+    }
+}
+
+// Initialize wizard when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('wizardTareasModal')) {
+        console.log('🧙‍♂️ WIZARD: Inicializando wizard de tareas');
+        window.wizardTareas = new WizardTareas();
+    }
+});
 
 </script>
 {% endblock %}
