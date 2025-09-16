@@ -82,26 +82,21 @@
                     <!-- Etapas del Proyecto -->
                     <div class="card border-0 bg-light">
                         <div class="card-body p-3">
-                            <div class="d-flex align-items-center justify-content-between mb-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="bg-dark rounded-circle p-2 me-3" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-                                        <i class="fas fa-tasks text-white"></i>
-                                    </div>
-                                    <h6 class="mb-0">Etapas del Proyecto</h6>
-                                </div>
-                                {% if can_manage %}
-                                <div class="d-flex gap-2">
-                                    <button id="btn-stage-delete" class="btn btn-danger btn-sm" disabled>
-                                        Eliminar seleccionadas (0)
-                                    </button>
-                                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
-                                        <i class="fas fa-plus me-1"></i>Agregar
-                                    </button>
-                                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
-                                        <i class="fas fa-magic me-1"></i>Wizard Tareas
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Etapas del Proyecto</h5>
+
+                                <div class="btn-group">
+                                    {# Solo mostrar eliminar si HAY etapas #}
+                                    {% if etapas|length > 0 %}
+                                      <button id="btnEliminarEtapas" class="btn btn-outline-danger btn-sm">
+                                        Eliminar seleccionadas (<span id="etpSelCount">0</span>)
+                                      </button>
+                                    {% endif %}
+
+                                    <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+                                      🧙‍♂️ Wizard Tareas
                                     </button>
                                 </div>
-                                {% endif %}
                             </div>
                             
                             <!-- Controles para selección múltiple de tareas -->
@@ -226,14 +221,11 @@
                                 </div>
                                 {% endfor %}
                             {% else %}
-                                <div class="text-center py-4">
-                                    <i class="fas fa-list-ul fa-2x text-muted mb-3"></i>
-                                    <p class="text-muted mb-3">No hay etapas definidas para esta obra.</p>
-                                    {% if can_manage %}
-                                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#seleccionarEtapasModal">
-                                        <i class="fas fa-tasks me-1"></i>Seleccionar Etapas
+                                <div class="text-center py-4 text-muted">
+                                    No hay etapas definidas para esta obra.<br>
+                                    <button id="btnWizardTareas2" class="btn btn-success mt-3" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+                                      ⚡ Configurar con Wizard
                                     </button>
-                                    {% endif %}
                                 </div>
                             {% endif %}
                         </div>
