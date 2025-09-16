@@ -2316,10 +2316,14 @@ def get_catalogo_etapas():
     try:
         from etapas_predefinidas import obtener_etapas_disponibles
         catalogo = obtener_etapas_disponibles()
-        return jsonify({"etapas_catalogo": catalogo})
+        response = jsonify({"ok": True, "etapas_catalogo": catalogo})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
     except Exception as e:
-        current_app.logger.exception("Error obteniendo catálogo de etapas")
-        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+        current_app.logger.exception("API Error obteniendo catálogo de etapas")
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 400
 
 
 @obras_bp.route('/api/wizard-tareas/etapas', methods=['GET'])
@@ -2329,12 +2333,16 @@ def get_wizard_etapas():
     try:
         obra_id = request.args.get('obra_id', type=int)
         if not obra_id:
-            return jsonify({"error": "obra_id es requerido"}), 400
+            response = jsonify({"ok": False, "error": "obra_id es requerido"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
             
         # Verificar permisos
         obra = Obra.query.get_or_404(obra_id)
         if not can_manage_obra(obra):
-            return jsonify({"error": "Sin permisos para gestionar esta obra"}), 403
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
         
         # Obtener catálogo completo
         from etapas_predefinidas import obtener_etapas_disponibles
@@ -2352,14 +2360,19 @@ def get_wizard_etapas():
             if etapa_catalogo:
                 etapa_creada['slug'] = etapa_catalogo['slug']
         
-        return jsonify({
+        response = jsonify({
+            "ok": True,
             "etapas_catalogo": catalogo,
             "etapas_creadas": etapas_creadas_data
         })
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
         
     except Exception as e:
-        current_app.logger.exception("Error obteniendo etapas para wizard")
-        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+        current_app.logger.exception("API Error obteniendo etapas para wizard")
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 400
 
 
 @obras_bp.route('/<int:obra_id>/etapas/bulk_from_catalog', methods=['POST'])
@@ -2397,15 +2410,20 @@ def bulk_create_etapas_from_catalog(obra_id):
             db.session.rollback()
             raise  # Re-raise to be caught by outer try-catch
         
-        return jsonify({
+        response = jsonify({
+            "ok": True,
             "creadas": creadas,
             "existentes": existentes
         })
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception(f"Error creando etapas desde catálogo para obra {obra_id}")
-        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+        current_app.logger.exception(f"API Error creando etapas desde catálogo para obra {obra_id}")
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 400
 
 
 # Etapa Management API Endpoints (existing)

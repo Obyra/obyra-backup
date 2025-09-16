@@ -1,0 +1,82 @@
+Objetivo: En el Paso 1 del Wizard quiero que las llamadas de catálogo y etapas SIEMPRE devuelvan JSON y que el front use las rutas correctas del blueprint. Ahora falla con Unexpected token '<' porque el servidor responde HTML (404/500).
+
+1) Verificá y fijá las rutas reales (con prefijo)
+
+Buscá en obras.py cómo está registrado el blueprint y su url_prefix. Confirmá si es '/obras' o '/api'.
+
+Asegurate de que existan y queden exactamente estas rutas (ajustá el prefijo según el blueprint):
+
+GET /<PREFIJO>/api/catalogo/etapas
+
+GET /<PREFIJO>/api/wizard-tareas/etapas?obra_id=<id>
+
+POST /<PREFIJO>/api/obras/<obra_id>/etapas/bulk_from_catalog
+
+POST /<PREFIJO>/api/wizard-tareas/preview
+
+GET /<PREFIJO>/api/obras/<obra_id>/equipo
+
+Todas deben retornar jsonify(...) y nunca render_template. Agregá try/except que devuelva JSON en caso de error:
+
+try:
+    ...
+    return jsonify(payload), 200
+except Exception as e:
+    current_app.logger.exception("API error")
+    return jsonify({"ok": False, "error": str(e)}), 400
+
+2) Actualizá el front del Wizard (Paso 1) a las URLs correctas
+
+En templates/obras/detalle.html (o donde esté el JS del wizard), cambiá los fetch a las rutas con prefijo:
+
+const PREF = '/obras'; // <-- ajustar al prefijo real del blueprint
+
+async function fetchJSON(url, options){
+  const r = await fetch(url, options);
+  const txt = await r.text();
+  const ct = r.headers.get('content-type') || '';
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${txt.slice(0,300)}`);
+  if (!ct.includes('application/json')) throw new Error(`No JSON (${ct}): ${txt.slice(0,300)}`);
+  return JSON.parse(txt);
+}
+
+async function cargarPaso1Catalogo(obraId){
+  const data = await fetchJSON(`${PREF}/api/wizard-tareas/etapas?obra_id=${obraId}`);
+  renderCatalogo(data.etapas_catalogo, data.etapas_creadas);
+}
+
+async function agregarEtapasSeleccionadas(obraId, catalogoIds){
+  const res = await fetchJSON(`${PREF}/api/obras/${obraId}/etapas/bulk_from_catalog`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ catalogo_ids: catalogoIds })
+  });
+  window.WIZARD = window.WIZARD || {};
+  window.WIZARD.etapa_ids = [...res.creadas, ...res.existentes].map(e => e.id);
+}
+
+async function irAPaso2Preview(obraId){
+  const body = { obra_id: obraId, etapa_ids: window.WIZARD.etapa_ids };
+  window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`,{
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+}
+
+3) QA rápido (automatizado)
+
+Agregá en consola logs claros cuando falle: console.error('Wizard Paso1 error:', err.message).
+
+Probá manualmente:
+
+Abrir Wizard → Paso 1 carga catálogo desde ${PREF}/api/wizard-tareas/etapas.
+
+Tildar 2–3 etapas → “Agregar seleccionadas” hace bulk_from_catalog y guarda WIZARD.etapa_ids.
+
+“Siguiente” llama preview y NO rompe.
+
+En caso de error, que el modal muestre el texto JSON del error (no HTML).
+
+4) Entregable
+
+Confirmar rutas finales (copiar/pegar) y archivo donde quedó el const PREF.
+
+Confirmar que ya no aparece Unexpected token '<' y que las respuestas vienen como application/json.

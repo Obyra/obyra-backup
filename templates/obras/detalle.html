@@ -3080,27 +3080,42 @@ class WizardTareas {
         this.cargarCatalogoEtapas();
     }
     
+    // Helper function for consistent JSON fetching
+    async fetchJSON(url, options = {}) {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        const contentType = response.headers.get('content-type') || '';
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+        }
+        
+        if (!contentType.includes('application/json')) {
+            throw new Error(`No JSON (${contentType}): ${text.slice(0, 300)}`);
+        }
+        
+        return JSON.parse(text);
+    }
+
     async cargarCatalogoEtapas() {
         try {
-            const response = await fetch(`/obras/api/wizard-tareas/etapas?obra_id=${this.obra_id}`, {
+            const data = await this.fetchJSON(`/obras/api/wizard-tareas/etapas?obra_id=${this.obra_id}`, {
                 headers: { 'Accept': 'application/json' }
             });
             
-            if (response.ok) {
-                const data = await response.json();
+            if (data.ok) {
                 this.WIZARD.catalogo = data.etapas_catalogo || [];
                 this.WIZARD.etapas_creadas = data.etapas_creadas || [];
                 this.renderCatalogo();
             } else {
-                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-                console.error('Error cargando catálogo:', errorData.error);
+                console.error('Wizard Paso1 error:', data.error);
                 document.getElementById('catalogoEtapas').innerHTML = 
-                    '<div class="col-12"><div class="alert alert-warning">Error cargando catálogo de etapas.</div></div>';
+                    `<div class="col-12"><div class="alert alert-warning">Error cargando catálogo: ${data.error}</div></div>`;
             }
         } catch (error) {
-            console.error('Error cargando catálogo:', error);
+            console.error('Wizard Paso1 error:', error.message);
             document.getElementById('catalogoEtapas').innerHTML = 
-                '<div class="col-12"><div class="alert alert-danger">Error de conexión al cargar el catálogo.</div></div>';
+                `<div class="col-12"><div class="alert alert-danger">Error de conexión: ${error.message}</div></div>`;
         }
     }
     
@@ -3242,7 +3257,7 @@ async function agregarEtapasSeleccionadas() {
     document.getElementById('btnAgregarEtapas').innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando etapas...';
     
     try {
-        const response = await fetch(`/obras/${window.wizardTareas.obra_id}/etapas/bulk_from_catalog`, {
+        const data = await window.wizardTareas.fetchJSON(`/obras/${window.wizardTareas.obra_id}/etapas/bulk_from_catalog`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -3251,8 +3266,7 @@ async function agregarEtapasSeleccionadas() {
             body: JSON.stringify({ catalogo_ids: catalogoIds })
         });
         
-        if (response.ok) {
-            const data = await response.json();
+        if (data.ok) {
             const { creadas, existentes } = data;
             
             // Update wizard state with created etapa IDs
@@ -3270,10 +3284,11 @@ async function agregarEtapasSeleccionadas() {
             }, 2000);
             
         } else {
-            const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-            mostrarErrorPaso1(`Error: ${errorData.error}`);
+            console.error('Wizard Paso1 error:', data.error);
+            mostrarErrorPaso1(`Error: ${data.error}`);
         }
     } catch (error) {
+        console.error('Wizard Paso1 error:', error.message);
         mostrarErrorPaso1(`Error de conexión: ${error.message}`);
     } finally {
         // Restore button state
