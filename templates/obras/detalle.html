@@ -863,23 +863,42 @@
                     </div>
                 </div>
 
-                <!-- Paso 1: Seleccionar Etapas -->
+                <!-- Paso 1: Seleccionar Etapas (Dynamic Loading) -->
                 <div id="wizardStep1" class="wizard-content">
                     <h6>Paso 1: Seleccionar Etapas</h6>
                     <p class="text-muted">Selecciona las etapas donde quieres crear tareas:</p>
-                    <div class="row">
-                        {% for etapa in etapas %}
-                        <div class="col-md-6 mb-2">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="etapas"
-                                       value="{{ etapa.id }}" id="wizardEtapa{{ etapa.id }}">
-                                <label class="form-check-label" for="wizardEtapa{{ etapa.id }}">
-                                    {{ etapa.nombre }}
-                                </label>
+                    
+                    <!-- Dynamic etapas container -->
+                    <div id="paso1-etapas" class="row">
+                        <!-- Se llena dinámicamente con cargarEtapasPaso1() -->
+                    </div>
+                    
+                    <!-- Quick etapa creation -->
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="abrirNuevaEtapa()">
+                            <i class="fas fa-plus me-1"></i>Crear etapa
+                        </button>
+                    </div>
+                    
+                    <!-- Inline etapa creation form -->
+                    <div id="nuevaEtapaForm" class="mt-3 d-none">
+                        <div class="card border-primary">
+                            <div class="card-body">
+                                <h6 class="card-title">Nueva Etapa</h6>
+                                <input id="newEtapaNombre" class="form-control form-control-sm mb-2" 
+                                       placeholder="Nombre de la etapa" maxlength="100">
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="crearEtapaRapida()">
+                                        <i class="fas fa-save me-1"></i>Guardar
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-light" onclick="cerrarNuevaEtapa()">
+                                        Cancelar
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        {% endfor %}
                     </div>
+                    
                     <div id="step1-error" class="text-danger mt-2 d-none"></div>
                 </div>
 
@@ -3057,8 +3076,79 @@ class WizardTareas {
         // Clear error messages
         document.getElementById('step1-error').classList.add('d-none');
         
-        // Reset form inputs
-        document.querySelectorAll('input[name="etapas"]').forEach(cb => cb.checked = false);
+        // Load etapas dynamically for Step 1
+        this.cargarEtapasPaso1();
+    }
+    
+    async cargarEtapasPaso1() {
+        try {
+            const response = await fetch(`/obras/${this.obra_id}/etapas`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.renderEtapasChecklist(data.etapas || []);
+            } else {
+                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+                console.error('Error cargando etapas:', errorData.error);
+                document.getElementById('paso1-etapas').innerHTML = 
+                    '<div class="col-12"><div class="alert alert-warning">Error cargando etapas. Puedes crear una nueva abajo.</div></div>';
+            }
+        } catch (error) {
+            console.error('Error cargando etapas:', error);
+            document.getElementById('paso1-etapas').innerHTML = 
+                '<div class="col-12"><div class="alert alert-warning">Error de conexión. Puedes crear una nueva etapa abajo.</div></div>';
+        }
+    }
+    
+    renderEtapasChecklist(etapas) {
+        const container = document.getElementById('paso1-etapas');
+        
+        if (etapas.length === 0) {
+            container.innerHTML = '<div class="col-12"><p class="text-muted">No hay etapas creadas. Crea una nueva etapa abajo.</p></div>';
+            return;
+        }
+        
+        let html = '';
+        etapas.forEach(etapa => {
+            html += `
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="etapas"
+                               value="${etapa.id}" id="wizardEtapa${etapa.id}">
+                        <label class="form-check-label" for="wizardEtapa${etapa.id}">
+                            📋 ${etapa.nombre}
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    appendEtapaCheckbox(etapa) {
+        const container = document.getElementById('paso1-etapas');
+        
+        // If container is empty or shows "no etapas" message, clear it
+        if (container.querySelector('.text-muted')) {
+            container.innerHTML = '';
+        }
+        
+        const newEtapaHtml = `
+            <div class="col-md-6 mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="etapas" checked
+                           value="${etapa.id}" id="wizardEtapa${etapa.id}">
+                    <label class="form-check-label fw-bold text-success" for="wizardEtapa${etapa.id}">
+                        📋 ${etapa.nombre} <span class="badge bg-success">Nueva</span>
+                    </label>
+                </div>
+            </div>
+        `;
+        
+        container.insertAdjacentHTML('beforeend', newEtapaHtml);
     }
     
     updateStepDisplay() {
@@ -3091,6 +3181,69 @@ class WizardTareas {
         const progress = (this.currentStep / 4) * 100;
         document.getElementById('wizardProgressBar').style.width = `${progress}%`;
     }
+}
+
+// Global functions for quick etapa creation (called from HTML buttons)
+function abrirNuevaEtapa() {
+    document.getElementById('nuevaEtapaForm').classList.remove('d-none');
+    document.getElementById('newEtapaNombre').focus();
+}
+
+function cerrarNuevaEtapa() {
+    document.getElementById('nuevaEtapaForm').classList.add('d-none');
+    document.getElementById('newEtapaNombre').value = '';
+}
+
+async function crearEtapaRapida() {
+    const nombre = document.getElementById('newEtapaNombre').value.trim();
+    if (!nombre) {
+        alert('Ingresa un nombre para la etapa');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/obras/${window.wizardTareas.obra_id}/etapas`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ nombre })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Add the new etapa checkbox and auto-select it
+            window.wizardTareas.appendEtapaCheckbox(data);
+            cerrarNuevaEtapa();
+            
+            // Show success message
+            const container = document.getElementById('paso1-etapas');
+            const successMsg = document.createElement('div');
+            successMsg.className = 'col-12';
+            successMsg.innerHTML = '<div class="alert alert-success alert-dismissible fade show"><i class="fas fa-check me-1"></i>Etapa creada exitosamente <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+            container.insertAdjacentElement('afterbegin', successMsg);
+            
+            // Auto-remove success message after 3 seconds
+            setTimeout(() => {
+                if (successMsg.parentNode) {
+                    successMsg.remove();
+                }
+            }, 3000);
+        } else {
+            const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+            alert(`Error: ${errorData.error}`);
+        }
+    } catch (error) {
+        alert(`Error de conexión: ${error.message}`);
+    }
+}
+
+function mostrarErrorPaso1(mensaje) {
+    const errorDiv = document.getElementById('step1-error');
+    errorDiv.textContent = mensaje;
+    errorDiv.classList.remove('d-none');
 }
 
 // Initialize wizard when DOM is ready

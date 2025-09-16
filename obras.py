@@ -2306,6 +2306,79 @@ def wizard_crear_tareas(obra_id):
         return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
 
 
+# Etapa Management API Endpoints
+
+@obras_bp.route('/<int:obra_id>/etapas', methods=['GET'])
+@login_required
+def get_obra_etapas(obra_id):
+    """Get etapas for obra - for wizard Step 1"""
+    try:
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos"}), 403
+        
+        # Obtener etapas
+        etapas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
+        
+        return jsonify({
+            "etapas": [{"id": e.id, "nombre": e.nombre} for e in etapas]
+        })
+        
+    except Exception as e:
+        current_app.logger.exception(f"Error obteniendo etapas obra {obra_id}")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@obras_bp.route('/<int:obra_id>/etapas', methods=['POST'])
+@login_required
+def create_obra_etapa(obra_id):
+    """Create new etapa for obra - for wizard quick creation"""
+    try:
+        data = request.get_json()
+        nombre = data.get("nombre", "").strip()
+        
+        if not nombre:
+            return jsonify({"error": "Nombre requerido"}), 400
+        
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos"}), 403
+        
+        # Verificar que no exista ya
+        existe = EtapaObra.query.filter_by(obra_id=obra_id, nombre=nombre).first()
+        if existe:
+            return jsonify({"error": f"Ya existe una etapa '{nombre}'"}), 400
+        
+        # Calcular siguiente orden
+        max_orden = db.session.query(db.func.max(EtapaObra.orden)).filter_by(obra_id=obra_id).scalar() or 0
+        
+        # Crear nueva etapa
+        nueva_etapa = EtapaObra(
+            obra_id=obra_id,
+            nombre=nombre,
+            orden=max_orden + 1,
+            descripcion=f"Etapa creada via wizard",
+            estado='planificacion'
+        )
+        
+        db.session.add(nueva_etapa)
+        db.session.commit()
+        
+        current_app.logger.info(f"✨ Etapa creada via wizard: '{nombre}' ID:{nueva_etapa.id}")
+        
+        return jsonify({
+            "id": nueva_etapa.id,
+            "nombre": nueva_etapa.nombre
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error creando etapa via wizard")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
 # API Endpoints for Wizard as per user specification
 
 @obras_bp.route('/api/wizard-tareas/preview', methods=['POST'])
