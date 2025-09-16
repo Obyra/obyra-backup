@@ -1,0 +1,236 @@
+Plan cerrado del Wizard
+Paso 1 — Etapas
+
+Multi-select de etapas de la obra.
+
+Al tocar Siguiente, mandá los etapa_ids al backend y guardalos en el estado del wizard (en session o en un input hidden).
+
+// al hacer click en "Siguiente"
+const etapaIds = [...document.querySelectorAll('input[name="etapas"]:checked')].map(i=>i.value);
+await fetch(`/api/wizard-tareas/preview`, {
+  method: 'POST',
+  headers: {'Content-Type':'application/json'},
+  body: JSON.stringify({ obra_id, etapa_ids: etapaIds })
+}).then(r=>r.json()).then(data => {
+  window.WIZARD = { etapa_ids: etapaIds, preview: data }; // guardo en memoria
+  gotoPaso(2);
+});
+
+Paso 2 — Tareas (filtradas por las etapas elegidas)
+
+Mostrar SOLO:
+
+a) Catálogo de tareas sugeridas por cada etapa (si lo tenés), y
+
+b) Tareas existentes de esas etapas que todavía no estén creadas para esta obra (opcional).
+
+UI: dos columnas
+
+Izquierda: árbol/accordion por etapa con checkbox de tareas.
+
+Derecha: “Tareas seleccionadas”.
+
+Botón “+ Nueva tarea” que abre un mini-form inline para crear una fila nueva asociada a una de las etapas elegidas.
+
+Endpoint (preview)
+# POST /api/wizard-tareas/preview
+# body: {obra_id:int, etapa_ids: [int]}
+# return: { etapas: [{id, nombre, tareas_catalogo:[{id,nombre,unidad_default}], tareas_existentes:[...] }] }
+
+@bp.post("/api/wizard-tareas/preview")
+def wizard_preview():
+    data = request.get_json()
+    etapa_ids = data["etapa_ids"]
+    obra_id = data["obra_id"]
+
+    etapas = (Etapa.query
+              .filter(Etapa.id.in_(etapa_ids), Etapa.obra_id==obra_id)
+              .all())
+
+    res = []
+    for e in etapas:
+        # Sugerencias del catálogo por tipo de etapa (si lo tenés)
+        tareas_cat = (TareaCatalogo.query
+                      .filter(TareaCatalogo.etapa_tipo==e.tipo)
+                      .with_entities(TareaCatalogo.id, TareaCatalogo.nombre, TareaCatalogo.unidad_default)
+                      .all())
+        # Opcional: tareas ya definidas en esta etapa pero no creadas en lote
+        tareas_exist = (Tarea.query
+                        .filter(Tarea.etapa_id==e.id)
+                        .with_entities(Tarea.id, Tarea.nombre, Tarea.unidad)
+                        .all())
+        res.append({
+            "id": e.id, "nombre": e.nombre,
+            "tareas_catalogo": [dict(id=t.id, nombre=t.nombre, unidad_default=t.unidad_default) for t in tareas_cat],
+            "tareas_existentes": [dict(id=t.id, nombre=t.nombre, unidad=t.unidad) for t in tareas_exist]
+        })
+    return jsonify({"etapas": res})
+
+
+Con esto el Paso 2 jamás “trae todo”: viene acotado a etapa_ids.
+
+Estructura que arma el front al salir del Paso 2
+{
+  "obra_id": 123,
+  "etapa_ids": [10, 11],
+  "tareas_seleccionadas": [
+    {"source":"catalogo","catalogo_id":55,"etapa_id":10,"nombre":"Revoque Fino","unidad":"m2"},
+    {"source":"nueva","etapa_id":11,"nombre":"Carpeta alivianada","unidad":"m3"}
+  ]
+}
+
+Paso 3 — Datos (edición masiva)
+
+Renderizar una tabla editable con las tareas seleccionadas:
+
+columnas: Etapa, Tarea, Inicio, Fin, Horas Est., Cantidad, Unidad (m2/m3/ml/ud), Asignado a, Prioridad.
+
+Asignado a: select de usuarios del equipo de la obra (/api/obras/{obra_id}/equipo).
+
+Avance: como estamos creando en lote, se inicializa en 0. Si necesitás traer avances existentes, añadí un toggle “usar avance existente” y traelos con un endpoint aparte.
+
+Validaciones mínimas: inicio ≤ fin, cantidad > 0, unidad obligatoria.
+
+Endpoint para usuarios (para el select)
+# GET /api/obras/<obra_id>/equipo
+return jsonify({"usuarios": [{"id":u.id,"nombre":u.nombre} for u in usuarios]})
+
+Paso 4 — Confirmar y crear en lote
+
+Un solo POST que crea tareas + asignaciones de usuario.
+
+Idempotencia soft: si existe una tarea con mismo obra_id + etapa_id + nombre, resolver con on_conflict (skip/actualizar). Lo más simple: skip y devolver duplicados.
+
+Endpoint (create)
+# POST /api/wizard-tareas/create
+# body: {obra_id, tareas:[{etapa_id, nombre, unidad, fecha_inicio, fecha_fin, horas, cantidad, asignado_usuario_id}]}
+@bp.post("/api/wizard-tareas/create")
+def wizard_create():
+    data = request.get_json()
+    obra_id = data["obra_id"]
+    tareas_in = data["tareas"]
+    creadas, duplicados = [], []
+
+    for t in tareas_in:
+        exists = (Tarea.query
+                  .filter_by(obra_id=obra_id, etapa_id=t["etapa_id"], nombre=t["nombre"])
+                  .first())
+        if exists:
+            duplicados.append({"etapa_id": t["etapa_id"], "nombre": t["nombre"]})
+            continue
+
+        tarea = Tarea(
+            obra_id=obra_id,
+            etapa_id=t["etapa_id"],
+            nombre=t["nombre"],
+            unidad=t["unidad"],
+            fecha_inicio=t.get("fecha_inicio"),
+            fecha_fin=t.get("fecha_fin"),
+            horas_estimadas=t.get("horas"),
+            cantidad_planificada=t.get("cantidad"),
+            avance_porcentaje=0
+        )
+        db.session.add(tarea)
+        db.session.flush()
+
+        if t.get("asignado_usuario_id"):
+            db.session.add(TareaMiembro(tarea_id=tarea.id, usuario_id=t["asignado_usuario_id"]))
+
+        creadas.append({"id": tarea.id, "nombre": tarea.nombre})
+    db.session.commit()
+    return jsonify({"ok": True, "creadas": creadas, "duplicados": duplicados})
+
+Detalles de UX que te van a destrabar
+
+Bloqueo de “Siguiente” en Paso 1
+Deshabilitá el botón hasta que haya al menos una etapa. El alert de “Selecciona al menos una etapa” está bien, pero mejor feedback inline (texto rojo bajo el selector).
+
+Que no “aparezca todo” en Paso 2
+El preview ya viene filtrado por etapa_ids. Si hoy te muestra todo, es porque el front llama a un endpoint general (/tareas) sin filtro. Reemplazalo por el POST /api/wizard-tareas/preview.
+
+Agregar tarea en el Paso 2
+El botón “+ Nueva tarea” arma una fila en “Seleccionadas” con {source:'nueva'} y pide etapa_id + nombre + unidad. El resto se edita en el Paso 3.
+
+Unificar la vía de carga
+Ocultá/inhabilitá la creación tradicional cuando el wizard está abierto (y en la vista dejá un cartelito: “Nueva carga masiva disponible en Wizard”). Así no se te desordena.
+
+Asignación de usuario y avance
+
+Nuevo: avance = 0.
+
+Si más adelante querés “usar avance existente”, agregamos un checkbox y un GET /api/tareas/<id>/avances para precargar.
+
+Validaciones antes de crear
+
+Campos obligatorios resaltados.
+
+fecha_inicio ≤ fecha_fin.
+
+cantidad > 0 cuando la unidad es cuantificable.
+
+Si falta asignado_usuario_id, igual dejá crear; el asignado puede ser “Sin asignar”.
+
+Ejemplos de payload finales (Paso 4)
+{
+  "obra_id": 123,
+  "tareas": [
+    {
+      "etapa_id": 10,
+      "nombre": "Revoque Fino",
+      "unidad": "m2",
+      "fecha_inicio": "2025-09-20",
+      "fecha_fin": "2025-09-25",
+      "horas": 32,
+      "cantidad": 180,
+      "asignado_usuario_id": 7
+    },
+    {
+      "etapa_id": 11,
+      "nombre": "Carpeta alivianada",
+      "unidad": "m3",
+      "fecha_inicio": "2025-09-26",
+      "fecha_fin": "2025-09-28",
+      "horas": 20,
+      "cantidad": 12,
+      "asignado_usuario_id": null
+    }
+  ]
+}
+
+
+Respuesta esperada:
+
+{
+  "ok": true,
+  "creadas": [{"id": 501, "nombre": "Revoque Fino"}, {"id": 502, "nombre": "Carpeta alivianada"}],
+  "duplicados": []
+}
+
+Snippet Jinja/HTML mínimo (Paso 2 – Accordion por etapa)
+<div id="accordion-etapas">
+  {% for e in preview.etapas %}
+  <div class="card mb-2">
+    <div class="card-header">
+      <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#et{{e.id}}">
+        {{e.nombre}}
+      </button>
+    </div>
+    <div id="et{{e.id}}" class="collapse show">
+      <div class="p-3">
+        <h6 class="text-muted">Tareas sugeridas</h6>
+        {% for t in e.tareas_catalogo %}
+        <div class="form-check">
+          <input class="form-check-input tarea-check" type="checkbox"
+                 data-etapa="{{e.id}}" data-source="catalogo" data-catalogo-id="{{t.id}}"
+                 data-unidad="{{t.unidad_default}}" id="tc{{t.id}}">
+          <label class="form-check-label" for="tc{{t.id}}">{{t.nombre}} <small>({{t.unidad_default}})</small></label>
+        </div>
+        {% endfor %}
+
+        <button class="btn btn-sm btn-outline-primary mt-2"
+                onclick="agregarNuevaTarea({{e.id}})">+ Nueva tarea</button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

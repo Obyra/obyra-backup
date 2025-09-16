@@ -2304,3 +2304,207 @@ def wizard_crear_tareas(obra_id):
         db.session.rollback()
         current_app.logger.exception(f"❌ WIZARD: Error creando tareas")
         return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
+
+
+# API Endpoints for Wizard as per user specification
+
+@obras_bp.route('/api/wizard-tareas/preview', methods=['POST'])
+@login_required
+def wizard_preview():
+    """Step 2 - Preview tasks filtered by selected etapas"""
+    try:
+        data = request.get_json()
+        etapa_ids = data.get("etapa_ids", [])
+        obra_id = data.get("obra_id")
+        
+        if not etapa_ids:
+            return jsonify({"error": "etapa_ids requeridos"}), 400
+            
+        if not obra_id:
+            return jsonify({"error": "obra_id requerido"}), 400
+            
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos"}), 403
+        
+        # Obtener etapas filtradas
+        etapas = (EtapaObra.query
+                  .filter(EtapaObra.id.in_(etapa_ids), EtapaObra.obra_id == obra_id)
+                  .all())
+        
+        res = []
+        for e in etapas:
+            # Tareas del catálogo por tipo de etapa (usando TAREAS_POR_ETAPA)
+            from tareas_predefinidas import TAREAS_POR_ETAPA
+            tareas_catalogo = []
+            
+            if e.nombre in TAREAS_POR_ETAPA:
+                for tarea_def in TAREAS_POR_ETAPA[e.nombre]:
+                    tareas_catalogo.append({
+                        "id": f"cat_{e.id}_{len(tareas_catalogo)}",
+                        "nombre": tarea_def.get("nombre", "Tarea sin nombre"),
+                        "unidad_default": tarea_def.get("unidad", "h")
+                    })
+            
+            # Tareas existentes en esta etapa (opcional, para referencia)
+            tareas_existentes = []
+            existing_tasks = TareaEtapa.query.filter_by(etapa_id=e.id).all()
+            for t in existing_tasks:
+                tareas_existentes.append({
+                    "id": t.id,
+                    "nombre": t.nombre,
+                    "unidad": t.unidad or "h"
+                })
+            
+            res.append({
+                "id": e.id,
+                "nombre": e.nombre,
+                "tareas_catalogo": tareas_catalogo,
+                "tareas_existentes": tareas_existentes
+            })
+        
+        return jsonify({"etapas": res})
+        
+    except Exception as e:
+        current_app.logger.exception("Error en wizard preview")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/equipo', methods=['GET'])
+@login_required
+def get_obra_equipo(obra_id):
+    """Get team members for obra (for wizard step 3)"""
+    try:
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos"}), 403
+        
+        # Obtener miembros del equipo
+        miembros = (ObraMiembro.query
+                   .filter_by(obra_id=obra_id)
+                   .join(Usuario)
+                   .all())
+        
+        usuarios = []
+        for m in miembros:
+            usuarios.append({
+                "id": m.usuario.id,
+                "nombre": m.usuario.nombre_completo,
+                "rol": m.rol_en_obra or "operario"
+            })
+        
+        return jsonify({"usuarios": usuarios})
+        
+    except Exception as e:
+        current_app.logger.exception(f"Error obteniendo equipo obra {obra_id}")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@obras_bp.route('/api/wizard-tareas/create', methods=['POST'])
+@login_required
+def wizard_create():
+    """Step 4 - Create tasks in batch with assignments"""
+    try:
+        data = request.get_json()
+        obra_id = data.get("obra_id")
+        tareas_in = data.get("tareas", [])
+        
+        if not obra_id:
+            return jsonify({"error": "obra_id requerido"}), 400
+            
+        if not tareas_in:
+            return jsonify({"error": "No hay tareas para crear"}), 400
+        
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"error": "Sin permisos"}), 403
+        
+        creadas = []
+        duplicados = []
+        
+        current_app.logger.info(f"🧙‍♂️ WIZARD CREATE: Procesando {len(tareas_in)} tareas para obra {obra_id}")
+        
+        # Use proper transaction context
+        try:
+            for t in tareas_in:
+                etapa_id = t.get("etapa_id")
+                nombre = t.get("nombre")
+                
+                if not etapa_id or not nombre:
+                    continue
+                    
+                # Verificar si ya existe (idempotencia)
+                exists = (TareaEtapa.query
+                         .filter_by(etapa_id=etapa_id, nombre=nombre)
+                         .first())
+                
+                if exists:
+                    duplicados.append({"etapa_id": etapa_id, "nombre": nombre})
+                    current_app.logger.info(f"📋 WIZARD: Tarea duplicada '{nombre}' en etapa {etapa_id}")
+                    continue
+                
+                # Parsear fechas
+                fecha_inicio = None
+                fecha_fin = None
+                
+                if t.get("fecha_inicio"):
+                    try:
+                        fecha_inicio = datetime.strptime(t["fecha_inicio"], '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                        
+                if t.get("fecha_fin"):
+                    try:
+                        fecha_fin = datetime.strptime(t["fecha_fin"], '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                
+                # Crear tarea
+                tarea = TareaEtapa(
+                    etapa_id=etapa_id,
+                    nombre=nombre,
+                    descripcion=f"Creada via wizard masivo",
+                    estado='pendiente',
+                    unidad=t.get("unidad", "h"),
+                    fecha_inicio_plan=fecha_inicio,
+                    fecha_fin_plan=fecha_fin,
+                    horas_estimadas=t.get("horas"),
+                    cantidad_planificada=t.get("cantidad"),
+                    responsable_id=t.get("asignado_usuario_id")
+                )
+                
+                db.session.add(tarea)
+                db.session.flush()  # Para obtener el ID
+                
+                # Asignar usuario en tarea_miembros si viene asignado_usuario_id
+                if t.get("asignado_usuario_id"):
+                    asignacion = TareaMiembro(
+                        tarea_id=tarea.id,
+                        usuario_id=t["asignado_usuario_id"]
+                    )
+                    db.session.add(asignacion)
+                
+                creadas.append({"id": tarea.id, "nombre": tarea.nombre})
+                current_app.logger.info(f"✨ WIZARD: Tarea creada '{nombre}' ID:{tarea.id}")
+            
+            # Confirmar transacción
+            db.session.commit()
+            current_app.logger.info(f"🎉 WIZARD CREATE: {len(creadas)} creadas, {len(duplicados)} duplicadas")
+            
+            return jsonify({
+                "ok": True,
+                "creadas": creadas,
+                "duplicados": duplicados
+            })
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.exception("Error en transacción wizard create")
+            raise e
+        
+    except Exception as e:
+        current_app.logger.exception("Error en wizard create")
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500

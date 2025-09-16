@@ -871,7 +871,7 @@
                         {% for etapa in etapas %}
                         <div class="col-md-6 mb-2">
                             <div class="form-check">
-                                <input class="form-check-input etapa-wizard-check" type="checkbox" 
+                                <input class="form-check-input" type="checkbox" name="etapas"
                                        value="{{ etapa.id }}" id="wizardEtapa{{ etapa.id }}">
                                 <label class="form-check-label" for="wizardEtapa{{ etapa.id }}">
                                     {{ etapa.nombre }}
@@ -880,18 +880,35 @@
                         </div>
                         {% endfor %}
                     </div>
+                    <div id="step1-error" class="text-danger mt-2 d-none"></div>
                 </div>
 
-                <!-- Paso 2: Tildar Tareas Sugeridas -->
+                <!-- Paso 2: Accordion por Etapa (según especificación) -->
                 <div id="wizardStep2" class="wizard-content d-none">
                     <h6>Paso 2: Seleccionar Tareas</h6>
                     <p class="text-muted">Marca las tareas que quieres crear para cada etapa:</p>
-                    <div id="tareasWizardContainer">
-                        <!-- Se llena dinámicamente con JS -->
+                    <div class="row">
+                        <div class="col-md-7">
+                            <div id="accordion-etapas">
+                                <!-- Se llena dinámicamente con accordion -->
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Tareas Seleccionadas</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="tareas-seleccionadas-list">
+                                        <p class="text-muted">Ninguna tarea seleccionada</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Paso 3: Completar Datos -->
+                <!-- Paso 3: Edición Masiva (según especificación) -->
                 <div id="wizardStep3" class="wizard-content d-none">
                     <h6>Paso 3: Completar Datos de Tareas</h6>
                     <p class="text-muted">Completa los detalles para cada tarea seleccionada:</p>
@@ -899,12 +916,15 @@
                         <table class="table table-sm" id="tablaDatosWizard">
                             <thead>
                                 <tr>
+                                    <th>Etapa</th>
                                     <th>Tarea</th>
                                     <th>Inicio</th>
                                     <th>Fin</th>
-                                    <th>Horas</th>
+                                    <th>Horas Est.</th>
+                                    <th>Cantidad</th>
                                     <th>Unidad</th>
-                                    <th>Responsable</th>
+                                    <th>Asignado a</th>
+                                    <th>Prioridad</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2546,17 +2566,19 @@ async function confirmarRechazo() {
 
 console.log('🔧 HOTFIX: Traditional form submission enabled (no AJAX interference)');
 
-// Issue #2 - Frontend: Wizard Tareas JavaScript Implementation
+// Upgraded Wizard per user specification  
 class WizardTareas {
     constructor() {
         this.currentStep = 1;
-        this.selectedEtapas = [];
-        this.selectedTareas = [];
-        this.tareasData = [];
-        this.responsables = {{ responsables_json|tojson|safe }};
+        this.obra_id = {{ obra.id }};
+        this.WIZARD = {
+            etapa_ids: [],
+            preview: null,
+            tareas_seleccionadas: [],
+            equipo: []
+        };
         
         this.initializeEventListeners();
-        this.loadTareasSugeridas();
     }
     
     initializeEventListeners() {
@@ -2568,92 +2590,475 @@ class WizardTareas {
         document.getElementById('wizardTareasModal')?.addEventListener('show.bs.modal', () => this.resetWizard());
     }
     
-    loadTareasSugeridas() {
-        // Load predefined tasks from backend data
-        this.tareasPredefinidas = {{ TAREAS_POR_ETAPA|tojson|safe }};
-        console.log('🧙‍♂️ WIZARD: Tareas predefinidas cargadas', this.tareasPredefinidas);
+    async nextStep() {
+        console.log(`🧙‍♂️ WIZARD: Step ${this.currentStep} → ${this.currentStep + 1}`);
+        
+        if (this.currentStep === 1) {
+            // Validate and get selected etapas
+            const etapaIds = [...document.querySelectorAll('input[name="etapas"]:checked')].map(i => parseInt(i.value));
+            
+            if (etapaIds.length === 0) {
+                document.getElementById('step1-error').textContent = 'Selecciona al menos una etapa';
+                document.getElementById('step1-error').classList.remove('d-none');
+                return;
+            }
+            
+            // Call preview API
+            try {
+                document.getElementById('wizardLoading').classList.remove('d-none');
+                document.getElementById('wizardStep1').classList.add('d-none');
+                
+                const response = await fetch('/api/wizard-tareas/preview', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ obra_id: this.obra_id, etapa_ids: etapaIds })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.WIZARD.etapa_ids = etapaIds;
+                    this.WIZARD.preview = data;
+                    this.goToStep(2);
+                } else {
+                    alert(`Error: ${data.error}`);
+                    this.goToStep(1);
+                }
+            } catch (error) {
+                alert(`Error de conexión: ${error.message}`);
+                this.goToStep(1);
+            }
+            
+        } else if (this.currentStep === 2) {
+            // Validate selected tasks
+            const selectedTasks = this.collectSelectedTasks();
+            
+            if (selectedTasks.length === 0) {
+                alert('Selecciona al menos una tarea');
+                return;
+            }
+            
+            this.WIZARD.tareas_seleccionadas = selectedTasks;
+            
+            // Load team members for step 3
+            await this.loadEquipo();
+            this.goToStep(3);
+            
+        } else if (this.currentStep === 3) {
+            // Validate table data
+            if (!this.validateTableData()) {
+                return;
+            }
+            
+            this.goToStep(4);
+        }
     }
     
-    resetWizard() {
-        this.currentStep = 1;
-        this.selectedEtapas = [];
-        this.selectedTareas = [];
-        this.tareasData = [];
+    async loadEquipo() {
+        try {
+            const response = await fetch(`/api/obras/${this.obra_id}/equipo`);
+            const data = await response.json();
+            this.WIZARD.equipo = data.usuarios || [];
+        } catch (error) {
+            console.error('Error loading equipo:', error);
+            this.WIZARD.equipo = [];
+        }
+    }
+    
+    collectSelectedTasks() {
+        const tasks = [];
+        document.querySelectorAll('.tarea-check:checked').forEach(checkbox => {
+            const etapaId = parseInt(checkbox.dataset.etapa);
+            const source = checkbox.dataset.source;
+            
+            if (source === 'catalogo') {
+                tasks.push({
+                    source: 'catalogo',
+                    catalogo_id: checkbox.dataset.catalogoId,
+                    etapa_id: etapaId,
+                    nombre: checkbox.dataset.nombre,
+                    unidad: checkbox.dataset.unidad
+                });
+            } else if (source === 'nueva') {
+                tasks.push({
+                    source: 'nueva',
+                    etapa_id: etapaId,
+                    nombre: checkbox.dataset.nombre,
+                    unidad: checkbox.dataset.unidad
+                });
+            }
+        });
         
-        // Reset UI
+        return tasks;
+    }
+    
+    validateTableData() {
+        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+        let valid = true;
+        
+        rows.forEach(row => {
+            const nombre = row.querySelector('.tarea-nombre').textContent;
+            const inicio = row.querySelector('.fecha-inicio').value;
+            const fin = row.querySelector('.fecha-fin').value;
+            const cantidad = row.querySelector('.cantidad').value;
+            
+            // Clear previous errors
+            row.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            
+            if (!inicio) {
+                row.querySelector('.fecha-inicio').classList.add('is-invalid');
+                valid = false;
+            }
+            
+            if (!fin) {
+                row.querySelector('.fecha-fin').classList.add('is-invalid');
+                valid = false;
+            }
+            
+            if (inicio && fin && new Date(inicio) > new Date(fin)) {
+                row.querySelector('.fecha-fin').classList.add('is-invalid');
+                valid = false;
+            }
+            
+            if (!cantidad || parseFloat(cantidad) <= 0) {
+                row.querySelector('.cantidad').classList.add('is-invalid');
+                valid = false;
+            }
+        });
+        
+        if (!valid) {
+            alert('Corrige los campos marcados en rojo');
+        }
+        
+        return valid;
+    }
+    
+    goToStep(step) {
+        this.currentStep = step;
         this.updateStepDisplay();
         this.updateProgressBar();
-        this.clearStepContent();
         
-        // Reset form inputs
-        document.querySelectorAll('.etapa-wizard-check').forEach(cb => cb.checked = false);
-    }
-    
-    nextStep() {
-        if (!this.validateCurrentStep()) return;
+        // Hide loading and show content
+        document.getElementById('wizardLoading').classList.add('d-none');
         
-        if (this.currentStep < 4) {
-            this.currentStep++;
-            this.updateStepDisplay();
-            this.updateProgressBar();
-            this.populateStepContent();
+        // Populate step content
+        if (step === 2) {
+            this.populateStep2();
+        } else if (step === 3) {
+            this.populateStep3();
+        } else if (step === 4) {
+            this.populateStep4();
         }
     }
     
     previousStep() {
         if (this.currentStep > 1) {
-            this.currentStep--;
-            this.updateStepDisplay();
-            this.updateProgressBar();
-            this.populateStepContent();
+            this.goToStep(this.currentStep - 1);
         }
     }
     
-    validateCurrentStep() {
-        switch (this.currentStep) {
-            case 1:
-                this.selectedEtapas = Array.from(document.querySelectorAll('.etapa-wizard-check:checked')).map(cb => parseInt(cb.value));
-                if (this.selectedEtapas.length === 0) {
-                    alert('Selecciona al menos una etapa');
-                    return false;
-                }
-                return true;
-                
-            case 2:
-                this.selectedTareas = Array.from(document.querySelectorAll('.tarea-wizard-check:checked')).map(cb => JSON.parse(cb.dataset.tarea));
-                if (this.selectedTareas.length === 0) {
-                    alert('Selecciona al menos una tarea');
-                    return false;
-                }
-                return true;
-                
-            case 3:
-                // Validate all required fields in the data table
-                const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
-                let valid = true;
-                
-                rows.forEach(row => {
-                    const nombre = row.querySelector('.tarea-nombre')?.textContent;
-                    const inicio = row.querySelector('.fecha-inicio').value;
-                    const fin = row.querySelector('.fecha-fin').value;
-                    const horas = row.querySelector('.horas-estimadas').value;
-                    
-                    if (!inicio || !fin) {
-                        alert(`Fechas requeridas para la tarea: ${nombre}`);
-                        valid = false;
-                        return;
-                    }
-                    
-                    if (!horas || parseFloat(horas) <= 0) {
-                        alert(`Horas estimadas debe ser mayor a 0 para: ${nombre}`);
-                        valid = false;
-                        return;
-                    }
-                });
-                
-                return valid;
+    populateStep2() {
+        const container = document.getElementById('accordion-etapas');
+        container.innerHTML = '';
+        
+        if (!this.WIZARD.preview || !this.WIZARD.preview.etapas) {
+            container.innerHTML = '<p class="text-danger">Error cargando tareas</p>';
+            return;
         }
-        return true;
+        
+        // Build accordion per user specification
+        this.WIZARD.preview.etapas.forEach((etapa, index) => {
+            const collapseId = `et${etapa.id}`;
+            const isExpanded = index === 0 ? 'show' : '';
+            
+            const etapaHtml = `
+                <div class="card mb-2">
+                    <div class="card-header">
+                        <button class="btn btn-link text-start w-100" data-bs-toggle="collapse" data-bs-target="#${collapseId}" type="button">
+                            📋 ${etapa.nombre}
+                        </button>
+                    </div>
+                    <div id="${collapseId}" class="collapse ${isExpanded}">
+                        <div class="p-3">
+                            <h6 class="text-muted">Tareas sugeridas</h6>
+                            ${etapa.tareas_catalogo.map(t => `
+                                <div class="form-check">
+                                    <input class="form-check-input tarea-check" type="checkbox"
+                                           data-etapa="${etapa.id}" 
+                                           data-source="catalogo" 
+                                           data-catalogo-id="${t.id}"
+                                           data-nombre="${t.nombre}"
+                                           data-unidad="${t.unidad_default}" 
+                                           id="tc${t.id}">
+                                    <label class="form-check-label" for="tc${t.id}">
+                                        ${t.nombre} <small class="text-muted">(${t.unidad_default})</small>
+                                    </label>
+                                </div>
+                            `).join('')}
+                            
+                            ${etapa.tareas_existentes.length > 0 ? `
+                                <h6 class="text-muted mt-3">Tareas existentes</h6>
+                                ${etapa.tareas_existentes.map(t => `
+                                    <div class="form-check">
+                                        <input class="form-check-input tarea-check" type="checkbox"
+                                               data-etapa="${etapa.id}" 
+                                               data-source="existente" 
+                                               data-tarea-id="${t.id}"
+                                               data-nombre="${t.nombre}"
+                                               data-unidad="${t.unidad}" 
+                                               id="te${t.id}">
+                                        <label class="form-check-label" for="te${t.id}">
+                                            ${t.nombre} <small class="text-muted">(${t.unidad})</small>
+                                        </label>
+                                    </div>
+                                `).join('')}
+                            ` : ''}
+
+                            <button class="btn btn-sm btn-outline-primary mt-2"
+                                    onclick="window.wizardTareas.agregarNuevaTarea(${etapa.id})">+ Nueva tarea</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML += etapaHtml;
+        });
+        
+        // Add event listeners for task selection
+        document.querySelectorAll('.tarea-check').forEach(checkbox => {
+            checkbox.addEventListener('change', () => this.updateSelectedTasksList());
+        });
+    }
+    
+    agregarNuevaTarea(etapaId) {
+        const nombre = prompt('Nombre de la nueva tarea:');
+        if (!nombre) return;
+        
+        const unidad = prompt('Unidad (h/m2/m3/ud):', 'h');
+        if (!unidad) return;
+        
+        // Create a temporary checkbox for the new task
+        const container = document.querySelector(`#et${etapaId} .p-3`);
+        const newTaskId = `nueva_${etapaId}_${Date.now()}`;
+        
+        const newTaskHtml = `
+            <div class="form-check border-start border-primary ps-3 ms-2 mt-2">
+                <input class="form-check-input tarea-check" type="checkbox" checked
+                       data-etapa="${etapaId}" 
+                       data-source="nueva" 
+                       data-nombre="${nombre}"
+                       data-unidad="${unidad}" 
+                       id="${newTaskId}">
+                <label class="form-check-label fw-bold text-primary" for="${newTaskId}">
+                    ${nombre} <small>(${unidad})</small> <span class="badge bg-primary">Nueva</span>
+                </label>
+            </div>
+        `;
+        
+        container.insertAdjacentHTML('beforeend', newTaskHtml);
+        
+        // Add event listener to new checkbox
+        document.getElementById(newTaskId).addEventListener('change', () => this.updateSelectedTasksList());
+        
+        // Update selected tasks list
+        this.updateSelectedTasksList();
+    }
+    
+    updateSelectedTasksList() {
+        const container = document.getElementById('tareas-seleccionadas-list');
+        const selectedTasks = document.querySelectorAll('.tarea-check:checked');
+        
+        if (selectedTasks.length === 0) {
+            container.innerHTML = '<p class="text-muted">Ninguna tarea seleccionada</p>';
+            return;
+        }
+        
+        let html = '';
+        selectedTasks.forEach(checkbox => {
+            const etapaNombre = this.WIZARD.preview.etapas.find(e => e.id == checkbox.dataset.etapa)?.nombre;
+            const isNueva = checkbox.dataset.source === 'nueva';
+            
+            html += `
+                <div class="d-flex justify-content-between align-items-center mb-1 p-2 bg-light rounded">
+                    <div>
+                        <small class="text-muted">${etapaNombre}</small><br>
+                        <strong>${checkbox.dataset.nombre}</strong>
+                        ${isNueva ? '<span class="badge bg-primary ms-1">Nueva</span>' : ''}
+                    </div>
+                    <small class="text-muted">${checkbox.dataset.unidad}</small>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    populateStep3() {
+        const tbody = document.querySelector('#tablaDatosWizard tbody');
+        tbody.innerHTML = '';
+        
+        this.WIZARD.tareas_seleccionadas.forEach((tarea, index) => {
+            const etapaNombre = this.WIZARD.preview.etapas.find(e => e.id == tarea.etapa_id)?.nombre;
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-muted">${etapaNombre}</td>
+                <td class="tarea-nombre">${tarea.nombre}</td>
+                <td><input type="date" class="form-control form-control-sm fecha-inicio" required></td>
+                <td><input type="date" class="form-control form-control-sm fecha-fin" required></td>
+                <td><input type="number" class="form-control form-control-sm horas-estimadas" min="0.1" step="0.1" placeholder="8.0"></td>
+                <td><input type="number" class="form-control form-control-sm cantidad" min="0.1" step="0.1" placeholder="1.0" required></td>
+                <td>
+                    <select class="form-select form-select-sm unidad">
+                        <option value="h" ${tarea.unidad === 'h' ? 'selected' : ''}>Horas</option>
+                        <option value="m2" ${tarea.unidad === 'm2' ? 'selected' : ''}>m²</option>
+                        <option value="m3" ${tarea.unidad === 'm3' ? 'selected' : ''}>m³</option>
+                        <option value="ml" ${tarea.unidad === 'ml' ? 'selected' : ''}>ml</option>
+                        <option value="ud" ${tarea.unidad === 'ud' ? 'selected' : ''}>Unidad</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm asignado">
+                        <option value="">Sin asignar</option>
+                        ${this.WIZARD.equipo.map(user => `
+                            <option value="${user.id}">${user.nombre}</option>
+                        `).join('')}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm prioridad">
+                        <option value="normal">Normal</option>
+                        <option value="alta">Alta</option>
+                        <option value="baja">Baja</option>
+                    </select>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+    
+    populateStep4() {
+        const container = document.getElementById('resumenWizard');
+        const totalTareas = this.WIZARD.tareas_seleccionadas.length;
+        
+        // Collect data from table
+        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+        let tareasConAsignado = 0;
+        let resumenHtml = '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Tarea</th><th>Fechas</th><th>Cantidad</th><th>Asignado</th></tr></thead><tbody>';
+        
+        rows.forEach((row, index) => {
+            const tarea = this.WIZARD.tareas_seleccionadas[index];
+            const inicio = row.querySelector('.fecha-inicio').value;
+            const fin = row.querySelector('.fecha-fin').value;
+            const cantidad = row.querySelector('.cantidad').value;
+            const asignadoSelect = row.querySelector('.asignado');
+            const asignadoNombre = asignadoSelect.options[asignadoSelect.selectedIndex].text;
+            
+            if (asignadoSelect.value) tareasConAsignado++;
+            
+            resumenHtml += `
+                <tr>
+                    <td>${tarea.nombre}</td>
+                    <td>${inicio} → ${fin}</td>
+                    <td>${cantidad} ${row.querySelector('.unidad').value}</td>
+                    <td>${asignadoNombre}</td>
+                </tr>
+            `;
+        });
+        
+        resumenHtml += '</tbody></table></div>';
+        
+        container.innerHTML = `
+            <div class="alert alert-info">
+                <h6>📊 Resumen de Tareas a Crear</h6>
+                <ul class="mb-0">
+                    <li><strong>Etapas seleccionadas:</strong> ${this.WIZARD.etapa_ids.length}</li>
+                    <li><strong>Tareas a crear:</strong> ${totalTareas}</li>
+                    <li><strong>Con asignación:</strong> ${tareasConAsignado}</li>
+                </ul>
+            </div>
+            ${resumenHtml}
+        `;
+    }
+    
+    async confirmarCreacion() {
+        // Build payload per user specification
+        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+        const tareas = [];
+        
+        rows.forEach((row, index) => {
+            const selectedTask = this.WIZARD.tareas_seleccionadas[index];
+            
+            tareas.push({
+                etapa_id: selectedTask.etapa_id,
+                nombre: selectedTask.nombre,
+                unidad: row.querySelector('.unidad').value,
+                fecha_inicio: row.querySelector('.fecha-inicio').value,
+                fecha_fin: row.querySelector('.fecha-fin').value,
+                horas: parseFloat(row.querySelector('.horas-estimadas').value) || null,
+                cantidad: parseFloat(row.querySelector('.cantidad').value) || null,
+                asignado_usuario_id: parseInt(row.querySelector('.asignado').value) || null
+            });
+        });
+        
+        const payload = {
+            obra_id: this.obra_id,
+            tareas: tareas
+        };
+        
+        console.log('🧙‍♂️ WIZARD: Enviando a /api/wizard-tareas/create', payload);
+        
+        // Show loading
+        document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
+        document.getElementById('wizardLoading').classList.remove('d-none');
+        document.querySelector('.modal-footer').style.display = 'none';
+        
+        try {
+            const response = await fetch('/api/wizard-tareas/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const result = await response.json();
+            console.log('🧙‍♂️ WIZARD: Respuesta', result);
+            
+            if (result.ok) {
+                alert(`✅ Éxito: ${result.creadas.length} tareas creadas, ${result.duplicados.length} duplicadas`);
+                
+                // Close modal and refresh page
+                const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
+                modal.hide();
+                window.location.reload();
+            } else {
+                alert(`❌ Error: ${result.error}`);
+                this.goToStep(4); // Go back to confirmation
+            }
+        } catch (error) {
+            console.error('❌ WIZARD: Error', error);
+            alert(`❌ Error de conexión: ${error.message}`);
+            this.goToStep(4);
+        }
+    }
+    
+    resetWizard() {
+        this.currentStep = 1;
+        this.WIZARD = {
+            etapa_ids: [],
+            preview: null,
+            tareas_seleccionadas: [],
+            equipo: []
+        };
+        
+        // Reset UI
+        this.updateStepDisplay();
+        this.updateProgressBar();
+        
+        // Clear error messages
+        document.getElementById('step1-error').classList.add('d-none');
+        
+        // Reset form inputs
+        document.querySelectorAll('input[name="etapas"]').forEach(cb => cb.checked = false);
     }
     
     updateStepDisplay() {
@@ -2677,242 +3082,14 @@ class WizardTareas {
         btnAnterior.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
         btnSiguiente.style.display = this.currentStep < 4 ? 'inline-block' : 'none';
         btnConfirmar.style.display = this.currentStep === 4 ? 'inline-block' : 'none';
+        
+        // Show/hide modal footer
+        document.querySelector('.modal-footer').style.display = 'block';
     }
     
     updateProgressBar() {
         const progress = (this.currentStep / 4) * 100;
         document.getElementById('wizardProgressBar').style.width = `${progress}%`;
-    }
-    
-    clearStepContent() {
-        document.getElementById('tareasWizardContainer').innerHTML = '';
-        document.querySelector('#tablaDatosWizard tbody').innerHTML = '';
-        document.getElementById('resumenWizard').innerHTML = '';
-    }
-    
-    populateStepContent() {
-        switch (this.currentStep) {
-            case 2:
-                this.populateTareasSugeridas();
-                break;
-            case 3:
-                this.populateTablaEditable();
-                break;
-            case 4:
-                this.populateResumen();
-                break;
-        }
-    }
-    
-    populateTareasSugeridas() {
-        const container = document.getElementById('tareasWizardContainer');
-        container.innerHTML = '';
-        
-        this.selectedEtapas.forEach(etapaId => {
-            const etapaNombre = document.querySelector(`label[for="wizardEtapa${etapaId}"]`).textContent;
-            const etapaDiv = document.createElement('div');
-            etapaDiv.className = 'mb-4';
-            
-            // Find suggested tasks for this stage
-            let tareasEtapa = [];
-            if (this.tareasPredefinidas && this.tareasPredefinidas[etapaId]) {
-                tareasEtapa = this.tareasPredefinidas[etapaId];
-            } else {
-                // Default tasks if no predefined ones
-                tareasEtapa = [
-                    { nombre: `Tarea principal - ${etapaNombre}`, descripcion: 'Tarea principal de la etapa' },
-                    { nombre: `Control de calidad - ${etapaNombre}`, descripcion: 'Control y verificación' }
-                ];
-            }
-            
-            etapaDiv.innerHTML = `
-                <h6 class="mb-2">📋 ${etapaNombre}</h6>
-                <div class="row">
-                    ${tareasEtapa.map(tarea => `
-                        <div class="col-md-6 mb-2">
-                            <div class="form-check">
-                                <input class="form-check-input tarea-wizard-check" type="checkbox" 
-                                       data-tarea='{"etapa_id": ${etapaId}, "nombre": "${tarea.nombre}", "descripcion": "${tarea.descripcion || ''}"}' 
-                                       id="wizardTarea${etapaId}_${tarea.nombre.replace(/\\s+/g, '')}">
-                                <label class="form-check-label" for="wizardTarea${etapaId}_${tarea.nombre.replace(/\\s+/g, '')}">
-                                    ${tarea.nombre}
-                                </label>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-            
-            container.appendChild(etapaDiv);
-        });
-    }
-    
-    populateTablaEditable() {
-        const tbody = document.querySelector('#tablaDatosWizard tbody');
-        tbody.innerHTML = '';
-        
-        this.selectedTareas.forEach((tarea, index) => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="tarea-nombre">${tarea.nombre}</td>
-                <td><input type="date" class="form-control form-control-sm fecha-inicio" required></td>
-                <td><input type="date" class="form-control form-control-sm fecha-fin" required></td>
-                <td><input type="number" class="form-control form-control-sm horas-estimadas" min="0.1" step="0.1" placeholder="8.0" required></td>
-                <td>
-                    <select class="form-select form-select-sm unidad">
-                        <option value="h">Horas</option>
-                        <option value="dias">Días</option>
-                        <option value="m2">m²</option>
-                        <option value="m3">m³</option>
-                        <option value="unidad">Unidad</option>
-                    </select>
-                </td>
-                <td>
-                    <select class="form-select form-select-sm responsable">
-                        <option value="">Sin asignar</option>
-                        ${this.responsables.map(resp => `
-                            <option value="${resp.usuario.id}">${resp.usuario.nombre_completo}</option>
-                        `).join('')}
-                    </select>
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-    }
-    
-    populateResumen() {
-        const container = document.getElementById('resumenWizard');
-        const resumenHtml = `
-            <div class="alert alert-info">
-                <h6>📊 Resumen de Tareas a Crear</h6>
-                <ul class="mb-0">
-                    <li><strong>Etapas seleccionadas:</strong> ${this.selectedEtapas.length}</li>
-                    <li><strong>Tareas a crear:</strong> ${this.selectedTareas.length}</li>
-                    <li><strong>Con responsables asignados:</strong> ${this.contarTareasConResponsable()}</li>
-                </ul>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-sm">
-                    <thead>
-                        <tr><th>Tarea</th><th>Fechas</th><th>Horas</th><th>Responsable</th></tr>
-                    </thead>
-                    <tbody>
-                        ${this.generarFilasResumen()}
-                    </tbody>
-                </table>
-            </div>
-        `;
-        container.innerHTML = resumenHtml;
-    }
-    
-    contarTareasConResponsable() {
-        return document.querySelectorAll('#tablaDatosWizard .responsable').length;
-    }
-    
-    generarFilasResumen() {
-        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
-        let html = '';
-        
-        rows.forEach(row => {
-            const nombre = row.querySelector('.tarea-nombre').textContent;
-            const inicio = row.querySelector('.fecha-inicio').value;
-            const fin = row.querySelector('.fecha-fin').value;
-            const horas = row.querySelector('.horas-estimadas').value;
-            const responsableSelect = row.querySelector('.responsable');
-            const responsableName = responsableSelect.options[responsableSelect.selectedIndex].text;
-            
-            html += `
-                <tr>
-                    <td>${nombre}</td>
-                    <td>${inicio} → ${fin}</td>
-                    <td>${horas}h</td>
-                    <td>${responsableName}</td>
-                </tr>
-            `;
-        });
-        
-        return html;
-    }
-    
-    async confirmarCreacion() {
-        // Collect all data for API call
-        const payload = {
-            etapas: [],
-            evitar_duplicados: document.getElementById('evitarDuplicados').checked
-        };
-        
-        // Build payload from table data
-        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
-        const etapasMap = {};
-        
-        rows.forEach((row, index) => {
-            const tarea = this.selectedTareas[index];
-            const inicio = row.querySelector('.fecha-inicio').value;
-            const fin = row.querySelector('.fecha-fin').value;
-            const horas = parseFloat(row.querySelector('.horas-estimadas').value);
-            const unidad = row.querySelector('.unidad').value;
-            const responsableId = parseInt(row.querySelector('.responsable').value) || null;
-            
-            if (!etapasMap[tarea.etapa_id]) {
-                etapasMap[tarea.etapa_id] = {
-                    etapa_id: tarea.etapa_id,
-                    tareas: []
-                };
-            }
-            
-            etapasMap[tarea.etapa_id].tareas.push({
-                nombre: tarea.nombre,
-                inicio: inicio,
-                fin: fin,
-                horas_estimadas: horas,
-                unidad: unidad,
-                responsable_id: responsableId
-            });
-        });
-        
-        payload.etapas = Object.values(etapasMap);
-        
-        console.log('🧙‍♂️ WIZARD: Enviando payload', payload);
-        
-        // Show loading
-        document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
-        document.getElementById('wizardLoading').classList.remove('d-none');
-        document.querySelector('.modal-footer').style.display = 'none';
-        
-        try {
-            const response = await fetch(`/obras/{{ obra.id }}/wizard/tareas`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
-            });
-            
-            const result = await response.json();
-            console.log('🧙‍♂️ WIZARD: Respuesta', result);
-            
-            if (result.ok) {
-                alert(`✅ Éxito: ${result.creadas} tareas creadas, ${result.ya_existian} ya existían, ${result.asignaciones_creadas} asignaciones realizadas`);
-                
-                // Close modal and refresh page
-                const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
-                modal.hide();
-                window.location.reload();
-            } else {
-                alert(`❌ Error: ${result.error}`);
-                this.showStep4(); // Go back to confirmation
-            }
-        } catch (error) {
-            console.error('❌ WIZARD: Error', error);
-            alert(`❌ Error de conexión: ${error.message}`);
-            this.showStep4(); // Go back to confirmation
-        }
-    }
-    
-    showStep4() {
-        document.getElementById('wizardLoading').classList.add('d-none');
-        document.getElementById('wizardStep4').classList.remove('d-none');
-        document.querySelector('.modal-footer').style.display = 'block';
     }
 }
 
