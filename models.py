@@ -603,18 +603,20 @@ class ObraMiembro(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    rol = db.Column(db.String(20), nullable=False, default='pm')
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    rol_en_obra = db.Column(db.String(30))
+    etapa_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
     
     # Relaciones
     obra = db.relationship('Obra')
-    usuario = db.relationship('Usuario', backref='obras_como_miembro')
+    usuario = db.relationship('Usuario', lazy='joined')
     
     # Constraint de unicidad
-    __table_args__ = (db.UniqueConstraint('obra_id', 'user_id', name='uq_obra_user'),)
+    __table_args__ = (db.UniqueConstraint('obra_id', 'usuario_id', name='uq_obra_usuario'),)
     
     def __repr__(self):
-        return f'<ObraMiembro Obra:{self.obra_id} Usuario:{self.user_id}>'
+        return f'<ObraMiembro Obra:{self.obra_id} Usuario:{self.usuario_id}>'
 
 
 class Presupuesto(db.Model):

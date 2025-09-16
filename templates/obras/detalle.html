@@ -337,22 +337,26 @@
                     {% endif %}
                 </div>
                 <div class="card-body">
-                    {% if asignaciones %}
+                    {% if miembros %}
                     <div class="row">
-                        {% for asignacion in asignaciones %}
+                        {% for miembro in miembros %}
                         <div class="col-md-6 col-lg-4 mb-3">
                             <div class="border rounded p-3">
-                                <h6 class="mb-1">{{ asignacion.usuario.nombre_completo }}</h6>
-                                <p class="text-muted mb-1">{{ asignacion.rol_en_obra|obtener_nombre_rol }}</p>
-                                {% if asignacion.etapa %}
+                                <h6 class="mb-1">{{ miembro.usuario.nombre_completo }}</h6>
+                                {% if miembro.rol_en_obra %}
+                                <p class="text-muted mb-1">{{ miembro.rol_en_obra }}</p>
+                                {% endif %}
+                                {% if miembro.etapa_id %}
                                 <div class="mb-2">
-                                    <span class="badge bg-info">{{ asignacion.etapa.nombre }}</span>
+                                    <span class="badge bg-info">Etapa {{ miembro.etapa_id }}</span>
                                 </div>
                                 {% endif %}
+                                {% if miembro.created_at %}
                                 <small class="text-muted">
                                     <i class="fas fa-calendar me-1"></i>
-                                    Desde {{ asignacion.fecha_asignacion.strftime('%d/%m/%Y') }}
+                                    Desde {{ miembro.created_at.strftime('%d/%m/%Y') }}
                                 </small>
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -566,8 +570,8 @@
                                 <label class="form-label">Responsable</label>
                                 <select class="form-select" name="responsable_id">
                                     <option value="">Sin asignar</option>
-                                    {% for asignacion in asignaciones %}
-                                    <option value="{{ asignacion.usuario.id }}">{{ asignacion.usuario.nombre_completo }}</option>
+                                    {% for responsable in responsables %}
+                                    <option value="{{ responsable.usuario.id }}">{{ responsable.usuario.nombre_completo }}</option>
                                     {% endfor %}
                                 </select>
                                 <div class="form-text">Responsable titular de la tarea</div>
@@ -2421,8 +2425,58 @@ async function confirmarRechazo() {
     }
 }
 
-// HOTFIX: Temporarily disabled AJAX - using traditional form submission
-// Will fix AJAX in Step 2 after basic functionality works
+// STEP 7: Proper AJAX implementation as specified by user
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🔧 Setting up assignment form handler...');
+    
+    const form = document.querySelector('#asignarUsuarioModal form');
+    if (!form) {
+        console.log('❌ Assignment form not found!');
+        return;
+    }
+    
+    console.log('✅ Found assignment form, attaching handler');
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        console.log('🚀 Form submit intercepted!');
+
+        const fd = new FormData(form);
+        
+        // Normalizar: si solo hay `usuario_id`, mapearlo a `user_ids[]`
+        const unico = fd.get('usuario_id');
+        if (unico && !fd.get('user_ids[]')) {
+            fd.append('user_ids[]', unico);
+        }
+
+        console.log('📤 Sending POST to:', form.action);
+        console.log('📋 FormData contents:');
+        for (let [key, value] of fd.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
+
+        try {
+            const res = await fetch(form.action, { 
+                method: 'POST', 
+                body: fd, 
+                credentials: 'include' 
+            });
+            const data = await res.json();
+            
+            console.log('📥 Response:', data);
+
+            if (data.ok) {
+                // Simple and effective reload as specified
+                window.location.reload(); 
+            } else {
+                alert(data.error || 'No se pudo asignar');
+            }
+        } catch (error) {
+            console.error('❌ Error:', error);
+            alert('Error de conexión: ' + error.message);
+        }
+    });
+});
 
 </script>
 {% endblock %}

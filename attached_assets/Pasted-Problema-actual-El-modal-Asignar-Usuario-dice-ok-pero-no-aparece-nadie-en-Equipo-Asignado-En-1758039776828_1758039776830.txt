@@ -1,0 +1,170 @@
+Problema actual
+
+El modal Asignar Usuario dice “ok”, pero no aparece nadie en “Equipo Asignado”.
+
+En el selector Responsable de “Nueva Tarea” no hay usuarios para elegir.
+
+Antes vimos un error de DB: column "usuario_id" does not exist en obra_miembros.
+
+Conclusión: hay desalineo de nombres de columna en obra_miembros (user_id vs usuario_id) y el detalle de Obra no está leyendo/mostrando los miembros asignados. Por eso también queda vacío el dropdown de “Responsable”.
+
+✅ Qué hay que hacer (copiar/pegar al agente)
+
+1) Esquema y modelo: unificar el nombre de columna
+
+En la tabla obra_miembros usar SIEMPRE usuario_id (coherente con el resto del código).
+
+Si hoy la columna es user_id, migrar:
+
+ALTER TABLE obra_miembros RENAME COLUMN user_id TO usuario_id;
+
+
+Asegurar unique para evitar duplicados:
+
+-- si no existe, crearla
+ALTER TABLE obra_miembros
+  ADD CONSTRAINT uq_obra_usuario UNIQUE (obra_id, usuario_id);
+
+
+Columns esperadas en obra_miembros:
+
+id PK
+
+obra_id INT NOT NULL (FK -> obras.id)
+
+usuario_id INT NOT NULL (FK -> usuarios.id)
+
+rol_en_obra VARCHAR(30) NULL
+
+etapa_id INT NULL
+
+created_at TIMESTAMP DEFAULT now()
+
+models.py
+
+class ObraMiembro(db.Model):
+    __tablename__ = "obra_miembros"
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    rol_en_obra = db.Column(db.String(30))
+    etapa_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    usuario = db.relationship('Usuario', lazy='joined')
+
+
+2) Endpoint de asignación – aceptar user_ids[] y contar bien
+
+En POST /obras/<obra_id>/asignar_usuario:
+
+Leer user_ids[] (FormData o JSON). Fallback: usuario_id.
+
+Si no hay IDs → return 400 con {ok:false, error:"Seleccione al menos un usuario"}.
+
+Insertar con usuario_id y ON CONFLICT DO NOTHING.
+
+Devolver cuántos creó y cuántos ya existían:
+
+user_ids = (
+    request.form.getlist('user_ids[]')
+    or request.json.get('user_ids', [])
+    or ([request.form.get('usuario_id')] if request.form.get('usuario_id') else [])
+)
+user_ids = [int(u) for u in user_ids if u]
+
+if not user_ids:
+    return jsonify(ok=False, error="Seleccione al menos un usuario"), 400
+
+creados = 0
+ya_existian = 0
+for uid in user_ids:
+    try:
+        db.session.execute(text("""
+            INSERT INTO obra_miembros (obra_id, usuario_id, rol_en_obra, etapa_id)
+            VALUES (:o, :u, :rol, :etapa)
+            ON CONFLICT (obra_id, usuario_id) DO NOTHING
+        """), {"o": obra_id, "u": uid, "rol": rol_en_obra, "etapa": etapa_id})
+        # saber si insertó: revisar rowcount
+        if db.session.get_bind().rowcount == 0:
+            ya_existian += 1
+        else:
+            creados += 1
+    except Exception:
+        db.session.rollback()
+        return jsonify(ok=False, error="Error asignando usuario"), 500
+
+db.session.commit()
+return jsonify(ok=True, creados=creados, ya_existian=ya_existian)
+
+
+3) Detalle de Obra – renderizar “Equipo Asignado”
+
+En la vista GET del detalle, cargar y pasar miembros:
+
+miembros = (ObraMiembro.query
+            .filter_by(obra_id=obra.id)
+            .join(Usuario, ObraMiembro.usuario_id == Usuario.id)
+            .order_by(Usuario.nombre.asc())
+            .all())
+return render_template("obras/detalle.html", obra=obra, miembros=miembros, ...)
+
+
+En templates/obras/detalle.html, en “Equipo Asignado”, iterar miembros y mostrar m.usuario.nombre + m.rol_en_obra.
+(Si ya existe el bloque, verificar que usa miembros y no otra variable.)
+
+4) Dropdown “Responsable” en “Nueva Tarea”
+
+Llenar el select con miembros de esa obra:
+
+responsables = (ObraMiembro.query
+                .filter_by(obra_id=obra.id)
+                .join(Usuario)
+                .all())
+# pasar 'responsables' al template y armar el <select>
+
+
+Opcional: si el modal se abre desde una etapa, filtrar por etapa_id o mostrar todos los asignados a la obra.
+
+5) JS del modal (AJAX)
+
+Asegurarse de interceptar el submit del form y enviar FormData con user_ids[].
+(Si ya está agregado, revisar que el id/selector del <form> coincida con el HTML real.)
+
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.querySelector('#form-asignar-usuario'); // asegurar este id en el HTML
+  if (!form) return;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const fd = new FormData(form);
+    // normalizar: si solo hay `usuario_id`, mapearlo a `user_ids[]`
+    const unico = fd.get('usuario_id');
+    if (unico && !fd.get('user_ids[]')) {
+      fd.append('user_ids[]', unico);
+    }
+
+    const res = await fetch(form.action, { method: 'POST', body: fd, credentials: 'include' });
+    const data = await res.json();
+
+    if (data.ok) {
+      window.location.reload(); // simple y efectivo
+    } else {
+      alert(data.error || 'No se pudo asignar');
+    }
+  });
+});
+
+
+6) QA de salida
+
+Abrir /obras/<id>.
+
+Asignar 1 usuario desde el modal → aparece en “Equipo Asignado”.
+
+Reintentar con el mismo usuario → respuesta {ok:true, creados:0, ya_existian:1} y la UI queda igual.
+
+Abrir “Agregar Tarea” → el select Responsable muestra los usuarios asignados.
+
+Registrar un avance desde el operario → Admin ve el % y las fotos (esto ya estaba OK).

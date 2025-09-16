@@ -50,8 +50,8 @@ def can_manage_obra(obra):
     # Verificar si es miembro PM específico de esta obra
     miembro = ObraMiembro.query.filter_by(
         obra_id=obra.id, 
-        user_id=current_user.id, 
-        rol='pm'
+        usuario_id=current_user.id, 
+        rol_en_obra='pm'
     ).first()
     return miembro is not None
 
@@ -84,7 +84,7 @@ def es_miembro_obra(obra_id, user_id):
     from models import ObraMiembro
     # Verificar membresía directa en la obra
     miembro = db.session.query(ObraMiembro.id)\
-        .filter_by(obra_id=obra_id, user_id=user_id).first()
+        .filter_by(obra_id=obra_id, usuario_id=user_id).first()
     if miembro:
         return True
     
@@ -315,6 +315,19 @@ def detalle(id):
     usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=current_user.organizacion_id).all()
     etapas_disponibles = obtener_etapas_disponibles()
     
+    # Load assigned members as specified by user
+    miembros = (ObraMiembro.query
+                .filter_by(obra_id=obra.id)
+                .join(Usuario, ObraMiembro.usuario_id == Usuario.id)
+                .order_by(Usuario.nombre.asc())
+                .all())
+    
+    # Also load responsables for dropdown (members of this obra)
+    responsables = (ObraMiembro.query
+                    .filter_by(obra_id=obra.id)
+                    .join(Usuario)
+                    .all())
+    
     from tareas_predefinidas import TAREAS_POR_ETAPA
     
     return render_template('obras/detalle.html', 
@@ -322,6 +335,8 @@ def detalle(id):
                          etapas=etapas, 
                          asignaciones=asignaciones,
                          usuarios_disponibles=usuarios_disponibles,
+                         miembros=miembros,
+                         responsables=responsables,
                          etapas_disponibles=etapas_disponibles,
                          roles_por_categoria=obtener_roles_por_categoria(),
                          TAREAS_POR_ETAPA=TAREAS_POR_ETAPA,
@@ -542,22 +557,35 @@ def asignar_usuario(obra_id):
                 flash('Usuarios inválidos', 'danger')
                 return redirect(url_for('obras.detalle', id=obra_id))
 
-        # Insertar evitando duplicados usando raw SQL
+        # Obtener campos opcionales  
+        rol_en_obra = request.form.get('rol')
+        etapa_id = request.form.get('etapa_id') or None
+        
+        # Insertar evitando duplicados usando raw SQL con usuario_id
         creados = 0
         ya_existian = 0
-        for u in usuarios:
-            result = db.session.execute(
-                text("""
-                INSERT INTO obra_miembros (obra_id, user_id)
-                VALUES (:o, :u)
-                ON CONFLICT (obra_id, user_id) DO NOTHING
-                RETURNING id
-                """), {"o": obra_id, "u": u.id}
-            )
-            if result.fetchone():
-                creados += 1
-            else:
-                ya_existian += 1
+        for uid in user_ids:
+            try:
+                result = db.session.execute(
+                    text("""
+                    INSERT INTO obra_miembros (obra_id, usuario_id, rol_en_obra, etapa_id)
+                    VALUES (:o, :u, :rol, :etapa)
+                    ON CONFLICT (obra_id, usuario_id) DO NOTHING
+                    """), {"o": obra_id, "u": int(uid), "rol": rol_en_obra, "etapa": etapa_id}
+                )
+                # Check if row was inserted by checking rowcount
+                if result.rowcount == 0:
+                    ya_existian += 1
+                else:
+                    creados += 1
+            except Exception as e:
+                current_app.logger.exception(f"Error inserting user {uid}")
+                db.session.rollback()
+                if is_ajax:
+                    return jsonify({"ok": False, "error": "Error asignando usuario"}), 500
+                else:
+                    flash('Error asignando usuario', 'danger')
+                    return redirect(url_for('obras.detalle', id=obra_id))
                     
         db.session.commit()
         
