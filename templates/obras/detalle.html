@@ -2425,58 +2425,11 @@ async function confirmarRechazo() {
     }
 }
 
-// STEP 7: Proper AJAX implementation as specified by user
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🔧 Setting up assignment form handler...');
-    
-    const form = document.querySelector('#asignarUsuarioModal form');
-    if (!form) {
-        console.log('❌ Assignment form not found!');
-        return;
-    }
-    
-    console.log('✅ Found assignment form, attaching handler');
-    
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        console.log('🚀 Form submit intercepted!');
+// HOTFIX: Temporarily disabled AJAX to let traditional form submission work
+// User requirement: "Quitar temporalmente cualquier preventDefault() para que el POST tradicional funcione YA"
+// After traditional form works, can optionally re-add AJAX
 
-        const fd = new FormData(form);
-        
-        // Normalizar: si solo hay `usuario_id`, mapearlo a `user_ids[]`
-        const unico = fd.get('usuario_id');
-        if (unico && !fd.get('user_ids[]')) {
-            fd.append('user_ids[]', unico);
-        }
-
-        console.log('📤 Sending POST to:', form.action);
-        console.log('📋 FormData contents:');
-        for (let [key, value] of fd.entries()) {
-            console.log(`  ${key}: ${value}`);
-        }
-
-        try {
-            const res = await fetch(form.action, { 
-                method: 'POST', 
-                body: fd, 
-                credentials: 'include' 
-            });
-            const data = await res.json();
-            
-            console.log('📥 Response:', data);
-
-            if (data.ok) {
-                // Simple and effective reload as specified
-                window.location.reload(); 
-            } else {
-                alert(data.error || 'No se pudo asignar');
-            }
-        } catch (error) {
-            console.error('❌ Error:', error);
-            alert('Error de conexión: ' + error.message);
-        }
-    });
-});
+console.log('🔧 HOTFIX: Traditional form submission enabled (no AJAX interference)');
 
 </script>
 {% endblock %}
