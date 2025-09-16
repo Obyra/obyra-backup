@@ -322,11 +322,24 @@ def detalle(id):
                 .order_by(Usuario.nombre.asc())
                 .all())
     
-    # Also load responsables for dropdown (members of this obra)
-    responsables = (ObraMiembro.query
-                    .filter_by(obra_id=obra.id)
-                    .join(Usuario)
-                    .all())
+    # Also load responsables for dropdown (members of this obra) 
+    responsables_query = (ObraMiembro.query
+                         .filter_by(obra_id=obra.id)
+                         .join(Usuario)
+                         .all())
+    
+    # Convert to JSON-serializable format for wizard
+    responsables = [
+        {
+            'usuario': {
+                'id': r.usuario.id,
+                'nombre_completo': r.usuario.nombre_completo,
+                'rol': r.usuario.rol
+            },
+            'rol_en_obra': r.rol_en_obra
+        }
+        for r in responsables_query
+    ]
     
     from tareas_predefinidas import TAREAS_POR_ETAPA
     
@@ -336,7 +349,8 @@ def detalle(id):
                          asignaciones=asignaciones,
                          usuarios_disponibles=usuarios_disponibles,
                          miembros=miembros,
-                         responsables=responsables,
+                         responsables=responsables_query,  # For template dropdown
+                         responsables_json=responsables,   # For wizard JavaScript
                          etapas_disponibles=etapas_disponibles,
                          roles_por_categoria=obtener_roles_por_categoria(),
                          TAREAS_POR_ETAPA=TAREAS_POR_ETAPA,

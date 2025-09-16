@@ -2553,7 +2553,7 @@ class WizardTareas {
         this.selectedEtapas = [];
         this.selectedTareas = [];
         this.tareasData = [];
-        this.responsables = {{ responsables|tojson|safe }};
+        this.responsables = {{ responsables_json|tojson|safe }};
         
         this.initializeEventListeners();
         this.loadTareasSugeridas();
