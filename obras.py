@@ -2375,7 +2375,7 @@ def get_wizard_etapas():
         return response, 400
 
 
-@obras_bp.route('/<int:obra_id>/etapas/bulk_from_catalog', methods=['POST'])
+@obras_bp.route('/api/obras/<int:obra_id>/etapas/bulk_from_catalog', methods=['POST'])
 @login_required
 def bulk_create_etapas_from_catalog(obra_id):
     """Create etapas in obra from catalog IDs (idempotent)"""
@@ -2383,13 +2383,17 @@ def bulk_create_etapas_from_catalog(obra_id):
         # Verificar permisos
         obra = Obra.query.get_or_404(obra_id)
         if not can_manage_obra(obra):
-            return jsonify({"error": "Sin permisos para gestionar esta obra"}), 403
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
         
         data = request.get_json()
         catalogo_ids = data.get("catalogo_ids", [])
         
         if not catalogo_ids:
-            return jsonify({"error": "Se requiere al menos un ID del catálogo"}), 400
+            response = jsonify({"ok": False, "error": "Se requiere al menos un ID del catálogo"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
         
         # Atomic transaction: create etapas and seed tasks together
         from etapas_predefinidas import crear_etapas_desde_catalogo

@@ -877,7 +877,7 @@
                             <i class="far fa-square me-1"></i>Deseleccionar Todas
                         </button>
                         <button type="button" class="btn btn-sm btn-success" onclick="agregarEtapasSeleccionadas()" 
-                                id="btnAgregarEtapas" disabled>
+                                id="btnAgregarEtapasSel" disabled>
                             <i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas (<span id="contadorSeleccionadas">0</span>)
                         </button>
                     </div>
@@ -3179,7 +3179,7 @@ class WizardTareas {
         const checkboxes = document.querySelectorAll('.catalog-checkbox:checked');
         const contador = checkboxes.length;
         const contadorElement = document.getElementById('contadorSeleccionadas');
-        const botonAgregar = document.getElementById('btnAgregarEtapas');
+        const botonAgregar = document.getElementById('btnAgregarEtapasSel');
         
         if (contadorElement) {
             contadorElement.textContent = contador;
@@ -3227,7 +3227,7 @@ function actualizarContadorSeleccionadas() {
     const checkboxes = document.querySelectorAll('.catalog-checkbox:checked');
     const contador = checkboxes.length;
     document.getElementById('contadorSeleccionadas').textContent = contador;
-    document.getElementById('btnAgregarEtapas').disabled = contador === 0;
+    document.getElementById('btnAgregarEtapasSel').disabled = contador === 0;
 }
 
 function seleccionarTodasLasEtapas() {
@@ -3242,61 +3242,72 @@ function deseleccionarTodasLasEtapas() {
     actualizarContadorSeleccionadas();
 }
 
-async function agregarEtapasSeleccionadas() {
-    const checkboxesSeleccionados = document.querySelectorAll('.catalog-checkbox:checked');
-    if (checkboxesSeleccionados.length === 0) {
-        mostrarErrorPaso1('Selecciona al menos una etapa del catálogo');
-        return;
-    }
-    
-    // Get selected catalog IDs
-    const catalogoIds = Array.from(checkboxesSeleccionados).map(cb => parseInt(cb.value));
-    
-    // Show loading state
-    document.getElementById('btnAgregarEtapas').disabled = true;
-    document.getElementById('btnAgregarEtapas').innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando etapas...';
-    
-    try {
-        const data = await window.wizardTareas.fetchJSON(`/obras/${window.wizardTareas.obra_id}/etapas/bulk_from_catalog`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ catalogo_ids: catalogoIds })
-        });
-        
-        if (data.ok) {
-            const { creadas, existentes } = data;
-            
-            // Update wizard state with created etapa IDs
-            const etapaIds = [...creadas.map(e => e.id), ...existentes.map(e => e.id)];
-            window.wizardTareas.WIZARD.etapa_ids = etapaIds;
-            
-            // Show success message
-            const totalEtapas = creadas.length + existentes.length;
-            const mensaje = `${creadas.length} etapas creadas, ${existentes.length} ya existían. Total: ${totalEtapas} etapas seleccionadas.`;
-            mostrarExitoPaso1(mensaje);
-            
-            // Auto-proceed to Step 2 after 2 seconds
-            setTimeout(() => {
-                window.wizardTareas.nextStep();
-            }, 2000);
-            
-        } else {
-            console.error('Wizard Paso1 error:', data.error);
-            mostrarErrorPaso1(`Error: ${data.error}`);
-        }
-    } catch (error) {
-        console.error('Wizard Paso1 error:', error.message);
-        mostrarErrorPaso1(`Error de conexión: ${error.message}`);
-    } finally {
-        // Restore button state
-        document.getElementById('btnAgregarEtapas').disabled = false;
-        document.getElementById('btnAgregarEtapas').innerHTML = '<i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas (<span id="contadorSeleccionadas">0</span>)';
-        actualizarContadorSeleccionadas();
-    }
+// Robust fetch helper as specified
+async function fetchJSON(url, opts){
+  const r = await fetch(url, opts);
+  const txt = await r.text();
+  const ct = r.headers.get('content-type') || '';
+  if(!r.ok) throw new Error(`HTTP ${r.status}: ${txt.slice(0,300)}`);
+  if(!ct.includes('application/json')) throw new Error(`No JSON (${ct}): ${txt.slice(0,300)}`);
+  return JSON.parse(txt);
 }
+
+// Replace handler as specified
+const PREF = '/obras'; // prefijo real del blueprint
+const $err = document.getElementById('step1-error'); // span/div rojo de error si existe
+const $ok  = document.getElementById('step1-success');  // span/div verde de ok si existe
+
+async function agregarEtapasSeleccionadas(){
+  $err && ($err.textContent = '');
+  $ok  && ($ok.textContent  = '');
+
+  const checks = [...document.querySelectorAll('.catalog-checkbox:checked')];
+  const catalogoIds = checks.map(i => Number(i.value)).filter(Boolean);
+
+  if(!catalogoIds.length){
+    $err && ($err.textContent = 'Seleccioná al menos una etapa del catálogo.');
+    return;
+  }
+
+  try {
+    const url = `${PREF}/api/obras/${window.wizardTareas.obra_id}/etapas/bulk_from_catalog`;
+    console.log('POST bulk_from_catalog', url, catalogoIds);
+    const res = await fetchJSON(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ catalogo_ids: catalogoIds })
+    });
+
+    if(res.ok === false){
+      throw new Error(res.error || 'Error desconocido del servidor');
+    }
+    if(!res || (!res.creadas && !res.existentes)){
+      throw new Error('Respuesta inválida del servidor');
+    }
+
+    const etapaIds = [...(res.creadas||[]), ...(res.existentes||[])].map(e => e.id).filter(Boolean);
+    if(!etapaIds.length){
+      throw new Error('No se devolvieron IDs de etapas de la obra');
+    }
+
+    window.WIZARD = window.WIZARD || {};
+    window.WIZARD.etapa_ids = etapaIds;
+
+    $ok && ($ok.textContent = `Agregadas ${res.creadas?.length||0} | Existentes ${res.existentes?.length||0}`);
+    // habilitar Siguiente si estaba deshabilitado
+    const btnSig = document.getElementById('wizardBtnSiguiente');
+    btnSig && btnSig.removeAttribute('disabled');
+  } catch (e){
+    console.error('Wizard Paso1 bulk error:', e);
+    $err && ($err.textContent = `Error: ${e.message}`);
+    alert(`Error al agregar etapas: ${e.message}`); // opcional, si quieren pop-up
+  }
+}
+
+// Asegurar el binding y global variables
+window.obraId = window.wizardTareas ? window.wizardTareas.obra_id : null;
+const btnAgregar = document.getElementById('btnAgregarEtapasSel');
+if(btnAgregar) btnAgregar.onclick = agregarEtapasSeleccionadas;
 
 function mostrarErrorPaso1(mensaje) {
     const errorDiv = document.getElementById('step1-error');
