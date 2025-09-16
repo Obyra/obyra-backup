@@ -558,7 +558,7 @@ def asignar_usuario(obra_id):
                 return redirect(url_for('obras.detalle', id=obra_id))
 
         # Obtener campos opcionales  
-        rol_en_obra = request.form.get('rol')
+        rol_en_obra = request.form.get('rol') or 'operario'  # Default role
         etapa_id = request.form.get('etapa_id') or None
         
         # Insertar evitando duplicados usando raw SQL con usuario_id
@@ -2118,3 +2118,175 @@ def rechazar_avance(avance_id):
         db.session.rollback()
         print(f"❌ Error en rechazar_avance: {str(e)}")
         return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route('/<int:obra_id>/wizard/tareas', methods=['POST'])
+@login_required
+def wizard_crear_tareas(obra_id):
+    """
+    Issue #1 - Backend: Wizard – creación masiva de tareas
+    Endpoint para crear varias tareas y asignar responsables en un solo paso
+    """
+    # Verificar permisos (solo admin/pm)
+    obra = Obra.query.get_or_404(obra_id)
+    if not can_manage_obra(obra):
+        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify(ok=False, error="JSON requerido"), 400
+            
+        etapas_data = data.get('etapas', [])
+        evitar_duplicados = data.get('evitar_duplicados', True)
+        
+        if not etapas_data:
+            return jsonify(ok=False, error="Se requiere al menos una etapa"), 400
+        
+        creadas = 0
+        ya_existian = 0
+        asignaciones_creadas = 0
+        
+        # Comenzar transacción
+        db.session.begin()
+        
+        current_app.logger.info(f"🧙‍♂️ WIZARD: Creando tareas para obra {obra_id}")
+        
+        for etapa_data in etapas_data:
+            etapa_id = etapa_data.get('etapa_id')
+            tareas_data = etapa_data.get('tareas', [])
+            
+            # Validar que la etapa existe y pertenece a la obra
+            etapa = EtapaObra.query.filter_by(
+                id=etapa_id, 
+                obra_id=obra_id
+            ).first()
+            
+            if not etapa:
+                db.session.rollback()
+                return jsonify(ok=False, error=f"Etapa {etapa_id} no existe en esta obra"), 400
+            
+            for tarea_data in tareas_data:
+                nombre = tarea_data.get('nombre')
+                inicio = tarea_data.get('inicio')  # formato "2025-09-20"
+                fin = tarea_data.get('fin')
+                horas_estimadas = tarea_data.get('horas_estimadas')
+                unidad = tarea_data.get('unidad', 'h')
+                responsable_id = tarea_data.get('responsable_id')
+                
+                # Validaciones básicas
+                if not nombre:
+                    db.session.rollback()
+                    return jsonify(ok=False, error="Nombre de tarea requerido"), 400
+                
+                if responsable_id:
+                    # Validar que el responsable es miembro de la obra
+                    miembro = ObraMiembro.query.filter_by(
+                        obra_id=obra_id,
+                        usuario_id=responsable_id
+                    ).first()
+                    
+                    if not miembro:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Usuario {responsable_id} no es miembro de esta obra"), 400
+                
+                # Parsear fechas
+                fecha_inicio_plan = None
+                fecha_fin_plan = None
+                
+                if inicio:
+                    try:
+                        fecha_inicio_plan = datetime.strptime(inicio, '%Y-%m-%d').date()
+                    except ValueError:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Fecha inicio inválida: {inicio}"), 400
+                
+                if fin:
+                    try:
+                        fecha_fin_plan = datetime.strptime(fin, '%Y-%m-%d').date()
+                    except ValueError:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Fecha fin inválida: {fin}"), 400
+                
+                # Verificar si ya existe (upsert por etapa_id, nombre)
+                tarea_existente = None
+                if evitar_duplicados:
+                    tarea_existente = TareaEtapa.query.filter_by(
+                        etapa_id=etapa_id,
+                        nombre=nombre
+                    ).first()
+                
+                if tarea_existente:
+                    # Actualizar tarea existente
+                    ya_existian += 1
+                    tarea = tarea_existente
+                    
+                    # Actualizar campos si vienen nuevos valores
+                    if fecha_inicio_plan:
+                        tarea.fecha_inicio_plan = fecha_inicio_plan
+                    if fecha_fin_plan:
+                        tarea.fecha_fin_plan = fecha_fin_plan
+                    if horas_estimadas:
+                        tarea.horas_estimadas = horas_estimadas
+                    if unidad:
+                        tarea.unidad = unidad
+                    if responsable_id:
+                        tarea.responsable_id = responsable_id
+                        
+                    current_app.logger.info(f"📝 WIZARD: Actualizada tarea existente '{nombre}' en etapa {etapa_id}")
+                    
+                else:
+                    # Crear nueva tarea
+                    tarea = TareaEtapa(
+                        etapa_id=etapa_id,
+                        nombre=nombre,
+                        descripcion=f"Creada via wizard",
+                        estado='pendiente',
+                        fecha_inicio_plan=fecha_inicio_plan,
+                        fecha_fin_plan=fecha_fin_plan,
+                        horas_estimadas=horas_estimadas,
+                        unidad=unidad,
+                        responsable_id=responsable_id
+                    )
+                    
+                    db.session.add(tarea)
+                    db.session.flush()  # Para obtener el ID
+                    creadas += 1
+                    
+                    current_app.logger.info(f"✨ WIZARD: Nueva tarea '{nombre}' creada en etapa {etapa_id}")
+                
+                # Asignar responsable en tarea_miembros si viene responsable_id
+                if responsable_id:
+                    # Verificar si ya está asignado
+                    asignacion_existente = TareaMiembro.query.filter_by(
+                        tarea_id=tarea.id,
+                        usuario_id=responsable_id
+                    ).first()
+                    
+                    if not asignacion_existente:
+                        asignacion = TareaMiembro(
+                            tarea_id=tarea.id,
+                            usuario_id=responsable_id,
+                            cuota_objetivo=None  # Opcional por ahora
+                        )
+                        db.session.add(asignacion)
+                        asignaciones_creadas += 1
+                        
+                        current_app.logger.info(f"👤 WIZARD: Asignado usuario {responsable_id} a tarea {tarea.id}")
+        
+        # Confirmar transacción
+        db.session.commit()
+        
+        current_app.logger.info(f"🎉 WIZARD: Completado - {creadas} creadas, {ya_existian} ya existían, {asignaciones_creadas} asignaciones")
+        
+        return jsonify(
+            ok=True,
+            creadas=creadas,
+            ya_existian=ya_existian,
+            asignaciones_creadas=asignaciones_creadas
+        )
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"❌ WIZARD: Error creando tareas")
+        return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
