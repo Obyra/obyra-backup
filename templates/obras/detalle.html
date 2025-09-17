@@ -3239,29 +3239,27 @@ function deseleccionarTodasLasEtapas() {
 }
 
 // === Adapter de navegación de pasos ===
-(function(){
-  // Si existe una función propia del wizard, usala como gotoPaso
+(function () {
+  // Si no existe gotoPaso, lo mapeamos a la función real del wizard
   if (typeof window.gotoPaso !== 'function') {
-    if (typeof window.goToStep === 'function') {
+    if (window.wizardTareas?.goToStep) {
+      window.gotoPaso = step => window.wizardTareas.goToStep(step);
+    } else if (typeof window.goToStep === 'function') {
       window.gotoPaso = window.goToStep;
     } else if (typeof window.wizardGoToStep === 'function') {
       window.gotoPaso = window.wizardGoToStep;
-    } else {
-      // Usar la instancia del wizard si está disponible
-      window.gotoPaso = function(step) {
-        if (window.wizardTareas && typeof window.wizardTareas.goToStep === 'function') {
-          window.wizardTareas.goToStep(step);
-        } else if (typeof window.nextStep === 'function') {
-          // Fallback: avanzar una vez si no hay API por número
-          if (typeof window.wizardPasoActual === 'number' && step > window.wizardPasoActual) {
-            while (window.wizardPasoActual < step) { window.nextStep(); }
-          } else {
-            window.nextStep();
-          }
+    } else if (typeof window.nextStep === 'function') {
+      // Fallback: avanza llamando nextStep() hasta llegar
+      window.gotoPaso = function (step) {
+        if (typeof window.wizardPasoActual === 'number') {
+          while (window.wizardPasoActual < step) window.nextStep();
         } else {
-          console.warn('No se encontró función de navegación; dejá gotoPaso para debug.');
+          window.nextStep();
         }
       };
+    } else {
+      console.warn('No se encontró función de navegación para el wizard.');
+      window.gotoPaso = function () {}; // evita crash si algo falta
     }
   }
 })();
@@ -3357,11 +3355,8 @@ document.getElementById('wizardBtnSiguiente')?.addEventListener('click', (e)=>{
 document.getElementById('wizardTareasModal')?.addEventListener('shown.bs.modal', ()=>{
   document.getElementById('wizardBtnSiguiente')?.removeAttribute('disabled');
   
-  // Esconder mensaje rojo legacy
-  const legacyMsg = document.querySelector('div.text-danger');
-  if (legacyMsg && legacyMsg.textContent.includes('Primero debes agregar etapas')) {
-    legacyMsg.classList.add('d-none');
-  }
+  // Ocultar mensajes legacy
+  document.querySelectorAll('.wizard-legacy-note').forEach(el => el.remove());
 });
 
 function mostrarErrorPaso1(mensaje) {

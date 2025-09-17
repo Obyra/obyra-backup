@@ -17,6 +17,9 @@ obras_bp = Blueprint('obras', __name__)
 # Error handlers for AJAX requests to return JSON instead of HTML
 @obras_bp.errorhandler(404)
 def handle_404(error):
+    # Always return JSON for API routes
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Not found"}), 404
     # Check if this is an AJAX request (common indicators)
     if request.is_json or 'application/json' in request.headers.get('Accept', ''):
         return jsonify({'ok': False, 'error': 'Recurso no encontrado'}), 404
@@ -25,10 +28,23 @@ def handle_404(error):
 
 @obras_bp.errorhandler(500)  
 def handle_500(error):
+    # Always return JSON for API routes
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Internal server error"}), 500
     # Check if this is an AJAX request
     if request.is_json or 'application/json' in request.headers.get('Accept', ''):
         return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
     # For regular web requests, let Flask handle it normally
+    raise error
+
+@obras_bp.errorhandler(401)
+def handle_401(error):
+    # Always return JSON for API routes
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 401
+    # For regular web requests, let Flask handle it normally  
     raise error
 
 # Helpers de permisos
