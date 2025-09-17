@@ -48,8 +48,11 @@ async function cargarCatalogoEtapas() {
       </div>
     `;
     
-    // Llamar API del wizard
-    const obraId = window.obraId;
+    // Obtener obra ID del modal o variable global
+    let obraId = document.getElementById('wizardTareasModal')?.getAttribute('data-obra-id');
+    if (!obraId) {
+      obraId = window.obraId;
+    }
     if (!obraId) {
       throw new Error('ID de obra no disponible');
     }

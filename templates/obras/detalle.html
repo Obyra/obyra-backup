@@ -93,7 +93,7 @@
                                       </button>
                                     {% endif %}
 
-                                    <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+                                    <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
                                       🧙‍♂️ Wizard Tareas
                                     </button>
                                 </div>
@@ -224,7 +224,7 @@
                             {% else %}
                                 <div class="text-center py-4 text-muted">
                                     No hay etapas definidas para esta obra.<br>
-                                    <button id="btnWizardTareas2" class="btn btn-success mt-3" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+                                    <button id="btnWizardTareas2" class="btn btn-success mt-3" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
                                       ⚡ Configurar con Wizard
                                     </button>
                                 </div>
@@ -834,7 +834,7 @@
 </div>
 
 <!-- Modal Wizard Tareas - Issue #2 Frontend -->
-<div class="modal fade" id="wizardTareasModal" tabindex="-1" data-bs-backdrop="static">
+<div class="modal fade" id="wizardTareasModal" tabindex="-1" data-bs-backdrop="static" data-obra-id="{{ obra.id }}">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
@@ -3496,7 +3496,7 @@ async function refreshEtapasContainer() {
       etapasHTML = `
         <div class="text-center py-4 text-muted">
           No hay etapas definidas para esta obra.<br>
-          <button id="btnWizardTareas2" class="btn btn-success mt-3" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+          <button id="btnWizardTareas2" class="btn btn-success mt-3" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
             ⚡ Configurar con Wizard
           </button>
         </div>
@@ -3516,7 +3516,7 @@ async function refreshEtapasContainer() {
           `;
         }
         buttonsHTML += `
-          <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+          <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal" data-obra-id="{{ obra.id }}">
             🧙‍♂️ Wizard Tareas
           </button>
         `;
@@ -3674,7 +3674,19 @@ document.getElementById('wizardBtnSiguiente')?.addEventListener('click', (e)=>{
   if(window.wizardPasoActual === 1){ e.preventDefault(); applyCatalogAndAdvance(); }
 });
 
-// 🔥 Event listeners del wizard ya están en wizard.js
+// 🔥 Copiar obra ID del botón al modal (recomendado para compatibilidad futura)
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-bs-target="#wizardTareasModal"]');
+  if (!btn) return;
+  const id = btn.getAttribute('data-obra-id');
+  if (id) {
+    const modal = document.getElementById('wizardTareasModal');
+    if (modal) {
+      modal.setAttribute('data-obra-id', id);
+      console.debug('🔥 [WIZARD] Copiando obra ID al modal:', id);
+    }
+  }
+});
 
 // 🎯 Funciones legacy de mensajes removidas - errores vienen del JSON API
 
