@@ -321,8 +321,18 @@ console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
     const slugs = getSel();
     console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas:`, slugs);
     if (!slugs.length) return;
-    document.getElementById('btnAgregarEtapasSel')?.click(); // misma acción que el botón verde
+    
+    // Aplicar selección (mismo que el botón verde)
+    document.getElementById('btnAgregarEtapasSel')?.click(); 
+    
+    // Navegar a paso 2 y cargar tareas
     window.gotoPaso(2);
+    
+    // Obtener obra_id del modal
+    const obraId = m.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
+    if (obraId && typeof window.loadTareasWizard === 'function') {
+      window.loadTareasWizard(obraId, slugs);
+    }
   };
 
   function connectWizardNav() {
@@ -348,3 +358,75 @@ console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
     }
   });
 })();
+
+// 🔥 CARGAR TAREAS PARA EL PASO 2
+window.loadTareasWizard = async function(obraId, slugs) {
+  console.log(`🔥 WIZARD: Cargando tareas para obra ${obraId}, etapas:`, slugs);
+  
+  const m = document.getElementById('wizardTareasModal');
+  const list = m.querySelector('#wizardListaTareas') || m.querySelector('#wizardStep2');
+  const spin = m.querySelector('#wizardSpinnerTareas');
+  
+  // Mostrar spinner y limpiar contenido
+  if (spin) spin.classList.remove('d-none');
+  if (list) list.innerHTML = '';
+  
+  try {
+    // Llamar al API de tareas (ajustar según su implementación)
+    const res = await fetch('/obras/api/wizard-tareas/tareas', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({ obra_id: parseInt(obraId), etapas: slugs })
+    });
+    
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    
+    const json = await res.json();
+    const tareas = json.tareas_catalogo || json.tareas || json.data || [];
+    
+    // Ocultar spinner
+    if (spin) spin.classList.add('d-none');
+    
+    // Renderizar tareas
+    if (list) {
+      list.innerHTML = tareas.length
+        ? `<div class="mb-3">
+             <h6 class="text-primary">Tareas disponibles (${tareas.length}):</h6>
+             <div class="row">${
+               tareas.map(t => `
+                 <div class="col-md-6 mb-2">
+                   <div class="form-check">
+                     <input class="form-check-input tarea-checkbox" type="checkbox" 
+                            data-id="${t.id}" data-slug="${t.slug || t.nombre}" 
+                            id="tarea-${t.id}">
+                     <label class="form-check-label" for="tarea-${t.id}">
+                       <strong>${t.nombre}</strong>
+                       ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
+                     </label>
+                   </div>
+                 </div>
+               `).join('')
+             }</div>
+           </div>`
+        : '<div class="text-muted text-center p-4">No hay tareas disponibles para las etapas seleccionadas.</div>';
+    }
+    
+    console.log(`✅ WIZARD: ${tareas.length} tareas cargadas exitosamente`);
+    
+  } catch (error) {
+    console.error('❌ WIZARD: Error cargando tareas:', error);
+    
+    // Ocultar spinner y mostrar error
+    if (spin) spin.classList.add('d-none');
+    if (list) {
+      list.innerHTML = `<div class="alert alert-warning">
+        <h6>No se pudieron cargar las tareas</h6>
+        <p class="mb-0">Error: ${error.message}</p>
+        <button class="btn btn-sm btn-outline-primary mt-2" onclick="window.loadTareasWizard(${obraId}, ${JSON.stringify(slugs)})">
+          Reintentar
+        </button>
+      </div>`;
+    }
+  }
+};
