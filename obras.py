@@ -2531,31 +2531,32 @@ def wizard_preview():
         obra_id = data.get("obra_id")
         
         if not etapa_ids:
-            return jsonify({"error": "etapa_ids requeridos"}), 400
+            return jsonify({"ok": False, "error": "etapa_ids requeridos"}), 400
             
         if not obra_id:
-            return jsonify({"error": "obra_id requerido"}), 400
+            return jsonify({"ok": False, "error": "obra_id requerido"}), 400
             
         # Verificar permisos
         obra = Obra.query.get_or_404(obra_id)
         if not can_manage_obra(obra):
-            return jsonify({"error": "Sin permisos"}), 403
+            return jsonify({"ok": False, "error": "Sin permisos"}), 403
         
         # Obtener etapas filtradas
         etapas = (EtapaObra.query
                   .filter(EtapaObra.id.in_(etapa_ids), EtapaObra.obra_id == obra_id)
                   .all())
         
-        res = []
+        # 🎯 Construir respuesta con esquema exacto que espera el frontend
+        etapas_data = []
         for e in etapas:
             # Tareas del catálogo por tipo de etapa (usando TAREAS_POR_ETAPA)
             from tareas_predefinidas import TAREAS_POR_ETAPA
             tareas_catalogo = []
             
             if e.nombre in TAREAS_POR_ETAPA:
-                for tarea_def in TAREAS_POR_ETAPA[e.nombre]:
+                for idx, tarea_def in enumerate(TAREAS_POR_ETAPA[e.nombre]):
                     tareas_catalogo.append({
-                        "id": f"cat_{e.id}_{len(tareas_catalogo)}",
+                        "codigo": f"cat_{e.id}_{idx}",
                         "nombre": tarea_def.get("nombre", "Tarea sin nombre"),
                         "unidad_default": tarea_def.get("unidad", "h")
                     })
@@ -2570,18 +2571,23 @@ def wizard_preview():
                     "unidad": t.unidad or "h"
                 })
             
-            res.append({
-                "id": e.id,
-                "nombre": e.nombre,
+            etapas_data.append({
+                "etapa_id": e.id,
+                "etapa_nombre": e.nombre,
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
         
-        return jsonify({"etapas": res})
+        # 🎯 Respuesta con esquema exacto según especificación del usuario
+        return jsonify({
+            "ok": True,
+            "obra_id": obra_id,
+            "etapas": etapas_data
+        })
         
     except Exception as e:
         current_app.logger.exception("Error en wizard preview")
-        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+        return jsonify({"ok": False, "error": f"Error interno: {str(e)}"}), 500
 
 
 @obras_bp.route('/api/obras/<int:obra_id>/equipo', methods=['GET'])

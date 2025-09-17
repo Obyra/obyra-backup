@@ -2674,7 +2674,7 @@ class WizardTareas {
     
     async loadEquipo() {
         try {
-            const response = await fetch(`/api/obras/${this.obra_id}/equipo`);
+            const response = await fetch(`/obras/api/obras/${this.obra_id}/equipo`);
             const data = await response.json();
             this.WIZARD.equipo = data.usuarios || [];
         } catch (error) {
@@ -2779,21 +2779,27 @@ class WizardTareas {
         const container = document.getElementById('accordion-etapas');
         container.innerHTML = '';
         
-        if (!this.WIZARD.preview || !this.WIZARD.preview.etapas) {
-            container.innerHTML = '<p class="text-danger">Error cargando tareas</p>';
+        // 🎯 Usar estado unificado del wizard
+        const preview = window.WIZARD.preview;
+        if (!preview || !preview.etapas) {
+            const error = preview && preview.ok === false ? preview.error : 'Error cargando tareas';
+            container.innerHTML = `<p class="text-danger">${error}</p>`;
+            console.error('❌ WIZARD: No hay preview disponible', preview);
             return;
         }
         
+        console.log('✅ WIZARD: Renderizando Step 2 desde preview:', preview);
+        
         // Build accordion per user specification
-        this.WIZARD.preview.etapas.forEach((etapa, index) => {
-            const collapseId = `et${etapa.id}`;
+        preview.etapas.forEach((etapa, index) => {
+            const collapseId = `et${etapa.etapa_id}`;
             const isExpanded = index === 0 ? 'show' : '';
             
             const etapaHtml = `
                 <div class="card mb-2">
                     <div class="card-header">
                         <button class="btn btn-link text-start w-100" data-bs-toggle="collapse" data-bs-target="#${collapseId}" type="button">
-                            📋 ${etapa.nombre}
+                            📋 ${etapa.etapa_nombre}
                         </button>
                     </div>
                     <div id="${collapseId}" class="collapse ${isExpanded}">
@@ -2802,13 +2808,13 @@ class WizardTareas {
                             ${etapa.tareas_catalogo.map(t => `
                                 <div class="form-check">
                                     <input class="form-check-input tarea-check" type="checkbox"
-                                           data-etapa="${etapa.id}" 
+                                           data-etapa="${etapa.etapa_id}" 
                                            data-source="catalogo" 
-                                           data-catalogo-id="${t.id}"
+                                           data-catalogo-id="${t.codigo}"
                                            data-nombre="${t.nombre}"
                                            data-unidad="${t.unidad_default}" 
-                                           id="tc${t.id}">
-                                    <label class="form-check-label" for="tc${t.id}">
+                                           id="tc${t.codigo}">
+                                    <label class="form-check-label" for="tc${t.codigo}">
                                         ${t.nombre} <small class="text-muted">(${t.unidad_default})</small>
                                     </label>
                                 </div>
@@ -2819,7 +2825,7 @@ class WizardTareas {
                                 ${etapa.tareas_existentes.map(t => `
                                     <div class="form-check">
                                         <input class="form-check-input tarea-check" type="checkbox"
-                                               data-etapa="${etapa.id}" 
+                                               data-etapa="${etapa.etapa_id}" 
                                                data-source="existente" 
                                                data-tarea-id="${t.id}"
                                                data-nombre="${t.nombre}"
@@ -2833,7 +2839,7 @@ class WizardTareas {
                             ` : ''}
 
                             <button class="btn btn-sm btn-outline-primary mt-2"
-                                    onclick="window.wizardTareas.agregarNuevaTarea(${etapa.id})">+ Nueva tarea</button>
+                                    onclick="window.wizardTareas.agregarNuevaTarea(${etapa.etapa_id})">+ Nueva tarea</button>
                         </div>
                     </div>
                 </div>
@@ -2893,7 +2899,7 @@ class WizardTareas {
         
         let html = '';
         selectedTasks.forEach(checkbox => {
-            const etapaNombre = this.WIZARD.preview.etapas.find(e => e.id == checkbox.dataset.etapa)?.nombre;
+            const etapaNombre = window.WIZARD.preview.etapas.find(e => e.etapa_id == checkbox.dataset.etapa)?.etapa_nombre;
             const isNueva = checkbox.dataset.source === 'nueva';
             
             html += `
@@ -2916,7 +2922,7 @@ class WizardTareas {
         tbody.innerHTML = '';
         
         this.WIZARD.tareas_seleccionadas.forEach((tarea, index) => {
-            const etapaNombre = this.WIZARD.preview.etapas.find(e => e.id == tarea.etapa_id)?.nombre;
+            const etapaNombre = window.WIZARD.preview.etapas.find(e => e.etapa_id == tarea.etapa_id)?.etapa_nombre;
             
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -3024,7 +3030,7 @@ class WizardTareas {
             tareas: tareas
         };
         
-        console.log('🧙‍♂️ WIZARD: Enviando a /api/wizard-tareas/create', payload);
+        console.log('🧙‍♂️ WIZARD: Enviando a /obras/api/wizard-tareas/create', payload);
         
         // Show loading
         document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
@@ -3242,31 +3248,7 @@ function deseleccionarTodasLasEtapas() {
     actualizarContadorSeleccionadas();
 }
 
-// === Adapter de navegación de pasos ===
-(function () {
-  // Si no existe gotoPaso, lo mapeamos a la función real del wizard
-  if (typeof window.gotoPaso !== 'function') {
-    if (window.wizardTareas?.goToStep) {
-      window.gotoPaso = step => window.wizardTareas.goToStep(step);
-    } else if (typeof window.goToStep === 'function') {
-      window.gotoPaso = window.goToStep;
-    } else if (typeof window.wizardGoToStep === 'function') {
-      window.gotoPaso = window.wizardGoToStep;
-    } else if (typeof window.nextStep === 'function') {
-      // Fallback: avanza llamando nextStep() hasta llegar
-      window.gotoPaso = function (step) {
-        if (typeof window.wizardPasoActual === 'number') {
-          while (window.wizardPasoActual < step) window.nextStep();
-        } else {
-          window.nextStep();
-        }
-      };
-    } else {
-      console.warn('No se encontró función de navegación para el wizard.');
-      window.gotoPaso = function () {}; // evita crash si algo falta
-    }
-  }
-})();
+// 🎯 Adapter legacy removido - usar implementación unificada en DOMContentLoaded
 
 const PREF = '/obras';
 window.obraId = window.obraId ?? +location.pathname.split('/').pop();
