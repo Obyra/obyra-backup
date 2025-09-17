@@ -1580,9 +1580,9 @@ def eliminar_tarea(tarea_id):
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@obras_bp.route('/tareas/bulk_delete', methods=['POST'])
-@login_required
-def tareas_bulk_delete():
+@obras_bp.route('/api/tareas/bulk_delete', methods=['POST'])
+@login_required  
+def api_tareas_bulk_delete():
     """Eliminar múltiples tareas en lote"""
     data = request.get_json()
     ids = data.get('ids', [])
@@ -1662,9 +1662,9 @@ def tareas_bulk_delete():
         db.session.rollback()
         return jsonify({'error': 'Error interno del servidor', 'ok': False}), 500
 
-@obras_bp.route('/etapas/bulk_delete', methods=['POST'])
+@obras_bp.route('/api/etapas/bulk_delete', methods=['POST'])
 @login_required
-def etapas_bulk_delete():
+def api_etapas_bulk_delete():
     """Eliminar múltiples etapas en lote"""
     data = request.get_json()
     ids = data.get('ids', [])

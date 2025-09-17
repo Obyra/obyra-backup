@@ -1995,7 +1995,7 @@ function eliminarTarea(tareaId) {
         const ids = selectedIds();
         if (!ids.length) return;
         if (!confirm(`¿Eliminar ${ids.length} tareas seleccionadas?`)) return;
-        const r = await fetch('/obras/tareas/bulk_delete', {
+        const r = await fetch('/obras/api/tareas/bulk_delete', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ ids })
@@ -2181,7 +2181,7 @@ document.getElementById('formAvanceDetalle')?.addEventListener('submit', async f
     if (!confirm(`¿Eliminar ${ids.length} etapas seleccionadas?\n\nEsta acción también eliminará todas las tareas asociadas y no se puede deshacer.`)) return;
     
     try {
-      const r = await fetch('/obras/etapas/bulk_delete', {
+      const r = await fetch('/obras/api/etapas/bulk_delete', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ ids })
@@ -3049,19 +3049,31 @@ class WizardTareas {
             console.log('🧙‍♂️ WIZARD: Respuesta', result);
             
             if (result.ok) {
-                alert(`✅ Éxito: ${result.creadas.length} tareas creadas, ${result.duplicados.length} duplicadas`);
+                // Show success in step container
+                document.getElementById('wizardLoading').classList.add('d-none');
+                document.getElementById('wizardSuccess').classList.remove('d-none');
+                document.getElementById('successMessage').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>¡Éxito!</strong> ${result.creadas.length} tareas creadas, ${result.duplicados.length} duplicadas
+                    </div>
+                `;
                 
-                // Close modal and refresh page
-                const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
-                modal.hide();
-                window.location.reload();
+                // Close modal and refresh after delay
+                setTimeout(() => {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
+                    modal.hide();
+                    window.location.reload();
+                }, 2000);
             } else {
-                alert(`❌ Error: ${result.error}`);
-                this.goToStep(4); // Go back to confirmation
+                // Show error in step 4 container
+                this.showStepError(4, result.error);
+                this.goToStep(4);
             }
         } catch (error) {
             console.error('❌ WIZARD: Error', error);
-            alert(`❌ Error de conexión: ${error.message}`);
+            // Show connection error in step 4 container
+            this.showStepError(4, `Error de conexión: ${error.message}`);
             this.goToStep(4);
         }
     }
