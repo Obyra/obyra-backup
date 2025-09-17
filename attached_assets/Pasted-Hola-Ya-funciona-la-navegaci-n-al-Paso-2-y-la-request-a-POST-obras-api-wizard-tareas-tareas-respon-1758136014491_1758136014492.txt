@@ -1,0 +1,81 @@
+Hola! Ya funciona la navegación al Paso 2 y la request a POST /obras/api/wizard-tareas/tareas responde 200, pero devuelve solo 3 tareas fake por etapa (placeholder). Necesitamos que el endpoint entregue el catálogo real.
+
+Backend (obras.py, endpoint /obras/api/wizard-tareas/tareas):
+
+Reemplazar el placeholder por la query real. Opciones (dependiendo del modelo que tengan):
+
+Opción A – con modelos SQLAlchemy (p. ej. TareaCatalogo):
+
+from models import db, TareaCatalogo  # ajustar import
+
+@bp.route('/obras/api/wizard-tareas/tareas', methods=['POST','GET'])
+def wizard_tareas_catalogo():
+    if request.method == 'POST' and request.is_json:
+        data = request.get_json(silent=True) or {}
+        obra_id = data.get('obra_id')
+        etapas  = data.get('etapas')  # lista de slugs
+    else:
+        obra_id = request.args.get('obra_id', type=int)
+        etapas  = request.args.getlist('etapas')
+
+    if not obra_id or not etapas:
+        return jsonify({'ok': False, 'error': 'obra_id y etapas son requeridos'}), 400
+
+    # Query real: tareas del catálogo para esas etapas
+    tareas = (db.session.query(TareaCatalogo)
+              .filter(TareaCatalogo.etapa_slug.in_(etapas))
+              .order_by(TareaCatalogo.etapa_slug, TareaCatalogo.orden, TareaCatalogo.nombre)
+              .all())
+
+    resp = [{
+        'id': t.id,
+        'nombre': t.nombre,
+        'descripcion': getattr(t, 'descripcion', '') or '',
+        'etapa_slug': t.etapa_slug
+    } for t in tareas]
+
+    return jsonify({'ok': True, 'tareas_catalogo': resp})
+
+
+Opción B – si usan listas/archivos helper (p. ej. tareas_predefinidas.py o tareas_detalladas.py):
+
+from tareas_predefinidas import get_tareas_por_etapa  # ajustar al helper real
+
+@bp.route('/obras/api/wizard-tareas/tareas', methods=['POST','GET'])
+def wizard_tareas_catalogo():
+    # ... (misma lectura de obra_id y etapas que arriba)
+
+    tareas = []
+    for slug in etapas:
+        for t in get_tareas_por_etapa(slug):  # devuelve [{'id', 'nombre', 'descripcion', ...}]
+            tareas.append({
+                'id': t.get('id') or f'{slug}-{t["nombre"]}',
+                'nombre': t['nombre'],
+                'descripcion': t.get('descripcion',''),
+                'etapa_slug': slug
+            })
+
+    return jsonify({'ok': True, 'tareas_catalogo': tareas})
+
+
+Importante:
+
+Mantener claves: id, nombre, descripcion, etapa_slug.
+
+Filtrar por los slugs que manda el front (etapas).
+
+Ordenar por etapa_slug y orden/nombre para que salga prolijo.
+
+Front (ya está bien):
+
+wizard.js manda { obra_id, etapas: [slugs...] } y pinta tareas_catalogo en el Paso 2.
+
+Si se seleccionan varias etapas, el backend debe devolver la unión de tareas de todas.
+
+Validación:
+
+Network → “tareas” = 200 y tareas_catalogo con muchas tareas reales.
+
+El Paso 2 muestra el listado completo (no solo 3).
+
+Al tildar, se mueve a “Tareas Seleccionadas” y Siguiente pasa al Paso 3.

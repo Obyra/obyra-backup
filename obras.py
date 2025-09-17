@@ -2428,19 +2428,31 @@ def wizard_tareas_catalogo():
             response.headers['Content-Type'] = 'application/json'
             return response, 403
 
-        # TODO: Reemplazar por la query real a catálogo de tareas
-        # from tareas_predefinidas import obtener_tareas_por_etapas
-        # tareas = obtener_tareas_por_etapas(etapas)
-        # resp = [{'id': t.id, 'nombre': t.nombre, 'etapa_slug': t.etapa_slug, 'descripcion': t.descripcion} for t in tareas]
-
-        # Placeholder para destrabar el front:
+        # Importar función de catálogo de tareas
+        from tareas_predefinidas import obtener_tareas_por_etapa
+        from etapas_predefinidas import obtener_etapas_disponibles
+        
+        # Mapear slugs a nombres completos de etapas
+        catalogo_etapas = obtener_etapas_disponibles()
+        slug_to_nombre = {e['slug']: e['nombre'] for e in catalogo_etapas}
+        
+        # Obtener tareas reales del catálogo
         resp = []
         for slug in etapas:
-            resp += [
-                {'id': f'{slug}-1', 'nombre': f'Tarea 1 ({slug})', 'etapa_slug': slug, 'descripcion': f'Primera tarea de {slug}'},
-                {'id': f'{slug}-2', 'nombre': f'Tarea 2 ({slug})', 'etapa_slug': slug, 'descripcion': f'Segunda tarea de {slug}'},
-                {'id': f'{slug}-3', 'nombre': f'Tarea 3 ({slug})', 'etapa_slug': slug, 'descripcion': f'Tercera tarea de {slug}'},
-            ]
+            nombre_etapa = slug_to_nombre.get(slug)
+            if nombre_etapa:
+                tareas_etapa = obtener_tareas_por_etapa(nombre_etapa)
+                for idx, tarea in enumerate(tareas_etapa):
+                    resp.append({
+                        'id': f'{slug}-{idx+1}',  # ID único: slug + índice
+                        'nombre': tarea['nombre'],
+                        'descripcion': tarea.get('descripcion', ''),
+                        'etapa_slug': slug,
+                        'horas': tarea.get('horas', 0)  # Campo adicional útil
+                    })
+        
+        # Ordenar por etapa_slug y nombre para presentación ordenada
+        resp.sort(key=lambda t: (t['etapa_slug'], t['nombre']))
 
         response = jsonify({'ok': True, 'tareas_catalogo': resp})
         response.headers['Content-Type'] = 'application/json'
