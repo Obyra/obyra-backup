@@ -288,182 +288,91 @@ function getTareasSeleccionadasPaso2(m) {
   });
 }
 
-// 🔥 CONECTAR NAVEGACIÓN DEL PASO 2 (INTERCEPTAR CLICK CUANDO PASO 2 VISIBLE)
-(function connectPaso2Next(){
-  const m   = document.getElementById('wizardTareasModal');
-  const btn = document.getElementById('wizardBtnSiguiente');
-  if (!m || !btn) return;
+// FUNCIONES DUPLICADAS ELIMINADAS - USANDO SOLO EL ENFOQUE CANÓNICO
 
-  // evita enganchar múltiples veces
-  if (btn.dataset.boundStep2) return;
-  btn.dataset.boundStep2 = '1';
-  btn.type = 'button';
-
-  btn.addEventListener('click', (ev) => {
-    // sólo interceptar si estamos en Paso 2 (pane visible)
-    const step2Visible = !!m.querySelector('#wizardStep2:not(.d-none), #wizardPaso2:not(.d-none)');
-    if (!step2Visible) return; // dejar fluir para los otros pasos
-
-    // capturar selección de Paso 2
-    const checks = [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked, #wizardPaso2 input[type="checkbox"]:checked')];
-    const sel = checks.map((cb, i) => {
-      const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim() || `Tarea ${i+1}`;
+// 🔥 CAPTURAR SELECCIÓN DEL PASO 2
+window.getSelPaso2 = function(modal = document.getElementById('wizardTareasModal')) {
+  return [...modal.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')]
+    .map((cb, i) => {
+      const label = cb.closest('.form-check, .card, li, .row')
+        ?.querySelector('label')?.textContent?.trim() || `Tarea ${i+1}`;
       return {
-        id: cb.dataset.id || cb.value || `t${i+1}`,
+        id: cb.dataset.id || cb.value || '',
         nombre: cb.dataset.nombre || label,
         etapa_slug: cb.dataset.etapa || ''
       };
     });
+};
 
-    console.log('WIZARD: Paso 2 selección =', sel.length);
-    if (!sel.length) return;
-
-    ev.preventDefault();
+// 🔥 ASEGURAR OPCIONES
+async function ensureOpciones(obraId){
+  if (window.WZ_STATE?.opciones) return window.WZ_STATE.opciones;
+  try {
+    const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, {credentials:'include'});
+    const j = await r.json();
+    const unidades = j?.unidades || ['m2','m','m3','u','kg','h'];
+    const usuarios = j?.usuarios || [];
     window.WZ_STATE = window.WZ_STATE || {};
-    window.WZ_STATE.tareasSel = sel;
-
-    // pintar y navegar
-    if (typeof window.renderPaso3 === 'function') window.renderPaso3(sel);
-    if (typeof window.gotoPaso    === 'function') window.gotoPaso(3);
-  });
-})();
-
-// 🔥 CONECTAR NAVEGACIÓN DEL PASO 2 (HABILITAR/DESHABILITAR BOTÓN)
-function connectPaso2Nav() {
-  const m   = document.getElementById('wizardTareasModal');
-  const btn = document.getElementById('wizardBtnSiguiente');
-  
-  if (!m || !btn) return;
-  
-  // Habilitar/deshabilitar "Siguiente" basado en selecciones
-  const update = () => {
-    const n = m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked').length;
-    btn.disabled = (n === 0);
-    btn.classList.toggle('disabled', n === 0);
-    console.log(`🔥 WIZARD Paso 2: ${n} tareas seleccionadas`);
-  };
-
-  // Conectar event listeners a checkboxes (selector robusto)
-  m.querySelectorAll('#wizardStep2 input[type="checkbox"]').forEach(cb => {
-    if (!cb.dataset.bound) { 
-      cb.dataset.bound = '1'; 
-      cb.addEventListener('change', update); 
-    }
-  });
-  update();
-
-  console.log('✅ WIZARD: Navegación Paso 2 conectada');
+    window.WZ_STATE.opciones = {unidades, usuarios};
+    return window.WZ_STATE.opciones;
+  } catch {
+    const fallback = {unidades: ['m2','m','m3','u','kg','h'], usuarios: []};
+    window.WZ_STATE = window.WZ_STATE || {};
+    window.WZ_STATE.opciones = fallback;
+    return fallback;
+  }
 }
 
-// 🔥 RENDERIZAR PASO 3 CON TABLA DE DATOS (COMPLETAMENTE CORREGIDO)
-window.renderPaso3 = async function renderPaso3(tareas = []) {
+// 🔥 HABILITAR BOTÓN SIGUIENTE PASO 3
+function enableNextStep3(){
+  const hasRows = document.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length > 0;
+  const btn = document.getElementById('wizardBtnSiguiente');
+  if (!btn) return;
+  btn.disabled = !hasRows;
+  btn.classList.toggle('disabled', !hasRows);
+  btn.removeAttribute('aria-disabled');
+}
+
+// 🔥 RENDERIZAR PASO 3 SIMPLIFICADO
+window.renderPaso3 = async function(tareas){
   const modal = document.getElementById('wizardTareasModal');
-  const step3 = modal?.querySelector('#wizardStep3, #wizardPaso3');
-  const tbody = step3?.querySelector('#tablaDatosWizard tbody');
-  
-  if (!tbody) { 
-    console.warn('[WZ] Falta tbody en Paso 3'); 
-    return; 
-  }
+  const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
+  if (!tbody) return;
 
-  // Cargar opciones una vez y cachear en WZ_STATE.opciones
-  if (!window.WZ_STATE) window.WZ_STATE = {};
-  if (!window.WZ_STATE.opciones) {
-    const obraId = Number(modal?.getAttribute('data-obra-id')) || window.OBRA_ID;
-    try {
-      const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, { credentials: 'include' });
-      window.WZ_STATE.opciones = await r.json(); // { ok, unidades, usuarios }
-      console.log('[WZ] Opciones cargadas:', window.WZ_STATE.opciones);
-    } catch (error) {
-      console.warn('[WZ] Error cargando opciones:', error);
-      window.WZ_STATE.opciones = { ok: true, unidades: ['m2', 'm', 'm3', 'u', 'kg', 'h'], usuarios: [] };
-    }
-  }
-  
-  const { unidades = ['m2', 'm', 'm3', 'u', 'kg', 'h'], usuarios = [] } = window.WZ_STATE.opciones || {};
+  const obraId = Number(modal.getAttribute('data-obra-id'));
+  const {unidades, usuarios} = await ensureOpciones(obraId);
 
-  // Construir las filas con selects y fallbacks
-  const rowsHtml = (tareas || []).map((t, i) => {
-    const unidadOptions = unidades.length > 0 
-      ? unidades.map(u => `<option value="${u}">${u}</option>`).join('')
-      : '<option value="m2">m2</option>'; // fallback
-      
-    const usuarioOptions = usuarios.length > 0
-      ? `<option value="">(sin asignar)</option>${usuarios.map(u => `<option value="${u.id}">${u.nombre}</option>`).join('')}`
-      : '<option value="" disabled>(sin equipo)</option>'; // fallback
+  tbody.innerHTML = tareas.map((t, i) => `
+    <tr>
+      <td>${t.etapa_slug || ''}</td>
+      <td>${t.nombre || ''}</td>
+      <td><input type="date" class="form-control form-control-sm" name="rows[${i}][inicio]"></td>
+      <td><input type="date" class="form-control form-control-sm" name="rows[${i}][fin]"></td>
+      <td><input type="number" class="form-control form-control-sm" name="rows[${i}][horas]" value="8" min="0" step="0.5"></td>
+      <td><input type="number" class="form-control form-control-sm" name="rows[${i}][cantidad]" value="1" min="0" step="0.01"></td>
+      <td>
+        <select class="form-select form-select-sm unidad-select" name="rows[${i}][unidad]">
+          ${unidades.map(u => `<option value="${u}">${u}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="form-select form-select-sm asignado-select" name="rows[${i}][asignado]">
+          <option value="">(sin asignar)</option>
+          ${usuarios.map(u => `<option value="${u.id}">${u.nombre}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="form-select form-select-sm" name="rows[${i}][prioridad]">
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+          <option value="baja">Baja</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
 
-    return `
-      <tr>
-        <td>${t.etapa_slug || ''}</td>
-        <td>${t.nombre || t.tarea || ''}</td>
-        <td><input type="date" name="rows[${i}][inicio]" class="form-control form-control-sm"></td>
-        <td><input type="date" name="rows[${i}][fin]" class="form-control form-control-sm"></td>
-        <td><input type="number" step="0.5" min="0" value="8" name="rows[${i}][horas]" class="form-control form-control-sm"></td>
-        <td><input type="number" step="0.01" min="0" value="1" name="rows[${i}][cantidad]" class="form-control form-control-sm"></td>
-        <td>
-          <select name="rows[${i}][unidad]" class="form-select form-select-sm unidad-select">
-            ${unidadOptions}
-          </select>
-        </td>
-        <td>
-          <select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select" ${usuarios.length === 0 ? 'disabled' : ''}>
-            ${usuarioOptions}
-          </select>
-        </td>
-        <td>
-          <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
-            <option value="media" selected>Media</option>
-            <option value="alta">Alta</option>
-            <option value="baja">Baja</option>
-          </select>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  tbody.innerHTML = rowsHtml;
-
-  // Habilitar/Deshabilitar y ENGANCHAR el botón "Siguiente" (Paso 3 → Paso 4)
-  const btnSig = document.getElementById('wizardBtnSiguiente');
-  if (btnSig) {
-    btnSig.type = 'button';
-    btnSig.disabled = tareas.length === 0;
-    btnSig.classList.toggle('disabled', tareas.length === 0);
-
-    if (!btnSig.dataset.boundStep3) {
-      btnSig.dataset.boundStep3 = '1';
-      btnSig.addEventListener('click', (ev) => {
-        // Sólo si estamos en el Paso 3 visible
-        const visible3 = !!modal?.querySelector('#wizardStep3:not(.d-none), #wizardPaso3:not(.d-none)');
-        if (!visible3) return;
-
-        if (tbody.querySelectorAll('tr').length === 0) return; // nada para confirmar
-        ev.preventDefault();
-        console.log('[WZ] Paso 3 → 4: Avanzando');
-        if (typeof window.gotoPaso === 'function') window.gotoPaso(4); // ← avanzar al Paso 4
-      });
-    }
-  }
-
-  // Botón "Atrás" (Paso 3 → Paso 2) 
-  const btnBack = document.getElementById('wizardBtnAnterior');
-  if (btnBack && !btnBack.dataset.boundPaso3Back) {
-    btnBack.dataset.boundPaso3Back = '1';
-    btnBack.type = 'button';
-    btnBack.addEventListener('click', (ev) => {
-      const visible3 = !!modal?.querySelector('#wizardStep3:not(.d-none), #wizardPaso3:not(.d-none)');
-      if (!visible3) return; // solo interceptar si estamos en paso 3
-      
-      ev.preventDefault();
-      console.log('[WZ] Paso 3 → 2: Volviendo (preservando selecciones)');
-      if (typeof window.gotoPaso === 'function') window.gotoPaso(2);
-    });
-  }
-
-  // Actualizar progreso visual
-  if (typeof updateWizardProgress === 'function') updateWizardProgress(3);
-
-  console.log('[WZ] Paso 3 renderizado con %d filas', tbody.querySelectorAll('tr').length);
+  enableNextStep3();
+  console.log('[WZ] Paso 3 renderizado con', tareas.length, 'filas');
 };
 
 // 🔥 PROGRESO VISUAL (BARRA Y "STEP ACTIVO") - MEJORADO
@@ -487,107 +396,66 @@ function updateWizardProgress(n) {
   console.log(`[WZ] Progreso actualizado a paso ${n}`);
 }
 
-// 🔥 CAPTURAR SELECCIÓN ANTES DE NAVEGAR DE PASO 2 A PASO 3  
-function getSelPaso2(modal) {
-  return [...modal.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked, #wizardPaso2 input[type="checkbox"]:checked')]
-    .map((cb, i) => ({
-      id: cb.dataset.id || cb.value || `t${i+1}`,
-      nombre: cb.dataset.nombre || (cb.closest('.form-check')?.querySelector('label')?.textContent.trim() || ''),
-      etapa_slug: cb.dataset.etapa || ''
-    }));
-}
-
-// 🔥 NAVEGACIÓN SIMPLIFICADA Y ROBUSTA DEL WIZARD
-(function setupWizardNavigation() {
+// 🔥 INTERCEPTOR PARA PASO 2 → PASO 3 
+(function connectPaso2Next(){
   const modal = document.getElementById('wizardTareasModal');
-  const next  = document.getElementById('wizardBtnSiguiente');
-  const back  = document.getElementById('wizardBtnAnterior');
-  
-  if (!modal || !next) {
-    console.warn('[WZ] Modal o botón siguiente no encontrado');
-    return;
-  }
+  const btn = document.getElementById('wizardBtnSiguiente');
+  if (!modal || !btn || btn.dataset.boundStep2) return;
+  btn.dataset.boundStep2 = '1';
 
-  // Limpiar handlers previos para evitar duplicados
-  if (next.dataset.wizardBound !== '1') {
-    next.dataset.wizardBound = '1';
-    next.type = 'button';
+  btn.addEventListener('click', (ev) => {
+    const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none)');
+    if (!step2Visible) return;              // dejar fluir para otros pasos
 
-    // EVENTO CLICK PARA BOTÓN "SIGUIENTE"
-    next.addEventListener('click', (ev) => {
-      // Detectar paso actual
-      const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none), #wizardPaso2:not(.d-none)');
-      
-      if (step2Visible) {
-        // PASO 2 → PASO 3: Capturar selección
-        const sel = getSelPaso2(modal);
-        console.log('[WZ] Paso 2 → 3, selección =', sel.length);
-        if (!sel.length) return;
-        
-        ev.preventDefault();
-        window.WZ_STATE = window.WZ_STATE || {};
-        window.WZ_STATE.tareasSel = sel;
+    const sel = window.getSelPaso2(modal);
+    console.log('[WZ] Paso 2 selección =', sel.length, sel);
+    if (!sel.length) return;                // no capturó nada → no avanzamos
 
-        if (typeof window.gotoPaso === 'function') window.gotoPaso(3);
-        if (typeof window.renderPaso3 === 'function') window.renderPaso3(sel);
-      }
-      // El paso 3 → 4 ya está manejado en renderPaso3
-    });
-  }
+    ev.preventDefault();                    // detenemos el submit/navegación
+    window.WZ_STATE = window.WZ_STATE || {};
+    window.WZ_STATE.tareasSel = sel;
 
-  // EVENTO CLICK PARA BOTÓN "ATRÁS"  
-  if (back && back.dataset.wizardBound !== '1') {
-    back.dataset.wizardBound = '1';
+    if (typeof window.gotoPaso === 'function') window.gotoPaso(3);
+    if (typeof window.renderPaso3 === 'function') window.renderPaso3(sel); // pinto filas con la selección
+    if (typeof updateWizardProgress === 'function') updateWizardProgress(3);
+  });
+})();
+
+// 🔥 BOTÓN ATRÁS ESPECÍFICO PARA PASO 3
+(function ensureBackBtnStep3(){
+  const modal = document.getElementById('wizardTareasModal');
+  const footer = modal?.querySelector('.modal-footer');
+  if (!modal || !footer) return;
+
+  let back = document.getElementById('wizardBtnAnteriorPaso3');
+  if (!back) {
+    back = document.createElement('button');
+    back.id = 'wizardBtnAnteriorPaso3';
     back.type = 'button';
-    back.addEventListener('click', (e) => {
-      const step4Visible = !!modal.querySelector('#wizardStep4:not(.d-none), #wizardPaso4:not(.d-none)');
-      
-      if (step4Visible) {
-        // PASO 4 → PASO 3: Volver a Paso 3
-        e.preventDefault();
-        console.log('[WZ] Paso 4 → 3');
-        if (typeof window.gotoPaso === 'function') window.gotoPaso(3);
-        // Re-renderizar Paso 3 con datos guardados
-        if (window.WZ_STATE && window.WZ_STATE.tareasSel && typeof window.renderPaso3 === 'function') {
-          window.renderPaso3(window.WZ_STATE.tareasSel);
-        }
-      }
-      // El paso 3 → 2 ya está manejado en renderPaso3
-    });
+    back.className = 'btn btn-outline-secondary me-auto';
+    back.textContent = 'Atrás';
+    footer.insertBefore(back, footer.firstChild);
   }
-  
-  console.log('[WZ] Navegación del wizard configurada correctamente');
+  if (!back.dataset.bound) {
+    back.dataset.bound = '1';
+    back.addEventListener('click', (e) => { e.preventDefault(); gotoPaso(2); });
+  }
 })();
 
 console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
 
-// 🔥 LÓGICA DE NAVEGACIÓN DEL WIZARD (después de Bootstrap)
+// 🔥 FUNCIONES SIMPLIFICADAS DEL WIZARD (MANTENIENDO SOLO LO ESENCIAL)
 (function () {
   const m = document.getElementById('wizardTareasModal');
+  
+  // Función para obtener etapas seleccionadas (Paso 1)
   const getSel = () => [...m.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')]
                         .map(cb => cb.dataset.slug).filter(Boolean);
   window.getEtapasSeleccionadas = getSel;
 
+  // Función de navegación principal
   window.gotoPaso = function (n) {
     console.log(`🔥 WIZARD: Navegando a paso ${n}`);
-    
-    // Buscar por data-paso
-    const panes = [...m.querySelectorAll('[data-paso]'), ...m.querySelectorAll('[id^="wizardPaso"]')];
-    if (panes.length) {
-      panes.forEach(el => {
-        const num = Number(el.getAttribute('data-paso') || (el.id.match(/wizardPaso(\d+)/)||[])[1]);
-        el.classList.toggle('d-none', num !== n);
-      });
-      return;
-    }
-    
-    // Buscar por tabs Bootstrap
-    const tabBtn = m.querySelector(`[data-bs-toggle="tab"][data-bs-target="#wizardPaso${n}"]`);
-    if (tabBtn) { 
-      const Tab = window.bootstrap?.Tab; 
-      Tab ? new Tab(tabBtn).show() : tabBtn.click(); 
-      return; 
-    }
     
     // Buscar por IDs wizardStep1, wizardStep2, etc.
     const stepById = m.querySelector(`#wizardStep${n}`);
@@ -595,6 +463,8 @@ console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
       // Ocultar todos los pasos y mostrar el seleccionado
       [...m.querySelectorAll('[id^="wizardStep"]')].forEach(el => el.classList.add('d-none'));
       stepById.classList.remove('d-none');
+      // Actualizar progreso visual
+      if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
       return;
     }
     
@@ -602,9 +472,11 @@ console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
     const generic = [...m.querySelectorAll('.wizard-content')];
     if (generic.length) {
       generic.forEach((el,i)=> el.classList.toggle('d-none', i !== (n-1)));
+      if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
     }
   };
 
+  // Función para aplicar catálogo y avanzar (Paso 1 → Paso 2)
   window.applyCatalogAndAdvance = function () {
     const slugs = getSel();
     console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas:`, slugs);
