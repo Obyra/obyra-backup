@@ -61,6 +61,39 @@
                                 {% endif %}
                             </div>
                             
+                            <!-- 🎯 Mini-galería de fotos de avances (3 últimas) -->
+                            {% set fotos_recientes = [] %}
+                            {% for avance in tarea.avances|reverse %}
+                                {% for foto in avance.fotos %}
+                                    {% if fotos_recientes|length < 3 %}
+                                        {% if fotos_recientes.append(foto) %}{% endif %}
+                                    {% endif %}
+                                {% endfor %}
+                            {% endfor %}
+                            
+                            {% if fotos_recientes %}
+                            <div class="mt-2">
+                                <div class="d-flex gap-1">
+                                    {% for foto in fotos_recientes %}
+                                    <img src="/static/{{ foto.file_path }}" 
+                                         class="rounded border foto-miniatura" 
+                                         style="width: 40px; height: 40px; object-fit: cover; cursor: pointer;"
+                                         title="Avance del {{ foto.created_at.strftime('%d/%m/%Y') }}"
+                                         onclick="abrirGaleriaCompleta({{ tarea.id }})"
+                                         alt="Foto de avance">
+                                    {% endfor %}
+                                    {% if tarea.avances|selectattr('fotos')|list|length > 3 %}
+                                    <div class="d-flex align-items-center justify-content-center rounded border bg-light text-muted" 
+                                         style="width: 40px; height: 40px; font-size: 12px; cursor: pointer;"
+                                         onclick="abrirGaleriaCompleta({{ tarea.id }})"
+                                         title="Ver todas las fotos">
+                                        +{{ (tarea.avances|selectattr('fotos')|list|length) - 3 }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
                             <!-- Usuarios asignados -->
                             {% if tarea.responsable %}
                             <div class="mt-1">
@@ -103,7 +136,9 @@
                             
                             <!-- Métricas adicionales -->
                             <div class="mt-2 d-flex gap-3">
-                                <small class="text-muted">
+                                <small class="text-muted" style="cursor: pointer;" 
+                                       onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')"
+                                       title="Ver todos los avances de esta tarea">
                                     <i class="fas fa-chart-line me-1"></i>
                                     {{ tarea.avances|length or 0 }} registros
                                 </small>

@@ -47,6 +47,17 @@ def handle_401(error):
     # For regular web requests, let Flask handle it normally  
     raise error
 
+
+@obras_bp.errorhandler(403)
+def handle_403(error):
+    # Always return JSON for API routes
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+    # For regular web requests, let Flask handle it normally  
+    raise error
+
 # Helpers de permisos
 def is_admin():
     """Verifica si el usuario actual es admin"""
@@ -2468,6 +2479,83 @@ def get_obra_etapas(obra_id):
     except Exception as e:
         current_app.logger.exception(f"Error obteniendo etapas obra {obra_id}")
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@obras_bp.route('/api/dashboard/alerts')
+@login_required  
+def dashboard_alerts():
+    """API: Get dashboard alerts (overdue, due today, upcoming tasks)"""
+    try:
+        from datetime import date, timedelta
+        from sqlalchemy import and_, or_
+        
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        next_week = today + timedelta(days=7)
+        
+        # Base query: tareas de la organización del usuario
+        base_query = (TareaEtapa.query
+                     .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
+                     .join(Obra, EtapaObra.obra_id == Obra.id)
+                     .filter(Obra.organizacion_id == current_user.organizacion_id))
+        
+        # Solo tareas activas (no completadas)
+        active_tasks = base_query.filter(
+            or_(TareaEtapa.estado == 'en_curso', TareaEtapa.estado == 'pendiente')
+        )
+        
+        # 1. OVERDUE: Tareas con fecha_fin_plan vencida
+        overdue_count = active_tasks.filter(
+            and_(
+                TareaEtapa.fecha_fin_plan.isnot(None),
+                TareaEtapa.fecha_fin_plan < today
+            )
+        ).count()
+        
+        # 2. DUE TODAY: Tareas que vencen hoy
+        due_today_count = active_tasks.filter(
+            TareaEtapa.fecha_fin_plan == today
+        ).count()
+        
+        # 3. UPCOMING: Tareas que vencen en los próximos 7 días
+        upcoming_count = active_tasks.filter(
+            and_(
+                TareaEtapa.fecha_fin_plan.isnot(None),
+                TareaEtapa.fecha_fin_plan > today,
+                TareaEtapa.fecha_fin_plan <= next_week
+            )
+        ).count()
+        
+        # 4. PENDING APPROVALS: Avances pendientes de aprobación (solo para PM/Admin)
+        pending_avances = 0
+        if current_user.role in ['admin', 'pm']:
+            pending_avances = (TareaAvance.query
+                              .join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id)
+                              .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)  
+                              .join(Obra, EtapaObra.obra_id == Obra.id)
+                              .filter(
+                                  and_(
+                                      Obra.organizacion_id == current_user.organizacion_id,
+                                      TareaAvance.status == 'pendiente'
+                                  )
+                              )).count()
+        
+        # Response con contadores de alertas
+        return jsonify({
+            'ok': True,
+            'alerts': {
+                'overdue_count': overdue_count,
+                'due_today_count': due_today_count,
+                'upcoming_count': upcoming_count,
+                'pending_approvals_count': pending_avances,
+                'total_alerts': overdue_count + due_today_count + pending_avances
+            },
+            'generated_at': today.isoformat()
+        })
+        
+    except Exception as e:
+        print(f"❌ Error dashboard alerts: {str(e)}")
+        return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
 
 
 @obras_bp.route('/<int:obra_id>/etapas', methods=['POST'])

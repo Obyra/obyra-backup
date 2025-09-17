@@ -3083,11 +3083,13 @@ class WizardTareas {
                         </div>
                     `;
                     
-                    // Close modal and refresh after delay
+                    // Close modal and refresh task lists after delay
                     setTimeout(() => {
                         const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
                         modal.hide();
-                        window.location.reload();
+                        
+                        // 🎯 CRÍTICO: Refrescar SOLO las listas de tareas desde BD (no todo el catálogo)
+                        this.refreshTaskListsFromDB();
                     }, 2000);
                 } else {
                     // No tasks processed - show error
@@ -3155,6 +3157,55 @@ class WizardTareas {
         
         // Load catalog for Step 1
         this.cargarCatalogoEtapas();
+    }
+    
+    refreshTaskListsFromDB() {
+        // Refrescar solo las listas de tareas de las etapas modificadas (desde BD, no catálogo)
+        if (this.WIZARD && this.WIZARD.etapa_ids && this.WIZARD.etapa_ids.length > 0) {
+            console.log('🔄 WIZARD: Refrescando listas de tareas desde BD para etapas:', this.WIZARD.etapa_ids);
+            
+            // Refrescar cada etapa que fue modificada
+            this.WIZARD.etapa_ids.forEach(etapaId => {
+                if (typeof cargarTareasEtapa === 'function') {
+                    cargarTareasEtapa(etapaId);
+                } else {
+                    console.warn(`⚠️ Función cargarTareasEtapa no disponible para etapa ${etapaId}`);
+                }
+            });
+            
+            // Mostrar notificación de éxito
+            this.showSuccessToast(`Tareas actualizadas en ${this.WIZARD.etapa_ids.length} etapa(s)`);
+        } else {
+            // Fallback: recargar página completa si no hay etapas específicas
+            console.log('⚠️ WIZARD: No hay etapa_ids, recargando página completa');
+            window.location.reload();
+        }
+    }
+    
+    showSuccessToast(message) {
+        // Simple success notification (bootstrap toast would be ideal but fallback to alert)
+        const existingAlert = document.querySelector('.wizard-success-alert');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+        
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'wizard-success-alert alert alert-success position-fixed';
+        alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        alertDiv.innerHTML = `
+            <i class="fas fa-check-circle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        // Auto-remove after 4 seconds
+        setTimeout(() => {
+            if (alertDiv.parentElement) {
+                alertDiv.remove();
+            }
+        }, 4000);
     }
     
     // Helper function for consistent JSON fetching
@@ -3431,6 +3482,148 @@ document.getElementById('wizardTareasModal')?.addEventListener('shown.bs.modal',
 });
 
 // 🎯 Funciones legacy de mensajes removidas - errores vienen del JSON API
+
+// 🎯 Función para abrir galería completa de fotos de avances
+async function abrirGaleriaCompleta(tareaId) {
+    try {
+        // Crear modal dinámico para galería de fotos
+        const modalId = 'modalGaleriaFotos';
+        let modal = document.getElementById(modalId);
+        
+        if (!modal) {
+            // Crear modal si no existe
+            const modalHTML = `
+                <div class="modal fade" id="${modalId}" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-images me-2"></i>Galería de Avances
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body" id="galeria-fotos-body">
+                                <div class="text-center">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modal = document.getElementById(modalId);
+        }
+        
+        // Mostrar modal con loading
+        const modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+        
+        // Usar endpoint existente de avances pendientes para obtener fotos
+        const response = await fetch(`/obras/api/tareas/${tareaId}/avances-pendientes`);
+        const data = await response.json();
+        
+        const galeriaBody = document.getElementById('galeria-fotos-body');
+        
+        if (data.ok && data.avances && data.avances.length > 0) {
+            // Recopilar todas las fotos de todos los avances
+            const todasLasFotos = [];
+            data.avances.forEach(avance => {
+                if (avance.fotos && avance.fotos.length > 0) {
+                    avance.fotos.forEach(foto => {
+                        todasLasFotos.push({
+                            ...foto,
+                            fecha: avance.fecha,
+                            usuario_nombre: avance.usuario_nombre,
+                            cantidad: avance.cantidad,
+                            notas: avance.notas
+                        });
+                    });
+                }
+            });
+            
+            if (todasLasFotos.length > 0) {
+                let fotosHTML = '<div class="row g-2">';
+                
+                todasLasFotos.forEach((foto, index) => {
+                    fotosHTML += `
+                        <div class="col-md-4 col-sm-6">
+                            <div class="card">
+                                <img src="/static/${foto.file_path}" 
+                                     class="card-img-top" 
+                                     style="height: 200px; object-fit: cover; cursor: pointer;"
+                                     onclick="ampliarFoto('/static/${foto.file_path}')"
+                                     alt="Avance ${index + 1}">
+                                <div class="card-footer p-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar me-1"></i>
+                                        ${new Date(foto.fecha).toLocaleDateString('es-AR')}
+                                        ${foto.usuario_nombre ? `<br><i class="fas fa-user me-1"></i>${foto.usuario_nombre}` : ''}
+                                        ${foto.cantidad ? `<br><i class="fas fa-calculator me-1"></i>${foto.cantidad} unidades` : ''}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                fotosHTML += '</div>';
+                galeriaBody.innerHTML = fotosHTML;
+            } else {
+                galeriaBody.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-image fa-3x mb-3"></i>
+                        <p>No hay fotos de avances para esta tarea</p>
+                    </div>
+                `;
+            }
+        } else {
+            galeriaBody.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-image fa-3x mb-3"></i>
+                    <p>No hay avances registrados para esta tarea</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar galería:', error);
+        document.getElementById('galeria-fotos-body').innerHTML = `
+            <div class="text-center text-danger py-4">
+                <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                <p>Error al cargar las fotos</p>
+            </div>
+        `;
+    }
+}
+
+// Función auxiliar para ampliar foto individual
+function ampliarFoto(imageSrc) {
+    const modalHTML = `
+        <div class="modal fade" id="modalAmpliarFoto" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Vista Ampliada</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <img src="${imageSrc}" class="img-fluid w-100" alt="Foto ampliada">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('modalAmpliarFoto');
+    if (existingModal) existingModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    new bootstrap.Modal(document.getElementById('modalAmpliarFoto')).show();
+}
 
 // Initialize wizard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
