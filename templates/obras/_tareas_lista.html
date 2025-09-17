@@ -13,11 +13,53 @@
                                 <strong class="text-dark">{{ tarea.nombre }}</strong>
                             </div>
                             
-                            {% if tarea.horas_estimadas %}
-                            <small class="text-muted d-block">
-                                <i class="fas fa-clock me-1"></i> {{ tarea.horas_estimadas }}h estimadas
-                            </small>
-                            {% endif %}
+                            <!-- 🎯 Chips informativos: Inicio → Fin · Horas Est. · Cantidad + Unidad · Asignado · Prioridad -->
+                            <div class="d-flex gap-1 flex-wrap mb-2">
+                                <!-- Fechas de inicio → fin -->
+                                {% if tarea.fecha_inicio_plan or tarea.fecha_fin_plan %}
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fas fa-calendar-alt me-1"></i>
+                                    {{ tarea.fecha_inicio_plan.strftime('%d/%m') if tarea.fecha_inicio_plan else '—' }} → 
+                                    {{ tarea.fecha_fin_plan.strftime('%d/%m') if tarea.fecha_fin_plan else '—' }}
+                                </span>
+                                {% endif %}
+                                
+                                <!-- Horas estimadas -->
+                                {% if tarea.horas_estimadas %}
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fas fa-clock me-1"></i> {{ tarea.horas_estimadas }} h
+                                </span>
+                                {% endif %}
+                                
+                                <!-- Cantidad + Unidad -->
+                                {% if tarea.cantidad_planificada %}
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fas fa-calculator me-1"></i> {{ tarea.cantidad_planificada }} {{ tarea.unidad or 'un' }}
+                                </span>
+                                {% endif %}
+                                
+                                <!-- Asignado (responsable o primer miembro) -->
+                                {% if tarea.responsable %}
+                                <span class="badge bg-primary text-white">
+                                    <i class="fas fa-user-tie me-1"></i> {{ tarea.responsable.nombre }} {{ tarea.responsable.apellido[0] if tarea.responsable.apellido else '' }}
+                                </span>
+                                {% elif tarea.miembros %}
+                                    {% set primer_miembro = tarea.miembros[0].usuario %}
+                                    <span class="badge bg-primary text-white">
+                                        <i class="fas fa-user me-1"></i> {{ primer_miembro.nombre }} {{ primer_miembro.apellido[0] if primer_miembro.apellido else '' }}
+                                    </span>
+                                {% endif %}
+                                
+                                <!-- Prioridad -->
+                                {% if tarea.prioridad %}
+                                    {% set prioridad_class = 'bg-danger' if tarea.prioridad == 'alta' else ('bg-warning text-dark' if tarea.prioridad == 'media' else 'bg-secondary') %}
+                                    <span class="badge {{ prioridad_class }}">
+                                        {% if tarea.prioridad == 'alta' %}<i class="fas fa-exclamation-triangle me-1"></i>Alta
+                                        {% elif tarea.prioridad == 'media' %}<i class="fas fa-minus me-1"></i>Media  
+                                        {% else %}<i class="fas fa-low-vision me-1"></i>Baja{% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
                             
                             <!-- Usuarios asignados -->
                             {% if tarea.responsable %}

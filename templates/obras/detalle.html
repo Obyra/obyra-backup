@@ -551,7 +551,6 @@
                                     <option value="ml">ml (metro lineal)</option>
                                     <option value="m3">m³</option>
                                     <option value="un" selected>un (unidad)</option>
-                                    <option value="h">h (hora)</option>
                                     <option value="kg">kg</option>
                                 </select>
                                 <div class="form-text">Unidad para medir el progreso de esta tarea</div>
@@ -676,7 +675,6 @@
                                 <option value="ml">ml</option>
                                 <option value="m3">m³</option>
                                 <option value="un">un</option>
-                                <option value="h">h</option>
                                 <option value="kg">kg</option>
                             </select>
                         </div>
@@ -2763,6 +2761,9 @@ class WizardTareas {
         if (step === 2) {
             this.populateStep2();
         } else if (step === 3) {
+            // 🎯 CRÍTICO: Antes del Paso 3, recopilar SOLO las tareas seleccionadas
+            this.WIZARD.tareas_seleccionadas = this.collectSelectedTasks();
+            console.log(`✅ WIZARD: Paso 3 - ${this.WIZARD.tareas_seleccionadas.length} tareas seleccionadas`, this.WIZARD.tareas_seleccionadas);
             this.populateStep3();
         } else if (step === 4) {
             this.populateStep4();
@@ -2934,11 +2935,11 @@ class WizardTareas {
                 <td><input type="number" class="form-control form-control-sm cantidad" min="0.1" step="0.1" placeholder="1.0" required></td>
                 <td>
                     <select class="form-select form-select-sm unidad">
-                        <option value="h" ${tarea.unidad === 'h' ? 'selected' : ''}>Horas</option>
                         <option value="m2" ${tarea.unidad === 'm2' ? 'selected' : ''}>m²</option>
                         <option value="m3" ${tarea.unidad === 'm3' ? 'selected' : ''}>m³</option>
                         <option value="ml" ${tarea.unidad === 'ml' ? 'selected' : ''}>ml</option>
-                        <option value="ud" ${tarea.unidad === 'ud' ? 'selected' : ''}>Unidad</option>
+                        <option value="un" ${tarea.unidad === 'un' || tarea.unidad === 'ud' ? 'selected' : ''}>Unidad</option>
+                        <option value="kg" ${tarea.unidad === 'kg' ? 'selected' : ''}>kg</option>
                     </select>
                 </td>
                 <td>
