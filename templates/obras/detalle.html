@@ -81,7 +81,7 @@
 
                     <!-- Etapas del Proyecto -->
                     <div class="card border-0 bg-light">
-                        <div class="card-body p-3">
+                        <div class="card-body p-3" id="etapas-main-container">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 class="mb-0">Etapas del Proyecto</h5>
 
@@ -121,6 +121,7 @@
                             </div>
                             {% endif %}
                             
+                            <div id="etapas-list">
                             {% if etapas %}
                                 {% for etapa in etapas %}
                                 <div class="border-bottom py-2">
@@ -228,6 +229,7 @@
                                     </button>
                                 </div>
                             {% endif %}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3176,9 +3178,17 @@ class WizardTareas {
             // Mostrar notificación de éxito
             this.showSuccessToast(`Tareas actualizadas en ${this.WIZARD.etapa_ids.length} etapa(s)`);
         } else {
-            // Fallback: recargar página completa si no hay etapas específicas
-            console.log('⚠️ WIZARD: No hay etapa_ids, recargando página completa');
-            window.location.reload();
+            // Fallback: refrescar contenedor de etapas en lugar de recargar página
+            console.log('⚠️ WIZARD: No hay etapa_ids, refrescando contenedor de etapas');
+            try {
+                await refreshEtapasContainer();
+                console.log('✅ Contenedor de etapas actualizado como fallback');
+            } catch (error) {
+                console.error('❌ Error en fallback refreshEtapasContainer:', error);
+                // Solo como último recurso
+                console.log('🔄 Último recurso: recargando página completa');
+                window.location.reload();
+            }
         }
     }
     
@@ -3395,6 +3405,189 @@ function setPaso1Disabled(disabled){
 function sameArray(a,b){ if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length) return false;
   return [...a].sort().join(',') === [...b].sort().join(','); }
 
+// 🔄 Refresh etapas container after wizard operations
+async function refreshEtapasContainer() {
+  console.log('🔄 Refrescando contenedor de etapas...');
+  try {
+    const response = await fetchJSON(`${PREF}/api/etapas/${window.obraId}/refresh`);
+    if (!response.ok) {
+      throw new Error(response.error || 'Error al obtener etapas');
+    }
+    
+    const etapasContainer = document.getElementById('etapas-main-container');
+    if (!etapasContainer) {
+      throw new Error('Contenedor de etapas no encontrado');
+    }
+    
+    const etapasList = document.getElementById('etapas-list');
+    if (!etapasList) {
+      throw new Error('Lista de etapas no encontrada');
+    }
+    
+    // Get current header and controls
+    const header = etapasContainer.querySelector('.d-flex.justify-content-between.align-items-center');
+    const multiSelectControls = etapasContainer.querySelector('.d-flex.align-items-center.gap-2.mb-3');
+    
+    // Build new etapas HTML
+    let etapasHTML = '';
+    if (response.has_etapas) {
+      response.etapas.forEach(etapa => {
+        etapasHTML += `
+          <div class="border-bottom py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center">
+                  <span class="badge bg-primary me-2">${etapa.orden}</span>
+                  <h6 class="mb-1 cursor-pointer" onclick="toggleTareasEtapa(${etapa.id})">
+                    ${etapa.nombre}
+                    <i class="fas fa-chevron-down ms-1" id="chevron-${etapa.id}"></i>
+                  </h6>
+                </div>
+                ${etapa.descripcion ? `<p class="text-muted small mb-2">${etapa.descripcion}</p>` : ''}
+                
+                <!-- Tareas Colapsibles -->
+                <div class="collapse ms-4" id="tareas-${etapa.id}">
+                  <div id="tareas-container-${etapa.id}">
+                    <div class="text-center py-2">
+                      <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                      </div>
+                      <small class="text-muted ms-2">Cargando tareas...</small>
+                    </div>
+                  </div>
+                </div>
+                
+                ${response.can_manage ? `
+                <button class="btn btn-sm btn-outline-success mt-2" 
+                        onclick="abrirModalTarea(${etapa.id}, '${etapa.nombre}')">
+                  <i class="fas fa-plus me-1"></i>Agregar Tarea
+                </button>
+                ` : ''}
+              </div>
+              
+              <div class="text-end">
+                <div class="stage-actions d-flex align-items-center gap-2">
+                  ${response.can_manage ? `
+                  <label class="form-check m-0">
+                    <input type="checkbox" class="form-check-input stage-check" value="${etapa.id}">
+                  </label>
+                  ` : ''}
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                            data-bs-toggle="dropdown">
+                      ${etapa.estado || 'pendiente'}
+                    </button>
+                    <ul class="dropdown-menu">
+                      <li><a class="dropdown-item" onclick="cambiarEstadoEtapa(${etapa.id}, 'pendiente')">Pendiente</a></li>
+                      <li><a class="dropdown-item" onclick="cambiarEstadoEtapa(${etapa.id}, 'en_curso')">En Curso</a></li>
+                      <li><a class="dropdown-item" onclick="cambiarEstadoEtapa(${etapa.id}, 'completada')">Completada</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      etapasHTML = `
+        <div class="text-center py-4 text-muted">
+          No hay etapas definidas para esta obra.<br>
+          <button id="btnWizardTareas2" class="btn btn-success mt-3" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+            ⚡ Configurar con Wizard
+          </button>
+        </div>
+      `;
+    }
+    
+    // Update button group in header
+    if (header) {
+      const btnGroup = header.querySelector('.btn-group');
+      if (btnGroup) {
+        let buttonsHTML = '';
+        if (response.has_etapas) {
+          buttonsHTML += `
+            <button id="btnEliminarEtapas" class="btn btn-outline-danger btn-sm">
+              Eliminar seleccionadas (<span id="etpSelCount">0</span>)
+            </button>
+          `;
+        }
+        buttonsHTML += `
+          <button id="btnWizardTareas" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#wizardTareasModal">
+            🧙‍♂️ Wizard Tareas
+          </button>
+        `;
+        btnGroup.innerHTML = buttonsHTML;
+      }
+    }
+    
+    // Replace content in etapas-list container only
+    etapasList.innerHTML = etapasHTML;
+    
+    // Re-bind event handlers
+    rebindEtapasEvents();
+    
+    console.log('✅ Contenedor de etapas actualizado exitosamente');
+    
+  } catch (error) {
+    console.error('❌ Error refreshEtapasContainer:', error);
+    throw error;
+  }
+}
+
+// Re-bind events after DOM refresh
+function rebindEtapasEvents() {
+  // Re-bind stage checkbox events
+  document.querySelectorAll('.stage-check').forEach(checkbox => {
+    checkbox.removeEventListener('change', updateEtapaSelection);
+    checkbox.addEventListener('change', updateEtapaSelection);
+  });
+  
+  // Re-bind wizard buttons
+  const wizardBtn = document.getElementById('btnWizardTareas');
+  const wizardBtn2 = document.getElementById('btnWizardTareas2');
+  
+  [wizardBtn, wizardBtn2].forEach(btn => {
+    if (btn) {
+      btn.setAttribute('data-bs-toggle', 'modal');
+      btn.setAttribute('data-bs-target', '#wizardTareasModal');
+      
+      // Remove existing event listeners and add new ones
+      btn.replaceWith(btn.cloneNode(true));
+      const newBtn = document.getElementById(btn.id);
+      if (newBtn) {
+        newBtn.setAttribute('data-bs-toggle', 'modal');
+        newBtn.setAttribute('data-bs-target', '#wizardTareasModal');
+      }
+    }
+  });
+  
+  // Re-bind eliminar button events
+  const eliminarBtn = document.getElementById('btnEliminarEtapas');
+  if (eliminarBtn) {
+    // Clear existing listeners and rebind
+    eliminarBtn.replaceWith(eliminarBtn.cloneNode(true));
+    const newEliminarBtn = document.getElementById('btnEliminarEtapas');
+    if (newEliminarBtn && typeof bindEliminarEtapasEvents === 'function') {
+      bindEliminarEtapasEvents();
+    }
+  }
+  
+  // Re-bind etapa toggle events (chevron clicks)
+  document.querySelectorAll('[onclick*="toggleTareasEtapa"]').forEach(el => {
+    // These use onclick attributes, so they should work automatically
+    console.log(`✅ Etapa toggle encontrado: ${el.textContent.trim()}`);
+  });
+  
+  // Re-bind etapa status dropdown events
+  document.querySelectorAll('[onclick*="cambiarEstadoEtapa"]').forEach(el => {
+    // These use onclick attributes, so they should work automatically  
+    console.log(`✅ Estado etapa encontrado: ${el.textContent.trim()}`);
+  });
+  
+  console.log('✅ Eventos de etapas re-vinculados');
+}
+
 // ---------- core ----------
 let paso1Busy=false, debounceTimer=null;
 
@@ -3430,6 +3623,11 @@ async function applyCatalogAndAdvance(){
       if (window.wizardTareas && window.wizardTareas.WIZARD) {
         window.wizardTareas.WIZARD.etapa_ids = etapaIds;
       }
+      
+      // 🔄 Refresh etapas container to show new etapas
+      console.log('🔄 WIZARD: Refrescando contenedor de etapas...');
+      await refreshEtapasContainer();
+      console.log('✅ WIZARD: Contenedor actualizado, continuando...');
     }
 
     // 🎯 Llamada preview con payload exacto y navegación global

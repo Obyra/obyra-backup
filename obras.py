@@ -2481,6 +2481,42 @@ def get_obra_etapas(obra_id):
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
 
+@obras_bp.route('/api/etapas/<int:obra_id>/refresh', methods=['GET'])
+@login_required
+def get_obra_etapas_full(obra_id):
+    """Get complete etapas data for DOM refresh"""
+    try:
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"ok": False, "error": "Sin permisos"}), 403
+        
+        # Obtener etapas con datos completos
+        etapas = obra.etapas.order_by(EtapaObra.orden).all()
+        can_manage = can_manage_obra(obra)
+        
+        etapas_data = []
+        for etapa in etapas:
+            etapas_data.append({
+                "id": etapa.id,
+                "nombre": etapa.nombre,
+                "descripcion": etapa.descripcion,
+                "orden": etapa.orden,
+                "estado": etapa.estado
+            })
+        
+        return jsonify({
+            "ok": True,
+            "etapas": etapas_data,
+            "can_manage": can_manage,
+            "has_etapas": len(etapas_data) > 0
+        })
+        
+    except Exception as e:
+        current_app.logger.exception(f"Error obteniendo etapas completas obra {obra_id}")
+        return jsonify({"ok": False, "error": f"Error interno: {str(e)}"}), 500
+
+
 @obras_bp.route('/api/dashboard/alerts')
 @login_required  
 def dashboard_alerts():
