@@ -43,6 +43,16 @@ def load_user(user_id):
     from models import Usuario
     return Usuario.query.get(int(user_id))
 
+@login_manager.unauthorized_handler
+def unauthorized():
+    """Custom unauthorized handler that returns JSON for API routes"""
+    from flask import request, jsonify, redirect, url_for
+    # Check if this is an API request
+    if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    # For regular web requests, redirect to login
+    return redirect(url_for('auth.login'))
+
 
 # Register blueprints
 from auth import auth_bp
@@ -317,6 +327,11 @@ def forbidden(error):
 
 @app.errorhandler(401)
 def unauthorized(error):
+    from flask import request, jsonify, redirect, url_for
+    # Check if this is an API request  
+    if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    # For regular web requests, redirect to login
     return redirect(url_for('auth.login'))
 
 @app.errorhandler(404)
