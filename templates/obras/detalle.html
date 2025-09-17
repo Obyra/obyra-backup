@@ -2620,7 +2620,7 @@ class WizardTareas {
                 document.getElementById('wizardLoading').classList.remove('d-none');
                 document.getElementById('wizardStep1').classList.add('d-none');
                 
-                const response = await fetch('/api/wizard-tareas/preview', {
+                const response = await fetch('/obras/api/wizard-tareas/preview', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ obra_id: this.obra_id, etapa_ids: etapaIds })
@@ -3026,7 +3026,7 @@ class WizardTareas {
         document.querySelector('.modal-footer').style.display = 'none';
         
         try {
-            const response = await fetch('/api/wizard-tareas/create', {
+            const response = await fetch('/obras/api/wizard-tareas/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

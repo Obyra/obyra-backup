@@ -1,0 +1,59 @@
+Qué pasa:
+En el Paso 1 del wizard, al presionar Siguiente (o al auto-avanzar) aparece el pop-up “Unexpected token ‘<’, ‘<!DOCTYPE’ is not valid JSON”. La etapa igual se crea, pero no avanza.
+
+Lo que necesito que revisen y corrijan:
+
+Identificar la request que devuelve HTML
+
+Abrir DevTools → Network (con Preserve log).
+
+Reproducir el error y decirme:
+• URL exacta de la request que falla
+• Status (302/401/404/500)
+• Content-Type (ahora se ve text/html)
+
+Esa request debería ser POST a /obras/api/wizard-tareas/preview (o, en su defecto, a /obras/api/obras/<obra_id>/etapas/bulk_from_catalog).
+
+Prefijo y rutas correctas
+
+Asegurar que las APIs del wizard existen con prefijo /obras y que el front las llama con ese mismo prefijo:
+• POST /obras/api/obras/<obra_id>/etapas/bulk_from_catalog
+• POST /obras/api/wizard-tareas/preview
+
+Si alguna está en otro path o sin /obras, corregirla.
+
+Las APIs deben responder siempre JSON (también en error)
+
+Para todas las rutas bajo /obras/api/:
+• No redirigir al login (nada de HTML). Si no hay sesión, devolver 401 en JSON.
+• Para 404/500, devolver application/json con un campo error.
+
+El objetivo es que nunca llegue HTML a esas llamadas.
+
+Criterio de verificación en Network
+
+En Paso 1, ver dos llamadas:
+• bulk_from_catalog → 200 JSON
+• preview → 200 JSON
+
+Content-Type = application/json en ambas (no text/html, no 302).
+
+Navegación del wizard
+
+Una vez que preview responde OK en JSON, el wizard debe avanzar al Paso 2.
+
+Si el front llama a gotoPaso(2), asegúrense de que exista el alias a la función real de navegación del wizard (o reemplacen la llamada por la función correcta).
+
+Mensaje legacy
+
+Ocultar/eliminar el texto rojo estático “Primero debes agregar etapas del catálogo…”. Los errores deben venir del mensaje JSON de la API.
+
+Aceptación:
+
+Marco 1–2 etapas y avanza solo al Paso 2 (sin alertas).
+
+Siguiente hace lo mismo (bulk + preview).
+
+En Network, bulk y preview devuelven application/json (sin HTML/redirects).
+
+Si falla, en la UI veo “Error: <mensaje del JSON>”, no <!DOCTYPE>.
