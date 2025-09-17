@@ -1,0 +1,133 @@
+Contexto (Wizard → Paso 3)
+
+El backend /obras/api/wizard-tareas/opciones responde OK:
+
+200 OK con: { ok:true, unidades:[…6], usuarios:[…1] }.
+
+Verificado en consola (screenshots): las opciones llegan y window.WZ_STATE.opciones existe.
+
+En el DOM, al entrar al Paso 3:
+
+Hay filas en #wizardStep3 #tablaDatosWizard tbody (p.ej. 1 o 2).
+
+Existen los <select> de Unidad (.unidad-select) y Asignado a (.asignado-select) — también verificado.
+
+Bloqueos actuales:
+
+No habilita / no engancha el botón “Siguiente” en Paso 3.
+En consola aparece: Uncaught ReferenceError: btnSig is not defined.
+Es decir, dentro del render del Paso 3 se usa btnSig sin declararlo.
+
+Progreso visual: el paso activo no siempre pinta correctamente.
+
+UX: si no hay usuarios/unidades, debería tener fallback (texto/input) y no romper.
+
+Qué hay que hacer
+1) Arreglar el render y navegación del Paso 3 (wizard.js)
+
+En la función que pinta el Paso 3 (donde se loguea "[WZ] Paso 3 renderizado con X filas"), asegurarse de:
+
+async function renderPaso3(tareas) {
+  const modal = document.getElementById('wizardTareasModal');
+  const step3 = modal.querySelector('#wizardStep3, #wizardPaso3');
+  const tbody = step3.querySelector('#tablaDatosWizard tbody');
+
+  // Cargar opciones una vez y cachear en WZ_STATE.opciones
+  if (!window.WZ_STATE) window.WZ_STATE = {};
+  if (!window.WZ_STATE.opciones) {
+    const obraId = Number(modal.getAttribute('data-obra-id')) || window.OBRA_ID;
+    const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, { credentials: 'include' });
+    window.WZ_STATE.opciones = await r.json(); // { ok, unidades, usuarios }
+  }
+  const { unidades = [], usuarios = [] } = window.WZ_STATE.opciones || {};
+
+  // …(aquí construyen las filas del tbody usando <select class="unidad-select"> y <select class="asignado-select"> con 'unidades' y 'usuarios')…
+
+  // Habilitar/Deshabilitar y ENGANCHAR el botón “Siguiente” (Paso 3 → Paso 4)
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  btnSig.type = 'button';
+  btnSig.disabled = tareas.length === 0;
+  btnSig.classList.toggle('disabled', tareas.length === 0);
+
+  if (!btnSig.dataset.boundStep3) {
+    btnSig.dataset.boundStep3 = '1';
+    btnSig.addEventListener('click', (ev) => {
+      // Sólo si estamos en el Paso 3 visible
+      const visible3 = !!modal.querySelector('#wizardStep3:not(.d-none), #wizardPaso3:not(.d-none)');
+      if (!visible3) return;
+
+      if (tbody.querySelectorAll('tr').length === 0) return; // nada para confirmar
+      ev.preventDefault();
+      gotoPaso(4); // ← avanzar al Paso 4
+    });
+  }
+
+  // Botón “Atrás” (Paso 3 → Paso 2)
+  const btnBack = document.getElementById('wizardBtnAnteriorPaso3');
+  if (btnBack && !btnBack.dataset.bound) {
+    btnBack.dataset.bound = '1';
+    btnBack.type = 'button';
+    btnBack.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      gotoPaso(2);
+    });
+  }
+
+  // Actualizar progreso visual
+  if (typeof updateWizardProgress === 'function') updateWizardProgress(3);
+
+  console.log('[WZ] Paso 3 renderizado con %d filas', tbody.querySelectorAll('tr').length);
+}
+
+
+Nota: el error de consola que vemos ahora es exactamente por usar btnSig sin un const btnSig = document.getElementById('wizardBtnSiguiente') en ese scope. Esto destraba el avance.
+
+2) Asegurar el llenado de selects de “Unidad” y “Asignado a”
+
+Los <select class="unidad-select"> deben poblarse con WZ_STATE.opciones.unidades.
+
+Los <select class="asignado-select"> con WZ_STATE.opciones.usuarios (usar value=id y text=nombre).
+
+Defaults razonables:
+
+Horas Est.: 8
+
+Cantidad: 1
+
+Unidad: primera opción disponible (unidades[0]), p.ej. "m2".
+
+Asignado: primer usuario si existe; si usuarios está vacío, renderizar un <input> o un <select disabled> con “Sin equipo”.
+
+3) Progreso visual del wizard
+
+Implementar/usar updateWizardProgress(n) dentro de gotoPaso(n) y/o al final de cada render:
+
+Resaltar el step activo (tabs/pills o barra) en 1,2,3,4.
+
+Ej.: updateWizardProgress(3) al terminar renderPaso3.
+
+4) Mantener selección al volver
+
+El flujo actual guarda la selección del Paso 2 en WZ_STATE.tareasSel. Al volver con “Atrás”, respetar esas marcas (ya está funcionando, sólo verificar).
+
+Checks finales (rápido)
+
+Opciones: fetch('/obras/api/wizard-tareas/opciones?obra_id=18',{credentials:'include'}).then(r=>r.json()) → { ok:true, unidades:[…], usuarios:[…] }.
+
+DOM: #wizardStep3 #tablaDatosWizard tbody tr > 0 y existen .unidad-select y .asignado-select.
+
+Botón siguiente: no más btnSig is not defined; habilitado cuando hay filas.
+
+Progreso: barra/step activo en 3 al entrar a Paso 3 y en 4 al avanzar.
+
+Con esto se corrigen:
+
+El ReferenceError del botón,
+
+La imposibilidad de avanzar,
+
+Los selects vacíos (unidad/usuario),
+
+Y la barra de progreso que no se pintaba bien.
+
+¡Gracias!
