@@ -2606,8 +2606,10 @@ class WizardTareas {
         console.log(`🧙‍♂️ WIZARD: Step ${this.currentStep} → ${this.currentStep + 1}`);
         
         if (this.currentStep === 1) {
-            // Validate that etapas have been created from catalog
-            const etapaIds = this.WIZARD.etapa_ids || [];
+            // Validate that etapas have been created from catalog - sync with global wizard
+            window.WIZARD = window.WIZARD || {};
+            this.WIZARD.etapa_ids = this.WIZARD.etapa_ids || window.WIZARD.etapa_ids || [];
+            const etapaIds = this.WIZARD.etapa_ids;
             
             // Skip old validation - our new auto-advance system handles this
             // if (etapaIds.length === 0) {
@@ -2631,6 +2633,10 @@ class WizardTareas {
                 if (response.ok) {
                     this.WIZARD.etapa_ids = etapaIds;
                     this.WIZARD.preview = data;
+                    // Sync with global wizard
+                    window.WIZARD = window.WIZARD || {};
+                    window.WIZARD.etapa_ids = etapaIds;
+                    window.WIZARD.preview = data;
                     this.goToStep(2);
                 } else {
                     alert(`Error: ${data.error}`);
@@ -3317,6 +3323,11 @@ async function applyCatalogAndAdvance(){
 
       window.WIZARD.etapa_ids = etapaIds;
       window.WIZARD._last_catalog_ids = selected.slice();
+      
+      // Sync with old wizard instance if exists
+      if (window.wizardTareas && window.wizardTareas.WIZARD) {
+        window.wizardTareas.WIZARD.etapa_ids = etapaIds;
+      }
     }
 
     const body = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
