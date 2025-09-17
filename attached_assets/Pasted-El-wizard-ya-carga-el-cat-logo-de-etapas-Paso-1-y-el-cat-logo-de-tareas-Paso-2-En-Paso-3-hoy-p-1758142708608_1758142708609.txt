@@ -1,0 +1,229 @@
+El wizard ya carga el catálogo de etapas (Paso 1) y el catálogo de tareas (Paso 2).
+
+En Paso 3 hoy pintamos las filas, pero:
+
+el campo “Asignado a” no despliega usuarios (no hay endpoint/JS que lo alimente);
+
+el campo “Unidad” no tiene opciones (idem);
+
+el botón Siguiente en Paso 3 a veces queda deshabilitado;
+
+la barra de progreso y el “punto activo” no se actualizan visualmente.
+
+Qué necesitamos que implementes
+
+Backend – nuevo endpoint de opciones para el paso 3
+
+Ruta: GET /obras/api/wizard-tareas/opciones?obra_id=<id>
+
+Respuesta JSON:
+
+{
+  "ok": true,
+  "unidades": ["m2","m","m3","u","kg","h"],
+  "usuarios": [{"id": 12, "nombre": "Juan Perez"}, ...]
+}
+
+
+usuarios: devolver el equipo de la obra (miembros asignados a esa obra). Si no hay equipo, devolver lista vacía.
+
+unidades: podés usar esa lista fija por ahora (o si ya tenés un catálogo, usarlo).
+
+Validaciones: obra_id requerido; 403 si el usuario actual no tiene permiso sobre la obra.
+
+Sugerido en obras.py (ajustá nombres de modelos/tablas a los reales):
+
+@app.route('/obras/api/wizard-tareas/opciones')
+@login_required
+def wizard_tareas_opciones():
+    obra_id = request.args.get('obra_id', type=int)
+    if not obra_id:
+        return jsonify(ok=False, error='obra_id requerido'), 400
+
+    if not can_manage_obra(current_user, obra_id):
+        return jsonify(ok=False, error='sin permisos'), 403
+
+    # Unidades sugeridas (placeholder)
+    unidades = ['m2', 'm', 'm3', 'u', 'kg', 'h']
+
+    # Equipo de la obra (ajustar a tus modelos)
+    usuarios = []
+    q = (db.session.query(User.id, User.nombre)
+         .join(ObraEquipo, ObraEquipo.user_id == User.id)
+         .filter(ObraEquipo.obra_id == obra_id)
+         .all())
+    usuarios = [{'id': uid, 'nombre': nom} for uid, nom in q]
+
+    return jsonify(ok=True, unidades=unidades, usuarios=usuarios)
+
+
+Frontend – wizard.js (Paso 3)
+
+Cargar opciones al entrar en Paso 3:
+
+async function loadOpcionesPaso3() {
+  const modal = document.getElementById('wizardTareasModal');
+  const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID);
+  window.WZ_STATE = window.WZ_STATE || {};
+  if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
+
+  const resp = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, {credentials:'include'});
+  const json = await resp.json();
+  window.WZ_STATE.opciones = json.ok ? json : {ok:true, unidades:['m2','m','m3','u','kg','h'], usuarios:[]};
+  return window.WZ_STATE.opciones;
+}
+
+
+Render de filas: cambiar las celdas de Unidad y Asignado a a <select> usando las opciones del endpoint:
+
+window.renderPaso3 = async function renderPaso3(tareasSel) {
+  const opciones = await loadOpcionesPaso3();
+  const unidades = opciones.unidades || [];
+  const usuarios = opciones.usuarios || [];
+
+  const tbody = document.querySelector('#wizardStep3 #tablaDatosWizard tbody') ||
+                document.querySelector('#wizardPaso3 #tablaDatosWizard tbody');
+  if (!tbody) return;
+
+  const rowsHtml = (tareasSel || []).map((t, i) => `
+    <tr>
+      <td>${t.etapa_slug || ''}</td>
+      <td>${t.nombre || t.tarea || ''}</td>
+
+      <td><input type="date"  name="rows[${i}][inicio]"  class="form-control form-control-sm"></td>
+      <td><input type="date"  name="rows[${i}][fin]"     class="form-control form-control-sm"></td>
+      <td><input type="number" step="0.5" min="0" value="8"  name="rows[${i}][horas]"   class="form-control form-control-sm"></td>
+      <td><input type="number" step="0.01" min="0" value="1"  name="rows[${i}][cantidad]"class="form-control form-control-sm"></td>
+
+      <td>
+        <select name="rows[${i}][unidad]" class="form-select form-select-sm unidad-select">
+          ${unidades.map(u => `<option value="${u}">${u}</option>`).join('')}
+        </select>
+      </td>
+
+      <td>
+        <select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">
+          <option value="">(sin asignar)</option>
+          ${usuarios.map(u => `<option value="${u.id}">${u.nombre}</option>`).join('')}
+        </select>
+      </td>
+
+      <td>
+        <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+          <option value="baja">Baja</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
+
+  tbody.innerHTML = rowsHtml;
+
+  // Habilitar/Deshabilitar “Siguiente” segun haya filas
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  if (btnSig) {
+    const enable = (tareasSel || []).length > 0;
+    btnSig.disabled = !enable;
+    btnSig.classList.toggle('disabled', !enable);
+    btnSig.type = 'button';
+    if (!btnSig.dataset.boundStep3) {
+      btnSig.dataset.boundStep3 = '1';
+      btnSig.addEventListener('click', (ev) => {
+        if ((tareasSel || []).length > 0) { ev.preventDefault(); gotoPaso(4); }
+      });
+    }
+  }
+
+  updateWizardProgress(3);
+  console.log('[WZ] Paso 3 renderizado con', (tareasSel || []).length, 'filas');
+}
+
+
+Capturar selección antes de navegar de Paso 2 a Paso 3 (si no está ya):
+
+function getSelPaso2(modal) {
+  return [...modal.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')]
+    .map((cb, i) => ({
+      id: cb.dataset.id || cb.value || `t${i+1}`,
+      nombre: cb.dataset.nombre || (cb.closest('.form-check')?.querySelector('label')?.textContent.trim() || ''),
+      etapa_slug: cb.dataset.etapa || ''
+    }));
+}
+
+(() => {
+  const modal = document.getElementById('wizardTareasModal');
+  const next  = document.getElementById('wizardBtnSiguiente');
+  if (!modal || !next) return;
+
+  // limpiar handlers previos
+  next.replaceWith(next.cloneNode(true));
+  const btn = document.getElementById('wizardBtnSiguiente');
+  btn.type = 'button';
+
+  btn.addEventListener('click', (ev) => {
+    const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none), #wizardPaso2:not(.d-none)');
+    if (!step2Visible) return; // dejar flujo normal p/otros pasos
+
+    const sel = getSelPaso2(modal);
+    if (!sel.length) return;
+    ev.preventDefault();
+
+    window.WZ_STATE = window.WZ_STATE || {};
+    window.WZ_STATE.tareasSel = sel;
+
+    gotoPaso(3);
+    renderPaso3(sel);
+  });
+})();
+
+
+Progreso visual (barra y “step activo”):
+
+function updateWizardProgress(n) {
+  // Si hay progress bar lineal
+  const bars = document.querySelectorAll('.progress .progress-bar');
+  bars.forEach(b => b.style.width = ({1: '25%', 2:'50%', 3:'75%', 4:'100%'}[n] || '0%'));
+
+  // Si hay navegación por pasos (tabs / pills)
+  document.querySelectorAll('[data-wizard-step]').forEach(el => {
+    el.classList.toggle('active', Number(el.getAttribute('data-wizard-step')) === n);
+  });
+}
+
+// Llamar dentro de gotoPaso(n)
+// updateWizardProgress(n);
+
+
+Habilitar botón “Anterior” en Paso 3
+Ya lo agregamos con gotoPaso(2); sólo asegúrate que el botón tenga el id wizardBtnAnteriorPaso3 o que el listener use el que exista.
+
+Cómo probar
+
+Abrir una obra y lanzar el wizard.
+
+Paso 1 → seleccionar al menos 1 etapa → Siguiente.
+
+Paso 2 → tildar 2 tareas → Siguiente.
+
+Paso 3:
+
+Ver que la tabla tiene tantas filas como tareas seleccionadas.
+
+En “Unidad” ver el select con opciones (m2, m, m3, u, kg, h).
+
+En “Asignado a” ver el select con el equipo de la obra.
+
+Modificar algunos valores (fechas, horas, unidad, asignado).
+
+Ver que el botón Siguiente está habilitado y la barra de progreso marca el paso 3 (75%).
+
+Click Siguiente → debe ir al Paso 4.
+
+Notas
+
+Si tu modelo de equipo no es ObraEquipo, ajustá el join a lo que corresponda.
+
+Si todavía no tenés equipo en la obra, el select de “Asignado a” se verá, pero vacío (con opción “(sin asignar)”).
+
+El endpoint nuevo no rompe nada existente; sólo agrega datos para el Paso 3.

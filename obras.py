@@ -2457,6 +2457,63 @@ def wizard_tareas_catalogo():
         response = jsonify({'ok': True, 'tareas_catalogo': resp})
         response.headers['Content-Type'] = 'application/json'
         return response, 200
+
+    except Exception as e:
+        logging.error(f"Error en wizard_tareas_endpoint: {e}")
+        response = jsonify({"ok": False, "error": "Error interno del servidor"})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 500
+
+@obras_bp.route('/api/wizard-tareas/opciones')
+@login_required  
+def wizard_tareas_opciones():
+    """Endpoint para obtener opciones de Paso 3: unidades y equipo de la obra"""
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        if not obra_id:
+            response = jsonify({"ok": False, "error": "obra_id requerido"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
+
+        # Verificar permisos sobre la obra
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
+
+        # Unidades predefinidas para tareas de construcción
+        unidades = ['m2', 'm', 'm3', 'u', 'kg', 'h']
+
+        # Obtener equipo de la obra usando ObraMiembro
+        usuarios = []
+        try:
+            query_result = (db.session.query(Usuario.id, Usuario.nombre, Usuario.apellido, ObraMiembro.rol_en_obra)
+                           .join(ObraMiembro, ObraMiembro.usuario_id == Usuario.id)
+                           .filter(ObraMiembro.obra_id == obra_id)
+                           .filter(Usuario.activo == True)
+                           .all())
+            
+            for user_id, nombre, apellido, rol in query_result:
+                nombre_completo = f"{nombre} {apellido}".strip()
+                usuarios.append({
+                    'id': user_id, 
+                    'nombre': nombre_completo,
+                    'rol': rol or 'Sin rol'
+                })
+                
+        except Exception as e:
+            logging.warning(f"Error al obtener equipo de obra {obra_id}: {e}")
+            # Continuar con lista vacía si hay error
+            usuarios = []
+
+        response = jsonify({
+            'ok': True, 
+            'unidades': unidades, 
+            'usuarios': usuarios
+        })
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
         
     except Exception as e:
         current_app.logger.exception("API Error obteniendo tareas para wizard")

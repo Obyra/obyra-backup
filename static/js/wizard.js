@@ -355,24 +355,61 @@ function connectPaso2Nav() {
   console.log('✅ WIZARD: Navegación Paso 2 conectada');
 }
 
-// 🔥 RENDERIZAR PASO 3 CON TABLA DE DATOS (GLOBAL)
-window.renderPaso3 = function renderPaso3(tareas = []) {
-  const m = document.getElementById('wizardTareasModal');
-  const tbody = m.querySelector('#wizardStep3 #tablaDatosWizard tbody, #wizardPaso3 #tablaDatosWizard tbody');
+// 🔥 CARGAR OPCIONES PARA EL PASO 3
+async function loadOpcionesPaso3() {
+  const modal = document.getElementById('wizardTareasModal');
+  const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID);
+  window.WZ_STATE = window.WZ_STATE || {};
+  if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
+
+  try {
+    const resp = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, {credentials:'include'});
+    const json = await resp.json();
+    window.WZ_STATE.opciones = json.ok ? json : {ok:true, unidades:['m2','m','m3','u','kg','h'], usuarios:[]};
+    console.log('[WZ] Opciones cargadas:', window.WZ_STATE.opciones);
+    return window.WZ_STATE.opciones;
+  } catch (error) {
+    console.warn('[WZ] Error cargando opciones:', error);
+    window.WZ_STATE.opciones = {ok:true, unidades:['m2','m','m3','u','kg','h'], usuarios:[]};
+    return window.WZ_STATE.opciones;
+  }
+}
+
+// 🔥 RENDERIZAR PASO 3 CON TABLA DE DATOS (GLOBAL MEJORADO)
+window.renderPaso3 = async function renderPaso3(tareasSel = []) {
+  const opciones = await loadOpcionesPaso3();
+  const unidades = opciones.unidades || [];
+  const usuarios = opciones.usuarios || [];
+
+  const tbody = document.querySelector('#wizardStep3 #tablaDatosWizard tbody') ||
+                document.querySelector('#wizardPaso3 #tablaDatosWizard tbody');
   if (!tbody) { console.warn('[WZ] Falta tbody en Paso 3'); return; }
 
-  tbody.innerHTML = tareas.map((t, i) => `
+  const rowsHtml = (tareasSel || []).map((t, i) => `
     <tr>
       <td>${t.etapa_slug || ''}</td>
-      <td>${t.nombre}</td>
-      <td><input type="date"   name="rows[${i}][inicio]"   class="form-control form-control-sm"></td>
-      <td><input type="date"   name="rows[${i}][fin]"      class="form-control form-control-sm"></td>
-      <td><input type="number" name="rows[${i}][horas]"    step="0.5"  min="0" class="form-control form-control-sm"></td>
-      <td><input type="number" name="rows[${i}][cantidad]" step="0.01" min="0" class="form-control form-control-sm"></td>
-      <td><input type="text"   name="rows[${i}][unidad]"   class="form-control form-control-sm"></td>
-      <td><input type="text"   name="rows[${i}][asignado]" class="form-control form-control-sm"></td>
+      <td>${t.nombre || t.tarea || ''}</td>
+
+      <td><input type="date"  name="rows[${i}][inicio]"  class="form-control form-control-sm"></td>
+      <td><input type="date"  name="rows[${i}][fin]"     class="form-control form-control-sm"></td>
+      <td><input type="number" step="0.5" min="0" value="8"  name="rows[${i}][horas]"   class="form-control form-control-sm"></td>
+      <td><input type="number" step="0.01" min="0" value="1"  name="rows[${i}][cantidad]"class="form-control form-control-sm"></td>
+
       <td>
-        <select class="form-select form-select-sm" name="rows[${i}][prioridad]">
+        <select name="rows[${i}][unidad]" class="form-select form-select-sm unidad-select">
+          ${unidades.map(u => `<option value="${u}">${u}</option>`).join('')}
+        </select>
+      </td>
+
+      <td>
+        <select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">
+          <option value="">(sin asignar)</option>
+          ${usuarios.map(u => `<option value="${u.id}">${u.nombre}</option>`).join('')}
+        </select>
+      </td>
+
+      <td>
+        <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
           <option value="media" selected>Media</option>
           <option value="alta">Alta</option>
           <option value="baja">Baja</option>
@@ -381,27 +418,133 @@ window.renderPaso3 = function renderPaso3(tareas = []) {
     </tr>
   `).join('');
 
-  const next = document.getElementById('wizardBtnSiguiente');
-  if (next) { next.disabled = tareas.length === 0; next.classList.toggle('disabled', tareas.length === 0); next.type = 'button'; }
-  console.log('[WZ] Paso 3 renderizado con', tareas.length, 'filas');
+  tbody.innerHTML = rowsHtml;
+
+  // Habilitar/Deshabilitar "Siguiente" según haya filas
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  if (btnSig) {
+    const enable = (tareasSel || []).length > 0;
+    btnSig.disabled = !enable;
+    btnSig.classList.toggle('disabled', !enable);
+    btnSig.type = 'button';
+    if (!btnSig.dataset.boundStep3) {
+      btnSig.dataset.boundStep3 = '1';
+      btnSig.addEventListener('click', (ev) => {
+        if ((tareasSel || []).length > 0) { 
+          ev.preventDefault(); 
+          console.log('[WZ] Navegando a Paso 4');
+          if (typeof window.gotoPaso === 'function') window.gotoPaso(4);
+        }
+      });
+    }
+  }
+
+  updateWizardProgress(3);
+  console.log('[WZ] Paso 3 renderizado con', (tareasSel || []).length, 'filas');
 };
 
-// 🔥 BOTÓN ATRÁS EN PASO 3 → PASO 2 (PRESERVANDO SELECCIÓN)
-(function connectPaso3Back(){
-  const m    = document.getElementById('wizardTareasModal');
-  const back = document.getElementById('wizardBtnAnterior');
-  if (!m || !back || back.dataset.boundStep3) return;
-  back.dataset.boundStep3 = '1';
-  back.type = 'button';
-  back.addEventListener('click', (e) => { 
-    // Solo interceptar si estamos en Paso 3
-    const step3Visible = !!m.querySelector('#wizardStep3:not(.d-none), #wizardPaso3:not(.d-none)');
-    if (!step3Visible) return;
-    
-    e.preventDefault(); 
-    console.log('🔥 WIZARD: Volviendo a Paso 2');
-    if (typeof window.gotoPaso === 'function') window.gotoPaso(2);
+// 🔥 PROGRESO VISUAL (BARRA Y "STEP ACTIVO")
+function updateWizardProgress(n) {
+  // Si hay progress bar lineal
+  const bars = document.querySelectorAll('.progress .progress-bar');
+  bars.forEach(b => b.style.width = ({1: '25%', 2:'50%', 3:'75%', 4:'100%'}[n] || '0%'));
+
+  // Si hay navegación por pasos (tabs / pills)
+  document.querySelectorAll('[data-wizard-step]').forEach(el => {
+    el.classList.toggle('active', Number(el.getAttribute('data-wizard-step')) === n);
   });
+  
+  console.log(`[WZ] Progreso actualizado a paso ${n}`);
+}
+
+// 🔥 CAPTURAR SELECCIÓN ANTES DE NAVEGAR DE PASO 2 A PASO 3
+function getSelPaso2(modal) {
+  return [...modal.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked, #wizardPaso2 input[type="checkbox"]:checked')]
+    .map((cb, i) => ({
+      id: cb.dataset.id || cb.value || `t${i+1}`,
+      nombre: cb.dataset.nombre || (cb.closest('.form-check')?.querySelector('label')?.textContent.trim() || ''),
+      etapa_slug: cb.dataset.etapa || ''
+    }));
+}
+
+// 🔥 NAVEGACIÓN MEJORADA DEL WIZARD
+(function setupWizardNavigation() {
+  const modal = document.getElementById('wizardTareasModal');
+  const next  = document.getElementById('wizardBtnSiguiente');
+  const back  = document.getElementById('wizardBtnAnterior');
+  
+  if (!modal || !next) return;
+
+  // Limpiar handlers previos para evitar duplicados
+  const newNext = next.cloneNode(true);
+  next.parentNode.replaceChild(newNext, next);
+  const newBack = back?.cloneNode(true);
+  if (back && newBack) back.parentNode.replaceChild(newBack, back);
+  
+  const btnNext = document.getElementById('wizardBtnSiguiente');
+  const btnBack = document.getElementById('wizardBtnAnterior');
+  
+  btnNext.type = 'button';
+
+  // EVENTO CLICK PARA BOTÓN "SIGUIENTE"
+  btnNext.addEventListener('click', (ev) => {
+    // Detectar paso actual
+    const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none), #wizardPaso2:not(.d-none)');
+    const step3Visible = !!modal.querySelector('#wizardStep3:not(.d-none), #wizardPaso3:not(.d-none)');
+    
+    if (step2Visible) {
+      // PASO 2 → PASO 3: Capturar selección
+      const sel = getSelPaso2(modal);
+      console.log('[WZ] Paso 2 → 3, selección =', sel.length);
+      if (!sel.length) return;
+      
+      ev.preventDefault();
+      window.WZ_STATE = window.WZ_STATE || {};
+      window.WZ_STATE.tareasSel = sel;
+
+      if (typeof window.gotoPaso === 'function') window.gotoPaso(3);
+      if (typeof window.renderPaso3 === 'function') window.renderPaso3(sel);
+      
+    } else if (step3Visible) {
+      // PASO 3 → PASO 4: Validar que hay filas
+      const filas = modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr, #wizardPaso3 #tablaDatosWizard tbody tr');
+      if (filas.length > 0) {
+        ev.preventDefault();
+        console.log('[WZ] Paso 3 → 4');
+        if (typeof window.gotoPaso === 'function') window.gotoPaso(4);
+      }
+    }
+    // Para otros pasos, dejar flujo normal
+  });
+
+  // EVENTO CLICK PARA BOTÓN "ATRÁS"  
+  if (btnBack) {
+    btnBack.type = 'button';
+    btnBack.addEventListener('click', (e) => {
+      const step3Visible = !!modal.querySelector('#wizardStep3:not(.d-none), #wizardPaso3:not(.d-none)');
+      const step4Visible = !!modal.querySelector('#wizardStep4:not(.d-none), #wizardPaso4:not(.d-none)');
+      
+      if (step3Visible) {
+        // PASO 3 → PASO 2: Preservar selecciones
+        e.preventDefault(); 
+        console.log('[WZ] Paso 3 → 2 (preservando selecciones)');
+        if (typeof window.gotoPaso === 'function') window.gotoPaso(2);
+        
+      } else if (step4Visible) {
+        // PASO 4 → PASO 3: Volver a Paso 3
+        e.preventDefault();
+        console.log('[WZ] Paso 4 → 3');
+        if (typeof window.gotoPaso === 'function') window.gotoPaso(3);
+        // Re-renderizar Paso 3 con datos guardados
+        if (window.WZ_STATE && window.WZ_STATE.tareasSel && typeof window.renderPaso3 === 'function') {
+          window.renderPaso3(window.WZ_STATE.tareasSel);
+        }
+      }
+      // Para otros pasos, dejar flujo normal
+    });
+  }
+  
+  console.log('[WZ] Navegación del wizard configurada');
 })();
 
 console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
