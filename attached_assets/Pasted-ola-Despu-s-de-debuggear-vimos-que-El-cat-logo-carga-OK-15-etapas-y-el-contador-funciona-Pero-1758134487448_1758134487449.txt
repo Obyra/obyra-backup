@@ -1,0 +1,84 @@
+ola! Después de debuggear vimos que:
+
+El catálogo carga OK (15 etapas) y el contador funciona.
+
+Pero al hacer Siguiente no avanza a Paso 2 porque faltan funciones globales y el botón no está conectado.
+
+Además, la API devuelve un objeto ({ etapas_catalogo: [...], etapas_creadas: [...], ok: true }) y hay que usar esas claves (no data.map directo).
+
+Qué necesitamos en static/js/wizard.js:
+
+Normalizar la respuesta del endpoint en cargarCatalogoEtapas(...):
+
+const json     = await res.json();
+const catalogo = json.etapas_catalogo || [];
+const creadas  = new Set((json.etapas_creadas || []).map(e => e.slug || e.id));
+// render con `catalogo` y marcar `checked disabled` solo si está en `creadas`
+
+
+Exponer y conectar la lógica de navegación del wizard (pegar al final de wizard.js, después de Bootstrap):
+
+(function () {
+  const m = document.getElementById('wizardTareasModal');
+  const getSel = () => [...m.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')]
+                        .map(cb => cb.dataset.slug).filter(Boolean);
+  window.getEtapasSeleccionadas = getSel;
+
+  window.gotoPaso = function (n) {
+    const panes = [...m.querySelectorAll('[data-paso]'), ...m.querySelectorAll('[id^="wizardPaso"]')];
+    if (panes.length) {
+      panes.forEach(el => {
+        const num = Number(el.getAttribute('data-paso') || (el.id.match(/wizardPaso(\d+)/)||[])[1]);
+        el.classList.toggle('d-none', num !== n);
+      });
+      return;
+    }
+    const tabBtn = m.querySelector(`[data-bs-toggle="tab"][data-bs-target="#wizardPaso${n}"]`);
+    if (tabBtn) { const Tab = window.bootstrap?.Tab; Tab ? new Tab(tabBtn).show() : tabBtn.click(); return; }
+    const generic = [...m.querySelectorAll('.wizard-step,.wz-step,.step-pane,[role="tabpanel"]')];
+    if (generic.length) generic.forEach((el,i)=> el.classList.toggle('d-none', i !== (n-1)));
+  };
+
+  window.applyCatalogAndAdvance = function () {
+    const slugs = getSel();
+    if (!slugs.length) return;
+    document.getElementById('btnAgregarEtapas')?.click(); // misma acción que el botón verde
+    window.gotoPaso(2);
+  };
+
+  function connectWizardNav() {
+    const btnSig = document.getElementById('wizardBtnSiguiente');
+    if (btnSig && !btnSig.dataset.bound) {
+      btnSig.dataset.bound = '1';
+      btnSig.type = 'button';
+      btnSig.addEventListener('click', (ev) => {
+        if (getSel().length > 0) { ev.preventDefault(); window.applyCatalogAndAdvance(); }
+      });
+    }
+  }
+
+  document.addEventListener('shown.bs.modal', (ev) => {
+    if (ev.target?.id === 'wizardTareasModal') connectWizardNav();
+  });
+})();
+
+
+Asegurar estos IDs en el template del wizard:
+
+Botón verde: id="btnAgregarEtapas"
+
+Botón siguiente: id="wizardBtnSiguiente"
+
+Contenedores de pasos con data-paso="1", data-paso="2" o IDs wizardPaso1, wizardPaso2.
+
+Select/Deselect All: que ignore :disabled y llame updateSelectionCounter() (esto ya está, pero confirmarlo).
+
+Prueba esperada:
+
+Abro wizard → ninguna etapa marcada salvo creadas.
+
+Marco ≥1 → Siguiente se habilita.
+
+Click en Siguiente → aplica selección y cambia a Paso 2.
+
+¿Podés aplicarlo y avisarnos? ¡Gracias! 🙌

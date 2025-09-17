@@ -219,23 +219,7 @@ document.addEventListener('change', (e) => {
   }
 });
 
-// 🔥 Enganche "Siguiente" con applyCatalogAndAdvance si es necesario
-document.addEventListener('DOMContentLoaded', () => {
-  const siguienteBtn = document.getElementById('wizardBtnSiguiente');
-  if (siguienteBtn) {
-    siguienteBtn.addEventListener('click', (ev) => {
-      const count = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
-      console.log(`🔥 WIZARD: Botón Siguiente clickeado - ${count} etapas seleccionadas`);
-      
-      // Si estamos en paso 1 y hay selecciones, aplicar catálogo
-      if (window.wizardPasoActual === 1 && count > 0 && typeof window.applyCatalogAndAdvance === 'function') {
-        console.log('🔥 WIZARD: Aplicando catálogo y avanzando...');
-        ev.preventDefault();
-        window.applyCatalogAndAdvance(); // agrega y luego avanza al Paso 2
-      }
-    });
-  }
-});
+// 🔥 Lógica de navegación del wizard - Remover el event listener anterior (será reemplazado abajo)
 
 // 🔥 EXPONER FUNCIONES AL GLOBAL
 window.cargarCatalogoEtapas = cargarCatalogoEtapas;
@@ -288,3 +272,79 @@ document.addEventListener('click', (ev) => {
 });
 
 console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
+
+// 🔥 LÓGICA DE NAVEGACIÓN DEL WIZARD (después de Bootstrap)
+(function () {
+  const m = document.getElementById('wizardTareasModal');
+  const getSel = () => [...m.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')]
+                        .map(cb => cb.dataset.slug).filter(Boolean);
+  window.getEtapasSeleccionadas = getSel;
+
+  window.gotoPaso = function (n) {
+    console.log(`🔥 WIZARD: Navegando a paso ${n}`);
+    
+    // Buscar por data-paso
+    const panes = [...m.querySelectorAll('[data-paso]'), ...m.querySelectorAll('[id^="wizardPaso"]')];
+    if (panes.length) {
+      panes.forEach(el => {
+        const num = Number(el.getAttribute('data-paso') || (el.id.match(/wizardPaso(\d+)/)||[])[1]);
+        el.classList.toggle('d-none', num !== n);
+      });
+      return;
+    }
+    
+    // Buscar por tabs Bootstrap
+    const tabBtn = m.querySelector(`[data-bs-toggle="tab"][data-bs-target="#wizardPaso${n}"]`);
+    if (tabBtn) { 
+      const Tab = window.bootstrap?.Tab; 
+      Tab ? new Tab(tabBtn).show() : tabBtn.click(); 
+      return; 
+    }
+    
+    // Buscar por IDs wizardStep1, wizardStep2, etc.
+    const stepById = m.querySelector(`#wizardStep${n}`);
+    if (stepById) {
+      // Ocultar todos los pasos y mostrar el seleccionado
+      [...m.querySelectorAll('[id^="wizardStep"]')].forEach(el => el.classList.add('d-none'));
+      stepById.classList.remove('d-none');
+      return;
+    }
+    
+    // Fallback genérico
+    const generic = [...m.querySelectorAll('.wizard-content')];
+    if (generic.length) {
+      generic.forEach((el,i)=> el.classList.toggle('d-none', i !== (n-1)));
+    }
+  };
+
+  window.applyCatalogAndAdvance = function () {
+    const slugs = getSel();
+    console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas:`, slugs);
+    if (!slugs.length) return;
+    document.getElementById('btnAgregarEtapasSel')?.click(); // misma acción que el botón verde
+    window.gotoPaso(2);
+  };
+
+  function connectWizardNav() {
+    const btnSig = document.getElementById('wizardBtnSiguiente');
+    if (btnSig && !btnSig.dataset.bound) {
+      btnSig.dataset.bound = '1';
+      btnSig.type = 'button';
+      btnSig.addEventListener('click', (ev) => {
+        console.log(`🔥 WIZARD: Botón Siguiente clickeado`);
+        if (getSel().length > 0) { 
+          ev.preventDefault(); 
+          window.applyCatalogAndAdvance(); 
+        }
+      });
+      console.log('✅ WIZARD: Navegación conectada');
+    }
+  }
+
+  document.addEventListener('shown.bs.modal', (ev) => {
+    if (ev.target?.id === 'wizardTareasModal') {
+      console.log('🔥 WIZARD: Modal mostrado, conectando navegación');
+      connectWizardNav();
+    }
+  });
+})();
