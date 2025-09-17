@@ -885,6 +885,7 @@
                         </div>
                     </div>
                     
+                    <div id="wizardPaso1Warning" class="text-danger small mt-2"></div>
                     <div id="step1-error" class="text-danger mt-3 d-none"></div>
                     <div id="step1-success" class="alert alert-success mt-3 d-none">
                         <i class="fas fa-check me-2"></i>
@@ -3234,10 +3235,11 @@ function deseleccionarTodasLasEtapas() {
     actualizarContadorSeleccionadas();
 }
 
-const PREF = '/obras';
+// ==== CONFIG ====
+const PREF = '/obras'; // prefijo real del blueprint
 window.obraId = window.obraId ?? +location.pathname.split('/').pop();
 
-// helper robusto (no MÁS '<DOCTYPE')
+// ==== HELPERS ====
 async function fetchJSON(url, opts){
   const r = await fetch(url, opts);
   const txt = await r.text();
@@ -3246,79 +3248,98 @@ async function fetchJSON(url, opts){
   if(!ct.includes('application/json')) throw new Error(`No JSON (${ct}): ${txt.slice(0,300)}`);
   return JSON.parse(txt);
 }
-
 function getCatalogoIds(){
   return [...document.querySelectorAll('.etp:checked, .catalog-checkbox:checked')]
     .map(el => Number(el.dataset.catalogId || el.value))
     .filter(Boolean);
 }
+function sameArray(a,b){
+  if(!Array.isArray(a)||!Array.isArray(b)) return false;
+  if(a.length!==b.length) return false;
+  return [...a].sort().join(',') === [...b].sort().join(',');
+}
+function showWarn(msg){
+  const n = document.getElementById('wizardPaso1Warning');
+  if(n) n.textContent = msg; else alert(msg);
+}
+function clearWarn(){ const n = document.getElementById('wizardPaso1Warning'); if(n) n.textContent = ''; }
 
-let autoTimer=null, busy=false;
+function setPaso1Disabled(disabled){
+  ['btnAgregarEtapasSel','wizardBtnSiguiente']
+    .forEach(id=>document.getElementById(id)?.toggleAttribute('disabled', disabled));
+  document.querySelectorAll('.etp, .catalog-checkbox')
+    .forEach(el=>el.toggleAttribute('disabled', disabled));
+  if(disabled) clearWarn();
+}
 
-async function autoAddAndNext(){
-  if (busy) return;
-  const catalogoIds = getCatalogoIds();
-  if (!catalogoIds.length) { showErr('Seleccioná al menos una etapa del catálogo.'); return; }
+// ==== CORE ====
+let paso1Busy = false, debounceTimer=null;
 
+async function applyCatalogAndAdvance({advance=true}={}){
+  if(paso1Busy) return;
+  const selected = getCatalogoIds();
+  if(!selected.length){
+    showWarn('Seleccioná al menos una etapa del catálogo.');
+    return;
+  }
   try{
-    busy = true;
-    disablePaso1(true);
-
-    // 1) Crear/recuperar etapas de la obra
-    const bulk = await fetchJSON(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ catalogo_ids: catalogoIds })
-    });
-    if (bulk.ok === false) throw new Error(bulk.error || 'Error en bulk_from_catalog');
-
-    const etapaIds = [...(bulk.creadas||[]), ...(bulk.existentes||[])].map(e=>+e.id).filter(Boolean);
-    if (!etapaIds.length) throw new Error('No se devolvieron IDs de etapas');
+    paso1Busy = true; setPaso1Disabled(true);
 
     window.WIZARD = window.WIZARD || {};
-    window.WIZARD.etapa_ids = etapaIds;
+    // Evitar pegarle de nuevo si la selección no cambió
+    if(!sameArray(window.WIZARD._last_catalog_ids, selected)){
+      const bulk = await fetchJSON(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ catalogo_ids: selected })
+      });
+      if(bulk.ok === false) throw new Error(bulk.error || 'Error en bulk_from_catalog');
 
-    // 2) Preview filtrado y salto a Paso 2
-    const body = { obra_id: window.obraId, etapa_ids: etapaIds };
-    window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`, {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
-    });
+      const etapaIds = [...(bulk.creadas||[]), ...(bulk.existentes||[])]
+        .map(e => Number(e.id)).filter(Boolean);
+      if(!etapaIds.length) throw new Error('El servidor no devolvió IDs de etapas');
 
-    gotoPaso(2);
+      window.WIZARD.etapa_ids = etapaIds;
+      window.WIZARD._last_catalog_ids = selected.slice();
+    }
+
+    if(advance){
+      const body = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
+      window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      gotoPaso(2); // <- función existente del wizard
+    }else{
+      document.getElementById('wizardBtnSiguiente')?.removeAttribute('disabled');
+    }
   }catch(e){
-    console.error('Wizard Paso1 autoAddAndNext:', e);
-    showErr(`Error: ${e.message}`);
+    console.error('Wizard Paso1:', e);
+    showWarn(`Error: ${e.message}`);
   }finally{
-    busy = false;
-    disablePaso1(false);
+    paso1Busy = false; setPaso1Disabled(false);
   }
 }
 
-// Botón "Agregar Etapas Seleccionadas" → hace todo y avanza
-document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', (e)=>{
-  e.preventDefault(); autoAddAndNext();
-});
-
-// Botón "Siguiente" en Paso 1 → si no agregó, agrega y avanza
-document.getElementById('wizardBtnSiguiente')?.addEventListener('click', async (e)=>{
-  if (window.wizardPasoActual !== 1) return;  // otros pasos siguen normal
-  e.preventDefault(); autoAddAndNext();
-});
-
-// Auto-avance al tildar (con debounce para no spamear el backend)
+// ==== BINDINGS ====
+// 1) Auto-aplicar y avanzar al tildar/destildar (debounce)
 document.querySelectorAll('.etp, .catalog-checkbox').forEach(cb=>{
   cb.addEventListener('change', ()=>{
-    clearTimeout(autoTimer);
-    autoTimer = setTimeout(autoAddAndNext, 350);
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(()=>applyCatalogAndAdvance({advance:true}), 300);
   });
 });
 
-// helpers visuales
-function disablePaso1(flag){
-  document.querySelectorAll('.etp, .catalog-checkbox, #btnAgregarEtapasSel, #wizardBtnSiguiente')
-    .forEach(el => flag ? el.setAttribute('disabled','') : el.removeAttribute('disabled'));
-  document.getElementById('wizardInfo')?.classList.toggle('d-none', !flag);
-}
-function showErr(msg){ const n = document.getElementById('wizardError'); if(n) n.textContent = msg; else alert(msg); }
+// 2) Botón verde hace lo mismo (por compatibilidad)
+document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', (e)=>{
+  e.preventDefault(); applyCatalogAndAdvance({advance:true});
+});
+
+// 3) "Siguiente" en Paso 1 aplica y avanza (ya NO queda bloqueado)
+document.getElementById('wizardBtnSiguiente')?.addEventListener('click', (e)=>{
+  if(window.wizardPasoActual === 1){
+    e.preventDefault(); applyCatalogAndAdvance({advance:true});
+  }
+});
 
 function mostrarErrorPaso1(mensaje) {
     const errorDiv = document.getElementById('step1-error');
