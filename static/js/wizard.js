@@ -288,219 +288,198 @@ function getTareasSeleccionadasPaso2(m) {
   });
 }
 
-// FUNCIONES DUPLICADAS ELIMINADAS - USANDO SOLO EL ENFOQUE CANÓNICO
+// 🔥 BLOQUE CANÓNICO LIMPIO - IMPLEMENTACIÓN FINAL
 
 // 🔥 CAPTURAR SELECCIÓN DEL PASO 2
 window.getSelPaso2 = function(modal = document.getElementById('wizardTareasModal')) {
-  return [...modal.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')]
-    .map((cb, i) => {
-      const label = cb.closest('.form-check, .card, li, .row')
-        ?.querySelector('label')?.textContent?.trim() || `Tarea ${i+1}`;
-      return {
-        id: cb.dataset.id || cb.value || '',
-        nombre: cb.dataset.nombre || label,
-        etapa_slug: cb.dataset.etapa || ''
-      };
-    });
-};
+// 🔥 OBTENER TAREAS SELECCIONADAS DEL PASO 2 (SELECTOR ROBUSTO) - MANTENIDO POR COMPATIBILIDAD
+function getTareasSeleccionadasPaso2(m) {
+  const marked = m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked');
+  return [...marked].map((cb, i) => {
+    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim()
+               || cb.value || `Tarea ${i+1}`;
+    return {
+      id: cb.dataset.id || cb.value || `t${i+1}`,
+      nombre: cb.dataset.nombre || label.replace(/\n/g, ' ').trim(),
+      etapa_slug: cb.dataset.etapa || ''
+    };
+  });
+}
 
-// 🔥 ASEGURAR OPCIONES
-async function ensureOpciones(obraId){
-  if (window.WZ_STATE?.opciones) return window.WZ_STATE.opciones;
-  try {
-    const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, {credentials:'include'});
-    const j = await r.json();
-    const unidades = j?.unidades || ['m2','m','m3','u','kg','h'];
-    const usuarios = j?.usuarios || [];
-    window.WZ_STATE = window.WZ_STATE || {};
-    window.WZ_STATE.opciones = {unidades, usuarios};
+// 🔥 BLOQUE CANÓNICO LIMPIO - IMPLEMENTACIÓN FINAL
+(() => {
+  const modal = document.getElementById('wizardTareasModal');
+  if (!modal) return;
+
+  window.WZ_STATE = window.WZ_STATE || {};
+
+  // 1) Selección del Paso 2 (GLOBAL)
+  window.getSelPaso2 = function () {
+    const m = document.getElementById('wizardTareasModal');
+    return [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')].map((cb, i) => ({
+      id: cb.dataset.id || cb.value || String(i + 1),
+      nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || '').trim(),
+      etapa_slug: cb.dataset.etapa || ''
+    }));
+  };
+
+  // 2) Cargar opciones de Paso 3 (GLOBAL)
+  window.ensureOpciones = async function (obraId) {
+    if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
+    try {
+      const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, { credentials: 'include' });
+      const j = await r.json();
+      window.WZ_STATE.opciones = j.ok ? j : { ok: true, unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
+    } catch {
+      window.WZ_STATE.opciones = { ok: true, unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
+    }
     return window.WZ_STATE.opciones;
-  } catch {
-    const fallback = {unidades: ['m2','m','m3','u','kg','h'], usuarios: []};
-    window.WZ_STATE = window.WZ_STATE || {};
-    window.WZ_STATE.opciones = fallback;
-    return fallback;
+  };
+
+  // 3) Render Paso 3 (GLOBAL)
+  window.renderPaso3 = async function (tareas) {
+    const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+    const opts = await window.ensureOpciones(obraId);
+    const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
+    if (!tbody) return;
+
+    const unidadOpts = (opts.unidades || []).map(u => `<option value="${u}">${u}</option>`).join('');
+    const asignadoList = (opts.usuarios || []).length ? opts.usuarios : [{ id: '', nombre: '(sin asignar)' }];
+    const asignadoOpts = asignadoList.map(u => `<option value="${u.id||''}">${u.nombre||'(sin asignar)'}</option>`).join('');
+
+    tbody.innerHTML = (tareas || []).map((t, i) => `
+      <tr data-i="${i}">
+        <td>${t.etapa_slug||''}</td>
+        <td>${t.nombre||''}</td>
+        <td><input name="rows[${i}][inicio]"   class="form-control form-control-sm" type="date"></td>
+        <td><input name="rows[${i}][fin]"      class="form-control form-control-sm" type="date"></td>
+        <td><input name="rows[${i}][horas]"    class="form-control form-control-sm" type="number" min="0" step="0.5" value="8"></td>
+        <td><input name="rows[${i}][cantidad]" class="form-control form-control-sm" type="number" min="0" step="0.01" value="1"></td>
+        <td><select name="rows[${i}][unidad]"   class="form-select form-select-sm unidad-select">${unidadOpts}</select></td>
+        <td><select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">${asignadoOpts}</select></td>
+        <td>
+          <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
+            <option value="media" selected>Media</option>
+            <option value="alta">Alta</option>
+            <option value="baja">Baja</option>
+          </select>
+        </td>
+      </tr>
+    `).join('');
+
+    window.enableNextStep3();
+  };
+
+  // 4) Habilitar/Deshabilitar "Siguiente" en Paso 3 (GLOBAL)
+  window.enableNextStep3 = function () {
+    const btn = document.getElementById('wizardBtnSiguiente');
+    const rows = modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length;
+    const enabled = rows > 0;
+    if (btn) {
+      btn.disabled = !enabled;
+      btn.classList.toggle('disabled', !enabled);
+      btn.type = 'button';
+    }
+  };
+
+  // 5) Interceptor de "Siguiente" SOLO cuando Paso 2 está visible (GLOBAL)
+  function connectPaso2Next () {
+    const btn = document.getElementById('wizardBtnSiguiente');
+    if (!btn || btn.dataset.boundPaso2 === '1') return;
+    btn.dataset.boundPaso2 = '1';
+
+    btn.addEventListener('click', (ev) => {
+      const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none)');
+      if (!step2Visible) return;
+
+      const sel = window.getSelPaso2();
+      if (!sel.length) return; // no interrumpas si no hay selección
+
+      ev.preventDefault();
+      window.WZ_STATE = window.WZ_STATE || {};
+      window.WZ_STATE.tareasSel = sel;
+      if (typeof gotoPaso === 'function') gotoPaso(3);
+      window.renderPaso3(sel);
+    });
   }
-}
+  window.connectPaso2Next = connectPaso2Next;
 
-// 🔥 HABILITAR BOTÓN SIGUIENTE PASO 3
-function enableNextStep3(){
-  const hasRows = document.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length > 0;
-  const btn = document.getElementById('wizardBtnSiguiente');
-  if (!btn) return;
-  btn.disabled = !hasRows;
-  btn.classList.toggle('disabled', !hasRows);
-  btn.removeAttribute('aria-disabled');
-}
+  // 6) Botón Atrás de Paso 3 (GLOBAL)
+  window.ensureBackBtnStep3 = function () {
+    const footer = modal.querySelector('.modal-footer') || modal;
+    let back = document.getElementById('wizardBtnAnteriorPaso3');
+    if (!back) {
+      back = document.createElement('button');
+      back.id = 'wizardBtnAnteriorPaso3';
+      back.type = 'button';
+      back.className = 'btn btn-outline-secondary me-auto';
+      back.textContent = 'Atrás';
+      footer.insertBefore(back, footer.firstChild);
+      back.addEventListener('click', (ev) => { ev.preventDefault(); if (typeof gotoPaso === 'function') gotoPaso(2); });
+    }
+  };
 
-// 🔥 RENDERIZAR PASO 3 SIMPLIFICADO
-window.renderPaso3 = async function(tareas){
-  const modal = document.getElementById('wizardTareasModal');
-  const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
-  if (!tbody) return;
-
-  const obraId = Number(modal.getAttribute('data-obra-id'));
-  const {unidades, usuarios} = await ensureOpciones(obraId);
-
-  tbody.innerHTML = tareas.map((t, i) => `
-    <tr>
-      <td>${t.etapa_slug || ''}</td>
-      <td>${t.nombre || ''}</td>
-      <td><input type="date" class="form-control form-control-sm" name="rows[${i}][inicio]"></td>
-      <td><input type="date" class="form-control form-control-sm" name="rows[${i}][fin]"></td>
-      <td><input type="number" class="form-control form-control-sm" name="rows[${i}][horas]" value="8" min="0" step="0.5"></td>
-      <td><input type="number" class="form-control form-control-sm" name="rows[${i}][cantidad]" value="1" min="0" step="0.01"></td>
-      <td>
-        <select class="form-select form-select-sm unidad-select" name="rows[${i}][unidad]">
-          ${unidades.map(u => `<option value="${u}">${u}</option>`).join('')}
-        </select>
-      </td>
-      <td>
-        <select class="form-select form-select-sm asignado-select" name="rows[${i}][asignado]">
-          <option value="">(sin asignar)</option>
-          ${usuarios.map(u => `<option value="${u.id}">${u.nombre}</option>`).join('')}
-        </select>
-      </td>
-      <td>
-        <select class="form-select form-select-sm" name="rows[${i}][prioridad]">
-          <option value="media" selected>Media</option>
-          <option value="alta">Alta</option>
-          <option value="baja">Baja</option>
-        </select>
-      </td>
-    </tr>
-  `).join('');
-
-  enableNextStep3();
-  console.log('[WZ] Paso 3 renderizado con', tareas.length, 'filas');
-};
-
-// 🔥 PROGRESO VISUAL (BARRA Y "STEP ACTIVO") - MEJORADO
-function updateWizardProgress(n) {
-  // Si hay progress bar lineal
-  const bars = document.querySelectorAll('.progress .progress-bar');
-  bars.forEach(b => b.style.width = ({1: '25%', 2:'50%', 3:'75%', 4:'100%'}[n] || '0%'));
-
-  // Si hay navegación por pasos (tabs / pills)
-  document.querySelectorAll('[data-wizard-step]').forEach(el => {
-    el.classList.toggle('active', Number(el.getAttribute('data-wizard-step')) === n);
-  });
-  
-  // Agregar clase CSS al modal para highlighting si existe
-  const modal = document.getElementById('wizardTareasModal');
-  if (modal) {
-    modal.className = modal.className.replace(/\bwizard-step-\d+\b/g, '');
-    modal.classList.add(`wizard-step-${n}`);
-  }
-  
-  console.log(`[WZ] Progreso actualizado a paso ${n}`);
-}
-
-// 🔥 INTERCEPTOR PARA PASO 2 → PASO 3 
-(function connectPaso2Next(){
-  const modal = document.getElementById('wizardTareasModal');
-  const btn = document.getElementById('wizardBtnSiguiente');
-  if (!modal || !btn || btn.dataset.boundStep2) return;
-  btn.dataset.boundStep2 = '1';
-
-  btn.addEventListener('click', (ev) => {
-    const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none)');
-    if (!step2Visible) return;              // dejar fluir para otros pasos
-
-    const sel = window.getSelPaso2(modal);
-    console.log('[WZ] Paso 2 selección =', sel.length, sel);
-    if (!sel.length) return;                // no capturó nada → no avanzamos
-
-    ev.preventDefault();                    // detenemos el submit/navegación
-    window.WZ_STATE = window.WZ_STATE || {};
-    window.WZ_STATE.tareasSel = sel;
-
-    if (typeof window.gotoPaso === 'function') window.gotoPaso(3);
-    if (typeof window.renderPaso3 === 'function') window.renderPaso3(sel); // pinto filas con la selección
-    if (typeof updateWizardProgress === 'function') updateWizardProgress(3);
-  });
-})();
-
-// 🔥 BOTÓN ATRÁS ESPECÍFICO PARA PASO 3
-(function ensureBackBtnStep3(){
-  const modal = document.getElementById('wizardTareasModal');
-  const footer = modal?.querySelector('.modal-footer');
-  if (!modal || !footer) return;
-
-  let back = document.getElementById('wizardBtnAnteriorPaso3');
-  if (!back) {
-    back = document.createElement('button');
-    back.id = 'wizardBtnAnteriorPaso3';
-    back.type = 'button';
-    back.className = 'btn btn-outline-secondary me-auto';
-    back.textContent = 'Atrás';
-    footer.insertBefore(back, footer.firstChild);
-  }
-  if (!back.dataset.bound) {
-    back.dataset.bound = '1';
-    back.addEventListener('click', (e) => { e.preventDefault(); gotoPaso(2); });
-  }
-})();
-
-console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
-
-// 🔥 FUNCIONES SIMPLIFICADAS DEL WIZARD (MANTENIENDO SOLO LO ESENCIAL)
-(function () {
-  const m = document.getElementById('wizardTareasModal');
-  
-  // Función para obtener etapas seleccionadas (Paso 1)
-  const getSel = () => [...m.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')]
-                        .map(cb => cb.dataset.slug).filter(Boolean);
-  window.getEtapasSeleccionadas = getSel;
-
-  // Función de navegación principal
+  // 7) Función de navegación simplificada
   window.gotoPaso = function (n) {
     console.log(`🔥 WIZARD: Navegando a paso ${n}`);
-    
-    // Buscar por IDs wizardStep1, wizardStep2, etc.
-    const stepById = m.querySelector(`#wizardStep${n}`);
+    const stepById = modal.querySelector(`#wizardStep${n}`);
     if (stepById) {
-      // Ocultar todos los pasos y mostrar el seleccionado
-      [...m.querySelectorAll('[id^="wizardStep"]')].forEach(el => el.classList.add('d-none'));
+      [...modal.querySelectorAll('[id^="wizardStep"]')].forEach(el => el.classList.add('d-none'));
       stepById.classList.remove('d-none');
-      // Actualizar progreso visual
       if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
       return;
     }
-    
-    // Fallback genérico
-    const generic = [...m.querySelectorAll('.wizard-content')];
+    const generic = [...modal.querySelectorAll('.wizard-content')];
     if (generic.length) {
       generic.forEach((el,i)=> el.classList.toggle('d-none', i !== (n-1)));
       if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
     }
   };
 
-  // Función para aplicar catálogo y avanzar (Paso 1 → Paso 2)
+  // 8) Función para aplicar catálogo y avanzar (Paso 1 → Paso 2)
   window.applyCatalogAndAdvance = function () {
+    const getSel = () => [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].map(cb => cb.dataset.slug).filter(Boolean);
     const slugs = getSel();
     console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas:`, slugs);
     if (!slugs.length) return;
     
-    // Aplicar selección (mismo que el botón verde)
     document.getElementById('btnAgregarEtapasSel')?.click(); 
-    
-    // Navegar a paso 2 y cargar tareas
     window.gotoPaso(2);
     
-    // Obtener obra_id del modal
-    const obraId = m.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
+    const obraId = modal.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
     if (obraId && typeof window.loadTareasWizard === 'function') {
       window.loadTareasWizard(obraId, slugs);
     }
   };
 
+  // 9) Progreso visual
+  window.updateWizardProgress = function(n) {
+    // Si hay progress bar lineal
+    const bars = document.querySelectorAll('.progress .progress-bar');
+    bars.forEach(b => b.style.width = ({1: '25%', 2:'50%', 3:'75%', 4:'100%'}[n] || '0%'));
+
+    // Si hay navegación por pasos (tabs / pills)
+    document.querySelectorAll('[data-wizard-step]').forEach(el => {
+      el.classList.toggle('active', Number(el.getAttribute('data-wizard-step')) === n);
+    });
+    
+    // Agregar clase CSS al modal para highlighting si existe
+    if (modal) {
+      modal.className = modal.className.replace(/\bwizard-step-\d+\b/g, '');
+      modal.classList.add(`wizard-step-${n}`);
+    }
+    
+    console.log(`[WZ] Progreso actualizado a paso ${n}`);
+  };
+
+  // 10) Navegación del Paso 1
   function connectWizardNav() {
     const btnSig = document.getElementById('wizardBtnSiguiente');
     if (btnSig && !btnSig.dataset.bound) {
       btnSig.dataset.bound = '1';
       btnSig.type = 'button';
       btnSig.addEventListener('click', (ev) => {
+        const getSel = () => [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].map(cb => cb.dataset.slug).filter(Boolean);
         console.log(`🔥 WIZARD: Botón Siguiente clickeado`);
         if (getSel().length > 0) { 
           ev.preventDefault(); 
@@ -517,6 +496,9 @@ console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
       connectWizardNav();
     }
   });
+
+  // 11) Activar interceptores
+  connectPaso2Next();
 })();
 
 // 🔥 CARGAR TAREAS PARA EL PASO 2
@@ -527,12 +509,10 @@ window.loadTareasWizard = async function(obraId, slugs) {
   const list = m.querySelector('#wizardListaTareas') || m.querySelector('#wizardStep2');
   const spin = m.querySelector('#wizardSpinnerTareas');
   
-  // Mostrar spinner y limpiar contenido
   if (spin) spin.classList.remove('d-none');
   if (list) list.innerHTML = '';
   
   try {
-    // Llamar al API de tareas (ajustar según su implementación)
     const res = await fetch('/obras/api/wizard-tareas/tareas', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -545,10 +525,8 @@ window.loadTareasWizard = async function(obraId, slugs) {
     const json = await res.json();
     const tareas = json.tareas_catalogo || json.tareas || json.data || [];
     
-    // Ocultar spinner
     if (spin) spin.classList.add('d-none');
     
-    // Renderizar tareas con data-attrs completos
     if (list) {
       list.innerHTML = tareas.length
         ? `<div class="mb-3">
@@ -574,15 +552,11 @@ window.loadTareasWizard = async function(obraId, slugs) {
         : '<div class="text-muted text-center p-4">No hay tareas disponibles para las etapas seleccionadas.</div>';
     }
     
-    // Conectar navegación del Paso 2
-    setTimeout(() => connectPaso2Nav(), 100);
-    
+    setTimeout(() => window.connectPaso2Next?.(), 100);
     console.log(`✅ WIZARD: ${tareas.length} tareas cargadas exitosamente`);
     
   } catch (error) {
     console.error('❌ WIZARD: Error cargando tareas:', error);
-    
-    // Ocultar spinner y mostrar error
     if (spin) spin.classList.add('d-none');
     if (list) {
       list.innerHTML = `<div class="alert alert-warning">
@@ -595,3 +569,5 @@ window.loadTareasWizard = async function(obraId, slugs) {
     }
   }
 };
+
+console.log('✅ WIZARD: Bloque canónico cargado - Sistema completamente limpio');

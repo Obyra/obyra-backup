@@ -1,0 +1,148 @@
+A) Eliminar llamadas viejas y enganchar solo el nuevo flujo
+
+Buscar y eliminar cualquier llamada a connectPaso2Nav() (hay una alrededor de la línea que marca el error ~578).
+
+Reemplazar esas llamadas por connectPaso2Next().
+
+Asegurarse de no tener duplicados de listeners de navegación (deben quedar solo las funciones nuevas: getSelPaso2, connectPaso2Next, ensureOpciones, renderPaso3, enableNextStep3, ensureBackBtnStep3).
+
+B) Definir funciones globales limpias (pegarlas tal cual)
+
+Pegar este bloque (o actualizarlo) y asegurarse de que quede al final del archivo y que no haya otras versiones de estas funciones más arriba:
+
+(() => {
+  const modal = document.getElementById('wizardTareasModal');
+  if (!modal) return;
+
+  window.WZ_STATE = window.WZ_STATE || {};
+
+  // 1) Selección del Paso 2 (GLOBAL)
+  window.getSelPaso2 = function () {
+    const m = document.getElementById('wizardTareasModal');
+    return [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')].map((cb, i) => ({
+      id: cb.dataset.id || cb.value || String(i + 1),
+      nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || '').trim(),
+      etapa_slug: cb.dataset.etapa || ''
+    }));
+  };
+
+  // 2) Cargar opciones de Paso 3 (GLOBAL)
+  window.ensureOpciones = async function (obraId) {
+    if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
+    try {
+      const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, { credentials: 'include' });
+      const j = await r.json();
+      window.WZ_STATE.opciones = j.ok ? j : { ok: true, unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
+    } catch {
+      window.WZ_STATE.opciones = { ok: true, unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
+    }
+    return window.WZ_STATE.opciones;
+  };
+
+  // 3) Render Paso 3 (GLOBAL)
+  window.renderPaso3 = async function (tareas) {
+    const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+    const opts = await window.ensureOpciones(obraId);
+    const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
+    if (!tbody) return;
+
+    const unidadOpts = (opts.unidades || []).map(u => `<option value="${u}">${u}</option>`).join('');
+    const asignadoList = (opts.usuarios || []).length ? opts.usuarios : [{ id: '', nombre: '(sin asignar)' }];
+    const asignadoOpts = asignadoList.map(u => `<option value="${u.id||''}">${u.nombre||'(sin asignar)'}</option>`).join('');
+
+    tbody.innerHTML = (tareas || []).map((t, i) => `
+      <tr data-i="${i}">
+        <td>${t.etapa_slug||''}</td>
+        <td>${t.nombre||''}</td>
+        <td><input name="rows[${i}][inicio]"   class="form-control form-control-sm" type="date"></td>
+        <td><input name="rows[${i}][fin]"      class="form-control form-control-sm" type="date"></td>
+        <td><input name="rows[${i}][horas]"    class="form-control form-control-sm" type="number" min="0" step="0.5" value="8"></td>
+        <td><input name="rows[${i}][cantidad]" class="form-control form-control-sm" type="number" min="0" step="0.01" value="1"></td>
+        <td><select name="rows[${i}][unidad]"   class="form-select form-select-sm unidad-select">${unidadOpts}</select></td>
+        <td><select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">${asignadoOpts}</select></td>
+        <td>
+          <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
+            <option value="media" selected>Media</option>
+            <option value="alta">Alta</option>
+            <option value="baja">Baja</option>
+          </select>
+        </td>
+      </tr>
+    `).join('');
+
+    window.enableNextStep3();
+  };
+
+  // 4) Habilitar/Deshabilitar “Siguiente” en Paso 3 (GLOBAL)
+  window.enableNextStep3 = function () {
+    const btn = document.getElementById('wizardBtnSiguiente');
+    const rows = modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length;
+    const enabled = rows > 0;
+    if (btn) {
+      btn.disabled = !enabled;
+      btn.classList.toggle('disabled', !enabled);
+      btn.type = 'button';
+    }
+  };
+
+  // 5) Interceptor de “Siguiente” SOLO cuando Paso 2 está visible (GLOBAL)
+  function connectPaso2Next () {
+    const btn = document.getElementById('wizardBtnSiguiente');
+    if (!btn || btn.dataset.boundPaso2 === '1') return;
+    btn.dataset.boundPaso2 = '1';
+
+    btn.addEventListener('click', (ev) => {
+      const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none)');
+      if (!step2Visible) return;
+
+      const sel = window.getSelPaso2();
+      if (!sel.length) return; // no interrumpas si no hay selección
+
+      ev.preventDefault();
+      window.WZ_STATE = window.WZ_STATE || {};
+      window.WZ_STATE.tareasSel = sel;
+      if (typeof gotoPaso === 'function') gotoPaso(3);
+      window.renderPaso3(sel);
+    });
+  }
+  window.connectPaso2Next = connectPaso2Next;
+
+  // 6) Botón Atrás de Paso 3 (GLOBAL)
+  window.ensureBackBtnStep3 = function () {
+    const footer = modal.querySelector('.modal-footer') || modal;
+    let back = document.getElementById('wizardBtnAnteriorPaso3');
+    if (!back) {
+      back = document.createElement('button');
+      back.id = 'wizardBtnAnteriorPaso3';
+      back.type = 'button';
+      back.className = 'btn btn-outline-secondary me-auto';
+      back.textContent = 'Atrás';
+      footer.insertBefore(back, footer.firstChild);
+      back.addEventListener('click', (ev) => { ev.preventDefault(); if (typeof gotoPaso === 'function') gotoPaso(2); });
+    }
+  };
+
+  // 7) Activar interceptores
+  connectPaso2Next();
+})();
+
+
+IMPORTANTE: que no quede ninguna otra versión de estas funciones en el archivo (ni connectPaso2Nav, ni connectPaso2* viejas, ni otros “setup wizard” duplicados). Si hay inicializadores al cargar, que invoquen solo connectPaso2Next().
+
+C) Verificaciones rápidas (lo mismo que probaste)
+
+En Paso 2 (con 2 tareas tildadas):
+
+document.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked').length → 2
+
+typeof window.getSelPaso2 → "function"
+
+window.getSelPaso2().length → 2
+
+Click en Siguiente:
+
+window.WZ_STATE?.tareasSel?.length → 2
+
+document.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length → 2
+
+botón Siguiente en Paso 3 → habilitado.
