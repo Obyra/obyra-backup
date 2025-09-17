@@ -274,12 +274,14 @@ document.addEventListener('click', (ev) => {
 // 🔥 ESTADO GLOBAL DEL WIZARD
 window.WZ_STATE = window.WZ_STATE || { tareasSel: [] };
 
-// 🔥 OBTENER TAREAS SELECCIONADAS DEL PASO 2
-function getTareasSeleccionadasPaso2(modal) {
-  return [...modal.querySelectorAll('#wizardStep2 .tarea-checkbox:checked')].map((cb, idx) => {
-    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim() || cb.value || `Tarea ${idx+1}`;
+// 🔥 OBTENER TAREAS SELECCIONADAS DEL PASO 2 (SELECTOR ROBUSTO)
+function getTareasSeleccionadasPaso2(m) {
+  const marked = m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked');
+  return [...marked].map((cb, i) => {
+    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim()
+               || cb.value || `Tarea ${i+1}`;
     return {
-      id: cb.dataset.id || cb.value || `t${idx+1}`,
+      id: cb.dataset.id || cb.value || `t${i+1}`,
       nombre: cb.dataset.nombre || label.replace(/\n/g, ' ').trim(),
       etapa_slug: cb.dataset.etapa || ''
     };
@@ -293,15 +295,16 @@ function connectPaso2Nav() {
   
   if (!m || !btn) return;
   
+  // Habilitar/deshabilitar "Siguiente" basado en selecciones
   const update = () => {
-    const n = m.querySelectorAll('#wizardStep2 .tarea-checkbox:checked').length;
+    const n = m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked').length;
     btn.disabled = (n === 0);
     btn.classList.toggle('disabled', n === 0);
     console.log(`🔥 WIZARD Paso 2: ${n} tareas seleccionadas`);
   };
 
-  // Conectar event listeners a checkboxes
-  m.querySelectorAll('#wizardStep2 .tarea-checkbox').forEach(cb => {
+  // Conectar event listeners a checkboxes (selector robusto)
+  m.querySelectorAll('#wizardStep2 input[type="checkbox"]').forEach(cb => {
     if (!cb.dataset.bound) { 
       cb.dataset.bound = '1'; 
       cb.addEventListener('change', update); 
@@ -309,19 +312,22 @@ function connectPaso2Nav() {
   });
   update();
 
-  // Botón Siguiente del Paso 2 → Paso 3
-  btn.type = 'button';
-  btn.onclick = (ev) => {
-    const seleccion = getTareasSeleccionadasPaso2(m);
-    console.log(`🔥 WIZARD: Navegando a Paso 3 con ${seleccion.length} tareas:`, seleccion);
-    
-    if (seleccion.length === 0) return;
-    
-    ev.preventDefault();
-    window.WZ_STATE.tareasSel = seleccion;     // Guardar antes de navegar
-    window.gotoPaso(3);
-    renderPaso3(window.WZ_STATE.tareasSel);    // Pintar filas en Paso 3
-  };
+  // IMPORTANTE: bindear botón una sola vez para evitar duplicados
+  if (!btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.type = 'button';
+    btn.onclick = (ev) => {
+      const seleccion = getTareasSeleccionadasPaso2(m);
+      console.log('🔥 WIZARD Paso2→3 seleccion:', seleccion);   // Verificar largo acá
+      
+      if (!seleccion.length) return;
+      
+      ev.preventDefault();
+      window.WZ_STATE.tareasSel = seleccion;     // Guardar antes de navegar
+      window.gotoPaso(3);
+      renderPaso3(window.WZ_STATE.tareasSel);    // Pintar filas en Paso 3
+    };
+  }
 
   console.log('✅ WIZARD: Navegación Paso 2 conectada');
 }
@@ -376,23 +382,29 @@ function connectPaso3Nav(tareas) {
     btnSig.disabled = tareas.length === 0;
     btnSig.classList.toggle('disabled', tareas.length === 0);
     btnSig.type = 'button';
-    btnSig.onclick = (e) => { 
-      if (tareas.length) { 
-        e.preventDefault(); 
-        console.log('🔥 WIZARD: Navegando a Paso 4');
-        window.gotoPaso(4); 
-      } 
-    };
+    
+    // IMPORTANTE: bindear una sola vez para evitar duplicados
+    if (!btnSig.dataset.boundStep3) {
+      btnSig.dataset.boundStep3 = '1';
+      btnSig.onclick = (e) => { 
+        if (tareas.length) { 
+          e.preventDefault(); 
+          console.log('🔥 WIZARD: Navegando a Paso 4');
+          window.gotoPaso(4); 
+        } 
+      };
+    }
   }
 
   // Atrás Paso 3 → Paso 2
-  if (btnAnt) {
+  if (btnAnt && !btnAnt.dataset.boundStep3) {
+    btnAnt.dataset.boundStep3 = '1';
     btnAnt.style.display = 'inline-block';
     btnAnt.onclick = (e) => {
       e.preventDefault();
       console.log('🔥 WIZARD: Volviendo a Paso 2');
       window.gotoPaso(2);
-      // Reconectar navegación del Paso 2
+      // Reconectar navegación del Paso 2 (mantiene selecciones)
       setTimeout(() => connectPaso2Nav(), 100);
     };
   }
