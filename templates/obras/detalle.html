@@ -3671,15 +3671,35 @@ document.getElementById('wizardBtnSiguiente')?.addEventListener('click', (e)=>{
   if(window.wizardPasoActual === 1){ e.preventDefault(); applyCatalogAndAdvance(); }
 });
 
-// Habilitar "Siguiente" al abrir el modal y cargar catálogo
-document.getElementById('wizardTareasModal')?.addEventListener('shown.bs.modal', ()=>{
-  document.getElementById('wizardBtnSiguiente')?.removeAttribute('disabled');
-  
-  // Ocultar mensajes legacy
-  document.querySelectorAll('.wizard-legacy-note').forEach(el => el.remove());
-  
-  // 🔥 CARGAR CATÁLOGO DE ETAPAS
-  cargarCatalogoEtapas();
+// 🔥 Event listener DELEGADO para modal wizard (más confiable)
+document.addEventListener('shown.bs.modal', (e) => {
+  if (e.target && e.target.id === 'wizardTareasModal') {
+    console.debug('🔥 [WIZARD] Modal shown - iniciando carga de catálogo');
+    document.getElementById('wizardBtnSiguiente')?.removeAttribute('disabled');
+    
+    // Ocultar mensajes legacy
+    document.querySelectorAll('.wizard-legacy-note').forEach(el => el.remove());
+    
+    // 🔥 CARGAR CATÁLOGO DE ETAPAS
+    if (typeof window.cargarCatalogoEtapas === 'function') {
+      window.cargarCatalogoEtapas();
+    } else {
+      console.error('❌ [WIZARD] Función cargarCatalogoEtapas no disponible');
+    }
+  }
+});
+
+// 🔥 Backup: trigger también en click del botón wizard
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-bs-target="#wizardTareasModal"]');
+  if (btn) {
+    console.debug('🔥 [WIZARD] Botón wizard clickeado');
+    setTimeout(() => {
+      if (typeof window.cargarCatalogoEtapas === 'function') {
+        window.cargarCatalogoEtapas();
+      }
+    }, 100); // Small delay para que el modal se abra
+  }
 });
 
 // 🎯 Funciones legacy de mensajes removidas - errores vienen del JSON API
@@ -3826,8 +3846,8 @@ function ampliarFoto(imageSrc) {
     new bootstrap.Modal(document.getElementById('modalAmpliarFoto')).show();
 }
 
-// 🔥 Función para cargar catálogo de etapas en Paso 1
-async function cargarCatalogoEtapas() {
+// 🔥 Función para cargar catálogo de etapas en Paso 1 (GLOBAL)
+window.cargarCatalogoEtapas = async function cargarCatalogoEtapas() {
   console.log('🔥 WIZARD: Cargando catálogo de etapas...');
   
   const catalogoContainer = document.getElementById('catalogoEtapas');
@@ -3933,8 +3953,8 @@ async function cargarCatalogoEtapas() {
   }
 }
 
-// 🔥 Re-bind eventos del catálogo después de cargar
-function rebindCatalogEvents() {
+// 🔥 Re-bind eventos del catálogo después de cargar (GLOBAL)
+window.rebindCatalogEvents = function rebindCatalogEvents() {
   // Checkbox selection
   document.querySelectorAll('.etapa-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', updateSelectionCounter);
@@ -3957,8 +3977,8 @@ function rebindCatalogEvents() {
   });
 }
 
-// 🔥 Actualizar contador de selección
-function updateSelectionCounter() {
+// 🔥 Actualizar contador de selección (GLOBAL)
+window.updateSelectionCounter = function updateSelectionCounter() {
   const checkedBoxes = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)');
   const counter = document.getElementById('contadorSeleccionadas');
   if (counter) {
