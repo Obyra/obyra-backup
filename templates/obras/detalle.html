@@ -3007,6 +3007,12 @@ class WizardTareas {
     }
     
     async confirmarCreacion() {
+        // Disable button to prevent multiple clicks
+        const btnConfirmar = document.getElementById('wizardBtnConfirmar');
+        btnConfirmar.disabled = true;
+        
+        console.log('🧙‍♂️ WIZARD: Iniciando confirmación...');
+        
         // Build payload per user specification
         const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
         const tareas = [];
@@ -3049,22 +3055,44 @@ class WizardTareas {
             console.log('🧙‍♂️ WIZARD: Respuesta', result);
             
             if (result.ok) {
-                // Show success in step container
-                document.getElementById('wizardLoading').classList.add('d-none');
-                document.getElementById('wizardSuccess').classList.remove('d-none');
-                document.getElementById('successMessage').innerHTML = `
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle me-2"></i>
-                        <strong>¡Éxito!</strong> ${result.creadas.length} tareas creadas, ${result.duplicados.length} duplicadas
-                    </div>
-                `;
+                const creadas = result.creadas ? result.creadas.length : 0;
+                const duplicadas = result.duplicados ? result.duplicados.length : 0;
+                const total = creadas + duplicadas;
                 
-                // Close modal and refresh after delay
-                setTimeout(() => {
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
-                    modal.hide();
-                    window.location.reload();
-                }, 2000);
+                if (total > 0) {
+                    // Success: tareas were processed (created or duplicated)
+                    document.getElementById('wizardLoading').classList.add('d-none');
+                    
+                    // Show success directly in step 4
+                    document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
+                    document.getElementById('wizardStep4').classList.remove('d-none');
+                    
+                    let successContainer = document.getElementById('step4Success');
+                    if (!successContainer) {
+                        const stepDiv = document.getElementById('wizardStep4');
+                        successContainer = document.createElement('div');
+                        successContainer.id = 'step4Success';
+                        successContainer.className = 'mt-3';
+                        stepDiv.insertBefore(successContainer, stepDiv.firstChild);
+                    }
+                    
+                    successContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>¡Completado!</strong> ${creadas} tareas creadas, ${duplicadas} duplicadas
+                        </div>
+                    `;
+                    
+                    // Close modal and refresh after delay
+                    setTimeout(() => {
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
+                        modal.hide();
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    // No tasks processed - show error
+                    this.showStepError(4, "No se procesaron tareas");
+                }
             } else {
                 // Show error in step 4 container
                 this.showStepError(4, result.error);
@@ -3076,6 +3104,36 @@ class WizardTareas {
             this.showStepError(4, `Error de conexión: ${error.message}`);
             this.goToStep(4);
         }
+    }
+
+    showStepError(step, message) {
+        // Hide loading
+        document.getElementById('wizardLoading').classList.add('d-none');
+        
+        // Show step content  
+        document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
+        document.getElementById(`wizardStep${step}`).classList.remove('d-none');
+        
+        // Show error in step container
+        let errorContainer = document.getElementById(`step${step}Error`);
+        if (!errorContainer) {
+            // Create error container if doesn't exist
+            const stepDiv = document.getElementById(`wizardStep${step}`);
+            errorContainer = document.createElement('div');
+            errorContainer.id = `step${step}Error`;
+            errorContainer.className = 'mt-3';
+            stepDiv.insertBefore(errorContainer, stepDiv.firstChild);
+        }
+        
+        errorContainer.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Error:</strong> ${message}
+            </div>
+        `;
+        
+        // Re-enable button
+        document.getElementById('wizardBtnConfirmar').disabled = false;
     }
     
     resetWizard() {

@@ -1,0 +1,68 @@
+Paso 4 no confirma (Crear Tareas no finaliza)
+
+Síntoma
+En el wizard (obra 18), llego a 4. Confirmar y al hacer clic en “Crear Tareas” no pasa nada: no hay toast, no se cierra el modal y no se ve recarga de tareas.
+
+Qué revisar y corregir (end-to-end):
+
+Click handler (frontend)
+
+Verificar que el botón “Crear Tareas” dispare la función (log rápido en consola) y deshabilite el botón mientras hace la petición.
+
+Asegurar que está usando window.WIZARD.tareas_seleccionadas para el payload (solo lo tildado en Paso 2).
+
+Petición de red
+
+Confirmar que se envía POST a /obras/api/wizard-tareas/create.
+
+Payload esperado (uno por tarea):
+{ etapa_id, nombre, fecha_inicio, fecha_fin, horas_estimadas, cantidad, unidad, asignado_id, prioridad }
+y a nivel general { obra_id, tareas:[…] }.
+
+Si la request no se dispara, es un problema de binding/validación previa.
+
+Si se dispara, capturar la respuesta.
+
+Respuesta del API (siempre JSON)
+
+Content-Type debe ser application/json (sin HTML ni redirecciones).
+
+Esquema esperado:
+
+OK → { ok:true, creadas:[{id,…}], duplicadas:[{id/nombre,…}], error:null } (200/201)
+
+Error → { ok:false, error:"mensaje" } (400/422/500)
+
+Revisar que el endpoint no devuelva 302 a login ni páginas HTML.
+
+Post-éxito (frontend)
+
+Mostrar toast: "Tareas creadas: N (duplicadas: M)".
+
+Cerrar el wizard y recargar el panel de “Etapas del Proyecto” desde BD.
+
+Rehabilitar el botón (por si el usuario quiere repetir).
+
+Post-error (frontend)
+
+Mostrar el mensaje real en el contenedor del paso (#wizardPaso4Warning), no alert() ni “undefined”.
+
+Rehabilitar el botón.
+
+Posibles causas concretas a chequear
+
+Falta de prefijo en ruta (asegurar /obras/api/…).
+
+Validación de unidad (ahora solo m2, m3, ml, un; no “Horas”).
+
+Permisos: @login_required debe responder 401 JSON, no redirigir.
+
+Duplicados: aunque todas resulten “duplicadas”, igual debe devolver JSON y cerrar correctamente.
+
+Criterios de aceptación
+
+En Network, se ve POST /obras/api/wizard-tareas/create con el payload correcto y 200/201 JSON.
+
+Se cierra el wizard, aparece toast y la lista de tareas de la etapa se refresca mostrando solo lo creado.
+
+En error, se ve el texto en #wizardPaso4Warning (sin pop-ups).
