@@ -1,0 +1,134 @@
+Objetivo: Al tildar/destildar etapas del catálogo en el Paso 1, se deben crear/recuperar las etapas, guardar los IDs reales en window.WIZARD.etapa_ids y avanzar automáticamente al Paso 2.
+El botón verde queda opcional. El botón Siguiente hace lo mismo. Mostrar errores reales en #wizardPaso1Warning. Deshabilitar controles solo durante la request.
+
+1) Asegurar HTML esperado (Paso 1)
+
+Los checkboxes del catálogo deben tener clase .etp (o .catalog-checkbox) y ID del catálogo en data-catalog-id (o en value):
+
+<input type="checkbox" class="etp" data-catalog-id="{{ e.id }}">
+
+
+Contenedor para errores:
+
+<div id="wizardPaso1Warning" class="text-danger small mt-2"></div>
+
+2) JS: reemplazar handlers por delegación (los checkboxes se renderizan dinámicos)
+
+Nota: usar el prefijo real de blueprint en PREF (ej: /obras).
+
+const PREF = '/obras';
+window.obraId = window.obraId ?? +location.pathname.split('/').pop();
+
+// ---------- helpers ----------
+async function fetchJSON(url, opts){
+  const r = await fetch(url, opts);
+  const txt = await r.text();
+  const ct  = r.headers.get('content-type') || '';
+  if(!r.ok) throw new Error(`HTTP ${r.status}: ${txt.slice(0,300)}`);
+  if(!ct.includes('application/json')) throw new Error(`No JSON (${ct}): ${txt.slice(0,300)}`);
+  return JSON.parse(txt);
+}
+function showWarn(msg){ const n=document.getElementById('wizardPaso1Warning'); n? n.textContent=msg: alert(msg); }
+function clearWarn(){ const n=document.getElementById('wizardPaso1Warning'); if(n) n.textContent=''; }
+function setPaso1Disabled(disabled){
+  document.getElementById('wizardBtnSiguiente')?.toggleAttribute('disabled', disabled);
+  document.getElementById('btnAgregarEtapasSel')?.toggleAttribute('disabled', disabled);
+  document.querySelectorAll('.etp,.catalog-checkbox').forEach(el => el.toggleAttribute('disabled', disabled));
+  if(disabled) clearWarn();
+}
+function sameArray(a,b){ if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length) return false;
+  return [...a].sort().join(',') === [...b].sort().join(','); }
+
+// ---------- core ----------
+let paso1Busy=false, debounceTimer=null;
+
+function getCatalogoIds(){
+  return [...document.querySelectorAll('.etp:checked, .catalog-checkbox:checked')]
+    .map(el => Number(el.dataset.catalogId || el.value)).filter(Boolean);
+}
+
+async function applyCatalogAndAdvance(){
+  if(paso1Busy) return;
+  const selected = getCatalogoIds();
+  if(!selected.length){ showWarn('Seleccioná al menos una etapa del catálogo.'); return; }
+
+  try{
+    paso1Busy = true; setPaso1Disabled(true);
+
+    window.WIZARD = window.WIZARD || {};
+    if(!sameArray(window.WIZARD._last_catalog_ids, selected)){
+      const bulk = await fetchJSON(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ catalogo_ids: selected })
+      });
+      if(bulk.ok === false) throw new Error(bulk.error || 'Error en bulk_from_catalog');
+
+      const etapaIds = [...(bulk.creadas||[]), ...(bulk.existentes||[])]
+        .map(e => Number(e.id)).filter(Boolean);
+      if(!etapaIds.length) throw new Error('El servidor no devolvió IDs de etapas');
+
+      window.WIZARD.etapa_ids = etapaIds;
+      window.WIZARD._last_catalog_ids = selected.slice();
+    }
+
+    const body = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
+    window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+
+    gotoPaso(2); // función existente del wizard
+  }catch(e){
+    console.error('Wizard Paso1:', e);
+    showWarn(`Error: ${e.message}`);
+  }finally{
+    paso1Busy=false; setPaso1Disabled(false);
+  }
+}
+
+// ---------- bindings ----------
+// (A) Delegación: escucha cambios en todo el contenedor del Paso 1
+document.getElementById('wizardPaso1Container')?.addEventListener('change', (ev)=>{
+  if(!ev.target.matches('.etp, .catalog-checkbox')) return;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(applyCatalogAndAdvance, 300); // auto-avance
+});
+
+// (B) Botón verde ahora es opcional (hace lo mismo)
+document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', (e)=>{
+  e.preventDefault(); applyCatalogAndAdvance();
+});
+
+// (C) “Siguiente” en Paso 1 también aplica + avanza
+document.getElementById('wizardBtnSiguiente')?.addEventListener('click', (e)=>{
+  if(window.wizardPasoActual === 1){ e.preventDefault(); applyCatalogAndAdvance(); }
+});
+
+// (D) Cuando se muestra el modal por primera vez, habilitar “Siguiente”
+document.getElementById('wizardModal')?.addEventListener('shown.bs.modal', ()=>{
+  document.getElementById('wizardBtnSiguiente')?.removeAttribute('disabled');
+});
+
+
+Asegurarse de que el contenedor del grid del catálogo tenga el id wizardPaso1Container y el modal tenga id wizardModal.
+
+3) Backend (solo validar)
+
+POST /obras/api/obras/<obra_id>/etapas/bulk_from_catalog → idempotente, responde:
+
+Éxito: {"ok": true, "creadas":[...], "existentes":[...], "error": null}
+
+Error: {"ok": false, "error": "<mensaje>"} (status 400)
+
+POST /obras/api/wizard-tareas/preview recibe {obra_id, etapa_ids} y devuelve JSON válido.
+
+4) Aceptación
+
+Tildar 1–2 etapas → avanza solo a Paso 2 (sin botón verde).
+
+“Siguiente” en Paso 1 hace lo mismo si no avanzó.
+
+Errores visibles en #wizardPaso1Warning (nunca “undefined”).
+
+Controles solo deshabilitados durante la request.
+
+window.WIZARD.etapa_ids contiene IDs numéricos de etapas de la obra.
