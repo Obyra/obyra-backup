@@ -271,6 +271,133 @@ document.addEventListener('click', (ev) => {
   }
 });
 
+// 🔥 ESTADO GLOBAL DEL WIZARD
+window.WZ_STATE = window.WZ_STATE || { tareasSel: [] };
+
+// 🔥 OBTENER TAREAS SELECCIONADAS DEL PASO 2
+function getTareasSeleccionadasPaso2(modal) {
+  return [...modal.querySelectorAll('#wizardStep2 .tarea-checkbox:checked')].map((cb, idx) => {
+    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim() || cb.value || `Tarea ${idx+1}`;
+    return {
+      id: cb.dataset.id || cb.value || `t${idx+1}`,
+      nombre: cb.dataset.nombre || label.replace(/\n/g, ' ').trim(),
+      etapa_slug: cb.dataset.etapa || ''
+    };
+  });
+}
+
+// 🔥 CONECTAR NAVEGACIÓN DEL PASO 2
+function connectPaso2Nav() {
+  const m   = document.getElementById('wizardTareasModal');
+  const btn = document.getElementById('wizardBtnSiguiente');
+  
+  if (!m || !btn) return;
+  
+  const update = () => {
+    const n = m.querySelectorAll('#wizardStep2 .tarea-checkbox:checked').length;
+    btn.disabled = (n === 0);
+    btn.classList.toggle('disabled', n === 0);
+    console.log(`🔥 WIZARD Paso 2: ${n} tareas seleccionadas`);
+  };
+
+  // Conectar event listeners a checkboxes
+  m.querySelectorAll('#wizardStep2 .tarea-checkbox').forEach(cb => {
+    if (!cb.dataset.bound) { 
+      cb.dataset.bound = '1'; 
+      cb.addEventListener('change', update); 
+    }
+  });
+  update();
+
+  // Botón Siguiente del Paso 2 → Paso 3
+  btn.type = 'button';
+  btn.onclick = (ev) => {
+    const seleccion = getTareasSeleccionadasPaso2(m);
+    console.log(`🔥 WIZARD: Navegando a Paso 3 con ${seleccion.length} tareas:`, seleccion);
+    
+    if (seleccion.length === 0) return;
+    
+    ev.preventDefault();
+    window.WZ_STATE.tareasSel = seleccion;     // Guardar antes de navegar
+    window.gotoPaso(3);
+    renderPaso3(window.WZ_STATE.tareasSel);    // Pintar filas en Paso 3
+  };
+
+  console.log('✅ WIZARD: Navegación Paso 2 conectada');
+}
+
+// 🔥 RENDERIZAR PASO 3 CON TABLA DE DATOS
+function renderPaso3(tareas) {
+  console.log(`🔥 WIZARD: Renderizando Paso 3 con ${tareas.length} tareas`);
+  
+  const m     = document.getElementById('wizardTareasModal');
+  const paso3 = m.querySelector('#wizardStep3,[data-paso="3"]');
+  const table = paso3?.querySelector('table');
+  const tbody = table?.querySelector('tbody');
+
+  if (!tbody) {
+    console.warn('⚠️ WIZARD: No se encontró tbody en Paso 3');
+    return;
+  }
+
+  tbody.innerHTML = tareas.map((t, i) => `
+    <tr data-id="${t.id}">
+      <td>${t.etapa_slug || '-'}</td>
+      <td>${t.nombre}</td>
+      <td><input type="date"    class="form-control form-control-sm" name="rows[${i}][inicio]"></td>
+      <td><input type="date"    class="form-control form-control-sm" name="rows[${i}][fin]"></td>
+      <td><input type="number"  step="0.5" min="0" class="form-control form-control-sm" name="rows[${i}][horas]" placeholder="8"></td>
+      <td><input type="number"  step="0.01" min="0" class="form-control form-control-sm" name="rows[${i}][cantidad]" placeholder="1"></td>
+      <td><input type="text"    class="form-control form-control-sm" name="rows[${i}][unidad]" placeholder="m²"></td>
+      <td><input type="text"    class="form-control form-control-sm" name="rows[${i}][asignado]" placeholder="Asignado a"></td>
+      <td>
+        <select class="form-select form-select-sm" name="rows[${i}][prioridad]">
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+          <option value="baja">Baja</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
+
+  // Conectar navegación del Paso 3
+  connectPaso3Nav(tareas);
+  
+  console.log(`✅ WIZARD: Paso 3 renderizado con ${tareas.length} filas`);
+}
+
+// 🔥 CONECTAR NAVEGACIÓN DEL PASO 3
+function connectPaso3Nav(tareas) {
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  const btnAnt = document.getElementById('wizardBtnAnterior');
+  
+  // Siguiente habilitado solo si hay filas; al click → Paso 4
+  if (btnSig) {
+    btnSig.disabled = tareas.length === 0;
+    btnSig.classList.toggle('disabled', tareas.length === 0);
+    btnSig.type = 'button';
+    btnSig.onclick = (e) => { 
+      if (tareas.length) { 
+        e.preventDefault(); 
+        console.log('🔥 WIZARD: Navegando a Paso 4');
+        window.gotoPaso(4); 
+      } 
+    };
+  }
+
+  // Atrás Paso 3 → Paso 2
+  if (btnAnt) {
+    btnAnt.style.display = 'inline-block';
+    btnAnt.onclick = (e) => {
+      e.preventDefault();
+      console.log('🔥 WIZARD: Volviendo a Paso 2');
+      window.gotoPaso(2);
+      // Reconectar navegación del Paso 2
+      setTimeout(() => connectPaso2Nav(), 100);
+    };
+  }
+}
+
 console.log('✅ WIZARD: Archivo wizard.js completamente cargado');
 
 // 🔥 LÓGICA DE NAVEGACIÓN DEL WIZARD (después de Bootstrap)
@@ -388,7 +515,7 @@ window.loadTareasWizard = async function(obraId, slugs) {
     // Ocultar spinner
     if (spin) spin.classList.add('d-none');
     
-    // Renderizar tareas
+    // Renderizar tareas con data-attrs completos
     if (list) {
       list.innerHTML = tareas.length
         ? `<div class="mb-3">
@@ -398,7 +525,9 @@ window.loadTareasWizard = async function(obraId, slugs) {
                  <div class="col-md-6 mb-2">
                    <div class="form-check">
                      <input class="form-check-input tarea-checkbox" type="checkbox" 
-                            data-id="${t.id}" data-slug="${t.slug || t.nombre}" 
+                            data-id="${t.id}" 
+                            data-nombre="${t.nombre}"
+                            data-etapa="${t.etapa_slug}"
                             id="tarea-${t.id}">
                      <label class="form-check-label" for="tarea-${t.id}">
                        <strong>${t.nombre}</strong>
@@ -411,6 +540,9 @@ window.loadTareasWizard = async function(obraId, slugs) {
            </div>`
         : '<div class="text-muted text-center p-4">No hay tareas disponibles para las etapas seleccionadas.</div>';
     }
+    
+    // Conectar navegación del Paso 2
+    setTimeout(() => connectPaso2Nav(), 100);
     
     console.log(`✅ WIZARD: ${tareas.length} tareas cargadas exitosamente`);
     

@@ -1,0 +1,140 @@
+Hola! Paso 1 y 2 ya funcionan. En Paso 2 marco tareas y “Siguiente” navega a Paso 3, pero Paso 3 queda vacío porque no se está llevando la selección. En consola veo Paso 3: filas pintadas = 0.
+
+Lo que hay que hacer
+
+Agregar datos a los checkboxes del Paso 2 (cuando renders tareas_catalogo):
+
+Clase común y data-attrs para leer fácil luego.
+
+<div class="form-check">
+  <input
+    type="checkbox"
+    class="form-check-input tarea-checkbox"
+    data-id="{{t.id}}"
+    data-nombre="{{t.nombre}}"
+    data-etapa="{{t.etapa_slug}}">
+  <label class="form-check-label">{{ t.nombre }}</label>
+</div>
+
+
+Guardar selección en un estado global antes de navegar (no leer el DOM de Paso 2 una vez que ya cambió de paso). En wizard.js:
+
+// estado global simple del wizard
+window.WZ_STATE = window.WZ_STATE || { tareasSel: [] };
+
+function getTareasSeleccionadasPaso2(modal) {
+  return [...modal.querySelectorAll('#wizardPaso2 .tarea-checkbox:checked')].map((cb, idx) => {
+    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim() || cb.value || `Tarea ${idx+1}`;
+    return {
+      id: cb.dataset.id || cb.value || `t${idx+1}`,
+      nombre: cb.dataset.nombre || label,
+      etapa_slug: cb.dataset.etapa || ''
+    };
+  });
+}
+
+// Al final de loadTareasWizard(), cuando conectás el botón Siguiente del Paso 2:
+function connectPaso2Nav() {
+  const m   = document.getElementById('wizardTareasModal');
+  const btn = document.getElementById('wizardBtnSiguiente');
+
+  const update = () => {
+    const n = m.querySelectorAll('#wizardPaso2 .tarea-checkbox:checked').length;
+    btn.disabled = (n === 0);
+    btn.classList.toggle('disabled', n === 0);
+  };
+
+  m.querySelectorAll('#wizardPaso2 .tarea-checkbox').forEach(cb => {
+    if (!cb.dataset.bound) { cb.dataset.bound = '1'; cb.addEventListener('change', update); }
+  });
+  update();
+
+  btn.type = 'button';
+  btn.onclick = (ev) => {
+    const seleccion = getTareasSeleccionadasPaso2(m);
+    if (seleccion.length === 0) return;
+    ev.preventDefault();
+    WZ_STATE.tareasSel = seleccion;     // << guardar antes de navegar
+    gotoPaso(3);
+    renderPaso3(WZ_STATE.tareasSel);    // << pintar filas en Paso 3
+  };
+
+  // botón Atrás Paso 2 → Paso 1
+  document.getElementById('wizardBtnAnteriorPaso2')?.addEventListener('click', e => {
+    e.preventDefault();
+    gotoPaso(1);
+  });
+}
+
+
+Render de Paso 3 (tabla con filas e inputs) y navegación:
+
+function renderPaso3(tareas) {
+  const m     = document.getElementById('wizardTareasModal');
+  const paso3 = m.querySelector('#wizardPaso3,[data-paso="3"]');
+  const table = paso3.querySelector('table');
+  const tbody = table.querySelector('tbody');
+
+  tbody.innerHTML = tareas.map((t, i) => `
+    <tr data-id="${t.id}">
+      <td>${t.etapa_slug || '-'}</td>
+      <td>${t.nombre}</td>
+      <td><input type="date"    class="form-control form-control-sm" name="rows[${i}][inicio]"></td>
+      <td><input type="date"    class="form-control form-control-sm" name="rows[${i}][fin]"></td>
+      <td><input type="number"  step="0.5" min="0" class="form-control form-control-sm" name="rows[${i}][horas]"></td>
+      <td><input type="number"  step="0.01" min="0" class="form-control form-control-sm" name="rows[${i}][cantidad]"></td>
+      <td><input type="text"    class="form-control form-control-sm" name="rows[${i}][unidad]"></td>
+      <td><input type="text"    class="form-control form-control-sm" name="rows[${i}][asignado]"></td>
+      <td>
+        <select class="form-select form-select-sm" name="rows[${i}][prioridad]">
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+          <option value="baja">Baja</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
+
+  // Siguiente habilitado sólo si hay filas; al click → Paso 4
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  btnSig.disabled = tareas.length === 0;
+  btnSig.classList.toggle('disabled', tareas.length === 0);
+  btnSig.type = 'button';
+  btnSig.onclick = (e) => { if (tareas.length) { e.preventDefault(); gotoPaso(4); } };
+
+  // Atrás Paso 3 → Paso 2
+  document.getElementById('wizardBtnAnteriorPaso3')?.addEventListener('click', e => {
+    e.preventDefault(); gotoPaso(2);
+  });
+}
+
+
+Template: asegurar que existen los contenedores del Paso 3:
+
+<div id="wizardPaso3" data-paso="3">
+  <table class="table table-sm">
+    <thead>
+      <tr><th>Etapa</th><th>Tarea</th><th>Inicio</th><th>Fin</th><th>Horas Est.</th><th>Cantidad</th><th>Unidad</th><th>Asignado a</th><th>Prioridad</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+
+y los botones del footer:
+
+<button id="wizardBtnAnteriorPaso2"  type="button" class="btn btn-outline-secondary">Atrás</button>
+<button id="wizardBtnAnteriorPaso3"  type="button" class="btn btn-outline-secondary">Atrás</button>
+<button id="wizardBtnSiguiente"      type="button" class="btn btn-primary">Siguiente</button>
+
+Criterios de aceptación
+
+Marco tareas en Paso 2 → Siguiente guarda la selección y Paso 3 muestra una fila por tarea con inputs.
+
+Atrás desde Paso 3 vuelve a Paso 2 manteniendo lo marcado.
+
+Siguiente desde Paso 3 avanza a Paso 4.
+
+Nota: No intentes leer #wizardPaso2 después de gotoPaso(3). Capturá la selección antes y guardala en WZ_STATE.tareasSel; luego usá esa lista para pintar Paso 3.
+
+Gracias! Con esto debería completarse el flujo.
