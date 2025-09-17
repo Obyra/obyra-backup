@@ -23,11 +23,35 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+# configure the database with fallback to SQLite
+database_url = os.environ.get("DATABASE_URL")
+
+# 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
+if not database_url:
+    database_url = "sqlite:///tmp/dev.db"
+    print("⚠️  DATABASE_URL no disponible, usando SQLite fallback")
+else:
+    # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
+    if "neon.tech" in database_url and "sslmode=" not in database_url:
+        if "?" in database_url:
+            database_url += "&sslmode=require"
+        else:
+            database_url += "?sslmode=require"
+        print("🔒 SSL requerido agregado para Neon")
+
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,
-    "pool_pre_ping": True,
+    "pool_recycle": 300,           # Reconexión cada 5 min
+    "pool_pre_ping": True,         # Test conexión antes de usar
+    "connect_args": {
+        "connect_timeout": 10,      # Timeout corto para conexión
+        "keepalives_idle": 600,     # Keep alive idle time
+        "keepalives_interval": 30,  # Keep alive interval
+        "keepalives_count": 3,      # Keep alive retry count
+    } if database_url.startswith('postgresql') else {},
+    "pool_timeout": 30,            # Timeout para obtener conexión del pool
+    "max_overflow": 0,             # No overflow connections
+    "pool_size": 5,                # Tamaño del pool
 }
 
 # initialize extensions
@@ -246,8 +270,33 @@ with app.app_context():
     from migrations_runtime import ensure_avance_audit_columns
     ensure_avance_audit_columns()
 
-    # Create all tables
-    db.create_all()
+    # 🔥 Intento crear tablas con fallback automático a SQLite
+    try:
+        print(f"📊 Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
+        db.create_all()
+        print("✅ Base de datos conectada exitosamente")
+    except Exception as e:
+        print(f"❌ Error conectando a base de datos principal: {str(e)}")
+        if "neon.tech" in app.config['SQLALCHEMY_DATABASE_URI']:
+            print("🔄 Fallback automático a SQLite...")
+            # Cambiar a SQLite y reiniciar SQLAlchemy
+            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tmp/dev.db"
+            # Simplificar engine options para SQLite
+            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+                "pool_recycle": 300,
+                "pool_pre_ping": True,
+            }
+            
+            # Reiniciar la conexión con la nueva configuración
+            db.init_app(app)
+            try:
+                db.create_all()
+                print("✅ SQLite fallback conectado exitosamente")
+            except Exception as sqlite_error:
+                print(f"❌ Error crítico con SQLite fallback: {str(sqlite_error)}")
+                raise sqlite_error
+        else:
+            raise e
     
     # Initialize RBAC permissions
     try:
