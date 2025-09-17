@@ -58,75 +58,82 @@ async function cargarCatalogoEtapas() {
     }
     
     console.log(`📡 WIZARD: Llamando API para obra ${obraId}`);
-    const response = await fetchJSON(`${PREF}/api/wizard-tareas/etapas?obra_id=${obraId}`);
     
-    if (!response.ok) {
-      throw new Error(response.error || 'Error cargando catálogo');
+    // 🔥 Normalizar la respuesta del API
+    const res = await fetch(`${PREF}/api/wizard-tareas/etapas?obra_id=${obraId}`, { 
+      credentials: 'include' 
+    });
+    const json = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(json.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     
-    const { etapas_catalogo, etapas_creadas } = response;
-    console.log('📦 WIZARD: Catálogo recibido:', { etapas_catalogo: etapas_catalogo?.length, etapas_creadas: etapas_creadas?.length });
-    console.log('🔍 WIZARD: Etapas creadas:', etapas_creadas);
+    // 🔥 Usar las claves correctas
+    const catalogo = Array.isArray(json) ? json : (json.etapas_catalogo || []);
+    const creadas = new Set((json.etapas_creadas || []).map(e => e.slug || e.id));
     
-    // Construir HTML del catálogo
-    let catalogoHTML = '';
-    if (etapas_catalogo && etapas_catalogo.length > 0) {
-      etapas_catalogo.forEach(etapa => {
-        const yaCreada = etapas_creadas.some(creada => creada.slug === etapa.slug);
-        console.log(`🔍 WIZARD: Etapa ${etapa.slug} - yaCreada: ${yaCreada}`);
+    console.log('📦 WIZARD: Catálogo recibido:', { catalogo: catalogo.length, creadas: creadas.size });
+    console.log('🔍 WIZARD: Etapas creadas:', Array.from(creadas));
+    
+    // 🔥 Render de cards - no marcar por defecto, solo checked disabled si ya está creada
+    if (catalogo.length > 0) {
+      const html = catalogo.map(e => {
+        const ya = creadas.has(e.slug || e.id);
+        console.log(`🔍 WIZARD: Etapa ${e.slug} - ya creada: ${ya}`);
         
-        const cardClass = yaCreada ? 'border-success bg-light-success' : 'border-light';
-        const iconClass = yaCreada ? 'text-success fas fa-check-circle' : 'text-primary fas fa-hammer';
-        const badgeClass = yaCreada ? 'badge bg-success' : 'badge bg-primary';
-        const statusText = yaCreada ? 'Ya agregada' : 'Disponible';
+        const cardClass = ya ? 'border-success bg-light-success' : 'border-light';
+        const iconClass = ya ? 'text-success fas fa-check-circle' : 'text-primary fas fa-hammer';
+        const badgeClass = ya ? 'badge bg-success' : 'badge bg-primary';
+        const statusText = ya ? 'Ya agregada' : 'Disponible';
         
-        catalogoHTML += `
+        return `
           <div class="col-md-6 col-lg-4 mb-3">
             <div class="card ${cardClass} h-100 etapa-catalog-card" 
-                 data-slug="${etapa.slug}" 
-                 data-nombre="${etapa.nombre}"
-                 data-ya-creada="${yaCreada}">
+                 data-etapa-nombre="${e.nombre}"
+                 data-slug="${e.slug || ''}"
+                 data-ya-creada="${ya}">
               <div class="card-body">
                 <div class="d-flex align-items-start">
                   <div class="me-3">
                     <i class="${iconClass}" style="font-size: 1.5rem;"></i>
                   </div>
                   <div class="flex-grow-1">
-                    <h6 class="card-title mb-2">${etapa.nombre}</h6>
-                    <p class="card-text text-muted small">${etapa.descripcion || 'Etapa de construcción'}</p>
+                    <div class="form-check">
+                      <input type="checkbox" class="form-check-input etapa-checkbox"
+                             data-slug="${e.slug || ''}" ${ya ? 'checked disabled' : ''}>
+                      <label class="form-check-label">
+                        <h6 class="card-title mb-1">${e.nombre}</h6>
+                      </label>
+                    </div>
+                    <div class="text-muted small">${e.descripcion || 'Etapa de construcción'}</div>
                     <div class="mt-2">
                       <span class="${badgeClass}">${statusText}</span>
-                      ${etapa.duracion_estimada ? `<span class="badge bg-light text-dark ms-1">${etapa.duracion_estimada} días</span>` : ''}
+                      ${e.duracion_estimada ? `<span class="badge bg-light text-dark ms-1">${e.duracion_estimada} días</span>` : ''}
                     </div>
-                  </div>
-                  <div class="ms-2">
-                    <input type="checkbox" 
-                           class="form-check-input etapa-checkbox" 
-                           data-slug="${etapa.slug}"
-                           ${yaCreada ? 'checked disabled' : ''}
-                           ${!yaCreada ? '' : ''}>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         `;
-      });
+      }).join('');
+      
+      catalogoContainer.innerHTML = html;
     } else {
-      catalogoHTML = `
+      catalogoContainer.innerHTML = `
         <div class="col-12 text-center py-4">
           <p class="text-muted">No hay etapas disponibles en el catálogo.</p>
         </div>
       `;
     }
     
-    // Actualizar contenido
-    catalogoContainer.innerHTML = catalogoHTML;
-    
     // Rebind eventos de checkbox
-    rebindCatalogEvents();
+    if (typeof rebindCatalogEvents === 'function') {
+      rebindCatalogEvents();
+    }
     
-    // 🔥 Inicializar contador después de cargar catálogo
+    // 🔥 Recalcular al terminar de pintar
     updateSelectionCounter();
     
     console.log('✅ WIZARD: Catálogo cargado correctamente');
@@ -172,24 +179,63 @@ function rebindCatalogEvents() {
   console.log('✅ WIZARD: Eventos del catálogo vinculados');
 }
 
-// 🔥 Actualizar contador de selección
+// 🔥 Habilitar "Siguiente" cuando haya selección (no deshabilitada)
 function updateSelectionCounter() {
-  const checkedBoxes = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)');
-  console.log(`📊 WIZARD: Contador actualizado - ${checkedBoxes.length} etapas seleccionadas`);
+  const count = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+  console.log(`📊 WIZARD: Contador actualizado - ${count} etapas seleccionadas`);
   
+  // Actualizar contador
   const counter = document.getElementById('contadorSeleccionadas');
   if (counter) {
-    counter.textContent = checkedBoxes.length;
+    counter.textContent = count;
   }
   
-  // Enable/disable "Siguiente" button
-  const siguienteBtn = document.getElementById('wizardBtnSiguiente');
-  if (siguienteBtn) {
-    siguienteBtn.disabled = checkedBoxes.length === 0;
-    siguienteBtn.classList.toggle('btn-primary', checkedBoxes.length > 0);
-    siguienteBtn.classList.toggle('btn-secondary', checkedBoxes.length === 0);
+  // Habilitar/deshabilitar botón "Siguiente"
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  if (btnSig) {
+    btnSig.disabled = (count === 0);
+    btnSig.classList.toggle('btn-primary', count > 0);
+    btnSig.classList.toggle('btn-secondary', count === 0);
   }
 }
+
+// 🔥 Agregar funciones globales para botones existentes
+window.seleccionarTodasLasEtapas = function() {
+  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = true);
+  updateSelectionCounter();
+  console.log('✅ WIZARD: Todas las etapas seleccionadas');
+};
+
+window.deseleccionarTodasLasEtapas = function() {
+  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = false);
+  updateSelectionCounter();
+  console.log('✅ WIZARD: Todas las etapas deseleccionadas');
+};
+
+// 🔥 Actualizar contador cuando cambie cualquier checkbox
+document.addEventListener('change', (e) => {
+  if (e.target.matches('.etapa-checkbox')) {
+    updateSelectionCounter();
+  }
+});
+
+// 🔥 Enganche "Siguiente" con applyCatalogAndAdvance si es necesario
+document.addEventListener('DOMContentLoaded', () => {
+  const siguienteBtn = document.getElementById('wizardBtnSiguiente');
+  if (siguienteBtn) {
+    siguienteBtn.addEventListener('click', (ev) => {
+      const count = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+      console.log(`🔥 WIZARD: Botón Siguiente clickeado - ${count} etapas seleccionadas`);
+      
+      // Si estamos en paso 1 y hay selecciones, aplicar catálogo
+      if (window.wizardPasoActual === 1 && count > 0 && typeof window.applyCatalogAndAdvance === 'function') {
+        console.log('🔥 WIZARD: Aplicando catálogo y avanzando...');
+        ev.preventDefault();
+        window.applyCatalogAndAdvance(); // agrega y luego avanza al Paso 2
+      }
+    });
+  }
+});
 
 // 🔥 EXPONER FUNCIONES AL GLOBAL
 window.cargarCatalogoEtapas = cargarCatalogoEtapas;

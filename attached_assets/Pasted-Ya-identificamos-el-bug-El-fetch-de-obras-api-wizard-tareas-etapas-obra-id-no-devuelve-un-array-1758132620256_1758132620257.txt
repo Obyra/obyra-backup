@@ -1,0 +1,87 @@
+Ya identificamos el bug:
+
+El fetch de /obras/api/wizard-tareas/etapas?obra_id=… no devuelve un array plano; devuelve un objeto
+{"etapas_catalogo":[...], "etapas_creadas":[...], "ok": true}.
+
+El frontend estaba tratando la respuesta como array (data.map(...)), por eso el error “data.map is not a function” y los estados raros de selección/botón.
+
+Qué necesitamos en static/js/wizard.js:
+
+Normalizar la respuesta (usar las claves reales):
+
+const res  = await fetch(`/obras/api/wizard-tareas/etapas?obra_id=${obraId}`, { credentials: 'include' });
+const json = await res.json();
+
+const catalogo = Array.isArray(json) ? json : (json.etapas_catalogo || []);
+const creadas  = new Set((json.etapas_creadas || []).map(e => e.slug || e.id));
+
+
+Render de cards: no marcar por defecto; solo checked disabled si ya está creada:
+
+const html = catalogo.map(e => {
+  const ya = creadas.has(e.slug || e.id);
+  return `
+    <div class="card etapa-card" data-etapa-nombre="${e.nombre}">
+      <div class="card-body">
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input etapa-checkbox"
+                 data-slug="${e.slug || ''}" ${ya ? 'checked disabled' : ''}>
+          <label class="form-check-label">${e.nombre}</label>
+        </div>
+        <div class="text-muted small">${e.descripcion || ''}</div>
+      </div>
+    </div>`;
+}).join('');
+
+document.querySelector('#listaEtapas').innerHTML = html;
+rebindCatalogEvents?.();      // si existe
+updateSelectionCounter();     // recalcular al terminar de pintar
+
+
+Select/Deselect all: ignorar los deshabilitados y actualizar contador:
+
+document.getElementById('btnSelectAll')?.addEventListener('click', () => {
+  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = true);
+  updateSelectionCounter();
+});
+document.getElementById('btnUnselectAll')?.addEventListener('click', () => {
+  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = false);
+  updateSelectionCounter();
+});
+
+
+Habilitar “Siguiente” cuando haya selección (no deshabilitada):
+
+function updateSelectionCounter() {
+  const count = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+  const btnSig = document.getElementById('wizardBtnSiguiente');
+  if (btnSig) btnSig.disabled = (count === 0);
+  // actualizar badge si corresponde
+}
+document.addEventListener('change', (e) => {
+  if (e.target.matches('.etapa-checkbox')) updateSelectionCounter();
+});
+
+
+(Si el flujo requiere “Agregar Etapas Seleccionadas” antes de pasar) engancharlo en “Siguiente”:
+
+document.getElementById('wizardBtnSiguiente')?.addEventListener('click', (ev) => {
+  const count = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+  if (count > 0 && typeof window.applyCatalogAndAdvance === 'function') {
+    ev.preventDefault();
+    window.applyCatalogAndAdvance(); // agrega y luego avanza al Paso 2
+  }
+});
+
+
+Verificación:
+
+En Network del browser, la respuesta muestra etapas_catalogo: Array(15) (todas).
+
+Al abrir el wizard, ninguna etapa aparece tildada salvo las “creadas”.
+
+Al tildar al menos una, Siguiente se habilita.
+
+“Seleccionar/Deseleccionar todas” no toca las ya creadas (disabled).
+
+¿Podés aplicar estos cambios y confirmar? Gracias!
