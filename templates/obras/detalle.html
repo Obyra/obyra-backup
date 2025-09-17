@@ -888,11 +888,7 @@
                     </div>
                     
                     <div id="wizardPaso1Warning" class="text-danger small mt-2"></div>
-                    <div id="step1-error" class="text-danger mt-3 d-none"></div>
-                    <div id="step1-success" class="alert alert-success mt-3 d-none">
-                        <i class="fas fa-check me-2"></i>
-                        <span id="step1-success-text"></span>
-                    </div>
+                    <!-- 🎯 Mensajes legacy removidos - errores vienen del JSON API -->
                 </div>
 
                 <!-- Paso 2: Accordion por Etapa (según especificación) -->
@@ -2606,10 +2602,9 @@ class WizardTareas {
         console.log(`🧙‍♂️ WIZARD: Step ${this.currentStep} → ${this.currentStep + 1}`);
         
         if (this.currentStep === 1) {
-            // Validate that etapas have been created from catalog - sync with global wizard
-            window.WIZARD = window.WIZARD || {};
-            this.WIZARD.etapa_ids = this.WIZARD.etapa_ids || window.WIZARD.etapa_ids || [];
-            const etapaIds = this.WIZARD.etapa_ids;
+            // 🎯 Usar estado unificado del wizard 
+            const etapaIds = window.WIZARD.etapa_ids || [];
+            console.log('🔍 WIZARD: Etapas para preview:', etapaIds);
             
             // Skip old validation - our new auto-advance system handles this
             // if (etapaIds.length === 0) {
@@ -2622,22 +2617,27 @@ class WizardTareas {
                 document.getElementById('wizardLoading').classList.remove('d-none');
                 document.getElementById('wizardStep1').classList.add('d-none');
                 
+                // 🎯 Llamada preview con payload exacto según especificación
+                const payload = { obra_id: this.obra_id, etapa_ids: etapaIds };
+                console.log('📡 WIZARD: Enviando payload preview:', payload);
+                
                 const response = await fetch('/obras/api/wizard-tareas/preview', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ obra_id: this.obra_id, etapa_ids: etapaIds })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    this.WIZARD.etapa_ids = etapaIds;
-                    this.WIZARD.preview = data;
-                    // Sync with global wizard
-                    window.WIZARD = window.WIZARD || {};
+                    // 🎯 Actualizar estado unificado
                     window.WIZARD.etapa_ids = etapaIds;
                     window.WIZARD.preview = data;
-                    this.goToStep(2);
+                    console.log('✅ WIZARD: Preview exitoso, avanzando al paso 2');
+                    window.gotoPaso(2);
                 } else {
                     alert(`Error: ${data.error}`);
                     this.goToStep(1);
@@ -3074,9 +3074,7 @@ class WizardTareas {
         this.updateStepDisplay();
         this.updateProgressBar();
         
-        // Clear error messages
-        document.getElementById('step1-error').classList.add('d-none');
-        document.getElementById('step1-success').classList.add('d-none');
+        // 🎯 Legacy error clearing removed
         
         // Load catalog for Step 1
         this.cargarCatalogoEtapas();
@@ -3330,12 +3328,21 @@ async function applyCatalogAndAdvance(){
       }
     }
 
-    const body = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
+    // 🎯 Llamada preview con payload exacto y navegación global
+    const payload = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
+    console.log('📡 WIZARD: Auto-advance enviando payload preview:', payload);
+    
     window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`, {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      method: 'POST', 
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }, 
+      body: JSON.stringify(payload)
     });
 
-    gotoPaso(2); // función existente del wizard
+    console.log('✅ WIZARD: Auto-advance preview exitoso, navegando al paso 2');
+    window.gotoPaso(2); // usar navegación global unificada
   }catch(e){
     console.error('Wizard Paso1:', e);
     showWarn(`Error: ${e.message}`);
@@ -3370,25 +3377,35 @@ document.getElementById('wizardTareasModal')?.addEventListener('shown.bs.modal',
   document.querySelectorAll('.wizard-legacy-note').forEach(el => el.remove());
 });
 
-function mostrarErrorPaso1(mensaje) {
-    const errorDiv = document.getElementById('step1-error');
-    errorDiv.textContent = mensaje;
-    errorDiv.classList.remove('d-none');
-    document.getElementById('step1-success').classList.add('d-none');
-}
-
-function mostrarExitoPaso1(mensaje) {
-    const successDiv = document.getElementById('step1-success');
-    document.getElementById('step1-success-text').textContent = mensaje;
-    successDiv.classList.remove('d-none');
-    document.getElementById('step1-error').classList.add('d-none');
-}
+// 🎯 Funciones legacy de mensajes removidas - errores vienen del JSON API
 
 // Initialize wizard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('wizardTareasModal')) {
         console.log('🧙‍♂️ WIZARD: Inicializando wizard de tareas');
+        
+        // 🎯 Estado unificado del wizard - single source of truth
+        window.WIZARD = window.WIZARD || {
+            etapa_ids: [],
+            _last_catalog_ids: [],
+            preview: null,
+            currentStep: 1
+        };
+        console.log('🔧 WIZARD: Estado inicializado', window.WIZARD);
+        
         window.wizardTareas = new WizardTareas();
+        
+        // 🎯 Exponer función de navegación global 
+        window.__wizard = window.wizardTareas;
+        window.gotoPaso = (step) => {
+            if (window.__wizard && window.__wizard.goToStep) {
+                console.log(`🧭 WIZARD: Navegando al paso ${step}`);
+                window.__wizard.goToStep(step);
+            } else {
+                console.warn('⚠️ WIZARD: Función de navegación no disponible');
+            }
+        };
+        console.log('🌐 WIZARD: Navegación global expuesta');
     }
 });
 
