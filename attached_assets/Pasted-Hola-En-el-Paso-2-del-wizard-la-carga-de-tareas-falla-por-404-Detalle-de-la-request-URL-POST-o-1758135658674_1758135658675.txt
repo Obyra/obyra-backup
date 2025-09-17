@@ -1,0 +1,70 @@
+Hola! En el Paso 2 del wizard la carga de tareas falla por 404.
+
+Detalle de la request
+
+URL: POST /obras/api/wizard-tareas/tareas
+
+Status: 404 Not Found
+
+Origen: botón “Reintentar”/al pasar a Paso 2
+
+Payload esperado:
+
+{"obra_id":18,"etapas":["mamposteria", "..."]}
+
+
+Lo que necesitamos en backend (Flask)
+Crear el endpoint hermano del de etapas y devolver tareas_catalogo:
+
+# En el mismo blueprint/módulo donde está el wizard
+from flask import request, jsonify
+
+@bp.route('/obras/api/wizard-tareas/tareas', methods=['POST','GET'])
+def wizard_tareas_catalogo():
+    # Soportar POST JSON y GET con query params
+    if request.method == 'POST' and request.is_json:
+        data = request.get_json(silent=True) or {}
+        obra_id = data.get('obra_id')
+        etapas  = data.get('etapas')  # lista de slugs
+    else:
+        obra_id = request.args.get('obra_id', type=int)
+        etapas  = request.args.getlist('etapas')
+
+    if not obra_id or not etapas:
+        return jsonify({'ok': False, 'error': 'obra_id y etapas son requeridos'}), 400
+
+    # TODO: Reemplazar por la query real a catálogo de tareas
+    # tareas = TareaCatalogo.query.filter(TareaCatalogo.etapa_slug.in_(etapas)).order_by(TareaCatalogo.orden).all()
+    # resp = [{'id': t.id, 'nombre': t.nombre, 'etapa_slug': t.etapa_slug} for t in tareas]
+
+    # Placeholder para destrabar el front:
+    resp = []
+    for slug in etapas:
+        resp += [
+            {'id': f'{slug}-1', 'nombre': f'Tarea 1 ({slug})', 'etapa_slug': slug},
+            {'id': f'{slug}-2', 'nombre': f'Tarea 2 ({slug})', 'etapa_slug': slug},
+        ]
+
+    return jsonify({'ok': True, 'tareas_catalogo': resp})
+
+
+Front (ya implementado)
+
+wizard.js llama POST /obras/api/wizard-tareas/tareas con {obra_id, etapas} y espera:
+
+{ "ok": true, "tareas_catalogo": [ { "id": 123, "nombre": "...", "etapa_slug": "mamposteria" }, ... ] }
+
+
+El Paso 2 pinta en #wizardListaTareas. Los contenedores (wizardPaso2 o data-paso="2") ya están.
+
+Cómo validar
+
+Network: la request “tareas” pasa de 404 a 200.
+
+Response: trae tareas_catalogo con ítems.
+
+UI: en “2. Tareas” se lista con checkboxes.
+
+“Reintentar” vuelve a cargar correctamente.
+
+Si prefieren otro path o usar GET, avisen así alineamos la URL/método en wizard.js.

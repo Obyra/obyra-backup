@@ -2402,6 +2402,57 @@ def get_wizard_etapas():
         return response, 400
 
 
+@obras_bp.route('/api/wizard-tareas/tareas', methods=['POST','GET'])
+@login_required
+def wizard_tareas_catalogo():
+    """Get catalog tareas for selected etapas (wizard Step 2)"""
+    try:
+        # Soportar POST JSON y GET con query params
+        if request.method == 'POST' and request.is_json:
+            data = request.get_json(silent=True) or {}
+            obra_id = data.get('obra_id')
+            etapas  = data.get('etapas')  # lista de slugs
+        else:
+            obra_id = request.args.get('obra_id', type=int)
+            etapas  = request.args.getlist('etapas')
+
+        if not obra_id or not etapas:
+            response = jsonify({'ok': False, 'error': 'obra_id y etapas son requeridos'})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
+
+        # Verificar permisos
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
+
+        # TODO: Reemplazar por la query real a catálogo de tareas
+        # from tareas_predefinidas import obtener_tareas_por_etapas
+        # tareas = obtener_tareas_por_etapas(etapas)
+        # resp = [{'id': t.id, 'nombre': t.nombre, 'etapa_slug': t.etapa_slug, 'descripcion': t.descripcion} for t in tareas]
+
+        # Placeholder para destrabar el front:
+        resp = []
+        for slug in etapas:
+            resp += [
+                {'id': f'{slug}-1', 'nombre': f'Tarea 1 ({slug})', 'etapa_slug': slug, 'descripcion': f'Primera tarea de {slug}'},
+                {'id': f'{slug}-2', 'nombre': f'Tarea 2 ({slug})', 'etapa_slug': slug, 'descripcion': f'Segunda tarea de {slug}'},
+                {'id': f'{slug}-3', 'nombre': f'Tarea 3 ({slug})', 'etapa_slug': slug, 'descripcion': f'Tercera tarea de {slug}'},
+            ]
+
+        response = jsonify({'ok': True, 'tareas_catalogo': resp})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
+        
+    except Exception as e:
+        current_app.logger.exception("API Error obteniendo tareas para wizard")
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 400
+
+
 @obras_bp.route('/api/obras/<int:obra_id>/etapas/bulk_from_catalog', methods=['POST'])
 @login_required
 def bulk_create_etapas_from_catalog(obra_id):
