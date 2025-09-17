@@ -66,12 +66,15 @@ async function cargarCatalogoEtapas() {
     
     const { etapas_catalogo, etapas_creadas } = response;
     console.log('📦 WIZARD: Catálogo recibido:', { etapas_catalogo: etapas_catalogo?.length, etapas_creadas: etapas_creadas?.length });
+    console.log('🔍 WIZARD: Etapas creadas:', etapas_creadas);
     
     // Construir HTML del catálogo
     let catalogoHTML = '';
     if (etapas_catalogo && etapas_catalogo.length > 0) {
       etapas_catalogo.forEach(etapa => {
         const yaCreada = etapas_creadas.some(creada => creada.slug === etapa.slug);
+        console.log(`🔍 WIZARD: Etapa ${etapa.slug} - yaCreada: ${yaCreada}`);
+        
         const cardClass = yaCreada ? 'border-success bg-light-success' : 'border-light';
         const iconClass = yaCreada ? 'text-success fas fa-check-circle' : 'text-primary fas fa-hammer';
         const badgeClass = yaCreada ? 'badge bg-success' : 'badge bg-primary';
@@ -100,7 +103,8 @@ async function cargarCatalogoEtapas() {
                     <input type="checkbox" 
                            class="form-check-input etapa-checkbox" 
                            data-slug="${etapa.slug}"
-                           ${yaCreada ? 'checked disabled' : ''}>
+                           ${yaCreada ? 'checked disabled' : ''}
+                           ${!yaCreada ? '' : ''}>
                   </div>
                 </div>
               </div>
@@ -121,6 +125,9 @@ async function cargarCatalogoEtapas() {
     
     // Rebind eventos de checkbox
     rebindCatalogEvents();
+    
+    // 🔥 Inicializar contador después de cargar catálogo
+    updateSelectionCounter();
     
     console.log('✅ WIZARD: Catálogo cargado correctamente');
     
@@ -168,17 +175,19 @@ function rebindCatalogEvents() {
 // 🔥 Actualizar contador de selección
 function updateSelectionCounter() {
   const checkedBoxes = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)');
+  console.log(`📊 WIZARD: Contador actualizado - ${checkedBoxes.length} etapas seleccionadas`);
+  
   const counter = document.getElementById('contadorSeleccionadas');
   if (counter) {
     counter.textContent = checkedBoxes.length;
   }
   
-  // Enable/disable agregar button
-  const addBtn = document.querySelector('[onclick*="applyCatalogAndAdvance"]');
-  if (addBtn) {
-    addBtn.disabled = checkedBoxes.length === 0;
-    addBtn.classList.toggle('btn-success', checkedBoxes.length > 0);
-    addBtn.classList.toggle('btn-secondary', checkedBoxes.length === 0);
+  // Enable/disable "Siguiente" button
+  const siguienteBtn = document.getElementById('wizardBtnSiguiente');
+  if (siguienteBtn) {
+    siguienteBtn.disabled = checkedBoxes.length === 0;
+    siguienteBtn.classList.toggle('btn-primary', checkedBoxes.length > 0);
+    siguienteBtn.classList.toggle('btn-secondary', checkedBoxes.length === 0);
   }
 }
 
