@@ -274,234 +274,203 @@ document.addEventListener('click', (ev) => {
 // 🔥 ESTADO GLOBAL DEL WIZARD
 window.WZ_STATE = window.WZ_STATE || { tareasSel: [] };
 
-// 🔥 OBTENER TAREAS SELECCIONADAS DEL PASO 2 (SELECTOR ROBUSTO)
-function getTareasSeleccionadasPaso2(m) {
-  const marked = m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked');
-  return [...marked].map((cb, i) => {
-    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim()
-               || cb.value || `Tarea ${i+1}`;
-    return {
-      id: cb.dataset.id || cb.value || `t${i+1}`,
-      nombre: cb.dataset.nombre || label.replace(/\n/g, ' ').trim(),
-      etapa_slug: cb.dataset.etapa || ''
-    };
-  });
+// =================== BLOQUE CANÓNICO ÚNICO ===================
+// Eliminar listeners viejos clonando y reemplazando el botón
+function resetButtonClean() {
+  const oldBtn = document.getElementById('wizardBtnSiguiente');
+  if (!oldBtn) return null;
+  
+  const newBtn = oldBtn.cloneNode(true);
+  oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+  
+  // Limpiar marcadores legacy
+  delete newBtn.dataset.bound;
+  delete newBtn.dataset.boundPaso2;
+  delete newBtn.dataset.boundStep2;
+  
+  console.log('🔥 WIZARD: Botón clonado, listeners viejos eliminados');
+  return newBtn;
 }
 
-// 🔥 BLOQUE CANÓNICO LIMPIO - IMPLEMENTACIÓN FINAL
+// 1) window.getSelPaso2(modal) - BLOQUE CANÓNICO
+window.getSelPaso2 = function(modal) {
+  const m = modal || document.getElementById('wizardTareasModal');
+  return [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')].map((cb, i) => ({
+    id: cb.dataset.id || cb.value || String(i + 1),
+    nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || `Tarea ${i+1}`).trim(),
+    etapa_slug: cb.dataset.etapa || ''
+  }));
+};
 
-// 🔥 CAPTURAR SELECCIÓN DEL PASO 2
-window.getSelPaso2 = function(modal = document.getElementById('wizardTareasModal')) {
-// 🔥 OBTENER TAREAS SELECCIONADAS DEL PASO 2 (SELECTOR ROBUSTO) - MANTENIDO POR COMPATIBILIDAD
-function getTareasSeleccionadasPaso2(m) {
-  const marked = m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked');
-  return [...marked].map((cb, i) => {
-    const label = cb.closest('.form-check')?.querySelector('label')?.textContent?.trim()
-               || cb.value || `Tarea ${i+1}`;
-    return {
-      id: cb.dataset.id || cb.value || `t${i+1}`,
-      nombre: cb.dataset.nombre || label.replace(/\n/g, ' ').trim(),
-      etapa_slug: cb.dataset.etapa || ''
-    };
-  });
-}
+// 2) window.ensureOpciones(obra_id) - BLOQUE CANÓNICO  
+window.ensureOpciones = async function (obraId) {
+  if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
+  try {
+    const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, { credentials: 'include' });
+    const j = await r.json();
+    window.WZ_STATE.opciones = { unidades: j?.unidades || ['m2','m','m3','u','kg','h'], usuarios: j?.usuarios || [] };
+  } catch {
+    window.WZ_STATE.opciones = { unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
+  }
+  return window.WZ_STATE.opciones;
+};
 
-// 🔥 BLOQUE CANÓNICO LIMPIO - IMPLEMENTACIÓN FINAL
-(() => {
+// 3) window.renderPaso3(tareasSel) - BLOQUE CANÓNICO
+window.renderPaso3 = async function (tareasSel) {
   const modal = document.getElementById('wizardTareasModal');
-  if (!modal) return;
+  const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
+  if (!tbody) return;
 
-  window.WZ_STATE = window.WZ_STATE || {};
+  const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+  const opts = await window.ensureOpciones(obraId);
+  
+  const unidadOpts = opts.unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+  const asignadoOpts = opts.usuarios.length 
+    ? opts.usuarios.map(u => `<option value="${u.id||''}">${u.nombre||'(sin asignar)'}</option>`).join('')
+    : '<option value="">(sin asignar)</option>';
 
-  // 1) Selección del Paso 2 (GLOBAL)
-  window.getSelPaso2 = function () {
-    const m = document.getElementById('wizardTareasModal');
-    return [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')].map((cb, i) => ({
-      id: cb.dataset.id || cb.value || String(i + 1),
-      nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || '').trim(),
-      etapa_slug: cb.dataset.etapa || ''
-    }));
-  };
+  tbody.innerHTML = (tareasSel || []).map((t, i) => `
+    <tr data-i="${i}">
+      <td>${t.etapa_slug||''}</td>
+      <td>${t.nombre||''}</td>
+      <td><input name="rows[${i}][inicio]"   class="form-control form-control-sm" type="date"></td>
+      <td><input name="rows[${i}][fin]"      class="form-control form-control-sm" type="date"></td>
+      <td><input name="rows[${i}][horas]"    class="form-control form-control-sm" type="number" min="0" step="0.5" value="8"></td>
+      <td><input name="rows[${i}][cantidad]" class="form-control form-control-sm" type="number" min="0" step="0.01" value="1"></td>
+      <td><select name="rows[${i}][unidad]"   class="form-select form-select-sm unidad-select">${unidadOpts}</select></td>
+      <td><select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">${asignadoOpts}</select></td>
+      <td>
+        <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+          <option value="baja">Baja</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
 
-  // 2) Cargar opciones de Paso 3 (GLOBAL)
-  window.ensureOpciones = async function (obraId) {
-    if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
-    try {
-      const r = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, { credentials: 'include' });
-      const j = await r.json();
-      window.WZ_STATE.opciones = j.ok ? j : { ok: true, unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
-    } catch {
-      window.WZ_STATE.opciones = { ok: true, unidades: ['m2','m','m3','u','kg','h'], usuarios: [] };
-    }
-    return window.WZ_STATE.opciones;
-  };
+  window.enableNextStep3();
+  window.ensureBackBtnStep3();
+};
 
-  // 3) Render Paso 3 (GLOBAL)
-  window.renderPaso3 = async function (tareas) {
-    const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
-    const opts = await window.ensureOpciones(obraId);
-    const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
-    if (!tbody) return;
+// 4) window.enableNextStep3() - BLOQUE CANÓNICO
+window.enableNextStep3 = function () {
+  const btn = document.getElementById('wizardBtnSiguiente');
+  const rows = document.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length;
+  if (btn) {
+    btn.disabled = rows === 0;
+    btn.classList.toggle('disabled', rows === 0);
+  }
+};
 
-    const unidadOpts = (opts.unidades || []).map(u => `<option value="${u}">${u}</option>`).join('');
-    const asignadoList = (opts.usuarios || []).length ? opts.usuarios : [{ id: '', nombre: '(sin asignar)' }];
-    const asignadoOpts = asignadoList.map(u => `<option value="${u.id||''}">${u.nombre||'(sin asignar)'}</option>`).join('');
+// 5) window.gotoPaso(n) - BLOQUE CANÓNICO
+window.gotoPaso = function (n) {
+  const modal = document.getElementById('wizardTareasModal');
+  console.log(`🔥 WIZARD: Navegando a paso ${n}`);
+  
+  // Soporta #wizardStepX o #wizardPasoX
+  const target = modal.querySelector(`#wizardStep${n}`) || modal.querySelector(`#wizardPaso${n}`);
+  if (target) {
+    [...modal.querySelectorAll('[id^="wizardStep"], [id^="wizardPaso"]')].forEach(el => el.classList.add('d-none'));
+    target.classList.remove('d-none');
+    if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
+  }
+};
 
-    tbody.innerHTML = (tareas || []).map((t, i) => `
-      <tr data-i="${i}">
-        <td>${t.etapa_slug||''}</td>
-        <td>${t.nombre||''}</td>
-        <td><input name="rows[${i}][inicio]"   class="form-control form-control-sm" type="date"></td>
-        <td><input name="rows[${i}][fin]"      class="form-control form-control-sm" type="date"></td>
-        <td><input name="rows[${i}][horas]"    class="form-control form-control-sm" type="number" min="0" step="0.5" value="8"></td>
-        <td><input name="rows[${i}][cantidad]" class="form-control form-control-sm" type="number" min="0" step="0.01" value="1"></td>
-        <td><select name="rows[${i}][unidad]"   class="form-select form-select-sm unidad-select">${unidadOpts}</select></td>
-        <td><select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">${asignadoOpts}</select></td>
-        <td>
-          <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
-            <option value="media" selected>Media</option>
-            <option value="alta">Alta</option>
-            <option value="baja">Baja</option>
-          </select>
-        </td>
-      </tr>
-    `).join('');
+// 6) window.ensureBackBtnStep3() - BLOQUE CANÓNICO
+window.ensureBackBtnStep3 = function () {
+  const modal = document.getElementById('wizardTareasModal');
+  const footer = modal.querySelector('.modal-footer');
+  if (!footer) return;
 
-    window.enableNextStep3();
-  };
-
-  // 4) Habilitar/Deshabilitar "Siguiente" en Paso 3 (GLOBAL)
-  window.enableNextStep3 = function () {
-    const btn = document.getElementById('wizardBtnSiguiente');
-    const rows = modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr').length;
-    const enabled = rows > 0;
-    if (btn) {
-      btn.disabled = !enabled;
-      btn.classList.toggle('disabled', !enabled);
-      btn.type = 'button';
-    }
-  };
-
-  // 5) Interceptor de "Siguiente" SOLO cuando Paso 2 está visible (GLOBAL)
-  function connectPaso2Next () {
-    const btn = document.getElementById('wizardBtnSiguiente');
-    if (!btn || btn.dataset.boundPaso2 === '1') return;
-    btn.dataset.boundPaso2 = '1';
-
-    btn.addEventListener('click', (ev) => {
-      const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none)');
-      if (!step2Visible) return;
-
-      const sel = window.getSelPaso2();
-      if (!sel.length) return; // no interrumpas si no hay selección
-
-      ev.preventDefault();
-      window.WZ_STATE = window.WZ_STATE || {};
-      window.WZ_STATE.tareasSel = sel;
-      if (typeof gotoPaso === 'function') gotoPaso(3);
-      window.renderPaso3(sel);
+  let back = document.getElementById('wizardBtnAnteriorPaso3');
+  if (!back) {
+    back = document.createElement('button');
+    back.id = 'wizardBtnAnteriorPaso3';
+    back.type = 'button';
+    back.className = 'btn btn-outline-secondary me-auto';
+    back.textContent = 'Atrás';
+    footer.insertBefore(back, footer.firstChild);
+    back.addEventListener('click', (ev) => { 
+      ev.preventDefault(); 
+      window.gotoPaso(2); 
     });
   }
-  window.connectPaso2Next = connectPaso2Next;
+};
 
-  // 6) Botón Atrás de Paso 3 (GLOBAL)
-  window.ensureBackBtnStep3 = function () {
-    const footer = modal.querySelector('.modal-footer') || modal;
-    let back = document.getElementById('wizardBtnAnteriorPaso3');
-    if (!back) {
-      back = document.createElement('button');
-      back.id = 'wizardBtnAnteriorPaso3';
-      back.type = 'button';
-      back.className = 'btn btn-outline-secondary me-auto';
-      back.textContent = 'Atrás';
-      footer.insertBefore(back, footer.firstChild);
-      back.addEventListener('click', (ev) => { ev.preventDefault(); if (typeof gotoPaso === 'function') gotoPaso(2); });
-    }
-  };
+// 7) Progreso visual - BLOQUE CANÓNICO
+window.updateWizardProgress = function(n) {
+  const bars = document.querySelectorAll('.progress .progress-bar');
+  bars.forEach(b => b.style.width = ({1: '25%', 2:'50%', 3:'75%', 4:'100%'}[n] || '0%'));
+  
+  document.querySelectorAll('[data-wizard-step]').forEach(el => {
+    el.classList.toggle('active', Number(el.getAttribute('data-wizard-step')) === n);
+  });
+  
+  const modal = document.getElementById('wizardTareasModal');
+  if (modal) {
+    modal.className = modal.className.replace(/\bwizard-step-\d+\b/g, '');
+    modal.classList.add(`wizard-step-${n}`);
+  }
+  
+  console.log(`[WZ] Progreso actualizado a paso ${n}`);
+};
 
-  // 7) Función de navegación simplificada
-  window.gotoPaso = function (n) {
-    console.log(`🔥 WIZARD: Navegando a paso ${n}`);
-    const stepById = modal.querySelector(`#wizardStep${n}`);
-    if (stepById) {
-      [...modal.querySelectorAll('[id^="wizardStep"]')].forEach(el => el.classList.add('d-none'));
-      stepById.classList.remove('d-none');
-      if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
+// =================== INTERCEPTOR ÚNICO PASO 2→3 ===================
+function setupUniqueInterceptor() {
+  const btn = resetButtonClean();
+  if (!btn) return;
+  
+  const modal = document.getElementById('wizardTareasModal');
+  
+  // INTERCEPTOR ÚNICO - CON CLONACIÓN DE BOTÓN
+  btn.addEventListener('click', (ev) => {
+    const step2Visible = !!modal.querySelector('#wizardStep2:not(.d-none)');
+    
+    if (!step2Visible) {
+      // Paso 1 → permitir flujo normal para applyCatalogAndAdvance
+      const etapasSeleccionadas = [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].length;
+      if (etapasSeleccionadas > 0) {
+        ev.preventDefault();
+        
+        // Aplicar etapas seleccionadas
+        const slugs = [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].map(cb => cb.dataset.slug).filter(Boolean);
+        console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas`);
+        
+        document.getElementById('btnAgregarEtapasSel')?.click(); 
+        window.gotoPaso(2);
+        
+        const obraId = modal.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
+        if (obraId && typeof window.loadTareasWizard === 'function') {
+          window.loadTareasWizard(obraId, slugs);
+        }
+      }
       return;
     }
-    const generic = [...modal.querySelectorAll('.wizard-content')];
-    if (generic.length) {
-      generic.forEach((el,i)=> el.classList.toggle('d-none', i !== (n-1)));
-      if (typeof updateWizardProgress === 'function') updateWizardProgress(n);
-    }
-  };
-
-  // 8) Función para aplicar catálogo y avanzar (Paso 1 → Paso 2)
-  window.applyCatalogAndAdvance = function () {
-    const getSel = () => [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].map(cb => cb.dataset.slug).filter(Boolean);
-    const slugs = getSel();
-    console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas:`, slugs);
-    if (!slugs.length) return;
     
-    document.getElementById('btnAgregarEtapasSel')?.click(); 
-    window.gotoPaso(2);
+    // Paso 2 → interceptar completamente
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
     
-    const obraId = modal.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
-    if (obraId && typeof window.loadTareasWizard === 'function') {
-      window.loadTareasWizard(obraId, slugs);
-    }
-  };
-
-  // 9) Progreso visual
-  window.updateWizardProgress = function(n) {
-    // Si hay progress bar lineal
-    const bars = document.querySelectorAll('.progress .progress-bar');
-    bars.forEach(b => b.style.width = ({1: '25%', 2:'50%', 3:'75%', 4:'100%'}[n] || '0%'));
-
-    // Si hay navegación por pasos (tabs / pills)
-    document.querySelectorAll('[data-wizard-step]').forEach(el => {
-      el.classList.toggle('active', Number(el.getAttribute('data-wizard-step')) === n);
-    });
+    const sel = window.getSelPaso2();
+    console.log(`🔥 WIZARD: Paso 2→3, selección:`, sel.length);
     
-    // Agregar clase CSS al modal para highlighting si existe
-    if (modal) {
-      modal.className = modal.className.replace(/\bwizard-step-\d+\b/g, '');
-      modal.classList.add(`wizard-step-${n}`);
-    }
+    if (sel.length === 0) return;
     
-    console.log(`[WZ] Progreso actualizado a paso ${n}`);
-  };
-
-  // 10) Navegación del Paso 1
-  function connectWizardNav() {
-    const btnSig = document.getElementById('wizardBtnSiguiente');
-    if (btnSig && !btnSig.dataset.bound) {
-      btnSig.dataset.bound = '1';
-      btnSig.type = 'button';
-      btnSig.addEventListener('click', (ev) => {
-        const getSel = () => [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].map(cb => cb.dataset.slug).filter(Boolean);
-        console.log(`🔥 WIZARD: Botón Siguiente clickeado`);
-        if (getSel().length > 0) { 
-          ev.preventDefault(); 
-          window.applyCatalogAndAdvance(); 
-        }
-      });
-      console.log('✅ WIZARD: Navegación conectada');
-    }
-  }
-
-  document.addEventListener('shown.bs.modal', (ev) => {
-    if (ev.target?.id === 'wizardTareasModal') {
-      console.log('🔥 WIZARD: Modal mostrado, conectando navegación');
-      connectWizardNav();
-    }
+    window.WZ_STATE.tareasSel = sel;
+    window.gotoPaso(3);
+    window.renderPaso3(sel);
+    if (typeof window.updateWizardProgress === 'function') window.updateWizardProgress(3);
   });
+  
+  console.log('✅ WIZARD: Interceptor único configurado');
+}
 
-  // 11) Activar interceptores
-  connectPaso2Next();
-})();
+// =================== COMPATIBILIDAD LEGACY ===================
+window.connectPaso2Nav = setupUniqueInterceptor;
 
-// 🔥 CARGAR TAREAS PARA EL PASO 2
+// =================== CARGA DE TAREAS PASO 2 ===================
 window.loadTareasWizard = async function(obraId, slugs) {
   console.log(`🔥 WIZARD: Cargando tareas para obra ${obraId}, etapas:`, slugs);
   
@@ -552,7 +521,7 @@ window.loadTareasWizard = async function(obraId, slugs) {
         : '<div class="text-muted text-center p-4">No hay tareas disponibles para las etapas seleccionadas.</div>';
     }
     
-    setTimeout(() => window.connectPaso2Next?.(), 100);
+    // NUEVA LLAMADA LIMPIA - ya no existe connectPaso2Next viejo
     console.log(`✅ WIZARD: ${tareas.length} tareas cargadas exitosamente`);
     
   } catch (error) {
@@ -570,4 +539,12 @@ window.loadTareasWizard = async function(obraId, slugs) {
   }
 };
 
-console.log('✅ WIZARD: Bloque canónico cargado - Sistema completamente limpio');
+// =================== INICIALIZACIÓN ===================
+document.addEventListener('shown.bs.modal', (ev) => {
+  if (ev.target?.id === 'wizardTareasModal') {
+    console.log('🔥 WIZARD: Modal mostrado, configurando interceptor único');
+    setupUniqueInterceptor();
+  }
+});
+
+console.log('✅ WIZARD: Bloque canónico ÚNICO cargado - Sin duplicados');
