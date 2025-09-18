@@ -3,6 +3,61 @@
 
 console.log('🧙‍♂️ WIZARD: Iniciando sistema con event delegation...');
 
+// =================== POLYFILL GOTOPASO ===================
+// Polyfill robusto de navegación de pasos para Bootstrap Tabs
+(function ensureGotoPaso(){
+  if (typeof window.gotoPaso === "function") return;
+
+  window.gotoPaso = function(step){
+    console.log(`🔄 WIZARD: Navegando a paso ${step}`);
+    
+    // 1) Intentar via Bootstrap Tabs
+    const triggers = [
+      `[data-bs-target="#wizard-paso${step}"]`,
+      `[href="#wizard-paso${step}"]`,
+      `[data-bs-target="#paso${step}"]`,
+      `[href="#paso${step}"]`,
+      `[data-bs-target="#wizardPaso${step}"]`,
+      `[href="#wizardPaso${step}"]`,
+      `[data-bs-target="#wizardStep${step}"]`,
+      `[href="#wizardStep${step}"]`
+    ];
+    
+    const trigger = document.querySelector(triggers.join(","));
+    if (trigger && window.bootstrap?.Tab) {
+      try {
+        window.bootstrap.Tab.getOrCreateInstance(trigger).show();
+        console.log(`✅ WIZARD: Navegación a paso ${step} exitosa (Bootstrap Tab)`);
+        return;
+      } catch (e) {
+        console.warn('⚠️ WIZARD: Error con Bootstrap Tab, usando fallback:', e);
+      }
+    }
+
+    // 2) Fallback: mostrar/ocultar panes directamente
+    const paneSelectors = [
+      `#wizard-paso${step}`, `#paso${step}`, `#wizardPaso${step}`, `#wizardStep${step}`
+    ];
+    const pane = document.querySelector(paneSelectors.join(","));
+    
+    if (pane) {
+      const container = pane.closest(".tab-content") || document;
+      // Ocultar todos los panes
+      container.querySelectorAll(".tab-pane").forEach(el => {
+        el.classList.remove("active", "show");
+      });
+      // Mostrar el pane destino
+      pane.classList.add("active", "show");
+      console.log(`✅ WIZARD: Navegación a paso ${step} exitosa (fallback)`);
+      return;
+    }
+
+    console.warn(`⚠️ WIZARD: No se encontró pane para paso ${step}`);
+  };
+  
+  console.log('✅ WIZARD: Polyfill gotoPaso instalado');
+})();
+
 // =================== PREFIJO Y UTILIDADES ===================
 const PREF = window.PREFIX || '';
 
@@ -368,7 +423,7 @@ window.applyCatalogAndAdvance = function() {
   console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas`);
   
   document.getElementById('btnAgregarEtapasSel')?.click(); 
-  window.gotoPaso(2);
+  window.gotoPaso?.(2);
   
   const obraId = modal.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
   if (obraId && typeof window.loadTareasWizard === 'function') {
@@ -387,7 +442,7 @@ function setupUniqueInterceptor() {
 
   newBtn.addEventListener('click', (ev) => {
     ev.preventDefault(); 
-    window.gotoPaso(2); 
+    window.gotoPaso?.(2); 
   });
   
   console.log('✅ WIZARD: Interceptor único configurado');
@@ -568,7 +623,7 @@ if (!window.__WZ_FINISH_INSTALLED__) {
       
       // LOCK anti-rebote por 2 segundos y avanzar
       window.__WZ_NAV_LOCK_UNTIL__ = Date.now() + 2000;
-      window.gotoPaso(4);
+      window.gotoPaso?.(4);
       
     } catch (error) {
       console.error('❌ WIZARD: Error al finalizar:', error);
