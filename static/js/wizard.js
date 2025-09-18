@@ -298,7 +298,8 @@ window.getSelPaso2 = function(modal) {
   return [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')].map((cb, i) => ({
     id: cb.dataset.id || cb.value || String(i + 1),
     nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || `Tarea ${i+1}`).trim(),
-    etapa_slug: cb.dataset.etapa || ''
+    etapa_slug: cb.dataset.etapa || '',
+    etapa_id: cb.dataset.etapaId || null  // Usar data-etapa-id del HTML
   }));
 };
 
@@ -315,7 +316,19 @@ window.ensureOpciones = async function (obraId) {
   return window.WZ_STATE.opciones;
 };
 
-// 3) window.renderPaso3(tareasSel) - BLOQUE CANÓNICO
+// 3) buildUsuarioSelect - Función helper - BLOQUE CANÓNICO
+function buildUsuarioSelect(usuarios, asignadoId = null, index = 0) {
+  let html = `<select name="rows[${index}][asignado]" class="form-select form-select-sm usuario-select">
+    <option value="">— Seleccioná —</option>`;
+  for (const u of usuarios) {
+    const sel = (asignadoId && Number(asignadoId) === Number(u.id)) ? ' selected' : '';
+    html += `<option value="${u.id}"${sel}>${u.nombre}</option>`;
+  }
+  html += `</select>`;
+  return html;
+}
+
+// 3) window.renderPaso3(tareasSel) - BLOQUE CANÓNICO 
 window.renderPaso3 = async function (tareasSel) {
   const modal = document.getElementById('wizardTareasModal');
   const tbody = modal.querySelector('#wizardStep3 #tablaDatosWizard tbody');
@@ -325,9 +338,6 @@ window.renderPaso3 = async function (tareasSel) {
   const opts = await window.ensureOpciones(obraId);
   
   const unidadOpts = opts.unidades.map(u => `<option value="${u}">${u}</option>`).join('');
-  const asignadoOpts = opts.usuarios.length 
-    ? opts.usuarios.map(u => `<option value="${u.id||''}">${u.nombre||'(sin asignar)'}</option>`).join('')
-    : '<option value="">(sin asignar)</option>';
 
   tbody.innerHTML = (tareasSel || []).map((t, i) => `
     <tr data-i="${i}">
@@ -338,7 +348,7 @@ window.renderPaso3 = async function (tareasSel) {
       <td><input name="rows[${i}][horas]"    class="form-control form-control-sm" type="number" min="0" step="0.5" value="8"></td>
       <td><input name="rows[${i}][cantidad]" class="form-control form-control-sm" type="number" min="0" step="0.01" value="1"></td>
       <td><select name="rows[${i}][unidad]"   class="form-select form-select-sm unidad-select">${unidadOpts}</select></td>
-      <td><select name="rows[${i}][asignado]" class="form-select form-select-sm asignado-select">${asignadoOpts}</select></td>
+      <td>${buildUsuarioSelect(opts.usuarios, t.asignado_id, i)}</td>
       <td>
         <select name="rows[${i}][prioridad]" class="form-select form-select-sm">
           <option value="media" selected>Media</option>
@@ -472,7 +482,7 @@ window.connectPaso2Nav = setupUniqueInterceptor;
 
 // =================== CARGA DE TAREAS PASO 2 ===================
 window.loadTareasWizard = async function(obraId, slugs) {
-  console.log(`🔥 WIZARD: Cargando tareas para obra ${obraId}, etapas:`, slugs);
+  console.log(`🔥 WIZARD: Cargando tareas REALES para obra ${obraId}, etapas:`, slugs);
   
   const m = document.getElementById('wizardTareasModal');
   const list = m.querySelector('#wizardListaTareas') || m.querySelector('#wizardStep2');
@@ -482,35 +492,57 @@ window.loadTareasWizard = async function(obraId, slugs) {
   if (list) list.innerHTML = '';
   
   try {
-    const res = await fetch('/obras/api/wizard-tareas/tareas', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      credentials: 'include',
-      body: JSON.stringify({ obra_id: parseInt(obraId), etapas: slugs })
+    // Cargar tareas reales de las etapas ya creadas en la obra
+    const res = await fetch(`/obras/${obraId}/etapas`, {
+      method: 'GET',
+      credentials: 'include'
     });
     
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     
     const json = await res.json();
-    const tareas = json.tareas_catalogo || json.tareas || json.data || [];
+    const etapas = json.etapas || [];
+    
+    // Filtrar solo las etapas que coinciden con los slugs seleccionados
+    const etapasFiltradas = etapas.filter(e => slugs.includes(e.slug));
+    
+    // Obtener todas las tareas de las etapas filtradas  
+    let todasLasTareas = [];
+    
+    for (const etapa of etapasFiltradas) {
+      if (etapa.tareas && etapa.tareas.length > 0) {
+        etapa.tareas.forEach(tarea => {
+          todasLasTareas.push({
+            id: tarea.id,
+            nombre: tarea.nombre,
+            descripcion: tarea.descripcion || '',
+            etapa_slug: etapa.slug,
+            etapa_id: etapa.id,  // ¡Aquí está el etapa_id que necesitamos!
+            etapa_nombre: etapa.nombre,
+            horas: tarea.horas_estimadas || 0
+          });
+        });
+      }
+    }
     
     if (spin) spin.classList.add('d-none');
     
     if (list) {
-      list.innerHTML = tareas.length
+      list.innerHTML = todasLasTareas.length
         ? `<div class="mb-3">
-             <h6 class="text-primary">Tareas disponibles (${tareas.length}):</h6>
+             <h6 class="text-primary">Tareas disponibles (${todasLasTareas.length}):</h6>
              <div class="row">${
-               tareas.map(t => `
+               todasLasTareas.map(t => `
                  <div class="col-md-6 mb-2">
                    <div class="form-check">
                      <input class="form-check-input tarea-checkbox" type="checkbox" 
                             data-id="${t.id}" 
                             data-nombre="${t.nombre}"
                             data-etapa="${t.etapa_slug}"
+                            data-etapa-id="${t.etapa_id}"
                             id="tarea-${t.id}">
                      <label class="form-check-label" for="tarea-${t.id}">
-                       <strong>${t.nombre}</strong>
+                       <strong>${t.nombre}</strong> <small class="text-muted">(${t.etapa_nombre})</small>
                        ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
                      </label>
                    </div>
@@ -521,11 +553,10 @@ window.loadTareasWizard = async function(obraId, slugs) {
         : '<div class="text-muted text-center p-4">No hay tareas disponibles para las etapas seleccionadas.</div>';
     }
     
-    // NUEVA LLAMADA LIMPIA - ya no existe connectPaso2Next viejo
-    console.log(`✅ WIZARD: ${tareas.length} tareas cargadas exitosamente`);
+    console.log(`✅ WIZARD: ${todasLasTareas.length} tareas REALES cargadas exitosamente`);
     
   } catch (error) {
-    console.error('❌ WIZARD: Error cargando tareas:', error);
+    console.error('❌ WIZARD: Error cargando tareas reales:', error);
     if (spin) spin.classList.add('d-none');
     if (list) {
       list.innerHTML = `<div class="alert alert-warning">
@@ -544,6 +575,127 @@ document.addEventListener('shown.bs.modal', (ev) => {
   if (ev.target?.id === 'wizardTareasModal') {
     console.log('🔥 WIZARD: Modal mostrado, configurando interceptor único');
     setupUniqueInterceptor();
+  }
+});
+
+// =================== FUNCIONES PASO 3 → FINALIZAR ===================
+
+// collectPaso3Payload - Recopilar datos del Paso 3
+window.collectPaso3Payload = function() {
+  const modal = document.getElementById('wizardTareasModal');
+  const rows = [...modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr')];
+  const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+  
+  const tareas = rows.map((row, i) => {
+    const getData = (name) => row.querySelector(`[name="rows[${i}][${name}]"]`)?.value || '';
+    const tareaData = window.WZ_STATE.tareasSel?.[i] || {};
+    
+    return {
+      etapa_id: tareaData.etapa_id || null,  // Usar etapa_id guardado del paso 2
+      nombre: row.children[1]?.textContent?.trim() || '',
+      fecha_inicio: getData('inicio'),
+      fecha_fin: getData('fin'),
+      horas: Number(getData('horas')) || 8,
+      cantidad: Number(getData('cantidad')) || 1,
+      unidad: getData('unidad'),
+      asignado_usuario_id: getData('asignado') || null,  // Cambiar nombre del campo
+      prioridad: getData('prioridad') || 'media'
+    };
+  });
+  
+  return {
+    obra_id: obraId,
+    tareas: tareas.filter(t => t.etapa_id)  // Filtrar solo tareas con etapa_id válido
+  };
+};
+
+// installFinishInterceptor - Interceptor del botón Finalizar
+window.installFinishInterceptor = function() {
+  const oldBtn = document.querySelector("#wizardBtnConfirmar");
+  if (!oldBtn) return;
+  
+  const newBtn = oldBtn.cloneNode(true);
+  newBtn.removeAttribute("data-bs-toggle");
+  newBtn.removeAttribute("href");
+  newBtn.removeAttribute("data-action");
+  newBtn.removeAttribute("data-bs-dismiss");
+  
+  oldBtn.replaceWith(newBtn);
+  
+  newBtn.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
+    
+    console.log('🔥 WIZARD: Finalizando wizard...');
+    
+    // Validaciones
+    const payload = window.collectPaso3Payload();
+    if (!payload.tareas || payload.tareas.length === 0) {
+      alert('No hay tareas para crear');
+      return;
+    }
+    
+    const sinAsignar = payload.tareas.filter(t => !t.asignado_id || t.asignado_id === '');
+    if (sinAsignar.length > 0) {
+      const continuar = confirm(`${sinAsignar.length} tareas no tienen usuario asignado. ¿Continuar de todas formas?`);
+      if (!continuar) return;
+    }
+    
+    // Deshabilitar botón mientras procesa
+    newBtn.disabled = true;
+    newBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
+    
+    try {
+      const r = await fetch("/obras/api/wizard-tareas/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+      
+      const data = await r.json();
+      
+      if (data.ok) {
+        console.log('✅ WIZARD: Tareas creadas exitosamente');
+        window.gotoPaso(4);
+        if (typeof window.updateWizardProgress === 'function') window.updateWizardProgress(4);
+        
+        // Mostrar mensaje de éxito
+        const modal = document.getElementById('wizardTareasModal');
+        const resumen = modal.querySelector('#resumenWizard');
+        if (resumen) {
+          resumen.innerHTML = `
+            <div class="alert alert-success">
+              <h5><i class="fas fa-check-circle text-success me-2"></i>¡Tareas creadas exitosamente!</h5>
+              <p class="mb-0">Se crearon <strong>${payload.tareas.length} tareas</strong> en la obra.</p>
+            </div>
+          `;
+        }
+      } else {
+        throw new Error(data.error || 'Error desconocido');
+      }
+      
+    } catch (error) {
+      console.error('❌ WIZARD: Error al crear tareas:', error);
+      alert(`Error al finalizar: ${error.message}`);
+    } finally {
+      // Re-habilitar botón
+      newBtn.disabled = false;
+      newBtn.innerHTML = '<i class="fas fa-check me-1"></i>Crear Tareas';
+    }
+  }, { capture: true });
+  
+  console.log('✅ WIZARD: Interceptor de finalizar instalado');
+};
+
+// =================== AUTO-INSTALACIÓN ===================
+document.addEventListener('shown.bs.modal', (ev) => {
+  if (ev.target?.id === 'wizardTareasModal') {
+    console.log('🔥 WIZARD: Modal mostrado, configurando interceptores');
+    setupUniqueInterceptor();
+    // Instalar interceptor de finalizar con un pequeño delay para asegurar que el DOM esté listo
+    setTimeout(() => window.installFinishInterceptor(), 100);
   }
 });
 

@@ -1,0 +1,69 @@
+Hola, necesito que ajustes el Wizard de Obras (Paso 3 → Finalizar) en OBYRA con estos dos cambios:
+
+1️⃣ Select “Asignado a”
+
+En el render de las filas del Paso 3, el <select> de usuarios debe mostrar primero un placeholder “— Seleccioná —” y NO autoseleccionar ningún usuario, salvo que la tarea ya tenga asignado_id desde la base.
+
+Podés usar algo como:
+
+function buildUsuarioSelect(usuarios, asignadoId = null) {
+  let html = `<select class="form-select form-select-sm usuario-select">
+    <option value="">— Seleccioná —</option>`;
+  for (const u of usuarios) {
+    const sel = (asignadoId && Number(asignadoId) === Number(u.id)) ? ' selected' : '';
+    html += `<option value="${u.id}"${sel}>${u.nombre}</option>`;
+  }
+  html += `</select>`;
+  return html;
+}
+
+
+2️⃣ Botón “Finalizar” vuelve al Paso 2
+
+Hay que clonar #wizard-finish, quitarle atributos data-bs-toggle, href, data-action, etc. y agregar un interceptor único que:
+
+Valide que haya tareas y usuarios asignados.
+
+Arme el payload (collectPaso3Payload()).
+
+Envíe un fetch POST a /obras/api/wizard/bulk-create.
+
+Al terminar, ejecute gotoPaso(4) o muestre el resumen, sin volver al Paso 2.
+
+Ejemplo:
+
+function installFinishInterceptor() {
+  const oldBtn = document.querySelector("#wizard-finish");
+  if (!oldBtn) return;
+  const newBtn = oldBtn.cloneNode(true);
+  newBtn.removeAttribute("data-bs-toggle");
+  newBtn.removeAttribute("href");
+  newBtn.removeAttribute("data-action");
+  oldBtn.replaceWith(newBtn);
+
+  newBtn.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
+    // validaciones + envío
+    const payload = collectPaso3Payload();
+    const r = await fetch("/obras/api/wizard/bulk-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (data.ok) gotoPaso(4);
+    else alert("No se pudo finalizar");
+  }, { capture: true });
+}
+
+
+También revisá que en el HTML del botón Finalizar no quede href="#paso2" ni listeners viejos que hagan gotoPaso(2) o “Aplicando catálogo…”.
+
+El objetivo es que:
+
+El select de usuario nunca esté pre-marcado salvo asignación previa real.
+
+Al confirmar, se cree todo y se pase al Paso 4, no al Paso 2.
