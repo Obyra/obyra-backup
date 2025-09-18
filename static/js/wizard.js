@@ -6,19 +6,29 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema con event delegation...');
 // =================== PREFIJO Y UTILIDADES ===================
 const PREF = window.PREFIX || '';
 
-// Helper para fetch con manejo de errores mejorado
-async function fetchJSON(url, opts) {
+// Helper para forzar rutas absolutas
+const api = (p) => p.startsWith('/') ? p : `/${p}`;
+
+// Helper para fetch con manejo robusto de errores y HTML
+async function fetchJSON(url, opts = {}) {
   try {
-    const response = await fetch(url, opts);
-    if (!response.ok) {
-      if (response.headers.get('content-type')?.includes('application/json')) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-      } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+    const r = await fetch(url, { credentials: 'same-origin', ...opts });
+    const ctype = r.headers.get('content-type') || '';
+    const text = await r.text();
+
+    if (!r.ok) {
+      throw new Error(
+        ctype.includes('application/json')
+          ? (JSON.parse(text).error || `HTTP ${r.status}`)
+          : `HTTP ${r.status} (no JSON): ${text.slice(0,120)}`
+      );
     }
-    return await response.json();
+    
+    if (!ctype.includes('application/json')) {
+      throw new Error(`Respuesta no-JSON del servidor: ${text.slice(0,120)}`);
+    }
+    
+    return JSON.parse(text);
   } catch (error) {
     console.error('❌ WIZARD: Error en fetchJSON:', error);
     throw error;
@@ -57,15 +67,11 @@ async function cargarCatalogoEtapas() {
     
     console.log(`📡 WIZARD: Llamando API para obra ${obraId}`);
     
-    // 🔥 Normalizar la respuesta del API
-    const res = await fetch(`${PREF}/api/wizard-tareas/etapas?obra_id=${obraId}`, { 
-      credentials: 'include' 
-    });
-    const json = await res.json();
+    // 🔥 Usar ruta absoluta para evitar 404
+    const url = api(`obras/api/wizard-tareas/etapas?obra_id=${obraId}`);
+    const json = await fetchJSON(url);
     
-    if (!res.ok) {
-      throw new Error(json.error || `HTTP ${res.status}: ${res.statusText}`);
-    }
+    // fetchJSON ya maneja errores HTTP
     
     // 🔥 Usar las claves correctas
     const catalogo = Array.isArray(json) ? json : (json.etapas_catalogo || []);
@@ -277,13 +283,8 @@ window.ensureOpciones = async function (obraId) {
   if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
 
   try {
-    const resp = await fetch(`/obras/api/wizard-tareas/opciones?obra_id=${obraId}`, {
-      credentials: 'same-origin'
-    });
-    
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    
-    const data = await resp.json();
+    const url = api(`obras/api/wizard-tareas/opciones?obra_id=${obraId}`);
+    const data = await fetchJSON(url);
     window.WZ_STATE.opciones = data;
     return data;
     
@@ -304,7 +305,7 @@ window.populatePaso3 = async function() {
     return;
   }
 
-  // Cargar opciones (unidades y equipo)
+  // Cargar opciones (unidades y equipo) - Ruta absoluta
   const opciones = await window.ensureOpciones(obraId);
   const unidades = opciones.unidades || ['h', 'días', 'und'];
   const equipo = opciones.equipo || [];
@@ -424,17 +425,13 @@ window.loadTareasWizard = async function(obraId, slugs) {
   if (list) list.innerHTML = '';
   
   try {
-    // USAR EL ENDPOINT DEL CATÁLOGO (NO DB REAL)
-    const res = await fetch('/obras/api/wizard-tareas/tareas', {
+    // USAR EL ENDPOINT DEL CATÁLOGO (NO DB REAL) - Ruta absoluta
+    const url = api('obras/api/wizard-tareas/tareas');
+    const json = await fetchJSON(url, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      credentials: 'include',
       body: JSON.stringify({ obra_id: parseInt(obraId), etapas: slugs })
     });
-    
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    
-    const json = await res.json();
     const tareas = json.tareas_catalogo || json.tareas || json.data || [];
     
     if (spin) spin.classList.add('d-none');
@@ -556,16 +553,15 @@ if (!window.__WZ_FINISH_INSTALLED__) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
     
     try {
-      const r = await fetch('/obras/api/wizard-tareas/create', {
+      const url = api('obras/api/wizard-tareas/create');
+      const data = await fetchJSON(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify(payload)
       });
       
-      const data = await r.json();
-      if (!r.ok || !data.ok) {
-        throw new Error(data.error || `HTTP ${r.status}`);
+      if (!data.ok) {
+        throw new Error(data.error || 'Error desconocido');
       }
       
       console.log('✅ WIZARD: Tareas creadas, avanzando a Paso 4');
