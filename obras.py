@@ -2893,11 +2893,25 @@ def wizard_create():
         # Use proper transaction context
         try:
             for t in tareas_in:
-                etapa_id = t.get("etapa_id")
+                etapa_slug = t.get("etapa_slug")
                 nombre = t.get("nombre")
                 
-                if not etapa_id or not nombre:
+                if not etapa_slug or not nombre:
                     continue
+                    
+                # Mapear etapa_slug a etapa_id real
+                etapa_real = (EtapaObra.query
+                             .join(EtapaObra.obra)  
+                             .filter(EtapaObra.obra_id == obra_id)
+                             .filter(EtapaObra.slug == etapa_slug)
+                             .first())
+                
+                if not etapa_real:
+                    # Si no existe la etapa, saltamos esta tarea
+                    current_app.logger.warning(f"⚠️ WIZARD: Etapa '{etapa_slug}' no encontrada en obra {obra_id}")
+                    continue
+                    
+                etapa_id = etapa_real.id
                     
                 # Verificar si ya existe (idempotencia)
                 exists = (TareaEtapa.query

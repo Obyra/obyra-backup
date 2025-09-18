@@ -299,7 +299,7 @@ window.getSelPaso2 = function(modal) {
     id: cb.dataset.id || cb.value || String(i + 1),
     nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || `Tarea ${i+1}`).trim(),
     etapa_slug: cb.dataset.etapa || '',
-    etapa_id: cb.dataset.etapaId || null  // Usar data-etapa-id del HTML
+    etapa_id: null  // Las plantillas no tienen etapa_id hasta ser creadas
   }));
 };
 
@@ -480,9 +480,29 @@ function setupUniqueInterceptor() {
 // =================== COMPATIBILIDAD LEGACY ===================
 window.connectPaso2Nav = setupUniqueInterceptor;
 
-// =================== CARGA DE TAREAS PASO 2 ===================
+// =================== FUNCIÓN CATÁLOGO ===================
+// Función para obtener tareas del catálogo local (alternativa)
+window.getCatalogTasksFor = function(selectedEtapas) {
+  // Si tenemos catálogo cargado en memoria, usarlo
+  const map = window.WZ_CATALOGO?.tareas_por_etapa || {};
+  const out = [];
+  
+  for (const etapa of selectedEtapas) {
+    const lista = map[etapa] || [];
+    lista.forEach((t, idx) => out.push({ 
+      ...t, 
+      id: `${etapa}-${idx+1}`,
+      etapa_slug: etapa,
+      _source: 'catalog' 
+    }));
+  }
+  
+  return out;
+};
+
+// =================== CARGA DE TAREAS PASO 2 (CATÁLOGO) ===================
 window.loadTareasWizard = async function(obraId, slugs) {
-  console.log(`🔥 WIZARD: Cargando tareas REALES para obra ${obraId}, etapas:`, slugs);
+  console.log(`🔥 WIZARD: Cargando tareas del CATÁLOGO para obra ${obraId}, etapas:`, slugs);
   
   const m = document.getElementById('wizardTareasModal');
   const list = m.querySelector('#wizardListaTareas') || m.querySelector('#wizardStep2');
@@ -492,78 +512,58 @@ window.loadTareasWizard = async function(obraId, slugs) {
   if (list) list.innerHTML = '';
   
   try {
-    // Cargar tareas reales de las etapas ya creadas en la obra
-    const res = await fetch(`/obras/${obraId}/etapas`, {
-      method: 'GET',
-      credentials: 'include'
+    // USAR EL ENDPOINT DEL CATÁLOGO (NO DB REAL)
+    const res = await fetch('/obras/api/wizard-tareas/tareas', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({ obra_id: parseInt(obraId), etapas: slugs })
     });
     
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     
     const json = await res.json();
-    const etapas = json.etapas || [];
-    
-    // Filtrar solo las etapas que coinciden con los slugs seleccionados
-    const etapasFiltradas = etapas.filter(e => slugs.includes(e.slug));
-    
-    // Obtener todas las tareas de las etapas filtradas  
-    let todasLasTareas = [];
-    
-    for (const etapa of etapasFiltradas) {
-      if (etapa.tareas && etapa.tareas.length > 0) {
-        etapa.tareas.forEach(tarea => {
-          todasLasTareas.push({
-            id: tarea.id,
-            nombre: tarea.nombre,
-            descripcion: tarea.descripcion || '',
-            etapa_slug: etapa.slug,
-            etapa_id: etapa.id,  // ¡Aquí está el etapa_id que necesitamos!
-            etapa_nombre: etapa.nombre,
-            horas: tarea.horas_estimadas || 0
-          });
-        });
-      }
-    }
+    const tareas = json.tareas_catalogo || json.tareas || json.data || [];
     
     if (spin) spin.classList.add('d-none');
     
     if (list) {
-      list.innerHTML = todasLasTareas.length
+      list.innerHTML = tareas.length
         ? `<div class="mb-3">
-             <h6 class="text-primary">Tareas disponibles (${todasLasTareas.length}):</h6>
+             <h6 class="text-primary">📋 Plantillas disponibles (${tareas.length}):</h6>
              <div class="row">${
-               todasLasTareas.map(t => `
+               tareas.map(t => `
                  <div class="col-md-6 mb-2">
                    <div class="form-check">
                      <input class="form-check-input tarea-checkbox" type="checkbox" 
                             data-id="${t.id}" 
                             data-nombre="${t.nombre}"
                             data-etapa="${t.etapa_slug}"
-                            data-etapa-id="${t.etapa_id}"
                             id="tarea-${t.id}">
                      <label class="form-check-label" for="tarea-${t.id}">
-                       <strong>${t.nombre}</strong> <small class="text-muted">(${t.etapa_nombre})</small>
+                       <strong>${t.nombre}</strong>
                        ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
+                       <small class="text-info d-block">⏱️ ${t.horas || 0}h estimadas</small>
                      </label>
                    </div>
                  </div>
                `).join('')
              }</div>
            </div>`
-        : '<div class="text-muted text-center p-4">No hay tareas disponibles para las etapas seleccionadas.</div>';
+        : '<div class="text-muted text-center p-4">📝 No hay plantillas disponibles para las etapas seleccionadas.</div>';
     }
     
-    console.log(`✅ WIZARD: ${todasLasTareas.length} tareas REALES cargadas exitosamente`);
+    console.log(`✅ WIZARD: ${tareas.length} plantillas del catálogo cargadas exitosamente`);
     
   } catch (error) {
-    console.error('❌ WIZARD: Error cargando tareas reales:', error);
+    console.error('❌ WIZARD: Error cargando plantillas del catálogo:', error);
     if (spin) spin.classList.add('d-none');
     if (list) {
       list.innerHTML = `<div class="alert alert-warning">
-        <h6>No se pudieron cargar las tareas</h6>
+        <h6>No se pudieron cargar las plantillas</h6>
         <p class="mb-0">Error: ${error.message}</p>
         <button class="btn btn-sm btn-outline-primary mt-2" onclick="window.loadTareasWizard(${obraId}, ${JSON.stringify(slugs)})">
-          Reintentar
+          <i class="fas fa-refresh me-1"></i>Reintentar
         </button>
       </div>`;
     }
@@ -591,21 +591,21 @@ window.collectPaso3Payload = function() {
     const tareaData = window.WZ_STATE.tareasSel?.[i] || {};
     
     return {
-      etapa_id: tareaData.etapa_id || null,  // Usar etapa_id guardado del paso 2
+      etapa_slug: tareaData.etapa_slug || '',  // Usar slug de la plantilla
       nombre: row.children[1]?.textContent?.trim() || '',
       fecha_inicio: getData('inicio'),
       fecha_fin: getData('fin'),
       horas: Number(getData('horas')) || 8,
       cantidad: Number(getData('cantidad')) || 1,
       unidad: getData('unidad'),
-      asignado_usuario_id: getData('asignado') || null,  // Cambiar nombre del campo
+      asignado_usuario_id: getData('asignado') || null,
       prioridad: getData('prioridad') || 'media'
     };
   });
   
   return {
     obra_id: obraId,
-    tareas: tareas.filter(t => t.etapa_id)  // Filtrar solo tareas con etapa_id válido
+    tareas: tareas.filter(t => t.etapa_slug)  // Filtrar tareas con etapa_slug válido
   };
 };
 
