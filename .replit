@@ -42,6 +42,10 @@ localPort = 34117
 externalPort = 5000
 
 [[ports]]
+localPort = 36283
+externalPort = 8000
+
+[[ports]]
 localPort = 38067
 externalPort = 6000
 
@@ -68,10 +72,6 @@ externalPort = 3001
 [[ports]]
 localPort = 44611
 externalPort = 3002
-
-[[ports]]
-localPort = 46015
-externalPort = 8000
 
 [agent]
 integrations = ["flask_google_oauth==1.0.0", "python_openai==1.0.0", "python_database==1.0.0"]
