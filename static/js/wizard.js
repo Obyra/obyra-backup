@@ -689,14 +689,93 @@ window.installFinishInterceptor = function() {
   console.log('✅ WIZARD: Interceptor de finalizar instalado');
 };
 
-// =================== AUTO-INSTALACIÓN ===================
+// installConfirmInterceptor - Interceptor del botón "Confirmar" (Paso 4 → Cerrar Modal)
+window.installConfirmInterceptor = function() {
+  const oldBtn = document.querySelector('#wizardBtnCerrar, #wizard-confirm, [data-action="confirm"], #wizardBtnFin');
+  if (!oldBtn) {
+    console.warn('⚠️ WIZARD: Botón Confirmar no encontrado');
+    return;
+  }
+  
+  const newBtn = oldBtn.cloneNode(true);
+  ['href', 'data-bs-toggle', 'data-bs-target', 'data-action'].forEach(attr => {
+    newBtn.removeAttribute(attr);
+  });
+  
+  oldBtn.replaceWith(newBtn);
+  
+  newBtn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
+    
+    console.log('🎯 WIZARD: Confirmando - cerrando modal...');
+    
+    // Cerrar el modal
+    const modal = document.querySelector('#wizardTareasModal, #wizard-modal');
+    if (modal) {
+      try {
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+        bsModal.hide();
+        console.log('✅ WIZARD: Modal cerrado exitosamente');
+        
+        // Opcional: recargar la página para mostrar las nuevas tareas
+        setTimeout(() => {
+          window.location.reload();
+        }, 300);
+        
+      } catch (error) {
+        console.error('❌ WIZARD: Error cerrando modal:', error);
+        // Fallback: ocultar manualmente
+        modal.style.display = 'none';
+        document.body.classList.remove('modal-open');
+        document.querySelector('.modal-backdrop')?.remove();
+      }
+    }
+  }, { capture: true });
+  
+  console.log('✅ WIZARD: Interceptor de Confirmar instalado');
+};
+
+// neutralizarRebotesLegacy - Neutralizar navegación legacy a Paso 2
+window.neutralizarRebotesLegacy = function() {
+  // Neutralizar enlaces que llevan al paso 2
+  document.querySelectorAll('a[href="#paso2"], a[href="#wizardPaso2"]').forEach(link => {
+    link.removeAttribute('href');
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('🚫 WIZARD: Navegación a Paso 2 bloqueada (legacy)');
+    }, { capture: true });
+  });
+  
+  // Bloquear hashchange hacia paso2
+  window.addEventListener('hashchange', (e) => {
+    if (/paso2/i.test(location.hash)) {
+      console.log('🚫 WIZARD: Hashchange a Paso 2 bloqueado');
+      history.replaceState(null, '', '#');
+      e.stopImmediatePropagation?.();
+    }
+  }, { capture: true });
+  
+  console.log('✅ WIZARD: Rebotes legacy neutralizados');
+};
+
+// =================== AUTO-INSTALACIÓN COMPLETA ===================
 document.addEventListener('shown.bs.modal', (ev) => {
   if (ev.target?.id === 'wizardTareasModal') {
-    console.log('🔥 WIZARD: Modal mostrado, configurando interceptores');
+    console.log('🔥 WIZARD: Modal mostrado, configurando interceptores completos');
+    
+    // Configurar interceptor de navegación Paso 1 → 2
     setupUniqueInterceptor();
-    // Instalar interceptor de finalizar con un pequeño delay para asegurar que el DOM esté listo
-    setTimeout(() => window.installFinishInterceptor(), 100);
+    
+    // Configurar interceptores finales con delay para asegurar DOM listo
+    setTimeout(() => {
+      window.installFinishInterceptor();      // Paso 3 → 4
+      window.installConfirmInterceptor();     // Paso 4 → Cerrar
+      window.neutralizarRebotesLegacy();      // Bloquear rebotes
+    }, 100);
   }
 });
 
-console.log('✅ WIZARD: Bloque canónico ÚNICO cargado - Sin duplicados');
+console.log('✅ WIZARD: Sistema completo cargado - Flujo Paso1→2→3→4→Cerrar');
