@@ -3175,7 +3175,7 @@ class WizardTareas {
         this.cargarCatalogoEtapas();
     }
     
-    refreshTaskListsFromDB() {
+    async refreshTaskListsFromDB() {
         // Refrescar solo las listas de tareas de las etapas modificadas (desde BD, no catálogo)
         if (this.WIZARD && this.WIZARD.etapa_ids && this.WIZARD.etapa_ids.length > 0) {
             console.log('🔄 WIZARD: Refrescando listas de tareas desde BD para etapas:', this.WIZARD.etapa_ids);

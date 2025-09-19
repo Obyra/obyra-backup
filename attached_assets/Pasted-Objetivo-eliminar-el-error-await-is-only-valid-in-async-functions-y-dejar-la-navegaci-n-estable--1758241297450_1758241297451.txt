@@ -1,0 +1,87 @@
+Objetivo: eliminar el error await is only valid in async functions… y dejar la navegación estable.
+
+1) Quitar await en top-level
+
+Hay un await fuera de función en algún script clásico que carga junto al wizard (la consola lo marca como 18:3715:17). Buscá y envolvé todo bloque que use await en una IIFE async o movelo a una función async llamada después del DOMContentLoaded o del shown.bs.modal.
+
+Acción:
+
+Revisar TODOS los <script> (incluidos inline en templates) relacionados al wizard.
+
+En cualquier init con await en tope de archivo o fuera de async, cambiar de:
+
+// ❌ top-level await (rompe)
+const data = await fetchJSON(url);
+renderEtapas(data);
+
+
+a:
+
+// ✅ envuelto
+(async function initWizardPaso1(){
+  try {
+    const data = await fetchJSON(url);
+    renderEtapas(data);
+  } catch (e) {
+    showPaso1Error("Error cargando catálogo de etapas", e.message || String(e));
+  }
+})();
+
+
+No convertir los scripts a type="module".
+
+Búsquedas útiles:
+
+rg -n "await " static templates | rg -v "async"
+rg -n "<script[^>]*>.*await " -U templates
+
+2) Confirmar gotoPaso y mapeo de panes
+
+Ya tenemos polyfill, pero asegurate que cada pane tenga un selector reconocible.
+
+Opciones:
+
+Dar IDs consistentes: #wizard-paso1, #wizard-paso2, #wizard-paso3, #wizard-paso4, o
+
+Agregar data-wz-step="1|2|3|4" en cada .tab-pane.
+
+El polyfill intenta con:
+#wizard-pasoX, #pasoX, #wizardPasoX, #wizard-stepX, #stepX y data-wz-step.
+
+3) Mantener lo ya correcto
+
+URLs con helper api() (rutas absolutas).
+
+Paso 2 usando catálogo (no DB).
+
+Select “Asignado a” con placeholder.
+
+Interceptores por event delegation para #wizard-finish y #wizard-confirm (sin clonado).
+
+4) QA a pasar (en navegador)
+
+Consola limpia: no debe aparecer más await is only valid….
+
+Paso 1 → click Siguiente → navega a Paso 2 sin pane no encontrado.
+
+Paso 2 → tildar 2–3 plantillas → Siguiente → en Paso 3 aparecen esas filas y el select “Asignado a” muestra “— Seleccioná —”.
+
+Finalizar (Paso 3): ver POST /obras/api/wizard-bulk-create (o ruta equivalente) con {ok:true} y navegar a Paso 4.
+
+Confirmar (Paso 4): se cierra el modal y no vuelve a Paso 2.
+
+🔎 Si querés verificar vos rapidito
+
+localizar el script culpable:
+
+[...document.scripts].map((s,i)=>({i, src:s.src||`inline#${i}`, type:s.type||'classic'}))
+
+
+Si hay inline, abrí “Sources” y buscá “await ” en ese bloque. Cualquier inline no-module con await es el culpable.
+
+probar gotoPaso y panes:
+
+({
+  gotoPaso: typeof window.gotoPaso,
+  pane2: !!document.querySelector('#wizard-paso2,#paso2,#wizardPaso2,#wizard-step2,[data-wz-step="2"]')
+})
