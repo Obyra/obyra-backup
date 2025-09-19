@@ -2799,19 +2799,26 @@ class WizardTareas {
     }
     
     populateStep2() {
+        console.log('🔥 DEBUG: populateStep2() iniciado');
         const container = document.getElementById('accordion-etapas');
+        console.log('🔥 DEBUG: container encontrado:', container);
         container.innerHTML = '';
         
         // 🎯 Usar estado unificado del wizard
         const preview = window.WIZARD.preview;
+        console.log('🔥 DEBUG: window.WIZARD:', window.WIZARD);
+        console.log('🔥 DEBUG: preview completo:', preview);
+        
         if (!preview || !preview.etapas) {
             const error = preview && preview.ok === false ? preview.error : 'Error cargando tareas';
-            container.innerHTML = `<p class="text-danger">${error}</p>`;
-            console.error('❌ WIZARD: No hay preview disponible', preview);
+            console.error('❌ WIZARD: No hay preview disponible', { preview, hasEtapas: preview?.etapas, etapasLength: preview?.etapas?.length });
+            container.innerHTML = `<p class="text-danger">DEBUG: ${error}</p>`;
             return;
         }
         
         console.log('✅ WIZARD: Renderizando Step 2 desde preview:', preview);
+        console.log('🔥 DEBUG: preview.etapas:', preview.etapas);
+        console.log('🔥 DEBUG: preview.etapas.length:', preview.etapas.length);
         
         // Build accordion per user specification
         preview.etapas.forEach((etapa, index) => {
