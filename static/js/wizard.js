@@ -525,6 +525,23 @@ function setupUniqueInterceptor() {
       console.log('🔥 WIZARD: Navegando Paso 1 → 2');
       window.gotoPaso?.(2);
       
+      // 🎯 CARGAR TAREAS DEL CATÁLOGO para las etapas seleccionadas
+      setTimeout(() => {
+        const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)');
+        const slugs = Array.from(etapasSeleccionadas).map(cb => cb.getAttribute('data-slug') || cb.value);
+        
+        console.log(`🔥 WIZARD: Cargando tareas para etapas:`, slugs);
+        
+        // Obtener obra ID
+        let obraId = document.getElementById('wizardTareasModal')?.getAttribute('data-obra-id') || window.obraId;
+        
+        if (obraId && slugs.length > 0 && typeof window.loadTareasWizard === 'function') {
+          window.loadTareasWizard(obraId, slugs);
+        } else {
+          console.error('❌ WIZARD: No se puede cargar tareas - obraId:', obraId, 'slugs:', slugs);
+        }
+      }, 100);
+      
     } else if (paso2Visible || currentStep === 2) {
       // PASO 2 → 3: Capturar tareas seleccionadas del catálogo
       const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)');
