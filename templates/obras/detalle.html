@@ -3299,19 +3299,25 @@ class WizardTareas {
             
             html += `
                 <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="etapa-card card ${estaCreada ? 'border-success' : 'border-light'} h-100" 
-                         data-etapa-id="${etapa.id}" data-etapa-slug="${etapa.slug}"
-                         style="cursor: pointer;">
+                    <div class="card ${estaCreada ? 'border-success' : 'border-light'} h-100">
                         <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <h6 class="mb-1 ${estaCreada ? 'text-success' : ''}">
-                                        📋 ${etapa.nombre}
-                                        ${estaCreada ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}
-                                    </h6>
-                                    <p class="text-muted small mb-0">${etapa.descripcion}</p>
-                                </div>
-                                <span class="badge bg-light text-dark">${etapa.orden}</span>
+                            <div class="form-check">
+                                <input class="form-check-input etapa-check" type="checkbox" 
+                                       name="etapa" value="${etapa.id}" data-etapa-id="${etapa.id}"
+                                       id="catalogEtapa${etapa.id}" ${estaCreada ? 'checked' : ''}
+                                       onchange="window.wizardTareas?.actualizarContadorSeleccionadas()">
+                                <label class="form-check-label w-100" for="catalogEtapa${etapa.id}">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1 ${estaCreada ? 'text-success' : ''}">
+                                                📋 ${etapa.nombre}
+                                                ${estaCreada ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}
+                                            </h6>
+                                            <p class="text-muted small mb-0">${etapa.descripcion}</p>
+                                        </div>
+                                        <span class="badge bg-light text-dark">${etapa.orden}</span>
+                                    </div>
+                                </label>
                             </div>
                             ${estaCreada ? `<div class="mt-2"><small class="text-success"><i class="fas fa-info-circle me-1"></i>Ya existe en la obra</small></div>` : ''}
                         </div>
@@ -3335,20 +3341,6 @@ class WizardTareas {
         if (botonAgregar) {
             botonAgregar.disabled = contador === 0;
         }
-        
-        // Update visual state of cards
-        document.querySelectorAll('.etapa-card').forEach(card => {
-            const id = Number(card.dataset.etapaId);
-            const isSelected = window.WZ.state.selectedEtapaIds.includes(id);
-            card.classList.toggle('selected', isSelected);
-            if (isSelected) {
-                card.style.backgroundColor = '#e3f2fd';
-                card.style.borderColor = '#2196F3';
-            } else {
-                card.style.backgroundColor = '';
-                card.style.borderColor = '';
-            }
-        });
     }
     
     updateStepDisplay() {
@@ -3853,80 +3845,46 @@ function ampliarFoto(imageSrc) {
     new bootstrap.Modal(document.getElementById('modalAmpliarFoto')).show();
 }
 
-// 🔥 Estado global del wizard y funciones helper
-window.WZ = window.WZ || {};
-window.WZ.state = window.WZ.state || { selectedEtapaIds: [] };
+// 🔥 Collector canónico según especificación del usuario
+const STEP1 = '[data-wz-step="1"],#wizardStep1,#wizard-paso1,#paso1';
 
-// Collector canónico para usar en contador y en el POST
 function getSelectedEtapaIds() {
-  // Si existieran checkboxes reales, también los soportamos:
-  const STEP1 = '[data-wz-step="1"],#wizardStep1,#wizard-paso1,#paso1';
-  const fromInputs = [...document.querySelectorAll(`${STEP1} input[type="checkbox"]:checked`)]
+  // soportar tanto .etapa-check como .etapa-checkbox y cualquier name="etapa"
+  const cbs = [...document.querySelectorAll(
+    `${STEP1} input[type="checkbox"]:checked`
+  )];
+
+  return cbs
     .map(cb => Number(cb.dataset.etapaId || cb.value))
     .filter(Boolean);
-
-  const fromState = (window.WZ.state?.selectedEtapaIds || []).filter(Boolean);
-  return [...new Set(fromInputs.length ? fromInputs : fromState)];
 }
+window.getSelectedEtapaIds = getSelectedEtapaIds;
 
-// Helper para actualizar contador desde cualquier lugar
-function updateStep1Counter(count) {
-  if (typeof count !== 'number') count = getSelectedEtapaIds().length;
-  const contadorElement = document.getElementById('contadorSeleccionadas');
-  const botonAgregar = document.getElementById('wizard-add-etapas');
-  
-  if (contadorElement) contadorElement.textContent = count;
-  if (botonAgregar) botonAgregar.disabled = count === 0;
-}
-
-// Delegación para togglear selección por card (actualiza estado + clase visual)
-document.addEventListener('click', (ev) => {
-  const card = ev.target.closest('[data-wz-step="1"] .etapa-card, #wizardStep1 .etapa-card');
-  if (!card) return;
-  const id = Number(card.dataset.etapaId);
-  if (!id) return;
-
-  const arr = window.WZ.state.selectedEtapaIds;
-  const i = arr.indexOf(id);
-  if (i === -1) { arr.push(id); card.classList.add('selected'); }
-  else { arr.splice(i,1); card.classList.remove('selected'); }
-
-  updateStep1Counter?.(arr.length);  // actualizar badge si existe
-}, { capture: true });
-
-// Paso 1 → Paso 2 (Agregar/Siguiente) usa SIEMPRE el collector anterior
+// Handler Paso 1 → Paso 2 (Agregar/Siguiente) usando el collector canónico
 document.addEventListener('click', async (ev) => {
-  const btn = ev.target.closest('#wizard-add-etapas,#wizard-next-step1');
+  const btn = ev.target.closest('#wizard-add-etapas,#wizard-next-step1,[data-action="wizard-next-step1"]');
   if (!btn) return;
+
   ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
 
   const etapa_ids = getSelectedEtapaIds();
   if (!etapa_ids.length) { alert('Seleccioná al menos una etapa.'); return; }
 
-  const payload = { obra_id: window.obraId, etapa_ids };
-  console.log('📡 WIZARD: Enviando payload preview:', payload);
-  
-  try {
-    const r = await fetch('/obras/api/wizard-tareas/preview', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      credentials:'same-origin',
-      body: JSON.stringify(payload)
-    });
-    const j = await r.json();
-    if (!r.ok || !j.ok) { 
-      console.error('❌ WIZARD Preview error:', j); 
-      alert(j.error||'No se pudo continuar'); 
-      return; 
-    }
-    
-    console.log('✅ WIZARD: Preview exitoso, navegando a paso 2');
+  const obra_id = window.obraId || window.WIZARD?.obra_id;
+  const r = await fetch('/obras/api/wizard-tareas/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ obra_id, etapa_ids })
+  });
+  const j = await r.json().catch(()=> ({}));
+
+  if (r.ok && j?.ok) {
     window.WIZARD.preview = j;
     window.WIZARD.etapa_ids = etapa_ids;
-    window.gotoPaso(2);
-  } catch (error) {
-    console.error('❌ WIZARD Connection error:', error);
-    alert('Error de conexión: ' + error.message);
+    window.gotoPaso?.(2);
+  } else {
+    alert(j?.error || 'No se pudo continuar');
   }
 }, { capture: true });
 

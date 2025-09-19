@@ -1,0 +1,74 @@
+1) Unificar markup de los inputs o adaptar el collector
+
+Opción A (recomendada – markup canónico):
+en cada card de etapa, el checkbox debe ser:
+
+<input
+  type="checkbox"
+  class="form-check-input etapa-check"   <!-- importante: agregar 'etapa-check' -->
+  name="etapa"
+  value="{{ etapa.id }}"                 <!-- id numérico -->
+  data-etapa-id="{{ etapa.id }}"         <!-- idem por dataset -->
+/>
+
+
+Opción B (si quieren mantener la clase actual):
+si se quedan con .etapa-checkbox, entonces el collector debe buscar eso y no .etapa-check.
+
+2) Collector canónico (usar SIEMPRE para contador y POST)
+
+En static/js/wizard.js:
+
+const STEP1 = '[data-wz-step="1"],#wizardStep1,#wizard-paso1,#paso1';
+
+function getSelectedEtapaIds() {
+  // soportar tanto .etapa-check como .etapa-checkbox y cualquier name="etapa"
+  const cbs = [...document.querySelectorAll(
+    `${STEP1} input[type="checkbox"]:checked`
+  )];
+
+  return cbs
+    .map(cb => Number(cb.dataset.etapaId || cb.value))
+    .filter(Boolean);
+}
+window.getSelectedEtapaIds = getSelectedEtapaIds;
+
+
+Nota: si quedan con la clase actual, no pasa nada; lo clave es que el value o data-etapa-id traiga el ID numérico.
+
+3) Handler Paso 1 → Paso 2 (Agregar/Siguiente) usando el collector
+document.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('#wizard-add-etapas,#wizard-next-step1,[data-action="wizard-next-step1"]');
+  if (!btn) return;
+
+  ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+
+  const etapa_ids = getSelectedEtapaIds();
+  if (!etapa_ids.length) { alert('Seleccioná al menos una etapa.'); return; }
+
+  const obra_id = window.obraId || window.WIZARD?.obra_id;
+  const r = await fetch('/obras/api/wizard-tareas/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ obra_id, etapa_ids })
+  });
+  const j = await r.json().catch(()=> ({}));
+
+  if (r.ok && j?.ok) window.gotoPaso?.(2);
+  else alert(j?.error || 'No se pudo continuar');
+}, { capture: true });
+
+4) Botones de Paso 1
+
+Asegurar type="button" (si están dentro de un <form>) para evitar submit tradicional:
+
+<button id="wizard-add-etapas" type="button">Agregar Etapas Seleccionadas</button>
+<button id="wizard-next-step1"  type="button">Siguiente</button>
+
+5) (Opcional) Limpieza del warning A11y
+
+En gotoPaso(step), después de activar el pane, remover aria-hidden del activo y ponerlo en los demás:
+
+cont.querySelectorAll('.tab-pane').forEach(el => el.setAttribute('aria-hidden','true'));
+pane.removeAttribute('aria-hidden');
