@@ -6,11 +6,16 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
 // =================== POLYFILL GOTOPASO ===================
 (function ensureGotoPaso(){
   window.gotoPaso = function(step){
-    // localizar el pane por orden de prioridad
+    // localizar el pane por orden de prioridad - ✅ AGREGADO #wizardStep${step}
     const pane = document.querySelector(
-      `[data-wz-step="${step}"], #wizard-paso${step}, #paso${step}, #wizardPaso${step}, #wizard-step${step}, #step${step}`
+      `[data-wz-step="${step}"], #wizardStep${step}, #wizard-paso${step}, #paso${step}, #wizardPaso${step}, #wizard-step${step}, #step${step}`
     );
-    if (!pane) { console.warn('gotoPaso: pane no encontrado', step); return; }
+    if (!pane) { 
+      console.error(`❌ gotoPaso: pane no encontrado para paso ${step}. Selectores probados: [data-wz-step="${step}"], #wizardStep${step}, #wizard-paso${step}, #paso${step}, etc.`);
+      return; 
+    }
+    
+    console.log(`✅ gotoPaso: Pane encontrado para paso ${step}:`, { id: pane.id, classes: pane.className });
 
     // contenedor (tab-content) o documento
     const cont = pane.closest('.tab-content') || document;
@@ -22,6 +27,14 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
     });
     pane.classList.add('active','show');
     pane.removeAttribute('aria-hidden');
+    
+    console.log(`🎯 gotoPaso: Paso ${step} activado. Estado final:`, { 
+      id: pane.id, 
+      hasActive: pane.classList.contains('active'),
+      hasShow: pane.classList.contains('show'),
+      ariaHidden: pane.getAttribute('aria-hidden'),
+      isVisible: !!(pane.offsetParent)
+    });
 
     // marcar el tab nav si existe
     const tab = document.querySelector(`[data-bs-target="#${pane.id}"], a[href="#${pane.id}"]`);
@@ -484,7 +497,11 @@ window.loadTareasWizard = async function(obraId, slugs) {
         contenedor: list.id || 'sin-id', 
         tareasCount: tareas.length,
         htmlLength: html.length,
-        visible: !list.classList.contains('d-none')
+        hasActive: list.classList.contains('active'),
+        hasShow: list.classList.contains('show'),
+        noDNone: !list.classList.contains('d-none'),
+        isActuallyVisible: !!(list.offsetParent),
+        ariaHidden: list.getAttribute('aria-hidden')
       });
       console.log(`🎯 WIZARD: Contenedor después del render:`, list.innerHTML.substring(0, 200) + '...');
     } else {
