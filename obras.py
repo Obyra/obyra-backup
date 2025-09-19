@@ -2786,11 +2786,11 @@ def wizard_preview():
             return jsonify({"ok": False, "error": "Sin permisos"}), 403
         
         # 🎯 CORRECCIÓN: etapa_ids son IDs del CATÁLOGO, no de etapas existentes
-        from etapas_predefinidas import ETAPAS_PREDEFINIDAS
+        from etapas_predefinidas import ETAPAS_CONSTRUCCION
         from tareas_predefinidas import TAREAS_POR_ETAPA
         
         current_app.logger.debug(f"🔥 DEBUG WIZARD: Recibidos etapa_ids del catálogo: {etapa_ids}")
-        current_app.logger.debug(f"🔥 DEBUG WIZARD: Total etapas en catálogo: {len(ETAPAS_PREDEFINIDAS)}")
+        current_app.logger.debug(f"🔥 DEBUG WIZARD: Total etapas en catálogo: {len(ETAPAS_CONSTRUCCION)}")
         
         # 🎯 Construir respuesta desde el catálogo predefinido
         etapas_data = []
@@ -2798,7 +2798,7 @@ def wizard_preview():
         for etapa_id in etapa_ids:
             # Buscar la etapa en el catálogo predefinido
             etapa_def = None
-            for etapa in ETAPAS_PREDEFINIDAS:
+            for etapa in ETAPAS_CONSTRUCCION:
                 if etapa.get("id") == etapa_id:
                     etapa_def = etapa
                     break
