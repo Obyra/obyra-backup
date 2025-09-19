@@ -3293,9 +3293,17 @@ class WizardTareas {
         });
         
         let html = '';
+        console.log('🏗️ RENDER: Catálogo etapas:', catalogo.length, catalogo);
+        
         catalogo.forEach(etapa => {
+            console.log('📋 RENDER: Etapa individual:', etapa, 'ID:', etapa.id, 'tipo:', typeof etapa.id);
+            
             const estaCreada = etapasExistentesMap.has(etapa.slug) || etapasExistentesMap.has(etapa.nombre);
             const etapaExistente = etapasExistentesMap.get(etapa.slug) || etapasExistentesMap.get(etapa.nombre);
+            
+            // Ensure ID is available
+            const etapaId = etapa.id || etapa.pk || etapa.catalog_id;
+            console.log('🔑 RENDER: ID final usado:', etapaId, 'tipo:', typeof etapaId);
             
             html += `
                 <div class="col-md-6 col-lg-4 mb-3">
@@ -3303,10 +3311,10 @@ class WizardTareas {
                         <div class="card-body p-3">
                             <div class="form-check">
                                 <input class="form-check-input etapa-check" type="checkbox" 
-                                       name="etapa" value="${etapa.id}" data-etapa-id="${etapa.id}"
-                                       id="catalogEtapa${etapa.id}" ${estaCreada ? 'checked' : ''}
+                                       name="etapa" value="${etapaId}" data-etapa-id="${etapaId}"
+                                       id="catalogEtapa${etapaId}" ${estaCreada ? 'checked' : ''}
                                        onchange="window.getSelectedEtapaIds && window.wizardTareas?.actualizarContadorSeleccionadas()">
-                                <label class="form-check-label w-100" for="catalogEtapa${etapa.id}">
+                                <label class="form-check-label w-100" for="catalogEtapa${etapaId}">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
                                             <h6 class="mb-1 ${estaCreada ? 'text-success' : ''}">
