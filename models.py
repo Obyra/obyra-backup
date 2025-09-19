@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from flask_login import UserMixin
-from app import db
+from extensions import db
 from sqlalchemy import func
 import uuid
 import json

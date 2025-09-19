@@ -1,8 +1,8 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
-from app import db, app
+from extensions import db
 from models import Usuario, Organizacion
 from sqlalchemy import func
 from datetime import datetime
@@ -13,7 +13,7 @@ import uuid
 auth_bp = Blueprint('auth', __name__)
 
 # Configuración OAuth con Google
-oauth = OAuth(app)
+oauth = OAuth()
 google = None
 
 # Lista blanca de emails para administradores automáticos

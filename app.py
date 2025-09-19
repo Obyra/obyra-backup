@@ -1,19 +1,10 @@
 import os
 import logging
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_required, current_user
-from sqlalchemy.orm import DeclarativeBase
+from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-db = SQLAlchemy(model_class=Base)
-login_manager = LoginManager()
+from extensions import db, login_manager
 
 # create the app
 app = Flask(__name__)
@@ -64,6 +55,7 @@ login_manager.login_message_category = 'info'
 
 @login_manager.user_loader
 def load_user(user_id):
+    # Import here to avoid circular imports
     from models import Usuario
     return Usuario.query.get(int(user_id))
 
@@ -78,62 +70,7 @@ def unauthorized():
     return redirect(url_for('auth.login'))
 
 
-# Register blueprints
-from auth import auth_bp
-from obras import obras_bp
-from presupuestos import presupuestos_bp
-from equipos import equipos_bp
-from inventario import inventario_bp
-from marketplaces import marketplaces_bp
-from reportes import reportes_bp
-from asistente_ia import asistente_bp
-from cotizacion_inteligente import cotizacion_bp
-from control_documentos import documentos_bp
-from seguridad_cumplimiento import seguridad_bp
-from agent_local import agent_bp  # 👈 nuestro mini agente local
-from planes import planes_bp
-from events_service import events_bp
-from reports_service import reports_bp
-
-# Importar nuevos blueprints mejorados
-from equipos_new import equipos_new_bp
-from inventario_new import inventario_new_bp
-
-# Importar blueprints del Portal de Proveedores
-from supplier_auth import supplier_auth_bp
-from supplier_portal import supplier_portal_bp
-from market import market_bp
-
-# MARKETPLACE MODULE - Following strict instructions
-from marketplace.routes import bp as marketplace_bp
-
-app.register_blueprint(auth_bp, url_prefix='/auth')
-app.register_blueprint(obras_bp, url_prefix='/obras')
-app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
-app.register_blueprint(equipos_bp, url_prefix='/equipos')
-app.register_blueprint(inventario_bp, url_prefix='/inventario')
-app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
-app.register_blueprint(reportes_bp, url_prefix='/reportes')
-app.register_blueprint(asistente_bp, url_prefix='/asistente')
-app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
-app.register_blueprint(documentos_bp, url_prefix='/documentos')
-app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
-app.register_blueprint(agent_bp)  # Agente IA local sin prefijo
-app.register_blueprint(planes_bp)  # Sistema de planes
-
-# Registrar nuevos blueprints mejorados
-app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
-app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
-
-# Registrar blueprints del Portal de Proveedores
-app.register_blueprint(supplier_auth_bp)  # Ya tiene prefix '/proveedor'
-app.register_blueprint(supplier_portal_bp)  # Ya tiene prefix '/proveedor'
-app.register_blueprint(market_bp)  # Ya tiene prefix '/market'
-
-# MARKETPLACE MODULE - Register as per strict instructions
-app.register_blueprint(marketplace_bp, url_prefix="/")
-app.register_blueprint(events_bp)  # Sistema de eventos
-app.register_blueprint(reports_bp)  # Sistema de reportes PDF
+# Register blueprints - moved after database initialization to avoid circular imports
 
 # Funciones globales para templates
 @app.context_processor
@@ -264,6 +201,7 @@ def from_json_filter(json_str):
 
 # Create tables and initial data
 with app.app_context():
+    # Import models after app context is available to avoid circular imports
     from models import Usuario, Organizacion
     
     # Run startup migrations before creating tables
@@ -356,6 +294,78 @@ with app.app_context():
         print(f"⚠️ Marketplace initialization skipped: {e}")
     
     print("📊 Database tables created successfully")
+
+# Register blueprints after database initialization to avoid circular imports
+try:
+    from auth import auth_bp
+    from obras import obras_bp
+    from presupuestos import presupuestos_bp
+    from equipos import equipos_bp
+    from inventario import inventario_bp
+    from marketplaces import marketplaces_bp
+    from reportes import reportes_bp
+    from asistente_ia import asistente_bp
+    from cotizacion_inteligente import cotizacion_bp
+    from control_documentos import documentos_bp
+    from seguridad_cumplimiento import seguridad_bp
+    from agent_local import agent_bp
+    from planes import planes_bp
+    from events_service import events_bp
+    from reports_service import reports_bp
+    
+    # Initialize OAuth with app before registering auth blueprint
+    from auth import oauth
+    oauth.init_app(app)
+    
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(obras_bp, url_prefix='/obras')
+    app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
+    app.register_blueprint(equipos_bp, url_prefix='/equipos')
+    app.register_blueprint(inventario_bp, url_prefix='/inventario')
+    app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
+    app.register_blueprint(reportes_bp, url_prefix='/reportes')
+    app.register_blueprint(asistente_bp, url_prefix='/asistente')
+    app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
+    app.register_blueprint(documentos_bp, url_prefix='/documentos')
+    app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
+    app.register_blueprint(agent_bp)
+    app.register_blueprint(planes_bp)
+    app.register_blueprint(events_bp)
+    app.register_blueprint(reports_bp)
+    
+    print("✅ Core blueprints registered successfully")
+except ImportError as e:
+    print(f"⚠️ Some core blueprints not available: {e}")
+
+# Try to register optional blueprints
+try:
+    from equipos_new import equipos_new_bp
+    from inventario_new import inventario_new_bp
+    app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
+    app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
+    print("✅ Enhanced blueprints registered successfully")
+except ImportError as e:
+    print(f"⚠️ Enhanced blueprints not available: {e}")
+
+# Try to register supplier portal blueprints
+try:
+    from supplier_auth import supplier_auth_bp
+    from supplier_portal import supplier_portal_bp
+    from market import market_bp
+    app.register_blueprint(supplier_auth_bp)
+    app.register_blueprint(supplier_portal_bp)
+    app.register_blueprint(market_bp)
+    print("✅ Supplier portal blueprints registered successfully")
+except ImportError as e:
+    print(f"⚠️ Supplier portal blueprints not available: {e}")
+
+# Try to register marketplace blueprints
+try:
+    from marketplace.routes import bp as marketplace_bp
+    app.register_blueprint(marketplace_bp, url_prefix="/")
+    print("✅ Marketplace blueprint registered successfully")
+except ImportError as e:
+    print(f"⚠️ Marketplace blueprint not available: {e}")
 
 
 # === MEDIA SERVING ENDPOINT ===
