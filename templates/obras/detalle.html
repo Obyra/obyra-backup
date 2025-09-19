@@ -2620,15 +2620,15 @@ class WizardTareas {
         console.log(`🧙‍♂️ WIZARD: Step ${this.currentStep} → ${this.currentStep + 1}`);
         
         if (this.currentStep === 1) {
-            // 🎯 Usar estado unificado del wizard 
-            const etapaIds = window.WIZARD.etapa_ids || [];
+            // 🎯 Obtener etapas seleccionadas usando el collector
+            const etapaIds = window.getSelectedEtapaIds();
             console.log('🔍 WIZARD: Etapas para preview:', etapaIds);
             
-            // Skip old validation - our new auto-advance system handles this
-            // if (etapaIds.length === 0) {
-            //     mostrarErrorPaso1('Primero debes agregar etapas del catálogo usando el botón "Agregar Etapas Seleccionadas"');
-            //     return;
-            // }
+            // Validar que hay etapas seleccionadas
+            if (etapaIds.length === 0) {
+                alert('Debe seleccionar al menos una etapa');
+                return;
+            }
             
             // Call preview API
             try {
