@@ -1,0 +1,70 @@
+Qué vimos
+
+El POST sigue saliendo con etapa_ids: [] → 400.
+
+En consola aparece getSelectedEtapaIds is not defined → el collector no existe en window o nunca se carga.
+
+El warning muestra un input con clase form-check-input etapa-checkbox (con “…checkbox”), pero el collector que propusimos usa .etapa-check (sin “box”).
+→ desajuste entre markup y selector = no encuentra nada.
+
+Pedido exacto al agente
+
+Objetivo: Paso 1 debe enviar etapa_ids con IDs reales.
+
+Markup canónico de los checkboxes (Opción A):
+
+<input
+  type="checkbox"
+  class="form-check-input etapa-check"   <!-- OBLIGATORIO: 'etapa-check' -->
+  name="etapa"
+  value="{{ etapa.id }}"                 <!-- id numérico -->
+  data-etapa-id="{{ etapa.id }}"         <!-- idem por dataset -->
+/>
+
+
+Nota: hoy la clase es etapa-checkbox. Cambiarla a etapa-check (o adaptar el collector a ambas).
+
+Collector canónico y global (usado por contador y POST):
+
+const STEP1 = '[data-wz-step="1"],#wizardStep1,#wizard-paso1,#paso1';
+
+function getSelectedEtapaIds() {
+  return [...document.querySelectorAll(`${STEP1} input.etapa-check:checked, ${STEP1} input.etapa-checkbox:checked`)]
+    .map(cb => Number(cb.dataset.etapaId || cb.value))
+    .filter(Boolean);
+}
+window.getSelectedEtapaIds = getSelectedEtapaIds;  // <-- debe quedar en window
+
+
+Handler Paso 1 → Paso 2 (usa SIEMPRE el collector; no submit tradicional):
+
+document.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('#wizard-add-etapas,#wizard-next-step1,[data-action="wizard-next-step1"]');
+  if (!btn) return;
+
+  ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+
+  const etapa_ids = getSelectedEtapaIds();
+  if (!etapa_ids.length) { alert('Seleccioná al menos una etapa.'); return; }
+
+  const obra_id = window.obraId || window.WIZARD?.obra_id;
+  const r = await fetch('/obras/api/wizard-tareas/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ obra_id, etapa_ids })
+  });
+  const j = await r.json().catch(()=> ({}));
+
+  if (r.ok && j?.ok) window.gotoPaso?.(2);
+  else alert(j?.error || 'No se pudo continuar');
+}, { capture: true });
+
+
+Botones de Paso 1 (evitar envío clásico):
+
+<button id="wizard-add-etapas" type="button">Agregar Etapas Seleccionadas</button>
+<button id="wizard-next-step1"  type="button">Siguiente</button>
+
+
+(Opcional) A11y warning: al activar un pane, remover aria-hidden en el activo y ponerlo en los demás.

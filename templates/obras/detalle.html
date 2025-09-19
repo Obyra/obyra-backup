@@ -3305,7 +3305,7 @@ class WizardTareas {
                                 <input class="form-check-input etapa-check" type="checkbox" 
                                        name="etapa" value="${etapa.id}" data-etapa-id="${etapa.id}"
                                        id="catalogEtapa${etapa.id}" ${estaCreada ? 'checked' : ''}
-                                       onchange="window.wizardTareas?.actualizarContadorSeleccionadas()">
+                                       onchange="window.getSelectedEtapaIds && window.wizardTareas?.actualizarContadorSeleccionadas()">
                                 <label class="form-check-label w-100" for="catalogEtapa${etapa.id}">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
@@ -3845,22 +3845,17 @@ function ampliarFoto(imageSrc) {
     new bootstrap.Modal(document.getElementById('modalAmpliarFoto')).show();
 }
 
-// 🔥 Collector canónico según especificación del usuario
+// 🔥 Collector canónico según especificación exacta del usuario
 const STEP1 = '[data-wz-step="1"],#wizardStep1,#wizard-paso1,#paso1';
 
 function getSelectedEtapaIds() {
-  // soportar tanto .etapa-check como .etapa-checkbox y cualquier name="etapa"
-  const cbs = [...document.querySelectorAll(
-    `${STEP1} input[type="checkbox"]:checked`
-  )];
-
-  return cbs
+  return [...document.querySelectorAll(`${STEP1} input.etapa-check:checked, ${STEP1} input.etapa-checkbox:checked`)]
     .map(cb => Number(cb.dataset.etapaId || cb.value))
     .filter(Boolean);
 }
-window.getSelectedEtapaIds = getSelectedEtapaIds;
+window.getSelectedEtapaIds = getSelectedEtapaIds;  // <-- debe quedar en window
 
-// Handler Paso 1 → Paso 2 (Agregar/Siguiente) usando el collector canónico
+// Handler Paso 1 → Paso 2 (usa SIEMPRE el collector; no submit tradicional)
 document.addEventListener('click', async (ev) => {
   const btn = ev.target.closest('#wizard-add-etapas,#wizard-next-step1,[data-action="wizard-next-step1"]');
   if (!btn) return;
@@ -3879,13 +3874,8 @@ document.addEventListener('click', async (ev) => {
   });
   const j = await r.json().catch(()=> ({}));
 
-  if (r.ok && j?.ok) {
-    window.WIZARD.preview = j;
-    window.WIZARD.etapa_ids = etapa_ids;
-    window.gotoPaso?.(2);
-  } else {
-    alert(j?.error || 'No se pudo continuar');
-  }
+  if (r.ok && j?.ok) window.gotoPaso?.(2);
+  else alert(j?.error || 'No se pudo continuar');
 }, { capture: true });
 
 // Initialize wizard when DOM is ready
