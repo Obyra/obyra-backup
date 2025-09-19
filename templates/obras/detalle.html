@@ -3854,9 +3854,9 @@ function ampliarFoto(imageSrc) {
 
 // 🔥 Collector canónico que funciona en el wizard modal
 function getSelectedEtapaIds() {
-  // Buscar checkboxes marcados dentro del wizard modal - priorizar etapa-checkbox
-  const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked, #wizardTareasModal input.etapa-check:checked');
-  console.log('🔍 COLLECTOR: Checkboxes encontrados:', checkboxes.length, checkboxes);
+  // Buscar checkboxes marcados Y NO DESHABILITADOS dentro del wizard modal
+  const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked:not(:disabled), #wizardTareasModal input.etapa-check:checked:not(:disabled)');
+  console.log('🔍 COLLECTOR: Checkboxes encontrados (habilitados):', checkboxes.length, checkboxes);
   
   const ids = [...checkboxes]
     .map(cb => {
