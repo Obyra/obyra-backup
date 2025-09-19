@@ -854,9 +854,12 @@
                         <div class="progress-bar" id="wizardProgressBar" style="width: 25%"></div>
                     </div>
                 </div>
+                
+                <!-- Tab content container -->
+                <div class="tab-content">
 
                 <!-- Paso 1: Catálogo de Etapas -->
-                <div id="wizardStep1" class="wizard-content" data-paso="1">
+                <div id="wizardStep1" class="tab-pane show active" data-wz-step="1" data-paso="1">
                     <h6>Paso 1: Catálogo de Etapas</h6>
                     <p class="text-muted">Selecciona las etapas del catálogo que deseas incluir en esta obra:</p>
                     
@@ -892,7 +895,7 @@
                 </div>
 
                 <!-- Paso 2: Accordion por Etapa (según especificación) -->
-                <div id="wizardStep2" class="wizard-content d-none" data-paso="2">
+                <div id="wizardStep2" class="tab-pane" data-wz-step="2" data-paso="2">
                     <h6>Paso 2: Seleccionar Tareas</h6>
                     <p class="text-muted">Marca las tareas que quieres crear para cada etapa:</p>
                     <!-- Spinner de carga -->
@@ -928,7 +931,7 @@
                 </div>
 
                 <!-- Paso 3: Edición Masiva (según especificación) -->
-                <div id="wizardStep3" class="wizard-content d-none" data-paso="3">
+                <div id="wizardStep3" class="tab-pane" data-wz-step="3" data-paso="3">
                     <h6>Paso 3: Completar Datos de Tareas</h6>
                     <p class="text-muted">Completa los detalles para cada tarea seleccionada:</p>
                     <div class="table-responsive">
@@ -954,7 +957,7 @@
                 </div>
 
                 <!-- Paso 4: Resumen y Confirmar -->
-                <div id="wizardStep4" class="wizard-content d-none" data-paso="4">
+                <div id="wizardStep4" class="tab-pane" data-wz-step="4" data-paso="4">
                     <h6>Paso 4: Confirmar Creación</h6>
                     <p class="text-muted">Revisa el resumen antes de crear las tareas:</p>
                     <div id="resumenWizard">
@@ -967,6 +970,8 @@
                         </label>
                     </div>
                 </div>
+
+                </div> <!-- /tab-content -->
 
                 <!-- Loading state -->
                 <div id="wizardLoading" class="text-center d-none">
@@ -2629,7 +2634,7 @@ class WizardTareas {
             // Call preview API
             try {
                 document.getElementById('wizardLoading').classList.remove('d-none');
-                document.getElementById('wizardStep1').classList.add('d-none');
+                document.getElementById('wizardStep1').classList.remove('active','show');
                 
                 // 🎯 Llamada preview con payload exacto según especificación
                 const payload = { obra_id: this.obra_id, etapa_ids: etapaIds };
@@ -3056,7 +3061,7 @@ class WizardTareas {
         console.log('🧙‍♂️ WIZARD: Enviando a /obras/api/wizard-tareas/create', payload);
         
         // Show loading
-        document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
+        document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
         document.getElementById('wizardLoading').classList.remove('d-none');
         document.querySelector('.modal-footer').style.display = 'none';
         
@@ -3080,8 +3085,8 @@ class WizardTareas {
                     document.getElementById('wizardLoading').classList.add('d-none');
                     
                     // Show success directly in step 4
-                    document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
-                    document.getElementById('wizardStep4').classList.remove('d-none');
+                    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
+                    document.getElementById('wizardStep4').classList.add('active','show');
                     
                     let successContainer = document.getElementById('step4Success');
                     if (!successContainer) {
@@ -3129,8 +3134,8 @@ class WizardTareas {
         document.getElementById('wizardLoading').classList.add('d-none');
         
         // Show step content  
-        document.querySelectorAll('.wizard-content').forEach(el => el.classList.add('d-none'));
-        document.getElementById(`wizardStep${step}`).classList.remove('d-none');
+        document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
+        document.getElementById(`wizardStep${step}`).classList.add('active','show');
         
         // Show error in step container
         let errorContainer = document.getElementById(`step${step}Error`);
@@ -3346,7 +3351,7 @@ class WizardTareas {
         document.querySelectorAll('.wizard-content').forEach(step => step.classList.add('d-none'));
         
         // Show current step
-        document.getElementById(`wizardStep${this.currentStep}`)?.classList.remove('d-none');
+        document.getElementById(`wizardStep${this.currentStep}`)?.classList.add('active','show');
         
         // Update step indicators
         document.querySelectorAll('.wizard-step').forEach((step, index) => {
@@ -3863,14 +3868,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 🎯 Exponer función de navegación global 
         window.__wizard = window.wizardTareas;
-        window.gotoPaso = (step) => {
-            if (window.__wizard && window.__wizard.goToStep) {
-                console.log(`🧭 WIZARD: Navegando al paso ${step}`);
-                window.__wizard.goToStep(step);
-            } else {
-                console.warn('⚠️ WIZARD: Función de navegación no disponible');
-            }
-        };
         console.log('🌐 WIZARD: Navegación global expuesta');
     }
 });

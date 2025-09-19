@@ -5,90 +5,30 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
 
 // =================== POLYFILL GOTOPASO ===================
 (function ensureGotoPaso(){
-  // Mapea panes reales del DOM a números de paso (una vez)
-  function mapDomSteps(){
-    if (window.__WZ_STEP_MAP__) return window.__WZ_STEP_MAP__;
-    const map = {};
-
-    // candidatos a panes de pasos
-    const panes = document.querySelectorAll(
-      '.tab-pane,[role="tabpanel"],[data-wz-step],[id*="paso"],[id*="Paso"],[id*="step"],[id*="Step"]'
-    );
-
-    panes.forEach(p => {
-      const id = p.id || '';
-      let n = null;
-
-      // 1) si ya viene data-wz-step, usarlo
-      if (p.dataset.wzStep) n = Number(p.dataset.wzStep);
-
-      // 2) intentar parsear el número de id: paso2, wizard-paso3, wizard-step4, etc.
-      if (n == null) {
-        const m = id.match(/(?:paso|Paso|step|Step)(\d+)/);
-        if (m) n = Number(m[1]);
-      }
-
-      // 3) como fallback, si encontramos un heading "2. Tareas", etc.
-      if (n == null) {
-        const h = p.querySelector('h1,h2,h3,[data-step-title]');
-        const t = h?.textContent || '';
-        const m2 = t.match(/(\d)\s*[.)-]/);
-        if (m2) n = Number(m2[1]);
-      }
-
-      if (n) {
-        map[n] = map[n] || p;
-        // Anotar para próximas veces
-        p.dataset.wzStep = String(n);
-      }
-    });
-
-    // También mapear triggers (tabs)
-    const triggers = document.querySelectorAll('.nav-link,[data-bs-target],[href^="#"]');
-    triggers.forEach(a => {
-      const tgt = a.getAttribute('data-bs-target') || a.getAttribute('href') || '';
-      const m = tgt.match(/(?:paso|Paso|step|Step)(\d+)/);
-      if (m) {
-        const n = Number(m[1]);
-        map[n] = map[n] || document.querySelector(tgt);
-      }
-    });
-
-    window.__WZ_STEP_MAP__ = map;
-    return map;
-  }
-
   window.gotoPaso = function(step){
-    const map = mapDomSteps();
-
-    // 1) probar con triggers de bootstrap
-    const trigger = document.querySelector([
-      `[data-bs-target="#wizard-paso${step}"]`,
-      `[href="#wizard-paso${step}"]`,
-      `[data-bs-target="#paso${step}"]`,
-      `[href="#paso${step}"]`,
-      `[data-bs-target="#wizardPaso${step}"]`,
-      `[href="#wizardPaso${step}"]`,
-      `[data-bs-target="#wizard-step${step}"]`,
-      `[href="#wizard-step${step}"]`,
-    ].join(','));
-
-    if (trigger && window.bootstrap?.Tab) {
-      window.bootstrap.Tab.getOrCreateInstance(trigger).show();
-      return;
-    }
-
-    // 2) fallback: mostrar/ocultar panes usando el mapeo o selectores ampliados
-    const pane = map[step] || document.querySelector(
-      `#wizard-paso${step},#paso${step},#wizardPaso${step},#wizard-step${step},#step${step}`
+    // localizar el pane por orden de prioridad
+    const pane = document.querySelector(
+      `[data-wz-step="${step}"], #wizard-paso${step}, #paso${step}, #wizardPaso${step}, #wizard-step${step}, #step${step}`
     );
+    if (!pane) { console.warn('gotoPaso: pane no encontrado', step); return; }
 
-    if (pane) {
-      const cont = pane.closest('.tab-content') || document;
-      cont.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
-      pane.classList.add('active','show');
-    } else {
-      console.warn('gotoPaso: pane no encontrado', step);
+    // contenedor (tab-content) o documento
+    const cont = pane.closest('.tab-content') || document;
+
+    // ocultar todos y mostrar el requerido
+    cont.querySelectorAll('.tab-pane').forEach(el => {
+      el.classList.remove('active','show');
+      el.setAttribute('aria-hidden','true');
+    });
+    pane.classList.add('active','show');
+    pane.removeAttribute('aria-hidden');
+
+    // marcar el tab nav si existe
+    const tab = document.querySelector(`[data-bs-target="#${pane.id}"], a[href="#${pane.id}"]`);
+    if (tab) {
+      const nav = tab.closest('.nav') || document;
+      nav.querySelectorAll('.nav-link.active').forEach(l=>l.classList.remove('active'));
+      tab.classList.add('active');
     }
   };
 })();
