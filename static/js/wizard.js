@@ -315,7 +315,8 @@ function updateTaskSelectionPanel() {
   console.log(`📊 WIZARD: Panel tareas actualizado - ${count} tareas seleccionadas`);
   
   // Buscar panel "Tareas Seleccionadas" por varios posibles IDs/selectores
-  const panel = document.getElementById('tareasSeleccionadasPanel') || 
+  const panel = document.getElementById('tareas-seleccionadas-list') ||
+               document.getElementById('tareasSeleccionadasPanel') || 
                document.querySelector('.tareas-seleccionadas') ||
                document.querySelector('[data-panel="tareas-seleccionadas"]') ||
                document.querySelector('.panel-selected-tasks');
