@@ -465,6 +465,12 @@ window.loadTareasWizard = async function(obraId, slugs) {
     
     const tareas = json.tareas_catalogo || json.tareas || json.data || [];
     
+    console.log(`🔍 WIZARD: Datos recibidos del backend:`, { 
+      json, 
+      tareasExtracted: tareas,
+      primerasTareas: tareas.slice(0, 3)
+    });
+    
     if (spin) spin.classList.add('d-none');
     
     if (list) {
@@ -472,22 +478,34 @@ window.loadTareasWizard = async function(obraId, slugs) {
         ? `<div class="mb-3">
              <h6 class="text-primary">📋 Plantillas disponibles (${tareas.length}):</h6>
              <div class="row">${
-               tareas.map(t => `
-                 <div class="col-md-6 mb-2">
-                   <div class="form-check">
-                     <input class="form-check-input tarea-checkbox" type="checkbox" 
-                            data-id="${t.id}" 
-                            data-nombre="${t.nombre}"
-                            data-etapa="${t.etapa_slug}"
-                            id="tarea-${t.id}">
-                     <label class="form-check-label" for="tarea-${t.id}">
-                       <strong>${t.nombre}</strong>
-                       ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
-                       <small class="text-info d-block">⏱️ ${t.horas || 0}h estimadas</small>
-                     </label>
+               tareas.map((t, index) => {
+                 console.log(`🔍 WIZARD: Generando checkbox ${index}:`, { 
+                   tarea: t, 
+                   id: t.id, 
+                   nombre: t.nombre, 
+                   etapaSlug: t.etapa_slug 
+                 });
+                 
+                 return `
+                   <div class="col-md-6 mb-2">
+                     <div class="form-check">
+                       <input class="form-check-input tarea-checkbox" type="checkbox" 
+                              data-id="${t.id || ''}" 
+                              data-nombre="${t.nombre || ''}"
+                              data-etapa="${t.etapa_slug || ''}"
+                              data-descripcion="${t.descripcion || ''}"
+                              data-horas="${t.horas || '8'}"
+                              value="${t.id || ''}"
+                              id="tarea-${t.id || index}">
+                       <label class="form-check-label" for="tarea-${t.id || index}">
+                         <strong>${t.nombre || 'Tarea sin nombre'}</strong>
+                         ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
+                         <small class="text-info d-block">⏱️ ${t.horas || 0}h estimadas</small>
+                       </label>
+                     </div>
                    </div>
-                 </div>
-               `).join('')
+                 `;
+               }).join('')
              }</div>
            </div>`
         : '<div class="text-muted text-center p-4">📝 No hay plantillas disponibles para las etapas seleccionadas.</div>';
