@@ -3845,13 +3845,18 @@ function ampliarFoto(imageSrc) {
     new bootstrap.Modal(document.getElementById('modalAmpliarFoto')).show();
 }
 
-// 🔥 Collector canónico según especificación exacta del usuario
-const STEP1 = '[data-wz-step="1"],#wizardStep1,#wizard-paso1,#paso1';
-
+// 🔥 Collector canónico que funciona en el wizard modal
 function getSelectedEtapaIds() {
-  return [...document.querySelectorAll(`${STEP1} input.etapa-check:checked, ${STEP1} input.etapa-checkbox:checked`)]
+  // Buscar checkboxes marcados dentro del wizard modal, específicamente en catalogoEtapas
+  const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-check:checked, #wizardTareasModal input.etapa-checkbox:checked');
+  console.log('🔍 COLLECTOR: Checkboxes encontrados:', checkboxes.length, checkboxes);
+  
+  const ids = [...checkboxes]
     .map(cb => Number(cb.dataset.etapaId || cb.value))
     .filter(Boolean);
+  
+  console.log('📊 COLLECTOR: IDs extraídos:', ids);
+  return ids;
 }
 window.getSelectedEtapaIds = getSelectedEtapaIds;  // <-- debe quedar en window
 
@@ -3860,22 +3865,49 @@ document.addEventListener('click', async (ev) => {
   const btn = ev.target.closest('#wizard-add-etapas,#wizard-next-step1,[data-action="wizard-next-step1"]');
   if (!btn) return;
 
+  console.log('🚀 WIZARD: Botón Paso 1 → Paso 2 presionado');
   ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
 
   const etapa_ids = getSelectedEtapaIds();
-  if (!etapa_ids.length) { alert('Seleccioná al menos una etapa.'); return; }
+  console.log('📋 WIZARD: Etapas seleccionadas:', etapa_ids);
+  
+  if (!etapa_ids.length) { 
+    alert('Seleccioná al menos una etapa.'); 
+    return; 
+  }
 
   const obra_id = window.obraId || window.WIZARD?.obra_id;
-  const r = await fetch('/obras/api/wizard-tareas/preview', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ obra_id, etapa_ids })
-  });
-  const j = await r.json().catch(()=> ({}));
+  console.log('🏗️ WIZARD: obra_id:', obra_id);
+  
+  const payload = { obra_id, etapa_ids };
+  console.log('📡 WIZARD: Enviando POST payload:', payload);
+  
+  try {
+    const r = await fetch('/obras/api/wizard-tareas/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+    
+    console.log('📨 WIZARD: Response status:', r.status);
+    const j = await r.json();
+    console.log('📄 WIZARD: Response data:', j);
 
-  if (r.ok && j?.ok) window.gotoPaso?.(2);
-  else alert(j?.error || 'No se pudo continuar');
+    if (r.ok && j?.ok) {
+      console.log('✅ WIZARD: Navegando a Paso 2');
+      window.WIZARD = window.WIZARD || {};  // Ensure object exists
+      window.WIZARD.preview = j;
+      window.WIZARD.etapa_ids = etapa_ids;
+      window.gotoPaso?.(2);
+    } else {
+      console.error('❌ WIZARD: Error en respuesta:', j);
+      alert(j?.error || 'No se pudo continuar');
+    }
+  } catch (error) {
+    console.error('💥 WIZARD: Error de red:', error);
+    alert('Error de conexión: ' + error.message);
+  }
 }, { capture: true });
 
 // Initialize wizard when DOM is ready
