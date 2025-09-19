@@ -491,8 +491,8 @@ window.loadTareasWizard = async function(obraId, slugs) {
   }
 };
 
-// =================== NAVEGACIÓN PASO 1 → 2 ===================
-// Interceptor único para botón "Siguiente" (Paso 1 → 2)
+// =================== NAVEGACIÓN PASO 1 → 2 y PASO 2 → 3 ===================
+// Interceptor único para botón "Siguiente" 
 function setupUniqueInterceptor() {
   const btnSiguiente = document.getElementById('wizardBtnSiguiente');
   if (!btnSiguiente || btnSiguiente.dataset.wizardBound) return;
@@ -501,18 +501,70 @@ function setupUniqueInterceptor() {
   
   btnSiguiente.addEventListener('click', (ev) => {
     ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
     
-    const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
-    if (etapasSeleccionadas === 0) {
-      alert('Debe seleccionar al menos una etapa');
-      return;
+    // Determinar paso actual usando Bootstrap tab-pane classes
+    const modal = document.getElementById('wizardTareasModal');
+    const paso1Visible = modal.querySelector('#wizardStep1.active, #paso1.active, .tab-pane.active[id*="1"]');
+    const paso2Visible = modal.querySelector('#wizardStep2.active, #paso2.active, .tab-pane.active[id*="2"]');
+    
+    // Fallback: usar estado global si está disponible
+    const currentStep = window.WZ_STATE?.currentStep || window.currentStep || 1;
+    
+    console.log(`🔍 WIZARD: Detectando paso - Paso1Visible: ${!!paso1Visible}, Paso2Visible: ${!!paso2Visible}, currentStep: ${currentStep}`);
+    
+    if (paso1Visible || currentStep === 1) {
+      // PASO 1 → 2: Validar etapas seleccionadas
+      const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+      if (etapasSeleccionadas === 0) {
+        alert('Debe seleccionar al menos una etapa');
+        return;
+      }
+      
+      console.log('🔥 WIZARD: Navegando Paso 1 → 2');
+      window.gotoPaso?.(2);
+      
+    } else if (paso2Visible || currentStep === 2) {
+      // PASO 2 → 3: Capturar tareas seleccionadas del catálogo
+      const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)');
+      
+      if (tareasSeleccionadas.length === 0) {
+        alert('Debe seleccionar al menos una tarea del catálogo');
+        return;
+      }
+      
+      // 🎯 CAPTURAR TAREAS EN WZ_STATE.tareasSel
+      window.WZ_STATE = window.WZ_STATE || {};
+      window.WZ_STATE.tareasSel = [];
+      
+      tareasSeleccionadas.forEach(checkbox => {
+        const tareaData = {
+          id: checkbox.getAttribute('data-id') || '',
+          nombre: checkbox.getAttribute('data-nombre') || checkbox.nextElementSibling?.textContent?.trim() || 'Tarea sin nombre',
+          etapa_slug: checkbox.getAttribute('data-etapa') || '',
+          descripcion: checkbox.getAttribute('data-descripcion') || '',
+          horas: checkbox.getAttribute('data-horas') || '8'
+        };
+        window.WZ_STATE.tareasSel.push(tareaData);
+      });
+      
+      console.log(`🎯 WIZARD: ${window.WZ_STATE.tareasSel.length} tareas capturadas del catálogo:`, window.WZ_STATE.tareasSel);
+      
+      // Navegar al Paso 3 y popularlo
+      console.log('🔥 WIZARD: Navegando Paso 2 → 3');
+      window.gotoPaso?.(3);
+      
+      // Poblar el Paso 3 con las tareas seleccionadas
+      setTimeout(() => {
+        if (typeof window.populatePaso3 === 'function') {
+          window.populatePaso3();
+        }
+      }, 100);
     }
-    
-    console.log('🔥 WIZARD: Navegando Paso 1 → 2');
-    window.gotoPaso?.(2);
-  });
+  }, { capture: true });  // 🎯 Usar capture para evitar conflictos con otros listeners
   
-  console.log('✅ WIZARD: Interceptor Paso 1→2 configurado');
+  console.log('✅ WIZARD: Interceptor Paso 1→2 y 2→3 configurado');
 }
 
 // =================== INICIALIZACIÓN ===================
