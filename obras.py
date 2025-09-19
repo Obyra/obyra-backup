@@ -2785,50 +2785,57 @@ def wizard_preview():
         if not can_manage_obra(obra):
             return jsonify({"ok": False, "error": "Sin permisos"}), 403
         
-        # Obtener etapas filtradas
-        etapas = (EtapaObra.query
-                  .filter(EtapaObra.id.in_(etapa_ids), EtapaObra.obra_id == obra_id)
-                  .all())
+        # 🎯 CORRECCIÓN: etapa_ids son IDs del CATÁLOGO, no de etapas existentes
+        from etapas_predefinidas import ETAPAS_PREDEFINIDAS
+        from tareas_predefinidas import TAREAS_POR_ETAPA
         
-        # 🎯 Construir respuesta con esquema exacto que espera el frontend
+        current_app.logger.debug(f"🔥 DEBUG WIZARD: Recibidos etapa_ids del catálogo: {etapa_ids}")
+        current_app.logger.debug(f"🔥 DEBUG WIZARD: Total etapas en catálogo: {len(ETAPAS_PREDEFINIDAS)}")
+        
+        # 🎯 Construir respuesta desde el catálogo predefinido
         etapas_data = []
-        for e in etapas:
-            # Tareas del catálogo por tipo de etapa (usando TAREAS_POR_ETAPA)
-            from tareas_predefinidas import TAREAS_POR_ETAPA
-            tareas_catalogo = []
+        
+        for etapa_id in etapa_ids:
+            # Buscar la etapa en el catálogo predefinido
+            etapa_def = None
+            for etapa in ETAPAS_PREDEFINIDAS:
+                if etapa.get("id") == etapa_id:
+                    etapa_def = etapa
+                    break
             
-            current_app.logger.debug(f"🔥 DEBUG WIZARD: Procesando etapa '{e.nombre}' (ID: {e.id})")
+            if not etapa_def:
+                current_app.logger.warning(f"❌ DEBUG WIZARD: Etapa con ID {etapa_id} NO encontrada en catálogo")
+                continue
+                
+            etapa_nombre = etapa_def.get("nombre", f"Etapa {etapa_id}")
+            current_app.logger.debug(f"✅ DEBUG WIZARD: Procesando etapa del catálogo '{etapa_nombre}' (ID: {etapa_id})")
+            
+            # Tareas del catálogo por tipo de etapa
+            tareas_catalogo = []
             current_app.logger.debug(f"🔥 DEBUG WIZARD: Claves disponibles en TAREAS_POR_ETAPA: {list(TAREAS_POR_ETAPA.keys())}")
             
-            if e.nombre in TAREAS_POR_ETAPA:
-                current_app.logger.debug(f"✅ DEBUG WIZARD: Encontrada etapa '{e.nombre}' en catálogo")
-                for idx, tarea_def in enumerate(TAREAS_POR_ETAPA[e.nombre]):
+            if etapa_nombre in TAREAS_POR_ETAPA:
+                current_app.logger.debug(f"✅ DEBUG WIZARD: Encontrada etapa '{etapa_nombre}' en catálogo de tareas")
+                for idx, tarea_def in enumerate(TAREAS_POR_ETAPA[etapa_nombre]):
                     tareas_catalogo.append({
-                        "codigo": f"cat_{e.id}_{idx}",
+                        "codigo": f"cat_{etapa_id}_{idx}",
                         "nombre": tarea_def.get("nombre", "Tarea sin nombre"),
                         "unidad_default": tarea_def.get("unidad", "h")
                     })
             else:
-                current_app.logger.warning(f"❌ DEBUG WIZARD: Etapa '{e.nombre}' NO encontrada en TAREAS_POR_ETAPA")
+                current_app.logger.warning(f"❌ DEBUG WIZARD: Etapa '{etapa_nombre}' NO encontrada en TAREAS_POR_ETAPA")
             
-            # Tareas existentes en esta etapa (opcional, para referencia)
+            # Para el wizard, no incluimos tareas existentes ya que estamos creando nuevas
             tareas_existentes = []
-            existing_tasks = TareaEtapa.query.filter_by(etapa_id=e.id).all()
-            for t in existing_tasks:
-                tareas_existentes.append({
-                    "id": t.id,
-                    "nombre": t.nombre,
-                    "unidad": t.unidad or "h"
-                })
             
             etapas_data.append({
-                "etapa_id": e.id,
-                "etapa_nombre": e.nombre,
+                "etapa_id": etapa_id,  # ID del catálogo
+                "etapa_nombre": etapa_nombre,
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
             
-            current_app.logger.debug(f"📊 DEBUG WIZARD: Etapa {e.nombre} - {len(tareas_catalogo)} tareas catálogo, {len(tareas_existentes)} existentes")
+            current_app.logger.debug(f"📊 DEBUG WIZARD: Etapa {etapa_nombre} - {len(tareas_catalogo)} tareas catálogo")
         
         current_app.logger.debug(f"🎯 DEBUG WIZARD: Respuesta final con {len(etapas_data)} etapas")
         # 🎯 Respuesta con esquema exacto según especificación del usuario
