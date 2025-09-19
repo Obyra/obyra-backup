@@ -433,8 +433,14 @@ window.loadTareasWizard = async function(obraId, slugs) {
   const list = m.querySelector('#wizardListaTareas') || m.querySelector('#wizardStep2');
   const spin = m.querySelector('#wizardSpinnerTareas');
   
+  console.log(`🔍 WIZARD: Contenedores encontrados - Modal: ${!!m}, ListaTareas: ${!!list}, Spinner: ${!!spin}`);
+  console.log(`🔍 WIZARD: Selector usado: #wizardListaTareas`);
+  
   if (spin) spin.classList.remove('d-none');
-  if (list) list.innerHTML = '';
+  if (list) {
+    list.innerHTML = '';
+    console.log(`🔍 WIZARD: Lista limpiada. Contenedor actual:`, list);
+  }
   
   try {
     // USAR EL ENDPOINT DEL CATÁLOGO (NO DB REAL) - Ruta absoluta
@@ -449,7 +455,7 @@ window.loadTareasWizard = async function(obraId, slugs) {
     if (spin) spin.classList.add('d-none');
     
     if (list) {
-      list.innerHTML = tareas.length
+      const html = tareas.length
         ? `<div class="mb-3">
              <h6 class="text-primary">📋 Plantillas disponibles (${tareas.length}):</h6>
              <div class="row">${
@@ -472,6 +478,17 @@ window.loadTareasWizard = async function(obraId, slugs) {
              }</div>
            </div>`
         : '<div class="text-muted text-center p-4">📝 No hay plantillas disponibles para las etapas seleccionadas.</div>';
+      
+      list.innerHTML = html;
+      console.log(`🎯 WIZARD: HTML renderizado en contenedor:`, { 
+        contenedor: list.id || 'sin-id', 
+        tareasCount: tareas.length,
+        htmlLength: html.length,
+        visible: !list.classList.contains('d-none')
+      });
+      console.log(`🎯 WIZARD: Contenedor después del render:`, list.innerHTML.substring(0, 200) + '...');
+    } else {
+      console.error('❌ WIZARD: No se encontró contenedor para renderizar tareas');
     }
     
     console.log(`✅ WIZARD: ${tareas.length} plantillas del catálogo cargadas exitosamente`);
