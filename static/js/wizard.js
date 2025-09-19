@@ -1,17 +1,12 @@
 // 🧙‍♂️ WIZARD TAREAS - Sistema de creación masiva de tareas por etapas
-// Versión con EVENT DELEGATION para robustez ante re-renderizado del DOM
+// Versión ESTABILIZADA con event delegation y polyfills robustos
 
-console.log('🧙‍♂️ WIZARD: Iniciando sistema con event delegation...');
+console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
 
 // =================== POLYFILL GOTOPASO ===================
-// Polyfill robusto de navegación de pasos para Bootstrap Tabs
 (function ensureGotoPaso(){
   if (typeof window.gotoPaso === "function") return;
-
   window.gotoPaso = function(step){
-    console.log(`🔄 WIZARD: Navegando a paso ${step}`);
-    
-    // 1) Intentar via Bootstrap Tabs
     const triggers = [
       `[data-bs-target="#wizard-paso${step}"]`,
       `[href="#wizard-paso${step}"]`,
@@ -19,75 +14,133 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema con event delegation...');
       `[href="#paso${step}"]`,
       `[data-bs-target="#wizardPaso${step}"]`,
       `[href="#wizardPaso${step}"]`,
-      `[data-bs-target="#wizardStep${step}"]`,
-      `[href="#wizardStep${step}"]`
     ];
-    
-    const trigger = document.querySelector(triggers.join(","));
-    if (trigger && window.bootstrap?.Tab) {
-      try {
-        window.bootstrap.Tab.getOrCreateInstance(trigger).show();
-        console.log(`✅ WIZARD: Navegación a paso ${step} exitosa (Bootstrap Tab)`);
-        return;
-      } catch (e) {
-        console.warn('⚠️ WIZARD: Error con Bootstrap Tab, usando fallback:', e);
-      }
-    }
-
-    // 2) Fallback: mostrar/ocultar panes directamente
-    const paneSelectors = [
-      `#wizard-paso${step}`, `#paso${step}`, `#wizardPaso${step}`, `#wizardStep${step}`
-    ];
-    const pane = document.querySelector(paneSelectors.join(","));
-    
-    if (pane) {
-      const container = pane.closest(".tab-content") || document;
-      // Ocultar todos los panes
-      container.querySelectorAll(".tab-pane").forEach(el => {
-        el.classList.remove("active", "show");
-      });
-      // Mostrar el pane destino
-      pane.classList.add("active", "show");
-      console.log(`✅ WIZARD: Navegación a paso ${step} exitosa (fallback)`);
+    const t = document.querySelector(triggers.join(","));
+    if (t && window.bootstrap?.Tab) {
+      window.bootstrap.Tab.getOrCreateInstance(t).show();
       return;
     }
-
-    console.warn(`⚠️ WIZARD: No se encontró pane para paso ${step}`);
+    const pane = document.querySelector(`#wizard-paso${step}, #paso${step}, #wizardPaso${step}`);
+    if (pane) {
+      const cont = pane.closest(".tab-content") || document;
+      cont.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active","show"));
+      pane.classList.add("active","show");
+    } else {
+      console.warn("gotoPaso: pane no encontrado", step);
+    }
   };
-  
-  console.log('✅ WIZARD: Polyfill gotoPaso instalado');
 })();
 
-// =================== PREFIJO Y UTILIDADES ===================
-const PREF = window.PREFIX || '';
-
-// Helper para forzar rutas absolutas
+// =================== UTILIDADES ===================
+// helper de rutas absolutas
 const api = (p) => p.startsWith('/') ? p : `/${p}`;
 
-// Helper para fetch con manejo robusto de errores y HTML
+// fetch JSON que grite si viene HTML
 async function fetchJSON(url, opts = {}) {
-  try {
-    const r = await fetch(url, { credentials: 'same-origin', ...opts });
-    const ctype = r.headers.get('content-type') || '';
-    const text = await r.text();
-
-    if (!r.ok) {
-      throw new Error(
-        ctype.includes('application/json')
-          ? (JSON.parse(text).error || `HTTP ${r.status}`)
-          : `HTTP ${r.status} (no JSON): ${text.slice(0,120)}`
-      );
-    }
-    
-    if (!ctype.includes('application/json')) {
-      throw new Error(`Respuesta no-JSON del servidor: ${text.slice(0,120)}`);
-    }
-    
-    return JSON.parse(text);
-  } catch (error) {
-    console.error('❌ WIZARD: Error en fetchJSON:', error);
-    throw error;
+  const r = await fetch(url, { credentials: 'same-origin', ...opts });
+  const ctype = r.headers.get('content-type') || '';
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(ctype.includes('application/json')
+      ? (JSON.parse(text).error || `HTTP ${r.status}`)
+      : `HTTP ${r.status} (no JSON): ${text.slice(0,120)}`);
   }
+  if (!ctype.includes('application/json')) {
+    throw new Error(`Respuesta no-JSON del servidor: ${text.slice(0,120)}`);
+  }
+  return JSON.parse(text);
+}
+
+// =================== EVENT DELEGATION INTERCEPTORS ===================
+
+// FINALIZAR: Paso 3 -> 4
+if (!window.__WZ_FINISH_INSTALLED__) {
+  window.__WZ_FINISH_INSTALLED__ = true;
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('#wizardBtnConfirmar, #wizard-finish, [data-action="finish"]');
+    if (!btn) return;
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+
+    console.log('🎯 WIZARD: Finalizando (event delegation)...');
+    
+    const payload = window.collectPaso3Payload?.();
+    if (!payload?.tareas?.length) {
+      alert('No hay tareas para crear');
+      return;
+    }
+    
+    btn.disabled = true;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
+    
+    try {
+      const r = await fetch(api('obras/api/wizard-tareas/create'), {
+        method: 'POST', 
+        headers: {'Content-Type':'application/json'}, 
+        credentials:'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) { 
+        console.error(j); 
+        alert(j.error || 'No se pudo finalizar'); 
+        return; 
+      }
+
+      console.log('✅ WIZARD: Tareas creadas, navegando a Paso 4');
+      // anti-rebote corto
+      window.__WZ_NAV_LOCK_UNTIL__ = Date.now() + 2000;
+      window.gotoPaso?.(4);
+      
+    } catch (error) {
+      console.error('❌ WIZARD: Error:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+    }
+  }, { capture: true });
+}
+
+// CONFIRMAR: Paso 4 -> cerrar modal
+if (!window.__WZ_CONFIRM_INSTALLED__) {
+  window.__WZ_CONFIRM_INSTALLED__ = true;
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('#wizardBtnCerrar, #wizardBtnFin, #wizard-confirm, [data-action="confirm"]');
+    if (!btn) return;
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+
+    console.log('🎯 WIZARD: Confirmando - cerrando modal...');
+    const modalEl = document.querySelector('#wizardTareasModal, #wizard-modal');
+    if (modalEl) { 
+      try { 
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide(); 
+        // Opcional: refrescar para mostrar nuevas tareas
+        setTimeout(() => window.location.reload(), 300);
+      } catch {} 
+    }
+  }, { capture: true });
+}
+
+// Guard anti-rebote a Paso 2 durante el lock
+if (!window.__WZ_GUARD_INSTALLED__) {
+  window.__WZ_GUARD_INSTALLED__ = true;
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest('a[href="#paso2"],a[href="#wizardPaso2"]');
+    if (!a) return;
+    if ((window.__WZ_NAV_LOCK_UNTIL__||0) > Date.now()) {
+      ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+      console.log('🚫 WIZARD: Click a Paso 2 bloqueado (lock activo)');
+    }
+  }, { capture: true });
+  
+  window.addEventListener('hashchange', (e) => {
+    if ((window.__WZ_NAV_LOCK_UNTIL__||0) > Date.now() && /paso2/i.test(location.hash)) {
+      history.replaceState(null,'','#'); 
+      e.stopImmediatePropagation?.();
+      console.log('🚫 WIZARD: Hashchange a Paso 2 bloqueado');
+    }
+  }, { capture: true });
 }
 
 // =================== CATÁLOGO DE ETAPAS ===================
@@ -122,18 +175,14 @@ async function cargarCatalogoEtapas() {
     
     console.log(`📡 WIZARD: Llamando API para obra ${obraId}`);
     
-    // 🔥 Usar ruta absoluta para evitar 404
-    const url = api(`obras/api/wizard-tareas/etapas?obra_id=${obraId}`);
-    const json = await fetchJSON(url);
-    
-    // fetchJSON ya maneja errores HTTP
+    // 🔥 Usar ruta absoluta
+    const json = await fetchJSON(api(`obras/api/wizard-tareas/etapas?obra_id=${obraId}`));
     
     // 🔥 Usar las claves correctas
     const catalogo = Array.isArray(json) ? json : (json.etapas_catalogo || []);
     const creadas = new Set((json.etapas_creadas || []).map(e => e.slug || e.id));
     
     console.log('📦 WIZARD: Catálogo recibido:', { catalogo: catalogo.length, creadas: creadas.size });
-    console.log('🔍 WIZARD: Etapas creadas:', Array.from(creadas));
     
     // 🔥 Render de cards - no marcar por defecto, solo checked disabled si ya está creada
     if (catalogo.length > 0) {
@@ -268,78 +317,15 @@ window.cargarCatalogoEtapas = cargarCatalogoEtapas;
 window.rebindCatalogEvents = rebindCatalogEvents;
 window.updateSelectionCounter = updateSelectionCounter;
 
-// 🔥 Event listener DELEGADO para modal wizard
-document.addEventListener('shown.bs.modal', (e) => {
-  if (e.target && e.target.id === 'wizardTareasModal') {
-    console.debug('🔥 [WIZARD] Modal shown - iniciando carga de catálogo');
-    
-    // Habilitar botón siguiente
-    document.getElementById('wizardBtnSiguiente')?.removeAttribute('disabled');
-    
-    // Ocultar mensajes legacy
-    document.querySelectorAll('.wizard-legacy-note').forEach(el => el.remove());
-    
-    // 🔥 CARGAR CATÁLOGO DE ETAPAS
-    if (typeof window.cargarCatalogoEtapas === 'function') {
-      window.cargarCatalogoEtapas();
-    } else {
-      console.error('❌ [WIZARD] Función cargarCatalogoEtapas no disponible');
-    }
-  }
-});
-
-// 🔥 Backup: trigger también en click del botón wizard
-document.addEventListener('click', (ev) => {
-  const btn = ev.target.closest('[data-bs-target="#wizardTareasModal"]');
-  if (btn) {
-    console.debug('🔥 [WIZARD] Botón wizard clickeado');
-    setTimeout(() => {
-      if (typeof window.cargarCatalogoEtapas === 'function') {
-        window.cargarCatalogoEtapas();
-      }
-    }, 100); // Small delay para que el modal se abra
-  }
-});
-
-// 🔥 ESTADO GLOBAL DEL WIZARD
+// =================== ESTADO GLOBAL DEL WIZARD ===================
 window.WZ_STATE = window.WZ_STATE || { tareasSel: [] };
 
-// =================== BLOQUE CANÓNICO ÚNICO ===================
-// Eliminar listeners viejos clonando y reemplazando el botón
-function resetButtonClean() {
-  const oldBtn = document.getElementById('wizardBtnSiguiente');
-  if (!oldBtn) return null;
-  
-  const newBtn = oldBtn.cloneNode(true);
-  oldBtn.parentNode.replaceChild(newBtn, oldBtn);
-  
-  // Limpiar marcadores legacy
-  delete newBtn.dataset.bound;
-  delete newBtn.dataset.boundPaso2;
-  delete newBtn.dataset.boundStep2;
-  
-  console.log('🔥 WIZARD: Botón clonado, listeners viejos eliminados');
-  return newBtn;
-}
-
-// 1) window.getSelPaso2(modal) - BLOQUE CANÓNICO
-window.getSelPaso2 = function(modal) {
-  const m = modal || document.getElementById('wizardTareasModal');
-  return [...m.querySelectorAll('#wizardStep2 input[type="checkbox"]:checked')].map((cb, i) => ({
-    id: cb.dataset.id || cb.value || String(i + 1),
-    nombre: (cb.closest('.form-check')?.querySelector('label')?.textContent || `Tarea ${i+1}`).trim(),
-    etapa_slug: cb.dataset.etapa || '',
-    etapa_id: null  // Las plantillas no tienen etapa_id hasta ser creadas
-  }));
-};
-
-// 2) window.ensureOpciones(obra_id) - BLOQUE CANÓNICO  
+// Opciones/equipos
 window.ensureOpciones = async function (obraId) {
   if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
 
   try {
-    const url = api(`obras/api/wizard-tareas/opciones?obra_id=${obraId}`);
-    const data = await fetchJSON(url);
+    const data = await fetchJSON(api(`obras/api/wizard-tareas/opciones?obra_id=${obraId}`));
     window.WZ_STATE.opciones = data;
     return data;
     
@@ -349,7 +335,36 @@ window.ensureOpciones = async function (obraId) {
   }
 };
 
-// 3) window.populatePaso3() - BLOQUE CANÓNICO
+// collectPaso3Payload - Recopilar datos del Paso 3
+window.collectPaso3Payload = function() {
+  const modal = document.getElementById('wizardTareasModal');
+  const rows = [...modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr, #paso3 #tablaDatosWizard tbody tr')];
+  const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+  
+  const tareas = rows.map((row, i) => {
+    const getData = (name) => row.querySelector(`[name="rows[${i}][${name}]"]`)?.value || '';
+    const tareaData = window.WZ_STATE.tareasSel?.[i] || {};
+    
+    return {
+      etapa_slug: tareaData.etapa_slug || '',  // Usar slug de la plantilla
+      nombre: row.children[1]?.textContent?.trim() || '',
+      fecha_inicio: getData('inicio'),
+      fecha_fin: getData('fin'),
+      horas: Number(getData('horas')) || 8,
+      cantidad: Number(getData('cantidad')) || 1,
+      unidad: getData('unidad'),
+      asignado_usuario_id: getData('asignado') || null,
+      prioridad: getData('prioridad') || 'media'
+    };
+  });
+  
+  return {
+    obra_id: obraId,
+    tareas: tareas.filter(t => t.etapa_slug)  // Filtrar tareas con etapa_slug válido
+  };
+};
+
+// populatePaso3 - BLOQUE CANÓNICO
 window.populatePaso3 = async function() {
   const modal = document.getElementById('wizardTareasModal');
   const tbody = modal.querySelector('#tablaDatosWizard tbody');
@@ -408,66 +423,6 @@ window.populatePaso3 = async function() {
   console.log(`✅ WIZARD: ${window.WZ_STATE.tareasSel.length} filas generadas en Paso 3`);
 };
 
-// 4) window.applyCatalogAndAdvance() - BLOQUE CANÓNICO
-window.applyCatalogAndAdvance = function() {
-  const modal = document.getElementById('wizardTareasModal');
-  const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
-  
-  if (etapasSeleccionadas === 0) {
-    alert('Debe seleccionar al menos una etapa');
-    return;
-  }
-
-  // Avanzar al paso 2 Y cargar tareas del catálogo
-  const slugs = [...modal.querySelectorAll('.etapa-checkbox:checked:not(:disabled)')].map(cb => cb.dataset.slug).filter(Boolean);
-  console.log(`🔥 WIZARD: Aplicando catálogo - ${slugs.length} etapas seleccionadas`);
-  
-  document.getElementById('btnAgregarEtapasSel')?.click(); 
-  window.gotoPaso?.(2);
-  
-  const obraId = modal.dataset.obraId || document.querySelector('[data-obra-id]')?.dataset.obraId;
-  if (obraId && typeof window.loadTareasWizard === 'function') {
-    window.loadTareasWizard(obraId, slugs);
-  }
-};
-
-// 5) setupUniqueInterceptor - INSTALADOR ÚNICO
-function setupUniqueInterceptor() {
-  const newBtn = resetButtonClean();
-  if (!newBtn) return;
-
-  // Marcar como configurado para evitar doble binding
-  if (newBtn.dataset.bound) return;
-  newBtn.dataset.bound = 'true';
-
-  newBtn.addEventListener('click', (ev) => {
-    ev.preventDefault(); 
-    window.gotoPaso?.(2); 
-  });
-  
-  console.log('✅ WIZARD: Interceptor único configurado');
-}
-
-// =================== FUNCIÓN CATÁLOGO ===================
-// Función para obtener tareas del catálogo local (alternativa)
-window.getCatalogTasksFor = function(selectedEtapas) {
-  // Si tenemos catálogo cargado en memoria, usarlo
-  const map = window.WZ_CATALOGO?.tareas_por_etapa || {};
-  const out = [];
-  
-  for (const etapa of selectedEtapas) {
-    const lista = map[etapa] || [];
-    lista.forEach((t, idx) => out.push({ 
-      ...t, 
-      id: `${etapa}-${idx+1}`,
-      etapa_slug: etapa,
-      _source: 'catalog' 
-    }));
-  }
-  
-  return out;
-};
-
 // =================== CARGA DE TAREAS PASO 2 (CATÁLOGO) ===================
 window.loadTareasWizard = async function(obraId, slugs) {
   console.log(`🔥 WIZARD: Cargando tareas del CATÁLOGO para obra ${obraId}, etapas:`, slugs);
@@ -481,12 +436,12 @@ window.loadTareasWizard = async function(obraId, slugs) {
   
   try {
     // USAR EL ENDPOINT DEL CATÁLOGO (NO DB REAL) - Ruta absoluta
-    const url = api('obras/api/wizard-tareas/tareas');
-    const json = await fetchJSON(url, {
+    const json = await fetchJSON(api(`obras/api/wizard-tareas/tareas?obra_id=${obraId}&etapas=${encodeURIComponent(JSON.stringify(slugs))}`), {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ obra_id: parseInt(obraId), etapas: slugs })
     });
+    
     const tareas = json.tareas_catalogo || json.tareas || json.data || [];
     
     if (spin) spin.classList.add('d-none');
@@ -534,172 +489,46 @@ window.loadTareasWizard = async function(obraId, slugs) {
   }
 };
 
-// =================== INICIALIZACIÓN ===================
-document.addEventListener('shown.bs.modal', (ev) => {
-  if (ev.target?.id === 'wizardTareasModal') {
-    console.log('🔥 WIZARD: Modal abierto, configurando interceptor único');
-    setupUniqueInterceptor();
-  }
-});
-
-// =================== FUNCIONES PASO 3 → FINALIZAR ===================
-
-// collectPaso3Payload - Recopilar datos del Paso 3
-window.collectPaso3Payload = function() {
-  const modal = document.getElementById('wizardTareasModal');
-  const rows = [...modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr')];
-  const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+// =================== NAVEGACIÓN PASO 1 → 2 ===================
+// Interceptor único para botón "Siguiente" (Paso 1 → 2)
+function setupUniqueInterceptor() {
+  const btnSiguiente = document.getElementById('wizardBtnSiguiente');
+  if (!btnSiguiente || btnSiguiente.dataset.wizardBound) return;
   
-  const tareas = rows.map((row, i) => {
-    const getData = (name) => row.querySelector(`[name="rows[${i}][${name}]"]`)?.value || '';
-    const tareaData = window.WZ_STATE.tareasSel?.[i] || {};
-    
-    return {
-      etapa_slug: tareaData.etapa_slug || '',  // Usar slug de la plantilla
-      nombre: row.children[1]?.textContent?.trim() || '',
-      fecha_inicio: getData('inicio'),
-      fecha_fin: getData('fin'),
-      horas: Number(getData('horas')) || 8,
-      cantidad: Number(getData('cantidad')) || 1,
-      unidad: getData('unidad'),
-      asignado_usuario_id: getData('asignado') || null,
-      prioridad: getData('prioridad') || 'media'
-    };
-  });
+  btnSiguiente.dataset.wizardBound = 'true';
   
-  return {
-    obra_id: obraId,
-    tareas: tareas.filter(t => t.etapa_slug)  // Filtrar tareas con etapa_slug válido
-  };
-};
-
-// =================== EVENT DELEGATION INTERCEPTORS ===================
-
-// 1) Delegado para botón FINALIZAR (Paso 3 → Paso 4)
-if (!window.__WZ_FINISH_INSTALLED__) {
-  window.__WZ_FINISH_INSTALLED__ = true;
-  document.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('#wizardBtnConfirmar, #wizard-finish, [data-action="finish"]');
-    if (!btn) return;
-    
+  btnSiguiente.addEventListener('click', (ev) => {
     ev.preventDefault();
-    ev.stopPropagation();
-    ev.stopImmediatePropagation?.();
     
-    console.log('🎯 WIZARD: Finalizando (delegado) - creando tareas...');
-    
-    // VALIDACIONES
-    const payload = window.collectPaso3Payload();
-    if (!payload.tareas || payload.tareas.length === 0) {
-      alert('No hay tareas para crear');
+    const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+    if (etapasSeleccionadas === 0) {
+      alert('Debe seleccionar al menos una etapa');
       return;
     }
     
-    // Opcional: confirmar si hay tareas sin asignar
-    const sinAsignar = payload.tareas.filter(t => !t.asignado_usuario_id);
-    if (sinAsignar.length > 0) {
-      const continuar = confirm(`${sinAsignar.length} tareas no tienen usuario asignado. ¿Continuar?`);
-      if (!continuar) return;
-    }
+    console.log('🔥 WIZARD: Navegando Paso 1 → 2');
+    window.gotoPaso?.(2);
+  });
+  
+  console.log('✅ WIZARD: Interceptor Paso 1→2 configurado');
+}
+
+// =================== INICIALIZACIÓN ===================
+// Modal shown event listener
+document.addEventListener('shown.bs.modal', (ev) => {
+  if (ev.target?.id === 'wizardTareasModal') {
+    console.log('🔥 WIZARD: Modal mostrado, iniciando carga');
     
-    // Deshabilitar botón
-    btn.disabled = true;
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
+    // Configurar interceptor de navegación Paso 1 → 2
+    setupUniqueInterceptor();
     
-    try {
-      const url = api('obras/api/wizard-tareas/create');
-      const data = await fetchJSON(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      if (!data.ok) {
-        throw new Error(data.error || 'Error desconocido');
+    // Cargar catálogo de etapas
+    setTimeout(() => {
+      if (typeof window.cargarCatalogoEtapas === 'function') {
+        window.cargarCatalogoEtapas();
       }
-      
-      console.log('✅ WIZARD: Tareas creadas, avanzando a Paso 4');
-      
-      // LOCK anti-rebote por 2 segundos y avanzar
-      window.__WZ_NAV_LOCK_UNTIL__ = Date.now() + 2000;
-      window.gotoPaso?.(4);
-      
-    } catch (error) {
-      console.error('❌ WIZARD: Error al finalizar:', error);
-      alert(`No se pudo finalizar: ${error.message}`);
-    } finally {
-      // Restaurar botón
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-    }
-  }, { capture: true });
-  
-  console.log('✅ WIZARD: Delegado FINALIZAR instalado');
-}
+    }, 100);
+  }
+});
 
-// 2) Delegado para botón CONFIRMAR (Paso 4 → Cerrar Modal)
-if (!window.__WZ_CONFIRM_INSTALLED__) {
-  window.__WZ_CONFIRM_INSTALLED__ = true;
-  document.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('#wizardBtnCerrar, #wizard-confirm, #wizardBtnFin, [data-action="confirm"]');
-    if (!btn) return;
-    
-    ev.preventDefault();
-    ev.stopPropagation();
-    ev.stopImmediatePropagation?.();
-    
-    console.log('🎯 WIZARD: Confirmando (delegado) - cerrando modal...');
-    
-    const modalEl = document.querySelector('#wizardTareasModal, #wizard-modal');
-    if (modalEl) {
-      try {
-        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-        console.log('✅ WIZARD: Modal cerrado exitosamente');
-        
-        // Opcional: refrescar para mostrar las nuevas tareas
-        setTimeout(() => {
-          window.location.reload();
-        }, 300);
-        
-      } catch (error) {
-        console.error('❌ WIZARD: Error cerrando modal:', error);
-      }
-    }
-  }, { capture: true });
-  
-  console.log('✅ WIZARD: Delegado CONFIRMAR instalado');
-}
-
-// 3) Neutralizar rebotes a Paso 2 (tabs/anchors legacy)
-if (!window.__WZ_GUARD_INSTALLED__) {
-  window.__WZ_GUARD_INSTALLED__ = true;
-  
-  // Bloquea clicks a anchors del paso 2 mientras esté activo el lock
-  document.addEventListener('click', (ev) => {
-    const a = ev.target.closest('a[href="#paso2"], a[href="#wizardPaso2"]');
-    if (!a) return;
-    
-    const lock = window.__WZ_NAV_LOCK_UNTIL__ || 0;
-    if (Date.now() < lock) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      ev.stopImmediatePropagation?.();
-      console.log('🚫 WIZARD: Click a Paso 2 bloqueado (lock activo)');
-    }
-  }, { capture: true });
-  
-  // Limpia cambios de hash a paso2 durante el lock
-  window.addEventListener('hashchange', (e) => {
-    const lock = window.__WZ_NAV_LOCK_UNTIL__ || 0;
-    if (Date.now() < lock && /paso2/i.test(location.hash)) {
-      console.log('🚫 WIZARD: Hashchange a Paso 2 bloqueado (lock activo)');
-      history.replaceState(null, '', '#');
-      e.stopImmediatePropagation?.();
-    }
-  }, { capture: true });
-  
-  console.log('✅ WIZARD: Guards anti-rebote instalados');
-}
-
-console.log('✅ WIZARD: Sistema con EVENT DELEGATION cargado - Flujo Paso1→2→3→4→Cerrar');
+console.log('✅ WIZARD: Sistema estabilizado cargado - Event delegation completo');

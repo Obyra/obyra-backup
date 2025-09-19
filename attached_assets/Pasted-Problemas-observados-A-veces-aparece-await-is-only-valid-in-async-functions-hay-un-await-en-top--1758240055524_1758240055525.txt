@@ -1,0 +1,148 @@
+Problemas observados:
+
+A veces aparece await is only valid in async functions… (hay un await en top-level de wizard.js).
+
+En algunos flujos window.gotoPaso no existe y rompe.
+
+Necesitamos garantizar que TODAS las llamadas a API usen rutas absolutas y devuelvan JSON.
+
+Finalizar/Confirmar deben funcionar con event delegation (no clonado de botones) y sin “rebote” al Paso 2.
+
+1) Top-level await
+
+Buscar cualquier await fuera de una función en static/js/wizard.js y envolverlo así:
+
+// ✅ patrón correcto
+(async function initWizardModal(){
+  try {
+    const data = await fetchJSON(api(`obras/api/wizard-tareas/etapas?obra_id=${obraId}`));
+    renderEtapas(data);
+  } catch (e) {
+    showPaso1Error("Error cargando catálogo de etapas", e.message || String(e));
+  }
+})();
+
+
+No cambiar el script a type="module". Solo mover ese await a una IIFE async.
+
+2) Polyfill robusto de gotoPaso (definir al inicio de wizard.js)
+(function ensureGotoPaso(){
+  if (typeof window.gotoPaso === "function") return;
+  window.gotoPaso = function(step){
+    const triggers = [
+      `[data-bs-target="#wizard-paso${step}"]`,
+      `[href="#wizard-paso${step}"]`,
+      `[data-bs-target="#paso${step}"]`,
+      `[href="#paso${step}"]`,
+      `[data-bs-target="#wizardPaso${step}"]`,
+      `[href="#wizardPaso${step}"]`,
+    ];
+    const t = document.querySelector(triggers.join(","));
+    if (t && window.bootstrap?.Tab) {
+      window.bootstrap.Tab.getOrCreateInstance(t).show();
+      return;
+    }
+    const pane = document.querySelector(`#wizard-paso${step}, #paso${step}, #wizardPaso${step}`);
+    if (pane) {
+      const cont = pane.closest(".tab-content") || document;
+      cont.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active","show"));
+      pane.classList.add("active","show");
+    } else {
+      console.warn("gotoPaso: pane no encontrado", step);
+    }
+  };
+})();
+
+3) Rutas absolutas y fetchJSON endurecido
+// helper de rutas absolutas
+const api = (p) => p.startsWith('/') ? p : `/${p}`;
+
+// fetch JSON que grite si viene HTML
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(url, { credentials: 'same-origin', ...opts });
+  const ctype = r.headers.get('content-type') || '';
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(ctype.includes('application/json')
+      ? (JSON.parse(text).error || `HTTP ${r.status}`)
+      : `HTTP ${r.status} (no JSON): ${text.slice(0,120)}`);
+  }
+  if (!ctype.includes('application/json')) {
+    throw new Error(`Respuesta no-JSON del servidor: ${text.slice(0,120)}`);
+  }
+  return JSON.parse(text);
+}
+
+
+Usar api(...) en todas las llamadas:
+
+// Paso 1
+await fetchJSON(api(`obras/api/wizard-tareas/etapas?obra_id=${obraId}`));
+// Paso 2
+await fetchJSON(api(`obras/api/wizard-tareas/tareas?obra_id=${obraId}&etapas=${encodeURIComponent(JSON.stringify(etapas))}`));
+// Opciones/equipos
+await fetchJSON(api(`obras/api/wizard-tareas/opciones?obra_id=${obraId}`));
+// Finalizar (crear)
+await fetchJSON(api(`obras/api/wizard-bulk-create`), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+
+4) Finalizar y Confirmar con event delegation (una vez, global)
+// FINALIZAR: Paso 3 -> 4
+if (!window.__WZ_FINISH_INSTALLED__) {
+  window.__WZ_FINISH_INSTALLED__ = true;
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('#wizard-finish');
+    if (!btn) return;
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+
+    const payload = collectPaso3Payload();
+    const r = await fetch(api('obras/api/wizard-bulk-create'), {
+      method: 'POST', headers: {'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { console.error(j); alert(j.error||'No se pudo finalizar'); return; }
+
+    // anti-rebote corto
+    window.__WZ_NAV_LOCK_UNTIL__ = Date.now() + 2000;
+    window.gotoPaso?.(4);
+  }, { capture: true });
+}
+
+// CONFIRMAR: Paso 4 -> cerrar modal
+if (!window.__WZ_CONFIRM_INSTALLED__) {
+  window.__WZ_CONFIRM_INSTALLED__ = true;
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('#wizard-confirm');
+    if (!btn) return;
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+
+    const modalEl = document.querySelector('#wizard-modal');
+    if (modalEl) { try { bootstrap.Modal.getOrCreateInstance(modalEl).hide(); } catch {} }
+  }, { capture: true });
+}
+
+// Guard anti-rebote a Paso 2 durante el lock
+if (!window.__WZ_GUARD_INSTALLED__) {
+  window.__WZ_GUARD_INSTALLED__ = true;
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest('a[href="#paso2"],a[href="#wizardPaso2"]');
+    if (!a) return;
+    if ((window.__WZ_NAV_LOCK_UNTIL__||0) > Date.now()) {
+      ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
+    }
+  }, { capture: true });
+  window.addEventListener('hashchange', (e) => {
+    if ((window.__WZ_NAV_LOCK_UNTIL__||0) > Date.now() && /paso2/i.test(location.hash)) {
+      history.replaceState(null,'','#'); e.stopImmediatePropagation?.();
+    }
+  }, { capture: true });
+}
+
+
+Quitar cualquier clonado de botones; la delegación lo reemplaza.
+
+5) Backend (confirmación rápida)
+
+Endpoints usados arriba deben responder application/json.
+
+En especial /obras/api/wizard-bulk-create → {ok:true} (no render HTML).
