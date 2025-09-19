@@ -578,7 +578,32 @@ function setupUniqueInterceptor() {
       
     } else if (paso2Visible || currentStep === 2) {
       // PASO 2 → 3: Capturar tareas seleccionadas del catálogo
+      console.log(`🔍 WIZARD: Iniciando captura Paso 2 → 3`);
+      
+      // Debug: contar todos los checkboxes disponibles
+      const todosCheckboxes = document.querySelectorAll('.tarea-checkbox');
+      const checkboxesChecked = document.querySelectorAll('.tarea-checkbox:checked');
+      const checkboxesNoDisabled = document.querySelectorAll('.tarea-checkbox:not(:disabled)');
       const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)');
+      
+      console.log(`🔍 WIZARD: Checkboxes encontrados:`, {
+        todos: todosCheckboxes.length,
+        checkeados: checkboxesChecked.length,
+        noDisabled: checkboxesNoDisabled.length,
+        seleccionadas: tareasSeleccionadas.length
+      });
+      
+      // Debug: mostrar detalles de los primeros checkboxes
+      if (todosCheckboxes.length > 0) {
+        console.log(`🔍 WIZARD: Primer checkbox:`, {
+          element: todosCheckboxes[0],
+          classes: todosCheckboxes[0].className,
+          checked: todosCheckboxes[0].checked,
+          disabled: todosCheckboxes[0].disabled,
+          dataId: todosCheckboxes[0].getAttribute('data-id'),
+          dataNombre: todosCheckboxes[0].getAttribute('data-nombre')
+        });
+      }
       
       if (tareasSeleccionadas.length === 0) {
         alert('Debe seleccionar al menos una tarea del catálogo');
