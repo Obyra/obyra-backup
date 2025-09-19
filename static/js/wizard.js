@@ -308,6 +308,33 @@ function updateSelectionCounter() {
   }
 }
 
+// 🔥 FUNCIÓN CRÍTICA: Actualizar panel "Tareas Seleccionadas" en tiempo real
+function updateTaskSelectionPanel() {
+  const checkedTasks = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)');
+  const count = checkedTasks.length;
+  console.log(`📊 WIZARD: Panel tareas actualizado - ${count} tareas seleccionadas`);
+  
+  // Buscar panel "Tareas Seleccionadas" por varios posibles IDs/selectores
+  const panel = document.getElementById('tareasSeleccionadasPanel') || 
+               document.querySelector('.tareas-seleccionadas') ||
+               document.querySelector('[data-panel="tareas-seleccionadas"]') ||
+               document.querySelector('.panel-selected-tasks');
+  
+  if (panel) {
+    if (count === 0) {
+      panel.innerHTML = '<div class="text-muted">Ninguna tarea seleccionada</div>';
+    } else {
+      const tasksList = Array.from(checkedTasks).map(checkbox => {
+        const name = checkbox.getAttribute('data-nombre') || 'Tarea sin nombre';
+        return `<div class="small mb-1">✓ ${name}</div>`;
+      }).join('');
+      panel.innerHTML = `<div class="mb-2"><strong>Tareas seleccionadas (${count}):</strong></div>${tasksList}`;
+    }
+  } else {
+    console.warn('⚠️ WIZARD: Panel "Tareas Seleccionadas" no encontrado en DOM');
+  }
+}
+
 window.seleccionarTodasLasEtapas = function() {
   document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = true);
   updateSelectionCounter();
@@ -490,6 +517,7 @@ window.loadTareasWizard = async function(obraId, slugs) {
                    <div class="col-md-6 mb-2">
                      <div class="form-check">
                        <input class="form-check-input tarea-checkbox" type="checkbox" 
+                              name="tasks[]"
                               data-id="${t.id || ''}" 
                               data-nombre="${t.nombre || ''}"
                               data-etapa="${t.etapa_slug || ''}"
@@ -511,6 +539,17 @@ window.loadTareasWizard = async function(obraId, slugs) {
         : '<div class="text-muted text-center p-4">📝 No hay plantillas disponibles para las etapas seleccionadas.</div>';
       
       list.innerHTML = html;
+      
+      // 🔥 REBINDEAR EVENT LISTENERS para tareas (CRÍTICO para panel "Tareas Seleccionadas")
+      setTimeout(() => {
+        document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
+          checkbox.addEventListener('change', updateTaskSelectionPanel);
+        });
+        // 🔥 INICIALIZAR panel al cargar
+        updateTaskSelectionPanel();
+        console.log('✅ WIZARD: Event listeners de tareas rebindeados');
+      }, 50);
+      
       console.log(`🎯 WIZARD: HTML renderizado en contenedor:`, { 
         contenedor: list.id || 'sin-id', 
         tareasCount: tareas.length,
