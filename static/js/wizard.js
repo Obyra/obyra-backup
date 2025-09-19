@@ -490,12 +490,13 @@ window.loadTareasWizard = async function(obraId, slugs) {
                    <div class="col-md-6 mb-2">
                      <div class="form-check">
                        <input class="form-check-input tarea-checkbox" type="checkbox" 
-                              data-id="${t.id || ''}" 
-                              data-nombre="${t.nombre || ''}"
+                              name="tasks[]"
+                              value="${t.id || ''}"
+                              data-task-id="${t.id || ''}" 
+                              data-task-name="${t.nombre || ''}"
                               data-etapa="${t.etapa_slug || ''}"
                               data-descripcion="${t.descripcion || ''}"
                               data-horas="${t.horas || '8'}"
-                              value="${t.id || ''}"
                               id="tarea-${t.id || index}">
                        <label class="form-check-label" for="tarea-${t.id || index}">
                          <strong>${t.nombre || 'Tarea sin nombre'}</strong>
@@ -598,11 +599,11 @@ function setupUniqueInterceptor() {
       // PASO 2 → 3: Capturar tareas seleccionadas del catálogo
       console.log(`🔍 WIZARD: Iniciando captura Paso 2 → 3`);
       
-      // Debug: contar todos los checkboxes disponibles
-      const todosCheckboxes = document.querySelectorAll('.tarea-checkbox');
-      const checkboxesChecked = document.querySelectorAll('.tarea-checkbox:checked');
-      const checkboxesNoDisabled = document.querySelectorAll('.tarea-checkbox:not(:disabled)');
-      const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)');
+      // Debug: contar todos los checkboxes disponibles en el contenedor correcto
+      const todosCheckboxes = document.querySelectorAll('#wizardListaTareas .tarea-checkbox');
+      const checkboxesChecked = document.querySelectorAll('#wizardListaTareas .tarea-checkbox:checked');
+      const checkboxesNoDisabled = document.querySelectorAll('#wizardListaTareas .tarea-checkbox:not(:disabled)');
+      const tareasSeleccionadas = document.querySelectorAll('#wizardListaTareas .tarea-checkbox:checked:not(:disabled)');
       
       console.log(`🔍 WIZARD: Checkboxes encontrados:`, {
         todos: todosCheckboxes.length,
@@ -618,8 +619,10 @@ function setupUniqueInterceptor() {
           classes: todosCheckboxes[0].className,
           checked: todosCheckboxes[0].checked,
           disabled: todosCheckboxes[0].disabled,
-          dataId: todosCheckboxes[0].getAttribute('data-id'),
-          dataNombre: todosCheckboxes[0].getAttribute('data-nombre')
+          nameAttr: todosCheckboxes[0].name,
+          valueAttr: todosCheckboxes[0].value,
+          dataTaskId: todosCheckboxes[0].getAttribute('data-task-id'),
+          dataTaskName: todosCheckboxes[0].getAttribute('data-task-name')
         });
       }
       
@@ -628,14 +631,25 @@ function setupUniqueInterceptor() {
         return;
       }
       
-      // 🎯 CAPTURAR TAREAS EN WZ_STATE.tareasSel
+      // 🎯 CAPTURAR TAREAS EN wizardState.selectedTaskIds Y WZ_STATE.tareasSel
+      window.wizardState = window.wizardState || {};
+      window.wizardState.selectedTaskIds = [];
       window.WZ_STATE = window.WZ_STATE || {};
       window.WZ_STATE.tareasSel = [];
       
       tareasSeleccionadas.forEach(checkbox => {
+        const taskId = checkbox.getAttribute('data-task-id') || checkbox.value || '';
+        const taskName = checkbox.getAttribute('data-task-name') || checkbox.nextElementSibling?.textContent?.trim() || 'Tarea sin nombre';
+        
+        // Poblar wizardState.selectedTaskIds
+        if (taskId) {
+          window.wizardState.selectedTaskIds.push(taskId);
+        }
+        
+        // Poblar WZ_STATE.tareasSel para compatibilidad
         const tareaData = {
-          id: checkbox.getAttribute('data-id') || '',
-          nombre: checkbox.getAttribute('data-nombre') || checkbox.nextElementSibling?.textContent?.trim() || 'Tarea sin nombre',
+          id: taskId,
+          nombre: taskName,
           etapa_slug: checkbox.getAttribute('data-etapa') || '',
           descripcion: checkbox.getAttribute('data-descripcion') || '',
           horas: checkbox.getAttribute('data-horas') || '8'
@@ -643,7 +657,10 @@ function setupUniqueInterceptor() {
         window.WZ_STATE.tareasSel.push(tareaData);
       });
       
-      console.log(`🎯 WIZARD: ${window.WZ_STATE.tareasSel.length} tareas capturadas del catálogo:`, window.WZ_STATE.tareasSel);
+      console.log(`🎯 WIZARD: ${window.WZ_STATE.tareasSel.length} tareas capturadas:`, {
+        selectedTaskIds: window.wizardState.selectedTaskIds,
+        tareasSel: window.WZ_STATE.tareasSel
+      });
       
       // Navegar al Paso 3 y popularlo
       console.log('🔥 WIZARD: Navegando Paso 2 → 3');
