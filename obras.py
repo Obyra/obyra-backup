@@ -2797,13 +2797,19 @@ def wizard_preview():
             from tareas_predefinidas import TAREAS_POR_ETAPA
             tareas_catalogo = []
             
+            current_app.logger.debug(f"🔥 DEBUG WIZARD: Procesando etapa '{e.nombre}' (ID: {e.id})")
+            current_app.logger.debug(f"🔥 DEBUG WIZARD: Claves disponibles en TAREAS_POR_ETAPA: {list(TAREAS_POR_ETAPA.keys())}")
+            
             if e.nombre in TAREAS_POR_ETAPA:
+                current_app.logger.debug(f"✅ DEBUG WIZARD: Encontrada etapa '{e.nombre}' en catálogo")
                 for idx, tarea_def in enumerate(TAREAS_POR_ETAPA[e.nombre]):
                     tareas_catalogo.append({
                         "codigo": f"cat_{e.id}_{idx}",
                         "nombre": tarea_def.get("nombre", "Tarea sin nombre"),
                         "unidad_default": tarea_def.get("unidad", "h")
                     })
+            else:
+                current_app.logger.warning(f"❌ DEBUG WIZARD: Etapa '{e.nombre}' NO encontrada en TAREAS_POR_ETAPA")
             
             # Tareas existentes en esta etapa (opcional, para referencia)
             tareas_existentes = []
@@ -2821,7 +2827,10 @@ def wizard_preview():
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
+            
+            current_app.logger.debug(f"📊 DEBUG WIZARD: Etapa {e.nombre} - {len(tareas_catalogo)} tareas catálogo, {len(tareas_existentes)} existentes")
         
+        current_app.logger.debug(f"🎯 DEBUG WIZARD: Respuesta final con {len(etapas_data)} etapas")
         # 🎯 Respuesta con esquema exacto según especificación del usuario
         return jsonify({
             "ok": True,
