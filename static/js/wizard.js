@@ -203,8 +203,8 @@ async function cargarCatalogoEtapas() {
                 <div class="d-flex align-items-start justify-content-between">
                   <div class="form-check">
                     <input class="form-check-input etapa-checkbox" type="checkbox" 
-                           data-slug="${etapa.slug}" 
-                           data-nombre="${etapa.nombre}"
+                           name="etapa" value="${etapa.id}" data-etapa-id="${etapa.id}"
+                           data-slug="${etapa.slug}" data-nombre="${etapa.nombre}"
                            id="etapa-${etapa.slug}" ${disabledAttr} ${checkedAttr}>
                     <label class="form-check-label fw-bold" for="etapa-${etapa.slug}">
                       ${etapa.nombre}

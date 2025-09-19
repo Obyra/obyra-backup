@@ -3310,7 +3310,7 @@ class WizardTareas {
                     <div class="card ${estaCreada ? 'border-success' : 'border-light'} h-100">
                         <div class="card-body p-3">
                             <div class="form-check">
-                                <input class="form-check-input etapa-check" type="checkbox" 
+                                <input class="form-check-input etapa-checkbox" type="checkbox" 
                                        name="etapa" value="${etapaId}" data-etapa-id="${etapaId}"
                                        id="catalogEtapa${etapaId}" ${estaCreada ? 'checked' : ''}
                                        onchange="window.getSelectedEtapaIds && window.wizardTareas?.actualizarContadorSeleccionadas()">
@@ -3855,15 +3855,19 @@ function ampliarFoto(imageSrc) {
 
 // 🔥 Collector canónico que funciona en el wizard modal
 function getSelectedEtapaIds() {
-  // Buscar checkboxes marcados dentro del wizard modal, específicamente en catalogoEtapas
-  const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-check:checked, #wizardTareasModal input.etapa-checkbox:checked');
+  // Buscar checkboxes marcados dentro del wizard modal - priorizar etapa-checkbox
+  const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked, #wizardTareasModal input.etapa-check:checked');
   console.log('🔍 COLLECTOR: Checkboxes encontrados:', checkboxes.length, checkboxes);
   
   const ids = [...checkboxes]
-    .map(cb => Number(cb.dataset.etapaId || cb.value))
+    .map(cb => {
+      const id = Number(cb.dataset.etapaId || cb.value);
+      console.log('📋 COLLECTOR: Checkbox:', cb.id, 'value:', cb.value, 'data-etapa-id:', cb.dataset.etapaId, 'ID final:', id);
+      return id;
+    })
     .filter(Boolean);
   
-  console.log('📊 COLLECTOR: IDs extraídos:', ids);
+  console.log('📊 COLLECTOR: IDs extraídos finales:', ids);
   return ids;
 }
 window.getSelectedEtapaIds = getSelectedEtapaIds;  // <-- debe quedar en window
