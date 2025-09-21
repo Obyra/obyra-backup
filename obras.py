@@ -2915,12 +2915,24 @@ def wizard_create():
                 if not etapa_slug or not nombre:
                     continue
                     
-                # Mapear etapa_slug a etapa_id real
-                etapa_real = (EtapaObra.query
-                             .join(EtapaObra.obra)  
-                             .filter(EtapaObra.obra_id == obra_id)
-                             .filter(EtapaObra.slug == etapa_slug)
-                             .first())
+                # Mapear etapa_slug a nombre y buscar etapa_id real
+                try:
+                    from etapas_predefinidas import obtener_etapas_disponibles
+                    catalogo_etapas = obtener_etapas_disponibles()
+                    slug_to_nombre = {e['slug']: e['nombre'] for e in catalogo_etapas}
+                    etapa_nombre = slug_to_nombre.get(etapa_slug)
+                    
+                    if not etapa_nombre:
+                        current_app.logger.warning(f"⚠️ WIZARD: Slug '{etapa_slug}' no encontrado en catálogo")
+                        continue
+                        
+                    etapa_real = (EtapaObra.query
+                                 .filter(EtapaObra.obra_id == obra_id)
+                                 .filter(EtapaObra.nombre == etapa_nombre)
+                                 .first())
+                except ImportError:
+                    current_app.logger.error("❌ WIZARD: No se pudo importar etapas_predefinidas")
+                    continue
                 
                 if not etapa_real:
                     # Si no existe la etapa, saltamos esta tarea
