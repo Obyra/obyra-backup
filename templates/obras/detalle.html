@@ -2611,10 +2611,30 @@ class WizardTareas {
     }
     
     initializeEventListeners() {
-        // Removed: Conflicting handler - now uses setupUniqueInterceptor() from wizard.js
+        // 🎯 SAFE EVENT LISTENERS - IDs únicos por paso
         document.getElementById('wizardBtnAnterior')?.addEventListener('click', () => this.previousStep());
-        document.getElementById('wizardBtnConfirmar')?.addEventListener('click', () => this.confirmarCreacion());
-        document.getElementById('wizardBtnFin')?.addEventListener('click', () => this.finalizarWizard());
+        
+        // ✅ Paso 3: Confirmar (POST único)
+        const btnConfirmar = document.getElementById('wizardBtnConfirmar');
+        if (btnConfirmar) {
+            // Remover listeners existentes
+            btnConfirmar.replaceWith(btnConfirmar.cloneNode(true));
+            document.getElementById('wizardBtnConfirmar').addEventListener('click', () => {
+                console.log('🔥 WIZARD: btnConfirmar clicked - iniciando creación');
+                this.confirmarCreacion();
+            });
+        }
+        
+        // ✅ Paso 4: Finalizar (NO POST)
+        const btnFin = document.getElementById('wizardBtnFin');
+        if (btnFin) {
+            // Remover listeners existentes
+            btnFin.replaceWith(btnFin.cloneNode(true));
+            document.getElementById('wizardBtnFin').addEventListener('click', () => {
+                console.log('🔥 WIZARD: btnFin clicked - finalizando sin POST');
+                this.finalizarWizard();
+            });
+        }
         
         // Reset wizard when modal opens
         document.getElementById('wizardTareasModal')?.addEventListener('show.bs.modal', () => this.resetWizard());
@@ -3052,9 +3072,11 @@ class WizardTareas {
     }
     
     async confirmarCreacion() {
-        // Disable button to prevent multiple clicks
+        // 🛡️ SECURITY: Disable button to prevent multiple clicks
         const btnConfirmar = document.getElementById('wizardBtnConfirmar');
         btnConfirmar.disabled = true;
+        
+        console.log('🔥 WIZARD confirmarCreacion: Paso 3 POST iniciado - btnConfirmar disabled');
         
         console.log('🧙‍♂️ WIZARD: Iniciando confirmación...');
         
@@ -3118,6 +3140,7 @@ class WizardTareas {
                     };
                     
                     // ✅ Navigate to step 4 properly (this will call updateStepDisplay)
+                    console.log('🎯 WIZARD: POST exitoso - navegando a Paso 4 (solo resumen, no POST)');
                     this.goToStep(4);
                     
                     let successContainer = document.getElementById('step4Success');
@@ -3413,17 +3436,45 @@ class WizardTareas {
             step.classList.toggle('fw-bold', index + 1 === this.currentStep);
         });
         
-        // Update buttons
+        // 🎯 CRITICAL: IDs únicos por paso con event listeners seguros
         const btnAnterior = document.getElementById('wizardBtnAnterior');
         const btnSiguiente = document.getElementById('wizardBtnSiguiente');
         const btnConfirmar = document.getElementById('wizardBtnConfirmar');
-        
         const btnFin = document.getElementById('wizardBtnFin');
         
+        // Standard navigation buttons
         btnAnterior.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
         btnSiguiente.style.display = this.currentStep < 4 ? 'inline-block' : 'none';
-        btnConfirmar.style.display = this.currentStep === 3 ? 'inline-block' : 'none';
-        btnFin.style.display = this.currentStep === 4 ? 'inline-block' : 'none';
+        
+        if (this.currentStep === 3) {
+            // 🔥 PASO 3: Solo botón Confirmar (POST)
+            btnConfirmar.style.display = 'inline-block';
+            btnConfirmar.disabled = false;
+            btnFin.style.display = 'none';
+            console.log('🎯 WIZARD: Paso 3 configurado - btnConfirmar visible, btnFin oculto');
+            
+        } else if (this.currentStep === 4) {
+            // 🔥 PASO 4: Solo botón Finalizar (NO POST)
+            btnConfirmar.style.display = 'none';
+            btnConfirmar.disabled = true; // 🛡️ Seguridad extra
+            btnFin.style.display = 'inline-block';
+            btnFin.disabled = false;
+            console.log('🎯 WIZARD: Paso 4 configurado - btnConfirmar oculto/disabled, btnFin visible');
+            
+        } else {
+            // Otros pasos: ambos ocultos
+            btnConfirmar.style.display = 'none';
+            btnFin.style.display = 'none';
+        }
+        
+        // 📊 LOGS DE VERIFICACIÓN
+        console.log(`📋 WIZARD updateStepDisplay:`, {
+            currentStep: this.currentStep,
+            btnConfirmar_visible: btnConfirmar.style.display !== 'none',
+            btnConfirmar_disabled: btnConfirmar.disabled,
+            btnFin_visible: btnFin.style.display !== 'none',
+            btnFin_disabled: btnFin.disabled
+        });
         
         // Show/hide modal footer
         document.querySelector('.modal-footer').style.display = 'block';
