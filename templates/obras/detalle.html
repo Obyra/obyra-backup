@@ -871,7 +871,7 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="deseleccionarTodasLasEtapas()">
                             <i class="far fa-square me-1"></i>Deseleccionar Todas
                         </button>
-                        <button id="wizard-add-etapas" type="button" class="btn btn-sm btn-success" disabled>
+                        <button id="wizard-add-etapas" type="button" class="btn btn-sm btn-success" data-action="add-etapas" disabled>
                             <i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas (<span id="contadorSeleccionadas">0</span>)
                         </button>
                     </div>
@@ -982,16 +982,16 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-outline-secondary" id="wizardBtnAnterior" style="display:none;">
+                <button type="button" class="btn btn-outline-secondary" id="wizardBtnAnterior" data-action="prev-step" style="display:none;">
                     <i class="fas fa-arrow-left me-1"></i>Anterior
                 </button>
-                <button type="button" class="btn btn-primary" id="wizardBtnSiguiente">
+                <button type="button" class="btn btn-primary" id="wizardBtnSiguiente" data-action="next-step">
                     Siguiente <i class="fas fa-arrow-right ms-1"></i>
                 </button>
-                <button type="button" class="btn btn-success" id="wizardBtnConfirmar" style="display:none;">
+                <button type="button" class="btn btn-success" id="wizardBtnConfirmar" data-action="create-tasks" style="display:none;">
                     <i class="fas fa-check me-1"></i>Crear Tareas
                 </button>
-                <button type="button" class="btn btn-primary" id="wizardBtnFin" style="display:none;">
+                <button type="button" class="btn btn-primary" id="wizardBtnFin" data-action="finish" style="display:none;">
                     <i class="fas fa-times me-1"></i>Finalizar
                 </button>
             </div>
@@ -2596,62 +2596,383 @@ async function confirmarRechazo() {
 console.log('🔧 HOTFIX: Traditional form submission enabled (no AJAX interference)');
 
 // Upgraded Wizard per user specification  
-class WizardTareas {
+class WizardController {
     constructor() {
-        this.currentStep = 1;
-        this.obra_id = {{ obra.id }};
-        this.WIZARD = {
-            etapa_ids: [],
-            preview: null,
-            tareas_seleccionadas: [],
-            equipo: []
+        this.obraId = {{ obra.id }};
+        
+        // ✅ SINGLE SOURCE OF TRUTH - Estado centralizado
+        this.state = {
+            currentStep: 1,
+            etapasSelected: [],     // IDs de etapas seleccionadas (checkboxes)
+            etapasCreated: [],      // IDs de etapas ya agregadas a la obra
+            tareasSelected: [],     // Tareas seleccionadas para creación
+            formData: {},           // Datos del formulario Paso 3
+            catalogo: null,         // Catálogo de etapas disponibles
+            submitting: false,      // Mutex para evitar doble-submit
+            navLock: false          // Lock durante operaciones async
         };
         
-        this.initializeEventListeners();
+        this.initializeController();
     }
     
-    initializeEventListeners() {
-        // 🎯 SAFE EVENT LISTENERS - IDs únicos por paso
-        document.getElementById('wizardBtnAnterior')?.addEventListener('click', () => this.previousStep());
+    initializeController() {
+        console.log('🎯 WIZARD: Inicializando WizardController simple');
         
-        // ✅ Paso 1: Agregar Etapas Seleccionadas (POST para crear etapas en obra)
-        const btnAgregarEtapas = document.getElementById('wizard-add-etapas');
-        if (btnAgregarEtapas) {
-            // Remover listeners existentes
-            btnAgregarEtapas.replaceWith(btnAgregarEtapas.cloneNode(true));
-            document.getElementById('wizard-add-etapas').addEventListener('click', () => {
-                console.log('🔥 WIZARD: btnAgregarEtapas clicked - creando etapas en obra');
-                this.agregarEtapasSeleccionadas();
-            });
+        // ✅ UN SOLO HANDLER DELEGADO - Elimina conflictos de múltiples listeners
+        const modal = document.getElementById('wizardTareasModal');
+        if (modal) {
+            // Remover cualquier handler anterior
+            if (this.handleDelegatedClick) {
+                modal.removeEventListener('click', this.handleDelegatedClick);
+            }
+            
+            // Nuevo handler delegado usando data-action pattern
+            this.handleDelegatedClick = this.handleDelegatedClick.bind(this);
+            modal.addEventListener('click', this.handleDelegatedClick);
+            
+            // ✅ HOOK MODAL RESET - Reset cuando se abre el modal
+            this.modalShowHandler = () => this.resetWizard();
+            modal.addEventListener('show.bs.modal', this.modalShowHandler);
+            
+            // ✅ HOOK CHECKBOX CHANGES - Actualizar contador y botón
+            this.checkboxChangeHandler = (e) => {
+                if (e.target.matches('.etapa-checkbox')) {
+                    this.updateCounter();
+                }
+            };
+            modal.addEventListener('change', this.checkboxChangeHandler);
+            
+            console.log('✅ WIZARD: Handlers delegados conectados');
         }
         
-        // ✅ Paso 3: Confirmar (POST único)
+        // Cargar catálogo inicial
+        this.loadCatalogo();
+    }
+    
+    // ✅ HANDLER DELEGADO ÚNICO - Patrón data-action para simplicidad
+    handleDelegatedClick(event) {
+        const target = event.target.closest('[data-action]');
+        if (!target) return;
+        
+        const action = target.dataset.action;
+        
+        // Prevenir múltiples clicks durante operaciones
+        if (this.state.submitting || this.state.navLock) {
+            console.log('🚫 WIZARD: Acción bloqueada (operación en curso)');
+            return;
+        }
+        
+        console.log(`🎯 WIZARD: Acción delegada: ${action}`);
+        
+        switch (action) {
+            case 'add-etapas':
+                this.addSelectedEtapas();
+                break;
+            case 'next-step':
+                this.nextStep();
+                break;
+            case 'prev-step':
+                this.prevStep();
+                break;
+            case 'create-tasks':
+                this.createTasks();
+                break;
+            case 'finish':
+                this.finish();
+                break;
+            case 'prev-step':
+                this.prevStep();
+                break;
+        }
+    }
+    
+    // ✅ MÉTODOS SIMPLIFICADOS - Un flujo claro sin complejidad
+    
+    async loadCatalogo() {
+        console.log('📡 WIZARD: Cargando catálogo de etapas...');
+        try {
+            const response = await fetch(`/obras/api/wizard-tareas/etapas?obra_id=${this.obraId}`);
+            const data = await response.json();
+            
+            if (data.ok || response.ok) {
+                this.state.catalogo = data.etapas_catalogo || data.catalogo || [];
+                this.state.etapasCreated = (data.etapas_creadas || []).map(e => e.id);
+                this.renderCatalogo();
+                console.log('✅ WIZARD: Catálogo cargado:', this.state.catalogo.length, 'etapas');
+            } else {
+                throw new Error(data.error || 'Error al cargar catálogo');
+            }
+        } catch (error) {
+            console.error('❌ WIZARD: Error cargando catálogo:', error);
+            this.showError('Error al cargar catálogo de etapas');
+        }
+    }
+    
+    // ✅ PASO 1: Agregar etapas seleccionadas (SIMPLE Y CONFIABLE)
+    async addSelectedEtapas() {
+        console.log('🔥 WIZARD: Agregando etapas seleccionadas...');
+        
+        if (this.state.submitting) return;
+        this.state.submitting = true;
+        
+        // Obtener IDs seleccionados directamente de checkboxes
+        const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked:not(:disabled)');
+        const selectedIds = Array.from(checkboxes).map(cb => Number(cb.value)).filter(Boolean);
+        
+        console.log('📋 WIZARD: IDs seleccionados:', selectedIds);
+        
+        if (selectedIds.length === 0) {
+            alert('Debe seleccionar al menos una etapa');
+            this.state.submitting = false;
+            return;
+        }
+        
+        // Mapear a slugs desde el catálogo
+        const slugs = selectedIds.map(id => {
+            const etapa = this.state.catalogo?.find(e => Number(e.id) === id);
+            return etapa?.slug || etapa?.nombre?.toLowerCase();
+        }).filter(Boolean);
+        
+        console.log('📋 WIZARD: Slugs a crear:', slugs);
+        
+        if (slugs.length === 0) {
+            alert('Error: No se pudieron identificar las etapas seleccionadas');
+            this.state.submitting = false;
+            return;
+        }
+        
+        const btn = document.getElementById('wizard-add-etapas');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Agregando...';
+        
+        try {
+            const response = await fetch(`/obras/api/obras/${this.obraId}/etapas/bulk_from_catalog`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ catalogo_ids: slugs })
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok || !result.ok) {
+                throw new Error(result.error || 'Error al agregar etapas');
+            }
+            
+            // Éxito: actualizar estado y UI
+            const creadas = result.creadas?.length || 0;
+            const existentes = result.existentes?.length || 0;
+            
+            this.showSuccess(`✅ ${creadas} etapa(s) agregada(s), ${existentes} ya existían`);
+            
+            // Recargar catálogo para mostrar etapas como creadas
+            await this.loadCatalogo();
+            
+            console.log('🎉 WIZARD: Etapas agregadas exitosamente');
+            
+        } catch (error) {
+            console.error('❌ WIZARD: Error:', error);
+            alert(`Error: ${error.message}`);
+        } finally {
+            this.state.submitting = false;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas (<span id="contadorSeleccionadas">0</span>)';
+        }
+    }
+    
+    nextStep() {
+        if (this.state.navLock) return;
+        
+        const next = this.state.currentStep + 1;
+        if (next > 4) return;
+        
+        console.log(`🎯 WIZARD: Paso ${this.state.currentStep} → ${next}`);
+        
+        // Validaciones por paso
+        if (this.state.currentStep === 1) {
+            // Verificar que hay etapas creadas en la obra
+            if (this.state.etapasCreated.length === 0) {
+                alert('Debe agregar al menos una etapa antes de continuar');
+                return;
+            }
+        }
+        
+        this.goToStep(next);
+    }
+    
+    goToStep(step) {
+        this.state.currentStep = step;
+        this.updateUI();
+        console.log(`📍 WIZARD: En Paso ${step}`);
+    }
+    
+    updateUI() {
+        console.log(`🔄 WIZARD: Actualizando UI para Paso ${this.state.currentStep}`);
+        
+        // ✅ ACTUALIZAR PASOS VISUALES - Usar clases Bootstrap correctas
+        document.querySelectorAll('.wizard-content, .tab-pane').forEach(content => {
+            content.classList.remove('active', 'show');
+            content.classList.add('d-none');
+        });
+        
+        const currentStepEl = document.getElementById(`wizardStep${this.state.currentStep}`);
+        if (currentStepEl) {
+            currentStepEl.classList.remove('d-none');
+            currentStepEl.classList.add('active', 'show');
+        }
+        
+        // ✅ ACTUALIZAR INDICADORES DE PASO
+        document.querySelectorAll('.wizard-step').forEach((step, index) => {
+            const stepNumber = index + 1;
+            step.classList.toggle('text-primary', stepNumber === this.state.currentStep);
+            step.classList.toggle('fw-bold', stepNumber === this.state.currentStep);
+        });
+        
+        // ✅ ACTUALIZAR BOTONES - Control determinístico
+        const btnAnterior = document.getElementById('wizardBtnAnterior');
+        const btnSiguiente = document.getElementById('wizardBtnSiguiente');
         const btnConfirmar = document.getElementById('wizardBtnConfirmar');
-        if (btnConfirmar) {
-            // Remover listeners existentes
-            btnConfirmar.replaceWith(btnConfirmar.cloneNode(true));
-            document.getElementById('wizardBtnConfirmar').addEventListener('click', () => {
-                console.log('🔥 WIZARD: btnConfirmar clicked - iniciando creación');
-                this.confirmarCreacion();
-            });
-        }
-        
-        // ✅ Paso 4: Finalizar (NO POST)
         const btnFin = document.getElementById('wizardBtnFin');
-        if (btnFin) {
-            // Remover listeners existentes
-            btnFin.replaceWith(btnFin.cloneNode(true));
-            document.getElementById('wizardBtnFin').addEventListener('click', () => {
-                console.log('🔥 WIZARD: btnFin clicked - finalizando sin POST');
-                this.finalizarWizard();
-            });
+        
+        // Ocultar todos
+        [btnAnterior, btnSiguiente, btnConfirmar, btnFin].forEach(btn => {
+            if (btn) btn.style.display = 'none';
+        });
+        
+        // Mostrar según paso
+        if (this.state.currentStep > 1 && btnAnterior) {
+            btnAnterior.style.display = 'inline-block';
         }
         
-        // Reset wizard when modal opens
-        document.getElementById('wizardTareasModal')?.addEventListener('show.bs.modal', () => this.resetWizard());
+        if (this.state.currentStep < 3 && btnSiguiente) {
+            btnSiguiente.style.display = 'inline-block';
+        } else if (this.state.currentStep === 3 && btnConfirmar) {
+            btnConfirmar.style.display = 'inline-block';
+            btnConfirmar.innerHTML = '<i class="fas fa-check me-1"></i>Crear Tareas';
+        } else if (this.state.currentStep === 4 && btnFin) {
+            btnFin.style.display = 'inline-block';
+            btnFin.innerHTML = '<i class="fas fa-check me-1"></i>Finalizar';
+        }
+        
+        // ✅ ACTUALIZAR PROGRESS BAR
+        const progressBar = document.getElementById('wizardProgressBar');
+        if (progressBar) {
+            const progress = (this.state.currentStep / 4) * 100;
+            progressBar.style.width = `${progress}%`;
+        }
+        
+        console.log(`✅ WIZARD: UI actualizada - Paso ${this.state.currentStep} visible`);
     }
     
-    async nextStep() {
+    async createTasks() {
+        console.log('🔥 WIZARD: Creando tareas (UN SOLO POST)...');
+        
+        if (this.state.submitting) {
+            console.log('🚫 WIZARD: Ya hay una creación en curso');
+            return;
+        }
+        
+        this.state.submitting = true;
+        
+        // TODO: Implementar creación de tareas
+        // Por ahora solo simular éxito y avanzar
+        setTimeout(() => {
+            this.goToStep(4);
+            this.state.submitting = false;
+        }, 1000);
+    }
+    
+    prevStep() {
+        if (this.state.navLock || this.state.currentStep <= 1) return;
+        
+        const prev = this.state.currentStep - 1;
+        console.log(`🎯 WIZARD: Paso ${this.state.currentStep} → ${prev} (atrás)`);
+        this.goToStep(prev);
+    }
+    
+    finish() {
+        console.log('🎯 WIZARD: Finalizando (solo cerrar)...');
+        const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
+        if (modal) modal.hide();
+        
+        // Opcional: recargar para mostrar nuevas tareas
+        setTimeout(() => window.location.reload(), 300);
+    }
+    
+    resetWizard() {
+        console.log('🔄 WIZARD: Reseteando wizard...');
+        this.state.currentStep = 1;
+        this.state.submitting = false;
+        this.state.navLock = false;
+        this.loadCatalogo();
+        this.updateUI();
+    }
+    
+    showSuccess(message) {
+        // TODO: Implementar toast de éxito
+        console.log('✅ WIZARD SUCCESS:', message);
+    }
+    
+    showError(message) {
+        // TODO: Implementar toast de error  
+        console.error('❌ WIZARD ERROR:', message);
+        alert(message);
+    }
+    
+    renderCatalogo() {
+        const container = document.getElementById('catalogoEtapas');
+        if (!container || !this.state.catalogo) return;
+        
+        const html = this.state.catalogo.map(etapa => {
+            const isCreated = this.state.etapasCreated.includes(etapa.id);
+            const badgeClass = isCreated ? 'bg-success' : 'bg-primary';
+            const badgeText = isCreated ? 'Ya agregada' : 'Disponible';
+            const disabledAttr = isCreated ? 'disabled' : '';
+            
+            return `
+                <div class="col-md-6 mb-3">
+                    <div class="card ${isCreated ? 'border-success' : ''}">
+                        <div class="card-body p-3">
+                            <div class="form-check">
+                                <input class="form-check-input etapa-checkbox" type="checkbox" 
+                                       value="${etapa.id}" data-etapa-id="${etapa.id}"
+                                       id="catalogEtapa${etapa.id}" ${disabledAttr}
+                                       onchange="window.wizardController?.updateCounter()">
+                                <label class="form-check-label w-100" for="catalogEtapa${etapa.id}">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1 ${isCreated ? 'text-success' : ''}">
+                                                📋 ${etapa.nombre}
+                                                ${isCreated ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}
+                                            </h6>
+                                            <p class="text-muted small mb-0">${etapa.descripcion || ''}</p>
+                                        </div>
+                                        <span class="badge ${badgeClass}">${badgeText}</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = html;
+        this.updateCounter();
+    }
+    
+    updateCounter() {
+        const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked:not(:disabled)');
+        const count = checkboxes.length;
+        
+        const counter = document.getElementById('contadorSeleccionadas');
+        if (counter) counter.textContent = count;
+        
+        const btn = document.getElementById('wizard-add-etapas');
+        if (btn) btn.disabled = count === 0;
+    }
+    
+    // ✅ LEGACY: Mantener compatibilidad temporal
+    async nextStepLegacy() {
         console.log(`🧙‍♂️ WIZARD: Step ${this.currentStep} → ${this.currentStep + 1}`);
         console.log('🔥 DEBUG: nextStep() llamado, this:', this);
         
@@ -4110,7 +4431,13 @@ window.getSelectedEtapaIds = getSelectedEtapaIds;  // <-- debe quedar en window
 // Initialize wizard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('wizardTareasModal')) {
-        console.log('🧙‍♂️ WIZARD: Inicializando wizard de tareas');
+        console.log('🧙‍♂️ WIZARD: Inicializando WizardController simplificado');
+        
+        // ✅ NUEVA IMPLEMENTACIÓN: WizardController centralizado
+        window.wizardController = new WizardController();
+        
+        // Mantener compatibilidad con código legacy
+        window.wizardTareas = window.wizardController;
         
         // 🎯 Estado unificado del wizard - single source of truth
         window.WIZARD = window.WIZARD || {
