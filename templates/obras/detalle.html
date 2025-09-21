@@ -2614,6 +2614,17 @@ class WizardTareas {
         // 🎯 SAFE EVENT LISTENERS - IDs únicos por paso
         document.getElementById('wizardBtnAnterior')?.addEventListener('click', () => this.previousStep());
         
+        // ✅ Paso 1: Agregar Etapas Seleccionadas (POST para crear etapas en obra)
+        const btnAgregarEtapas = document.getElementById('wizard-add-etapas');
+        if (btnAgregarEtapas) {
+            // Remover listeners existentes
+            btnAgregarEtapas.replaceWith(btnAgregarEtapas.cloneNode(true));
+            document.getElementById('wizard-add-etapas').addEventListener('click', () => {
+                console.log('🔥 WIZARD: btnAgregarEtapas clicked - creando etapas en obra');
+                this.agregarEtapasSeleccionadas();
+            });
+        }
+        
         // ✅ Paso 3: Confirmar (POST único)
         const btnConfirmar = document.getElementById('wizardBtnConfirmar');
         if (btnConfirmar) {
@@ -3212,6 +3223,79 @@ class WizardTareas {
         
         // Re-enable button
         document.getElementById('wizardBtnConfirmar').disabled = false;
+    }
+    
+    async agregarEtapasSeleccionadas() {
+        console.log('🔥 WIZARD: Iniciando agregado de etapas seleccionadas...');
+        
+        // Obtener etapas seleccionadas
+        const etapaIds = getSelectedEtapaIds();
+        if (etapaIds.length === 0) {
+            alert('Debe seleccionar al menos una etapa');
+            return;
+        }
+        
+        // Mapear IDs a slugs del catálogo
+        const catalogoSlugs = etapaIds
+            .map(id => {
+                const etapa = this.WIZARD.catalogo?.find(e => e.id === id);
+                return etapa?.slug || null;
+            })
+            .filter(Boolean);
+            
+        console.log('📋 WIZARD: Enviando slugs al backend:', catalogoSlugs);
+        
+        const btnAgregarEtapas = document.getElementById('wizard-add-etapas');
+        btnAgregarEtapas.disabled = true;
+        const originalHTML = btnAgregarEtapas.innerHTML;
+        btnAgregarEtapas.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Agregando...';
+        
+        try {
+            const response = await fetch(`/obras/api/obras/${this.obra_id}/etapas/bulk_from_catalog`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ 
+                    catalogo_ids: catalogoSlugs 
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok || !result.ok) {
+                throw new Error(result.error || 'Error al agregar etapas');
+            }
+            
+            // Show success message
+            const creadas = result.creadas?.length || 0;
+            const existentes = result.existentes?.length || 0;
+            
+            let mensaje = '';
+            if (creadas > 0) {
+                mensaje += `✅ ${creadas} etapa(s) agregada(s) exitosamente`;
+            }
+            if (existentes > 0) {
+                if (mensaje) mensaje += ', ';
+                mensaje += `🔄 ${existentes} etapa(s) ya existían`;
+            }
+            
+            // Show success toast notification
+            this.showSuccessToast(mensaje);
+            
+            // Recargar catálogo para reflejar cambios (etapas marcadas como "Ya agregada")
+            await this.cargarCatalogoEtapas();
+            
+            console.log('🎉 WIZARD: Etapas agregadas exitosamente');
+            
+        } catch (error) {
+            console.error('❌ WIZARD: Error agregando etapas:', error);
+            alert(`Error: ${error.message}`);
+        } finally {
+            btnAgregarEtapas.disabled = false;
+            btnAgregarEtapas.innerHTML = originalHTML;
+        }
     }
     
     finalizarWizard() {
