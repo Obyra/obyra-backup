@@ -3230,20 +3230,41 @@ class WizardTareas {
         
         // Obtener etapas seleccionadas
         const etapaIds = getSelectedEtapaIds();
+        console.log('🔍 WIZARD DEBUG: etapaIds obtenidos:', etapaIds);
+        
         if (etapaIds.length === 0) {
+            console.error('❌ WIZARD: No hay etapas seleccionadas');
             alert('Debe seleccionar al menos una etapa');
             return;
         }
         
-        // Mapear IDs a slugs del catálogo
+        // 🔍 DEBUG: Verificar catálogo disponible
+        console.log('🔍 WIZARD DEBUG: this.WIZARD.catalogo:', this.WIZARD.catalogo);
+        console.log('🔍 WIZARD DEBUG: Etapas en catálogo:', this.WIZARD.catalogo?.length || 0);
+        
+        // Mapear IDs a slugs del catálogo (con debugging detallado)
         const catalogoSlugs = etapaIds
             .map(id => {
-                const etapa = this.WIZARD.catalogo?.find(e => e.id === id);
-                return etapa?.slug || null;
+                console.log(`🔍 WIZARD DEBUG: Buscando slug para ID ${id}`);
+                const etapa = this.WIZARD.catalogo?.find(e => {
+                    console.log(`🔍 WIZARD DEBUG: Comparando etapa ${e.id} (${typeof e.id}) con ${id} (${typeof id})`);
+                    return Number(e.id) === Number(id);
+                });
+                console.log(`🔍 WIZARD DEBUG: Etapa encontrada para ID ${id}:`, etapa);
+                const slug = etapa?.slug || etapa?.nombre?.toLowerCase() || null;
+                console.log(`🔍 WIZARD DEBUG: Slug extraído para ID ${id}:`, slug);
+                return slug;
             })
             .filter(Boolean);
             
+        console.log('📋 WIZARD: Slugs mapeados:', catalogoSlugs);
         console.log('📋 WIZARD: Enviando slugs al backend:', catalogoSlugs);
+        
+        if (catalogoSlugs.length === 0) {
+            console.error('❌ WIZARD: No se pudieron mapear IDs a slugs. Catálogo:', this.WIZARD.catalogo);
+            alert('Error: No se pudieron identificar las etapas seleccionadas. Por favor, recargue el catálogo.');
+            return;
+        }
         
         const btnAgregarEtapas = document.getElementById('wizard-add-etapas');
         btnAgregarEtapas.disabled = true;
