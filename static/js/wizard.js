@@ -587,8 +587,16 @@ window.loadTareasWizard = async function(obraId, slugs) {
 // Interceptor único para botón "Siguiente" 
 function setupUniqueInterceptor() {
   const btnSiguiente = document.getElementById('wizardBtnSiguiente');
-  if (!btnSiguiente || btnSiguiente.dataset.wizardBound) return;
+  if (!btnSiguiente) {
+    console.error('❌ WIZARD: botón wizardBtnSiguiente no encontrado');
+    return;
+  }
+  if (btnSiguiente.dataset.wizardBound) {
+    console.log('🔥 WIZARD: setupUniqueInterceptor ya ejecutado, saltando');
+    return;
+  }
   
+  console.log('🔥 WIZARD: Configurando interceptor para botón Siguiente');
   btnSiguiente.dataset.wizardBound = 'true';
   
   btnSiguiente.addEventListener('click', (ev) => {
@@ -596,10 +604,21 @@ function setupUniqueInterceptor() {
     ev.stopPropagation();
     ev.stopImmediatePropagation?.();
     
+    console.log('🔥 WIZARD: Click en botón Siguiente detectado');
+    
     // Determinar paso actual usando Bootstrap tab-pane classes
     const modal = document.getElementById('wizardTareasModal');
     const paso1Visible = modal.querySelector('#wizardStep1.active, #paso1.active, .tab-pane.active[id*="1"]');
     const paso2Visible = modal.querySelector('#wizardStep2.active, #paso2.active, .tab-pane.active[id*="2"]');
+    
+    // Debug: mostrar todos los pasos y sus clases
+    const allSteps = modal.querySelectorAll('[id*="wizardStep"], [id*="paso"]');
+    console.log('🔍 WIZARD: Todos los pasos encontrados:', Array.from(allSteps).map(el => ({
+      id: el.id,
+      classes: el.className,
+      hasActive: el.classList.contains('active'),
+      hasShow: el.classList.contains('show')
+    })));
     
     // Fallback: usar estado global si está disponible
     const currentStep = window.WZ_STATE?.currentStep || window.currentStep || 1;
@@ -615,6 +634,8 @@ function setupUniqueInterceptor() {
       }
       
       console.log('🔥 WIZARD: Navegando Paso 1 → 2');
+      window.WZ_STATE = window.WZ_STATE || {};
+      window.WZ_STATE.currentStep = 2;
       window.gotoPaso?.(2);
       
       // 🎯 CARGAR TAREAS DEL CATÁLOGO para las etapas seleccionadas
@@ -688,6 +709,7 @@ function setupUniqueInterceptor() {
       
       // Navegar al Paso 3 y popularlo
       console.log('🔥 WIZARD: Navegando Paso 2 → 3');
+      window.WZ_STATE.currentStep = 3;
       window.gotoPaso?.(3);
       
       // Poblar el Paso 3 con las tareas seleccionadas
