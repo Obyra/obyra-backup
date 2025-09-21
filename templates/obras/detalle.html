@@ -2598,13 +2598,12 @@ console.log('🔧 HOTFIX: Traditional form submission enabled (no AJAX interfere
 // Upgraded Wizard per user specification  
 class WizardController {
     constructor() {
-        // ✅ EXTRAER OBRA_ID DE LA URL - Método confiable
-        this.obraId = this.extractObraIdFromUrl();
-        console.log('🎯 WIZARD: obra_id extraído:', this.obraId);
+        // ✅ USAR VARIABLE GLOBAL QUE YA FUNCIONA
+        this.obraId = window.obraId;
+        console.log('🎯 WIZARD: usando window.obraId:', this.obraId);
         
         if (!this.obraId) {
-            console.error('❌ WIZARD: No se pudo obtener obra_id de la URL');
-            alert('Error: No se puede identificar la obra actual');
+            console.error('❌ WIZARD: window.obraId no disponible');
             return;
         }
         
@@ -2655,13 +2654,6 @@ class WizardController {
         
         // Cargar catálogo inicial
         this.loadCatalogo();
-    }
-    
-    extractObraIdFromUrl() {
-        // Usar la misma lógica que ya funciona en el código
-        const pathname = window.location.pathname;
-        const match = pathname.match(/\/obras\/(\d+)/);
-        return match ? parseInt(match[1]) : null;
     }
     
     // ✅ HANDLER DELEGADO ÚNICO - Patrón data-action para simplicidad
