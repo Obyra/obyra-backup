@@ -1,0 +1,138 @@
+Severidad: SEV-1 (regresión)
+Módulo: Wizard “Crear Tareas en Lote”
+Estado actual del usuario:
+
+Paso 1: selecciona etapas ✅
+
+Paso 2: marca tareas, panel “Tareas Seleccionadas” muestra X tareas ✅
+
+Paso 3: se generan las filas y completo fechas, horas, cantidad, etc. ✅
+
+Al dar Siguiente/Confirmar, el modal se re-renderiza y no se persiste nada ❌
+
+En Network no aparece ningún POST; sólo GETs del catálogo.
+
+Evidencia de consola (real del entorno)
+
+📊 WIZARD: Panel tareas actualizado – N tareas seleccionadas
+
+✅ WIZARD: 2 filas generadas en Paso 3
+
+Validaciones: 🚦 requeridos vacíos: [] (no hay campos obligatorios faltantes)
+
+Pero no se ve ningún POST en Network y el wizard “vuelve a empezar”.
+
+Diagnóstico
+
+La regresión original fue por IDs/atributos de los checkboxes del Paso 2 y por un ID de panel distinto entre HTML y JS. Eso ya está normalizado (panel se actualiza y se pasa a Paso 3).
+Lo que sigue roto es el cierre del flujo: en Paso 3 el botón “Siguiente/Confirmar” no dispara el submit real del formulario, por eso no hay POST y no se crean las tareas.
+
+Además, detectamos que a veces los IDs de tareas llegan como objetos y terminan viajando como "[object Object]". Hay que normalizarlos a strings antes del submit.
+
+Qué hay que corregir (checklist corto)
+
+Paso 2 – checkboxes de tareas (debería quedar así; validar que esté)
+
+name="tasks[]"
+
+value="<id_real>" (string)
+
+data-id="<id_real>"
+
+data-nombre="<nombre_tarea>"
+
+clase tarea-checkbox
+(esto hoy parece OK; sólo verificación).
+
+Panel “Tareas Seleccionadas”
+
+El JS debe usar el ID que existe en el HTML (#tareas-seleccionadas-list o #selectedTasksList, el que realmente esté en la plantilla).
+
+Ya se ve el log “Panel tareas actualizado – X tareas seleccionadas”, así que sólo dejarlo consistente.
+
+Paso 3 – normalizar selección a strings
+En wizard.js (función que arma Paso 3 / que captura Paso2→3):
+
+Guardar selección en ambos estados por compatibilidad:
+
+window.WZ_STATE.tareasSel = ['mamposteria-4','mamposteria-6', ...] (array de strings)
+
+window.wizardState.selectedTaskIds = new Set([...])
+
+Nunca guardar objetos en esos estados.
+
+Paso 3 – al avanzar, hacer submit real
+En el handler del botón Siguiente/Confirmar de Paso 3:
+
+Antes de enviar, inyectar inputs hidden tasks[] (uno por ID string), y motivo si es requerido.
+
+Luego disparar form.requestSubmit().
+
+Asegurarse de no impedir el submit con preventDefault() o con navegación interna antes del POST.
+
+Si existe un Paso 4 de “Confirmar”, que ese botón haga el requestSubmit().
+
+Pseudocódigo (para wizard.js):
+
+function submitPaso3() {
+  const form = document.querySelector('#wizardTareasModal form') || document.querySelector('form');
+  if (!form) return;
+
+  const idsRaw =
+    (Array.isArray(window.WZ_STATE?.tareasSel) && window.WZ_STATE.tareasSel.length)
+      ? window.WZ_STATE.tareasSel
+      : Array.from(window.wizardState?.selectedTaskIds || []);
+
+  const ids = [...new Set(idsRaw.map(x =>
+    typeof x === 'string' ? x : (x?.id || x?.task_id || x?.tarea_id || x?.value)
+  ).filter(Boolean))];
+
+  // limpiar e inyectar
+  form.querySelectorAll('input[name="tasks[]"]').forEach(n => n.remove());
+  ids.forEach(id => {
+    const i = document.createElement('input');
+    i.type = 'hidden'; i.name = 'tasks[]'; i.value = String(id);
+    form.appendChild(i);
+  });
+
+  // motivo si el back lo exige
+  let m = form.querySelector('[name="motivo"], #motivo');
+  if (!m) { m = document.createElement('input'); m.type = 'hidden'; m.name = 'motivo'; form.appendChild(m); }
+  if (!m.value) m.value = 'Creación masiva desde el wizard';
+
+  // enviar de forma tradicional
+  form.requestSubmit();
+}
+// Wirear este submit a “Confirmar” o al “Siguiente” de Paso 3 según diseño actual.
+
+
+No bloquear por “Asignado a” vacío
+El select “Asignado a” aparece sin opciones (problema de datos/carga). No lo hagan required en esta entrega. Dejar esto para un ticket aparte.
+
+QA de cierre (aceptación)
+
+Abrir DevTools → Network → Clear
+
+Completar Wizard hasta Paso 3, llenar campos.
+
+Click en Confirmar/Guardar (o Siguiente si ahí se envía).
+
+Debe aparecer una request Method: POST con Form Data conteniendo:
+
+tasks[] = <id> (uno por cada tarea elegida; strings),
+
+motivo (si aplica),
+
+y el resto de los campos (inicio, fin, horas, cantidad, unidad, prioridad, asignado si corresponde).
+
+Respuesta 2xx y las tareas quedan creadas.
+
+Volver al dashboard/obra y verificar que las tareas estén asignadas.
+
+Archivos a tocar
+
+static/js/wizard.js (captura Paso2→3, normalización de IDs, handler de submit).
+
+templates/… del wizard sólo si hace falta ajustar el ID del panel ya existente.
+
+Con esto se resuelve la regresión (no-POST). Si necesitan, les paso vídeo con la reproducción y los logs que muestran que el panel y las filas de Paso 3 ya están OK pero falta el submit real.

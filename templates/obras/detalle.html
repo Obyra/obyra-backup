@@ -2608,7 +2608,7 @@ class WizardTareas {
     }
     
     initializeEventListeners() {
-        document.getElementById('wizardBtnSiguiente')?.addEventListener('click', () => this.nextStep());
+        // Removed: Conflicting handler - now uses setupUniqueInterceptor() from wizard.js
         document.getElementById('wizardBtnAnterior')?.addEventListener('click', () => this.previousStep());
         document.getElementById('wizardBtnConfirmar')?.addEventListener('click', () => this.confirmarCreacion());
         
