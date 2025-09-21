@@ -68,74 +68,12 @@ async function fetchJSON(url, opts = {}) {
 
 // =================== EVENT DELEGATION INTERCEPTORS ===================
 
-// FINALIZAR: Paso 3 -> 4
-if (!window.__WZ_FINISH_INSTALLED__) {
-  window.__WZ_FINISH_INSTALLED__ = true;
-  document.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('#wizardBtnConfirmar, #wizard-finish, [data-action="finish"]');
-    if (!btn) return;
-    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
-
-    console.log('🎯 WIZARD: Finalizando (event delegation)...');
-    
-    const payload = window.collectPaso3Payload?.();
-    if (!payload?.tareas?.length) {
-      alert('No hay tareas para crear');
-      return;
-    }
-    
-    btn.disabled = true;
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
-    
-    try {
-      const r = await fetch(api('obras/api/wizard-tareas/create'), {
-        method: 'POST', 
-        headers: {'Content-Type':'application/json'}, 
-        credentials:'same-origin',
-        body: JSON.stringify(payload)
-      });
-      const j = await r.json();
-      if (!r.ok || !j.ok) { 
-        console.error(j); 
-        alert(j.error || 'No se pudo finalizar'); 
-        return; 
-      }
-
-      console.log('✅ WIZARD: Tareas creadas, navegando a Paso 4');
-      // anti-rebote corto
-      window.__WZ_NAV_LOCK_UNTIL__ = Date.now() + 2000;
-      window.gotoPaso?.(4);
-      
-    } catch (error) {
-      console.error('❌ WIZARD: Error:', error);
-      alert(`Error: ${error.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-    }
-  }, { capture: true });
+// 🚫 DISABLED: FINALIZAR Paso 3 -> 4 (Now handled in detalle.html)
+// Eliminado para evitar listeners duplicados que causan doble POST
 }
 
-// CONFIRMAR: Paso 4 -> cerrar modal
-if (!window.__WZ_CONFIRM_INSTALLED__) {
-  window.__WZ_CONFIRM_INSTALLED__ = true;
-  document.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('#wizardBtnCerrar, #wizardBtnFin, #wizard-confirm, [data-action="confirm"]');
-    if (!btn) return;
-    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.();
-
-    console.log('🎯 WIZARD: Confirmando - cerrando modal...');
-    const modalEl = document.querySelector('#wizardTareasModal, #wizard-modal');
-    if (modalEl) { 
-      try { 
-        bootstrap.Modal.getOrCreateInstance(modalEl).hide(); 
-        // Opcional: refrescar para mostrar nuevas tareas
-        setTimeout(() => window.location.reload(), 300);
-      } catch {} 
-    }
-  }, { capture: true });
-}
+// 🚫 DISABLED: CONFIRMAR Paso 4 -> Cerrar (Now handled in detalle.html)
+// Eliminado para evitar listeners duplicados que interfieren con updateStepDisplay()
 
 // Guard anti-rebote a Paso 2 durante el lock
 if (!window.__WZ_GUARD_INSTALLED__) {
