@@ -991,7 +991,7 @@
                 <button type="button" class="btn btn-success" id="wizardBtnConfirmar" style="display:none;">
                     <i class="fas fa-check me-1"></i>Crear Tareas
                 </button>
-                <button type="button" class="btn btn-primary" id="wizardBtnFin" style="display:none;" data-action="confirm">
+                <button type="button" class="btn btn-primary" id="wizardBtnFin" style="display:none;">
                     <i class="fas fa-times me-1"></i>Finalizar
                 </button>
             </div>
@@ -3424,6 +3424,8 @@ class WizardTareas {
     }
     
     updateStepDisplay() {
+        console.log(`🔥 WIZARD updateStepDisplay: INICIO - currentStep=${this.currentStep}`);
+        
         // Hide all steps
         document.querySelectorAll('.wizard-content').forEach(step => step.classList.add('d-none'));
         
@@ -3442,23 +3444,41 @@ class WizardTareas {
         const btnConfirmar = document.getElementById('wizardBtnConfirmar');
         const btnFin = document.getElementById('wizardBtnFin');
         
+        // ✅ VERIFICAR QUE TODOS LOS BOTONES EXISTEN
+        console.log(`🔍 WIZARD botones encontrados:`, {
+            btnConfirmar: !!btnConfirmar,
+            btnFin: !!btnFin,
+            btnConfirmar_id: btnConfirmar?.id,
+            btnFin_id: btnFin?.id
+        });
+        
+        if (!btnConfirmar || !btnFin) {
+            console.error('❌ WIZARD: Botones críticos no encontrados!', { 
+                btnConfirmar: !!btnConfirmar, 
+                btnFin: !!btnFin 
+            });
+            return;
+        }
+        
         // Standard navigation buttons
-        btnAnterior.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
-        btnSiguiente.style.display = this.currentStep < 4 ? 'inline-block' : 'none';
+        if (btnAnterior) btnAnterior.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
+        if (btnSiguiente) btnSiguiente.style.display = this.currentStep < 4 ? 'inline-block' : 'none';
         
         if (this.currentStep === 3) {
             // 🔥 PASO 3: Solo botón Confirmar (POST)
             btnConfirmar.style.display = 'inline-block';
             btnConfirmar.disabled = false;
+            btnConfirmar.innerHTML = '<i class="fas fa-check me-1"></i>Crear Tareas';
             btnFin.style.display = 'none';
             console.log('🎯 WIZARD: Paso 3 configurado - btnConfirmar visible, btnFin oculto');
             
         } else if (this.currentStep === 4) {
-            // 🔥 PASO 4: Solo botón Finalizar (NO POST)
+            // 🔥 PASO 4: Solo botón Finalizar (NO POST) + CAMBIAR TEXTO DINÁMICAMENTE
             btnConfirmar.style.display = 'none';
             btnConfirmar.disabled = true; // 🛡️ Seguridad extra
             btnFin.style.display = 'inline-block';
             btnFin.disabled = false;
+            btnFin.innerHTML = '<i class="fas fa-check me-1"></i>Finalizar';
             console.log('🎯 WIZARD: Paso 4 configurado - btnConfirmar oculto/disabled, btnFin visible');
             
         } else {
@@ -3467,13 +3487,21 @@ class WizardTareas {
             btnFin.style.display = 'none';
         }
         
-        // 📊 LOGS DE VERIFICACIÓN
-        console.log(`📋 WIZARD updateStepDisplay:`, {
+        // 📊 LOGS DE VERIFICACIÓN DETALLADOS
+        console.log(`📋 WIZARD updateStepDisplay FINAL:`, {
             currentStep: this.currentStep,
-            btnConfirmar_visible: btnConfirmar.style.display !== 'none',
-            btnConfirmar_disabled: btnConfirmar.disabled,
-            btnFin_visible: btnFin.style.display !== 'none',
-            btnFin_disabled: btnFin.disabled
+            btnConfirmar: {
+                visible: btnConfirmar.style.display !== 'none',
+                disabled: btnConfirmar.disabled,
+                text: btnConfirmar.textContent.trim(),
+                computedDisplay: window.getComputedStyle(btnConfirmar).display
+            },
+            btnFin: {
+                visible: btnFin.style.display !== 'none', 
+                disabled: btnFin.disabled,
+                text: btnFin.textContent.trim(),
+                computedDisplay: window.getComputedStyle(btnFin).display
+            }
         });
         
         // Show/hide modal footer
