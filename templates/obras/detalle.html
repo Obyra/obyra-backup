@@ -3117,9 +3117,8 @@ class WizardTareas {
                         success: true
                     };
                     
-                    // Show success directly in step 4
-                    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
-                    document.getElementById('wizardStep4').classList.add('active','show');
+                    // ✅ Navigate to step 4 properly (this will call updateStepDisplay)
+                    this.goToStep(4);
                     
                     let successContainer = document.getElementById('step4Success');
                     if (!successContainer) {
