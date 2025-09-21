@@ -991,6 +991,9 @@
                 <button type="button" class="btn btn-success" id="wizardBtnConfirmar" style="display:none;">
                     <i class="fas fa-check me-1"></i>Crear Tareas
                 </button>
+                <button type="button" class="btn btn-primary" id="wizardBtnFin" style="display:none;" data-action="confirm">
+                    <i class="fas fa-times me-1"></i>Finalizar
+                </button>
             </div>
         </div>
     </div>
@@ -2611,6 +2614,7 @@ class WizardTareas {
         // Removed: Conflicting handler - now uses setupUniqueInterceptor() from wizard.js
         document.getElementById('wizardBtnAnterior')?.addEventListener('click', () => this.previousStep());
         document.getElementById('wizardBtnConfirmar')?.addEventListener('click', () => this.confirmarCreacion());
+        document.getElementById('wizardBtnFin')?.addEventListener('click', () => this.finalizarWizard());
         
         // Reset wizard when modal opens
         document.getElementById('wizardTareasModal')?.addEventListener('show.bs.modal', () => this.resetWizard());
@@ -2993,45 +2997,57 @@ class WizardTareas {
     
     populateStep4() {
         const container = document.getElementById('resumenWizard');
-        const totalTareas = this.WIZARD.tareas_seleccionadas.length;
         
-        // Collect data from table
-        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
-        let tareasConAsignado = 0;
-        let resumenHtml = '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Tarea</th><th>Fechas</th><th>Cantidad</th><th>Asignado</th></tr></thead><tbody>';
-        
-        rows.forEach((row, index) => {
-            const tarea = this.WIZARD.tareas_seleccionadas[index];
-            const inicio = row.querySelector('.fecha-inicio').value;
-            const fin = row.querySelector('.fecha-fin').value;
-            const cantidad = row.querySelector('.cantidad').value;
-            const asignadoSelect = row.querySelector('.asignado');
-            const asignadoNombre = asignadoSelect.options[asignadoSelect.selectedIndex].text;
+        // ✅ Use persisted results from Step 3 creation
+        if (window.WZ_RESULT && window.WZ_RESULT.success) {
+            const { total_creadas, total_duplicadas, tareas_creadas, tareas_duplicadas } = window.WZ_RESULT;
             
-            if (asignadoSelect.value) tareasConAsignado++;
-            
-            resumenHtml += `
-                <tr>
-                    <td>${tarea.nombre}</td>
-                    <td>${inicio} → ${fin}</td>
-                    <td>${cantidad} ${row.querySelector('.unidad').value}</td>
-                    <td>${asignadoNombre}</td>
-                </tr>
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>¡Tareas procesadas exitosamente!</strong>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-plus-circle text-success me-2"></i>Tareas Creadas: ${total_creadas}</h6>
+                                ${tareas_creadas.map(t => `
+                                    <div class="small text-success mb-1">
+                                        ✓ ${t.nombre || 'Tarea sin nombre'} (${t.etapa || 'Sin etapa'})
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-copy text-warning me-2"></i>Tareas Duplicadas: ${total_duplicadas}</h6>
+                                ${tareas_duplicadas.map(t => `
+                                    <div class="small text-warning mb-1">
+                                        ↻ ${t.nombre || 'Tarea sin nombre'} (${t.etapa || 'Sin etapa'})
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3 p-3 bg-light rounded">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Las tareas han sido agregadas a sus respectivas etapas. 
+                                ${total_duplicadas > 0 ? 'Las tareas duplicadas ya existían en la base de datos.' : ''}
+                            </small>
+                        </div>
+                    </div>
+                </div>
             `;
-        });
+            return;
+        }
         
-        resumenHtml += '</tbody></table></div>';
-        
+        // Fallback if no results (shouldn't happen normally)
         container.innerHTML = `
-            <div class="alert alert-info">
-                <h6>📊 Resumen de Tareas a Crear</h6>
-                <ul class="mb-0">
-                    <li><strong>Etapas seleccionadas:</strong> ${this.WIZARD.etapa_ids.length}</li>
-                    <li><strong>Tareas a crear:</strong> ${totalTareas}</li>
-                    <li><strong>Con asignación:</strong> ${tareasConAsignado}</li>
-                </ul>
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                No hay resultados disponibles. Por favor reinicia el wizard.
             </div>
-            ${resumenHtml}
         `;
     }
     
@@ -3091,6 +3107,15 @@ class WizardTareas {
                 if (total > 0) {
                     // Success: tareas were processed (created or duplicated)
                     document.getElementById('wizardLoading').classList.add('d-none');
+                    
+                    // ✅ PERSIST RESULTS for Step 4
+                    window.WZ_RESULT = {
+                        tareas_creadas: result.creadas || [],
+                        tareas_duplicadas: result.duplicados || [],
+                        total_creadas: result.creadas?.length || 0,
+                        total_duplicadas: result.duplicados?.length || 0,
+                        success: true
+                    };
                     
                     // Show success directly in step 4
                     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
@@ -3165,6 +3190,22 @@ class WizardTareas {
         
         // Re-enable button
         document.getElementById('wizardBtnConfirmar').disabled = false;
+    }
+    
+    finalizarWizard() {
+        // ✅ ONLY close modal and refresh - no task creation
+        console.log('🎯 WIZARD: Finalizando sin crear tareas adicionales...');
+        
+        const modal = bootstrap.Modal.getInstance(document.getElementById('wizardTareasModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
+        // Refresh task lists to show newly created tasks
+        this.refreshTaskListsFromDB();
+        
+        // Clear persisted results
+        window.WZ_RESULT = null;
     }
     
     resetWizard() {
@@ -3378,9 +3419,12 @@ class WizardTareas {
         const btnSiguiente = document.getElementById('wizardBtnSiguiente');
         const btnConfirmar = document.getElementById('wizardBtnConfirmar');
         
+        const btnFin = document.getElementById('wizardBtnFin');
+        
         btnAnterior.style.display = this.currentStep > 1 ? 'inline-block' : 'none';
         btnSiguiente.style.display = this.currentStep < 4 ? 'inline-block' : 'none';
-        btnConfirmar.style.display = this.currentStep === 4 ? 'inline-block' : 'none';
+        btnConfirmar.style.display = this.currentStep === 3 ? 'inline-block' : 'none';
+        btnFin.style.display = this.currentStep === 4 ? 'inline-block' : 'none';
         
         // Show/hide modal footer
         document.querySelector('.modal-footer').style.display = 'block';
