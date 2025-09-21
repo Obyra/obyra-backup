@@ -374,7 +374,7 @@ window.ensureOpciones = async function (obraId) {
     
   } catch (error) {
     console.error('❌ WIZARD: Error cargando opciones:', error);
-    return { unidades: ['h'], equipo: [] };
+    return { unidades: ['h'], usuarios: [], equipo: [] };
   }
 };
 
@@ -421,7 +421,7 @@ window.populatePaso3 = async function() {
   // Cargar opciones (unidades y equipo) - Ruta absoluta
   const opciones = await window.ensureOpciones(obraId);
   const unidades = opciones.unidades || ['h', 'días', 'und'];
-  const equipo = opciones.equipo || [];
+  const equipo = opciones.usuarios || opciones.equipo || [];  // Fix: Backend returns 'usuarios', not 'equipo'
 
   // Generar filas
   const filas = window.WZ_STATE.tareasSel.map((tarea, i) => {
