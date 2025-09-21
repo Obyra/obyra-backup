@@ -2994,7 +2994,7 @@ class WizardController {
                 document.getElementById('wizardStep1').classList.remove('active','show');
                 
                 // 🎯 Llamada preview con payload exacto según especificación
-                const payload = { obra_id: this.obra_id, etapa_ids: etapaIds };
+                const payload = { obra_id: this.obraId, etapa_ids: etapaIds };
                 console.log('📡 WIZARD: Enviando payload preview:', payload);
                 
                 const response = await fetch('/obras/api/wizard-tareas/preview', {
@@ -3050,7 +3050,7 @@ class WizardController {
     
     async loadEquipo() {
         try {
-            const response = await fetch(`/obras/api/obras/${this.obra_id}/equipo`);
+            const response = await fetch(`/obras/api/obras/${this.obraId}/equipo`);
             const data = await response.json();
             this.WIZARD.equipo = data.usuarios || [];
         } catch (error) {
@@ -3432,7 +3432,7 @@ class WizardController {
         });
         
         const payload = {
-            obra_id: this.obra_id,
+            obra_id: this.obraId,
             tareas: tareas
         };
         
@@ -3593,7 +3593,7 @@ class WizardController {
         btnAgregarEtapas.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Agregando...';
         
         try {
-            const response = await fetch(`/obras/api/obras/${this.obra_id}/etapas/bulk_from_catalog`, {
+            const response = await fetch(`/obras/api/obras/${this.obraId}/etapas/bulk_from_catalog`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -3753,7 +3753,7 @@ class WizardController {
 
     async cargarCatalogoEtapas() {
         try {
-            const data = await this.fetchJSON(`/obras/api/wizard-tareas/etapas?obra_id=${this.obra_id}`, {
+            const data = await this.fetchJSON(`/obras/api/wizard-tareas/etapas?obra_id=${this.obraId}`, {
                 headers: { 'Accept': 'application/json' }
             });
             
