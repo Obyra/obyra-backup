@@ -718,6 +718,48 @@ function setupUniqueInterceptor() {
           window.populatePaso3();
         }
       }, 100);
+      
+    } else if (currentStep === 3) {
+      // PASO 3: Cambiar botón a "Confirmar" y preparar finalización
+      console.log('🔍 WIZARD: Detectando Paso 3 - cambiando botón a Confirmar');
+      
+      // Validar que los campos requeridos estén completos
+      const modal = document.getElementById('wizardTareasModal');
+      const requiredFields = modal.querySelectorAll('#wizardStep3 input[required], #wizardStep3 select[required]');
+      let hasEmptyRequired = false;
+      
+      requiredFields.forEach(field => {
+        if (!field.value.trim()) {
+          hasEmptyRequired = true;
+          field.style.borderColor = '#dc3545';
+        } else {
+          field.style.borderColor = '';
+        }
+      });
+      
+      if (hasEmptyRequired) {
+        alert('Por favor completa todos los campos requeridos');
+        return;
+      }
+      
+      // Cambiar el botón a "Confirmar" y simular click
+      const btnSiguiente = document.getElementById('wizardBtnSiguiente');
+      const btnConfirmar = document.getElementById('wizardBtnConfirmar');
+      
+      if (btnSiguiente && btnConfirmar) {
+        btnSiguiente.style.display = 'none';
+        btnConfirmar.style.display = 'inline-block';
+        
+        // Simular click en Confirmar para activar el handler existente
+        setTimeout(() => {
+          btnConfirmar.click();
+        }, 100);
+      } else {
+        console.error('❌ WIZARD: Botones Siguiente/Confirmar no encontrados');
+      }
+      
+    } else {
+      console.warn(`⚠️ WIZARD: Paso no reconocido - currentStep: ${currentStep}`);
     }
   }, { capture: true });  // 🎯 Usar capture para evitar conflictos con otros listeners
   
