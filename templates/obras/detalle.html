@@ -2963,7 +2963,7 @@ class WizardController {
         }
     }
     
-    nextStep() {
+    async nextStep() {
         if (this.state.navLock) return;
         
         const next = this.state.currentStep + 1;
