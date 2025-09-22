@@ -2744,14 +2744,21 @@ class WizardController {
         if (this.state.submitting) return;
         this.state.submitting = true;
         
-        // Obtener IDs seleccionados directamente de checkboxes
-        const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked:not(:disabled)');
-        const selectedIds = Array.from(checkboxes).map(cb => Number(cb.value)).filter(Boolean);
+        // ✅ QUERY ÚNICA Y CONFIABLE - Extraer data-etapa-id y data-slug  
+        const checkboxes = document.querySelectorAll('#wizardStep1 input.etapa-checkbox:checked');
         
-        console.log('📋 WIZARD: IDs seleccionados:', selectedIds);
+        if (checkboxes.length === 0) {
+            alert('Seleccioná al menos una etapa');
+            this.state.submitting = false;
+            return;
+        }
+        
+        const selectedIds = Array.from(checkboxes).map(cb => Number(cb.dataset.etapaId || cb.value)).filter(Boolean);
+        
+        console.log('📋 WIZARD: obra_id:', this.obraId, 'IDs a enviar:', selectedIds);
         
         if (selectedIds.length === 0) {
-            alert('Debe seleccionar al menos una etapa');
+            alert('Error: No se pudieron obtener los IDs de las etapas seleccionadas');
             this.state.submitting = false;
             return;
         }
@@ -2787,14 +2794,20 @@ class WizardController {
                 throw new Error(result.error || 'Error al agregar etapas');
             }
             
-            // Éxito: actualizar estado y UI
+            // ✅ VALIDACIÓN REAL - Tratar como fallo si created+updated = 0
             const creadas = result.creadas?.length || 0;
             const existentes = result.existentes?.length || 0;
+            const total = creadas + existentes;
+            
+            if (total === 0) {
+                throw new Error('No se creó ni actualizó ninguna etapa');
+            }
             
             this.showSuccess(`✅ ${creadas} etapa(s) agregada(s), ${existentes} ya existían`);
             
-            // Recargar catálogo para mostrar etapas como creadas
+            // ✅ CONFIRMACIÓN Y ESTADO - Refrescar etapas de la obra
             await this.loadCatalogo();
+            await this.refreshObraEtapas();
             
             console.log('🎉 WIZARD: Etapas agregadas exitosamente');
             
@@ -2808,6 +2821,34 @@ class WizardController {
         }
     }
     
+    // ✅ CONFIRMACIÓN Y ESTADO - Refrescar etapas de la obra
+    async refreshObraEtapas() {
+        try {
+            const response = await fetch(`/obras/api/etapas/${this.obraId}/refresh`);
+            const data = await response.json();
+            
+            if (data.ok && data.etapas) {
+                // Actualizar contador local de etapas
+                this.state.etapasCreated = data.etapas.map(e => e.id);
+                console.log('✅ WIZARD: Etapas de obra actualizadas:', this.state.etapasCreated.length);
+                
+                // Habilitar/deshabilitar "Siguiente" según estado real
+                this.updateNextButton();
+            }
+        } catch (error) {
+            console.error('⚠️ WIZARD: Error refrescando etapas de obra:', error);
+        }
+    }
+    
+    // ✅ HABILITAR SIGUIENTE SOLO SI HAY ETAPAS
+    updateNextButton() {
+        const nextBtn = document.querySelector('[data-action="next-step"]');
+        if (nextBtn && this.state.currentStep === 1) {
+            nextBtn.disabled = this.state.etapasCreated.length === 0;
+            console.log('🎯 WIZARD: Botón Siguiente -', this.state.etapasCreated.length > 0 ? 'habilitado' : 'deshabilitado');
+        }
+    }
+    
     nextStep() {
         if (this.state.navLock) return;
         
@@ -2816,11 +2857,28 @@ class WizardController {
         
         console.log(`🎯 WIZARD: Paso ${this.state.currentStep} → ${next}`);
         
-        // Validaciones por paso
+        // ✅ VALIDACIONES POR PASO - Confirmar estado antes de avanzar
         if (this.state.currentStep === 1) {
             // Verificar que hay etapas creadas en la obra
             if (this.state.etapasCreated.length === 0) {
                 alert('Debe agregar al menos una etapa antes de continuar');
+                return;
+            }
+            
+            // ✅ GET RÁPIDO PARA CONFIRMAR - Si estado dudoso
+            try {
+                const response = await fetch(`/obras/api/etapas/${this.obraId}/refresh`);
+                const data = await response.json();
+                
+                if (!data.ok || !data.etapas || data.etapas.length === 0) {
+                    alert('No se detectaron etapas en la obra. Agregue etapas antes de continuar.');
+                    return;
+                }
+                
+                this.state.etapasCreated = data.etapas.map(e => e.id);
+            } catch (error) {
+                console.error('Error verificando etapas:', error);
+                alert('Error verificando el estado de las etapas');
                 return;
             }
         }
@@ -2998,14 +3056,18 @@ class WizardController {
     }
     
     updateCounter() {
-        const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked:not(:disabled)');
+        // ✅ QUERY ÚNICA Y CONFIABLE - Sin :enabled que desincroniza
+        const checkboxes = document.querySelectorAll('#wizardStep1 input.etapa-checkbox:checked');
         const count = checkboxes.length;
         
         const counter = document.getElementById('contadorSeleccionadas');
         if (counter) counter.textContent = count;
         
+        // ✅ BLOQUEO DEL BOTÓN - Deshabilitar cuando contador = 0
         const btn = document.getElementById('wizard-add-etapas');
         if (btn) btn.disabled = count === 0;
+        
+        console.log('📊 WIZARD: updateCounter - checkboxes encontrados:', count);
     }
     
     // ✅ LEGACY: Mantener compatibilidad temporal
@@ -4446,9 +4508,9 @@ function ampliarFoto(imageSrc) {
 
 // 🔥 Collector canónico que funciona en el wizard modal
 function getSelectedEtapaIds() {
-  // Buscar checkboxes marcados Y NO DESHABILITADOS dentro del wizard modal
-  const checkboxes = document.querySelectorAll('#wizardTareasModal input.etapa-checkbox:checked:not(:disabled), #wizardTareasModal input.etapa-check:checked:not(:disabled)');
-  console.log('🔍 COLLECTOR: Checkboxes encontrados (habilitados):', checkboxes.length, checkboxes);
+  // ✅ QUERY ÚNICA Y CONFIABLE - Sin :enabled que desincroniza  
+  const checkboxes = document.querySelectorAll('#wizardStep1 input.etapa-checkbox:checked');
+  console.log('🔍 COLLECTOR: Checkboxes encontrados:', checkboxes.length, checkboxes);
   
   const ids = [...checkboxes]
     .map(cb => {
