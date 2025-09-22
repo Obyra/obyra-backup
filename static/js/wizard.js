@@ -298,7 +298,13 @@ window.rebindCatalogEvents = rebindCatalogEvents;
 window.updateSelectionCounter = updateSelectionCounter;
 
 // =================== ESTADO GLOBAL DEL WIZARD ===================
-window.WZ_STATE = window.WZ_STATE || { tareasSel: [] };
+window.WZ_STATE = window.WZ_STATE || { 
+  tareasSel: [],
+  // 🛡️ GUARDS ANTI-DUPLICADO
+  mutexes: new Set(),           // Track active operations
+  requestCache: new Map(),      // Cache identical requests
+  buttonStates: new Map()       // Track button disabled states
+};
 
 // Opciones/equipos
 window.ensureOpciones = async function (obraId) {
@@ -722,3 +728,84 @@ document.addEventListener('shown.bs.modal', (ev) => {
 });
 
 console.log('✅ WIZARD: Sistema estabilizado cargado - Event delegation completo');
+
+// =================== GUARDS ANTI-DUPLICADO ===================
+// 🛡️ Mutex: Prevent multiple operations
+window.withMutex = async function(key, operation) {
+  if (window.WZ_STATE.mutexes.has(key)) {
+    console.log(`🚫 MUTEX: Operation '${key}' already in progress`);
+    return null;
+  }
+  
+  try {
+    window.WZ_STATE.mutexes.add(key);
+    console.log(`🔒 MUTEX: Acquired '${key}'`);
+    return await operation();
+  } finally {
+    window.WZ_STATE.mutexes.delete(key);
+    console.log(`🔓 MUTEX: Released '${key}'`);
+  }
+};
+
+// 🛡️ Button Guard: Prevent multiple clicks
+window.withButtonGuard = function(buttonId, operation) {
+  return window.withMutex(`button:${buttonId}`, async () => {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return await operation();
+    
+    const originalText = btn.innerHTML;
+    const originalDisabled = btn.disabled;
+    
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
+      window.WZ_STATE.buttonStates.set(buttonId, {originalText, originalDisabled});
+      
+      return await operation();
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = originalDisabled;
+      window.WZ_STATE.buttonStates.delete(buttonId);
+    }
+  });
+};
+
+// 🛡️ Request Deduplication: Cache identical requests
+window.withRequestCache = async function(url, options = {}, ttl = 5000) {
+  const cacheKey = `${url}:${JSON.stringify(options)}`;
+  const cached = window.WZ_STATE.requestCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < ttl) {
+    console.log(`📦 CACHE: Using cached response for ${url}`);
+    return cached.data;
+  }
+  
+  try {
+    const response = await fetchJSON(url, options);
+    window.WZ_STATE.requestCache.set(cacheKey, {
+      data: response,
+      timestamp: Date.now()
+    });
+    
+    // Auto-cleanup after TTL
+    setTimeout(() => {
+      window.WZ_STATE.requestCache.delete(cacheKey);
+    }, ttl);
+    
+    return response;
+  } catch (error) {
+    // Don't cache errors
+    console.error(`❌ REQUEST: Failed ${url}:`, error);
+    throw error;
+  }
+};
+
+// 🛡️ Idempotency: Generate unique keys for operations
+window.generateIdempotencyKey = function(operation, data = {}) {
+  const timestamp = Date.now();
+  const payload = JSON.stringify(data);
+  const hash = btoa(`${operation}:${timestamp}:${payload}`).slice(0, 16);
+  return `${operation}_${hash}`;
+};
+
+console.log('🛡️ GUARDS: Anti-duplicado system loaded');

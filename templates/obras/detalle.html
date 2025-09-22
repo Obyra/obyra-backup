@@ -2667,6 +2667,9 @@ class WizardController {
         const etapaId = Number(checkbox.dataset.etapaId || checkbox.value);
         const isChecked = checkbox.checked;
         
+        // 🛡️ GUARD: Prevenir múltiples POST del mismo checkbox
+        return window.withMutex(`checkbox-${etapaId}`, async () => {
+        
         console.log(`🎯 WIZARD: Checkbox ${etapaId} → ${isChecked ? 'checked' : 'unchecked'}`);
         
         if (!isChecked) {
@@ -2735,6 +2738,7 @@ class WizardController {
             }
             alert(`Error al agregar etapa: ${error.message}`);
         }
+        }); // 🛡️ Fin del withMutex guard
     }
     
     // ✅ MARCAR ETAPA COMO AGREGADA
@@ -2845,6 +2849,9 @@ class WizardController {
     async addSelectedEtapas() {
         console.log('🔥 WIZARD: Agregando etapas seleccionadas...');
         
+        // 🛡️ GUARD: Usar button guard para prevenir múltiples clicks
+        return window.withButtonGuard('wizard-add-etapas', async () => {
+        
         if (this.state.submitting) return;
         this.state.submitting = true;
         
@@ -2920,9 +2927,9 @@ class WizardController {
             alert(`Error: ${error.message}`);
         } finally {
             this.state.submitting = false;
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas (<span id="contadorSeleccionadas">0</span>)';
+            // 🛡️ NOTA: Button state restoration handled by withButtonGuard
         }
+        }); // 🛡️ Fin del withButtonGuard
     }
     
     // ✅ CONFIRMACIÓN Y ESTADO - Refrescar etapas de la obra
@@ -3618,11 +3625,10 @@ class WizardController {
     }
     
     async confirmarCreacion() {
-        // 🛡️ SECURITY: Disable button to prevent multiple clicks
-        const btnConfirmar = document.getElementById('wizardBtnConfirmar');
-        btnConfirmar.disabled = true;
+        // 🛡️ GUARD: Usar button guard para prevenir múltiples creaciones
+        return window.withButtonGuard('wizardBtnConfirmar', async () => {
         
-        console.log('🔥 WIZARD confirmarCreacion: Paso 3 POST iniciado - btnConfirmar disabled');
+        console.log('🔥 WIZARD confirmarCreacion: Paso 3 POST iniciado');
         
         console.log('🧙‍♂️ WIZARD: Iniciando confirmación...');
         
@@ -3728,6 +3734,7 @@ class WizardController {
             this.showStepError(4, `Error de conexión: ${error.message}`);
             this.goToStep(4);
         }
+        }); // 🛡️ Fin del withButtonGuard
     }
 
     showStepError(step, message) {
