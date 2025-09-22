@@ -3008,9 +3008,12 @@ class WizardController {
     }
     
     goToStep(step) {
-        this.state.currentStep = step;
-        this.updateUI();
-        console.log(`📍 WIZARD: En Paso ${step}`);
+        // 🎯 UNIFIED: Use global navigation with centralized validations
+        if (window.gotoPaso(step, { skipValidation: true })) {
+            this.state.currentStep = step;
+            this.updateUI();
+            console.log(`📍 WIZARD: En Paso ${step}`);
+        }
     }
     
     updateUI() {
@@ -3349,23 +3352,26 @@ class WizardController {
     }
     
     goToStep(step) {
-        this.currentStep = step;
-        this.updateStepDisplay();
-        this.updateProgressBar();
+        // 🎯 UNIFIED: Use global navigation with centralized validations
+        if (window.gotoPaso(step, { skipValidation: true })) {
+            this.currentStep = step;
+            this.updateStepDisplay();
+            this.updateProgressBar();
+            
+            // Hide loading and show content
+            document.getElementById('wizardLoading').classList.add('d-none');
         
-        // Hide loading and show content
-        document.getElementById('wizardLoading').classList.add('d-none');
-        
-        // Populate step content
-        if (step === 2) {
-            this.populateStep2();
-        } else if (step === 3) {
-            // 🎯 CRÍTICO: Antes del Paso 3, recopilar SOLO las tareas seleccionadas
-            this.WIZARD.tareas_seleccionadas = this.collectSelectedTasks();
-            console.log(`✅ WIZARD: Paso 3 - ${this.WIZARD.tareas_seleccionadas.length} tareas seleccionadas`, this.WIZARD.tareas_seleccionadas);
-            this.populateStep3();
-        } else if (step === 4) {
-            this.populateStep4();
+            // Populate step content
+            if (step === 2) {
+                this.populateStep2();
+            } else if (step === 3) {
+                // 🎯 CRÍTICO: Antes del Paso 3, recopilar SOLO las tareas seleccionadas
+                this.WIZARD.tareas_seleccionadas = this.collectSelectedTasks();
+                console.log(`✅ WIZARD: Paso 3 - ${this.WIZARD.tareas_seleccionadas.length} tareas seleccionadas`, this.WIZARD.tareas_seleccionadas);
+                this.populateStep3();
+            } else if (step === 4) {
+                this.populateStep4();
+            }
         }
     }
     

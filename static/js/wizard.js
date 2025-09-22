@@ -3,24 +3,82 @@
 
 console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
 
-// =================== POLYFILL GOTOPASO ===================
-(function ensureGotoPaso(){
-  window.gotoPaso = function(step){
-    // localizar el pane por orden de prioridad - ✅ AGREGADO #wizardStep${step}
+// =================== NAVEGACIÓN UNIFICADA CON VALIDACIONES ===================
+(function ensureUnifiedNavigation(){
+  // 🎯 STEP VALIDATORS: Validaciones centralizadas por paso
+  const STEP_VALIDATORS = {
+    1: () => {
+      const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+      if (etapasSeleccionadas === 0) {
+        throw new Error('Debe seleccionar al menos una etapa');
+      }
+      console.log(`✅ STEP 1: ${etapasSeleccionadas} etapas seleccionadas`);
+      return true;
+    },
+    
+    2: () => {
+      const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)').length;
+      if (tareasSeleccionadas === 0) {
+        throw new Error('Debe seleccionar al menos una tarea');
+      }
+      console.log(`✅ STEP 2: ${tareasSeleccionadas} tareas seleccionadas`);
+      return true;
+    },
+    
+    3: () => {
+      const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+      const hasEmptyRequired = Array.from(rows).some(row => {
+        const fechaInicio = row.querySelector('.fecha-inicio')?.value;
+        const fechaFin = row.querySelector('.fecha-fin')?.value;
+        const cantidad = row.querySelector('.cantidad')?.value;
+        return !fechaInicio || !fechaFin || !cantidad;
+      });
+      if (hasEmptyRequired) {
+        throw new Error('Complete todos los campos requeridos en la tabla');
+      }
+      console.log(`✅ STEP 3: ${rows.length} tareas validadas`);
+      return true;
+    }
+  };
+
+  // 🎯 UNIFIED NAVIGATION: Una sola función con validaciones
+  window.gotoPaso = function(step, options = {}){
+    const { skipValidation = false, force = false } = options;
+    
+    // 🛡️ Validation: Check current step before navigation
+    if (!skipValidation && !force) {
+      const currentStep = window.WZ_STATE?.currentStep || 1;
+      const validator = STEP_VALIDATORS[currentStep];
+      
+      if (validator) {
+        try {
+          validator();
+        } catch (error) {
+          console.warn(`❌ NAVIGATION: Step ${currentStep} validation failed:`, error.message);
+          alert(error.message);
+          return false;
+        }
+      }
+    }
+    
+    // 🔍 Find target pane with robust selectors
     const pane = document.querySelector(
       `[data-wz-step="${step}"], #wizardStep${step}, #wizard-paso${step}, #paso${step}, #wizardPaso${step}, #wizard-step${step}, #step${step}`
     );
+    
     if (!pane) { 
-      console.error(`❌ gotoPaso: pane no encontrado para paso ${step}. Selectores probados: [data-wz-step="${step}"], #wizardStep${step}, #wizard-paso${step}, #paso${step}, etc.`);
-      return; 
+      console.error(`❌ gotoPaso: pane no encontrado para paso ${step}. Selectores probados: [data-wz-step="${step}"], #wizardStep${step}, etc.`);
+      return false; 
     }
     
-    console.log(`✅ gotoPaso: Pane encontrado para paso ${step}:`, { id: pane.id, classes: pane.className });
+    console.log(`✅ gotoPaso: Navigating to step ${step}`, { id: pane.id, classes: pane.className });
 
-    // contenedor (tab-content) o documento
+    // 🎯 Update global state FIRST
+    window.WZ_STATE = window.WZ_STATE || {};
+    window.WZ_STATE.currentStep = step;
+    
+    // 🎨 Update UI: Hide all, show target
     const cont = pane.closest('.tab-content') || document;
-
-    // ocultar todos y mostrar el requerido
     cont.querySelectorAll('.tab-pane').forEach(el => {
       el.classList.remove('active','show');
       el.setAttribute('aria-hidden','true');
@@ -28,22 +86,37 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
     pane.classList.add('active','show');
     pane.removeAttribute('aria-hidden');
     
-    console.log(`🎯 gotoPaso: Paso ${step} activado. Estado final:`, { 
-      id: pane.id, 
-      hasActive: pane.classList.contains('active'),
-      hasShow: pane.classList.contains('show'),
-      ariaHidden: pane.getAttribute('aria-hidden'),
-      isVisible: !!(pane.offsetParent)
-    });
-
-    // marcar el tab nav si existe
+    // 🎯 Update navigation tabs
     const tab = document.querySelector(`[data-bs-target="#${pane.id}"], a[href="#${pane.id}"]`);
     if (tab) {
       const nav = tab.closest('.nav') || document;
       nav.querySelectorAll('.nav-link.active').forEach(l=>l.classList.remove('active'));
       tab.classList.add('active');
     }
+    
+    console.log(`🎯 gotoPaso: Step ${step} activated successfully`);
+    return true;
   };
+  
+  // 🔄 NAVIGATION HELPERS: Convenient methods
+  window.nextStep = function() {
+    const currentStep = window.WZ_STATE?.currentStep || 1;
+    return window.gotoPaso(currentStep + 1);
+  };
+  
+  window.prevStep = function() {
+    const currentStep = window.WZ_STATE?.currentStep || 1;
+    if (currentStep > 1) {
+      return window.gotoPaso(currentStep - 1, { skipValidation: true });
+    }
+    return false;
+  };
+  
+  window.forceStep = function(step) {
+    return window.gotoPaso(step, { force: true, skipValidation: true });
+  };
+  
+  console.log('🎯 UNIFIED NAVIGATION: Loaded with centralized validations');
 })();
 
 // =================== UTILIDADES ===================
