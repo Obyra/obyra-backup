@@ -2648,9 +2648,9 @@ class WizardController {
             modal.addEventListener('show.bs.modal', this.modalShowHandler);
             
             // ✅ AUTO-AGREGADO INDIVIDUAL - POST inmediato al tildar
-            this.checkboxChangeHandler = (e) => {
+            this.checkboxChangeHandler = async (e) => {
                 if (e.target.matches('.etapa-checkbox')) {
-                    this.handleCheckboxChange(e.target);
+                    await this.handleCheckboxChange(e.target);
                 }
             };
             modal.addEventListener('change', this.checkboxChangeHandler);
