@@ -2647,10 +2647,10 @@ class WizardController {
             this.modalShowHandler = () => this.resetWizard();
             modal.addEventListener('show.bs.modal', this.modalShowHandler);
             
-            // ✅ HOOK CHECKBOX CHANGES - Actualizar contador y botón
+            // ✅ AUTO-AGREGADO INDIVIDUAL - POST inmediato al tildar
             this.checkboxChangeHandler = (e) => {
                 if (e.target.matches('.etapa-checkbox')) {
-                    this.updateCounter();
+                    this.handleCheckboxChange(e.target);
                 }
             };
             modal.addEventListener('change', this.checkboxChangeHandler);
@@ -2660,6 +2660,108 @@ class WizardController {
         
         // Cargar catálogo inicial
         this.loadCatalogo();
+    }
+    
+    // ✅ AUTO-AGREGADO INDIVIDUAL - POST inmediato al tildar
+    async handleCheckboxChange(checkbox) {
+        const etapaId = Number(checkbox.dataset.etapaId || checkbox.value);
+        const isChecked = checkbox.checked;
+        
+        console.log(`🎯 WIZARD: Checkbox ${etapaId} → ${isChecked ? 'checked' : 'unchecked'}`);
+        
+        if (!isChecked) {
+            // Si se destilda, no hacer nada (las etapas agregadas quedan disabled)
+            return;
+        }
+        
+        // ✅ GUARDIA ANTI-DUPLICADO - Siempre mandar obra_id
+        if (!this.obraId || !etapaId) {
+            console.error('❌ WIZARD: Faltan obra_id o etapa_id');
+            checkbox.checked = false;
+            return;
+        }
+        
+        // ✅ SPINNER/DESHABILITAR - Evitar doble click
+        checkbox.disabled = true;
+        const label = checkbox.nextElementSibling;
+        const originalHTML = label?.innerHTML;
+        if (label) {
+            label.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Agregando...';
+        }
+        
+        try {
+            // Buscar etapa en catálogo para obtener slug
+            const etapa = this.state.catalogo?.find(e => Number(e.id) === etapaId);
+            const slug = etapa?.slug || etapa?.nombre?.toLowerCase();
+            
+            if (!slug) {
+                throw new Error('No se pudo identificar la etapa');
+            }
+            
+            console.log(`📡 WIZARD: POST individual - obra_id: ${this.obraId}, etapa_id: ${etapaId}, slug: ${slug}`);
+            
+            const response = await fetch(`/obras/api/obras/${this.obraId}/etapas/bulk_from_catalog`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ catalogo_ids: [slug] })
+            });
+            
+            const result = await response.json();
+            
+            // ✅ MANEJAR 409/DUPLICADO COMO ÉXITO
+            if (response.ok || response.status === 409) {
+                // Marcar como "Agregada"
+                this.markEtapaAsAdded(etapaId, checkbox, label);
+                
+                // ✅ SUMAR 1 AL CONTADOR y habilitar "Siguiente"
+                if (!this.state.etapasCreated.includes(etapaId)) {
+                    this.state.etapasCreated.push(etapaId);
+                }
+                this.updateNextButton();
+                
+                console.log('✅ WIZARD: Etapa agregada exitosamente:', etapaId);
+            } else {
+                throw new Error(result.error || 'Error al agregar etapa');
+            }
+            
+        } catch (error) {
+            console.error('❌ WIZARD: Error agregando etapa:', error);
+            
+            // ✅ DES-TILDAR Y MOSTRAR ERROR si falla
+            checkbox.checked = false;
+            checkbox.disabled = false;
+            if (label && originalHTML) {
+                label.innerHTML = originalHTML;
+            }
+            alert(`Error al agregar etapa: ${error.message}`);
+        }
+    }
+    
+    // ✅ MARCAR ETAPA COMO AGREGADA
+    markEtapaAsAdded(etapaId, checkbox, label) {
+        checkbox.checked = true;
+        checkbox.disabled = true;
+        
+        if (label) {
+            // Actualizar label para mostrar "Agregada"
+            label.innerHTML = label.innerHTML.replace(
+                /<i class="fas fa-spinner[^>]*><\/i>[^<]*/,
+                '<i class="fas fa-check-circle text-success ms-1"></i>'
+            );
+            
+            // Agregar clase de éxito
+            const titleElement = label.querySelector('h6');
+            if (titleElement && !titleElement.classList.contains('text-success')) {
+                titleElement.classList.add('text-success');
+            }
+        }
+        
+        // Actualizar badge
+        const badge = label?.querySelector('.badge');
+        if (badge) {
+            badge.className = 'badge bg-success';
+            badge.textContent = 'Agregada';
+        }
     }
     
     // ✅ HANDLER DELEGADO ÚNICO - Patrón data-action para simplicidad
@@ -2723,7 +2825,9 @@ class WizardController {
                 
                 if (this.state.catalogo.length > 0) {
                     this.renderCatalogo();
-                    console.log('✅ WIZARD: Catálogo cargado:', this.state.catalogo.length, 'etapas');
+                    // ✅ PRE-CARGAR ESTADO - Habilitar "Siguiente" si ya hay etapas
+                    this.updateNextButton();
+                    console.log('✅ WIZARD: Catálogo cargado:', this.state.catalogo.length, 'etapas,', this.state.etapasCreated.length, 'ya agregadas');
                 } else {
                     console.log('⚠️ WIZARD: Catálogo vacío');
                     document.getElementById('catalogoEtapas').innerHTML = '<p class="text-muted">No hay etapas disponibles</p>';
@@ -2840,12 +2944,22 @@ class WizardController {
         }
     }
     
-    // ✅ HABILITAR SIGUIENTE SOLO SI HAY ETAPAS
+    // ✅ HABILITAR SIGUIENTE AUTOMÁTICAMENTE - Cuando hay etapas agregadas
     updateNextButton() {
         const nextBtn = document.querySelector('[data-action="next-step"]');
         if (nextBtn && this.state.currentStep === 1) {
-            nextBtn.disabled = this.state.etapasCreated.length === 0;
-            console.log('🎯 WIZARD: Botón Siguiente -', this.state.etapasCreated.length > 0 ? 'habilitado' : 'deshabilitado');
+            const hasEtapas = this.state.etapasCreated.length > 0;
+            nextBtn.disabled = !hasEtapas;
+            
+            if (hasEtapas) {
+                nextBtn.classList.remove('btn-secondary');
+                nextBtn.classList.add('btn-primary');
+            } else {
+                nextBtn.classList.remove('btn-primary');
+                nextBtn.classList.add('btn-secondary');
+            }
+            
+            console.log('🎯 WIZARD: Botón Siguiente -', hasEtapas ? 'HABILITADO' : 'deshabilitado', `(${this.state.etapasCreated.length} etapas)`);
         }
     }
     
@@ -3020,7 +3134,10 @@ class WizardController {
         const html = this.state.catalogo.map(etapa => {
             const isCreated = this.state.etapasCreated.includes(etapa.id);
             const badgeClass = isCreated ? 'bg-success' : 'bg-primary';
-            const badgeText = isCreated ? 'Ya agregada' : 'Disponible';
+            const badgeText = isCreated ? 'Agregada' : 'Disponible';
+            
+            // ✅ PRE-CARGAR ESTADO - Etapas ya agregadas aparecen checked y disabled
+            const checkedAttr = isCreated ? 'checked' : '';
             const disabledAttr = isCreated ? 'disabled' : '';
             
             return `
@@ -3030,8 +3147,7 @@ class WizardController {
                             <div class="form-check">
                                 <input class="form-check-input etapa-checkbox" type="checkbox" 
                                        value="${etapa.id}" data-etapa-id="${etapa.id}"
-                                       id="catalogEtapa${etapa.id}" ${disabledAttr}
-                                       onchange="window.wizardController?.updateCounter()">
+                                       id="catalogEtapa${etapa.id}" ${checkedAttr} ${disabledAttr}>
                                 <label class="form-check-label w-100" for="catalogEtapa${etapa.id}">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
@@ -3052,22 +3168,21 @@ class WizardController {
         }).join('');
         
         container.innerHTML = html;
-        this.updateCounter();
+        
+        // ✅ YA NO NECESARIO updateCounter - El estado ya está reflejado
+        console.log('✅ WIZARD: Catálogo renderizado -', this.state.etapasCreated.length, 'etapas ya agregadas');
     }
     
     updateCounter() {
-        // ✅ QUERY ÚNICA Y CONFIABLE - Sin :enabled que desincroniza
+        // ✅ YA NO NECESARIO CON AUTO-AGREGADO INDIVIDUAL
+        // Solo contar para mostrar información 
         const checkboxes = document.querySelectorAll('#wizardStep1 input.etapa-checkbox:checked');
         const count = checkboxes.length;
         
         const counter = document.getElementById('contadorSeleccionadas');
         if (counter) counter.textContent = count;
         
-        // ✅ BLOQUEO DEL BOTÓN - Deshabilitar cuando contador = 0
-        const btn = document.getElementById('wizard-add-etapas');
-        if (btn) btn.disabled = count === 0;
-        
-        console.log('📊 WIZARD: updateCounter - checkboxes encontrados:', count);
+        console.log('📊 WIZARD: updateCounter - checkboxes marcados:', count);
     }
     
     // ✅ LEGACY: Mantener compatibilidad temporal
