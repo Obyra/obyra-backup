@@ -1,0 +1,55 @@
+Errores en consola y cómo solucionarlos (en este orden):
+
+SyntaxError en wizard.js:73 – “Unexpected token }”
+
+Hay una llave de más / desbalanceada. Corregir el bloque para que compile.
+
+Verificación: recargar y confirmar que ya no aparece ese SyntaxError.
+
+ReferenceError – WizardTareas is not defined
+
+Quedó código que instancia WizardTareas (la clase vieja) aunque ahora usamos WizardController.
+
+Eliminar o reemplazar esa inicialización legacy por la actual.
+
+Verificación: recargar y confirmar que desaparece el ReferenceError.
+
+Catálogo no carga – “Cannot read properties of undefined (reading 'catalogo')” en renderCatalogo()
+
+renderCatalogo se ejecuta cuando this.WIZARD o this.WIZARD.catalogo todavía no existen (la carga falló o no se inicializó el estado).
+
+Inicializar el estado antes de render: this.WIZARD = { catalogo: [] } y solo llamar a renderCatalogo después de un 200 OK con datos.
+
+Verificación: si la request falla, no llamar a renderCatalogo y mostrar un error claro; si sale 200, el catálogo se lista.
+
+obra_id ausente en la request inicial (400 “obra_id es requerido”)
+
+Definir una única fuente de verdad para obra_id al abrir el wizard (ej. window.obraId o data-obra-id en el DOM) y usarla en todas las requests (cargar catálogo, agregar etapas, preview/crear).
+
+Verificación en Network: la primera llamada debe ser GET .../wizard-tareas/etapas?obra_id=<ID> con 200.
+
+No ejecutar nada si falta obra_id
+
+Antes de llamar al backend, validar: si no hay obra_id, no dispares la request y mostrás “No se encontró el ID de la obra”.
+
+Verificación: sin obra_id no hay requests; con obra_id todo fluye.
+
+Asegurar flujo básico (sin duplicados)
+
+Paso 1: marcar etapas → Agregar → 1 request 2xx → UI actualizada → Siguiente habilitado.
+
+Paso 3: una sola creación (si existe, actualizar).
+
+Paso 4: solo resumen + Finalizar (sin requests).
+
+Importante: esto es hotfix puntual. No hacer refactors ni cambiar arquitectura. El objetivo es que el wizard vuelva a abrir, cargue catálogo y nos deje avanzar.
+
+Aceptación:
+
+La consola queda sin SyntaxError ni ReferenceError.
+
+La primera request lleva obra_id y responde 200.
+
+renderCatalogo() solo corre con datos válidos.
+
+Flujo 1→2→3→4 sin duplicados.

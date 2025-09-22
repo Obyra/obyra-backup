@@ -2687,9 +2687,6 @@ class WizardController {
             case 'finish':
                 this.finish();
                 break;
-            case 'prev-step':
-                this.prevStep();
-                break;
         }
     }
     
@@ -2697,15 +2694,30 @@ class WizardController {
     
     async loadCatalogo() {
         console.log('📡 WIZARD: Cargando catálogo de etapas...');
+        
+        // ✅ VALIDAR OBRA_ID ANTES DE HACER REQUEST
+        if (!this.obraId) {
+            console.error('❌ WIZARD: No hay obra_id disponible');
+            this.showError('No se encontró el ID de la obra');
+            return;
+        }
+        
         try {
             const response = await fetch(`/obras/api/wizard-tareas/etapas?obra_id=${this.obraId}`);
             const data = await response.json();
             
             if (data.ok || response.ok) {
+                // ✅ SOLO LLAMAR RENDER DESPUÉS DE 200 OK CON DATOS
                 this.state.catalogo = data.etapas_catalogo || data.catalogo || [];
                 this.state.etapasCreated = (data.etapas_creadas || []).map(e => e.id);
-                this.renderCatalogo();
-                console.log('✅ WIZARD: Catálogo cargado:', this.state.catalogo.length, 'etapas');
+                
+                if (this.state.catalogo.length > 0) {
+                    this.renderCatalogo();
+                    console.log('✅ WIZARD: Catálogo cargado:', this.state.catalogo.length, 'etapas');
+                } else {
+                    console.log('⚠️ WIZARD: Catálogo vacío');
+                    document.getElementById('catalogoEtapas').innerHTML = '<p class="text-muted">No hay etapas disponibles</p>';
+                }
             } else {
                 throw new Error(data.error || 'Error al cargar catálogo');
             }
@@ -2927,7 +2939,15 @@ class WizardController {
     
     renderCatalogo() {
         const container = document.getElementById('catalogoEtapas');
-        if (!container || !this.state.catalogo) return;
+        if (!container) {
+            console.error('❌ WIZARD: Container catalogoEtapas no encontrado');
+            return;
+        }
+        
+        if (!this.state.catalogo || this.state.catalogo.length === 0) {
+            console.log('⚠️ WIZARD: No hay catálogo para renderizar');
+            return;
+        }
         
         const html = this.state.catalogo.map(etapa => {
             const isCreated = this.state.etapasCreated.includes(etapa.id);
@@ -4455,7 +4475,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         console.log('🔧 WIZARD: Estado inicializado', window.WIZARD);
         
-        window.wizardTareas = new WizardTareas();
+        // ✅ ELIMINADO: Instancia legacy ya reemplazada por WizardController arriba
         
         // 🎯 Exponer función de navegación global 
         window.__wizard = window.wizardTareas;
