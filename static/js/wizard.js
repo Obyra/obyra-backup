@@ -70,7 +70,6 @@ async function fetchJSON(url, opts = {}) {
 
 // 🚫 DISABLED: FINALIZAR Paso 3 -> 4 (Now handled in detalle.html)
 // Eliminado para evitar listeners duplicados que causan doble POST
-}
 
 // 🚫 DISABLED: CONFIRMAR Paso 4 -> Cerrar (Now handled in detalle.html)
 // Eliminado para evitar listeners duplicados que interfieren con updateStepDisplay()
