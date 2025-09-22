@@ -2619,6 +2619,12 @@ class WizardController {
             navLock: false          // Lock durante operaciones async
         };
         
+        // ✅ COMPATIBILIDAD CON CÓDIGO LEGACY - Evitar undefined errors
+        this.WIZARD = {
+            catalogo: [],
+            etapas_creadas: []
+        };
+        
         this.initializeController();
     }
     
@@ -2710,6 +2716,10 @@ class WizardController {
                 // ✅ SOLO LLAMAR RENDER DESPUÉS DE 200 OK CON DATOS
                 this.state.catalogo = data.etapas_catalogo || data.catalogo || [];
                 this.state.etapasCreated = (data.etapas_creadas || []).map(e => e.id);
+                
+                // ✅ SINCRONIZAR CON LEGACY PARA EVITAR UNDEFINED
+                this.WIZARD.catalogo = this.state.catalogo;
+                this.WIZARD.etapas_creadas = data.etapas_creadas || [];
                 
                 if (this.state.catalogo.length > 0) {
                     this.renderCatalogo();
