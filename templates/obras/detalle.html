@@ -2857,16 +2857,16 @@ class WizardController {
         if (this.state.submitting) return;
         this.state.submitting = true;
         
-        // ✅ QUERY ÚNICA Y CONFIABLE - Extraer data-etapa-id y data-slug  
-        const checkboxes = document.querySelectorAll('#wizardStep1 input.etapa-checkbox:checked');
+        // 🎯 USE SET: No usar DOM, usar Set global como fuente única de verdad
+        const etapasSeleccionadas = window.WZ_STATE?.etapasSel?.size || 0;
         
-        if (checkboxes.length === 0) {
+        if (etapasSeleccionadas === 0) {
             alert('Seleccioná al menos una etapa');
             this.state.submitting = false;
             return;
         }
         
-        const selectedIds = Array.from(checkboxes).map(cb => Number(cb.dataset.etapaId || cb.value)).filter(Boolean);
+        const selectedIds = getSelectedEtapaIds().map(id => Number(id)).filter(Boolean);
         
         console.log('📋 WIZARD: obra_id:', this.obraId, 'IDs a enviar:', selectedIds);
         
@@ -3186,15 +3186,13 @@ class WizardController {
     }
     
     updateCounter() {
-        // ✅ YA NO NECESARIO CON AUTO-AGREGADO INDIVIDUAL
-        // Solo contar para mostrar información 
-        const checkboxes = document.querySelectorAll('#wizardStep1 input.etapa-checkbox:checked');
-        const count = checkboxes.length;
+        // 🎯 USE SET: No usar DOM, usar Set global como fuente única de verdad
+        const count = window.WZ_STATE?.etapasSel?.size || 0;
         
         const counter = document.getElementById('contadorSeleccionadas');
         if (counter) counter.textContent = count;
         
-        console.log('📊 WIZARD: updateCounter - checkboxes marcados:', count);
+        console.log('📊 WIZARD: updateCounter - etapas en Set:', count);
     }
     
     // ✅ LEGACY: Mantener compatibilidad temporal
@@ -4172,21 +4170,26 @@ class WizardController {
 // Global functions for catalog-based wizard (called from HTML buttons)
 
 function actualizarContadorSeleccionadas() {
-    const checkboxes = document.querySelectorAll('.catalog-checkbox:checked');
-    const contador = checkboxes.length;
+    // 🎯 USE SET: No usar DOM, usar Set global como fuente única de verdad
+    const contador = window.WZ_STATE?.etapasSel?.size || 0;
     document.getElementById('contadorSeleccionadas').textContent = contador;
     document.getElementById('btnAgregarEtapasSel').disabled = contador === 0;
+    console.log('📊 LEGACY: actualizarContadorSeleccionadas - usando Set:', contador);
 }
 
 function seleccionarTodasLasEtapas() {
-    const checkboxes = document.querySelectorAll('.catalog-checkbox');
-    checkboxes.forEach(checkbox => checkbox.checked = true);
+    // 🎯 USE SET: Usar Set + rehidratar, no manipular DOM directamente
+    document.querySelectorAll('.catalog-checkbox').forEach(cb => {
+        window.WZ_STATE.etapasSel.add(String(cb.dataset.etapaId || cb.value));
+    });
+    rehydrateChecksFromState();
     actualizarContadorSeleccionadas();
 }
 
 function deseleccionarTodasLasEtapas() {
-    const checkboxes = document.querySelectorAll('.catalog-checkbox');
-    checkboxes.forEach(checkbox => checkbox.checked = false);
+    // 🎯 USE SET: Limpiar Set + rehidratar
+    window.WZ_STATE.etapasSel.clear();
+    rehydrateChecksFromState();
     actualizarContadorSeleccionadas();
 }
 

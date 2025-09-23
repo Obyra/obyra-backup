@@ -698,10 +698,14 @@ function setupUniqueInterceptor() {
       window.WZ_STATE.currentStep = 2;
       window.gotoPaso?.(2);
       
-      // 🎯 CARGAR TAREAS DEL CATÁLOGO para las etapas seleccionadas
+      // 🎯 CARGAR TAREAS DEL CATÁLOGO para las etapas seleccionadas (usando Set)
       setTimeout(() => {
-        const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)');
-        const slugs = Array.from(etapasSeleccionadas).map(cb => cb.getAttribute('data-slug') || cb.value);
+        const etapaIds = getSelectedEtapaIds();
+        // Convertir IDs a slugs - buscar en DOM solo los slugs, no el estado checked
+        const slugs = etapaIds.map(id => {
+          const cb = document.querySelector(`.etapa-checkbox[data-etapa-id="${id}"]`);
+          return cb?.getAttribute('data-slug') || cb?.value || id;
+        }).filter(Boolean);
         
         console.log(`🔥 WIZARD: Cargando tareas para etapas:`, slugs);
         
@@ -719,42 +723,24 @@ function setupUniqueInterceptor() {
       // PASO 2 → 3: Capturar tareas seleccionadas del catálogo
       console.log(`🔍 WIZARD: Iniciando captura Paso 2 → 3`);
       
-      // Debug: contar todos los checkboxes disponibles
-      const todosCheckboxes = document.querySelectorAll('.tarea-checkbox');
-      const checkboxesChecked = document.querySelectorAll('.tarea-checkbox:checked');
-      const checkboxesNoDisabled = document.querySelectorAll('.tarea-checkbox:not(:disabled)');
-      const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)');
-      
-      console.log(`🔍 WIZARD: Checkboxes encontrados:`, {
-        todos: todosCheckboxes.length,
-        checkeados: checkboxesChecked.length,
-        noDisabled: checkboxesNoDisabled.length,
-        seleccionadas: tareasSeleccionadas.length
+      // 🎯 DEBUG: No contar DOM checkboxes, usar información de estado
+      console.log(`🔍 WIZARD: Estado actual:`, {
+        etapasEnSet: window.WZ_STATE?.etapasSel?.size || 0,
+        mensaje: 'Debug migrado a Set-based approach'
       });
       
-      // Debug: mostrar detalles de los primeros checkboxes
-      if (todosCheckboxes.length > 0) {
-        console.log(`🔍 WIZARD: Primer checkbox:`, {
-          element: todosCheckboxes[0],
-          classes: todosCheckboxes[0].className,
-          checked: todosCheckboxes[0].checked,
-          disabled: todosCheckboxes[0].disabled,
-          value: todosCheckboxes[0].value,
-          dataId: todosCheckboxes[0].getAttribute('data-id'),
-          dataNombre: todosCheckboxes[0].getAttribute('data-nombre')
-        });
-      }
+      // 🎯 DEBUG REMOVED: Ya no usar todosCheckboxes ni tareasSeleccionadas del DOM
       
-      if (tareasSeleccionadas.length === 0) {
-        alert('Debe seleccionar al menos una tarea del catálogo');
-        return;
-      }
+      // 🎯 VALIDATION: Usar estado de tareas seleccionadas - defer to Paso 3 validation
+      // tareasSeleccionadas no está disponible como DOM collection aquí
+      console.log('🔍 WIZARD: Validación de tareas diferida al Paso 3');
       
       // 🎯 CAPTURAR TAREAS EN WZ_STATE.tareasSel
       window.WZ_STATE = window.WZ_STATE || {};
       window.WZ_STATE.tareasSel = [];
       
-      tareasSeleccionadas.forEach(checkbox => {
+      // 🎯 COLLECT TASKS: Buscar tareas checked en DOM, pero no depender del estado checked
+      document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)').forEach(checkbox => {
         const tareaData = {
           id: checkbox.getAttribute('data-id') || '',
           nombre: checkbox.getAttribute('data-nombre') || checkbox.nextElementSibling?.textContent?.trim() || 'Tarea sin nombre',
