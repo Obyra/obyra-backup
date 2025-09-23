@@ -871,8 +871,8 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="deseleccionarTodasLasEtapas()">
                             <i class="far fa-square me-1"></i>Deseleccionar Todas
                         </button>
-                        <button id="wizard-add-etapas" type="button" class="btn btn-sm btn-success" data-action="add-etapas" disabled>
-                            <i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas (<span id="contadorSeleccionadas">0</span>)
+                        <button id="btnAgregarEtapasSel" type="button" class="btn btn-sm btn-success" data-action="add-etapas" disabled>
+                            <i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas
                         </button>
                     </div>
                     
@@ -2852,7 +2852,7 @@ class WizardController {
         console.log('🔥 WIZARD: Agregando etapas seleccionadas...');
         
         // 🛡️ GUARD: Usar button guard para prevenir múltiples clicks
-        return window.withButtonGuard('wizard-add-etapas', async () => {
+        return window.withButtonGuard('btnAgregarEtapasSel', async () => {
         
         if (this.state.submitting) return;
         this.state.submitting = true;
@@ -2890,7 +2890,7 @@ class WizardController {
             return;
         }
         
-        const btn = document.getElementById('wizard-add-etapas');
+        const btn = document.getElementById('btnAgregarEtapasSel');
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Agregando...';
         
@@ -3285,6 +3285,11 @@ class WizardController {
     
     collectSelectedTasks() {
         const tasks = [];
+        // 🎯 USE STATE: Si hay state disponible, usarlo en lugar de DOM
+        if (window.WZ_STATE?.tareasSel?.length > 0) {
+            return window.WZ_STATE.tareasSel;
+        }
+        // Fallback al DOM solo si no hay state
         document.querySelectorAll('.tarea-check:checked').forEach(checkbox => {
             const etapaId = parseInt(checkbox.dataset.etapa);
             const source = checkbox.dataset.source;
@@ -3503,9 +3508,10 @@ class WizardController {
     
     updateSelectedTasksList() {
         const container = document.getElementById('tareas-seleccionadas-list');
-        const selectedTasks = document.querySelectorAll('.tarea-check:checked');
+        // 🎯 USE STATE: Contar usando WZ_STATE.tareasSel si está disponible
+        const taskCount = window.WZ_STATE?.tareasSel?.length || document.querySelectorAll('.tarea-check:checked').length;
         
-        if (selectedTasks.length === 0) {
+        if (taskCount === 0) {
             container.innerHTML = '<p class="text-muted">Ninguna tarea seleccionada</p>';
             return;
         }
@@ -3814,7 +3820,7 @@ class WizardController {
             return;
         }
         
-        const btnAgregarEtapas = document.getElementById('wizard-add-etapas');
+        const btnAgregarEtapas = document.getElementById('btnAgregarEtapasSel');
         btnAgregarEtapas.disabled = true;
         const originalHTML = btnAgregarEtapas.innerHTML;
         btnAgregarEtapas.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Agregando...';
@@ -4038,7 +4044,7 @@ class WizardController {
                                 <input class="form-check-input etapa-checkbox" type="checkbox" 
                                        name="etapa" value="${etapaId}" data-etapa-id="${etapaId}"
                                        id="catalogEtapa${etapaId}" ${estaCreada ? 'checked' : ''}
-                                       onchange="window.getSelectedEtapaIds && window.wizardTareas?.actualizarContadorSeleccionadas()">
+                                       onchange="handleEtapaCheckboxChange(this)">
                                 <label class="form-check-label w-100" for="catalogEtapa${etapaId}">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
@@ -4066,7 +4072,7 @@ class WizardController {
     actualizarContadorSeleccionadas() {
         const contador = getSelectedEtapaIds().length;
         const contadorElement = document.getElementById('contadorSeleccionadas');
-        const botonAgregar = document.getElementById('wizard-add-etapas');
+        const botonAgregar = document.getElementById('btnAgregarEtapasSel');
         
         if (contadorElement) {
             contadorElement.textContent = contador;
@@ -4169,12 +4175,35 @@ class WizardController {
 
 // Global functions for catalog-based wizard (called from HTML buttons)
 
+function updateEtapasBadge(){
+  const n = window.WZ_STATE?.etapasSel?.size || 0;
+  const btn = document.querySelector('#btnAgregarEtapasSel'); // usar ESTE id
+  if (btn){
+    let span = btn.querySelector('.count');
+    if (!span){ span = document.createElement('span'); span.className='count'; btn.appendChild(span); }
+    span.textContent = n;
+    btn.disabled = n === 0;
+  }
+  const next = document.querySelector('#btnPaso1Siguiente');
+  if (next) next.disabled = (n === 0);
+  console.log('📊 UPDATE: updateEtapasBadge - Set size:', n);
+}
+
+// Legacy alias para compatibilidad
 function actualizarContadorSeleccionadas() {
-    // 🎯 USE SET: No usar DOM, usar Set global como fuente única de verdad
-    const contador = window.WZ_STATE?.etapasSel?.size || 0;
-    document.getElementById('contadorSeleccionadas').textContent = contador;
-    document.getElementById('btnAgregarEtapasSel').disabled = contador === 0;
-    console.log('📊 LEGACY: actualizarContadorSeleccionadas - usando Set:', contador);
+  updateEtapasBadge();
+}
+
+// 🎯 HANDLER CHECKBOX: Solo add/delete en Set + updateEtapasBadge (sin refresh ni POST)
+function handleEtapaCheckboxChange(checkbox) {
+  const etapaId = String(checkbox.dataset.etapaId || checkbox.value);
+  if (checkbox.checked) {
+    window.WZ_STATE.etapasSel.add(etapaId);
+  } else {
+    window.WZ_STATE.etapasSel.delete(etapaId);
+  }
+  updateEtapasBadge();
+  console.log('📋 CHECKBOX:', checkbox.checked ? 'ADD' : 'DEL', etapaId, '| Set size:', window.WZ_STATE.etapasSel.size);
 }
 
 function seleccionarTodasLasEtapas() {
@@ -4183,14 +4212,14 @@ function seleccionarTodasLasEtapas() {
         window.WZ_STATE.etapasSel.add(String(cb.dataset.etapaId || cb.value));
     });
     rehydrateChecksFromState();
-    actualizarContadorSeleccionadas();
+    updateEtapasBadge();
 }
 
 function deseleccionarTodasLasEtapas() {
     // 🎯 USE SET: Limpiar Set + rehidratar
     window.WZ_STATE.etapasSel.clear();
     rehydrateChecksFromState();
-    actualizarContadorSeleccionadas();
+    updateEtapasBadge();
 }
 
 // 🎯 Adapter legacy removido - usar implementación unificada en DOMContentLoaded
@@ -4489,16 +4518,32 @@ async function applyCatalogAndAdvance(explicitIds = null){
 // POST individual al tildar causaba re-render y pérdida de estado de checkboxes
 // Now using manual button click with Set-based selection
 
-// 🎯 BOTÓN LIMPIO: Eliminar listeners duplicados y usar SOLO el Set
-const old = document.getElementById('btnAgregarEtapasSel');
-if (old) {
-  old.replaceWith(old.cloneNode(true));              // limpia listeners viejos
-  const btn = document.getElementById('btnAgregarEtapasSel');
+// 🎯 BOTONES LIMPIOS: Eliminar listeners duplicados y usar SOLO el Set
+const oldAdd = document.getElementById('btnAgregarEtapasSel');
+if (oldAdd) {
+  oldAdd.replaceWith(oldAdd.cloneNode(true));              // limpia listeners viejos
+  const btnAdd = document.getElementById('btnAgregarEtapasSel');
   
-  btn.addEventListener('click', async (e) => {
+  btnAdd.addEventListener('click', async (e) => {
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
     const ids = [...window.WZ_STATE.etapasSel];      // ← fuente única de verdad
     console.log('ADD ids ->', ids);
+    if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
+    await window.applyCatalogAndAdvance?.(ids).catch(err => console.error('applyCatalogAndAdvance err', err));
+    await window.gotoPaso?.(2);
+  }, { once: true });
+}
+
+// 🎯 SIGUIENTE LIMPIO: Handler para btnPaso1Siguiente
+const oldNext = document.getElementById('btnPaso1Siguiente');
+if (oldNext) {
+  oldNext.replaceWith(oldNext.cloneNode(true));              // limpia listeners viejos
+  const btnNext = document.getElementById('btnPaso1Siguiente');
+  
+  btnNext.addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    const ids = [...window.WZ_STATE.etapasSel];      // ← fuente única de verdad
+    console.log('NEXT ids ->', ids);
     if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
     await window.applyCatalogAndAdvance?.(ids).catch(err => console.error('applyCatalogAndAdvance err', err));
     await window.gotoPaso?.(2);
@@ -4696,6 +4741,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.WZ_STATE = window.WZ_STATE || {};
         window.WZ_STATE.etapasSel = window.WZ_STATE.etapasSel || new Set();
         console.log('🔧 WZ_STATE: Set etapasSel inicializado', window.WZ_STATE.etapasSel);
+        
+        // 🎯 ALIAS GLOBAL: Exponer updateEtapasBadge para uso en re-renders
+        window.updateEtapasBadge = updateEtapasBadge;
         
         // ✅ ELIMINADO: Instancia legacy ya reemplazada por WizardController arriba
         
