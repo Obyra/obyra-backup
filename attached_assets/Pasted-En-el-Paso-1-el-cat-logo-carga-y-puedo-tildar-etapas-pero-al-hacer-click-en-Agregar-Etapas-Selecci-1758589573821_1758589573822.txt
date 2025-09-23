@@ -1,0 +1,50 @@
+En el Paso 1 el catálogo carga y puedo tildar etapas, pero al hacer click en “Agregar Etapas Seleccionadas” aparece el alert “Debe seleccionar al menos una etapa”. En consola se ve:
+
+STATE: Etapa X agregada. Total: 1 (el estado sube)
+
+COLLECTOR: Checkboxes encontrados: 0 / IDs extraídos: []
+
+STATE: Rehidratados 0 checkboxes...
+
+Causa: El validador/handler del botón sigue usando un collector del DOM (querySelectorAll(':checked')). Como hay un re-render del catálogo tras el POST individual, el DOM no tiene :checked y el collector devuelve 0, ignorando la selección real.
+
+Lo que necesito que cambien:
+
+Eliminar el collector del DOM (funciones collect*SelectedIds, etc.) y usar una única fuente de verdad basada en Set:
+
+window.WZ_STATE = window.WZ_STATE || {};
+WZ_STATE.etapasSel = WZ_STATE.etapasSel || new Set();
+
+function getSelectedEtapaIds(){ return [...WZ_STATE.etapasSel]; }
+function updateEtapasBadge(){ /* usa WZ_STATE.etapasSel.size */ }
+function rehydrateChecksFromState(){ /* tilda segun el Set */ }
+
+
+En wizard.js:
+
+En el change de cada checkbox solo actualizar WZ_STATE.etapasSel + updateEtapasBadge() (no refrescar el contenedor).
+
+En cargarCatalogoEtapas() / refreshEtapasContainer() después de hacer innerHTML ejecutar:
+
+bindCatalogEvents();
+rehydrateChecksFromState();
+updateEtapasBadge();
+
+
+Handler del botón Agregar Etapas:
+
+btn.addEventListener('click', async (e)=>{
+  e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+  const ids = getSelectedEtapaIds();
+  if(!ids.length){ alert('Debe seleccionar al menos una etapa'); return; }
+  await applyCatalogAndAdvance(ids);
+});
+
+
+No re-crear el Set al abrir/cerrar el modal: dejar WZ_STATE.etapasSel = WZ_STATE.etapasSel || new Set() (quitar reasignaciones tipo new Set() en openWizard()/initPaso1).
+
+Si mantienen el POST individual al tildar, que no haga re-render del catálogo; si re-renderiza, rehidratar inmediatamente después.
+
+Asegurar selector único: checkboxes como input[type="checkbox"][data-etapa-id] dentro de #catalogoEtapas.
+
+Resultado esperado: El contador se mantiene (no vuelve a 0), el botón usa el Set y el Paso 1 avanza al Paso 2 con las etapas seleccionadas.

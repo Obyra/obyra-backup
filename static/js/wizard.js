@@ -8,11 +8,12 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
   // 🎯 STEP VALIDATORS: Validaciones centralizadas por paso
   const STEP_VALIDATORS = {
     1: () => {
-      const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+      // 🎯 USE SET: No usar DOM, usar Set global como fuente única de verdad
+      const etapasSeleccionadas = window.WZ_STATE?.etapasSel?.size || 0;
       if (etapasSeleccionadas === 0) {
         throw new Error('Debe seleccionar al menos una etapa');
       }
-      console.log(`✅ STEP 1: ${etapasSeleccionadas} etapas seleccionadas`);
+      console.log(`✅ STEP 1: ${etapasSeleccionadas} etapas seleccionadas (desde Set)`);
       return true;
     },
     
@@ -358,15 +359,19 @@ function updateTaskSelectionPanel() {
 }
 
 window.seleccionarTodasLasEtapas = function() {
-  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = true);
-  updateSelectionCounter();
-  console.log('✅ WIZARD: Todas las etapas seleccionadas');
+  // 🎯 USE SET: Usar Set + rehidratar, no manipular DOM directamente
+  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => {
+    window.WZ_STATE.etapasSel.add(String(cb.dataset.etapaId));
+  });
+  rehydrateChecksFromState();
+  console.log('✅ WIZARD: Todas las etapas seleccionadas (Set + rehidratación)');
 };
 
 window.deseleccionarTodasLasEtapas = function() {
-  document.querySelectorAll('.etapa-checkbox:not(:disabled)').forEach(cb => cb.checked = false);
-  updateSelectionCounter();
-  console.log('✅ WIZARD: Todas las etapas deseleccionadas');
+  // 🎯 USE SET: Limpiar Set + rehidratar
+  window.WZ_STATE.etapasSel.clear();
+  rehydrateChecksFromState();
+  console.log('✅ WIZARD: Todas las etapas deseleccionadas (Set + rehidratación)');
 };
 
 // 🎯 DISABLED: Replaced by Set-based delegation in rebindCatalogEvents()
@@ -681,8 +686,8 @@ function setupUniqueInterceptor() {
     console.log(`🔍 WIZARD: Detectando paso - Paso1Visible: ${!!paso1Visible}, Paso2Visible: ${!!paso2Visible}, currentStep: ${currentStep}`);
     
     if (paso1Visible || currentStep === 1) {
-      // PASO 1 → 2: Validar etapas seleccionadas
-      const etapasSeleccionadas = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
+      // PASO 1 → 2: Validar etapas seleccionadas usando Set
+      const etapasSeleccionadas = window.WZ_STATE?.etapasSel?.size || 0;
       if (etapasSeleccionadas === 0) {
         alert('Debe seleccionar al menos una etapa');
         return;
