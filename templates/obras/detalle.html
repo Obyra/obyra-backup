@@ -4461,87 +4461,24 @@ function getCatalogoIds(){
   return getSelectedEtapaIds().map(id => Number(id)).filter(Boolean);
 }
 
-async function applyCatalogAndAdvance(explicitIds = null){
-  if(paso1Busy) return;
-  // 🎯 Use Set-based selection if provided, fallback to DOM for backwards compatibility
-  const selected = explicitIds || getCatalogoIds();
-  if(!selected.length){ showWarn('Seleccioná al menos una etapa del catálogo.'); return; }
+async function applyCatalogAndAdvance(selectedIds) {
+  const res = await fetch(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ catalogo_ids: selectedIds })
+  });
+  const data = await res.json().catch(() => ({}));
 
-  try{
-    paso1Busy = true; setPaso1Disabled(true);
+  // tomar ids del servidor o caer a lo seleccionado
+  const etapaIds = Array.isArray(data?.etapa_ids) && data.etapa_ids.length
+    ? data.etapa_ids.map(String)
+    : selectedIds.map(String);
 
-    window.WIZARD = window.WIZARD || {};
-    if(!sameArray(window.WIZARD._last_catalog_ids, selected)){
-      const bulk = await fetchJSON(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ catalogo_ids: selected })
-      });
-      if(bulk.ok === false) throw new Error(bulk.error || 'Error en bulk_from_catalog');
-
-      const etapaIds = [...(bulk.creadas||[]), ...(bulk.existentes||[])]
-        .map(e => Number(e.id)).filter(Boolean);
-      if(!etapaIds.length) throw new Error('El servidor no devolvió IDs de etapas');
-
-      window.WIZARD.etapa_ids = etapaIds;
-      window.WIZARD._last_catalog_ids = selected.slice();
-      
-      // Sync with old wizard instance if exists
-      if (window.wizardTareas && window.wizardTareas.WIZARD) {
-        window.wizardTareas.WIZARD.etapa_ids = etapaIds;
-      }
-      
-      // 🔄 Refresh etapas container to show new etapas
-      console.log('🔄 WIZARD: Refrescando contenedor de etapas...');
-      await refreshEtapasContainer();
-      
-      // 🎯 REHIDRATAR: Restaurar checkboxes desde estado global tras refresh
-      if (typeof rehydrateChecksFromState === 'function') {
-        rehydrateChecksFromState();
-      }
-      
-      // 🎯 BIND EVENTS: Re-bind catalog events después de re-render
-      if (typeof window.bindCatalogEvents === 'function') {
-        window.bindCatalogEvents();
-      }
-      
-      // 🎯 UPDATE BADGE: Actualizar badge con estado del Set
-      if (typeof window.updateEtapasBadge === 'function') {
-        window.updateEtapasBadge();
-      }
-      
-      console.log('✅ WIZARD: Contenedor actualizado, eventos re-bindeados, continuando...');
-    }
-
-    // 🎯 Llamada preview con payload exacto
-    const payload = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
-    console.log('📡 WIZARD: Auto-advance enviando payload preview:', payload);
-    
-    window.WIZARD.preview = await fetchJSON(`${PREF}/api/wizard-tareas/preview`, {
-      method: 'POST', 
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }, 
-      body: JSON.stringify(payload)
-    });
-
-    // 🎯 FIX: Retornar siempre los etapaIds para construir Paso 2
-    const etapaIds = window.WIZARD.etapa_ids || selected;
-    
-    // 🎯 Persistir para Paso 2
-    window.WZ_STATE = window.WZ_STATE || {};
-    window.WZ_STATE.etapasApplied = new Set(etapaIds.map(String));
-    
-    console.log('✅ WIZARD: applyCatalogAndAdvance completed, returning etapaIds:', etapaIds);
-    return etapaIds; // <- RETORNAR SIEMPRE
-
-  }catch(e){
-    console.error('Wizard Paso1:', e);
-    showWarn(`Error: ${e.message}`);
-    throw e; // <- RE-THROW para que el handler del botón lo capture
-  }finally{
-    paso1Busy=false; setPaso1Disabled(false);
-  }
+  // persistir para el Paso 2 y devolver
+  window.WZ_STATE = window.WZ_STATE || {};
+  window.WZ_STATE.etapasApplied = new Set(etapaIds);
+  console.log('✅ applyCatalogAndAdvance returning etapaIds:', etapaIds);
+  return etapaIds;
 }
 
 // ---------- bindings ----------
