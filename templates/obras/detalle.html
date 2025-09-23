@@ -871,7 +871,7 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="deseleccionarTodasLasEtapas()">
                             <i class="far fa-square me-1"></i>Deseleccionar Todas
                         </button>
-                        <button id="btnAgregarEtapasSel" type="button" class="btn btn-sm btn-success" data-action="add-etapas" disabled>
+                        <button id="btnAgregarEtapasSel" type="button" class="btn btn-sm btn-success" data-action="add-etapas" disabled style="display: none;">
                             <i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas
                         </button>
                     </div>
@@ -4195,15 +4195,16 @@ class WizardController {
 
 function updateEtapasBadge(){
   const n = window.WZ_STATE?.etapasSel?.size || 0;
-  const btn = document.querySelector('#btnAgregarEtapasSel'); // usar ESTE id
-  if (btn){
-    let span = btn.querySelector('.count');
-    if (!span){ span = document.createElement('span'); span.className='count'; btn.appendChild(span); }
-    span.textContent = n;
-    btn.disabled = n === 0;
+  // 🎯 FIX: Habilitar botón principal "Siguiente" en footer del modal
+  const wizardNext = document.querySelector('#wizardBtnSiguiente');
+  if (wizardNext) {
+    wizardNext.disabled = (n === 0);
+    if (n > 0) {
+      wizardNext.innerHTML = `Siguiente (${n}) <i class="fas fa-arrow-right ms-1"></i>`;
+    } else {
+      wizardNext.innerHTML = `Siguiente <i class="fas fa-arrow-right ms-1"></i>`;
+    }
   }
-  const next = document.querySelector('#btnPaso1Siguiente');
-  if (next) next.disabled = (n === 0);
   console.log('📊 UPDATE: updateEtapasBadge - Set size:', n);
 }
 
@@ -4504,24 +4505,31 @@ btn.addEventListener('click', async (e) => {
   }
 }, { once: true });
 
-// 🎯 SIGUIENTE: Usar mismo handler que botón principal
-const oldNext = document.getElementById('btnPaso1Siguiente');
-if (oldNext) {
-  oldNext.replaceWith(oldNext.cloneNode(true));
-  const btnNext = document.getElementById('btnPaso1Siguiente');
+// 🎯 HANDLER PRINCIPAL: wizardBtnSiguiente para Paso 1 → Paso 2
+const wizardNext = document.getElementById('wizardBtnSiguiente');
+if (wizardNext) {
+  wizardNext.replaceWith(wizardNext.cloneNode(true));
+  const btnNext = document.getElementById('wizardBtnSiguiente');
   
   btnNext.addEventListener('click', async (e) => {
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-    const ids = [...window.WZ_STATE.etapasSel];
-    console.log('NEXT ids ->', ids);
-    if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
-    try {
-      const etapaIds = await window.applyCatalogAndAdvance?.(ids);
-      await window.gotoPaso?.(2, { fromPaso: 1, etapaIds });
-    } catch (err) {
-      console.error('applyCatalogAndAdvance error', err);
+    
+    // 🎯 Paso 1: Aplicar etapas y avanzar
+    if (window.WZ_STATE?.currentStep === 1) {
+      const ids = [...window.WZ_STATE.etapasSel];
+      console.log('🎯 WIZARD: Paso 1 → 2, NEXT ids ->', ids);
+      if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
+      try {
+        const etapaIds = await window.applyCatalogAndAdvance?.(ids);
+        await window.gotoPaso?.(2, { fromPaso: 1, etapaIds });
+      } catch (err) {
+        console.error('applyCatalogAndAdvance error', err);
+      }
+    } else {
+      // 🎯 Otros pasos: navegación normal
+      window.nextStep?.();
     }
-  }, { once: true });
+  });
 }
 
 // ELIMINADO: Handler duplicado - ahora usa WizardTareas.nextStep()
