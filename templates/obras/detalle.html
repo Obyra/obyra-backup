@@ -905,6 +905,14 @@
                         <p class="text-muted mt-2">Cargando tareas...</p>
                     </div>
                     
+                    <!-- 🎯 Container para tareas por etapa -->
+                    <div id="accordion-etapas">
+                        <!-- Se llena dinámicamente con populateStep2() -->
+                        <div class="text-center py-4 text-muted">
+                            <p>Las tareas se cargarán automáticamente...</p>
+                        </div>
+                    </div>
+                    
                     <!-- Lista de tareas -->
                     <div id="wizardListaTareas"></div>
                     
@@ -4463,6 +4471,7 @@ function getCatalogoIds(){
 }
 
 async function applyCatalogAndAdvance(selectedIds) {
+  // 🎯 PASO 1: Crear etapas desde catálogo
   const res = await fetch(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -4474,6 +4483,25 @@ async function applyCatalogAndAdvance(selectedIds) {
   const etapaIds = Array.isArray(data?.etapa_ids) && data.etapa_ids.length
     ? data.etapa_ids.map(String)
     : selectedIds.map(String);
+
+  // 🎯 PASO 2: Llamar preview para obtener tareas para Paso 2
+  try {
+    const previewRes = await fetch(`${PREF}/api/wizard-tareas/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ obra_id: window.obraId, etapa_ids: etapaIds.map(Number) })
+    });
+    const previewData = await previewRes.json().catch(() => ({}));
+    
+    // 🎯 Guardar preview para Paso 2
+    window.WIZARD = window.WIZARD || {};
+    window.WIZARD.preview = previewData;
+    window.WIZARD.etapa_ids = etapaIds.map(Number);
+    
+    console.log('✅ WIZARD: Preview data loaded:', previewData);
+  } catch (previewError) {
+    console.warn('⚠️ WIZARD: Preview API failed, Paso 2 might be empty:', previewError);
+  }
 
   // persistir para el Paso 2 y devolver
   window.WZ_STATE = window.WZ_STATE || {};
