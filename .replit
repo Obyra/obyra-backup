@@ -85,5 +85,9 @@ externalPort = 3002
 localPort = 45241
 externalPort = 8080
 
+[[ports]]
+localPort = 46021
+externalPort = 8081
+
 [agent]
 integrations = ["flask_google_oauth==1.0.0", "python_openai==1.0.0", "python_database==1.0.0"]

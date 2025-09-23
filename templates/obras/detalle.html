@@ -4448,7 +4448,17 @@ async function applyCatalogAndAdvance(explicitIds = null){
         rehydrateChecksFromState();
       }
       
-      console.log('✅ WIZARD: Contenedor actualizado, continuando...');
+      // 🎯 BIND EVENTS: Re-bind catalog events después de re-render
+      if (typeof window.bindCatalogEvents === 'function') {
+        window.bindCatalogEvents();
+      }
+      
+      // 🎯 UPDATE BADGE: Actualizar badge con estado del Set
+      if (typeof window.updateEtapasBadge === 'function') {
+        window.updateEtapasBadge();
+      }
+      
+      console.log('✅ WIZARD: Contenedor actualizado, eventos re-bindeados, continuando...');
     }
 
     // 🎯 Llamada preview con payload exacto y navegación global
@@ -4479,16 +4489,21 @@ async function applyCatalogAndAdvance(explicitIds = null){
 // POST individual al tildar causaba re-render y pérdida de estado de checkboxes
 // Now using manual button click with Set-based selection
 
-// 🎯 STEP 3: Botón "Agregar Etapas Seleccionadas" usa el Set (NO DOM)
-document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', async (e) => {
-  e.preventDefault();
-  const ids = getSelectedEtapaIds();
-  if (!ids.length) {
-    alert('Debe seleccionar al menos una etapa'); 
-    return;
-  }
-  await applyCatalogAndAdvance(ids); // Pasar IDs del Set
-});
+// 🎯 BOTÓN LIMPIO: Eliminar listeners duplicados y usar SOLO el Set
+const old = document.getElementById('btnAgregarEtapasSel');
+if (old) {
+  old.replaceWith(old.cloneNode(true));              // limpia listeners viejos
+  const btn = document.getElementById('btnAgregarEtapasSel');
+  
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    const ids = [...window.WZ_STATE.etapasSel];      // ← fuente única de verdad
+    console.log('ADD ids ->', ids);
+    if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
+    await window.applyCatalogAndAdvance?.(ids).catch(err => console.error('applyCatalogAndAdvance err', err));
+    await window.gotoPaso?.(2);
+  }, { once: true });
+}
 
 // ELIMINADO: Handler duplicado - ahora usa WizardTareas.nextStep()
 
@@ -4676,6 +4691,11 @@ document.addEventListener('DOMContentLoaded', () => {
             currentStep: 1
         };
         console.log('🔧 WIZARD: Estado inicializado', window.WIZARD);
+        
+        // 🎯 INICIALIZAR SET GLOBAL: Evitar recrear al abrir modal
+        window.WZ_STATE = window.WZ_STATE || {};
+        window.WZ_STATE.etapasSel = window.WZ_STATE.etapasSel || new Set();
+        console.log('🔧 WZ_STATE: Set etapasSel inicializado', window.WZ_STATE.etapasSel);
         
         // ✅ ELIMINADO: Instancia legacy ya reemplazada por WizardController arriba
         

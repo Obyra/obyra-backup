@@ -18,11 +18,12 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
     },
     
     2: () => {
-      const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)').length;
+      // 🎯 USE SET: Validar usando WZ_STATE.tareasSel size o state variable
+      const tareasSeleccionadas = window.WZ_STATE?.tareasSel?.length || 0;
       if (tareasSeleccionadas === 0) {
         throw new Error('Debe seleccionar al menos una tarea');
       }
-      console.log(`✅ STEP 2: ${tareasSeleccionadas} tareas seleccionadas`);
+      console.log(`✅ STEP 2: ${tareasSeleccionadas} tareas seleccionadas (desde state)`);
       return true;
     },
     
