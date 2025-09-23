@@ -6,27 +6,16 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
 // =================== NAVEGACIÓN UNIFICADA CON VALIDACIONES ===================
 (function ensureUnifiedNavigation(){
   // 🎯 STEP VALIDATORS: Validaciones centralizadas por paso
+  // 🎯 FIX: Detect current step from DOM (single source of truth)
+  function getCurrentStepFromDOM(){
+    const pane = document.querySelector('.tab-pane.active,[aria-hidden="false"].tab-pane');
+    return Number(pane?.dataset?.paso || pane?.dataset?.wzStep || 1);
+  }
+
   const STEP_VALIDATORS = {
-    1: () => {
-      // 🎯 USE SET: No usar DOM, usar Set global como fuente única de verdad
-      const etapasSeleccionadas = window.WZ_STATE?.etapasSel?.size || 0;
-      if (etapasSeleccionadas === 0) {
-        throw new Error('Debe seleccionar al menos una etapa');
-      }
-      console.log(`✅ STEP 1: ${etapasSeleccionadas} etapas seleccionadas (desde Set)`);
-      return true;
-    },
-    
-    2: () => {
-      // 🎯 USE SET: Validar usando WZ_STATE.tareasSel size o state variable
-      const tareasSeleccionadas = window.WZ_STATE?.tareasSel?.length || 0;
-      if (tareasSeleccionadas === 0) {
-        throw new Error('Debe seleccionar al menos una tarea');
-      }
-      console.log(`✅ STEP 2: ${tareasSeleccionadas} tareas seleccionadas (desde state)`);
-      return true;
-    },
-    
+    1: () => (window.WZ_STATE?.etapasSel?.size ?? 0) > 0 || ( ()=>{ throw new Error('Debe seleccionar al menos una etapa'); })(),
+    2: () => (window.WZ_STATE?.tareasSel instanceof Set ? window.WZ_STATE.tareasSel.size : (window.WZ_STATE?.tareasSel?.length ?? 0)) > 0
+              || ( ()=>{ throw new Error('Debe seleccionar al menos una tarea'); })(),
     3: () => {
       const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
       const hasEmptyRequired = Array.from(rows).some(row => {
@@ -44,22 +33,24 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
   };
 
   // 🎯 UNIFIED NAVIGATION: Una sola función con validaciones
-  window.gotoPaso = function(step, options = {}){
-    const { skipValidation = false, force = false } = options;
+  window.gotoPaso = function(step, ctx = {}){
+    const { skipValidation = false, force = false } = ctx;
+    
+    // 🎯 FIX: Get current step from DOM before any changes
+    const currentStep = getCurrentStepFromDOM();
+    
+    console.log(`🎯 NAVIGATION: Going from Step ${currentStep} → Step ${step}. Validating origin step ${currentStep}`);
     
     // 🛡️ Validation: Check current step before navigation (validate ORIGIN step)
     if (!skipValidation && !force) {
-      const currentStep = window.WZ_STATE?.currentStep || 1;
       const validator = STEP_VALIDATORS[currentStep];
-      
-      console.log(`🎯 NAVIGATION: Going from Step ${currentStep} → Step ${step}. Validating origin step ${currentStep}`);
       
       if (validator) {
         try {
           validator();
           console.log(`✅ NAVIGATION: Step ${currentStep} validation passed`);
         } catch (error) {
-          console.warn(`❌ NAVIGATION: Step ${currentStep} validation failed:`, error.message);
+          console.warn(`❌ NAV: validation failed on step ${currentStep}:`, error.message);
           alert(error.message);
           return false;
         }
@@ -106,18 +97,22 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
       tab.classList.add('active');
     }
     
+    // 🎯 FIX: Update state ONLY after successful navigation
+    window.WZ_STATE = window.WZ_STATE || {};
+    window.WZ_STATE.currentStep = step;
+    
     console.log(`🎯 gotoPaso: Step ${step} activated successfully`);
     return true;
   };
   
-  // 🔄 NAVIGATION HELPERS: Convenient methods
+  // 🔄 NAVIGATION HELPERS: Convenient methods (use DOM as source of truth)
   window.nextStep = function() {
-    const currentStep = window.WZ_STATE?.currentStep || 1;
+    const currentStep = getCurrentStepFromDOM();
     return window.gotoPaso(currentStep + 1);
   };
   
   window.prevStep = function() {
-    const currentStep = window.WZ_STATE?.currentStep || 1;
+    const currentStep = getCurrentStepFromDOM();
     if (currentStep > 1) {
       return window.gotoPaso(currentStep - 1, { skipValidation: true });
     }
