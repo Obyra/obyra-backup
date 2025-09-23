@@ -4750,7 +4750,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // 🎯 INICIALIZAR SET GLOBAL: Evitar recrear al abrir modal
         window.WZ_STATE = window.WZ_STATE || {};
         window.WZ_STATE.etapasSel = window.WZ_STATE.etapasSel || new Set();
+        window.WZ_STATE.currentStep = 1; // 🎯 FIX: Inicializar paso actual
         console.log('🔧 WZ_STATE: Set etapasSel inicializado', window.WZ_STATE.etapasSel);
+        
+        // 🎯 FIX: Reset al paso 1 cuando se abre el modal
+        const modal = document.getElementById('wizardTareasModal');
+        modal.addEventListener('show.bs.modal', () => {
+            console.log('📋 WIZARD: Modal opening - resetting to step 1');
+            window.WZ_STATE.currentStep = 1;
+            window.gotoPaso?.(1, { skipValidation: true });
+        });
         
         // 🎯 ALIAS GLOBAL: Exponer funciones para uso en re-renders
         window.updateEtapasBadge = updateEtapasBadge;

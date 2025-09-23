@@ -47,14 +47,17 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
   window.gotoPaso = function(step, options = {}){
     const { skipValidation = false, force = false } = options;
     
-    // 🛡️ Validation: Check current step before navigation
+    // 🛡️ Validation: Check current step before navigation (validate ORIGIN step)
     if (!skipValidation && !force) {
       const currentStep = window.WZ_STATE?.currentStep || 1;
       const validator = STEP_VALIDATORS[currentStep];
       
+      console.log(`🎯 NAVIGATION: Going from Step ${currentStep} → Step ${step}. Validating origin step ${currentStep}`);
+      
       if (validator) {
         try {
           validator();
+          console.log(`✅ NAVIGATION: Step ${currentStep} validation passed`);
         } catch (error) {
           console.warn(`❌ NAVIGATION: Step ${currentStep} validation failed:`, error.message);
           alert(error.message);
