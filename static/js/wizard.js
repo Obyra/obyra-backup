@@ -255,8 +255,8 @@ async function cargarCatalogoEtapas() {
       rebindCatalogEvents();
     }
     
-    // 🔥 Recalcular al terminar de pintar
-    updateSelectionCounter();
+    // 🎯 REHIDRATAR: Restaurar checkboxes desde estado global tras render
+    rehydrateChecksFromState();
     
     console.log('✅ WIZARD: Catálogo cargado correctamente');
     
@@ -276,46 +276,57 @@ async function cargarCatalogoEtapas() {
 }
 
 function rebindCatalogEvents() {
-  // Checkbox selection
-  document.querySelectorAll('.etapa-checkbox').forEach(checkbox => {
-    checkbox.addEventListener('change', updateSelectionCounter);
-  });
+  // 🎯 STEP 2: Set-based checkbox handling - NO refrescar contenedor
+  const container = document.getElementById('catalogoEtapas');
+  if (container) {
+    // Remove old listeners to avoid duplicates
+    container.removeEventListener('change', handleEtapaCheckboxChange);
+    container.removeEventListener('click', handleCardClick);
+    
+    // Add delegated event listeners
+    container.addEventListener('change', handleEtapaCheckboxChange);
+    container.addEventListener('click', handleCardClick);
+  }
   
-  // Card click to toggle checkbox  
-  document.querySelectorAll('.etapa-catalog-card').forEach(card => {
-    if (!card.dataset.yaCreada || card.dataset.yaCreada === 'false') {
-      card.style.cursor = 'pointer';
-      card.addEventListener('click', (e) => {
-        if (e.target.type !== 'checkbox') {
-          const checkbox = card.querySelector('.etapa-checkbox');
-          if (checkbox && !checkbox.disabled) {
-            checkbox.checked = !checkbox.checked;
-            updateSelectionCounter();
-          }
-        }
-      });
-    }
-  });
-  
-  console.log('✅ WIZARD: Eventos de catálogo rebindeados');
+  console.log('✅ WIZARD: Eventos de catálogo rebindeados con Set-based logic');
 }
 
-// 🔥 Habilitar "Siguiente" cuando haya selección (no deshabilitada)
+// 🎯 STEP 2: Handler para checkboxes usando Set (NO DOM)
+function handleEtapaCheckboxChange(e) {
+  const cb = e.target.closest('input[type="checkbox"][data-etapa-id]');
+  if (!cb) return;
+  
+  const id = String(cb.dataset.etapaId);
+  if (cb.checked) {
+    window.WZ_STATE.etapasSel.add(id);
+  } else {
+    window.WZ_STATE.etapasSel.delete(id);
+  }
+  updateEtapasBadge();
+  // ❌ NO refrescar contenedor acá - mantener estado
+  console.log(`🎯 STATE: Etapa ${id} ${cb.checked ? 'agregada' : 'removida'}. Total: ${window.WZ_STATE.etapasSel.size}`);
+}
+
+// 🎯 Handler para click en cards
+function handleCardClick(e) {
+  const card = e.target.closest('.etapa-catalog-card');
+  if (!card) return;
+  if (card.dataset.yaCreada === 'true') return; // Skip disabled cards
+  
+  if (e.target.type !== 'checkbox') {
+    const checkbox = card.querySelector('.etapa-checkbox');
+    if (checkbox && !checkbox.disabled) {
+      checkbox.checked = !checkbox.checked;
+      // Trigger change event to update Set
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+}
+
+// 🔥 LEGACY: Mantener compatibilidad (deprecated - usar updateEtapasBadge)
 function updateSelectionCounter() {
-  const count = document.querySelectorAll('.etapa-checkbox:checked:not(:disabled)').length;
-  console.log(`📊 WIZARD: Contador actualizado - ${count} etapas seleccionadas`);
-  
-  // Actualizar contador
-  const counter = document.getElementById('contadorSeleccionadas');
-  if (counter) {
-    counter.textContent = count;
-  }
-  
-  // Habilitar/deshabilitar botón siguiente
-  const btnSiguiente = document.getElementById('wizardBtnSiguiente');
-  if (btnSiguiente) {
-    btnSiguiente.disabled = count === 0;
-  }
+  console.log(`⚠️ DEPRECATED: updateSelectionCounter() - usar updateEtapasBadge() en su lugar`);
+  updateEtapasBadge();
 }
 
 // 🔥 FUNCIÓN CRÍTICA: Actualizar panel "Tareas Seleccionadas" en tiempo real
@@ -358,12 +369,8 @@ window.deseleccionarTodasLasEtapas = function() {
   console.log('✅ WIZARD: Todas las etapas deseleccionadas');
 };
 
-// 🔥 Actualizar contador cuando cambie cualquier checkbox
-document.addEventListener('change', (e) => {
-  if (e.target.matches('.etapa-checkbox')) {
-    updateSelectionCounter();
-  }
-});
+// 🎯 DISABLED: Replaced by Set-based delegation in rebindCatalogEvents()
+// Old global delegation removed to prevent conflicts with Set-based approach
 
 // 🔥 EXPONER FUNCIONES AL GLOBAL
 window.cargarCatalogoEtapas = cargarCatalogoEtapas;
@@ -376,8 +383,40 @@ window.WZ_STATE = window.WZ_STATE || {
   // 🛡️ GUARDS ANTI-DUPLICADO
   mutexes: new Set(),           // Track active operations
   requestCache: new Map(),      // Cache identical requests
-  buttonStates: new Map()       // Track button disabled states
+  buttonStates: new Map(),      // Track button disabled states
+  // 🎯 FUENTE ÚNICA DE VERDAD: Set global para etapas seleccionadas
+  etapasSel: new Set()
 };
+
+// 🎯 STEP 1: Helper functions for Set-based selection
+function getSelectedEtapaIds() { 
+  return [...window.WZ_STATE.etapasSel]; 
+}
+
+function updateEtapasBadge() {
+  const n = window.WZ_STATE.etapasSel.size;
+  const btn = document.getElementById('btnAgregarEtapas');
+  if (btn) {
+    const countSpan = btn.querySelector('.count') || btn.querySelector('.badge');
+    if (countSpan) {
+      countSpan.textContent = n;
+    }
+    btn.disabled = n === 0;
+    console.log(`🎯 STATE: Badge actualizado - ${n} etapas seleccionadas`);
+  }
+}
+
+// 🎯 STEP 3: Rehidratar checkboxes desde el estado
+function rehydrateChecksFromState() {
+  document
+    .querySelectorAll('#catalogoEtapas input[type="checkbox"][data-etapa-id]')
+    .forEach(cb => {
+      const id = String(cb.dataset.etapaId);
+      cb.checked = window.WZ_STATE.etapasSel.has(id);
+    });
+  updateEtapasBadge();
+  console.log(`🎯 STATE: Rehidratados ${window.WZ_STATE.etapasSel.size} checkboxes desde estado global`);
+}
 
 // Opciones/equipos
 window.ensureOpciones = async function (obraId) {

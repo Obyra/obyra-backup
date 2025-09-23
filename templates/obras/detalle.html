@@ -4404,9 +4404,10 @@ function getCatalogoIds(){
     .map(el => Number(el.dataset.catalogId || el.value)).filter(Boolean);
 }
 
-async function applyCatalogAndAdvance(){
+async function applyCatalogAndAdvance(explicitIds = null){
   if(paso1Busy) return;
-  const selected = getCatalogoIds();
+  // 🎯 Use Set-based selection if provided, fallback to DOM for backwards compatibility
+  const selected = explicitIds || getCatalogoIds();
   if(!selected.length){ showWarn('Seleccioná al menos una etapa del catálogo.'); return; }
 
   try{
@@ -4435,6 +4436,12 @@ async function applyCatalogAndAdvance(){
       // 🔄 Refresh etapas container to show new etapas
       console.log('🔄 WIZARD: Refrescando contenedor de etapas...');
       await refreshEtapasContainer();
+      
+      // 🎯 REHIDRATAR: Restaurar checkboxes desde estado global tras refresh
+      if (typeof rehydrateChecksFromState === 'function') {
+        rehydrateChecksFromState();
+      }
+      
       console.log('✅ WIZARD: Contenedor actualizado, continuando...');
     }
 
@@ -4469,9 +4476,15 @@ document.getElementById('wizardPaso1Container')?.addEventListener('change', (ev)
   window.__wdeb = setTimeout(applyCatalogAndAdvance, 300);
 });
 
-// Botón verde (opcional) hace lo mismo
-document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', (e)=>{
-  e.preventDefault(); applyCatalogAndAdvance();
+// 🎯 STEP 3: Botón "Agregar Etapas Seleccionadas" usa el Set (NO DOM)
+document.getElementById('btnAgregarEtapasSel')?.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const ids = getSelectedEtapaIds();
+  if (!ids.length) {
+    alert('Debe seleccionar al menos una etapa'); 
+    return;
+  }
+  await applyCatalogAndAdvance(ids); // Pasar IDs del Set
 });
 
 // ELIMINADO: Handler duplicado - ahora usa WizardTareas.nextStep()

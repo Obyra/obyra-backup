@@ -1,0 +1,69 @@
+Fix express (3 pasos, cortitos)
+1) Fuente única de verdad
+
+Guardá la selección en un Set global y no calcules más desde el DOM.
+
+// estado global
+window.WZ_STATE = window.WZ_STATE || {};
+WZ_STATE.etapasSel = WZ_STATE.etapasSel || new Set();
+
+function getSelectedEtapaIds() { return [...WZ_STATE.etapasSel]; }
+
+function updateEtapasBadge() {
+  const n = WZ_STATE.etapasSel.size;
+  const btn = document.getElementById('btnAgregarEtapas');
+  btn.querySelector('.count').textContent = n;
+  btn.disabled = n === 0;
+}
+
+2) No refrescar el contenedor al tildar
+
+En el handler del checkbox, no llames a refreshEtapasContainer() ni a ningún render que reemplace #catalogoEtapas. Solo actualizá el estado y el badge.
+
+// delegación en #catalogoEtapas
+container.addEventListener('change', (e) => {
+  const cb = e.target.closest('input[type="checkbox"][data-etapa-id]');
+  if (!cb) return;
+  const id = String(cb.dataset.etapaId);
+  if (cb.checked) WZ_STATE.etapasSel.add(id);
+  else WZ_STATE.etapasSel.delete(id);
+  updateEtapasBadge();
+  // ❌ Nada de refresh acá
+});
+
+
+Si sí o sí necesitás refrescar por el POST individual, rehidratá después:
+
+function rehydrateChecksFromState() {
+  document
+    .querySelectorAll('#catalogoEtapas input[type="checkbox"][data-etapa-id]')
+    .forEach(cb => {
+      const id = String(cb.dataset.etapaId);
+      cb.checked = WZ_STATE.etapasSel.has(id);
+    });
+  updateEtapasBadge();
+}
+
+// después de cualquier render/refresh:
+rehydrateChecksFromState();
+
+3) “Agregar Etapas Seleccionadas” usa el Set (no el DOM)
+document.getElementById('btnAgregarEtapas').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const ids = getSelectedEtapaIds();
+  if (!ids.length) {
+    alert('Debe seleccionar al menos una etapa'); 
+    return;
+  }
+  await applyCatalogAndAdvance(ids); // tu función existente
+});
+
+Checklist de verificación (1 minuto)
+
+Marcá 2–3 etapas → el botón debe pasar de (0) a (3) y quedar así aunque haya POST/refresh.
+
+Desmarcá una → baja a (2).
+
+Click en Agregar Etapas Seleccionadas → debe avanzar al Paso 2 con esas etapas.
+
+Si al tildar ves que el contador sube y luego baja, buscá en tu código dónde se llama a refreshEtapasContainer()/cargarCatalogoEtapas() tras el POST del checkbox y comentá esa línea (o dejala pero llamá rehydrateChecksFromState() inmediatamente después).
