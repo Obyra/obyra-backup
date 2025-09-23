@@ -63,6 +63,9 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
       }
     }
     
+    // 🎯 FIX: Blur active element para evitar ARIA warnings
+    document.activeElement?.blur();
+    
     // 🔍 Find target pane with robust selectors
     const pane = document.querySelector(
       `[data-wz-step="${step}"], #wizardStep${step}, #wizard-paso${step}, #paso${step}, #wizardPaso${step}, #wizard-step${step}, #step${step}`
@@ -87,6 +90,10 @@ console.log('🧙‍♂️ WIZARD: Iniciando sistema estabilizado...');
     });
     pane.classList.add('active','show');
     pane.removeAttribute('aria-hidden');
+    
+    // 🎯 FIX: Mover foco al contenedor del nuevo paso
+    pane.setAttribute('tabindex', '-1');
+    pane.focus({ preventScroll: true });
     
     // 🎯 Update navigation tabs
     const tab = document.querySelector(`[data-bs-target="#${pane.id}"], a[href="#${pane.id}"]`);

@@ -2561,8 +2561,13 @@ def bulk_create_etapas_from_catalog(obra_id):
             db.session.rollback()
             raise  # Re-raise to be caught by outer try-catch
         
+        # 🎯 FIX: Agregar etapa_ids para compatibilidad con frontend
+        all_etapas = creadas + existentes
+        etapa_ids = [etapa['id'] for etapa in all_etapas]
+        
         response = jsonify({
             "ok": True,
+            "etapa_ids": etapa_ids,  # <- Para compatibilidad con applyCatalogAndAdvance fallback
             "creadas": creadas,
             "existentes": existentes
         })

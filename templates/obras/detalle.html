@@ -4512,7 +4512,7 @@ async function applyCatalogAndAdvance(explicitIds = null){
       console.log('✅ WIZARD: Contenedor actualizado, eventos re-bindeados, continuando...');
     }
 
-    // 🎯 Llamada preview con payload exacto y navegación global
+    // 🎯 Llamada preview con payload exacto
     const payload = { obra_id: window.obraId, etapa_ids: window.WIZARD.etapa_ids };
     console.log('📡 WIZARD: Auto-advance enviando payload preview:', payload);
     
@@ -4525,11 +4525,20 @@ async function applyCatalogAndAdvance(explicitIds = null){
       body: JSON.stringify(payload)
     });
 
-    console.log('✅ WIZARD: Auto-advance preview exitoso, navegando al paso 2');
-    window.gotoPaso(2); // usar navegación global unificada
+    // 🎯 FIX: Retornar siempre los etapaIds para construir Paso 2
+    const etapaIds = window.WIZARD.etapa_ids || selected;
+    
+    // 🎯 Persistir para Paso 2
+    window.WZ_STATE = window.WZ_STATE || {};
+    window.WZ_STATE.etapasApplied = new Set(etapaIds.map(String));
+    
+    console.log('✅ WIZARD: applyCatalogAndAdvance completed, returning etapaIds:', etapaIds);
+    return etapaIds; // <- RETORNAR SIEMPRE
+
   }catch(e){
     console.error('Wizard Paso1:', e);
     showWarn(`Error: ${e.message}`);
+    throw e; // <- RE-THROW para que el handler del botón lo capture
   }finally{
     paso1Busy=false; setPaso1Disabled(false);
   }
@@ -4551,8 +4560,8 @@ btn.addEventListener('click', async (e) => {
   console.log('ADD ids ->', ids);
   if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
   try {
-    await window.applyCatalogAndAdvance?.(ids);
-    await window.gotoPaso?.(2);
+    const etapaIds = await window.applyCatalogAndAdvance?.(ids);
+    await window.gotoPaso?.(2, { fromPaso: 1, etapaIds });
   } catch (err) {
     console.error('applyCatalogAndAdvance error', err);
   }
@@ -4570,8 +4579,8 @@ if (oldNext) {
     console.log('NEXT ids ->', ids);
     if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
     try {
-      await window.applyCatalogAndAdvance?.(ids);
-      await window.gotoPaso?.(2);
+      const etapaIds = await window.applyCatalogAndAdvance?.(ids);
+      await window.gotoPaso?.(2, { fromPaso: 1, etapaIds });
     } catch (err) {
       console.error('applyCatalogAndAdvance error', err);
     }
