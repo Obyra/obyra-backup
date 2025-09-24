@@ -1,0 +1,414 @@
+diff --git a/static/js/wizard.js b/static/js/wizard.js
+index aefc905df4c60802044f6c98b21944ebd85895e7..d7c0d16a2318bed582f52d9cd2b4664dc6833306 100644
+--- a/static/js/wizard.js
++++ b/static/js/wizard.js
+@@ -427,193 +427,290 @@ function rehydrateChecksFromState() {
+     });
+   updateEtapasBadge();
+   console.log(`🎯 STATE: Rehidratados ${window.WZ_STATE.etapasSel.size} checkboxes desde estado global`);
+ }
+ 
+ // Opciones/equipos
+ window.ensureOpciones = async function (obraId) {
+   if (window.WZ_STATE.opciones) return window.WZ_STATE.opciones;
+ 
+   try {
+     const data = await fetchJSON(api(`obras/api/wizard-tareas/opciones?obra_id=${obraId}`));
+     window.WZ_STATE.opciones = data;
+     return data;
+     
+   } catch (error) {
+     console.error('❌ WIZARD: Error cargando opciones:', error);
+     return { unidades: ['h'], usuarios: [], equipo: [] };
+   }
+ };
+ 
+ // collectPaso3Payload - Recopilar datos del Paso 3
+ window.collectPaso3Payload = function() {
+   const modal = document.getElementById('wizardTareasModal');
+   const rows = [...modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr, #paso3 #tablaDatosWizard tbody tr')];
+   const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
+-  
++
++  const etapaCatalogo = [
++    ...(window.WIZARD?.preview?.etapas || []),
++    ...(window.WIZARD?.catalogo || []),
++  ];
++
++  const findEtapaInfo = (slug, catalogId) => {
++    const catalogIdStr = catalogId != null ? String(catalogId) : null;
++    return etapaCatalogo.find(etapa => {
++      if (!etapa) return false;
++      const etapaSlug = etapa.etapa_slug || etapa.slug;
++      const etapaId = etapa.etapa_id ?? etapa.id;
++      const slugMatches = slug && etapaSlug && etapaSlug === slug;
++      const idMatches = catalogIdStr && etapaId != null && String(etapaId) === catalogIdStr;
++      return slugMatches || idMatches;
++    }) || null;
++  };
++
++  const toNumberOrNull = (value) => {
++    if (value === undefined || value === null || value === '' || value === 'null') {
++      return null;
++    }
++    const num = Number(value);
++    return Number.isFinite(num) ? num : null;
++  };
++
++  const toIntOrNull = (value) => {
++    if (value === undefined || value === null || value === '' || value === 'null') {
++      return null;
++    }
++    const num = parseInt(value, 10);
++    return Number.isFinite(num) ? num : null;
++  };
++
+   const tareas = rows.map((row, i) => {
+     const getData = (name) => row.querySelector(`[name="rows[${i}][${name}]"]`)?.value || '';
+     const tareaData = window.WZ_STATE.tareasSel?.[i] || {};
+-    
++    const etapaInfo = findEtapaInfo(
++      tareaData.etapa_slug,
++      tareaData.etapa_catalog_id ?? tareaData.etapa_id ?? tareaData.etapa_catalog_id_raw
++    );
++
++    const etapaCatalogId = (
++      tareaData.etapa_catalog_id ??
++      tareaData.etapa_id ??
++      etapaInfo?.etapa_id ??
++      etapaInfo?.id ??
++      null
++    );
++
++    const etapaIdNumber = toNumberOrNull(etapaCatalogId);
++    const etapaSlug = tareaData.etapa_slug || etapaInfo?.etapa_slug || etapaInfo?.slug || '';
++    const etapaNombre = tareaData.etapa_nombre || etapaInfo?.etapa_nombre || etapaInfo?.nombre || '';
++    const asignadoId = toIntOrNull(getData('asignado'));
++    const unidad = getData('unidad') || 'h';
++    const horasValor = toNumberOrNull(getData('horas'));
++    const cantidadValor = toNumberOrNull(getData('cantidad'));
++
+     return {
+-      etapa_slug: tareaData.etapa_slug || '',  // Usar slug de la plantilla
++      etapa_slug: etapaSlug,
++      etapa_id: etapaIdNumber,
++      catalogo_id: etapaIdNumber,
++      etapa_nombre: etapaNombre,
+       nombre: row.children[1]?.textContent?.trim() || '',
+       fecha_inicio: getData('inicio'),
+       fecha_fin: getData('fin'),
+-      horas: Number(getData('horas')) || 8,
+-      cantidad: Number(getData('cantidad')) || 1,
+-      unidad: getData('unidad'),
+-      asignado_usuario_id: getData('asignado') || null,
++      horas: horasValor == null ? 8 : horasValor,
++      cantidad: cantidadValor == null ? 1 : cantidadValor,
++      unidad,
++      asignado_usuario_id: asignadoId,
+       prioridad: getData('prioridad') || 'media'
+     };
+   });
+-  
++
+   return {
+     obra_id: obraId,
+-    tareas: tareas.filter(t => t.etapa_slug)  // Filtrar tareas con etapa_slug válido
++    tareas: tareas.filter(t => t.etapa_slug || t.etapa_id != null)  // Filtrar tareas con información de etapa válida
+   };
+ };
+ 
+ // populatePaso3 - BLOQUE CANÓNICO
+ window.populatePaso3 = async function() {
+   const modal = document.getElementById('wizardTareasModal');
+   const tbody = modal.querySelector('#tablaDatosWizard tbody');
+   const obraId = modal.dataset.obraId || window.obraId;
+-  
++
+   if (!tbody || !window.WZ_STATE.tareasSel?.length) {
+     console.warn('⚠️ WIZARD: No hay tareas seleccionadas o tabla no encontrada');
+     return;
+   }
+ 
+   // Cargar opciones (unidades y equipo) - Ruta absoluta
+   const opciones = await window.ensureOpciones(obraId);
+   const unidades = opciones.unidades || ['h', 'días', 'und'];
+   const equipo = opciones.usuarios || opciones.equipo || [];  // Fix: Backend returns 'usuarios', not 'equipo'
+ 
+   // Generar filas
+   const filas = window.WZ_STATE.tareasSel.map((tarea, i) => {
+-    const unidadesOpts = unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+-    
+-    // Modificación: Agregar placeholder y no pre-seleccionar usuario
++    const etapaLabel = tarea.etapa_nombre || tarea.etapa_slug || 'Sin etapa';
++    const horasDefault = tarea.horas && Number(tarea.horas) > 0 ? Number(tarea.horas) : 8;
++    const cantidadDefault = tarea.cantidad && Number(tarea.cantidad) > 0 ? Number(tarea.cantidad) : 1;
++    const unidadActual = tarea.unidad || 'h';
++    const asignadoActual = tarea.asignado_usuario_id != null ? Number(tarea.asignado_usuario_id) : null;
++    const prioridadActual = tarea.prioridad || 'media';
++
++    const unidadesOpts = unidades.map(u => `
++      <option value="${u}" ${u === unidadActual ? 'selected' : ''}>${u}</option>
++    `).join('');
++
+     const equipoOpts = [
+-      '<option value="">— Seleccioná —</option>',  // Placeholder
+-      ...equipo.map(user => `<option value="${user.id}">${user.nombre}</option>`)
++      '<option value="">— Seleccioná —</option>',
++      ...equipo.map(user => `
++        <option value="${user.id}" ${Number(user.id) === asignadoActual ? 'selected' : ''}>${user.nombre}</option>
++      `)
+     ].join('');
+ 
++    const prioridadOpts = ['baja', 'media', 'alta'].map(value => `
++      <option value="${value}" ${value === prioridadActual ? 'selected' : ''}>${value.charAt(0).toUpperCase()}${value.slice(1)}</option>
++    `).join('');
++
+     return `
+       <tr data-index="${i}">
+-        <td class="small text-muted">${tarea.etapa_slug || 'Sin etapa'}</td>
+-        <td class="fw-bold">${tarea.nombre}</td>
+-        <td><input type="date" name="rows[${i}][inicio]" class="form-control form-control-sm"></td>
+-        <td><input type="date" name="rows[${i}][fin]" class="form-control form-control-sm"></td>
+-        <td><input type="number" name="rows[${i}][horas]" value="8" min="1" class="form-control form-control-sm" style="width:70px"></td>
+-        <td><input type="number" name="rows[${i}][cantidad]" value="1" min="1" class="form-control form-control-sm" style="width:70px"></td>
++        <td class="small text-muted">${etapaLabel}</td>
++        <td class="fw-bold tarea-nombre">${tarea.nombre}</td>
++        <td><input type="date" name="rows[${i}][inicio]" class="form-control form-control-sm fecha-inicio" required></td>
++        <td><input type="date" name="rows[${i}][fin]" class="form-control form-control-sm fecha-fin" required></td>
++        <td><input type="number" name="rows[${i}][horas]" value="${horasDefault}" min="1" class="form-control form-control-sm horas-estimadas" style="width:70px"></td>
++        <td><input type="number" name="rows[${i}][cantidad]" value="${cantidadDefault}" min="1" class="form-control form-control-sm cantidad" style="width:70px" required></td>
+         <td>
+-          <select name="rows[${i}][unidad]" class="form-select form-select-sm" style="width:80px">
++          <select name="rows[${i}][unidad]" class="form-select form-select-sm unidad" style="width:80px">
+             ${unidadesOpts}
+           </select>
+         </td>
+         <td>
+-          <select name="rows[${i}][asignado]" class="form-select form-select-sm" style="min-width:120px">
++          <select name="rows[${i}][asignado]" class="form-select form-select-sm asignado" style="min-width:120px">
+             ${equipoOpts}
+           </select>
+         </td>
+         <td>
+-          <select name="rows[${i}][prioridad]" class="form-select form-select-sm" style="width:90px">
+-            <option value="baja">Baja</option>
+-            <option value="media" selected>Media</option>
+-            <option value="alta">Alta</option>
++          <select name="rows[${i}][prioridad]" class="form-select form-select-sm prioridad" style="width:90px">
++            ${prioridadOpts}
+           </select>
+         </td>
+       </tr>
+     `;
+   }).join('');
+ 
+   tbody.innerHTML = filas;
+   console.log(`✅ WIZARD: ${window.WZ_STATE.tareasSel.length} filas generadas en Paso 3`);
+ };
+ 
+ // =================== CARGA DE TAREAS PASO 2 (CATÁLOGO) ===================
+ window.loadTareasWizard = async function(obraId, slugs) {
+   console.log(`🔥 WIZARD: Cargando tareas del CATÁLOGO para obra ${obraId}, etapas:`, slugs);
+   
+   const m = document.getElementById('wizardTareasModal');
+   const list = m.querySelector('#wizardListaTareas') || m.querySelector('#wizardStep2');
+   const spin = m.querySelector('#wizardSpinnerTareas');
+   
+   console.log(`🔍 WIZARD: Contenedores encontrados - Modal: ${!!m}, ListaTareas: ${!!list}, Spinner: ${!!spin}`);
+   console.log(`🔍 WIZARD: Selector usado: #wizardListaTareas`);
+   
+   if (spin) spin.classList.remove('d-none');
+   if (list) {
+     list.innerHTML = '';
+     console.log(`🔍 WIZARD: Lista limpiada. Contenedor actual:`, list);
+   }
+   
+   try {
+     // USAR EL ENDPOINT DEL CATÁLOGO (NO DB REAL) - Ruta absoluta
+     const json = await fetchJSON(api(`obras/api/wizard-tareas/tareas?obra_id=${obraId}&etapas=${encodeURIComponent(JSON.stringify(slugs))}`), {
+       method: 'POST',
+       headers: {'Content-Type':'application/json'},
+       body: JSON.stringify({ obra_id: parseInt(obraId), etapas: slugs })
+     });
+     
+     const tareas = json.tareas_catalogo || json.tareas || json.data || [];
++
++    const slugToEtapaMeta = new Map();
++    const registerEtapaMeta = (slug, meta = {}) => {
++      if (!slug) return;
++      const current = slugToEtapaMeta.get(slug) || {};
++      const catalogId = meta.etapa_id ?? meta.id;
++      slugToEtapaMeta.set(slug, {
++        id: catalogId != null ? catalogId : current.id ?? null,
++        nombre: meta.etapa_nombre || meta.nombre || current.nombre || '',
++        slug,
++      });
++    };
++
++    (window.WIZARD?.preview?.etapas || []).forEach(etapa => {
++      registerEtapaMeta(etapa?.etapa_slug || etapa?.slug, etapa);
++    });
++    (window.WIZARD?.catalogo || []).forEach(etapa => {
++      registerEtapaMeta(etapa?.slug, etapa);
++    });
++
++    const escapeAttr = (value) => String(value ?? '').replace(/"/g, '&quot;');
+     
+     console.log(`🔍 WIZARD: Datos recibidos del backend:`, { 
+       json, 
+       tareasExtracted: tareas,
+       primerasTareas: tareas.slice(0, 3)
+     });
+     
+     if (spin) spin.classList.add('d-none');
+     
+     if (list) {
+       const html = tareas.length
+         ? `<div class="mb-3">
+              <h6 class="text-primary">📋 Plantillas disponibles (${tareas.length}):</h6>
+              <div class="row">${
+                tareas.map((t, index) => {
+-                 console.log(`🔍 WIZARD: Generando checkbox ${index}:`, { 
+-                   tarea: t, 
+-                   id: t.id, 
+-                   nombre: t.nombre, 
+-                   etapaSlug: t.etapa_slug 
++                 const etapaSlug = t.etapa_slug || '';
++                 const etapaMeta = slugToEtapaMeta.get(etapaSlug) || {};
++                 const etapaCatalogIdAttr = etapaMeta.id != null ? etapaMeta.id : '';
++                 const etapaNombreAttr = etapaMeta.nombre || '';
++                 console.log(`🔍 WIZARD: Generando checkbox ${index}:`, {
++                   tarea: t,
++                   id: t.id,
++                   nombre: t.nombre,
++                   etapaSlug,
++                   etapaCatalogId: etapaCatalogIdAttr,
++                   etapaNombre: etapaNombreAttr,
+                  });
+-                 
++
+                  return `
+                    <div class="col-md-6 mb-2">
+                      <div class="form-check">
+-                       <input class="form-check-input tarea-checkbox" type="checkbox" 
+-                              name="tasks[]"
+-                              data-id="${t.id || ''}" 
+-                              data-nombre="${t.nombre || ''}"
+-                              data-etapa="${t.etapa_slug || ''}"
+-                              data-descripcion="${t.descripcion || ''}"
+-                              data-horas="${t.horas || '8'}"
+-                              value="${t.id || ''}"
+-                              id="tarea-${t.id || index}">
++                        <input class="form-check-input tarea-checkbox" type="checkbox"
++                               name="tasks[]"
++                               data-id="${t.id || ''}"
++                               data-nombre="${t.nombre || ''}"
++                               data-etapa="${t.etapa_slug || ''}"
++                               data-etapa-id="${escapeAttr(etapaCatalogIdAttr)}"
++                               data-etapa-nombre="${escapeAttr(etapaNombreAttr)}"
++                               data-descripcion="${t.descripcion || ''}"
++                               data-horas="${t.horas || '8'}"
++                               value="${t.id || ''}"
++                               id="tarea-${t.id || index}">
+                        <label class="form-check-label" for="tarea-${t.id || index}">
+                          <strong>${t.nombre || 'Tarea sin nombre'}</strong>
+                          ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
+                          <small class="text-info d-block">⏱️ ${t.horas || 0}h estimadas</small>
+                        </label>
+                      </div>
+                    </div>
+                  `;
+                }).join('')
+              }</div>
+            </div>`
+         : '<div class="text-muted text-center p-4">📝 No hay plantillas disponibles para las etapas seleccionadas.</div>';
+       
+       list.innerHTML = html;
+       
+       // 🔥 REBINDEAR EVENT LISTENERS para tareas (CRÍTICO para panel "Tareas Seleccionadas")
+       setTimeout(() => {
+         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
+           checkbox.addEventListener('change', updateTaskSelectionPanel);
+         });
+         // 🔥 INICIALIZAR panel al cargar
+         updateTaskSelectionPanel();
+         console.log('✅ WIZARD: Event listeners de tareas rebindeados');
+       }, 50);
+       
+diff --git a/static/js/wizard.js b/static/js/wizard.js
+index aefc905df4c60802044f6c98b21944ebd85895e7..d7c0d16a2318bed582f52d9cd2b4664dc6833306 100644
+--- a/static/js/wizard.js
++++ b/static/js/wizard.js
+@@ -722,57 +819,71 @@ function setupUniqueInterceptor() {
+           window.loadTareasWizard(obraId, slugs);
+         } else {
+           console.error('❌ WIZARD: No se puede cargar tareas - obraId:', obraId, 'slugs:', slugs);
+         }
+       }, 100);
+       
+     } else if (paso2Visible || currentStep === 2) {
+       // PASO 2 → 3: Capturar tareas seleccionadas del catálogo
+       console.log(`🔍 WIZARD: Iniciando captura Paso 2 → 3`);
+       
+       // 🎯 DEBUG: No contar DOM checkboxes, usar información de estado
+       console.log(`🔍 WIZARD: Estado actual:`, {
+         etapasEnSet: window.WZ_STATE?.etapasSel?.size || 0,
+         mensaje: 'Debug migrado a Set-based approach'
+       });
+       
+       // 🎯 DEBUG REMOVED: Ya no usar todosCheckboxes ni tareasSeleccionadas del DOM
+       
+       // 🎯 VALIDATION: Usar estado de tareas seleccionadas - defer to Paso 3 validation
+       // tareasSeleccionadas no está disponible como DOM collection aquí
+       console.log('🔍 WIZARD: Validación de tareas diferida al Paso 3');
+       
+       // 🎯 CAPTURAR TAREAS EN WZ_STATE.tareasSel
+       window.WZ_STATE = window.WZ_STATE || {};
+       window.WZ_STATE.tareasSel = [];
+-      
++
+       // 🎯 COLLECT TASKS: Buscar tareas checked en DOM, pero no depender del estado checked
+       document.querySelectorAll('.tarea-checkbox:checked:not(:disabled)').forEach(checkbox => {
++        const etapaNombreAttr = checkbox.getAttribute('data-etapa-nombre') || '';
++        const etapaCatalogAttr = checkbox.getAttribute('data-etapa-id');
++        let etapaCatalogId = null;
++        if (etapaCatalogAttr && etapaCatalogAttr !== 'null') {
++          const parsed = Number(etapaCatalogAttr);
++          if (Number.isFinite(parsed)) {
++            etapaCatalogId = parsed;
++          }
++        }
++
+         const tareaData = {
+           id: checkbox.getAttribute('data-id') || '',
+           nombre: checkbox.getAttribute('data-nombre') || checkbox.nextElementSibling?.textContent?.trim() || 'Tarea sin nombre',
+           etapa_slug: checkbox.getAttribute('data-etapa') || '',
++          etapa_nombre: etapaNombreAttr,
++          etapa_catalog_id: etapaCatalogId,
++          etapa_id: etapaCatalogId,
++          etapa_catalog_id_raw: etapaCatalogAttr,
+           descripcion: checkbox.getAttribute('data-descripcion') || '',
+           horas: checkbox.getAttribute('data-horas') || '8'
+         };
+         window.WZ_STATE.tareasSel.push(tareaData);
+       });
+       
+       console.log(`🎯 WIZARD: ${window.WZ_STATE.tareasSel.length} tareas capturadas del catálogo:`, window.WZ_STATE.tareasSel);
+       
+       // Navegar al Paso 3 y popularlo
+       console.log('🔥 WIZARD: Navegando Paso 2 → 3');
+       window.WZ_STATE.currentStep = 3;
+       window.gotoPaso?.(3);
+       
+       // Poblar el Paso 3 con las tareas seleccionadas
+       setTimeout(() => {
+         if (typeof window.populatePaso3 === 'function') {
+           window.populatePaso3();
+         }
+       }, 100);
+       
+     } else if (currentStep === 3) {
+       // PASO 3: Cambiar botón a "Confirmar" y preparar finalización
+       console.log('🔍 WIZARD: Detectando Paso 3 - cambiando botón a Confirmar');
+       
+       // Validar que los campos requeridos estén completos

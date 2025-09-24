@@ -560,23 +560,23 @@ window.populatePaso3 = async function() {
     return `
       <tr data-index="${i}">
         <td class="small text-muted">${etapaLabel}</td>
-        <td class="fw-bold">${tarea.nombre}</td>
-        <td><input type="date" name="rows[${i}][inicio]" class="form-control form-control-sm"></td>
-        <td><input type="date" name="rows[${i}][fin]" class="form-control form-control-sm"></td>
-        <td><input type="number" name="rows[${i}][horas]" value="8" min="1" class="form-control form-control-sm" style="width:70px"></td>
-        <td><input type="number" name="rows[${i}][cantidad]" value="1" min="1" class="form-control form-control-sm" style="width:70px"></td>
+        <td class="fw-bold tarea-nombre">${tarea.nombre}</td>
+        <td><input type="date" name="rows[${i}][inicio]" class="form-control form-control-sm fecha-inicio" required></td>
+        <td><input type="date" name="rows[${i}][fin]" class="form-control form-control-sm fecha-fin" required></td>
+        <td><input type="number" name="rows[${i}][horas]" value="8" min="1" class="form-control form-control-sm horas-estimadas" style="width:70px"></td>
+        <td><input type="number" name="rows[${i}][cantidad]" value="1" min="1" class="form-control form-control-sm cantidad" style="width:70px" required></td>
         <td>
-          <select name="rows[${i}][unidad]" class="form-select form-select-sm" style="width:80px">
+          <select name="rows[${i}][unidad]" class="form-select form-select-sm unidad" style="width:80px">
             ${unidadesOpts}
           </select>
         </td>
         <td>
-          <select name="rows[${i}][asignado]" class="form-select form-select-sm" style="min-width:120px">
+          <select name="rows[${i}][asignado]" class="form-select form-select-sm asignado" style="min-width:120px">
             ${equipoOpts}
           </select>
         </td>
         <td>
-          <select name="rows[${i}][prioridad]" class="form-select form-select-sm" style="width:90px">
+          <select name="rows[${i}][prioridad]" class="form-select form-select-sm prioridad" style="width:90px">
             <option value="baja">Baja</option>
             <option value="media" selected>Media</option>
             <option value="alta">Alta</option>

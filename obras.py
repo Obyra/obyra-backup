@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
-import logging
 import requests
 from app import db
 from sqlalchemy import text, func
@@ -2826,7 +2825,6 @@ def wizard_preview():
 
             # Tareas del catálogo por tipo de etapa
             tareas_catalogo = []
-            current_app.logger.debug(f"🔥 DEBUG WIZARD: Claves disponibles en TAREAS_POR_ETAPA: {list(TAREAS_POR_ETAPA.keys())}")
             
             if etapa_nombre in TAREAS_POR_ETAPA:
                 current_app.logger.debug(

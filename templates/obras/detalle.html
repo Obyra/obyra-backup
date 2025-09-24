@@ -2635,6 +2635,146 @@ class WizardController {
         
         this.initializeController();
     }
+
+    parseNumber(value) {
+        if (value === undefined || value === null || value === '' || value === 'null') {
+            return null;
+        }
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+    }
+
+    buildEtapaMetaLookup() {
+        const lookup = {
+            byId: new Map(),
+            bySlug: new Map()
+        };
+
+        const register = (raw) => {
+            if (!raw) return;
+            const id = raw.id ?? raw.etapa_id ?? null;
+            const slug = raw.slug ?? raw.etapa_slug ?? null;
+            const nombre = raw.nombre ?? raw.etapa_nombre ?? null;
+
+            const meta = {
+                id: this.parseNumber(id),
+                slug: slug || null,
+                nombre: nombre || null
+            };
+
+            if (meta.id !== null && !lookup.byId.has(String(meta.id))) {
+                lookup.byId.set(String(meta.id), meta);
+            }
+            if (meta.slug && !lookup.bySlug.has(meta.slug)) {
+                lookup.bySlug.set(meta.slug, meta);
+            }
+        };
+
+        const previewEtapas = window.WIZARD?.preview?.etapas || [];
+        previewEtapas.forEach(etapa => register({
+            id: etapa?.etapa_id,
+            slug: etapa?.etapa_slug,
+            nombre: etapa?.etapa_nombre
+        }));
+
+        const catalogoEtapas = this.WIZARD?.catalogo || window.WIZARD?.catalogo || [];
+        catalogoEtapas.forEach(register);
+
+        const etapasCreadas = this.WIZARD?.etapas_creadas || window.WIZARD?.etapas_creadas || [];
+        etapasCreadas.forEach(register);
+
+        return lookup;
+    }
+
+    enrichTaskWithEtapaMeta(task, lookup = null) {
+        if (!task) return task;
+
+        const metaLookup = lookup || this.buildEtapaMetaLookup();
+        const enriched = { ...task };
+
+        const candidateIds = [
+            task?.etapa_catalog_id,
+            task?.etapa_id,
+            task?.catalogo_id,
+            task?.catalog_id,
+            task?.catalogoId,
+            task?.etapa_catalog_id_raw,
+            task?.etapaId
+        ];
+
+        let resolvedMeta = null;
+
+        for (const value of candidateIds) {
+            const idNum = this.parseNumber(value);
+            if (idNum !== null) {
+                if (enriched.etapa_catalog_id === undefined || enriched.etapa_catalog_id === null) {
+                    enriched.etapa_catalog_id = idNum;
+                }
+                if (enriched.etapa_id === undefined || enriched.etapa_id === null) {
+                    enriched.etapa_id = idNum;
+                }
+                const metaById = metaLookup.byId.get(String(idNum));
+                if (metaById) {
+                    resolvedMeta = metaById;
+                    break;
+                }
+            }
+        }
+
+        if (!resolvedMeta) {
+            const candidateSlugs = [
+                task?.etapa_slug,
+                task?.etapa,
+                task?.slug
+            ].filter(Boolean);
+
+            for (const slug of candidateSlugs) {
+                const metaBySlug = metaLookup.bySlug.get(slug);
+                if (metaBySlug) {
+                    resolvedMeta = metaBySlug;
+                    break;
+                }
+            }
+        }
+
+        if (resolvedMeta) {
+            if (resolvedMeta.id !== null) {
+                enriched.etapa_catalog_id = resolvedMeta.id;
+            }
+            if (resolvedMeta.id !== null) {
+                enriched.etapa_id = resolvedMeta.id;
+            }
+            if (resolvedMeta.slug) {
+                enriched.etapa_slug = enriched.etapa_slug || resolvedMeta.slug;
+            }
+            if (resolvedMeta.nombre) {
+                enriched.etapa_nombre = enriched.etapa_nombre || resolvedMeta.nombre;
+            }
+        }
+
+        if (!enriched.etapa_slug && enriched.etapa_catalog_id !== undefined && enriched.etapa_catalog_id !== null) {
+            const metaById = metaLookup.byId.get(String(enriched.etapa_catalog_id));
+            if (metaById?.slug) {
+                enriched.etapa_slug = metaById.slug;
+                if (!enriched.etapa_nombre) {
+                    enriched.etapa_nombre = metaById.nombre || enriched.etapa_nombre;
+                }
+            }
+        }
+
+        if (!enriched.etapa_nombre && enriched.etapa_slug) {
+            const metaBySlug = metaLookup.bySlug.get(enriched.etapa_slug);
+            if (metaBySlug?.nombre) {
+                enriched.etapa_nombre = metaBySlug.nombre;
+                if (metaBySlug.id !== null) {
+                    enriched.etapa_catalog_id = metaBySlug.id;
+                    enriched.etapa_id = metaBySlug.id;
+                }
+            }
+        }
+
+        return enriched;
+    }
     
     initializeController() {
         console.log('🎯 WIZARD: Inicializando WizardController simple');
@@ -3296,52 +3436,62 @@ class WizardController {
     }
     
     collectSelectedTasks() {
-        const tasks = [];
+        let tasks = [];
+
         // 🎯 USE STATE: Si hay state disponible, usarlo en lugar de DOM
         if (window.WZ_STATE?.tareasSel?.length > 0) {
-            return window.WZ_STATE.tareasSel;
+            tasks = [...window.WZ_STATE.tareasSel];
+        } else {
+            // Fallback al DOM solo si no hay state
+            document.querySelectorAll('.tarea-check:checked').forEach(checkbox => {
+                const etapaId = this.parseNumber(checkbox.dataset.etapa);
+                const source = checkbox.dataset.source;
+
+                if (source === 'catalogo') {
+                    tasks.push({
+                        source: 'catalogo',
+                        catalogo_id: checkbox.dataset.catalogoId,
+                        etapa_catalog_id: etapaId,
+                        etapa_id: etapaId,
+                        nombre: checkbox.dataset.nombre,
+                        unidad: checkbox.dataset.unidad
+                    });
+                } else if (source === 'nueva') {
+                    tasks.push({
+                        source: 'nueva',
+                        etapa_catalog_id: etapaId,
+                        etapa_id: etapaId,
+                        nombre: checkbox.dataset.nombre,
+                        unidad: checkbox.dataset.unidad
+                    });
+                }
+            });
         }
-        // Fallback al DOM solo si no hay state
-        document.querySelectorAll('.tarea-check:checked').forEach(checkbox => {
-            const etapaId = parseInt(checkbox.dataset.etapa);
-            const source = checkbox.dataset.source;
-            
-            if (source === 'catalogo') {
-                tasks.push({
-                    source: 'catalogo',
-                    catalogo_id: checkbox.dataset.catalogoId,
-                    etapa_id: etapaId,
-                    nombre: checkbox.dataset.nombre,
-                    unidad: checkbox.dataset.unidad
-                });
-            } else if (source === 'nueva') {
-                tasks.push({
-                    source: 'nueva',
-                    etapa_id: etapaId,
-                    nombre: checkbox.dataset.nombre,
-                    unidad: checkbox.dataset.unidad
-                });
-            }
-        });
-        
-        return tasks;
+
+        const lookup = this.buildEtapaMetaLookup();
+        return tasks.map(task => this.enrichTaskWithEtapaMeta(task, lookup));
     }
     
     validateTableData() {
         const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
         let valid = true;
-        
+
         rows.forEach(row => {
-            const nombre = row.querySelector('.tarea-nombre').textContent;
-            const inicio = row.querySelector('.fecha-inicio').value;
-            const fin = row.querySelector('.fecha-fin').value;
-            const cantidad = row.querySelector('.cantidad').value;
-            
+            const nombreEl = row.querySelector('.tarea-nombre');
+            const inicioEl = row.querySelector('.fecha-inicio');
+            const finEl = row.querySelector('.fecha-fin');
+            const cantidadEl = row.querySelector('.cantidad');
+
+            const nombre = nombreEl?.textContent || '';
+            const inicio = inicioEl?.value || '';
+            const fin = finEl?.value || '';
+            const cantidad = cantidadEl?.value || '';
+
             // Clear previous errors
             row.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-            
+
             if (!inicio) {
-                row.querySelector('.fecha-inicio').classList.add('is-invalid');
+                inicioEl?.classList.add('is-invalid');
                 valid = false;
             }
             

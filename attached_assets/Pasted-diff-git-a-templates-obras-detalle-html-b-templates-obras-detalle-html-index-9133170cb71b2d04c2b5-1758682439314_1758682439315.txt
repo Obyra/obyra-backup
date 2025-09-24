@@ -1,0 +1,669 @@
+diff --git a/templates/obras/detalle.html b/templates/obras/detalle.html
+index 9133170cb71b2d04c2b5a325f4d16052fcb022d8..a89196f667f50bc0b9be10bea2c8a0cdbe8124d5 100644
+--- a/templates/obras/detalle.html
++++ b/templates/obras/detalle.html
+@@ -2610,54 +2610,194 @@ class WizardController {
+         this.obraId = window.obraId;
+         console.log('🎯 WIZARD: usando window.obraId:', this.obraId);
+         
+         if (!this.obraId) {
+             console.error('❌ WIZARD: window.obraId no disponible');
+             return;
+         }
+         
+         // ✅ SINGLE SOURCE OF TRUTH - Estado centralizado
+         this.state = {
+             currentStep: 1,
+             etapasSelected: [],     // IDs de etapas seleccionadas (checkboxes)
+             etapasCreated: [],      // IDs de etapas ya agregadas a la obra
+             tareasSelected: [],     // Tareas seleccionadas para creación
+             formData: {},           // Datos del formulario Paso 3
+             catalogo: null,         // Catálogo de etapas disponibles
+             submitting: false,      // Mutex para evitar doble-submit
+             navLock: false          // Lock durante operaciones async
+         };
+         
+         // ✅ COMPATIBILIDAD CON CÓDIGO LEGACY - Evitar undefined errors
+         this.WIZARD = {
+             catalogo: [],
+             etapas_creadas: []
+         };
+-        
++
+         this.initializeController();
+     }
+-    
++
++    parseNumber(value) {
++        if (value === undefined || value === null || value === '' || value === 'null') {
++            return null;
++        }
++        const num = Number(value);
++        return Number.isFinite(num) ? num : null;
++    }
++
++    buildEtapaMetaLookup() {
++        const lookup = {
++            byId: new Map(),
++            bySlug: new Map()
++        };
++
++        const register = (raw) => {
++            if (!raw) return;
++            const id = raw.id ?? raw.etapa_id ?? null;
++            const slug = raw.slug ?? raw.etapa_slug ?? null;
++            const nombre = raw.nombre ?? raw.etapa_nombre ?? null;
++
++            const meta = {
++                id: this.parseNumber(id),
++                slug: slug || null,
++                nombre: nombre || null
++            };
++
++            if (meta.id !== null && !lookup.byId.has(String(meta.id))) {
++                lookup.byId.set(String(meta.id), meta);
++            }
++            if (meta.slug && !lookup.bySlug.has(meta.slug)) {
++                lookup.bySlug.set(meta.slug, meta);
++            }
++        };
++
++        const previewEtapas = window.WIZARD?.preview?.etapas || [];
++        previewEtapas.forEach(etapa => register({
++            id: etapa?.etapa_id,
++            slug: etapa?.etapa_slug,
++            nombre: etapa?.etapa_nombre
++        }));
++
++        const catalogoEtapas = this.WIZARD?.catalogo || window.WIZARD?.catalogo || [];
++        catalogoEtapas.forEach(register);
++
++        const etapasCreadas = this.WIZARD?.etapas_creadas || window.WIZARD?.etapas_creadas || [];
++        etapasCreadas.forEach(register);
++
++        return lookup;
++    }
++
++    enrichTaskWithEtapaMeta(task, lookup = null) {
++        if (!task) return task;
++
++        const metaLookup = lookup || this.buildEtapaMetaLookup();
++        const enriched = { ...task };
++
++        const candidateIds = [
++            task?.etapa_catalog_id,
++            task?.etapa_id,
++            task?.catalogo_id,
++            task?.catalog_id,
++            task?.catalogoId,
++            task?.etapa_catalog_id_raw,
++            task?.etapaId
++        ];
++
++        let resolvedMeta = null;
++
++        for (const value of candidateIds) {
++            const idNum = this.parseNumber(value);
++            if (idNum !== null) {
++                if (enriched.etapa_catalog_id === undefined || enriched.etapa_catalog_id === null) {
++                    enriched.etapa_catalog_id = idNum;
++                }
++                if (enriched.etapa_id === undefined || enriched.etapa_id === null) {
++                    enriched.etapa_id = idNum;
++                }
++                const metaById = metaLookup.byId.get(String(idNum));
++                if (metaById) {
++                    resolvedMeta = metaById;
++                    break;
++                }
++            }
++        }
++
++        if (!resolvedMeta) {
++            const candidateSlugs = [
++                task?.etapa_slug,
++                task?.etapa,
++                task?.slug
++            ].filter(Boolean);
++
++            for (const slug of candidateSlugs) {
++                const metaBySlug = metaLookup.bySlug.get(slug);
++                if (metaBySlug) {
++                    resolvedMeta = metaBySlug;
++                    break;
++                }
++            }
++        }
++
++        if (resolvedMeta) {
++            if (resolvedMeta.id !== null) {
++                enriched.etapa_catalog_id = resolvedMeta.id;
++            }
++            if (resolvedMeta.id !== null) {
++                enriched.etapa_id = resolvedMeta.id;
++            }
++            if (resolvedMeta.slug) {
++                enriched.etapa_slug = enriched.etapa_slug || resolvedMeta.slug;
++            }
++            if (resolvedMeta.nombre) {
++                enriched.etapa_nombre = enriched.etapa_nombre || resolvedMeta.nombre;
++            }
++        }
++
++        if (!enriched.etapa_slug && enriched.etapa_catalog_id !== undefined && enriched.etapa_catalog_id !== null) {
++            const metaById = metaLookup.byId.get(String(enriched.etapa_catalog_id));
++            if (metaById?.slug) {
++                enriched.etapa_slug = metaById.slug;
++                if (!enriched.etapa_nombre) {
++                    enriched.etapa_nombre = metaById.nombre || enriched.etapa_nombre;
++                }
++            }
++        }
++
++        if (!enriched.etapa_nombre && enriched.etapa_slug) {
++            const metaBySlug = metaLookup.bySlug.get(enriched.etapa_slug);
++            if (metaBySlug?.nombre) {
++                enriched.etapa_nombre = metaBySlug.nombre;
++                if (metaBySlug.id !== null) {
++                    enriched.etapa_catalog_id = metaBySlug.id;
++                    enriched.etapa_id = metaBySlug.id;
++                }
++            }
++        }
++
++        return enriched;
++    }
++
+     initializeController() {
+         console.log('🎯 WIZARD: Inicializando WizardController simple');
+         
+         // ✅ UN SOLO HANDLER DELEGADO - Elimina conflictos de múltiples listeners
+         const modal = document.getElementById('wizardTareasModal');
+         if (modal) {
+             // Remover cualquier handler anterior
+             if (this.handleDelegatedClick) {
+                 modal.removeEventListener('click', this.handleDelegatedClick);
+             }
+             
+             // Nuevo handler delegado usando data-action pattern
+             this.handleDelegatedClick = this.handleDelegatedClick.bind(this);
+             modal.addEventListener('click', this.handleDelegatedClick);
+             
+             // 🎯 NO RESET: Evitar reset que recarga catálogo y limpia checkboxes DOM
+             // El Set global mantiene el estado, no necesitamos resetear al abrir modal
+             // this.modalShowHandler = () => this.resetWizard();
+             // modal.addEventListener('show.bs.modal', this.modalShowHandler);
+             
+             // 🎯 DISABLED: POST individual al tildar causaba re-render y pérdida de estado  
+             // Now using Set-based approach with manual button click
+             // this.checkboxChangeHandler = async (e) => {
+             //     if (e.target.matches('.etapa-checkbox')) {
+             //         await this.handleCheckboxChange(e.target);
+diff --git a/templates/obras/detalle.html b/templates/obras/detalle.html
+index 9133170cb71b2d04c2b5a325f4d16052fcb022d8..a89196f667f50bc0b9be10bea2c8a0cdbe8124d5 100644
+--- a/templates/obras/detalle.html
++++ b/templates/obras/detalle.html
+@@ -3274,115 +3414,125 @@ class WizardController {
+             await this.loadEquipo();
+             this.goToStep(3);
+             
+         } else if (this.currentStep === 3) {
+             // Validate table data
+             if (!this.validateTableData()) {
+                 return;
+             }
+             
+             this.goToStep(4);
+         }
+     }
+     
+     async loadEquipo() {
+         try {
+             const response = await fetch(`/obras/api/obras/${this.obraId}/equipo`);
+             const data = await response.json();
+             this.WIZARD.equipo = data.usuarios || [];
+         } catch (error) {
+             console.error('Error loading equipo:', error);
+             this.WIZARD.equipo = [];
+         }
+     }
+     
+     collectSelectedTasks() {
+-        const tasks = [];
++        let tasks = [];
++
+         // 🎯 USE STATE: Si hay state disponible, usarlo en lugar de DOM
+         if (window.WZ_STATE?.tareasSel?.length > 0) {
+-            return window.WZ_STATE.tareasSel;
++            tasks = [...window.WZ_STATE.tareasSel];
++        } else {
++            // Fallback al DOM solo si no hay state
++            document.querySelectorAll('.tarea-check:checked').forEach(checkbox => {
++                const etapaId = this.parseNumber(checkbox.dataset.etapa);
++                const source = checkbox.dataset.source;
++
++                if (source === 'catalogo') {
++                    tasks.push({
++                        source: 'catalogo',
++                        catalogo_id: checkbox.dataset.catalogoId,
++                        etapa_catalog_id: etapaId,
++                        etapa_id: etapaId,
++                        nombre: checkbox.dataset.nombre,
++                        unidad: checkbox.dataset.unidad
++                    });
++                } else if (source === 'nueva') {
++                    tasks.push({
++                        source: 'nueva',
++                        etapa_catalog_id: etapaId,
++                        etapa_id: etapaId,
++                        nombre: checkbox.dataset.nombre,
++                        unidad: checkbox.dataset.unidad
++                    });
++                }
++            });
+         }
+-        // Fallback al DOM solo si no hay state
+-        document.querySelectorAll('.tarea-check:checked').forEach(checkbox => {
+-            const etapaId = parseInt(checkbox.dataset.etapa);
+-            const source = checkbox.dataset.source;
+-            
+-            if (source === 'catalogo') {
+-                tasks.push({
+-                    source: 'catalogo',
+-                    catalogo_id: checkbox.dataset.catalogoId,
+-                    etapa_id: etapaId,
+-                    nombre: checkbox.dataset.nombre,
+-                    unidad: checkbox.dataset.unidad
+-                });
+-            } else if (source === 'nueva') {
+-                tasks.push({
+-                    source: 'nueva',
+-                    etapa_id: etapaId,
+-                    nombre: checkbox.dataset.nombre,
+-                    unidad: checkbox.dataset.unidad
+-                });
+-            }
+-        });
+-        
+-        return tasks;
++
++        const lookup = this.buildEtapaMetaLookup();
++        return tasks.map(task => this.enrichTaskWithEtapaMeta(task, lookup));
+     }
+     
+     validateTableData() {
+         const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+         let valid = true;
+-        
++
+         rows.forEach(row => {
+-            const nombre = row.querySelector('.tarea-nombre').textContent;
+-            const inicio = row.querySelector('.fecha-inicio').value;
+-            const fin = row.querySelector('.fecha-fin').value;
+-            const cantidad = row.querySelector('.cantidad').value;
+-            
++            const nombreEl = row.querySelector('.tarea-nombre');
++            const inicioEl = row.querySelector('.fecha-inicio');
++            const finEl = row.querySelector('.fecha-fin');
++            const cantidadEl = row.querySelector('.cantidad');
++
++            const nombre = nombreEl?.textContent || '';
++            const inicio = inicioEl?.value || '';
++            const fin = finEl?.value || '';
++            const cantidad = cantidadEl?.value || '';
++
+             // Clear previous errors
+             row.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+-            
++
+             if (!inicio) {
+-                row.querySelector('.fecha-inicio').classList.add('is-invalid');
++                inicioEl?.classList.add('is-invalid');
+                 valid = false;
+             }
+-            
++
+             if (!fin) {
+-                row.querySelector('.fecha-fin').classList.add('is-invalid');
++                finEl?.classList.add('is-invalid');
+                 valid = false;
+             }
+-            
++
+             if (inicio && fin && new Date(inicio) > new Date(fin)) {
+-                row.querySelector('.fecha-fin').classList.add('is-invalid');
++                finEl?.classList.add('is-invalid');
+                 valid = false;
+             }
+-            
++
+             if (!cantidad || parseFloat(cantidad) <= 0) {
+-                row.querySelector('.cantidad').classList.add('is-invalid');
++                cantidadEl?.classList.add('is-invalid');
+                 valid = false;
+             }
+         });
+-        
++
+         if (!valid) {
+             alert('Corrige los campos marcados en rojo');
+         }
+         
+         return valid;
+     }
+     
+     goToStep(step) {
+         // 🎯 UNIFIED: Use global navigation with centralized validations
+         if (window.gotoPaso(step, { skipValidation: true })) {
+             this.currentStep = step;
+             this.updateStepDisplay();
+             this.updateProgressBar();
+             
+             // Hide loading and show content
+             document.getElementById('wizardLoading').classList.add('d-none');
+         
+             // Populate step content
+             if (step === 2) {
+                 this.populateStep2();
+             } else if (step === 3) {
+                 // 🎯 CRÍTICO: Antes del Paso 3, recopilar SOLO las tareas seleccionadas
+                 this.WIZARD.tareas_seleccionadas = this.collectSelectedTasks();
+                 console.log(`✅ WIZARD: Paso 3 - ${this.WIZARD.tareas_seleccionadas.length} tareas seleccionadas`, this.WIZARD.tareas_seleccionadas);
+                 this.populateStep3();
+diff --git a/templates/obras/detalle.html b/templates/obras/detalle.html
+index 9133170cb71b2d04c2b5a325f4d16052fcb022d8..a89196f667f50bc0b9be10bea2c8a0cdbe8124d5 100644
+--- a/templates/obras/detalle.html
++++ b/templates/obras/detalle.html
+@@ -3529,84 +3679,90 @@ class WizardController {
+         }
+         
+         let html = '';
+         selectedTasks.forEach(checkbox => {
+             const etapaNombre = window.WIZARD.preview.etapas.find(e => e.etapa_id == checkbox.dataset.etapa)?.etapa_nombre;
+             const isNueva = checkbox.dataset.source === 'nueva';
+             
+             html += `
+                 <div class="d-flex justify-content-between align-items-center mb-1 p-2 bg-light rounded">
+                     <div>
+                         <small class="text-muted">${etapaNombre}</small><br>
+                         <strong>${checkbox.dataset.nombre}</strong>
+                         ${isNueva ? '<span class="badge bg-primary ms-1">Nueva</span>' : ''}
+                     </div>
+                     <small class="text-muted">${checkbox.dataset.unidad}</small>
+                 </div>
+             `;
+         });
+         
+         container.innerHTML = html;
+     }
+     
+     populateStep3() {
+         const tbody = document.querySelector('#tablaDatosWizard tbody');
+         tbody.innerHTML = '';
+-        
++
+         this.WIZARD.tareas_seleccionadas.forEach((tarea, index) => {
+-            const etapaNombre = window.WIZARD.preview.etapas.find(e => e.etapa_id == tarea.etapa_id)?.etapa_nombre;
+-            
++            const etapaNombre = tarea.etapa_nombre || window.WIZARD.preview.etapas.find(e => e.etapa_id == tarea.etapa_id)?.etapa_nombre || 'Sin etapa';
++            const unidadActual = tarea.unidad || 'h';
++            const horasValor = tarea.horas && Number(tarea.horas) > 0 ? Number(tarea.horas) : '';
++            const cantidadValor = tarea.cantidad && Number(tarea.cantidad) > 0 ? Number(tarea.cantidad) : '';
++            const asignadoActual = tarea.asignado_usuario_id != null ? Number(tarea.asignado_usuario_id) : null;
++            const prioridadActual = tarea.prioridad || 'media';
++
+             const row = document.createElement('tr');
+             row.innerHTML = `
+                 <td class="text-muted">${etapaNombre}</td>
+                 <td class="tarea-nombre">${tarea.nombre}</td>
+-                <td><input type="date" class="form-control form-control-sm fecha-inicio" required></td>
+-                <td><input type="date" class="form-control form-control-sm fecha-fin" required></td>
+-                <td><input type="number" class="form-control form-control-sm horas-estimadas" min="0.1" step="0.1" placeholder="8.0"></td>
+-                <td><input type="number" class="form-control form-control-sm cantidad" min="0.1" step="0.1" placeholder="1.0" required></td>
++                <td><input type="date" class="form-control form-control-sm fecha-inicio" name="rows[${index}][inicio]" required></td>
++                <td><input type="date" class="form-control form-control-sm fecha-fin" name="rows[${index}][fin]" required></td>
++                <td><input type="number" class="form-control form-control-sm horas-estimadas" name="rows[${index}][horas]" min="0.1" step="0.1" placeholder="8.0" value="${horasValor}"></td>
++                <td><input type="number" class="form-control form-control-sm cantidad" name="rows[${index}][cantidad]" min="0.1" step="0.1" placeholder="1.0" value="${cantidadValor}" required></td>
+                 <td>
+-                    <select class="form-select form-select-sm unidad">
+-                        <option value="m2" ${tarea.unidad === 'm2' ? 'selected' : ''}>m²</option>
+-                        <option value="m3" ${tarea.unidad === 'm3' ? 'selected' : ''}>m³</option>
+-                        <option value="ml" ${tarea.unidad === 'ml' ? 'selected' : ''}>ml</option>
+-                        <option value="un" ${tarea.unidad === 'un' || tarea.unidad === 'ud' ? 'selected' : ''}>Unidad</option>
+-                        <option value="kg" ${tarea.unidad === 'kg' ? 'selected' : ''}>kg</option>
++                    <select class="form-select form-select-sm unidad" name="rows[${index}][unidad]">
++                        <option value="h" ${unidadActual === 'h' ? 'selected' : ''}>Horas</option>
++                        <option value="m2" ${unidadActual === 'm2' ? 'selected' : ''}>m²</option>
++                        <option value="m3" ${unidadActual === 'm3' ? 'selected' : ''}>m³</option>
++                        <option value="ml" ${unidadActual === 'ml' ? 'selected' : ''}>ml</option>
++                        <option value="un" ${unidadActual === 'un' || unidadActual === 'ud' ? 'selected' : ''}>Unidad</option>
++                        <option value="kg" ${unidadActual === 'kg' ? 'selected' : ''}>kg</option>
+                     </select>
+                 </td>
+                 <td>
+-                    <select class="form-select form-select-sm asignado">
++                    <select class="form-select form-select-sm asignado" name="rows[${index}][asignado]">
+                         <option value="">Sin asignar</option>
+                         ${this.WIZARD.equipo.map(user => `
+-                            <option value="${user.id}">${user.nombre}</option>
++                            <option value="${user.id}" ${Number(user.id) === asignadoActual ? 'selected' : ''}>${user.nombre}</option>
+                         `).join('')}
+                     </select>
+                 </td>
+                 <td>
+-                    <select class="form-select form-select-sm prioridad">
+-                        <option value="normal">Normal</option>
+-                        <option value="alta">Alta</option>
+-                        <option value="baja">Baja</option>
++                    <select class="form-select form-select-sm prioridad" name="rows[${index}][prioridad]">
++                        <option value="baja" ${prioridadActual === 'baja' ? 'selected' : ''}>Baja</option>
++                        <option value="media" ${prioridadActual === 'media' ? 'selected' : ''}>Media</option>
++                        <option value="alta" ${prioridadActual === 'alta' ? 'selected' : ''}>Alta</option>
+                     </select>
+                 </td>
+             `;
+             tbody.appendChild(row);
+         });
+     }
+     
+     populateStep4() {
+         const container = document.getElementById('resumenWizard');
+         
+         // ✅ Use persisted results from Step 3 creation
+         if (window.WZ_RESULT && window.WZ_RESULT.success) {
+             const { total_creadas, total_duplicadas, tareas_creadas, tareas_duplicadas } = window.WZ_RESULT;
+             
+             container.innerHTML = `
+                 <div class="card">
+                     <div class="card-body">
+                         <div class="alert alert-success">
+                             <i class="fas fa-check-circle me-2"></i>
+                             <strong>¡Tareas procesadas exitosamente!</strong>
+                         </div>
+                         
+                         <div class="row">
+                             <div class="col-md-6">
+                                 <h6><i class="fas fa-plus-circle text-success me-2"></i>Tareas Creadas: ${total_creadas}</h6>
+diff --git a/templates/obras/detalle.html b/templates/obras/detalle.html
+index 9133170cb71b2d04c2b5a325f4d16052fcb022d8..a89196f667f50bc0b9be10bea2c8a0cdbe8124d5 100644
+--- a/templates/obras/detalle.html
++++ b/templates/obras/detalle.html
+@@ -3629,81 +3785,154 @@ class WizardController {
+                         <div class="mt-3 p-3 bg-light rounded">
+                             <small class="text-muted">
+                                 <i class="fas fa-info-circle me-1"></i>
+                                 Las tareas han sido agregadas a sus respectivas etapas. 
+                                 ${total_duplicadas > 0 ? 'Las tareas duplicadas ya existían en la base de datos.' : ''}
+                             </small>
+                         </div>
+                     </div>
+                 </div>
+             `;
+             return;
+         }
+         
+         // Fallback if no results (shouldn't happen normally)
+         container.innerHTML = `
+             <div class="alert alert-warning">
+                 <i class="fas fa-exclamation-triangle me-2"></i>
+                 No hay resultados disponibles. Por favor reinicia el wizard.
+             </div>
+         `;
+     }
+     
+     async confirmarCreacion() {
+         // 🛡️ GUARD: Usar button guard para prevenir múltiples creaciones
+         return window.withButtonGuard('wizardBtnConfirmar', async () => {
+-        
++
+         console.log('🔥 WIZARD confirmarCreacion: Paso 3 POST iniciado');
+-        
++
+         console.log('🧙‍♂️ WIZARD: Iniciando confirmación...');
+-        
+-        // Build payload per user specification
+-        const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
+-        const tareas = [];
+-        
+-        rows.forEach((row, index) => {
+-            const selectedTask = this.WIZARD.tareas_seleccionadas[index];
+-            
+-            tareas.push({
+-                etapa_id: selectedTask.etapa_id,
+-                nombre: selectedTask.nombre,
+-                unidad: row.querySelector('.unidad').value,
+-                fecha_inicio: row.querySelector('.fecha-inicio').value,
+-                fecha_fin: row.querySelector('.fecha-fin').value,
+-                horas: parseFloat(row.querySelector('.horas-estimadas').value) || null,
+-                cantidad: parseFloat(row.querySelector('.cantidad').value) || null,
+-                asignado_usuario_id: parseInt(row.querySelector('.asignado').value) || null
++
++        const collectorResult = typeof window.collectPaso3Payload === 'function'
++            ? window.collectPaso3Payload()
++            : null;
++
++        let tareasPayload = Array.isArray(collectorResult?.tareas) ? collectorResult.tareas : [];
++
++        if (!tareasPayload.length) {
++            const rows = document.querySelectorAll('#tablaDatosWizard tbody tr');
++            tareasPayload = Array.from(rows).map((row, index) => {
++                const getValue = (selector) => row.querySelector(selector)?.value || '';
++                return {
++                    nombre: row.querySelector('.tarea-nombre')?.textContent?.trim() || '',
++                    unidad: getValue('.unidad') || 'h',
++                    fecha_inicio: getValue('.fecha-inicio'),
++                    fecha_fin: getValue('.fecha-fin'),
++                    horas: parseFloat(getValue('.horas-estimadas')) || null,
++                    cantidad: parseFloat(getValue('.cantidad')) || null,
++                    asignado_usuario_id: parseInt(getValue('.asignado')) || null,
++                    prioridad: getValue('.prioridad') || 'media'
++                };
+             });
+-        });
+-        
++        }
++
++        const lookup = this.buildEtapaMetaLookup();
++        const selectedTasks = Array.isArray(this.WIZARD.tareas_seleccionadas)
++            ? this.WIZARD.tareas_seleccionadas
++            : [];
++
++        const toEtapaId = (...values) => {
++            for (const value of values) {
++                const parsed = this.parseNumber(value);
++                if (parsed !== null) return parsed;
++            }
++            return null;
++        };
++
++        const tareasEnriquecidas = tareasPayload.map((tarea, index) => {
++            const selected = selectedTasks[index] || {};
++
++            const etapaId = toEtapaId(
++                tarea.etapa_id,
++                tarea.catalogo_id,
++                tarea.catalog_id,
++                selected.etapa_catalog_id,
++                selected.etapa_id,
++                selected.catalogo_id,
++                selected.catalog_id
++            );
++
++            const etapaSlug = tarea.etapa_slug || selected.etapa_slug || selected.etapa || null;
++            const metaById = etapaId !== null ? lookup.byId.get(String(etapaId)) : null;
++            const metaBySlug = !metaById && etapaSlug ? lookup.bySlug.get(etapaSlug) : null;
++            const resolvedMeta = metaById || metaBySlug || null;
++
++            const resolvedId = resolvedMeta?.id ?? etapaId;
++            const resolvedSlug = tarea.etapa_slug || selected.etapa_slug || resolvedMeta?.slug || null;
++            const resolvedNombre = tarea.etapa_nombre || selected.etapa_nombre || resolvedMeta?.nombre || null;
++
++            const unidad = tarea.unidad || selected.unidad || 'h';
++            const asignado = this.parseNumber(
++                tarea.asignado_usuario_id !== undefined ? tarea.asignado_usuario_id : selected.asignado_usuario_id
++            );
++
++            const prioridad = tarea.prioridad || selected.prioridad || 'media';
++
++            return {
++                ...selected,
++                ...tarea,
++                etapa_id: resolvedId,
++                catalogo_id: resolvedId,
++                etapa_catalog_id: resolvedId,
++                etapa_slug: resolvedSlug,
++                etapa_nombre: resolvedNombre,
++                unidad,
++                asignado_usuario_id: asignado,
++                prioridad
++            };
++        }).filter(t => t && (t.etapa_slug || (t.etapa_id !== null && t.etapa_id !== undefined)));
++
++        if (!tareasEnriquecidas.length) {
++            this.showStepError(4, 'No se pudo construir la información de las tareas seleccionadas.');
++            return;
++        }
++
++        const tareasSinEtapa = tareasEnriquecidas.filter(t => !t.etapa_slug && (t.etapa_id === null || t.etapa_id === undefined));
++        if (tareasSinEtapa.length) {
++            console.warn('⚠️ WIZARD: No se pudo identificar la etapa para algunas tareas', tareasSinEtapa);
++            this.showStepError(4, 'No se pudo identificar la etapa para algunas tareas seleccionadas. Reintentá recargando el catálogo.');
++            return;
++        }
++
+         const payload = {
+             obra_id: this.obraId,
+-            tareas: tareas
++            evitar_duplicados: document.getElementById('evitarDuplicados')?.checked ?? true,
++            tareas: tareasEnriquecidas
+         };
+-        
++
+         console.log('🧙‍♂️ WIZARD: Enviando a /obras/api/wizard-tareas/create', payload);
+-        
++
+         // Show loading
+         document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active','show'));
+         document.getElementById('wizardLoading').classList.remove('d-none');
+         document.querySelector('.modal-footer').style.display = 'none';
+         
+         try {
+             const response = await fetch('/obras/api/wizard-tareas/create', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify(payload)
+             });
+             
+             const result = await response.json();
+             console.log('🧙‍♂️ WIZARD: Respuesta', result);
+             
+             if (result.ok) {
+                 const creadas = result.creadas ? result.creadas.length : 0;
+                 const duplicadas = result.duplicados ? result.duplicados.length : 0;
+                 const total = creadas + duplicadas;
+                 
+                 if (total > 0) {
+                     // Success: tareas were processed (created or duplicated)
+                     document.getElementById('wizardLoading').classList.add('d-none');
+                     
+                     // ✅ PERSIST RESULTS for Step 4
