@@ -2791,58 +2791,78 @@ def wizard_preview():
             return jsonify({"ok": False, "error": "Sin permisos"}), 403
         
         # 🎯 CORRECCIÓN: etapa_ids son IDs del CATÁLOGO, no de etapas existentes
-        from etapas_predefinidas import ETAPAS_CONSTRUCCION
         from tareas_predefinidas import TAREAS_POR_ETAPA
         
-        current_app.logger.debug(f"🔥 DEBUG WIZARD: Recibidos etapa_ids del catálogo: {etapa_ids}")
-        current_app.logger.debug(f"🔥 DEBUG WIZARD: Total etapas en catálogo: {len(ETAPAS_CONSTRUCCION)}")
-        
+        catalogo = obtener_etapas_disponibles()
+        catalogo_por_id = {str(etapa.get("id")): etapa for etapa in catalogo}
+
+        current_app.logger.debug(
+            "🔥 DEBUG WIZARD: Recibidos etapa_ids del catálogo: %s", etapa_ids
+        )
+        current_app.logger.debug(
+            "🔥 DEBUG WIZARD: Total etapas en catálogo: %s", len(catalogo)
+        )
+
         # 🎯 Construir respuesta desde el catálogo predefinido
         etapas_data = []
         
         for etapa_id in etapa_ids:
-            # Buscar la etapa en el catálogo predefinido
-            etapa_def = None
-            for etapa in ETAPAS_CONSTRUCCION:
-                if etapa.get("id") == etapa_id:
-                    etapa_def = etapa
-                    break
-            
+            etapa_def = catalogo_por_id.get(str(etapa_id))
             if not etapa_def:
-                current_app.logger.warning(f"❌ DEBUG WIZARD: Etapa con ID {etapa_id} NO encontrada en catálogo")
+                current_app.logger.warning(
+                    "❌ DEBUG WIZARD: Etapa con ID %s NO encontrada en catálogo", etapa_id
+                )
                 continue
                 
             etapa_nombre = etapa_def.get("nombre", f"Etapa {etapa_id}")
-            current_app.logger.debug(f"✅ DEBUG WIZARD: Procesando etapa del catálogo '{etapa_nombre}' (ID: {etapa_id})")
-            
+            etapa_slug = etapa_def.get("slug")
+            current_app.logger.debug(
+                "✅ DEBUG WIZARD: Procesando etapa del catálogo '%s' (ID: %s, slug: %s)",
+                etapa_nombre,
+                etapa_def.get("id"),
+                etapa_slug,
+            )
+
             # Tareas del catálogo por tipo de etapa
             tareas_catalogo = []
             current_app.logger.debug(f"🔥 DEBUG WIZARD: Claves disponibles en TAREAS_POR_ETAPA: {list(TAREAS_POR_ETAPA.keys())}")
             
             if etapa_nombre in TAREAS_POR_ETAPA:
-                current_app.logger.debug(f"✅ DEBUG WIZARD: Encontrada etapa '{etapa_nombre}' en catálogo de tareas")
+                current_app.logger.debug(
+                    "✅ DEBUG WIZARD: Encontrada etapa '%s' en catálogo de tareas", etapa_nombre
+                )
                 for idx, tarea_def in enumerate(TAREAS_POR_ETAPA[etapa_nombre]):
                     tareas_catalogo.append({
-                        "codigo": f"cat_{etapa_id}_{idx}",
+                        "codigo": f"cat_{etapa_def.get('id')}_{idx}",
                         "nombre": tarea_def.get("nombre", "Tarea sin nombre"),
                         "unidad_default": tarea_def.get("unidad", "h")
                     })
             else:
-                current_app.logger.warning(f"❌ DEBUG WIZARD: Etapa '{etapa_nombre}' NO encontrada en TAREAS_POR_ETAPA")
-            
+                current_app.logger.warning(
+                    "❌ DEBUG WIZARD: Etapa '%s' NO encontrada en TAREAS_POR_ETAPA",
+                    etapa_nombre,
+                )
+
             # Para el wizard, no incluimos tareas existentes ya que estamos creando nuevas
             tareas_existentes = []
             
             etapas_data.append({
-                "etapa_id": etapa_id,  # ID del catálogo
+                "etapa_id": etapa_def.get("id"),  # ID del catálogo
+                "etapa_slug": etapa_slug,
                 "etapa_nombre": etapa_nombre,
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
             
-            current_app.logger.debug(f"📊 DEBUG WIZARD: Etapa {etapa_nombre} - {len(tareas_catalogo)} tareas catálogo")
-        
-        current_app.logger.debug(f"🎯 DEBUG WIZARD: Respuesta final con {len(etapas_data)} etapas")
+            current_app.logger.debug(
+                "📊 DEBUG WIZARD: Etapa %s - %s tareas catálogo",
+                etapa_nombre,
+                len(tareas_catalogo),
+            )
+
+        current_app.logger.debug(
+            "🎯 DEBUG WIZARD: Respuesta final con %s etapas", len(etapas_data)
+        )
         # 🎯 Respuesta con esquema exacto según especificación del usuario
         return jsonify({
             "ok": True,
@@ -2911,37 +2931,91 @@ def wizard_create():
         
         current_app.logger.info(f"🧙‍♂️ WIZARD CREATE: Procesando {len(tareas_in)} tareas para obra {obra_id}")
         
+        catalogo_etapas = obtener_etapas_disponibles()
+        slug_to_nombre = {
+            etapa.get('slug'): etapa.get('nombre')
+            for etapa in catalogo_etapas
+            if etapa.get('slug')
+        }
+        id_to_nombre = {
+            str(etapa.get('id')): etapa.get('nombre')
+            for etapa in catalogo_etapas
+            if etapa.get('id') is not None
+        }
+        id_to_slug = {
+            str(etapa.get('id')): etapa.get('slug')
+            for etapa in catalogo_etapas
+            if etapa.get('id') is not None
+        }
+
+        def _safe_number(value):
+            if value in (None, '', 'null'):
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _safe_user_id(value):
+            if value in (None, '', 'null'):
+                return None
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
         # Use proper transaction context
         try:
             for t in tareas_in:
-                etapa_slug = t.get("etapa_slug")
-                nombre = t.get("nombre")
-                
-                if not etapa_slug or not nombre:
+                nombre = (t.get("nombre") or "").strip()
+                etapa_slug = (t.get("etapa_slug") or "").strip() or None
+                etapa_catalogo_id_raw = (
+                    t.get("etapa_id")
+                    or t.get("catalogo_id")
+                    or t.get("catalog_id")
+                )
+                etapa_nombre_payload = (t.get("etapa_nombre") or "").strip() or None
+
+                if not nombre:
+                    current_app.logger.warning(
+                        "⚠️ WIZARD: Tarea sin nombre descartada (payload: %s)", t
+                    )
                     continue
                     
-                # Mapear etapa_slug a nombre y buscar etapa_id real
-                try:
-                    from etapas_predefinidas import obtener_etapas_disponibles
-                    catalogo_etapas = obtener_etapas_disponibles()
-                    slug_to_nombre = {e['slug']: e['nombre'] for e in catalogo_etapas}
+                etapa_catalogo_id = None
+                if etapa_catalogo_id_raw not in (None, ""):
+                    etapa_catalogo_id = str(etapa_catalogo_id_raw)
+                    if not etapa_slug:
+                        etapa_slug = id_to_slug.get(etapa_catalogo_id)
+
+                etapa_nombre = None
+                if etapa_slug:
                     etapa_nombre = slug_to_nombre.get(etapa_slug)
-                    
-                    if not etapa_nombre:
-                        current_app.logger.warning(f"⚠️ WIZARD: Slug '{etapa_slug}' no encontrado en catálogo")
-                        continue
-                        
-                    etapa_real = (EtapaObra.query
-                                 .filter(EtapaObra.obra_id == obra_id)
-                                 .filter(EtapaObra.nombre == etapa_nombre)
-                                 .first())
-                except ImportError:
-                    current_app.logger.error("❌ WIZARD: No se pudo importar etapas_predefinidas")
+                if not etapa_nombre and etapa_catalogo_id:
+                    etapa_nombre = id_to_nombre.get(etapa_catalogo_id)
+                if not etapa_nombre and etapa_nombre_payload:
+                    etapa_nombre = etapa_nombre_payload
+
+                if not etapa_nombre:
+                    current_app.logger.warning(
+                        "⚠️ WIZARD: No se pudo determinar la etapa para '%s' (slug=%s, id=%s)",
+                        nombre,
+                        etapa_slug,
+                        etapa_catalogo_id,
+                    )
                     continue
+                    
+                # Buscar etapa real en la obra
+                etapa_real = (EtapaObra.query
+                             .filter(EtapaObra.obra_id == obra_id)
+                             .filter(EtapaObra.nombre == etapa_nombre)
+                             .first())
                 
                 if not etapa_real:
-                    # Si no existe la etapa, saltamos esta tarea
-                    current_app.logger.warning(f"⚠️ WIZARD: Etapa '{etapa_slug}' no encontrada en obra {obra_id}")
+                    current_app.logger.warning(
+                        "⚠️ WIZARD: Etapa '%s' no encontrada en obra %s", 
+                        etapa_nombre, obra_id
+                    )
                     continue
                     
                 etapa_id = etapa_real.id
@@ -2981,19 +3055,20 @@ def wizard_create():
                     unidad=t.get("unidad", "h"),
                     fecha_inicio_plan=fecha_inicio,
                     fecha_fin_plan=fecha_fin,
-                    horas_estimadas=t.get("horas"),
-                    cantidad_planificada=t.get("cantidad"),
-                    responsable_id=t.get("asignado_usuario_id")
+                    horas_estimadas=_safe_number(t.get("horas")),
+                    cantidad_planificada=_safe_number(t.get("cantidad")),
+                    responsable_id=_safe_user_id(t.get("asignado_usuario_id"))
                 )
                 
                 db.session.add(tarea)
                 db.session.flush()  # Para obtener el ID
                 
                 # Asignar usuario en tarea_miembros si viene asignado_usuario_id
-                if t.get("asignado_usuario_id"):
+                user_id = _safe_user_id(t.get("asignado_usuario_id"))
+                if user_id:
                     asignacion = TareaMiembro(
                         tarea_id=tarea.id,
-                        usuario_id=t["asignado_usuario_id"]
+                        usuario_id=user_id
                     )
                     db.session.add(asignacion)
                 
