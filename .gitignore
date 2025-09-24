@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Entorno / secretos
+.env
+.env.*
+*.key
+*.pem
+
+# Frontend / build
+node_modules/
+dist/
+build/
+.npm/
+
+# Replit
+.repldb
+# (dejamos .replit y replit.nix para reproducir el entorno)
+
+# Archivos pesados locales
+uploads/
+*.sqlite*
+*.db
+
+# SO
+.DS_Store
+Thumbs.db
