@@ -449,27 +449,83 @@ window.collectPaso3Payload = function() {
   const modal = document.getElementById('wizardTareasModal');
   const rows = [...modal.querySelectorAll('#wizardStep3 #tablaDatosWizard tbody tr, #paso3 #tablaDatosWizard tbody tr')];
   const obraId = Number(modal?.getAttribute('data-obra-id') || window.OBRA_ID || 0);
-  
+
+  const etapaCatalogo = [
+    ...(window.WIZARD?.preview?.etapas || []),
+    ...(window.WIZARD?.catalogo || []),
+  ];
+
+  const findEtapaInfo = (slug, catalogId) => {
+    const catalogIdStr = catalogId != null ? String(catalogId) : null;
+    return etapaCatalogo.find(etapa => {
+      if (!etapa) return false;
+      const etapaSlug = etapa.etapa_slug || etapa.slug;
+      const etapaId = etapa.etapa_id ?? etapa.id;
+      const slugMatches = slug && etapaSlug && etapaSlug === slug;
+      const idMatches = catalogIdStr && etapaId != null && String(etapaId) === catalogIdStr;
+      return slugMatches || idMatches;
+    }) || null;
+  };
+
+  const toNumberOrNull = (value) => {
+    if (value === undefined || value === null || value === '' || value === 'null') {
+      return null;
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const toIntOrNull = (value) => {
+    if (value === undefined || value === null || value === '' || value === 'null') {
+      return null;
+    }
+    const num = parseInt(value, 10);
+    return Number.isFinite(num) ? num : null;
+  };
+
   const tareas = rows.map((row, i) => {
     const getData = (name) => row.querySelector(`[name="rows[${i}][${name}]"]`)?.value || '';
     const tareaData = window.WZ_STATE.tareasSel?.[i] || {};
-    
+    const etapaInfo = findEtapaInfo(
+      tareaData.etapa_slug,
+      tareaData.etapa_catalog_id ?? tareaData.etapa_id ?? tareaData.etapa_catalog_id_raw
+    );
+
+    const etapaCatalogId = (
+      tareaData.etapa_catalog_id ??
+      tareaData.etapa_id ??
+      etapaInfo?.etapa_id ??
+      etapaInfo?.id ??
+      null
+    );
+
+    const etapaIdNumber = toNumberOrNull(etapaCatalogId);
+    const etapaSlug = tareaData.etapa_slug || etapaInfo?.etapa_slug || etapaInfo?.slug || '';
+    const etapaNombre = tareaData.etapa_nombre || etapaInfo?.etapa_nombre || etapaInfo?.nombre || '';
+    const asignadoId = toIntOrNull(getData('asignado'));
+    const unidad = getData('unidad') || 'h';
+    const horasValor = toNumberOrNull(getData('horas'));
+    const cantidadValor = toNumberOrNull(getData('cantidad'));
+
     return {
-      etapa_slug: tareaData.etapa_slug || '',  // Usar slug de la plantilla
+      etapa_slug: etapaSlug,
+      etapa_id: etapaIdNumber,
+      catalogo_id: etapaIdNumber,
+      etapa_nombre: etapaNombre,
       nombre: row.children[1]?.textContent?.trim() || '',
       fecha_inicio: getData('inicio'),
       fecha_fin: getData('fin'),
-      horas: Number(getData('horas')) || 8,
-      cantidad: Number(getData('cantidad')) || 1,
-      unidad: getData('unidad'),
-      asignado_usuario_id: getData('asignado') || null,
+      horas: horasValor == null ? 8 : horasValor,
+      cantidad: cantidadValor == null ? 1 : cantidadValor,
+      unidad,
+      asignado_usuario_id: asignadoId,
       prioridad: getData('prioridad') || 'media'
     };
   });
-  
+
   return {
     obra_id: obraId,
-    tareas: tareas.filter(t => t.etapa_slug)  // Filtrar tareas con etapa_slug válido
+    tareas: tareas.filter(t => t.etapa_slug || t.etapa_id != null)  // Filtrar tareas con información de etapa válida
   };
 };
 
@@ -492,16 +548,18 @@ window.populatePaso3 = async function() {
   // Generar filas
   const filas = window.WZ_STATE.tareasSel.map((tarea, i) => {
     const unidadesOpts = unidades.map(u => `<option value="${u}">${u}</option>`).join('');
-    
+
     // Modificación: Agregar placeholder y no pre-seleccionar usuario
     const equipoOpts = [
       '<option value="">— Seleccioná —</option>',  // Placeholder
       ...equipo.map(user => `<option value="${user.id}">${user.nombre}</option>`)
     ].join('');
 
+    const etapaLabel = tarea.etapa_nombre || tarea.etapa_slug || 'Sin etapa';
+
     return `
       <tr data-index="${i}">
-        <td class="small text-muted">${tarea.etapa_slug || 'Sin etapa'}</td>
+        <td class="small text-muted">${etapaLabel}</td>
         <td class="fw-bold">${tarea.nombre}</td>
         <td><input type="date" name="rows[${i}][inicio]" class="form-control form-control-sm"></td>
         <td><input type="date" name="rows[${i}][fin]" class="form-control form-control-sm"></td>
@@ -558,6 +616,27 @@ window.loadTareasWizard = async function(obraId, slugs) {
     });
     
     const tareas = json.tareas_catalogo || json.tareas || json.data || [];
+
+    const slugToEtapaMeta = new Map();
+    const registerEtapaMeta = (slug, meta = {}) => {
+      if (!slug) return;
+      const current = slugToEtapaMeta.get(slug) || {};
+      const catalogId = meta.etapa_id ?? meta.id;
+      slugToEtapaMeta.set(slug, {
+        id: catalogId != null ? catalogId : current.id ?? null,
+        nombre: meta.etapa_nombre || meta.nombre || current.nombre || '',
+        slug,
+      });
+    };
+
+    (window.WIZARD?.preview?.etapas || []).forEach(etapa => {
+      registerEtapaMeta(etapa?.etapa_slug || etapa?.slug, etapa);
+    });
+    (window.WIZARD?.catalogo || []).forEach(etapa => {
+      registerEtapaMeta(etapa?.slug, etapa);
+    });
+
+    const escapeAttr = (value) => String(value ?? '').replace(/"/g, '&quot;');
     
     console.log(`🔍 WIZARD: Datos recibidos del backend:`, { 
       json, 
@@ -573,25 +652,33 @@ window.loadTareasWizard = async function(obraId, slugs) {
              <h6 class="text-primary">📋 Plantillas disponibles (${tareas.length}):</h6>
              <div class="row">${
                tareas.map((t, index) => {
-                 console.log(`🔍 WIZARD: Generando checkbox ${index}:`, { 
-                   tarea: t, 
-                   id: t.id, 
-                   nombre: t.nombre, 
-                   etapaSlug: t.etapa_slug 
+                 const etapaSlug = t.etapa_slug || '';
+                 const etapaMeta = slugToEtapaMeta.get(etapaSlug) || {};
+                 const etapaCatalogIdAttr = etapaMeta.id != null ? etapaMeta.id : '';
+                 const etapaNombreAttr = etapaMeta.nombre || '';
+                 console.log(`🔍 WIZARD: Generando checkbox ${index}:`, {
+                   tarea: t,
+                   id: t.id,
+                   nombre: t.nombre,
+                   etapaSlug,
+                   etapaCatalogId: etapaCatalogIdAttr,
+                   etapaNombre: etapaNombreAttr,
                  });
-                 
+
                  return `
                    <div class="col-md-6 mb-2">
                      <div class="form-check">
-                       <input class="form-check-input tarea-checkbox" type="checkbox" 
-                              name="tasks[]"
-                              data-id="${t.id || ''}" 
-                              data-nombre="${t.nombre || ''}"
-                              data-etapa="${t.etapa_slug || ''}"
-                              data-descripcion="${t.descripcion || ''}"
-                              data-horas="${t.horas || '8'}"
-                              value="${t.id || ''}"
-                              id="tarea-${t.id || index}">
+                        <input class="form-check-input tarea-checkbox" type="checkbox"
+                               name="tasks[]"
+                               data-id="${t.id || ''}"
+                               data-nombre="${t.nombre || ''}"
+                               data-etapa="${t.etapa_slug || ''}"
+                               data-etapa-id="${escapeAttr(etapaCatalogIdAttr)}"
+                               data-etapa-nombre="${escapeAttr(etapaNombreAttr)}"
+                               data-descripcion="${t.descripcion || ''}"
+                               data-horas="${t.horas || '8'}"
+                               value="${t.id || ''}"
+                               id="tarea-${t.id || index}">
                        <label class="form-check-label" for="tarea-${t.id || index}">
                          <strong>${t.nombre || 'Tarea sin nombre'}</strong>
                          ${t.descripcion ? `<br><small class="text-muted">${t.descripcion}</small>` : ''}
