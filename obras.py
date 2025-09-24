@@ -2,9 +2,10 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 import requests
 from app import db
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
 from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto, TareaAvanceFoto
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
