@@ -1231,12 +1231,156 @@ def completar_tarea(tarea_id):
         return jsonify(ok=False, error="Error interno"), 500
 
 
+def _serialize_tarea_detalle(tarea):
+    """Construye el payload detallado de una tarea para API y vistas"""
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    def _format_date(dt):
+        return dt.strftime('%d/%m/%Y') if dt else None
+
+    def _format_datetime(dt):
+        return dt.isoformat() if dt else None
+
+    def _to_float(value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    avances = sorted(
+        list(tarea.avances),
+        key=lambda a: a.created_at or datetime.min,
+        reverse=True,
+    )
+
+    aprobados = [a for a in avances if a.status == 'aprobado']
+
+    fechas_reales = [a.fecha for a in aprobados if a.fecha]
+    if not fechas_reales:
+        fechas_reales = [a.fecha for a in avances if a.fecha]
+
+    fecha_inicio_real = min(fechas_reales) if fechas_reales else None
+    fecha_fin_real = max(fechas_reales) if fechas_reales else None
+    duracion_real_dias = None
+    if fecha_inicio_real and fecha_fin_real:
+        try:
+            duracion_real_dias = (fecha_fin_real - fecha_inicio_real).days + 1
+        except Exception:
+            duracion_real_dias = None
+
+    cantidad_plan = _to_float(tarea.cantidad_planificada)
+    cantidad_ejecutada = sum(
+        _to_float(a.cantidad) if a.cantidad is not None else _to_float(a.cantidad_ingresada)
+        for a in aprobados
+    ) or 0.0
+
+    cantidad_restante = None
+    if cantidad_plan is not None:
+        cantidad_restante = max(cantidad_plan - cantidad_ejecutada, 0.0)
+
+    status_labels = {
+        'aprobado': 'Aprobado',
+        'pendiente': 'Pendiente',
+        'rechazado': 'Rechazado',
+    }
+
+    avances_data = []
+    for avance in avances:
+        avances_data.append({
+            'id': avance.id,
+            'fecha': _format_date(avance.fecha) or _format_date(avance.created_at.date() if avance.created_at else None),
+            'fecha_iso': avance.fecha.isoformat() if avance.fecha else None,
+            'creado_en': _format_datetime(avance.created_at),
+            'cantidad': _to_float(avance.cantidad if avance.cantidad is not None else avance.cantidad_ingresada),
+            'unidad': avance.unidad or tarea.unidad,
+            'horas': _to_float(avance.horas or avance.horas_trabajadas),
+            'notas': avance.notas or '',
+            'status': avance.status or 'pendiente',
+            'status_label': status_labels.get(avance.status, (avance.status or 'Registrado').title()),
+            'usuario': getattr(avance.usuario, 'nombre_completo', None),
+            'fotos': [
+                {
+                    'id': foto.id,
+                    'url': url_for('serve_media', relpath=foto.file_path),
+                    'created_at': _format_datetime(foto.created_at),
+                }
+                for foto in sorted(
+                    list(avance.fotos),
+                    key=lambda f: f.created_at or avance.created_at or datetime.min,
+                    reverse=True,
+                )
+            ]
+        })
+
+    fotos_data = []
+    total_fotos = 0
+    for avance in avances:
+        for foto in sorted(
+            list(avance.fotos),
+            key=lambda f: f.created_at or avance.created_at or datetime.min,
+            reverse=True,
+        ):
+            total_fotos += 1
+            fotos_data.append({
+                'id': foto.id,
+                'avance_id': avance.id,
+                'url': url_for('serve_media', relpath=foto.file_path),
+                'thumbnail_url': url_for('serve_media', relpath=foto.file_path),
+                'status': avance.status,
+                'status_label': status_labels.get(avance.status, (avance.status or 'Registrado').title()),
+                'fecha': _format_date(avance.fecha) or _format_date(foto.created_at.date() if foto.created_at else None),
+                'fecha_iso': avance.fecha.isoformat() if avance.fecha else None,
+                'capturado_en': _format_datetime(foto.created_at),
+                'registrado_en': _format_datetime(avance.created_at),
+                'subido_por': getattr(avance.usuario, 'nombre_completo', None),
+                'cantidad': _to_float(avance.cantidad if avance.cantidad is not None else avance.cantidad_ingresada),
+                'unidad': avance.unidad or tarea.unidad,
+                'notas': avance.notas or '',
+            })
+
+    payload = {
+        'ok': True,
+        'tarea': {
+            'id': tarea.id,
+            'nombre': tarea.nombre,
+            'descripcion': tarea.descripcion,
+            'estado': tarea.estado,
+            'etapa': tarea.etapa.nombre if tarea.etapa else None,
+            'obra': obra.nombre if obra else None,
+            'obra_id': obra.id if obra else None,
+            'unidad': tarea.unidad,
+            'cantidad_planificada': cantidad_plan,
+            'cantidad_ejecutada': cantidad_ejecutada,
+            'cantidad_restante': cantidad_restante,
+            'fecha_inicio_plan': _format_datetime(tarea.fecha_inicio_plan),
+            'fecha_fin_plan': _format_datetime(tarea.fecha_fin_plan),
+            'fecha_inicio_plan_label': _format_date(tarea.fecha_inicio_plan),
+            'fecha_fin_plan_label': _format_date(tarea.fecha_fin_plan),
+            'fecha_inicio_real': _format_datetime(fecha_inicio_real),
+            'fecha_fin_real': _format_datetime(fecha_fin_real),
+            'fecha_inicio_real_label': _format_date(fecha_inicio_real),
+            'fecha_fin_real_label': _format_date(fecha_fin_real),
+            'duracion_real_dias': duracion_real_dias,
+            'total_avances': len(avances),
+            'total_fotos': total_fotos,
+            'responsable': getattr(tarea.responsable, 'nombre_completo', None),
+            'ultimo_registro': _format_datetime(avances[0].created_at) if avances else None,
+        },
+        'avances': avances_data,
+        'fotos': fotos_data,
+    }
+    return payload
+
+
 @obras_bp.route('/mis-tareas')
-@login_required  
+@login_required
 def mis_tareas():
     """Página que lista las tareas asignadas al usuario actual (operarios)"""
     from flask import current_app
-    
+    from collections import OrderedDict
+
     q = (
         db.session.query(TareaEtapa)
         .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
@@ -1247,9 +1391,114 @@ def mis_tareas():
         .order_by(Obra.nombre, EtapaObra.orden, TareaEtapa.id.desc())
     )
     tareas = q.all()
-    current_app.logger.info("mis_tareas user=%s unidades=%s",
-                            current_user.id, [(t.id, t.unidad, t.rendimiento) for t in tareas])
-    return render_template('obras/mis_tareas.html', tareas=tareas)
+    current_app.logger.info(
+        "mis_tareas user=%s unidades=%s",
+        current_user.id,
+        [(t.id, t.unidad, t.rendimiento) for t in tareas],
+    )
+
+    estados = OrderedDict([
+        ('pendiente', {'label': 'Pendientes', 'icon': 'far fa-circle'}),
+        ('en_curso', {'label': 'En curso', 'icon': 'fas fa-play-circle'}),
+        ('completada', {'label': 'Finalizadas', 'icon': 'fas fa-check-circle'}),
+    ])
+
+    tareas_por_estado = {clave: [] for clave in estados.keys()}
+    for tarea in tareas:
+        estado_normalizado = (tarea.estado or 'pendiente').lower()
+        if estado_normalizado not in tareas_por_estado:
+            estado_normalizado = 'pendiente'
+        tareas_por_estado[estado_normalizado].append(tarea)
+
+    resumen_estados = {clave: len(valor) for clave, valor in tareas_por_estado.items()}
+
+    return render_template(
+        'obras/mis_tareas.html',
+        tareas=tareas,
+        tareas_por_estado=tareas_por_estado,
+        estados=estados,
+        resumen_estados=resumen_estados,
+    )
+
+
+@obras_bp.route('/mis-tareas/<int:tarea_id>')
+@login_required
+def mis_tareas_detalle(tarea_id):
+    """Detalle ampliado para operarios de una tarea asignada"""
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    if not obra or obra.organizacion_id != current_user.organizacion_id:
+        flash('No tienes permisos para ver esta tarea.', 'danger')
+        return redirect(url_for('obras.mis_tareas'))
+
+    es_responsable = tarea.responsable_id == current_user.id
+    es_miembro = any(mi.user_id == current_user.id for mi in tarea.miembros)
+
+    if not (es_responsable or es_miembro or can_manage_obra(obra)):
+        flash('No tienes permisos para ver esta tarea.', 'danger')
+        return redirect(url_for('obras.mis_tareas'))
+
+    payload = _serialize_tarea_detalle(tarea)
+
+    puede_actualizar_estado = es_responsable or es_miembro
+
+    return render_template(
+        'obras/mis_tareas_detalle.html',
+        tarea=tarea,
+        obra=obra,
+        detalle=payload['tarea'],
+        avances=payload['avances'],
+        puede_actualizar_estado=puede_actualizar_estado,
+    )
+
+
+@obras_bp.route('/api/mis-tareas/<int:tarea_id>/estado', methods=['POST'])
+@login_required
+def api_mis_tareas_estado(tarea_id):
+    """Permite a un operario actualizar el estado de una tarea asignada"""
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    if not obra or obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    es_responsable = tarea.responsable_id == current_user.id
+    es_miembro = any(mi.user_id == current_user.id for mi in tarea.miembros)
+
+    if not (es_responsable or es_miembro or can_manage_obra(obra)):
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    data = request.get_json(silent=True) or {}
+    nuevo_estado = (data.get('estado') or '').lower()
+    estados_validos = {'pendiente', 'en_curso', 'completada'}
+
+    if nuevo_estado not in estados_validos:
+        return jsonify({'ok': False, 'error': 'Estado no válido'}), 400
+
+    try:
+        cambio_realizado = tarea.estado != nuevo_estado
+        tarea.estado = nuevo_estado
+
+        ahora = datetime.utcnow()
+        if nuevo_estado == 'en_curso' and tarea.fecha_inicio_real is None:
+            tarea.fecha_inicio_real = ahora
+        if nuevo_estado == 'completada':
+            if tarea.fecha_inicio_real is None:
+                tarea.fecha_inicio_real = ahora
+            tarea.fecha_fin_real = ahora
+
+        db.session.commit()
+        payload = _serialize_tarea_detalle(tarea)
+        return jsonify({
+            'ok': True,
+            'cambio': cambio_realizado,
+            'tarea': payload['tarea'],
+        })
+    except Exception as exc:
+        current_app.logger.exception('Error actualizando estado de tarea %s: %s', tarea_id, exc)
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': 'No se pudo actualizar la tarea'}), 500
 
 
 @obras_bp.route('/api/tareas/<int:tarea_id>/avances-pendientes')
@@ -1346,112 +1595,7 @@ def api_tarea_galeria(tarea_id):
     if not puede_ver:
         return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
 
-    def _format_date(dt):
-        return dt.strftime('%d/%m/%Y') if dt else None
-
-    def _format_datetime(dt):
-        return dt.isoformat() if dt else None
-
-    def _to_float(value):
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
-    avances = sorted(
-        list(tarea.avances),
-        key=lambda a: a.created_at or datetime.min,
-        reverse=True,
-    )
-
-    aprobados = [a for a in avances if a.status == 'aprobado']
-
-    fechas_reales = [a.fecha for a in aprobados if a.fecha]
-    if not fechas_reales:
-        fechas_reales = [a.fecha for a in avances if a.fecha]
-
-    fecha_inicio_real = min(fechas_reales) if fechas_reales else None
-    fecha_fin_real = max(fechas_reales) if fechas_reales else None
-    duracion_real_dias = None
-    if fecha_inicio_real and fecha_fin_real:
-        try:
-            duracion_real_dias = (fecha_fin_real - fecha_inicio_real).days + 1
-        except Exception:
-            duracion_real_dias = None
-
-    cantidad_plan = _to_float(tarea.cantidad_planificada)
-    cantidad_ejecutada = sum(
-        _to_float(a.cantidad) if a.cantidad is not None else _to_float(a.cantidad_ingresada)
-        for a in aprobados
-    )
-    cantidad_ejecutada = cantidad_ejecutada or 0.0
-    cantidad_restante = None
-    if cantidad_plan is not None:
-        cantidad_restante = max(cantidad_plan - cantidad_ejecutada, 0.0)
-
-    status_labels = {
-        'aprobado': 'Aprobado',
-        'pendiente': 'Pendiente',
-        'rechazado': 'Rechazado',
-    }
-
-    fotos_data = []
-    total_fotos = 0
-    for avance in avances:
-        fotos_ordenadas = sorted(
-            list(avance.fotos),
-            key=lambda f: f.created_at or avance.created_at or datetime.min,
-            reverse=True,
-        )
-        for foto in fotos_ordenadas:
-            total_fotos += 1
-            fotos_data.append({
-                'id': foto.id,
-                'avance_id': avance.id,
-                'url': url_for('serve_media', relpath=foto.file_path),
-                'thumbnail_url': url_for('serve_media', relpath=foto.file_path),
-                'status': avance.status,
-                'status_label': status_labels.get(avance.status, (avance.status or 'Registrado').title()),
-                'fecha': _format_date(avance.fecha) or _format_date(foto.created_at.date() if foto.created_at else None),
-                'fecha_iso': avance.fecha.isoformat() if avance.fecha else None,
-                'capturado_en': _format_datetime(foto.created_at),
-                'registrado_en': _format_datetime(avance.created_at),
-                'subido_por': getattr(avance.usuario, 'nombre_completo', None),
-                'cantidad': _to_float(avance.cantidad if avance.cantidad is not None else avance.cantidad_ingresada),
-                'unidad': avance.unidad or tarea.unidad,
-                'notas': avance.notas or '',
-            })
-
-    galeria = {
-        'ok': True,
-        'tarea': {
-            'id': tarea.id,
-            'nombre': tarea.nombre,
-            'etapa': tarea.etapa.nombre if tarea.etapa else None,
-            'unidad': tarea.unidad,
-            'cantidad_planificada': cantidad_plan,
-            'cantidad_ejecutada': cantidad_ejecutada,
-            'cantidad_restante': cantidad_restante,
-            'fecha_inicio_plan': _format_datetime(tarea.fecha_inicio_plan),
-            'fecha_fin_plan': _format_datetime(tarea.fecha_fin_plan),
-            'fecha_inicio_plan_label': _format_date(tarea.fecha_inicio_plan),
-            'fecha_fin_plan_label': _format_date(tarea.fecha_fin_plan),
-            'fecha_inicio_real': _format_datetime(fecha_inicio_real),
-            'fecha_fin_real': _format_datetime(fecha_fin_real),
-            'fecha_inicio_real_label': _format_date(fecha_inicio_real),
-            'fecha_fin_real_label': _format_date(fecha_fin_real),
-            'duracion_real_dias': duracion_real_dias,
-            'total_avances': len(avances),
-            'total_fotos': total_fotos,
-            'responsable': getattr(tarea.responsable, 'nombre_completo', None),
-            'ultimo_registro': _format_datetime(avances[0].created_at) if avances else None,
-        },
-        'fotos': fotos_data,
-    }
-
-    return jsonify(galeria)
+    return jsonify(_serialize_tarea_detalle(tarea))
 
 
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])

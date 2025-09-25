@@ -8,9 +8,19 @@
                 <div class="flex-grow-1">
                     <div class="d-flex justify-content-between align-items-start">
                         <div class="flex-grow-1">
-                            <div class="d-flex align-items-center mb-1">
-                                <i class="fas fa-tasks me-2 text-primary"></i>
-                                <strong class="text-dark">{{ tarea.nombre }}</strong>
+                            <div class="d-flex align-items-center justify-content-between mb-1 gap-2 flex-wrap">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-tasks me-2 text-primary"></i>
+                                    <strong class="text-dark">{{ tarea.nombre }}</strong>
+                                </div>
+                                {% if can_manage %}
+                                <button type="button"
+                                        class="btn btn-link btn-sm p-0 text-decoration-none"
+                                        onclick="abrirGaleriaCompleta({{ tarea.id }})"
+                                        title="Ver detalle de avances">
+                                    <i class="fas fa-info-circle me-1"></i>Detalle
+                                </button>
+                                {% endif %}
                             </div>
                             
                             <!-- 🎯 Chips informativos: Inicio → Fin · Horas Est. · Cantidad + Unidad · Asignado · Prioridad -->
