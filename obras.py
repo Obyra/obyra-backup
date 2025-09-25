@@ -2434,13 +2434,13 @@ def wizard_crear_tareas(obra_id):
                     # Verificar si ya está asignado
                     asignacion_existente = TareaMiembro.query.filter_by(
                         tarea_id=tarea.id,
-                        usuario_id=responsable_id
+                        user_id=responsable_id
                     ).first()
-                    
+
                     if not asignacion_existente:
                         asignacion = TareaMiembro(
                             tarea_id=tarea.id,
-                            usuario_id=responsable_id,
+                            user_id=responsable_id,
                             cuota_objetivo=None  # Opcional por ahora
                         )
                         db.session.add(asignacion)
@@ -3406,7 +3406,7 @@ def wizard_create():
                 if asignado_usuario_id:
                     asignacion = TareaMiembro(
                         tarea_id=tarea.id,
-                        usuario_id=asignado_usuario_id,
+                        user_id=asignado_usuario_id,
                     )
                     db.session.add(asignacion)
 
