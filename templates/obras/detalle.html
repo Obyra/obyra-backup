@@ -163,8 +163,12 @@
                                             <div class="stage-actions d-flex align-items-center gap-2">
                                                 <!-- Checkbox fijo para selección múltiple de ETAPAS -->
                                                 {% if can_manage %}
-                                                <label class="form-check m-0">
-                                                    <input type="checkbox" class="form-check-input stage-check" value="{{ etapa.id }}">
+                                                <label class="form-check m-0" for="stageCheck{{ etapa.id }}">
+                                                    <input type="checkbox"
+                                                           class="form-check-input stage-check"
+                                                           id="stageCheck{{ etapa.id }}"
+                                                           name="etapasSeleccionadas[]"
+                                                           value="{{ etapa.id }}">
                                                 </label>
                                                 {% endif %}
                                                 
@@ -2603,6 +2607,7 @@ async function confirmarRechazo() {
 
 console.log('🔧 HOTFIX: Traditional form submission enabled (no AJAX interference)');
 
+<<<<<<< HEAD
 // Upgraded Wizard per user specification  
 class WizardController {
     constructor() {
@@ -4407,8 +4412,16 @@ function deseleccionarTodasLasEtapas() {
 
 const PREF = '/obras';
 window.obraId = window.obraId ?? +location.pathname.split('/').pop();
+=======
+// Upgraded Wizard per user specification
+// La lógica del wizard vive en static/js/wizard.js; este bloque legacy fue
+// eliminado para evitar conflictos de doble inicialización.
+>>>>>>> codex/analizar-el-wizard-de-obra
 
 // ---------- helpers ----------
+const PREF = '/obras';
+window.obraId = window.obraId ?? Number(document.getElementById('wizardTareasModal')?.dataset.obraId || location.pathname.split('/').pop());
+
 async function fetchJSON(url, opts){
   const r = await fetch(url, opts);
   const txt = await r.text();
@@ -4455,6 +4468,7 @@ async function refreshEtapasContainer() {
     let etapasHTML = '';
     if (response.has_etapas) {
       response.etapas.forEach(etapa => {
+        const checkboxId = `stageCheck${etapa.id}`;
         etapasHTML += `
           <div class="border-bottom py-2">
             <div class="d-flex justify-content-between align-items-start">
@@ -4491,8 +4505,8 @@ async function refreshEtapasContainer() {
               <div class="text-end">
                 <div class="stage-actions d-flex align-items-center gap-2">
                   ${response.can_manage ? `
-                  <label class="form-check m-0">
-                    <input type="checkbox" class="form-check-input stage-check" value="${etapa.id}">
+                  <label class="form-check m-0" for="${checkboxId}">
+                    <input type="checkbox" class="form-check-input stage-check" id="${checkboxId}" name="etapasSeleccionadas[]" value="${etapa.id}">
                   </label>
                   ` : ''}
                   <div class="dropdown">
@@ -4558,6 +4572,22 @@ async function refreshEtapasContainer() {
   }
 }
 
+if (!window.__ARIA_FOCUS_GUARD__) {
+  window.__ARIA_FOCUS_GUARD__ = true;
+  document.addEventListener('hide.bs.modal', (event) => {
+    const active = document.activeElement;
+    const modalEl = event?.target;
+    if (
+      active
+      && modalEl instanceof HTMLElement
+      && modalEl.contains(active)
+      && typeof active.blur === 'function'
+    ) {
+      active.blur();
+    }
+  }, true);
+}
+
 // Re-bind events after DOM refresh
 function rebindEtapasEvents() {
   // Re-bind stage checkbox events
@@ -4611,106 +4641,6 @@ function rebindEtapasEvents() {
   console.log('✅ Eventos de etapas re-vinculados');
 }
 
-// ---------- core ----------
-let paso1Busy=false, debounceTimer=null;
-
-function getCatalogoIds(){
-  // 🎯 USE SET: Migrado a usar Set global como fuente única de verdad
-  console.log('⚠️ DEPRECATED: getCatalogoIds() - usar getSelectedEtapaIds() en su lugar');
-  return getSelectedEtapaIds().map(id => Number(id)).filter(Boolean);
-}
-
-async function applyCatalogAndAdvance(selectedIds) {
-  // 🎯 PASO 1: Crear etapas desde catálogo
-  const res = await fetch(`${PREF}/api/obras/${window.obraId}/etapas/bulk_from_catalog`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ catalogo_ids: selectedIds })
-  });
-  const data = await res.json().catch(() => ({}));
-
-  // tomar ids del servidor o caer a lo seleccionado
-  const etapaIds = Array.isArray(data?.etapa_ids) && data.etapa_ids.length
-    ? data.etapa_ids.map(String)
-    : selectedIds.map(String);
-
-  // 🎯 PASO 2: Llamar preview para obtener tareas para Paso 2
-  try {
-    const previewRes = await fetch(`${PREF}/api/wizard-tareas/preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ obra_id: window.obraId, etapa_ids: etapaIds.map(Number) })
-    });
-    const previewData = await previewRes.json().catch(() => ({}));
-    
-    // 🎯 Guardar preview para Paso 2
-    window.WIZARD = window.WIZARD || {};
-    window.WIZARD.preview = previewData;
-    window.WIZARD.etapa_ids = etapaIds.map(Number);
-    
-    console.log('✅ WIZARD: Preview data loaded:', previewData);
-  } catch (previewError) {
-    console.warn('⚠️ WIZARD: Preview API failed, Paso 2 might be empty:', previewError);
-  }
-
-  // persistir para el Paso 2 y devolver
-  window.WZ_STATE = window.WZ_STATE || {};
-  window.WZ_STATE.etapasApplied = new Set(etapaIds);
-  console.log('✅ applyCatalogAndAdvance returning etapaIds:', etapaIds);
-  return etapaIds;
-}
-
-// ---------- bindings ----------
-// 🎯 DISABLED: Auto-aplicar removed to prevent re-render conflicts with Set state
-// POST individual al tildar causaba re-render y pérdida de estado de checkboxes
-// Now using manual button click with Set-based selection
-
-// 🎯 BOTÓN LIMPIO: Handler exacto según especificación
-const old = document.getElementById('btnAgregarEtapasSel');
-old.replaceWith(old.cloneNode(true));
-const btn = document.getElementById('btnAgregarEtapasSel');
-
-btn.addEventListener('click', async (e) => {
-  e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-  const ids = [...window.WZ_STATE.etapasSel];
-  console.log('ADD ids ->', ids);
-  if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
-  try {
-    const etapaIds = await window.applyCatalogAndAdvance?.(ids);
-    await window.gotoPaso?.(2, { fromPaso: 1, etapaIds });
-  } catch (err) {
-    console.error('applyCatalogAndAdvance error', err);
-  }
-}, { once: true });
-
-// 🎯 HANDLER PRINCIPAL: wizardBtnSiguiente para Paso 1 → Paso 2
-const wizardNext = document.getElementById('wizardBtnSiguiente');
-if (wizardNext) {
-  wizardNext.replaceWith(wizardNext.cloneNode(true));
-  const btnNext = document.getElementById('wizardBtnSiguiente');
-  
-  btnNext.addEventListener('click', async (e) => {
-    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-    
-    // 🎯 Paso 1: Aplicar etapas y avanzar
-    if (window.WZ_STATE?.currentStep === 1) {
-      const ids = [...window.WZ_STATE.etapasSel];
-      console.log('🎯 WIZARD: Paso 1 → 2, NEXT ids ->', ids);
-      if (!ids.length) { alert('Debe seleccionar al menos una etapa'); return; }
-      try {
-        const etapaIds = await window.applyCatalogAndAdvance?.(ids);
-        await window.gotoPaso?.(2, { fromPaso: 1, etapaIds });
-      } catch (err) {
-        console.error('applyCatalogAndAdvance error', err);
-      }
-    } else {
-      // 🎯 Otros pasos: navegación normal
-      window.nextStep?.();
-    }
-  });
-}
-
-// ELIMINADO: Handler duplicado - ahora usa WizardTareas.nextStep()
 
 // 🔥 Copiar obra ID del botón al modal (recomendado para compatibilidad futura)
 document.addEventListener('click', e => {
@@ -4731,15 +4661,13 @@ document.addEventListener('click', e => {
 // 🎯 Función para abrir galería completa de fotos de avances
 async function abrirGaleriaCompleta(tareaId) {
     try {
-        // Crear modal dinámico para galería de fotos
         const modalId = 'modalGaleriaFotos';
         let modal = document.getElementById(modalId);
-        
+
         if (!modal) {
-            // Crear modal si no existe
             const modalHTML = `
                 <div class="modal fade" id="${modalId}" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title">
@@ -4748,7 +4676,7 @@ async function abrirGaleriaCompleta(tareaId) {
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
                             <div class="modal-body" id="galeria-fotos-body">
-                                <div class="text-center">
+                                <div class="text-center py-4">
                                     <div class="spinner-border" role="status">
                                         <span class="visually-hidden">Cargando...</span>
                                     </div>
@@ -4761,83 +4689,124 @@ async function abrirGaleriaCompleta(tareaId) {
             document.body.insertAdjacentHTML('beforeend', modalHTML);
             modal = document.getElementById(modalId);
         }
-        
-        // Mostrar modal con loading
+
         const modalInstance = new bootstrap.Modal(modal);
         modalInstance.show();
-        
-        // Usar endpoint existente de avances pendientes para obtener fotos
-        const response = await fetch(`/obras/api/tareas/${tareaId}/avances-pendientes`);
-        const data = await response.json();
-        
+
         const galeriaBody = document.getElementById('galeria-fotos-body');
-        
-        if (data.ok && data.avances && data.avances.length > 0) {
-            // Recopilar todas las fotos de todos los avances
-            const todasLasFotos = [];
-            data.avances.forEach(avance => {
-                if (avance.fotos && avance.fotos.length > 0) {
-                    avance.fotos.forEach(foto => {
-                        todasLasFotos.push({
-                            ...foto,
-                            fecha: avance.fecha,
-                            usuario_nombre: avance.usuario_nombre,
-                            cantidad: avance.cantidad,
-                            notas: avance.notas
-                        });
-                    });
-                }
-            });
-            
-            if (todasLasFotos.length > 0) {
-                let fotosHTML = '<div class="row g-2">';
-                
-                todasLasFotos.forEach((foto, index) => {
-                    fotosHTML += `
-                        <div class="col-md-4 col-sm-6">
-                            <div class="card">
-                                <img src="/static/${foto.file_path}" 
-                                     class="card-img-top" 
-                                     style="height: 200px; object-fit: cover; cursor: pointer;"
-                                     onclick="ampliarFoto('/static/${foto.file_path}')"
-                                     alt="Avance ${index + 1}">
-                                <div class="card-footer p-2">
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar me-1"></i>
-                                        ${new Date(foto.fecha).toLocaleDateString('es-AR')}
-                                        ${foto.usuario_nombre ? `<br><i class="fas fa-user me-1"></i>${foto.usuario_nombre}` : ''}
-                                        ${foto.cantidad ? `<br><i class="fas fa-calculator me-1"></i>${foto.cantidad} unidades` : ''}
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                fotosHTML += '</div>';
-                galeriaBody.innerHTML = fotosHTML;
-            } else {
-                galeriaBody.innerHTML = `
-                    <div class="text-center text-muted py-4">
-                        <i class="fas fa-image fa-3x mb-3"></i>
-                        <p>No hay fotos de avances para esta tarea</p>
-                    </div>
-                `;
-            }
-        } else {
+        galeriaBody.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+            </div>
+        `;
+
+        const response = await fetch(`/obras/api/tareas/${tareaId}/galeria`);
+        const data = await response.json();
+
+        const formatNumber = (value) => {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+            return Number(value).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+        };
+
+        const formatDate = (value) => {
+            if (!value) return '—';
+            try { return new Date(value).toLocaleDateString('es-AR'); } catch { return '—'; }
+        };
+
+        const formatDateTime = (value) => {
+            if (!value) return '—';
+            try { return new Date(value).toLocaleString('es-AR', { hour12: false }); } catch { return '—'; }
+        };
+
+        if (!data.ok) {
             galeriaBody.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-image fa-3x mb-3"></i>
-                    <p>No hay avances registrados para esta tarea</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${data.error || 'No se pudo cargar la galería de avances.'}
                 </div>
             `;
+            return;
         }
-        
+
+        const tarea = data.tarea || {};
+        const fotos = Array.isArray(data.fotos) ? data.fotos : [];
+
+        const resumenHTML = `
+            <div class="border rounded bg-light p-3 mb-3">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <h6 class="mb-1">${tarea.nombre || 'Tarea'}</h6>
+                        <small class="text-muted">Etapa: <strong>${tarea.etapa || '—'}</strong></small>
+                    </div>
+                    ${tarea.responsable ? `<span class="badge bg-primary"><i class="fas fa-user-tie me-1"></i>${tarea.responsable}</span>` : ''}
+                </div>
+                <div class="row g-2 mt-2 small">
+                    <div class="col-md-3"><strong>Planificado:</strong> ${formatDate(tarea.fecha_inicio_plan)} → ${formatDate(tarea.fecha_fin_plan)}</div>
+                    <div class="col-md-3"><strong>Real:</strong> ${formatDate(tarea.fecha_inicio_real)} → ${formatDate(tarea.fecha_fin_real)}</div>
+                    <div class="col-md-3"><strong>Duración real:</strong> ${tarea.duracion_real_dias != null ? `${tarea.duracion_real_dias} días` : '—'}</div>
+                    <div class="col-md-3"><strong>Avance aprobado:</strong> ${formatNumber(tarea.cantidad_ejecutada)} / ${formatNumber(tarea.cantidad_planificada)} ${tarea.unidad || ''}</div>
+                    <div class="col-md-3"><strong>Pendiente:</strong> ${tarea.cantidad_restante != null ? formatNumber(tarea.cantidad_restante) : '—'} ${tarea.unidad || ''}</div>
+                    <div class="col-md-3"><strong>Registros:</strong> ${tarea.total_avances ?? 0}</div>
+                    <div class="col-md-3"><strong>Fotos:</strong> ${tarea.total_fotos ?? 0}</div>
+                    <div class="col-md-3"><strong>Último registro:</strong> ${formatDateTime(tarea.ultimo_registro)}</div>
+                </div>
+            </div>
+        `;
+
+        if (fotos.length === 0) {
+            galeriaBody.innerHTML = resumenHTML + `
+                <div class="text-center text-muted py-5">
+                    <i class="fas fa-image-slash fa-2x mb-2"></i>
+                    <p class="mb-0">Todavía no hay fotos cargadas para esta tarea.</p>
+                </div>
+            `;
+            return;
+        }
+
+        let fotosHTML = resumenHTML + '<div class="row g-3">';
+        fotos.forEach((foto) => {
+            const status = (foto.status || '').toLowerCase();
+            const badgeClass = status === 'aprobado'
+                ? 'bg-success'
+                : (status === 'pendiente' ? 'bg-warning text-dark' : 'bg-secondary');
+
+            fotosHTML += `
+                <div class="col-md-4 col-sm-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="ratio ratio-4x3">
+                            <img src="${foto.thumbnail_url || foto.url}"
+                                 class="object-fit-cover w-100 h-100 rounded-top"
+                                 style="cursor: pointer;"
+                                 alt="Foto de avance"
+                                 onclick="ampliarFoto('${foto.url}')">
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge ${badgeClass} text-uppercase">${foto.status_label || foto.status || 'Registrado'}</span>
+                                <small class="text-muted">${foto.fecha || formatDate(foto.fecha_iso)}</small>
+                            </div>
+                            <div class="small text-muted d-flex flex-column gap-1">
+                                ${foto.subido_por ? `<span><i class="fas fa-user me-1"></i>${foto.subido_por}</span>` : ''}
+                                ${foto.cantidad != null ? `<span><i class="fas fa-ruler-combined me-1"></i>${formatNumber(foto.cantidad)} ${foto.unidad || ''}</span>` : ''}
+                                ${foto.notas ? `<span><i class="fas fa-sticky-note me-1"></i>${foto.notas}</span>` : ''}
+                                ${foto.registrado_en ? `<span><i class="fas fa-clock me-1"></i>${formatDateTime(foto.registrado_en)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        fotosHTML += '</div>';
+
+        galeriaBody.innerHTML = fotosHTML;
     } catch (error) {
-        console.error('Error al cargar galería:', error);
-        document.getElementById('galeria-fotos-body').innerHTML = `
+        console.error('Error al abrir la galería de fotos:', error);
+        const galeriaBody = document.getElementById('galeria-fotos-body');
+        galeriaBody.innerHTML = `
             <div class="text-center text-danger py-4">
-                <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
                 <p>Error al cargar las fotos</p>
             </div>
         `;
@@ -4876,52 +4845,6 @@ function ampliarFoto(imageSrc) {
 // 🎯 USE GLOBAL SET FUNCTION: getSelectedEtapaIds is now defined in wizard.js using Set
 
 // ELIMINADO: Handler duplicado global - ahora usa WizardTareas.nextStep()
-
-// Initialize wizard when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('wizardTareasModal')) {
-        console.log('🧙‍♂️ WIZARD: Inicializando WizardController simplificado');
-        
-        // ✅ NUEVA IMPLEMENTACIÓN: WizardController centralizado
-        window.wizardController = new WizardController();
-        
-        // Mantener compatibilidad con código legacy
-        window.wizardTareas = window.wizardController;
-        
-        // 🎯 Estado unificado del wizard - single source of truth
-        window.WIZARD = window.WIZARD || {
-            etapa_ids: [],
-            _last_catalog_ids: [],
-            preview: null,
-            currentStep: 1
-        };
-        console.log('🔧 WIZARD: Estado inicializado', window.WIZARD);
-        
-        // 🎯 INICIALIZAR SET GLOBAL: Evitar recrear al abrir modal
-        window.WZ_STATE = window.WZ_STATE || {};
-        window.WZ_STATE.etapasSel = window.WZ_STATE.etapasSel || new Set();
-        window.WZ_STATE.currentStep = 1; // 🎯 FIX: Inicializar paso actual
-        console.log('🔧 WZ_STATE: Set etapasSel inicializado', window.WZ_STATE.etapasSel);
-        
-        // 🎯 FIX: Reset al paso 1 cuando se abre el modal
-        const modal = document.getElementById('wizardTareasModal');
-        modal.addEventListener('show.bs.modal', () => {
-            console.log('📋 WIZARD: Modal opening - resetting to step 1');
-            window.WZ_STATE.currentStep = 1;
-            window.gotoPaso?.(1, { skipValidation: true });
-        });
-        
-        // 🎯 ALIAS GLOBAL: Exponer funciones para uso en re-renders
-        window.updateEtapasBadge = updateEtapasBadge;
-        window.bindCatalogEvents = bindCatalogEvents;
-        
-        // ✅ ELIMINADO: Instancia legacy ya reemplazada por WizardController arriba
-        
-        // 🎯 Exponer función de navegación global 
-        window.__wizard = window.wizardTareas;
-        console.log('🌐 WIZARD: Navegación global expuesta');
-    }
-});
 
 </script>
 {% endblock %}

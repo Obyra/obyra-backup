@@ -1322,6 +1322,138 @@ def obtener_avances_pendientes(tarea_id):
         return jsonify(ok=False, error="Error interno"), 500
 
 
+@obras_bp.route('/api/tareas/<int:tarea_id>/galeria')
+@login_required
+def api_tarea_galeria(tarea_id):
+    """Galería consolidada de fotos y métricas de una tarea"""
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    if not obra or obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    puede_ver = False
+    if can_manage_obra(obra):
+        puede_ver = True
+    elif tarea.responsable_id == current_user.id:
+        puede_ver = True
+    else:
+        for miembro in tarea.miembros:
+            if miembro.user_id == current_user.id:
+                puede_ver = True
+                break
+
+    if not puede_ver:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    def _format_date(dt):
+        return dt.strftime('%d/%m/%Y') if dt else None
+
+    def _format_datetime(dt):
+        return dt.isoformat() if dt else None
+
+    def _to_float(value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    avances = sorted(
+        list(tarea.avances),
+        key=lambda a: a.created_at or datetime.min,
+        reverse=True,
+    )
+
+    aprobados = [a for a in avances if a.status == 'aprobado']
+
+    fechas_reales = [a.fecha for a in aprobados if a.fecha]
+    if not fechas_reales:
+        fechas_reales = [a.fecha for a in avances if a.fecha]
+
+    fecha_inicio_real = min(fechas_reales) if fechas_reales else None
+    fecha_fin_real = max(fechas_reales) if fechas_reales else None
+    duracion_real_dias = None
+    if fecha_inicio_real and fecha_fin_real:
+        try:
+            duracion_real_dias = (fecha_fin_real - fecha_inicio_real).days + 1
+        except Exception:
+            duracion_real_dias = None
+
+    cantidad_plan = _to_float(tarea.cantidad_planificada)
+    cantidad_ejecutada = sum(
+        _to_float(a.cantidad) if a.cantidad is not None else _to_float(a.cantidad_ingresada)
+        for a in aprobados
+    )
+    cantidad_ejecutada = cantidad_ejecutada or 0.0
+    cantidad_restante = None
+    if cantidad_plan is not None:
+        cantidad_restante = max(cantidad_plan - cantidad_ejecutada, 0.0)
+
+    status_labels = {
+        'aprobado': 'Aprobado',
+        'pendiente': 'Pendiente',
+        'rechazado': 'Rechazado',
+    }
+
+    fotos_data = []
+    total_fotos = 0
+    for avance in avances:
+        fotos_ordenadas = sorted(
+            list(avance.fotos),
+            key=lambda f: f.created_at or avance.created_at or datetime.min,
+            reverse=True,
+        )
+        for foto in fotos_ordenadas:
+            total_fotos += 1
+            fotos_data.append({
+                'id': foto.id,
+                'avance_id': avance.id,
+                'url': url_for('serve_media', relpath=foto.file_path),
+                'thumbnail_url': url_for('serve_media', relpath=foto.file_path),
+                'status': avance.status,
+                'status_label': status_labels.get(avance.status, (avance.status or 'Registrado').title()),
+                'fecha': _format_date(avance.fecha) or _format_date(foto.created_at.date() if foto.created_at else None),
+                'fecha_iso': avance.fecha.isoformat() if avance.fecha else None,
+                'capturado_en': _format_datetime(foto.created_at),
+                'registrado_en': _format_datetime(avance.created_at),
+                'subido_por': getattr(avance.usuario, 'nombre_completo', None),
+                'cantidad': _to_float(avance.cantidad if avance.cantidad is not None else avance.cantidad_ingresada),
+                'unidad': avance.unidad or tarea.unidad,
+                'notas': avance.notas or '',
+            })
+
+    galeria = {
+        'ok': True,
+        'tarea': {
+            'id': tarea.id,
+            'nombre': tarea.nombre,
+            'etapa': tarea.etapa.nombre if tarea.etapa else None,
+            'unidad': tarea.unidad,
+            'cantidad_planificada': cantidad_plan,
+            'cantidad_ejecutada': cantidad_ejecutada,
+            'cantidad_restante': cantidad_restante,
+            'fecha_inicio_plan': _format_datetime(tarea.fecha_inicio_plan),
+            'fecha_fin_plan': _format_datetime(tarea.fecha_fin_plan),
+            'fecha_inicio_plan_label': _format_date(tarea.fecha_inicio_plan),
+            'fecha_fin_plan_label': _format_date(tarea.fecha_fin_plan),
+            'fecha_inicio_real': _format_datetime(fecha_inicio_real),
+            'fecha_fin_real': _format_datetime(fecha_fin_real),
+            'fecha_inicio_real_label': _format_date(fecha_inicio_real),
+            'fecha_fin_real_label': _format_date(fecha_fin_real),
+            'duracion_real_dias': duracion_real_dias,
+            'total_avances': len(avances),
+            'total_fotos': total_fotos,
+            'responsable': getattr(tarea.responsable, 'nombre_completo', None),
+            'ultimo_registro': _format_datetime(avances[0].created_at) if avances else None,
+        },
+        'fotos': fotos_data,
+    }
+
+    return jsonify(galeria)
+
+
 @obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
 @login_required
 def agregar_tarea(id):
@@ -2302,13 +2434,13 @@ def wizard_crear_tareas(obra_id):
                     # Verificar si ya está asignado
                     asignacion_existente = TareaMiembro.query.filter_by(
                         tarea_id=tarea.id,
-                        usuario_id=responsable_id
+                        user_id=responsable_id
                     ).first()
-                    
+
                     if not asignacion_existente:
                         asignacion = TareaMiembro(
                             tarea_id=tarea.id,
-                            usuario_id=responsable_id,
+                            user_id=responsable_id,
                             cuota_objetivo=None  # Opcional por ahora
                         )
                         db.session.add(asignacion)
@@ -2791,8 +2923,11 @@ def wizard_preview():
             return jsonify({"ok": False, "error": "Sin permisos"}), 403
         
         # 🎯 CORRECCIÓN: etapa_ids son IDs del CATÁLOGO, no de etapas existentes
+<<<<<<< HEAD
         from tareas_predefinidas import TAREAS_POR_ETAPA
         
+=======
+>>>>>>> codex/analizar-el-wizard-de-obra
         catalogo = obtener_etapas_disponibles()
         catalogo_por_id = {str(etapa.get("id")): etapa for etapa in catalogo}
 
@@ -2805,7 +2940,7 @@ def wizard_preview():
 
         # 🎯 Construir respuesta desde el catálogo predefinido
         etapas_data = []
-        
+
         for etapa_id in etapa_ids:
             etapa_def = catalogo_por_id.get(str(etapa_id))
             if not etapa_def:
@@ -2813,7 +2948,7 @@ def wizard_preview():
                     "❌ DEBUG WIZARD: Etapa con ID %s NO encontrada en catálogo", etapa_id
                 )
                 continue
-                
+
             etapa_nombre = etapa_def.get("nombre", f"Etapa {etapa_id}")
             etapa_slug = etapa_def.get("slug")
             current_app.logger.debug(
@@ -2825,7 +2960,10 @@ def wizard_preview():
 
             # Tareas del catálogo por tipo de etapa
             tareas_catalogo = []
+<<<<<<< HEAD
             
+=======
+>>>>>>> codex/analizar-el-wizard-de-obra
             if etapa_nombre in TAREAS_POR_ETAPA:
                 current_app.logger.debug(
                     "✅ DEBUG WIZARD: Encontrada etapa '%s' en catálogo de tareas", etapa_nombre
@@ -2844,7 +2982,7 @@ def wizard_preview():
 
             # Para el wizard, no incluimos tareas existentes ya que estamos creando nuevas
             tareas_existentes = []
-            
+
             etapas_data.append({
                 "etapa_id": etapa_def.get("id"),  # ID del catálogo
                 "etapa_slug": etapa_slug,
@@ -2852,7 +2990,11 @@ def wizard_preview():
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> codex/analizar-el-wizard-de-obra
             current_app.logger.debug(
                 "📊 DEBUG WIZARD: Etapa %s - %s tareas catálogo",
                 etapa_nombre,
@@ -2946,6 +3088,209 @@ def wizard_create():
             for etapa in catalogo_etapas
             if etapa.get('id') is not None
         }
+<<<<<<< HEAD
+=======
+        nombre_to_catalogo = {
+            (etapa.get('nombre') or '').strip().lower(): etapa
+            for etapa in catalogo_etapas
+            if etapa.get('nombre')
+        }
+
+        # Cache existing etapas in obra to allow automatic creation/matching
+        existing_etapas = (
+            EtapaObra.query
+            .filter(EtapaObra.obra_id == obra_id)
+            .all()
+        )
+
+        etapas_cache = {}
+
+        def _slugify_nombre(nombre):
+            if not nombre:
+                return None
+            import re
+            import unicodedata
+
+            texto = unicodedata.normalize('NFKD', nombre)
+            texto = texto.encode('ascii', 'ignore').decode('ascii')
+            texto = re.sub(r'[^a-zA-Z0-9]+', '-', texto)
+            texto = texto.strip('-').lower()
+            return texto or None
+
+        def _register_etapa_cache(etapa_obj, catalog_meta=None, catalog_id=None, slug=None):
+            if not etapa_obj:
+                return
+
+            nombre_norm = (etapa_obj.nombre or '').strip().lower()
+            etapas_cache.setdefault(('nombre', nombre_norm), etapa_obj)
+            etapas_cache.setdefault(('db_id', str(etapa_obj.id)), etapa_obj)
+
+            meta = catalog_meta or {}
+            slug_meta = slug or meta.get('slug') or None
+            catalog_meta_id = catalog_id or meta.get('id')
+
+            if slug_meta:
+                etapas_cache.setdefault(('slug', slug_meta), etapa_obj)
+                slug_to_nombre.setdefault(slug_meta, etapa_obj.nombre)
+
+            if catalog_meta_id is not None:
+                etapas_cache.setdefault(('catalog', str(catalog_meta_id)), etapa_obj)
+                id_to_nombre.setdefault(str(catalog_meta_id), etapa_obj.nombre)
+                if slug_meta:
+                    id_to_slug.setdefault(str(catalog_meta_id), slug_meta)
+
+        for etapa_existente in existing_etapas:
+            catalog_meta = nombre_to_catalogo.get((etapa_existente.nombre or '').strip().lower())
+            _register_etapa_cache(etapa_existente, catalog_meta=catalog_meta)
+
+        max_orden = max((et.orden or 0) for et in existing_etapas) if existing_etapas else 0
+
+        def _find_catalog_meta(slug=None, catalog_id=None, nombre=None):
+            slug_norm = (slug or '').strip() or None
+            catalog_id_norm = None
+            if catalog_id not in (None, ''):
+                catalog_id_norm = str(catalog_id)
+            nombre_norm = (nombre or '').strip().lower() or None
+
+            if slug_norm and slug_norm in slug_to_nombre:
+                meta = next((e for e in catalogo_etapas if e.get('slug') == slug_norm), None)
+                if meta:
+                    return meta
+
+            if catalog_id_norm and catalog_id_norm in id_to_nombre:
+                meta = next((e for e in catalogo_etapas if str(e.get('id')) == catalog_id_norm), None)
+                if meta:
+                    return meta
+
+            if nombre_norm and nombre_norm in nombre_to_catalogo:
+                return nombre_to_catalogo[nombre_norm]
+
+            return None
+
+        def _ensure_etapa(etapa_slug, etapa_nombre, etapa_catalog_id):
+            nonlocal max_orden
+
+            slug_norm = (etapa_slug or '').strip() or None
+            nombre_norm = (etapa_nombre or '').strip() or None
+            catalog_norm = None
+            if etapa_catalog_id not in (None, ''):
+                try:
+                    catalog_norm = str(int(etapa_catalog_id))
+                except (TypeError, ValueError):
+                    catalog_norm = str(etapa_catalog_id)
+
+            # Cache lookups
+            for key, value in (
+                ('slug', slug_norm),
+                ('catalog', catalog_norm),
+                ('nombre', nombre_norm.lower() if nombre_norm else None),
+            ):
+                if value:
+                    etapa_cached = etapas_cache.get((key, value))
+                    if etapa_cached:
+                        catalog_meta = _find_catalog_meta(slug=slug_norm, catalog_id=catalog_norm, nombre=etapa_cached.nombre)
+                        resolved_slug = slug_norm or (catalog_meta.get('slug') if catalog_meta else None)
+                        resolved_catalog_id = catalog_norm or (str(catalog_meta.get('id')) if catalog_meta and catalog_meta.get('id') is not None else None)
+                        resolved_nombre = etapa_cached.nombre
+                        return etapa_cached, resolved_slug, resolved_nombre, resolved_catalog_id
+
+            consulta = EtapaObra.query.filter(EtapaObra.obra_id == obra_id)
+            etapa_real = None
+            if nombre_norm:
+                etapa_real = (
+                    consulta
+                    .filter(func.lower(EtapaObra.nombre) == nombre_norm.lower())
+                    .first()
+                )
+
+            if not etapa_real and slug_norm:
+                pattern = f"%{slug_norm.replace('-', '%')}%"
+                etapa_real = (
+                    consulta
+                    .filter(EtapaObra.nombre.ilike(pattern))
+                    .first()
+                )
+
+            if not etapa_real and catalog_norm:
+                catalog_meta = _find_catalog_meta(slug=slug_norm, catalog_id=catalog_norm, nombre=nombre_norm)
+                if catalog_meta:
+                    etapa_real = (
+                        consulta
+                        .filter(func.lower(EtapaObra.nombre) == catalog_meta.get('nombre', '').strip().lower())
+                        .first()
+                    )
+
+            if etapa_real:
+                catalog_meta = _find_catalog_meta(slug=slug_norm, catalog_id=catalog_norm, nombre=etapa_real.nombre)
+                _register_etapa_cache(etapa_real, catalog_meta=catalog_meta, catalog_id=catalog_norm, slug=slug_norm)
+                resolved_slug = slug_norm or (catalog_meta.get('slug') if catalog_meta else None)
+                resolved_catalog_id = catalog_norm or (str(catalog_meta.get('id')) if catalog_meta and catalog_meta.get('id') is not None else None)
+                resolved_nombre = etapa_real.nombre
+                return etapa_real, resolved_slug, resolved_nombre, resolved_catalog_id
+
+            catalog_meta = _find_catalog_meta(slug=slug_norm, catalog_id=catalog_norm, nombre=nombre_norm)
+            if catalog_meta:
+                sugerido_orden = catalog_meta.get('orden') if isinstance(catalog_meta.get('orden'), int) else None
+                if sugerido_orden and sugerido_orden > max_orden:
+                    orden_nuevo = sugerido_orden
+                else:
+                    max_orden += 10
+                    orden_nuevo = max_orden
+
+                etapa_real = EtapaObra(
+                    obra_id=obra_id,
+                    nombre=catalog_meta.get('nombre') or (nombre_norm or 'Etapa sin nombre'),
+                    descripcion=catalog_meta.get('descripcion') or '',
+                    orden=orden_nuevo,
+                    estado='planificacion'
+                )
+                db.session.add(etapa_real)
+                db.session.flush()
+                max_orden = max(max_orden, orden_nuevo or 0)
+
+                resolved_slug = catalog_meta.get('slug') or slug_norm or _slugify_nombre(nombre_norm)
+                resolved_catalog_id = str(catalog_meta.get('id')) if catalog_meta.get('id') is not None else catalog_norm
+                resolved_nombre = etapa_real.nombre
+
+                _register_etapa_cache(etapa_real, catalog_meta=catalog_meta, catalog_id=resolved_catalog_id, slug=resolved_slug)
+
+                current_app.logger.info(
+                    "✨ WIZARD: Etapa '%s' creada automáticamente (ID:%s, slug=%s)",
+                    resolved_nombre,
+                    etapa_real.id,
+                    resolved_slug,
+                )
+                return etapa_real, resolved_slug, resolved_nombre, resolved_catalog_id
+
+            if nombre_norm:
+                max_orden += 10
+                etapa_real = EtapaObra(
+                    obra_id=obra_id,
+                    nombre=nombre_norm,
+                    descripcion='Etapa creada automáticamente via wizard',
+                    orden=max_orden,
+                    estado='planificacion'
+                )
+                db.session.add(etapa_real)
+                db.session.flush()
+
+                resolved_slug = slug_norm or _slugify_nombre(nombre_norm)
+                resolved_catalog_id = catalog_norm or str(etapa_real.id)
+                resolved_nombre = etapa_real.nombre
+
+                _register_etapa_cache(etapa_real, catalog_meta=None, catalog_id=resolved_catalog_id, slug=resolved_slug)
+                if resolved_slug:
+                    slug_to_nombre.setdefault(resolved_slug, resolved_nombre)
+
+                current_app.logger.info(
+                    "✨ WIZARD: Etapa '%s' creada sin catálogo (ID:%s)",
+                    resolved_nombre,
+                    etapa_real.id,
+                )
+                return etapa_real, resolved_slug, resolved_nombre, resolved_catalog_id
+
+            return None, None, None, None
+>>>>>>> codex/analizar-el-wizard-de-obra
 
         def _safe_number(value):
             if value in (None, '', 'null'):
@@ -2980,7 +3325,11 @@ def wizard_create():
                         "⚠️ WIZARD: Tarea sin nombre descartada (payload: %s)", t
                     )
                     continue
+<<<<<<< HEAD
                     
+=======
+
+>>>>>>> codex/analizar-el-wizard-de-obra
                 etapa_catalogo_id = None
                 if etapa_catalogo_id_raw not in (None, ""):
                     etapa_catalogo_id = str(etapa_catalogo_id_raw)
@@ -2995,6 +3344,7 @@ def wizard_create():
                 if not etapa_nombre and etapa_nombre_payload:
                     etapa_nombre = etapa_nombre_payload
 
+<<<<<<< HEAD
                 if not etapa_nombre:
                     current_app.logger.warning(
                         "⚠️ WIZARD: No se pudo determinar la etapa para '%s' (slug=%s, id=%s)",
@@ -3014,25 +3364,53 @@ def wizard_create():
                     current_app.logger.warning(
                         "⚠️ WIZARD: Etapa '%s' no encontrada en obra %s", 
                         etapa_nombre, obra_id
+=======
+                etapa_real, etapa_slug_resolved, etapa_nombre_resolved, etapa_catalogo_id_resolved = _ensure_etapa(
+                    etapa_slug,
+                    etapa_nombre,
+                    etapa_catalogo_id,
+                )
+
+                if not etapa_real:
+                    current_app.logger.warning(
+                        "⚠️ WIZARD: No se pudo determinar/crear la etapa para '%s' (slug=%s, id=%s)",
+                        nombre,
+                        etapa_slug,
+                        etapa_catalogo_id_raw,
+>>>>>>> codex/analizar-el-wizard-de-obra
                     )
                     continue
-                    
+
+                etapa_slug = etapa_slug_resolved or etapa_slug
+                etapa_nombre = etapa_nombre_resolved or etapa_nombre or etapa_nombre_payload
+                etapa_catalogo_id = etapa_catalogo_id_resolved or etapa_catalogo_id or etapa_catalogo_id_raw
                 etapa_id = etapa_real.id
-                    
+
                 # Verificar si ya existe (idempotencia)
-                exists = (TareaEtapa.query
-                         .filter_by(etapa_id=etapa_id, nombre=nombre)
-                         .first())
-                
+                exists = (
+                    TareaEtapa.query
+                    .filter_by(etapa_id=etapa_id, nombre=nombre)
+                    .first()
+                )
+
                 if exists:
-                    duplicados.append({"etapa_id": etapa_id, "nombre": nombre})
-                    current_app.logger.info(f"📋 WIZARD: Tarea duplicada '{nombre}' en etapa {etapa_id}")
+                    duplicados.append({
+                        "etapa_id": etapa_id,
+                        "etapa_slug": etapa_slug,
+                        "etapa": etapa_nombre,
+                        "nombre": nombre,
+                    })
+                    current_app.logger.info(
+                        "📋 WIZARD: Tarea duplicada '%s' en etapa %s",
+                        nombre,
+                        etapa_id,
+                    )
                     continue
-                
+
                 # Parsear fechas
                 fecha_inicio = None
                 fecha_fin = None
-                
+
                 if t.get("fecha_inicio"):
                     try:
                         fecha_inicio = datetime.strptime(t["fecha_inicio"], '%Y-%m-%d').date()
@@ -3044,35 +3422,63 @@ def wizard_create():
                         fecha_fin = datetime.strptime(t["fecha_fin"], '%Y-%m-%d').date()
                     except ValueError:
                         pass
-                
+
+                horas_estimadas = _safe_number(t.get("horas"))
+                cantidad_planificada = _safe_number(t.get("cantidad"))
+                asignado_usuario_id = _safe_user_id(t.get("asignado_usuario_id"))
+
                 # Crear tarea
                 tarea = TareaEtapa(
                     etapa_id=etapa_id,
                     nombre=nombre,
                     descripcion=f"Creada via wizard masivo",
                     estado='pendiente',
-                    unidad=t.get("unidad", "h"),
+                    unidad=(t.get("unidad") or "h"),
                     fecha_inicio_plan=fecha_inicio,
                     fecha_fin_plan=fecha_fin,
+<<<<<<< HEAD
                     horas_estimadas=_safe_number(t.get("horas")),
                     cantidad_planificada=_safe_number(t.get("cantidad")),
                     responsable_id=_safe_user_id(t.get("asignado_usuario_id"))
+=======
+                    horas_estimadas=horas_estimadas,
+                    cantidad_planificada=cantidad_planificada,
+                    responsable_id=asignado_usuario_id,
+>>>>>>> codex/analizar-el-wizard-de-obra
                 )
-                
+
                 db.session.add(tarea)
                 db.session.flush()  # Para obtener el ID
-                
+
                 # Asignar usuario en tarea_miembros si viene asignado_usuario_id
+<<<<<<< HEAD
                 user_id = _safe_user_id(t.get("asignado_usuario_id"))
                 if user_id:
                     asignacion = TareaMiembro(
                         tarea_id=tarea.id,
                         usuario_id=user_id
+=======
+                if asignado_usuario_id:
+                    asignacion = TareaMiembro(
+                        tarea_id=tarea.id,
+                        user_id=asignado_usuario_id,
+>>>>>>> codex/analizar-el-wizard-de-obra
                     )
                     db.session.add(asignacion)
-                
-                creadas.append({"id": tarea.id, "nombre": tarea.nombre})
-                current_app.logger.info(f"✨ WIZARD: Tarea creada '{nombre}' ID:{tarea.id}")
+
+                creadas.append({
+                    "id": tarea.id,
+                    "nombre": tarea.nombre,
+                    "etapa_id": etapa_id,
+                    "etapa_slug": etapa_slug,
+                    "etapa": etapa_nombre,
+                })
+                current_app.logger.info(
+                    "✨ WIZARD: Tarea creada '%s' ID:%s (etapa=%s)",
+                    nombre,
+                    tarea.id,
+                    etapa_nombre,
+                )
             
             # Confirmar transacción
             db.session.commit()

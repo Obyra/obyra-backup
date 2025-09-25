@@ -30,4 +30,15 @@ uploads/
 # SO
 .DS_Store
 Thumbs.db
+<<<<<<< HEAD
 attached_assets/
+=======
+
+# Dev artifacts
+attached_assets/
+instance/media/
+*.png
+*.jpg
+*.jpeg
+*.webp
+>>>>>>> codex/analizar-el-wizard-de-obra
