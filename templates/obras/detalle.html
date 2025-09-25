@@ -4658,6 +4658,16 @@ document.addEventListener('click', e => {
 
 // 🎯 Funciones legacy de mensajes removidas - errores vienen del JSON API
 
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // 🎯 Función para abrir galería completa de fotos de avances
 async function abrirGaleriaCompleta(tareaId) {
     try {
@@ -4732,22 +4742,23 @@ async function abrirGaleriaCompleta(tareaId) {
 
         const tarea = data.tarea || {};
         const fotos = Array.isArray(data.fotos) ? data.fotos : [];
+        const avances = Array.isArray(data.avances) ? data.avances : [];
 
         const resumenHTML = `
             <div class="border rounded bg-light p-3 mb-3">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                     <div>
-                        <h6 class="mb-1">${tarea.nombre || 'Tarea'}</h6>
-                        <small class="text-muted">Etapa: <strong>${tarea.etapa || '—'}</strong></small>
+                        <h6 class="mb-1">${escapeHtml(tarea.nombre || 'Tarea')}</h6>
+                        <small class="text-muted">Etapa: <strong>${escapeHtml(tarea.etapa || '—')}</strong></small>
                     </div>
-                    ${tarea.responsable ? `<span class="badge bg-primary"><i class="fas fa-user-tie me-1"></i>${tarea.responsable}</span>` : ''}
+                    ${tarea.responsable ? `<span class="badge bg-primary"><i class="fas fa-user-tie me-1"></i>${escapeHtml(tarea.responsable)}</span>` : ''}
                 </div>
                 <div class="row g-2 mt-2 small">
                     <div class="col-md-3"><strong>Planificado:</strong> ${formatDate(tarea.fecha_inicio_plan)} → ${formatDate(tarea.fecha_fin_plan)}</div>
                     <div class="col-md-3"><strong>Real:</strong> ${formatDate(tarea.fecha_inicio_real)} → ${formatDate(tarea.fecha_fin_real)}</div>
                     <div class="col-md-3"><strong>Duración real:</strong> ${tarea.duracion_real_dias != null ? `${tarea.duracion_real_dias} días` : '—'}</div>
-                    <div class="col-md-3"><strong>Avance aprobado:</strong> ${formatNumber(tarea.cantidad_ejecutada)} / ${formatNumber(tarea.cantidad_planificada)} ${tarea.unidad || ''}</div>
-                    <div class="col-md-3"><strong>Pendiente:</strong> ${tarea.cantidad_restante != null ? formatNumber(tarea.cantidad_restante) : '—'} ${tarea.unidad || ''}</div>
+                    <div class="col-md-3"><strong>Avance aprobado:</strong> ${formatNumber(tarea.cantidad_ejecutada)} / ${formatNumber(tarea.cantidad_planificada)} ${escapeHtml(tarea.unidad || '')}</div>
+                    <div class="col-md-3"><strong>Pendiente:</strong> ${tarea.cantidad_restante != null ? formatNumber(tarea.cantidad_restante) : '—'} ${escapeHtml(tarea.unidad || '')}</div>
                     <div class="col-md-3"><strong>Registros:</strong> ${tarea.total_avances ?? 0}</div>
                     <div class="col-md-3"><strong>Fotos:</strong> ${tarea.total_fotos ?? 0}</div>
                     <div class="col-md-3"><strong>Último registro:</strong> ${formatDateTime(tarea.ultimo_registro)}</div>
@@ -4755,52 +4766,137 @@ async function abrirGaleriaCompleta(tareaId) {
             </div>
         `;
 
+        const avancesHTML = avances.length ? `
+            <div class="mb-4">
+                <h6 class="mb-3"><i class="fas fa-list-check me-2 text-primary"></i>Avances registrados</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Fecha</th>
+                                <th scope="col">Cantidad</th>
+                                <th scope="col">Notas</th>
+                                <th scope="col">Estado</th>
+                                <th scope="col" class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${avances.map((avance) => {
+                                const cantidad = avance.cantidad != null ? `${Number(avance.cantidad).toFixed(2)} ${escapeHtml(avance.unidad || tarea.unidad || '')}` : '—';
+                                const horas = avance.horas != null ? `<div class="text-muted small">${Number(avance.horas).toFixed(2)} h</div>` : '';
+                                const notas = avance.notas ? escapeHtml(avance.notas) : '<span class="text-muted">—</span>';
+                                const status = (avance.status || 'pendiente').toLowerCase();
+                                const statusBadge = status === 'aprobado'
+                                    ? '<span class="badge bg-success">Aprobado</span>'
+                                    : status === 'rechazado'
+                                        ? '<span class="badge bg-danger">Rechazado</span>'
+                                        : '<span class="badge bg-warning text-dark">Pendiente</span>';
+                                const confirmButton = status === 'pendiente'
+                                    ? `<button class="btn btn-success btn-sm" data-accion="aprobar-avance" data-avance-id="${avance.id}" data-tarea-id="${tarea.id}">
+                                            <i class="fas fa-check me-1"></i>Confirmar
+                                       </button>`
+                                    : '';
+                                return `
+                                    <tr>
+                                        <td>${escapeHtml(avance.fecha || '')}</td>
+                                        <td>${cantidad}${horas}</td>
+                                        <td>${notas}</td>
+                                        <td>${statusBadge}</td>
+                                        <td class="text-end">${confirmButton}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        ` : `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-1"></i>No hay avances registrados para esta tarea todavía.
+            </div>
+        `;
+
         if (fotos.length === 0) {
-            galeriaBody.innerHTML = resumenHTML + `
+            galeriaBody.innerHTML = resumenHTML + avancesHTML + `
                 <div class="text-center text-muted py-5">
                     <i class="fas fa-image-slash fa-2x mb-2"></i>
                     <p class="mb-0">Todavía no hay fotos cargadas para esta tarea.</p>
                 </div>
             `;
-            return;
-        }
+        } else {
+            let fotosHTML = resumenHTML + avancesHTML + '<div class="row g-3">';
+            fotos.forEach((foto) => {
+                const status = (foto.status || '').toLowerCase();
+                const badgeClass = status === 'aprobado'
+                    ? 'bg-success'
+                    : (status === 'pendiente' ? 'bg-warning text-dark' : 'bg-secondary');
 
-        let fotosHTML = resumenHTML + '<div class="row g-3">';
-        fotos.forEach((foto) => {
-            const status = (foto.status || '').toLowerCase();
-            const badgeClass = status === 'aprobado'
-                ? 'bg-success'
-                : (status === 'pendiente' ? 'bg-warning text-dark' : 'bg-secondary');
-
-            fotosHTML += `
-                <div class="col-md-4 col-sm-6">
-                    <div class="card h-100 shadow-sm">
-                        <div class="ratio ratio-4x3">
-                            <img src="${foto.thumbnail_url || foto.url}"
-                                 class="object-fit-cover w-100 h-100 rounded-top"
-                                 style="cursor: pointer;"
-                                 alt="Foto de avance"
-                                 onclick="ampliarFoto('${foto.url}')">
-                        </div>
-                        <div class="card-body p-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="badge ${badgeClass} text-uppercase">${foto.status_label || foto.status || 'Registrado'}</span>
-                                <small class="text-muted">${foto.fecha || formatDate(foto.fecha_iso)}</small>
+                fotosHTML += `
+                    <div class="col-md-4 col-sm-6">
+                        <div class="card h-100 shadow-sm">
+                            <div class="ratio ratio-4x3">
+                                <img src="${foto.thumbnail_url || foto.url}"
+                                     class="object-fit-cover w-100 h-100 rounded-top"
+                                     style="cursor: pointer;"
+                                     alt="Foto de avance"
+                                     onclick="ampliarFoto('${foto.url}')">
                             </div>
-                            <div class="small text-muted d-flex flex-column gap-1">
-                                ${foto.subido_por ? `<span><i class="fas fa-user me-1"></i>${foto.subido_por}</span>` : ''}
-                                ${foto.cantidad != null ? `<span><i class="fas fa-ruler-combined me-1"></i>${formatNumber(foto.cantidad)} ${foto.unidad || ''}</span>` : ''}
-                                ${foto.notas ? `<span><i class="fas fa-sticky-note me-1"></i>${foto.notas}</span>` : ''}
-                                ${foto.registrado_en ? `<span><i class="fas fa-clock me-1"></i>${formatDateTime(foto.registrado_en)}</span>` : ''}
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="badge ${badgeClass} text-uppercase">${escapeHtml(foto.status_label || foto.status || 'Registrado')}</span>
+                                    <small class="text-muted">${escapeHtml(foto.fecha || formatDate(foto.fecha_iso))}</small>
+                                </div>
+                                <div class="small text-muted d-flex flex-column gap-1">
+                                    ${foto.subido_por ? `<span><i class="fas fa-user me-1"></i>${escapeHtml(foto.subido_por)}</span>` : ''}
+                                    ${foto.cantidad != null ? `<span><i class="fas fa-ruler-combined me-1"></i>${formatNumber(foto.cantidad)} ${escapeHtml(foto.unidad || '')}</span>` : ''}
+                                    ${foto.notas ? `<span><i class="fas fa-sticky-note me-1"></i>${escapeHtml(foto.notas)}</span>` : ''}
+                                    ${foto.registrado_en ? `<span><i class="fas fa-clock me-1"></i>${formatDateTime(foto.registrado_en)}</span>` : ''}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-        });
-        fotosHTML += '</div>';
+                `;
+            });
+            fotosHTML += '</div>';
+            galeriaBody.innerHTML = fotosHTML;
+        }
 
-        galeriaBody.innerHTML = fotosHTML;
+        galeriaBody.querySelectorAll('[data-accion="aprobar-avance"]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const avanceId = btn.getAttribute('data-avance-id');
+                const tareaIdLocal = btn.getAttribute('data-tarea-id');
+                if (!avanceId) return;
+                const original = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Confirmando';
+                try {
+                    const response = await fetch(`/obras/avances/${avanceId}/aprobar`, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    const result = await response.json();
+                    if (!result.ok) {
+                        throw new Error(result.error || 'No se pudo confirmar el avance');
+                    }
+                    if (window.showToastMessage) {
+                        window.showToastMessage('Avance confirmado correctamente', 'success');
+                    }
+                    await abrirGaleriaCompleta(tareaIdLocal || tareaId);
+                } catch (error) {
+                    console.error('Error confirmando avance', error);
+                    if (window.showToastMessage) {
+                        window.showToastMessage(error.message || 'Error al confirmar el avance', 'danger');
+                    } else {
+                        alert(error.message || 'Error al confirmar el avance');
+                    }
+                } finally {
+                    btn.innerHTML = original;
+                    btn.disabled = false;
+                }
+            });
+        });
     } catch (error) {
         console.error('Error al abrir la galería de fotos:', error);
         const galeriaBody = document.getElementById('galeria-fotos-body');
