@@ -2765,6 +2765,22 @@ async function refreshEtapasContainer() {
   }
 }
 
+if (!window.__ARIA_FOCUS_GUARD__) {
+  window.__ARIA_FOCUS_GUARD__ = true;
+  document.addEventListener('hide.bs.modal', (event) => {
+    const active = document.activeElement;
+    const modalEl = event?.target;
+    if (
+      active
+      && modalEl instanceof HTMLElement
+      && modalEl.contains(active)
+      && typeof active.blur === 'function'
+    ) {
+      active.blur();
+    }
+  }, true);
+}
+
 // Re-bind events after DOM refresh
 function rebindEtapasEvents() {
   // Re-bind stage checkbox events

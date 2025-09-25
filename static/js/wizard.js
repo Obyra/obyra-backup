@@ -29,6 +29,8 @@ function initWizard() {
 
   const stepCount = stepPanes.length || 4;
 
+  let lastTriggerElement = null;
+
   const state = {
     obraId,
     step: 1,
@@ -60,8 +62,20 @@ function initWizard() {
     return String(value).trim() || null;
   }
 
+  function slugify(text) {
+    if (!text) {
+      return '';
+    }
+    return String(text)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
   function resolveEtapaMeta({ slug, catalogId, nombre }) {
-    const slugKey = (slug || '').trim();
+    const slugKey = (slug || '').trim() || slugify(nombre || '');
     const catalogKey = normalizeCatalogId(catalogId);
     const nombreKey = (nombre || '').trim().toLowerCase();
 
@@ -96,13 +110,17 @@ function initWizard() {
     }
 
     if (slugKey || catalogKey || nombre) {
+      const fallbackSlug = slugify(nombre);
       const metaObj = {
         id: catalogKey,
-        slug: slugKey || null,
+        slug: slugKey || fallbackSlug || null,
         nombre: nombre || '',
       };
       if (slugKey && !metaBySlug.has(slugKey)) {
         metaBySlug.set(slugKey, metaObj);
+      }
+      if (!slugKey && fallbackSlug && !metaBySlug.has(fallbackSlug)) {
+        metaBySlug.set(fallbackSlug, metaObj);
       }
       if (catalogKey && !metaById.has(catalogKey)) {
         metaById.set(catalogKey, metaObj);
@@ -136,6 +154,10 @@ function initWizard() {
 
     stepPanes.forEach((pane, index) => {
       const isActive = index === (step - 1);
+      const activeElement = document.activeElement;
+      if (!isActive && activeElement && pane.contains(activeElement) && typeof activeElement.blur === 'function') {
+        activeElement.blur();
+      }
       pane.classList.toggle('show', isActive);
       pane.classList.toggle('active', isActive);
       pane.setAttribute('aria-hidden', String(!isActive));
@@ -566,7 +588,7 @@ function initWizard() {
       const idRaw = row.getAttribute('data-etapa-id') || task.catalogo_id;
       const etapaNombreRaw = row.getAttribute('data-etapa-nombre') || task.etapa_nombre || '';
       const meta = resolveEtapaMeta({ slug: slugRaw, catalogId: idRaw, nombre: etapaNombreRaw });
-      const etapaSlug = meta.slug || slugRaw || null;
+      const etapaSlug = meta.slug || slugify(etapaNombreRaw) || slugRaw || null;
       const etapaCatalogRaw = meta.id || normalizeCatalogId(idRaw);
       const etapaCatalogId = (() => {
         if (etapaCatalogRaw == null) {
@@ -802,8 +824,34 @@ function initWizard() {
     }
   }
 
-  function handleModalShown() {
+  function handleModalShow(event) {
+    lastTriggerElement = null;
+    if (event?.relatedTarget instanceof HTMLElement) {
+      lastTriggerElement = event.relatedTarget;
+    } else if (document.activeElement instanceof HTMLElement && !modal.contains(document.activeElement)) {
+      lastTriggerElement = document.activeElement;
+    }
     resetWizard();
+  }
+
+  function handleModalHide() {
+    const active = document.activeElement;
+    if (active && modal.contains(active) && typeof active.blur === 'function') {
+      active.blur();
+    }
+  }
+
+  function handleModalHidden() {
+    if (lastTriggerElement && typeof lastTriggerElement.focus === 'function') {
+      setTimeout(() => {
+        try {
+          lastTriggerElement.focus({ preventScroll: true });
+        } catch (err) {
+          console.debug('No se pudo devolver el foco al disparador del wizard', err);
+        }
+      }, 0);
+    }
+    lastTriggerElement = null;
   }
 
   function bindEvents() {
@@ -819,7 +867,9 @@ function initWizard() {
     if (btnFinish) {
       btnFinish.addEventListener('click', handleFinish);
     }
-    modal.addEventListener('show.bs.modal', handleModalShown);
+    modal.addEventListener('show.bs.modal', handleModalShow);
+    modal.addEventListener('hide.bs.modal', handleModalHide);
+    modal.addEventListener('hidden.bs.modal', handleModalHidden);
   }
 
   function bindCatalogEvents() {
