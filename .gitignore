@@ -30,3 +30,11 @@ uploads/
 # SO
 .DS_Store
 Thumbs.db
+
+# Dev artifacts
+attached_assets/
+instance/media/
+*.png
+*.jpg
+*.jpeg
+*.webp
