@@ -30,3 +30,4 @@ uploads/
 # SO
 .DS_Store
 Thumbs.db
+attached_assets/
