@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 1) Validar que el secret esté disponible en el entorno
+if [[ -z "${GITHUB_PAT:-}" ]]; then
+  echo "ERROR: GITHUB_PAT vacío. Agregá el Secret en Replit y reabrí la Shell." >&2
+  exit 1
+fi
+
+remote="${1:-origin}"
+branch="${2:-$(git rev-parse --abbrev-ref HEAD)}"
+
+# 2) Guardar y restaurar el remoto pase lo que pase
+OLD_URL="$(git remote get-url "$remote")"
+cleanup() { git remote set-url "$remote" "$OLD_URL"; }
+trap cleanup EXIT
+
+# 3) Cambiar remoto temporalmente, pushear y restaurar
+git remote set-url "$remote" "https://${GITHUB_PAT}@github.com/Obyra/obyra-backup.git"
+git push -u "$remote" "$branch" "${@:3}"
