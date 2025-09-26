@@ -51,13 +51,14 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('presupuestos') %}
+                    {% set presupuestos_url = safe_url_for('presupuestos.lista') %}
+                    {% if current_user.puede_acceder_modulo('presupuestos') and presupuestos_url %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarPresupuestos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-calculator me-1"></i>Presupuestos
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('presupuestos.lista') }}">Ver Presupuestos</a></li>
+                            <li><a class="dropdown-item" href="{{ presupuestos_url }}">Ver Presupuestos</a></li>
                         </ul>
                     </li>
                     {% endif %}
@@ -100,26 +101,36 @@
                     {% endif %}
                     
                     <!-- Marketplaces -->
-                    {% if current_user.puede_acceder_modulo('marketplaces') %}
+                    {% set marketplaces_index = safe_url_for('marketplaces.index') %}
+                    {% if current_user.puede_acceder_modulo('marketplaces') and marketplaces_index %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarMarketplaces" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-store me-1"></i>Marketplaces
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('marketplaces.index') }}">
+                            <li><a class="dropdown-item" href="{{ marketplaces_index }}">
                                 <i class="fas fa-search me-2"></i>Buscar Proveedores
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('marketplaces.buscar') }}">
+                            {% set marketplaces_buscar = safe_url_for('marketplaces.buscar') %}
+                            {% if marketplaces_buscar %}
+                            <li><a class="dropdown-item" href="{{ marketplaces_buscar }}">
                                 <i class="fas fa-filter me-2"></i>Búsqueda Avanzada
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('marketplaces.mis_cotizaciones') }}">
+                            {% endif %}
+                            {% set marketplaces_cotizaciones = safe_url_for('marketplaces.mis_cotizaciones') %}
+                            {% if marketplaces_cotizaciones %}
+                            <li><a class="dropdown-item" href="{{ marketplaces_cotizaciones }}">
                                 <i class="fas fa-file-invoice me-2"></i>Mis Cotizaciones
                             </a></li>
+                            {% endif %}
                             {% if current_user.es_admin() %}
+                                {% set marketplaces_admin = safe_url_for('marketplaces.admin_proveedores') %}
+                                {% if marketplaces_admin %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('marketplaces.admin_proveedores') }}">
+                            <li><a class="dropdown-item" href="{{ marketplaces_admin }}">
                                 <i class="fas fa-cog me-2"></i>Administrar Proveedores
                             </a></li>
+                                {% endif %}
                             {% endif %}
                         </ul>
                     </li>
@@ -141,58 +152,84 @@
                     {% endif %}
                     
                     <!-- Documentos - Solo para Admin/PM -->
-                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
+                    {% set documentos_dashboard = safe_url_for('documentos.dashboard') %}
+                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] and documentos_dashboard %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-folder me-1"></i>Documentos
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.dashboard') }}">
+                            <li><a class="dropdown-item" href="{{ documentos_dashboard }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>Control Center
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.biblioteca') }}">
+                            {% set documentos_biblioteca = safe_url_for('documentos.biblioteca') %}
+                            {% if documentos_biblioteca %}
+                            <li><a class="dropdown-item" href="{{ documentos_biblioteca }}">
                                 <i class="fas fa-book me-2"></i>Biblioteca Digital
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.subir_documento') }}">
+                            {% endif %}
+                            {% set documentos_subir = safe_url_for('documentos.subir_documento') %}
+                            {% if documentos_subir %}
+                            <li><a class="dropdown-item" href="{{ documentos_subir }}">
                                 <i class="fas fa-upload me-2"></i>Subir Documento
                             </a></li>
+                            {% endif %}
                             {% if current_user.rol == 'administrador' %}
+                                {% set documentos_config = safe_url_for('documentos.configuracion_tipos') %}
+                                {% if documentos_config %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.configuracion_tipos') }}">
+                            <li><a class="dropdown-item" href="{{ documentos_config }}">
                                 <i class="fas fa-cog me-2"></i>Configurar Tipos
                             </a></li>
+                                {% endif %}
                             {% endif %}
                         </ul>
                     </li>
                     {% endif %}
                     
                     <!-- Seguridad -->
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% set seguridad_dashboard = safe_url_for('seguridad.dashboard') %}
+                    {% if current_user.rol in ['administrador', 'tecnico'] and seguridad_dashboard %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-shield-alt me-1"></i>Seguridad
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('seguridad.dashboard') }}">
+                            <li><a class="dropdown-item" href="{{ seguridad_dashboard }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>Panel de Seguridad
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('seguridad.protocolos') }}">
+                            {% set seguridad_protocolos = safe_url_for('seguridad.protocolos') %}
+                            {% if seguridad_protocolos %}
+                            <li><a class="dropdown-item" href="{{ seguridad_protocolos }}">
                                 <i class="fas fa-clipboard-list me-2"></i>Protocolos
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('seguridad.checklists') }}">
+                            {% endif %}
+                            {% set seguridad_checklists = safe_url_for('seguridad.checklists') %}
+                            {% if seguridad_checklists %}
+                            <li><a class="dropdown-item" href="{{ seguridad_checklists }}">
                                 <i class="fas fa-check-square me-2"></i>Checklists
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('seguridad.incidentes') }}">
+                            {% endif %}
+                            {% set seguridad_incidentes = safe_url_for('seguridad.incidentes') %}
+                            {% if seguridad_incidentes %}
+                            <li><a class="dropdown-item" href="{{ seguridad_incidentes }}">
                                 <i class="fas fa-exclamation-triangle me-2"></i>Incidentes
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('seguridad.certificaciones') }}">
+                            {% endif %}
+                            {% set seguridad_certificaciones = safe_url_for('seguridad.certificaciones') %}
+                            {% if seguridad_certificaciones %}
+                            <li><a class="dropdown-item" href="{{ seguridad_certificaciones }}">
                                 <i class="fas fa-certificate me-2"></i>Certificaciones
                             </a></li>
+                            {% endif %}
                             {% if current_user.rol == 'administrador' %}
+                                {% set seguridad_auditorias = safe_url_for('seguridad.auditorias') %}
+                                {% if seguridad_auditorias %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('seguridad.auditorias') }}">
+                            <li><a class="dropdown-item" href="{{ seguridad_auditorias }}">
                                 <i class="fas fa-search me-2"></i>Auditorías
                             </a></li>
+                                {% endif %}
                             {% endif %}
                         </ul>
                     </li>
@@ -221,10 +258,13 @@
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
-                            <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
+                                {% set auditoria_url = safe_url_for('agent_local.auditoria_consultas') %}
+                                {% if auditoria_url %}
+                            <li><a class="dropdown-item" href="{{ auditoria_url }}">
                                 <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
+                                {% endif %}
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión

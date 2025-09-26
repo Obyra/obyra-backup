@@ -122,6 +122,20 @@ def _first_available_endpoint(*endpoints):
     return None
 
 
+def _endpoint_exists(endpoint: str) -> bool:
+    """Check if a given endpoint is registered on the Flask application."""
+
+    return endpoint in app.view_functions
+
+
+def _safe_url_for(endpoint: str, **values):
+    """Generate a URL only if the endpoint exists, otherwise return ``None``."""
+
+    if _endpoint_exists(endpoint):
+        return url_for(endpoint, **values)
+    return None
+
+
 @login_manager.user_loader
 def load_user(user_id):
     # Import here to avoid circular imports
@@ -148,7 +162,12 @@ def unauthorized():
 @app.context_processor
 def utility_processor():
     from tareas_predefinidas import TAREAS_POR_ETAPA
-    return dict(obtener_tareas_para_etapa=lambda nombre_etapa: TAREAS_POR_ETAPA.get(nombre_etapa, []))
+
+    return {
+        "obtener_tareas_para_etapa": lambda nombre_etapa: TAREAS_POR_ETAPA.get(nombre_etapa, []),
+        "endpoint_exists": _endpoint_exists,
+        "safe_url_for": _safe_url_for,
+    }
 
 
 
