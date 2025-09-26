@@ -85,27 +85,27 @@ def utility_processor():
 def verificar_periodo_prueba():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
     from flask import request
-    
+
     # Rutas que no requieren verificación de plan
     rutas_excluidas = [
         'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
         'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
     ]
-    
+
     if (current_user.is_authenticated and 
         request.endpoint and
         request.endpoint not in rutas_excluidas and 
         not request.endpoint.startswith('static')):
-        
+
         # ✨ EXCEPCIÓN ESPECIAL: Administradores tienen acceso completo sin restricciones
         emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
         if current_user.email in emails_admin_completo:
             return  # Acceso completo sin restricciones de plan
-        
+
         # Verificar si el usuario está en periodo de prueba y ya expiró
         if (current_user.plan_activo == 'prueba' and 
             not current_user.esta_en_periodo_prueba()):
-            
+
             flash(f'Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
 
@@ -203,7 +203,7 @@ def from_json_filter(json_str):
 with app.app_context():
     # Import models after app context is available to avoid circular imports
     from models import Usuario, Organizacion
-    
+
     # Run startup migrations before creating tables
     from migrations_runtime import ensure_avance_audit_columns
     ensure_avance_audit_columns()
@@ -224,7 +224,7 @@ with app.app_context():
                 "pool_recycle": 300,
                 "pool_pre_ping": True,
             }
-            
+
             # Reiniciar la conexión con la nueva configuración
             db.init_app(app)
             try:
@@ -235,7 +235,7 @@ with app.app_context():
                 raise sqlite_error
         else:
             raise e
-    
+
     # Initialize RBAC permissions
     try:
         from models import seed_default_role_permissions
@@ -243,11 +243,11 @@ with app.app_context():
         print("🔐 RBAC permissions seeded successfully")
     except Exception as e:
         print(f"⚠️ RBAC seeding skipped: {e}")
-    
+
     # Initialize marketplace tables (isolated mk_ tables)
     try:
         from marketplace.models import MkProduct, MkProductVariant, MkCart, MkCartItem, MkOrder, MkOrderItem, MkPayment, MkPurchaseOrder, MkCommission
-        
+
         # Create marketplace tables only
         MkProduct.__table__.create(db.engine, checkfirst=True)
         MkProductVariant.__table__.create(db.engine, checkfirst=True)
@@ -258,7 +258,7 @@ with app.app_context():
         MkPayment.__table__.create(db.engine, checkfirst=True)
         MkPurchaseOrder.__table__.create(db.engine, checkfirst=True)
         MkCommission.__table__.create(db.engine, checkfirst=True)
-        
+
         # Seed basic marketplace data
         if not MkCommission.query.first():
             commission_rates = [
@@ -267,7 +267,7 @@ with app.app_context():
             ]
             for commission in commission_rates:
                 db.session.add(commission)
-            
+
             # Demo products
             demo_product = MkProduct(
                 seller_company_id=1,
@@ -278,7 +278,7 @@ with app.app_context():
             )
             db.session.add(demo_product)
             db.session.flush()
-            
+
             demo_variant = MkProductVariant(
                 product_id=demo_product.id,
                 sku="CEM-PORT-50KG",
@@ -288,11 +288,11 @@ with app.app_context():
             )
             db.session.add(demo_variant)
             db.session.commit()
-        
+
         print("🏪 Marketplace tables created and seeded successfully")
     except Exception as e:
         print(f"⚠️ Marketplace initialization skipped: {e}")
-    
+
     print("📊 Database tables created successfully")
 
 # Register blueprints after database initialization to avoid circular imports
@@ -312,11 +312,11 @@ try:
     from planes import planes_bp
     from events_service import events_bp
     from reports_service import reports_bp
-    
+
     # Initialize OAuth with app before registering auth blueprint
     from auth import oauth
     oauth.init_app(app)
-    
+
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(obras_bp, url_prefix='/obras')
     app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
@@ -332,7 +332,7 @@ try:
     app.register_blueprint(planes_bp)
     app.register_blueprint(events_bp)
     app.register_blueprint(reports_bp)
-    
+
     print("✅ Core blueprints registered successfully")
 except ImportError as e:
     print(f"⚠️ Some core blueprints not available: {e}")
