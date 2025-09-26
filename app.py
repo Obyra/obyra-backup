@@ -1,10 +1,53 @@
 import os
+import sys
 import logging
+import importlib.util
+from types import ModuleType
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
 from extensions import db, login_manager
+
+# Provide a lightweight stub for authlib when it's not installed
+def _ensure_authlib_stub():
+    try:
+        authlib_spec = importlib.util.find_spec("authlib.integrations.flask_client")
+    except ModuleNotFoundError:
+        authlib_spec = None
+
+    if authlib_spec is not None:
+        return
+
+    # Build minimal package structure expected by the application
+    authlib_pkg = sys.modules.setdefault("authlib", ModuleType("authlib"))
+    integrations_pkg = sys.modules.setdefault(
+        "authlib.integrations", ModuleType("authlib.integrations")
+    )
+
+    class OAuthStub:
+        """Fallback OAuth stub used when authlib is unavailable."""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def init_app(self, app):
+            """Mirror the real API but perform no action."""
+
+        def register(self, *args, **kwargs):
+            raise RuntimeError(
+                "authlib is required for OAuth support. Install authlib to enable this feature."
+            )
+
+    flask_client_module = ModuleType("authlib.integrations.flask_client")
+    flask_client_module.OAuth = OAuthStub
+    sys.modules["authlib.integrations.flask_client"] = flask_client_module
+    setattr(integrations_pkg, "flask_client", flask_client_module)
+    setattr(authlib_pkg, "integrations", integrations_pkg)
+    print("⚠️  authlib not installed; OAuth functionality disabled.")
+
+
+_ensure_authlib_stub()
 
 # create the app
 app = Flask(__name__)
