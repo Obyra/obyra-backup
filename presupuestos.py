@@ -3,6 +3,9 @@ from flask_login import login_required, current_user
 from datetime import date, datetime
 from io import BytesIO
 import json
+REPORTLAB_AVAILABLE = False
+REPORTLAB_ERROR = None
+
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
@@ -11,15 +14,34 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     REPORTLAB_AVAILABLE = True
-except ModuleNotFoundError:
+except Exception as exc:  # pragma: no cover - dependency guard
     A4 = colors = inch = SimpleDocTemplate = Table = TableStyle = Paragraph = Spacer = None
     getSampleStyleSheet = ParagraphStyle = None
     TA_CENTER = TA_RIGHT = None
-    REPORTLAB_AVAILABLE = False
+    REPORTLAB_ERROR = str(exc)
+
+XLSXWRITER_AVAILABLE = False
+XLSXWRITER_ERROR = None
+
+try:
+    import xlsxwriter
+    XLSXWRITER_AVAILABLE = True
+except Exception as exc:  # pragma: no cover - dependency guard
+    xlsxwriter = None
+    XLSXWRITER_ERROR = str(exc)
 from app import db
 from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
 from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
-import xlsxwriter
+
+if not REPORTLAB_AVAILABLE:
+    print("⚠️ Presupuestos: ReportLab no disponible; la exportación a PDF estará deshabilitada.")
+    if REPORTLAB_ERROR:
+        print(f"   ↳ Motivo: {REPORTLAB_ERROR}")
+
+if not XLSXWRITER_AVAILABLE:
+    print("⚠️ Presupuestos: xlsxwriter no disponible; la exportación a Excel estará deshabilitada.")
+    if XLSXWRITER_ERROR:
+        print(f"   ↳ Motivo: {XLSXWRITER_ERROR}")
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
@@ -524,12 +546,17 @@ def exportar_excel_ia():
     """Exporta los resultados de la calculadora IA a Excel"""
     if not current_user.puede_acceder_modulo('presupuestos'):
         return jsonify({'error': 'Sin permisos'}), 403
-    
+
+    if not XLSXWRITER_AVAILABLE:
+        return jsonify({
+            'error': 'La exportación a Excel requiere el paquete xlsxwriter. Instálalo para habilitar esta función.'
+        }), 503
+
     try:
         data = request.get_json()
         if not data or not data.get('presupuesto'):
             return jsonify({'error': 'No se recibieron datos'}), 400
-        
+
         presupuesto = data['presupuesto']
         
         # Crear archivo Excel en memoria
@@ -758,7 +785,8 @@ def generar_pdf(id):
         return redirect(url_for('reportes.dashboard'))
 
     if not REPORTLAB_AVAILABLE:
-        flash('La generación de PDFs requiere el paquete reportlab. Instálalo para habilitar esta función.', 'warning')
+        detalle = f" Motivo: {REPORTLAB_ERROR}" if REPORTLAB_ERROR else ''
+        flash('La generación de PDFs requiere el paquete reportlab. Instálalo para habilitar esta función.' + detalle, 'warning')
         return redirect(url_for('presupuestos.detalle', id=id))
 
     presupuesto = Presupuesto.query.get_or_404(id)
