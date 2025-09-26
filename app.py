@@ -1,5 +1,8 @@
 import os
 import logging
+import importlib.util
+import sys
+import types
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -71,6 +74,58 @@ def unauthorized():
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
+
+
+def _ensure_authlib_stub():
+    """Guarantee that importing authlib doesn't break the app when it's absent.
+
+    Windows deployments reported that importing :mod:`auth` failed before the
+    fallback inside ``auth.py`` could run, leaving the application without the
+    ``auth`` blueprint and breaking ``url_for('auth.login')``.  To keep the
+    bootstrap resilient we lazily insert a minimal stub for
+    ``authlib.integrations.flask_client`` when the real dependency is missing.
+
+    The stub implements the ``OAuth`` class interface used by ``auth.py`` and
+    simply logs that Google OAuth remains disabled.  When authlib is available
+    this helper is a no-op.
+    """
+
+    spec = importlib.util.find_spec("authlib.integrations.flask_client")
+    if spec is not None:
+        return  # authlib is installed, no changes required
+
+    if "authlib.integrations.flask_client" in sys.modules:
+        return  # another stub already registered
+
+    flask_client_module = types.ModuleType("authlib.integrations.flask_client")
+
+    class _StubOAuth:
+        """Minimal OAuth stub that mirrors the methods expected by auth.py."""
+
+        def __init__(self, *_, **__):  # pragma: no cover - simple diagnostic
+            print("⚠️ authlib ausente: usando stub OAuth; Google OAuth queda deshabilitado.")
+
+        def init_app(self, app):  # pragma: no cover - simple diagnostic
+            print("⚠️ OAuth.init_app omitido (stub)")
+
+        def register(self, *_, **__):  # pragma: no cover - simple diagnostic
+            print("⚠️ OAuth.register omitido (stub)")
+            return None
+
+    flask_client_module.OAuth = _StubOAuth  # type: ignore[attr-defined]
+
+    integrations_module = types.ModuleType("authlib.integrations")
+    integrations_module.flask_client = flask_client_module
+
+    authlib_module = types.ModuleType("authlib")
+    authlib_module.integrations = integrations_module
+
+    sys.modules["authlib"] = authlib_module
+    sys.modules["authlib.integrations"] = integrations_module
+    sys.modules["authlib.integrations.flask_client"] = flask_client_module
+
+
+_ensure_authlib_stub()
 
 # Funciones globales para templates
 @app.context_processor
