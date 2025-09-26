@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar uso en obra - Inventario | OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-hard-hat me-2 text-primary"></i>Registrar uso en obra</h2>
+            <p class="text-muted mb-0">Controla el consumo de materiales y herramientas en cada proyecto.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-clipboard-list me-1"></i>Volver al inventario
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title border-bottom pb-2 mb-4">Datos del uso</h5>
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="obra_id" class="form-label">Obra *</label>
+                            <select class="form-select" id="obra_id" name="obra_id" required>
+                                <option value="">Seleccionar obra...</option>
+                                {% for obra in obras %}
+                                <option value="{{ obra.id }}">{{ obra.nombre }}{% if obra.codigo %} ({{ obra.codigo }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            {% if not obras %}
+                            <div class="form-text text-warning"><i class="fas fa-exclamation-triangle me-1"></i>No hay obras activas disponibles.</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="item_id" class="form-label">Item de inventario *</label>
+                            <select class="form-select" id="item_id" name="item_id" required>
+                                <option value="">Seleccionar item...</option>
+                                {% for item in items %}
+                                <option value="{{ item.id }}">
+                                    {{ item.nombre }} — Stock: {{ '%.2f'|format(item.stock_actual) }} {{ item.unidad or '' }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% if not items %}
+                            <div class="form-text text-warning"><i class="fas fa-exclamation-triangle me-1"></i>No hay items activos en el inventario.</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="cantidad_usada" class="form-label">Cantidad usada *</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="cantidad_usada" name="cantidad_usada" min="0" step="0.01" placeholder="0.00" required>
+                                        <span class="input-group-text" id="unidadSeleccionada">un</span>
+                                    </div>
+                                    <div class="form-text">Se descontará automáticamente del stock disponible.</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="fecha_uso" class="form-label">Fecha de uso</label>
+                                    <input type="date" class="form-control" id="fecha_uso" name="fecha_uso" value="{{ request.form.fecha_uso or '' }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="observaciones" class="form-label">Observaciones</label>
+                            <textarea class="form-control" id="observaciones" name="observaciones" rows="3" placeholder="Detalles adicionales, cuadrilla responsable, sector de la obra, etc."></textarea>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('inventario.lista') }}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary" {% if not obras or not items %}disabled{% endif %}>
+                                <i class="fas fa-save me-1"></i>Registrar uso
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>Recomendaciones</h5>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Registra el uso diariamente para mantener un control preciso.</li>
+                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Utiliza observaciones para identificar cuadrillas o tareas específicas.</li>
+                        <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Si el stock es insuficiente, crea primero una entrada de inventario.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3"><i class="fas fa-boxes me-2 text-primary"></i>Items disponibles</h5>
+                    <div class="table-responsive" style="max-height: 320px;">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="text-end">Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.nombre }}</strong><br>
+                                        <small class="text-muted">{{ item.codigo }}{% if item.categoria %} · {{ item.categoria.nombre }}{% endif %}</small>
+                                    </td>
+                                    <td class="text-end">{{ '%.2f'|format(item.stock_actual) }} {{ item.unidad or '' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">No hay items activos para mostrar.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const itemSelect = document.getElementById('item_id');
+        const unidadBadge = document.getElementById('unidadSeleccionada');
+
+        function actualizarUnidad() {
+            const option = itemSelect.options[itemSelect.selectedIndex];
+            if (!option || !option.textContent) {
+                unidadBadge.textContent = 'un';
+                return;
+            }
+
+            const texto = option.textContent;
+            const match = texto.match(/Stock: [0-9.,]+\s([^\s]+)/);
+            unidadBadge.textContent = match ? match[1] : 'un';
+        }
+
+        itemSelect.addEventListener('change', actualizarUnidad);
+        actualizarUnidad();
+    });
+</script>
+{% endblock %}

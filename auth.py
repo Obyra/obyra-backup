@@ -126,26 +126,66 @@ def register():
             return render_template('auth/register.html', google_available=bool(google))
         
         try:
-            # Crear nuevo usuario
-            nuevo_usuario = Usuario(
-                nombre=nombre,
-                apellido=apellido,
-                email=email.lower(),
-                telefono=telefono,
-                password_hash=generate_password_hash(password),
-                rol='operario',  # Por defecto
-                auth_provider='manual',
-                activo=True
-            )
-            
+            token_invitacion = session.get('token_invitacion')
+            organizacion_id = session.get('organizacion_invitacion')
+
+            if token_invitacion and organizacion_id:
+                organizacion = Organizacion.query.get(organizacion_id)
+                if not (organizacion and organizacion.token_invitacion == token_invitacion):
+                    flash('Token de invitación inválido o expirado.', 'danger')
+                    return render_template('auth/register.html', google_available=bool(google))
+
+                nuevo_usuario = Usuario(
+                    nombre=nombre,
+                    apellido=apellido,
+                    email=email.lower(),
+                    telefono=telefono,
+                    password_hash=generate_password_hash(password),
+                    rol='operario',
+                    role='operario',
+                    auth_provider='manual',
+                    activo=True,
+                    organizacion_id=organizacion_id
+                )
+
+                session.pop('token_invitacion', None)
+                session.pop('organizacion_invitacion', None)
+                mensaje_bienvenida = f'¡Bienvenido/a a {organizacion.nombre}, {nombre}!'
+            else:
+                rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'administrador'
+                role_usuario = 'admin' if rol_usuario == 'administrador' else 'operario'
+
+                nueva_organizacion = Organizacion(
+                    nombre=f"Organización de {nombre} {apellido}",
+                    fecha_creacion=datetime.utcnow()
+                )
+                db.session.add(nueva_organizacion)
+                db.session.flush()
+
+                nuevo_usuario = Usuario(
+                    nombre=nombre,
+                    apellido=apellido,
+                    email=email.lower(),
+                    telefono=telefono,
+                    password_hash=generate_password_hash(password),
+                    rol=rol_usuario,
+                    role=role_usuario,
+                    auth_provider='manual',
+                    activo=True,
+                    organizacion_id=nueva_organizacion.id
+                )
+
+                mensaje_bienvenida = f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu organización ha sido creada.'
+
             db.session.add(nuevo_usuario)
             db.session.commit()
-            
-            # Auto-login después del registro
+
             login_user(nuevo_usuario)
-            flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
+            flash(mensaje_bienvenida, 'success')
+            if current_user.role == "operario":
+                return redirect(url_for("obras.mis_tareas"))
             return redirect(url_for('reportes.dashboard'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash('Error al crear la cuenta. Por favor, intenta de nuevo.', 'danger')

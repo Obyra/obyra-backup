@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Administrar proveedores | OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-store me-2 text-primary"></i>Proveedores de la organización</h2>
+            <p class="text-muted mb-0">Gestiona la red de proveedores, verifica su información y controla el acceso al marketplace.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('marketplaces.crear_proveedor') }}" class="btn btn-primary">
+                <i class="fas fa-user-plus me-1"></i>Nuevo proveedor
+            </a>
+            <a href="{{ url_for('marketplaces.index') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver al marketplace
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+                <h5 class="card-title mb-0">Listado de proveedores</h5>
+                <span class="badge bg-primary bg-opacity-10 text-primary">{{ proveedores|length }} registrados</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Proveedor</th>
+                            <th>Categoría</th>
+                            <th>Contacto</th>
+                            <th class="text-center">Calificación</th>
+                            <th class="text-center">Verificado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for proveedor in proveedores %}
+                        <tr>
+                            <td>
+                                <strong>{{ proveedor.nombre }}</strong><br>
+                                <small class="text-muted">{{ proveedor.especialidad or 'Sin especialidad definida' }}</small>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">{{ categorias.get(proveedor.categoria, {}).get('nombre', proveedor.categoria|capitalize) }}</div>
+                                {% set subcategoria = proveedor.subcategoria if proveedor.subcategoria is defined else None %}
+                                {% if subcategoria %}
+                                <small class="text-muted">{{ subcategoria }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div><i class="fas fa-envelope me-1 text-muted"></i>{{ proveedor.email or '—' }}</div>
+                                <div><i class="fas fa-phone me-1 text-muted"></i>{{ proveedor.telefono or '—' }}</div>
+                                {% if proveedor.ubicacion %}
+                                <small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>{{ proveedor.ubicacion }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-warning bg-opacity-25 text-warning">
+                                    <i class="fas fa-star me-1"></i>{{ '%.1f'|format(proveedor.calificacion or 0) }} / 5
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if proveedor.verificado %}
+                                <span class="badge bg-success bg-opacity-25 text-success"><i class="fas fa-check-circle me-1"></i>Verificado</span>
+                                {% else %}
+                                <span class="badge bg-secondary bg-opacity-25 text-secondary"><i class="fas fa-clock me-1"></i>Pendiente</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                <i class="fas fa-info-circle me-1"></i>No hay proveedores registrados todavía.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

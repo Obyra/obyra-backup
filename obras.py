@@ -3067,11 +3067,6 @@ def wizard_preview():
             return jsonify({"ok": False, "error": "Sin permisos"}), 403
         
         # 🎯 CORRECCIÓN: etapa_ids son IDs del CATÁLOGO, no de etapas existentes
-<<<<<<< HEAD
-        from tareas_predefinidas import TAREAS_POR_ETAPA
-        
-=======
->>>>>>> codex/analizar-el-wizard-de-obra
         catalogo = obtener_etapas_disponibles()
         catalogo_por_id = {str(etapa.get("id")): etapa for etapa in catalogo}
 
@@ -3104,10 +3099,6 @@ def wizard_preview():
 
             # Tareas del catálogo por tipo de etapa
             tareas_catalogo = []
-<<<<<<< HEAD
-            
-=======
->>>>>>> codex/analizar-el-wizard-de-obra
             if etapa_nombre in TAREAS_POR_ETAPA:
                 current_app.logger.debug(
                     "✅ DEBUG WIZARD: Encontrada etapa '%s' en catálogo de tareas", etapa_nombre
@@ -3134,11 +3125,7 @@ def wizard_preview():
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
-<<<<<<< HEAD
-            
-=======
 
->>>>>>> codex/analizar-el-wizard-de-obra
             current_app.logger.debug(
                 "📊 DEBUG WIZARD: Etapa %s - %s tareas catálogo",
                 etapa_nombre,
@@ -3232,8 +3219,6 @@ def wizard_create():
             for etapa in catalogo_etapas
             if etapa.get('id') is not None
         }
-<<<<<<< HEAD
-=======
         nombre_to_catalogo = {
             (etapa.get('nombre') or '').strip().lower(): etapa
             for etapa in catalogo_etapas
@@ -3434,7 +3419,6 @@ def wizard_create():
                 return etapa_real, resolved_slug, resolved_nombre, resolved_catalog_id
 
             return None, None, None, None
->>>>>>> codex/analizar-el-wizard-de-obra
 
         def _safe_number(value):
             if value in (None, '', 'null'):
@@ -3469,11 +3453,7 @@ def wizard_create():
                         "⚠️ WIZARD: Tarea sin nombre descartada (payload: %s)", t
                     )
                     continue
-<<<<<<< HEAD
-                    
-=======
 
->>>>>>> codex/analizar-el-wizard-de-obra
                 etapa_catalogo_id = None
                 if etapa_catalogo_id_raw not in (None, ""):
                     etapa_catalogo_id = str(etapa_catalogo_id_raw)
@@ -3488,27 +3468,6 @@ def wizard_create():
                 if not etapa_nombre and etapa_nombre_payload:
                     etapa_nombre = etapa_nombre_payload
 
-<<<<<<< HEAD
-                if not etapa_nombre:
-                    current_app.logger.warning(
-                        "⚠️ WIZARD: No se pudo determinar la etapa para '%s' (slug=%s, id=%s)",
-                        nombre,
-                        etapa_slug,
-                        etapa_catalogo_id,
-                    )
-                    continue
-                    
-                # Buscar etapa real en la obra
-                etapa_real = (EtapaObra.query
-                             .filter(EtapaObra.obra_id == obra_id)
-                             .filter(EtapaObra.nombre == etapa_nombre)
-                             .first())
-                
-                if not etapa_real:
-                    current_app.logger.warning(
-                        "⚠️ WIZARD: Etapa '%s' no encontrada en obra %s", 
-                        etapa_nombre, obra_id
-=======
                 etapa_real, etapa_slug_resolved, etapa_nombre_resolved, etapa_catalogo_id_resolved = _ensure_etapa(
                     etapa_slug,
                     etapa_nombre,
@@ -3521,7 +3480,6 @@ def wizard_create():
                         nombre,
                         etapa_slug,
                         etapa_catalogo_id_raw,
->>>>>>> codex/analizar-el-wizard-de-obra
                     )
                     continue
 
@@ -3580,33 +3538,19 @@ def wizard_create():
                     unidad=(t.get("unidad") or "h"),
                     fecha_inicio_plan=fecha_inicio,
                     fecha_fin_plan=fecha_fin,
-<<<<<<< HEAD
-                    horas_estimadas=_safe_number(t.get("horas")),
-                    cantidad_planificada=_safe_number(t.get("cantidad")),
-                    responsable_id=_safe_user_id(t.get("asignado_usuario_id"))
-=======
                     horas_estimadas=horas_estimadas,
                     cantidad_planificada=cantidad_planificada,
                     responsable_id=asignado_usuario_id,
->>>>>>> codex/analizar-el-wizard-de-obra
                 )
 
                 db.session.add(tarea)
                 db.session.flush()  # Para obtener el ID
 
                 # Asignar usuario en tarea_miembros si viene asignado_usuario_id
-<<<<<<< HEAD
-                user_id = _safe_user_id(t.get("asignado_usuario_id"))
-                if user_id:
-                    asignacion = TareaMiembro(
-                        tarea_id=tarea.id,
-                        usuario_id=user_id
-=======
                 if asignado_usuario_id:
                     asignacion = TareaMiembro(
                         tarea_id=tarea.id,
                         user_id=asignado_usuario_id,
->>>>>>> codex/analizar-el-wizard-de-obra
                     )
                     db.session.add(asignacion)
 

@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}Auditoría de Consultas IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
+    <div>
+      <h1 class="h3 mb-1">Auditoría de consultas del agente</h1>
+      <p class="text-muted mb-0">Monitorea quién utiliza el asistente IA, qué preguntas realiza y cómo responde la plataforma.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('agent_local.diagnostico_agent') }}">
+        <i class="fas fa-robot me-2"></i>Diagnóstico del agente
+      </a>
+      <div class="btn-group">
+        <a class="btn btn-success" href="{{ url_for('agent_local.auditoria_consultas', **request.args.to_dict(), export='excel') }}">
+          <i class="fas fa-file-excel me-2"></i>Exportar Excel
+        </a>
+        <a class="btn btn-danger" href="{{ url_for('agent_local.auditoria_consultas', **request.args.to_dict(), export='pdf') }}">
+          <i class="fas fa-file-pdf me-2"></i>Exportar PDF
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0">
+      <h2 class="h5 mb-0">Filtros avanzados</h2>
+    </div>
+    <div class="card-body">
+      <form method="get" class="row gy-3 gx-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">Organización</label>
+          <select class="form-select" name="organizacion">
+            <option value="">Todas</option>
+            {% for org in organizaciones %}
+              <option value="{{ org.id }}" {% if filtros.organizacion|int == org.id %}selected{% endif %}>{{ org.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Tipo de consulta</label>
+          <select class="form-select" name="tipo">
+            <option value="">Todos</option>
+            {% for tipo in ['obra','presupuesto','inventario','usuario','general'] %}
+              <option value="{{ tipo }}" {% if filtros.tipo == tipo %}selected{% endif %}>{{ tipo|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Estado</label>
+          <select class="form-select" name="estado">
+            <option value="">Todos</option>
+            {% for estado in ['exito','error'] %}
+              <option value="{{ estado }}" {% if filtros.estado == estado %}selected{% endif %}>{{ estado|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Desde</label>
+          <input type="date" class="form-control" name="fecha_desde" value="{{ filtros.fecha_desde }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Hasta</label>
+          <input type="date" class="form-control" name="fecha_hasta" value="{{ filtros.fecha_hasta }}">
+        </div>
+        <div class="col-md-1 d-grid">
+          <button class="btn btn-primary" type="submit"><i class="fas fa-filter me-1"></i>Filtrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small mb-1">Consultas totales</p>
+          <h3 class="h4 mb-0">{{ estadisticas.total_consultas }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small mb-1">Exitosas</p>
+          <div class="d-flex align-items-center gap-2">
+            <h3 class="h4 mb-0 text-success">{{ estadisticas.consultas_exitosas }}</h3>
+            <span class="badge bg-success-subtle text-success">{{ estadisticas.tasa_exito }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small mb-1">Con error</p>
+          <h3 class="h4 mb-0 text-danger">{{ estadisticas.consultas_error }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small mb-1">Tiempo promedio</p>
+          <h3 class="h4 mb-0">{{ '%.0f'|format(estadisticas.tiempo_promedio) }} ms</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-8">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-0">
+          <h2 class="h5 mb-0">Histórico de consultas (últimos 7 días)</h2>
+        </div>
+        <div class="card-body">
+          <canvas id="consultasChart" height="160"></canvas>
+          {% if not estadisticas.consultas_por_dia %}
+            <p class="text-muted small mb-0">No hay registros recientes para graficar.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm h-100 mb-3">
+        <div class="card-header bg-white border-0">
+          <h2 class="h6 mb-0">Consultas por tipo</h2>
+        </div>
+        <div class="card-body">
+          {% if estadisticas.tipos_consulta %}
+            <ul class="list-group list-group-flush small">
+              {% for tipo, total in estadisticas.tipos_consulta %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span class="text-capitalize">{{ tipo or 'Sin clasificar' }}</span>
+                  <span class="badge bg-primary-subtle text-primary">{{ total }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted small mb-0">Sin datos suficientes.</p>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-0">
+          <h2 class="h6 mb-0">Organizaciones activas</h2>
+        </div>
+        <div class="card-body">
+          {% if estadisticas.top_organizaciones %}
+            <ul class="list-group list-group-flush small">
+              {% for org_id, total, organizacion in estadisticas.top_organizaciones %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>{{ organizacion.nombre if organizacion else 'Organización #' ~ org_id }}</span>
+                  <span class="badge bg-secondary-subtle text-secondary">{{ total }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted small mb-0">Aún no hay actividad registrada.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0">
+      <div class="d-flex flex-wrap align-items-center justify-content-between">
+        <div>
+          <h2 class="h5 mb-0">Listado de consultas</h2>
+          <p class="text-muted small mb-0">Registros paginados con toda la información disponible.</p>
+        </div>
+        <span class="badge bg-primary-subtle text-primary">{{ consultas.total }} registros</span>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Fecha</th>
+            <th>Usuario</th>
+            <th>Organización</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Tiempo (ms)</th>
+            <th>IP</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for consulta in consultas.items %}
+            <tr>
+              <td>{{ consulta.fecha_consulta.strftime('%d/%m/%Y %H:%M') if consulta.fecha_consulta else '-' }}</td>
+              <td>
+                <div class="fw-semibold">{{ consulta.usuario.nombre_completo if consulta.usuario else 'Usuario eliminado' }}</div>
+                <div class="text-muted small">{{ consulta.usuario.email if consulta.usuario else '' }}</div>
+              </td>
+              <td>{{ consulta.organizacion.nombre if consulta.organizacion else 'Sin organización' }}</td>
+              <td class="text-capitalize">{{ consulta.tipo_consulta or 'General' }}</td>
+              <td>
+                {% if consulta.estado == 'exito' %}
+                  <span class="badge bg-success-subtle text-success">Éxito</span>
+                {% elif consulta.estado == 'error' %}
+                  <span class="badge bg-danger-subtle text-danger">Error</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">{{ consulta.estado or 'N/D' }}</span>
+                {% endif %}
+              </td>
+              <td>{{ consulta.tiempo_respuesta_ms or 0 }}</td>
+              <td class="text-muted small">{{ consulta.ip_address or '-' }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('agent_local.detalle_consulta', consulta_id=consulta.id) }}">
+                  <i class="fas fa-eye me-1"></i>Ver
+                </a>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">No se encontraron registros con los filtros seleccionados.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer bg-white border-0">
+      <nav aria-label="Paginación de auditoría">
+        <ul class="pagination mb-0 justify-content-end">
+          <li class="page-item {% if not consultas.has_prev %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('agent_local.auditoria_consultas', page=consultas.prev_num, **request.args.to_dict()) if consultas.has_prev else '#' }}" tabindex="-1">Anterior</a>
+          </li>
+          {% for page_num in consultas.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if page_num %}
+              <li class="page-item {% if page_num == consultas.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('agent_local.auditoria_consultas', page=page_num, **request.args.to_dict()) }}">{{ page_num }}</a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+          {% endfor %}
+          <li class="page-item {% if not consultas.has_next %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('agent_local.auditoria_consultas', page=consultas.next_num, **request.args.to_dict()) if consultas.has_next else '#' }}">Siguiente</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script>
+  const ctx = document.getElementById('consultasChart');
+  if (ctx && {{ estadisticas.consultas_por_dia|length }} > 0) {
+    const labels = {{ estadisticas.consultas_por_dia | map(attribute=0) | map('string') | list | tojson }};
+    const data = {{ estadisticas.consultas_por_dia | map(attribute=1) | list | tojson }};
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Consultas',
+          data,
+          fill: false,
+          borderColor: '#0d6efd',
+          tension: 0.3,
+          pointRadius: 4,
+          backgroundColor: 'rgba(13,110,253,0.2)'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+  }
+</script>
+{% endblock %}

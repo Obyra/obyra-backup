@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Subir documento{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1"><i class="fas fa-upload me-2 text-primary"></i>Subir nuevo documento</h2>
+                    <p class="text-muted mb-0">Carga archivos y vincúlalos a tus obras para mantener la trazabilidad documental.</p>
+                </div>
+                <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a la biblioteca
+                </a>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('documentos.procesar_subida') }}" enctype="multipart/form-data" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="obra_id" class="form-label">Obra</label>
+                            <select class="form-select" id="obra_id" name="obra_id" required>
+                                <option value="">Seleccionar obra</option>
+                                {% for obra in obras %}
+                                <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="tipo_documento_id" class="form-label">Tipo de documento</label>
+                            <select class="form-select" id="tipo_documento_id" name="tipo_documento_id" required>
+                                <option value="">Seleccionar tipo</option>
+                                {% for tipo in tipos_documento %}
+                                <option value="{{ tipo.id }}">{{ tipo.nombre }} ({{ tipo.categoria|title }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="nombre" class="form-label">Nombre del documento</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej: Contrato de alquiler" required>
+                        </div>
+                        <div class="col-12">
+                            <label for="descripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="3" placeholder="Breve detalle del contenido"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="archivo" class="form-label">Archivo</label>
+                            <input type="file" class="form-control" id="archivo" name="archivo" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png,.zip" required>
+                            <small class="text-muted">Formatos permitidos: PDF, Office, Imágenes, ZIP.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="tags" class="form-label">Etiquetas</label>
+                            <input type="text" class="form-control" id="tags" name="tags" placeholder="Contratos, Seguridad, Plano">
+                            <small class="text-muted">Separar por comas.</small>
+                        </div>
+                        <div class="col-12 text-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-cloud-upload-alt me-1"></i>Guardar documento
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

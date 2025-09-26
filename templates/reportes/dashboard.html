@@ -259,31 +259,40 @@
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-3">
-                        <a href="{{ url_for('obras.crear') }}" class="btn btn-primary d-flex align-items-center">
+                        {% set nueva_obra_url = safe_url_for('obras.crear') %}
+                        {% if nueva_obra_url %}
+                        <a href="{{ nueva_obra_url }}" class="btn btn-primary d-flex align-items-center">
                             <i class="fas fa-plus me-3"></i>
                             <div class="text-start">
                                 <div class="fw-bold">Nueva Obra</div>
                                 <small>Crear proyecto</small>
                             </div>
                         </a>
-                        
-                        <a href="{{ url_for('presupuestos.calculadora_ia') }}" class="btn btn-success d-flex align-items-center">
+                        {% endif %}
+
+                        {% set calculadora_url = safe_url_for('presupuestos.calculadora_ia') %}
+                        {% if calculadora_url %}
+                        <a href="{{ calculadora_url }}" class="btn btn-success d-flex align-items-center">
                             <i class="fas fa-calculator me-3"></i>
                             <div class="text-start">
                                 <div class="fw-bold">Calcular Cómputo</div>
                                 <small>Estimar materiales</small>
                             </div>
                         </a>
-                        
-                        <a href="{{ url_for('marketplaces.index') }}" class="btn btn-warning d-flex align-items-center">
+                        {% endif %}
+
+                        {% set marketplaces_url = safe_url_for('marketplaces.index') %}
+                        {% if marketplaces_url %}
+                        <a href="{{ marketplaces_url }}" class="btn btn-warning d-flex align-items-center">
                             <i class="fas fa-store me-3"></i>
                             <div class="text-start">
                                 <div class="fw-bold">Marketplaces</div>
                                 <small>Buscar proveedores</small>
                             </div>
                         </a>
-                        
-                        <button type="button" class="btn btn-warning d-flex align-items-center" 
+                        {% endif %}
+
+                        <button type="button" class="btn btn-warning d-flex align-items-center"
                                 data-bs-toggle="modal" data-bs-target="#reportModal">
                             <i class="fas fa-file-pdf me-3"></i>
                             <div class="text-start">

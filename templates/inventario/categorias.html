@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Categorías de inventario | OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-tags me-2 text-primary"></i>Categorías de inventario</h2>
+            <p class="text-muted mb-0">Organiza tus materiales, herramientas y servicios para agilizar la gestión.</p>
+        </div>
+        <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-clipboard-list me-1"></i>Volver al inventario
+        </a>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title border-bottom pb-2 mb-4">Crear nueva categoría</h5>
+                    <form method="POST" action="{{ url_for('inventario.crear_categoria') }}">
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label">Nombre *</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej: Materiales pesados" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tipo" class="form-label">Tipo *</label>
+                            <select class="form-select" id="tipo" name="tipo" required>
+                                <option value="">Seleccionar tipo...</option>
+                                <option value="material">Material</option>
+                                <option value="herramienta">Herramienta</option>
+                                <option value="equipo">Equipo</option>
+                                <option value="servicio">Servicio</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="descripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="3" placeholder="Detalles que faciliten su identificación y uso"></textarea>
+                        </div>
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus me-1"></i>Crear categoría
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">Categorías existentes</h5>
+                        <span class="badge bg-primary bg-opacity-10 text-primary">{{ categorias|length }} registradas</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Tipo</th>
+                                    <th>Descripción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for categoria in categorias %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ categoria.nombre }}</strong>
+                                        {% if categoria.fecha_creacion %}
+                                        <br><small class="text-muted">Creada el {{ categoria.fecha_creacion.strftime('%d/%m/%Y') }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="badge bg-secondary bg-opacity-25 text-secondary text-uppercase">{{ categoria.tipo }}</span></td>
+                                    <td class="text-muted">{{ categoria.descripcion or '—' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        <i class="fas fa-info-circle me-1"></i>No hay categorías registradas todavía.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

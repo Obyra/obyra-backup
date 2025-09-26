@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes de Documentos{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-chart-bar me-2 text-primary"></i>Reportes de Documentos</h2>
+            <p class="text-muted mb-0">Visualiza métricas de distribución y estados de tu documentación.</p>
+        </div>
+        <a href="{{ url_for('documentos.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver al panel
+        </a>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-city me-2"></i>Documentos por obra</h5>
+                </div>
+                <div class="card-body">
+                    {% if reporte.documentos_por_obra %}
+                    <ul class="list-group list-group-flush">
+                        {% for nombre, total in reporte.documentos_por_obra %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ nombre }}</span>
+                            <span class="badge bg-primary rounded-pill">{{ total }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-folder-open fa-2x mb-2"></i>
+                        <p class="mb-0">Aún no hay documentos asignados a obras.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-tags me-2"></i>Documentos por tipo</h5>
+                </div>
+                <div class="card-body">
+                    {% if reporte.documentos_por_tipo %}
+                    <ul class="list-group list-group-flush">
+                        {% for nombre, total in reporte.documentos_por_tipo %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ nombre }}</span>
+                            <span class="badge bg-info text-dark rounded-pill">{{ total }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-tags fa-2x mb-2"></i>
+                        <p class="mb-0">Todavía no se definieron tipos de documento.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-traffic-light me-2"></i>Documentos por estado</h5>
+                </div>
+                <div class="card-body">
+                    {% if reporte.documentos_por_estado %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Estado</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for estado, total in reporte.documentos_por_estado %}
+                                <tr>
+                                    <td>{{ estado|title }}</td>
+                                    <td class="text-end">{{ total }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-traffic-light fa-2x mb-2"></i>
+                        <p class="mb-0">No hay estados registrados.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Actividad mensual</h5>
+                </div>
+                <div class="card-body">
+                    {% if reporte.actividad_mensual %}
+                    <ul class="list-group list-group-flush">
+                        {% for fila in reporte.actividad_mensual %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ fila.mes }}</span>
+                            <span class="badge bg-secondary">{{ fila.total }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-calendar-alt fa-2x mb-2"></i>
+                        <p class="mb-0">Aún no hay actividad mensual registrada.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

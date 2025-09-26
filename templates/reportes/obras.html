@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes de Obras{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-0">Reportes de Obras</h1>
+            <p class="text-muted mb-0">Analiza el estado de las obras, su presupuesto y avance con filtros dinámicos.</p>
+        </div>
+        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver al dashboard
+        </a>
+    </div>
+
+    <form class="card shadow-sm mb-4" method="get" action="{{ url_for('reportes.reporte_obras') }}">
+        <div class="card-header bg-white border-bottom-0">
+            <h2 class="h5 mb-0">Filtros</h2>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todos</option>
+                        {% for value, label in estados_disponibles %}
+                            <option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Responsable</label>
+                    <select name="responsable_id" class="form-select">
+                        <option value="">Todos</option>
+                        {% for responsable in responsables %}
+                            <option value="{{ responsable.id }}" {% if responsable_id_int == responsable.id %}selected{% endif %}>
+                                {{ responsable.nombre }} {{ responsable.apellido }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Cliente</label>
+                    <input type="text" name="cliente" value="{{ cliente }}" class="form-control" list="clientes-list" placeholder="Buscar cliente">
+                    <datalist id="clientes-list">
+                        {% for cliente_option in clientes_disponibles %}
+                            <option value="{{ cliente_option }}"></option>
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Fecha inicio desde</label>
+                    <input type="date" name="fecha_desde" value="{{ fecha_desde }}" class="form-control">
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Fecha inicio hasta</label>
+                    <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}" class="form-control">
+                </div>
+                <div class="col-sm-6 col-lg-3 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-funnel"></i> Aplicar filtros
+                    </button>
+                </div>
+                <div class="col-sm-6 col-lg-3 d-flex align-items-end">
+                    <a href="{{ url_for('reportes.reporte_obras') }}" class="btn btn-link text-decoration-none w-100">Limpiar filtros</a>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-lg-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Total de obras</span>
+                    <h3 class="mt-2 mb-0">{{ estadisticas.total_obras }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Presupuesto acumulado</span>
+                    <h3 class="mt-2 mb-0">${{ '%.2f'|format(estadisticas.total_presupuesto) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Costo real acumulado</span>
+                    <h3 class="mt-2 mb-0">${{ '%.2f'|format(estadisticas.total_costo_real) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Avance promedio</span>
+                    <h3 class="mt-2 mb-0">{{ '%.1f'|format(estadisticas.progreso_promedio) }}%</h3>
+                    <small class="text-muted">Variación presupuestaria: {{ '%.1f'|format(estadisticas.variacion_presupuestaria) }}%</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0">
+                    <h2 class="h6 mb-0">Obras por estado</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Estado</th>
+                                <th class="text-center">Cantidad</th>
+                                <th class="text-center">Avance promedio</th>
+                                <th class="text-end">Presupuesto</th>
+                                <th class="text-end">Costo real</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if resumen_por_estado %}
+                                {% for estado_nombre, cantidad, avance, presupuesto, costo in resumen_por_estado %}
+                                    <tr>
+                                        <td class="text-capitalize">{{ estado_nombre.replace('_', ' ') }}</td>
+                                        <td class="text-center">{{ cantidad }}</td>
+                                        <td class="text-center">{{ '%.1f'|format(avance or 0) }}%</td>
+                                        <td class="text-end">${{ '%.2f'|format(presupuesto or 0) }}</td>
+                                        <td class="text-end">${{ '%.2f'|format(costo or 0) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No se encontraron obras con los filtros seleccionados.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0">
+                    <h2 class="h6 mb-0">Ranking de obras</h2>
+                </div>
+                <div class="card-body">
+                    <h3 class="h6">Mayor avance</h3>
+                    <ul class="list-group mb-3">
+                        {% if ranking_avance %}
+                            {% for obra in ranking_avance %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ obra.nombre }}</strong>
+                                        <div class="small text-muted">{{ obra.cliente }}</div>
+                                    </div>
+                                    <span class="badge bg-success">{{ obra.progreso }}%</span>
+                                </li>
+                            {% endfor %}
+                        {% else %}
+                            <li class="list-group-item text-center text-muted">Sin datos disponibles.</li>
+                        {% endif %}
+                    </ul>
+
+                    <h3 class="h6">Mayor presupuesto</h3>
+                    <ul class="list-group">
+                        {% if ranking_presupuesto %}
+                            {% for obra in ranking_presupuesto %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ obra.nombre }}</strong>
+                                        <div class="small text-muted">{{ obra.cliente }}</div>
+                                    </div>
+                                    <span class="badge bg-primary">${{ '%.2f'|format(obra.presupuesto_total or 0) }}</span>
+                                </li>
+                            {% endfor %}
+                        {% else %}
+                            <li class="list-group-item text-center text-muted">Sin datos disponibles.</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-white border-bottom-0 d-flex justify-content-between align-items-center">
+            <h2 class="h6 mb-0">Detalle de obras</h2>
+            <span class="text-muted small">{{ obras|length }} resultados</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Cliente</th>
+                        <th>Estado</th>
+                        <th>Inicio</th>
+                        <th>Fin estimado</th>
+                        <th class="text-end">Presupuesto</th>
+                        <th class="text-end">Costo real</th>
+                        <th>Avance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if obras %}
+                        {% for obra in obras %}
+                            <tr>
+                                <td><strong>{{ obra.nombre }}</strong></td>
+                                <td>{{ obra.cliente or '-' }}</td>
+                                <td class="text-capitalize">
+                                    <span class="badge text-bg-light border">{{ obra.estado.replace('_', ' ') }}</span>
+                                </td>
+                                <td>{{ obra.fecha_inicio|default('-', true) }}</td>
+                                <td>{{ obra.fecha_fin_estimada|default('-', true) }}</td>
+                                <td class="text-end">${{ '%.2f'|format(obra.presupuesto_total or 0) }}</td>
+                                <td class="text-end">${{ '%.2f'|format(obra.costo_real or 0) }}</td>
+                                <td>
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ obra.progreso or 0 }}%"></div>
+                                    </div>
+                                    <small class="text-muted">{{ obra.progreso or 0 }}%</small>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No hay obras para mostrar.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
