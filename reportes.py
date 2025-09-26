@@ -304,12 +304,13 @@ def reporte_obras():
     )
 
     clientes_disponibles = (
-        db.session.query(func.distinct(Obra.cliente))
+        db.session.query(Obra.cliente)
         .filter(
             Obra.organizacion_id == current_user.organizacion_id,
             Obra.cliente.isnot(None),
             Obra.cliente != '',
         )
+        .distinct()
         .all()
     )
 
