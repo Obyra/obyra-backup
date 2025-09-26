@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Detalle de consulta IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
+    <div>
+      <h1 class="h3 mb-1">Detalle de consulta</h1>
+      <p class="text-muted mb-0">Información completa registrada durante la interacción con el agente inteligente.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('agent_local.auditoria_consultas') }}">
+      <i class="fas fa-arrow-left me-2"></i>Volver a la auditoría
+    </a>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-0">
+          <h2 class="h6 mb-0">Datos de la consulta</h2>
+        </div>
+        <div class="card-body">
+          <dl class="row mb-0 small">
+            <dt class="col-5 text-muted">Fecha</dt>
+            <dd class="col-7">{{ consulta.fecha_consulta.strftime('%d/%m/%Y %H:%M') if consulta.fecha_consulta else '-' }}</dd>
+
+            <dt class="col-5 text-muted">Usuario</dt>
+            <dd class="col-7">{{ consulta.usuario.nombre_completo if consulta.usuario else 'Usuario eliminado' }}</dd>
+
+            <dt class="col-5 text-muted">Email</dt>
+            <dd class="col-7">{{ consulta.usuario.email if consulta.usuario else '-' }}</dd>
+
+            <dt class="col-5 text-muted">Organización</dt>
+            <dd class="col-7">{{ consulta.organizacion.nombre if consulta.organizacion else 'Sin organización' }}</dd>
+
+            <dt class="col-5 text-muted">Tipo</dt>
+            <dd class="col-7 text-capitalize">{{ consulta.tipo_consulta or 'General' }}</dd>
+
+            <dt class="col-5 text-muted">Estado</dt>
+            <dd class="col-7">
+              {% if consulta.estado == 'exito' %}
+                <span class="badge bg-success-subtle text-success">Éxito</span>
+              {% elif consulta.estado == 'error' %}
+                <span class="badge bg-danger-subtle text-danger">Error</span>
+              {% else %}
+                <span class="badge bg-secondary-subtle text-secondary">{{ consulta.estado or 'N/D' }}</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-5 text-muted">Tiempo de respuesta</dt>
+            <dd class="col-7">{{ consulta.tiempo_respuesta_ms or 0 }} ms</dd>
+
+            <dt class="col-5 text-muted">Dirección IP</dt>
+            <dd class="col-7">{{ consulta.ip_address or '-' }}</dd>
+
+            <dt class="col-5 text-muted">User agent</dt>
+            <dd class="col-7 text-break">{{ consulta.user_agent or '-' }}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0">
+          <h2 class="h6 mb-0">Consulta realizada</h2>
+        </div>
+        <div class="card-body">
+          <pre class="bg-light p-3 rounded text-wrap text-break">{{ consulta.consulta_texto }}</pre>
+        </div>
+      </div>
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between">
+          <h2 class="h6 mb-0">Respuesta entregada</h2>
+          <span class="badge bg-primary-subtle text-primary">{{ consulta.estado|capitalize if consulta.estado else 'Procesada' }}</span>
+        </div>
+        <div class="card-body">
+          {% if consulta.respuesta_texto %}
+            <div class="bg-light p-3 rounded">
+              {{ consulta.respuesta_texto | safe }}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No se registró una respuesta para esta consulta.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
