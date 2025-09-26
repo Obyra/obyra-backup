@@ -7,10 +7,71 @@ import os
 import base64
 import json
 from datetime import datetime
-from openai import OpenAI
 
-# Inicializar cliente OpenAI
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+try:
+    from openai import OpenAI  # type: ignore
+    OPENAI_AVAILABLE = True
+except ModuleNotFoundError:
+    OpenAI = None  # type: ignore[assignment]
+    OPENAI_AVAILABLE = False
+
+# Inicializar cliente OpenAI solo si la librería y la API key están disponibles
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+if OPENAI_AVAILABLE and OPENAI_API_KEY:
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as exc:  # pragma: no cover - defensive
+        client = None
+        print(
+            "⚠️  No se pudo inicializar OpenAI; la calculadora IA funcionará en modo básico."
+        )
+        print(f"   Detalle: {exc}")
+else:
+    client = None
+    if not OPENAI_AVAILABLE:
+        print("⚠️  openai no instalado; la calculadora IA funcionará en modo básico.")
+    elif not OPENAI_API_KEY:
+        print("⚠️  OPENAI_API_KEY no configurada; la calculadora IA funcionará en modo básico.")
+    else:
+        print("⚠️  No fue posible inicializar OpenAI; la calculadora IA funcionará en modo básico.")
+
+
+def _safe_float(value, default):
+    """Convertir a float devolviendo un valor por defecto si falla."""
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _analisis_fallback(metros_cuadrados_manual, motivo, origen=None, confianza=None):
+    """Generar una respuesta de análisis cuando la IA no está disponible."""
+
+    tiene_superficie = metros_cuadrados_manual is not None and str(metros_cuadrados_manual).strip() != ""
+    superficie = _safe_float(metros_cuadrados_manual, 100.0 if not tiene_superficie else 100.0)
+
+    if superficie <= 0:
+        superficie = 100.0
+
+    if origen is None:
+        origen = "manual" if tiene_superficie else "estimado"
+
+    if confianza is None:
+        confianza = 0.8 if tiene_superficie else 0.3
+
+    observaciones = motivo
+    if tiene_superficie and "superficie" not in motivo.lower():
+        observaciones += " Basado en la superficie proporcionada por el usuario."
+
+    return {
+        "superficie_total_m2": superficie,
+        "tipo_construccion_sugerido": "Estándar",
+        "observaciones": observaciones,
+        "confianza_analisis": confianza,
+        "superficie_origen": origen,
+    }
 
 # Coeficientes de construcción expandidos por tipo y m² - Estilo Togal.AI
 COEFICIENTES_CONSTRUCCION = {
@@ -335,11 +396,25 @@ def analizar_plano_con_ia(archivo_pdf_base64, metros_cuadrados_manual=None):
     Analiza un plano arquitectónico usando IA de OpenAI
     Para PDFs, se usa análisis de texto, para superficie manual se sugiere el tipo
     """
+    if not client:
+        if not OPENAI_AVAILABLE:
+            motivo = "La librería openai no está instalada."
+        elif not OPENAI_API_KEY:
+            motivo = "OPENAI_API_KEY no está configurada."
+        else:
+            motivo = "No fue posible inicializar el cliente de OpenAI."
+
+        return _analisis_fallback(
+            metros_cuadrados_manual,
+            f"Análisis IA no disponible: {motivo}",
+            origen="manual" if metros_cuadrados_manual else "estimado",
+        )
+
     try:
         # Si hay superficie manual, hacer análisis inteligente sin imagen
         if metros_cuadrados_manual:
             superficie_float = float(metros_cuadrados_manual)
-            
+
             # el modelo gpt-4o es el más reciente lanzado en mayo 2024
             # no cambiar a menos que el usuario lo solicite específicamente
             response = client.chat.completions.create(
@@ -373,24 +448,22 @@ def analizar_plano_con_ia(archivo_pdf_base64, metros_cuadrados_manual=None):
         
         # Si no hay superficie manual, usar análisis básico
         print("Análisis de PDF directo no disponible - usando superficie manual si está disponible")
-        return {
-            "superficie_total_m2": float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0,
-            "tipo_construccion_sugerido": "Estándar",
-            "observaciones": "Análisis basado en superficie proporcionada. PDF cargado correctamente pero requiere superficie manual.",
-            "confianza_analisis": 0.8 if metros_cuadrados_manual else 0.3,
-            "superficie_origen": "manual" if metros_cuadrados_manual else "estimado"
-        }
-        
+        return _analisis_fallback(
+            metros_cuadrados_manual,
+            "Análisis basado en superficie proporcionada. PDF cargado correctamente pero requiere superficie manual.",
+            origen="manual" if metros_cuadrados_manual else "estimado",
+            confianza=0.8 if metros_cuadrados_manual else 0.3,
+        )
+
     except Exception as e:
         print(f"Error en análisis IA: {e}")
         # Fallback con datos manuales si falla la IA
-        return {
-            "superficie_total_m2": float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0,
-            "tipo_construccion_sugerido": "Estándar",
-            "observaciones": f"Error en análisis: {str(e)}. Usando superficie manual proporcionada.",
-            "confianza_analisis": 0.5,
-            "superficie_origen": "manual_fallback"
-        }
+        return _analisis_fallback(
+            metros_cuadrados_manual,
+            f"Error en análisis: {str(e)}. Usando superficie manual proporcionada.",
+            origen="manual_fallback",
+            confianza=0.5,
+        )
 
 def calcular_materiales(superficie_m2, tipo_construccion):
     """
