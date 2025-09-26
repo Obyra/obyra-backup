@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import secrets
 import importlib.util
 from importlib import import_module
 from types import ModuleType
@@ -50,9 +51,24 @@ def _ensure_authlib_stub():
 
 _ensure_authlib_stub()
 
+
+def _resolve_secret_key():
+    """Obtain a Flask secret key from env vars, generating a fallback if absent."""
+
+    for env_name in ("SESSION_SECRET", "SECRET_KEY", "FLASK_SECRET_KEY"):
+        value = os.environ.get(env_name)
+        if value:
+            return value
+
+    fallback = secrets.token_hex(32)
+    print(
+        "⚠️  SESSION_SECRET no configurado; generando clave secreta temporal para desarrollo."
+    )
+    return fallback
+
 # create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
+app.secret_key = _resolve_secret_key()
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
