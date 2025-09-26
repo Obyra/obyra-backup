@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import importlib.util
+from importlib import import_module
 from types import ModuleType
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
 from flask_login import login_required, current_user
@@ -96,6 +97,15 @@ login_manager.login_message = 'Por favor inicia sesión para acceder a esta pág
 login_manager.login_message_category = 'info'
 
 
+def _first_available_endpoint(*endpoints):
+    """Return the first endpoint that is currently registered on the app."""
+
+    for endpoint in endpoints:
+        if endpoint in app.view_functions:
+            return endpoint
+    return None
+
+
 @login_manager.user_loader
 def load_user(user_id):
     # Import here to avoid circular imports
@@ -110,7 +120,10 @@ def unauthorized():
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    login_endpoint = _first_available_endpoint('auth.login', 'supplier_auth.login')
+    if login_endpoint:
+        return redirect(url_for(login_endpoint))
+    return redirect('/')
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
@@ -159,8 +172,15 @@ def index():
         # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
-        return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+
+        dashboard_endpoint = _first_available_endpoint('reportes.dashboard', 'obras.lista')
+        if dashboard_endpoint:
+            return redirect(url_for(dashboard_endpoint))
+
+    login_endpoint = _first_available_endpoint('auth.login', 'supplier_auth.login')
+    if login_endpoint:
+        return redirect(url_for(login_endpoint))
+    return redirect('/')
 
 
 @app.route('/dashboard')
@@ -169,8 +189,15 @@ def dashboard():
         # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
-        return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+
+        dashboard_endpoint = _first_available_endpoint('reportes.dashboard', 'obras.lista')
+        if dashboard_endpoint:
+            return redirect(url_for(dashboard_endpoint))
+
+    login_endpoint = _first_available_endpoint('auth.login', 'supplier_auth.login')
+    if login_endpoint:
+        return redirect(url_for(login_endpoint))
+    return redirect('/')
 
 
 # Filtros personalizados
@@ -338,77 +365,108 @@ with app.app_context():
     
     print("📊 Database tables created successfully")
 
+def _safe_register_blueprint(module_name, blueprint_attr, *, url_prefix=None, group="core", init_oauth=False):
+    """Attempt to import and register a blueprint without aborting app startup."""
+
+    try:
+        module = import_module(module_name)
+    except ImportError as exc:
+        print(f"⚠️ {group.capitalize()} blueprint '{module_name}' not available: {exc}")
+        return False
+
+    try:
+        blueprint = getattr(module, blueprint_attr)
+    except AttributeError as exc:
+        print(
+            f"⚠️ {group.capitalize()} blueprint '{module_name}' is missing attribute '{blueprint_attr}': {exc}"
+        )
+        return False
+
+    if init_oauth and hasattr(module, "oauth"):
+        try:
+            module.oauth.init_app(app)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            print(f"⚠️ Failed to initialize OAuth for '{module_name}': {exc}")
+            # Continue registering blueprint even if OAuth init fails so login view exists
+
+    app.register_blueprint(blueprint, url_prefix=url_prefix)
+    return True
+
+
 # Register blueprints after database initialization to avoid circular imports
-try:
-    from auth import auth_bp
-    from obras import obras_bp
-    from presupuestos import presupuestos_bp
-    from equipos import equipos_bp
-    from inventario import inventario_bp
-    from marketplaces import marketplaces_bp
-    from reportes import reportes_bp
-    from asistente_ia import asistente_bp
-    from cotizacion_inteligente import cotizacion_bp
-    from control_documentos import documentos_bp
-    from seguridad_cumplimiento import seguridad_bp
-    from agent_local import agent_bp
-    from planes import planes_bp
-    from events_service import events_bp
-    from reports_service import reports_bp
-    
-    # Initialize OAuth with app before registering auth blueprint
-    from auth import oauth
-    oauth.init_app(app)
-    
-    app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(obras_bp, url_prefix='/obras')
-    app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
-    app.register_blueprint(equipos_bp, url_prefix='/equipos')
-    app.register_blueprint(inventario_bp, url_prefix='/inventario')
-    app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
-    app.register_blueprint(reportes_bp, url_prefix='/reportes')
-    app.register_blueprint(asistente_bp, url_prefix='/asistente')
-    app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
-    app.register_blueprint(documentos_bp, url_prefix='/documentos')
-    app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
-    app.register_blueprint(agent_bp)
-    app.register_blueprint(planes_bp)
-    app.register_blueprint(events_bp)
-    app.register_blueprint(reports_bp)
-    
+core_blueprints = [
+    ("auth", "auth_bp", "/auth", {"init_oauth": True}),
+    ("obras", "obras_bp", "/obras", {}),
+    ("presupuestos", "presupuestos_bp", "/presupuestos", {}),
+    ("equipos", "equipos_bp", "/equipos", {}),
+    ("inventario", "inventario_bp", "/inventario", {}),
+    ("marketplaces", "marketplaces_bp", "/marketplaces", {}),
+    ("reportes", "reportes_bp", "/reportes", {}),
+    ("asistente_ia", "asistente_bp", "/asistente", {}),
+    ("cotizacion_inteligente", "cotizacion_bp", "/cotizacion", {}),
+    ("control_documentos", "documentos_bp", "/documentos", {}),
+    ("seguridad_cumplimiento", "seguridad_bp", "/seguridad", {}),
+    ("agent_local", "agent_bp", None, {}),
+    ("planes", "planes_bp", None, {}),
+    ("events_service", "events_bp", None, {}),
+    ("reports_service", "reports_bp", None, {}),
+]
+
+registered_core = [
+    name
+    for name, attr, prefix, options in core_blueprints
+    if _safe_register_blueprint(
+        name,
+        attr,
+        url_prefix=prefix,
+        group="core",
+        **options,
+    )
+]
+
+if registered_core:
     print("✅ Core blueprints registered successfully")
-except ImportError as e:
-    print(f"⚠️ Some core blueprints not available: {e}")
 
 # Try to register optional blueprints
-try:
-    from equipos_new import equipos_new_bp
-    from inventario_new import inventario_new_bp
-    app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
-    app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
+enhanced_blueprints = [
+    ("equipos_new", "equipos_new_bp", "/equipos-new"),
+    ("inventario_new", "inventario_new_bp", "/inventario-new"),
+]
+
+if [
+    name
+    for name, attr, prefix in enhanced_blueprints
+    if _safe_register_blueprint(name, attr, url_prefix=prefix, group="enhanced")
+]:
     print("✅ Enhanced blueprints registered successfully")
-except ImportError as e:
-    print(f"⚠️ Enhanced blueprints not available: {e}")
 
 # Try to register supplier portal blueprints
-try:
-    from supplier_auth import supplier_auth_bp
-    from supplier_portal import supplier_portal_bp
-    from market import market_bp
-    app.register_blueprint(supplier_auth_bp)
-    app.register_blueprint(supplier_portal_bp)
-    app.register_blueprint(market_bp)
+supplier_blueprints = [
+    ("supplier_auth", "supplier_auth_bp", None),
+    ("supplier_portal", "supplier_portal_bp", None),
+    ("market", "market_bp", None),
+]
+
+if [
+    name
+    for name, attr, prefix in supplier_blueprints
+    if _safe_register_blueprint(name, attr, url_prefix=prefix, group="supplier portal")
+]:
     print("✅ Supplier portal blueprints registered successfully")
-except ImportError as e:
-    print(f"⚠️ Supplier portal blueprints not available: {e}")
 
 # Try to register marketplace blueprints
-try:
-    from marketplace.routes import bp as marketplace_bp
-    app.register_blueprint(marketplace_bp, url_prefix="/")
+if _safe_register_blueprint(
+    "marketplace.routes",
+    "bp",
+    url_prefix="/",
+    group="marketplace",
+):
     print("✅ Marketplace blueprint registered successfully")
-except ImportError as e:
-    print(f"⚠️ Marketplace blueprint not available: {e}")
+
+
+resolved_login_view = _first_available_endpoint('auth.login', 'supplier_auth.login')
+if resolved_login_view:
+    login_manager.login_view = resolved_login_view
 
 
 # === MEDIA SERVING ENDPOINT ===
@@ -434,7 +492,10 @@ def unauthorized(error):
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    login_endpoint = _first_available_endpoint('auth.login', 'supplier_auth.login')
+    if login_endpoint:
+        return redirect(url_for(login_endpoint))
+    return redirect('/')
 
 @app.errorhandler(404)
 def not_found(error):
