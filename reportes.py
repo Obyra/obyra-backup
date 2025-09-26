@@ -310,11 +310,13 @@ def reporte_obras():
             Obra.cliente.isnot(None),
             Obra.cliente != '',
         )
-        .order_by(func.lower(Obra.cliente))
         .all()
     )
 
-    clientes_disponibles = [row[0] for row in clientes_disponibles]
+    clientes_disponibles = sorted(
+        (row[0] for row in clientes_disponibles if row[0]),
+        key=lambda nombre: nombre.lower(),
+    )
 
     ranking_avance = sorted(obras, key=lambda o: o.progreso or 0, reverse=True)[:5]
     ranking_presupuesto = sorted(
