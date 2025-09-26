@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Control de Documentos{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-folder-open me-2 text-primary"></i>Control de Documentos</h2>
+            <p class="text-muted mb-0">Monitorea el ciclo de vida documental de tus obras y equipos.</p>
+        </div>
+        <div class="mt-3 mt-lg-0">
+            <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-book me-1"></i>Biblioteca digital
+            </a>
+            <a href="{{ url_for('documentos.subir_documento') }}" class="btn btn-primary">
+                <i class="fas fa-upload me-1"></i>Subir documento
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="card shadow-sm h-100 border-0 border-top border-primary border-3">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Documentos totales</p>
+                    <h3 class="fw-bold mb-0">{{ total_documentos }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card shadow-sm h-100 border-0 border-top border-warning border-3">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Pendientes de aprobación</p>
+                    <h3 class="fw-bold mb-0 text-warning">{{ documentos_pendientes }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card shadow-sm h-100 border-0 border-top border-success border-3">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Creados este mes</p>
+                    <h3 class="fw-bold mb-0 text-success">{{ documentos_mes }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card shadow-sm h-100 border-0 border-top border-info border-3">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Última actualización</p>
+                    <h3 class="fw-bold mb-0 text-info">
+                        {% if documentos_recientes %}
+                            {{ documentos_recientes[0].fecha_modificacion.strftime('%d/%m/%Y %H:%M') if documentos_recientes[0].fecha_modificacion else 'N/D' }}
+                        {% else %}
+                            N/D
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Documentos recientes</h5>
+                    <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+                </div>
+                <div class="card-body p-0">
+                    {% if documentos_recientes %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Obra</th>
+                                    <th>Tipo</th>
+                                    <th>Estado</th>
+                                    <th>Versión</th>
+                                    <th>Actualizado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for documento in documentos_recientes %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('documentos.ver_documento', documento_id=documento.id) }}" class="text-decoration-none">
+                                            {{ documento.nombre }}
+                                        </a>
+                                    </td>
+                                    <td>{{ documento.obra.nombre if documento.obra else '—' }}</td>
+                                    <td>{{ documento.tipo_documento.nombre if documento.tipo_documento else '—' }}</td>
+                                    <td>
+                                        <span class="badge
+                                            {% if documento.estado == 'aprobado' %} bg-success
+                                            {% elif documento.estado == 'revision' %} bg-warning text-dark
+                                            {% elif documento.estado == 'borrador' %} bg-secondary
+                                            {% else %} bg-dark
+                                            {% endif %}">
+                                            {{ documento.estado|title }}
+                                        </span>
+                                    </td>
+                                    <td>{{ documento.version }}</td>
+                                    <td>{{ documento.fecha_modificacion.strftime('%d/%m/%Y %H:%M') if documento.fecha_modificacion else 'N/D' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <i class="fas fa-folder-open fa-2x mb-2"></i>
+                        <p class="mb-0">Aún no se cargaron documentos en el sistema.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-check-double me-2"></i>Por aprobar</h5>
+                    <span class="badge bg-warning text-dark">{{ documentos_pendientes }}</span>
+                </div>
+                <div class="card-body">
+                    {% if documentos_aprobar %}
+                    <ul class="list-group list-group-flush">
+                        {% for documento in documentos_aprobar %}
+                        <li class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">{{ documento.nombre }}</h6>
+                                    <small class="text-muted">{{ documento.obra.nombre if documento.obra else '—' }}</small>
+                                </div>
+                                <a href="{{ url_for('documentos.ver_documento', documento_id=documento.id) }}" class="btn btn-sm btn-outline-primary">
+                                    Revisar
+                                </a>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-clipboard-check fa-2x mb-2"></i>
+                        <p class="mb-0">No hay documentos pendientes de aprobación.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% if current_user.rol == 'administrador' %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-body">
+                    <h6 class="fw-bold"><i class="fas fa-sliders-h me-2"></i>Configuración</h6>
+                    <p class="text-muted small mb-3">Administra los tipos y políticas documentales para tu organización.</p>
+                    <a href="{{ url_for('documentos.configuracion_tipos') }}" class="btn btn-outline-secondary w-100">Configurar tipos</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
