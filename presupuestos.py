@@ -3,12 +3,19 @@ from flask_login import login_required, current_user
 from datetime import date, datetime
 from io import BytesIO
 import json
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    REPORTLAB_AVAILABLE = True
+except ModuleNotFoundError:
+    A4 = colors = inch = SimpleDocTemplate = Table = TableStyle = Paragraph = Spacer = None
+    getSampleStyleSheet = ParagraphStyle = None
+    TA_CENTER = TA_RIGHT = None
+    REPORTLAB_AVAILABLE = False
 from app import db
 from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
 from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
@@ -749,10 +756,14 @@ def generar_pdf(id):
     if not current_user.puede_acceder_modulo('presupuestos'):
         flash('No tienes permisos para generar PDFs.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    if not REPORTLAB_AVAILABLE:
+        flash('La generación de PDFs requiere el paquete reportlab. Instálalo para habilitar esta función.', 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
     presupuesto = Presupuesto.query.get_or_404(id)
     items = presupuesto.items.all()
-    
+
     # Crear buffer para el PDF
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
