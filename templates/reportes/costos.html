@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes de Costos{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-0">Reportes de Costos</h1>
+            <p class="text-muted mb-0">Controla el consumo de materiales, mano de obra y equipos por obra, categoría y responsable.</p>
+        </div>
+        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver al dashboard
+        </a>
+    </div>
+
+    <form class="card shadow-sm mb-4" method="get" action="{{ url_for('reportes.reporte_costos') }}">
+        <div class="card-header bg-white border-bottom-0">
+            <h2 class="h5 mb-0">Filtros</h2>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Obra</label>
+                    <select name="obra_id" class="form-select">
+                        <option value="">Todas</option>
+                        {% for obra in obras %}
+                            <option value="{{ obra.id }}" {% if obra_id|int == obra.id %}selected{% endif %}>{{ obra.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Categoría</label>
+                    <select name="categoria_id" class="form-select">
+                        <option value="">Todas</option>
+                        {% for categoria in categorias %}
+                            <option value="{{ categoria.id }}" {% if categoria_id|int == categoria.id %}selected{% endif %}>{{ categoria.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Responsable</label>
+                    <select name="responsable_id" class="form-select">
+                        <option value="">Todos</option>
+                        {% for responsable in responsables %}
+                            <option value="{{ responsable.id }}" {% if responsable_id|int == responsable.id %}selected{% endif %}>
+                                {{ responsable.nombre }} {{ responsable.apellido }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Fecha desde</label>
+                    <input type="date" class="form-control" name="fecha_desde" value="{{ fecha_desde }}">
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label">Fecha hasta</label>
+                    <input type="date" class="form-control" name="fecha_hasta" value="{{ fecha_hasta }}">
+                </div>
+                <div class="col-sm-6 col-lg-3 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-funnel"></i> Aplicar filtros
+                    </button>
+                </div>
+                <div class="col-sm-6 col-lg-3 d-flex align-items-end">
+                    <a class="btn btn-link text-decoration-none w-100" href="{{ url_for('reportes.reporte_costos') }}">Limpiar filtros</a>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-xl-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Costo total</span>
+                    <h3 class="mt-2 mb-0">${{ '%.2f'|format(costo_total) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Promedio diario</span>
+                    <h3 class="mt-2 mb-0">${{ '%.2f'|format(promedio_diario) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Obras impactadas</span>
+                    <h3 class="mt-2 mb-0">{{ costos_por_obra_items|length }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <span class="text-muted text-uppercase small">Ítems utilizados</span>
+                    <h3 class="mt-2 mb-0">{{ costos_por_item_items|length }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0">
+                    <h2 class="h6 mb-0">Distribución por obra</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Obra</th>
+                                <th class="text-end">Costo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if costos_por_obra_items %}
+                                {% for nombre_obra, costo in costos_por_obra_items %}
+                                    <tr>
+                                        <td>{{ nombre_obra }}</td>
+                                        <td class="text-end">${{ '%.2f'|format(costo) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">No hay consumos registrados con los filtros seleccionados.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0">
+                    <h2 class="h6 mb-0">Distribución por categoría</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Categoría</th>
+                                <th class="text-end">Costo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if costos_por_categoria_items %}
+                                {% for nombre_categoria, costo in costos_por_categoria_items %}
+                                    <tr>
+                                        <td>{{ nombre_categoria }}</td>
+                                        <td class="text-end">${{ '%.2f'|format(costo) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">No hay consumos registrados con los filtros seleccionados.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0">
+                    <h2 class="h6 mb-0">Ítems con mayor costo acumulado</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Ítem</th>
+                                <th class="text-end">Costo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if costos_por_item_items %}
+                                {% for nombre_item, costo in costos_por_item_items[:10] %}
+                                    <tr>
+                                        <td>{{ nombre_item }}</td>
+                                        <td class="text-end">${{ '%.2f'|format(costo) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">No hay consumos registrados.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0">
+                    <h2 class="h6 mb-0">Detalle de consumos</h2>
+                </div>
+                <div class="table-responsive" style="max-height: 420px;">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Obra</th>
+                                <th>Ítem</th>
+                                <th class="text-end">Cantidad</th>
+                                <th class="text-end">Costo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if usos %}
+                                {% for uso in usos[:20] %}
+                                    <tr>
+                                        <td>{{ uso.fecha_uso }}</td>
+                                        <td>{{ uso.obra.nombre }}</td>
+                                        <td>{{ uso.item.nombre }}</td>
+                                        <td class="text-end">{{ '%.2f'|format(uso.cantidad_usada or 0) }}</td>
+                                        <td class="text-end">${{ '%.2f'|format((uso.cantidad_usada or 0) * (uso.item.precio_promedio or 0)) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No hay consumos registrados.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom-0">
+            <h2 class="h6 mb-0">Detalle completo de consumos</h2>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Obra</th>
+                        <th>Ítem</th>
+                        <th>Categoría</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Precio promedio</th>
+                        <th class="text-end">Costo total</th>
+                        <th>Responsable</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if usos %}
+                        {% for uso in usos %}
+                            <tr>
+                                <td>{{ uso.fecha_uso }}</td>
+                                <td>{{ uso.obra.nombre }}</td>
+                                <td>{{ uso.item.nombre }}</td>
+                                <td>{{ uso.item.categoria.nombre if uso.item.categoria else 'Sin categoría' }}</td>
+                                <td class="text-end">{{ '%.2f'|format(uso.cantidad_usada or 0) }}</td>
+                                <td class="text-end">${{ '%.2f'|format(uso.item.precio_promedio or 0) }}</td>
+                                <td class="text-end">${{ '%.2f'|format((uso.cantidad_usada or 0) * (uso.item.precio_promedio or 0)) }}</td>
+                                <td>{{ uso.usuario.nombre if uso.usuario else '-' }} {{ uso.usuario.apellido if uso.usuario else '' }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No se registran consumos con los filtros aplicados.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-white border-bottom-0">
+            <h2 class="h6 mb-0">Movimientos recientes de inventario</h2>
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Ítem</th>
+                        <th>Tipo</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Precio unitario</th>
+                        <th>Motivo</th>
+                        <th>Responsable</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if movimientos_recientes %}
+                        {% for movimiento in movimientos_recientes %}
+                            <tr>
+                                <td>{{ movimiento.fecha.strftime('%Y-%m-%d %H:%M') if movimiento.fecha else '-' }}</td>
+                                <td>{{ movimiento.item.nombre }}</td>
+                                <td class="text-capitalize">{{ movimiento.tipo }}</td>
+                                <td class="text-end">{{ '%.2f'|format(movimiento.cantidad or 0) }}</td>
+                                <td class="text-end">${{ '%.2f'|format(movimiento.precio_unitario or 0) }}</td>
+                                <td>{{ movimiento.motivo or '-' }}</td>
+                                <td>{{ movimiento.usuario.nombre if movimiento.usuario else '-' }} {{ movimiento.usuario.apellido if movimiento.usuario else '' }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">No hay movimientos recientes.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
