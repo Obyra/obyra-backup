@@ -1,41 +1,3 @@
-<<<<<<< HEAD
-anel al cargar
-        updateTaskSelectionPanel();
-        console.log('✅ WIZARD: Event listeners de tareas rebindeados');
-      }, 50);
-      
-      console.log(`🎯 WIZARD: HTML renderizado en contenedor:`, { 
-        contenedor: list.id || 'sin-id', 
-        tareasCount: tareas.length,
-        htmlLength: html.length,
-        hasActive: list.classList.contains('active'),
-        hasShow: list.classList.contains('show'),
-        noDNone: !list.classList.contains('d-none'),
-        isActuallyVisible: !!(list.offsetParent),
-        ariaHidden: list.getAttribute('aria-hidden')
-      });
-      console.log(`🎯 WIZARD: Contenedor después del render:`, list.innerHTML.substring(0, 200) + '...');
-    } else {
-      console.error('❌ WIZARD: No se encontró contenedor para renderizar tareas');
-    }
-    
-    console.log(`✅ WIZARD: ${tareas.length} plantillas del catálogo cargadas exitosamente`);
-    
-  } catch (error) {
-    console.error('❌ WIZARD: Error cargando plantillas del catálogo:', error);
-    if (spin) spin.classList.add('d-none');
-    if (list) {
-      list.innerHTML = `<div class="alert alert-warning">
-        <h6>No se pudieron cargar las plantillas</h6>
-        <p class="mb-0">Error: ${error.message}</p>
-        <button class="btn btn-sm btn-outline-primary mt-2" onclick="window.loadTareasWizard(${obraId}, ${JSON.stringify(slugs)})">
-          <i class="fas fa-refresh me-1"></i>Reintentar
-        </button>
-      </div>`;
-    }
-  }
-};
-=======
 /*
  * Wizard de creación masiva de tareas por etapas
  * Implementación simple y robusta que mantiene el estado en window.WZ_STATE
@@ -379,7 +341,6 @@ function initWizard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ obra_id: obraId, etapas: slugs }),
     });
->>>>>>> codex/analizar-el-wizard-de-obra
 
     const tareas = data.tareas_catalogo || [];
     state.tareasDisponibles = tareas;
