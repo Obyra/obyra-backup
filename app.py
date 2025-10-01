@@ -388,6 +388,28 @@ except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
 
 
+# --- Public legal pages fallbacks ---------------------------------------
+# Algunas implementaciones históricas definen estas rutas en módulos
+# separados (p.ej. main.py), pero cuando esos blueprints no están
+# disponibles la plantilla base sigue apuntando a los endpoints
+# ``terminos`` y ``privacidad``. Para evitar nuevos BuildError cuando
+# el proyecto se ejecuta en entornos mínimos (Replit, Visual Studio,
+# etc.), agregamos reglas lightweight sólo si aún no existen.
+if 'terminos' not in app.view_functions:
+    app.add_url_rule(
+        '/terminos',
+        endpoint='terminos',
+        view_func=lambda: render_template('legal/terminos.html')
+    )
+
+if 'privacidad' not in app.view_functions:
+    app.add_url_rule(
+        '/privacidad',
+        endpoint='privacidad',
+        view_func=lambda: render_template('legal/privacidad.html')
+    )
+
+
 # === MEDIA SERVING ENDPOINT ===
 
 @app.route("/media/<path:relpath>")
