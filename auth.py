@@ -3,13 +3,40 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from extensions import db
-from models import Usuario, Organizacion
+from models import Usuario, Organizacion, PerfilUsuario
 from sqlalchemy import func
 from datetime import datetime
 from typing import Dict, Optional, Tuple, Union
 import os
 import re
 import uuid
+
+
+def normalizar_cuit(valor: Optional[str]) -> str:
+    """Elimina caracteres no numéricos y limita a 11 dígitos."""
+    if not valor:
+        return ''
+    return re.sub(r'[^0-9]', '', valor)[:11]
+
+
+def validar_cuit(valor: Optional[str]) -> bool:
+    """Valida CUIL/CUIT usando el algoritmo estándar de verificación."""
+    cuit = normalizar_cuit(valor)
+    if len(cuit) != 11:
+        return False
+
+    try:
+        base = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+        total = sum(int(cuit[i]) * base[i] for i in range(10))
+        resto = total % 11
+        verificador = 11 - resto
+        if verificador == 11:
+            verificador = 0
+        elif verificador == 10:
+            verificador = 9
+        return int(cuit[-1]) == verificador
+    except ValueError:
+        return False
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -148,37 +175,56 @@ def register():
         return redirect(url_for('reportes.dashboard'))
     
     if request.method == 'POST':
-        nombre = request.form.get('nombre')
-        apellido = request.form.get('apellido')
-        email = request.form.get('email')
-        telefono = request.form.get('telefono')
+        nombre = (request.form.get('nombre') or '').strip()
+        apellido = (request.form.get('apellido') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        telefono = (request.form.get('telefono') or '').strip()
+        cuit_input = (request.form.get('cuit') or '').strip()
+        direccion = (request.form.get('direccion') or '').strip()
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
-        
+
         # Validaciones
-        if not all([nombre, apellido, email, password]):
+        if not all([nombre, apellido, email, password, cuit_input, direccion]):
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
         # Validar formato de email
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
             flash('Por favor, ingresa un email válido.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
+        cuit_normalizado = normalizar_cuit(cuit_input)
+        if not validar_cuit(cuit_normalizado):
+            flash('El CUIL/CUIT ingresado no es válido.', 'danger')
+            return render_template('auth/register.html', google_available=bool(google))
+
         if password != confirm_password:
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
         if len(password) < 6:
             flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
         
         # Verificar que el email no exista
-        if Usuario.query.filter_by(email=email).first():
+        if Usuario.query.filter(func.lower(Usuario.email) == email.lower()).first():
             flash('Ya existe un usuario con ese email.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
+        if PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first():
+            flash('Ya existe un usuario registrado con ese CUIL/CUIT.', 'danger')
+            return render_template('auth/register.html', google_available=bool(google))
+
         try:
+            nueva_organizacion = Organizacion(
+                nombre=f"Organización de {nombre} {apellido}",
+                fecha_creacion=datetime.utcnow()
+            )
+            db.session.add(nueva_organizacion)
+            db.session.flush()
+
+            rol_usuario = 'administrador'
             # Crear nuevo usuario
             nuevo_usuario = Usuario(
                 nombre=nombre,
@@ -186,14 +232,25 @@ def register():
                 email=email.lower(),
                 telefono=telefono,
                 password_hash=generate_password_hash(password),
-                rol='operario',  # Por defecto
+                rol=rol_usuario,
+                role=rol_usuario,
                 auth_provider='manual',
-                activo=True
+                activo=True,
+                organizacion_id=nueva_organizacion.id
             )
-            
+
             db.session.add(nuevo_usuario)
+            db.session.flush()
+
+            perfil_usuario = PerfilUsuario(
+                usuario_id=nuevo_usuario.id,
+                cuit=cuit_normalizado,
+                direccion=direccion
+            )
+            db.session.add(perfil_usuario)
+
             db.session.commit()
-            
+
             # Auto-login después del registro
             login_user(nuevo_usuario)
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')

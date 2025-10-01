@@ -68,6 +68,12 @@ class Usuario(UserMixin, db.Model):
     
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='usuarios')
+    perfil = db.relationship(
+        'PerfilUsuario',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
     obras_asignadas = db.relationship('AsignacionObra', back_populates='usuario', lazy='dynamic')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='usuario', lazy='dynamic')
     
@@ -205,8 +211,24 @@ class Usuario(UserMixin, db.Model):
         # Usuarios en periodo de prueba válido
         if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
             return True
-            
+
         return False
+
+
+class PerfilUsuario(db.Model):
+    __tablename__ = 'perfiles_usuario'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    cuit = db.Column(db.String(20), nullable=False, unique=True)
+    direccion = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='perfil')
+
+    def __repr__(self):
+        return f'<PerfilUsuario usuario_id={self.usuario_id} cuit={self.cuit}>'
 
 
 class Obra(db.Model):

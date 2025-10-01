@@ -26,14 +26,28 @@
 
             <div class="mb-3">
                 <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
-                <input type="email" class="form-control" id="email" name="email" 
+                <input type="email" class="form-control" id="email" name="email"
                        value="{{ request.form.email or '' }}" required>
             </div>
 
             <div class="mb-3">
                 <label for="telefono" class="form-label">Teléfono</label>
-                <input type="tel" class="form-control" id="telefono" name="telefono" 
+                <input type="tel" class="form-control" id="telefono" name="telefono"
                        value="{{ request.form.telefono or '' }}" placeholder="Ej: +54 9 11 1234-5678">
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="cuit" class="form-label">CUIL/CUIT <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="cuit" name="cuit"
+                           value="{{ request.form.cuit or '' }}" placeholder="Ej: 20-12345678-3" required>
+                    <small class="form-text text-muted">Ingresa los 11 dígitos, con o sin guiones.</small>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="direccion" class="form-label">Dirección <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="direccion" name="direccion"
+                           value="{{ request.form.direccion or '' }}" placeholder="Ej: Av. Siempre Viva 742" required>
+                </div>
             </div>
 
             <div class="row">
@@ -170,7 +184,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.querySelector('.auth-form');
     const password = document.getElementById('password');
     const confirmPassword = document.getElementById('confirm_password');
-    
+    const cuitInput = document.getElementById('cuit');
+
     form.addEventListener('submit', function(e) {
         if (password.value !== confirmPassword.value) {
             e.preventDefault();
@@ -180,7 +195,7 @@ document.addEventListener('DOMContentLoaded', function() {
             confirmPassword.setCustomValidity('');
         }
     });
-    
+
     confirmPassword.addEventListener('input', function() {
         if (password.value !== confirmPassword.value) {
             confirmPassword.setCustomValidity('Las contraseñas no coinciden');
@@ -188,6 +203,20 @@ document.addEventListener('DOMContentLoaded', function() {
             confirmPassword.setCustomValidity('');
         }
     });
+
+    if (cuitInput) {
+        cuitInput.addEventListener('input', function() {
+            const digits = cuitInput.value.replace(/[^0-9]/g, '').slice(0, 11);
+            let formatted = digits;
+            if (digits.length > 2) {
+                formatted = digits.slice(0, 2) + '-' + digits.slice(2, Math.min(10, digits.length));
+                if (digits.length > 10) {
+                    formatted += '-' + digits.slice(10);
+                }
+            }
+            cuitInput.value = formatted;
+        });
+    }
 });
 </script>
 {% endblock %}
