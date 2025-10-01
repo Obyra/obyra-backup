@@ -1,5 +1,6 @@
 import os
 import logging
+import importlib
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -357,50 +358,51 @@ with app.app_context():
     
     print("📊 Database tables created successfully")
 
+def _import_blueprint(module_name, attr_name):
+    """Importa un blueprint de manera segura sin interrumpir el resto."""
+    module = importlib.import_module(module_name)
+    return getattr(module, attr_name)
+
+
 # Register blueprints after database initialization to avoid circular imports
 auth_blueprint_registered = False
+core_failures = []
 
 try:
-    from auth import auth_bp
-    from obras import obras_bp
-    from presupuestos import presupuestos_bp
-    from equipos import equipos_bp
-    from inventario import inventario_bp
-    from marketplaces import marketplaces_bp
-    from reportes import reportes_bp
-    from asistente_ia import asistente_bp
-    from cotizacion_inteligente import cotizacion_bp
-    from control_documentos import documentos_bp
-    from seguridad_cumplimiento import seguridad_bp
-    from agent_local import agent_bp
-    from planes import planes_bp
-    from events_service import events_bp
-    from reports_service import reports_bp
-    
-    # Initialize OAuth with app before registering auth blueprint
-    from auth import oauth
+    from auth import oauth  # type: ignore
+    auth_bp = _import_blueprint('auth', 'auth_bp')
     oauth.init_app(app)
-    
     app.register_blueprint(auth_bp, url_prefix='/auth')
     auth_blueprint_registered = True
-    app.register_blueprint(obras_bp, url_prefix='/obras')
-    app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
-    app.register_blueprint(equipos_bp, url_prefix='/equipos')
-    app.register_blueprint(inventario_bp, url_prefix='/inventario')
-    app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
-    app.register_blueprint(reportes_bp, url_prefix='/reportes')
-    app.register_blueprint(asistente_bp, url_prefix='/asistente')
-    app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
-    app.register_blueprint(documentos_bp, url_prefix='/documentos')
-    app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
-    app.register_blueprint(agent_bp)
-    app.register_blueprint(planes_bp)
-    app.register_blueprint(events_bp)
-    app.register_blueprint(reports_bp)
-    
+except Exception as exc:
+    core_failures.append(f"auth ({exc})")
+
+for module_name, attr_name, prefix in [
+    ('obras', 'obras_bp', '/obras'),
+    ('presupuestos', 'presupuestos_bp', '/presupuestos'),
+    ('equipos', 'equipos_bp', '/equipos'),
+    ('inventario', 'inventario_bp', '/inventario'),
+    ('marketplaces', 'marketplaces_bp', '/marketplaces'),
+    ('reportes', 'reportes_bp', '/reportes'),
+    ('asistente_ia', 'asistente_bp', '/asistente'),
+    ('cotizacion_inteligente', 'cotizacion_bp', '/cotizacion'),
+    ('control_documentos', 'documentos_bp', '/documentos'),
+    ('seguridad_cumplimiento', 'seguridad_bp', '/seguridad'),
+    ('agent_local', 'agent_bp', None),
+    ('planes', 'planes_bp', None),
+    ('events_service', 'events_bp', None),
+    ('reports_service', 'reports_bp', None),
+]:
+    try:
+        blueprint = _import_blueprint(module_name, attr_name)
+        app.register_blueprint(blueprint, url_prefix=prefix)
+    except Exception as exc:
+        core_failures.append(f"{module_name} ({exc})")
+
+if core_failures:
+    print("⚠️ Some core blueprints not available: " + "; ".join(core_failures))
+else:
     print("✅ Core blueprints registered successfully")
-except ImportError as e:
-    print(f"⚠️ Some core blueprints not available: {e}")
 
 if not auth_blueprint_registered:
 
@@ -411,6 +413,15 @@ if not auth_blueprint_registered:
             return redirect(url_for('supplier_auth.login'))
         except BuildError:
             return "Login no disponible temporalmente.", 503
+
+    @app.route('/auth/register', methods=['GET', 'POST'], endpoint='auth.register')
+    def fallback_auth_register():
+        """Mensaje claro cuando el registro estándar no está disponible."""
+        flash('El registro de usuarios no está disponible en este entorno.', 'warning')
+        try:
+            return redirect(url_for('supplier_auth.registro'))
+        except BuildError:
+            return "Registro de usuarios no disponible temporalmente.", 503
 
 # Try to register optional blueprints
 try:
@@ -463,6 +474,26 @@ if 'privacidad' not in app.view_functions:
         endpoint='privacidad',
         view_func=lambda: render_template('legal/privacidad.html')
     )
+
+if 'reportes.dashboard' not in app.view_functions:
+
+    @app.route('/reportes/dashboard', endpoint='reportes.dashboard')
+    @login_required
+    def fallback_reportes_dashboard():
+        """Proporciona un dashboard básico cuando el módulo de reportes falta."""
+        flash('El dashboard avanzado no está disponible en este entorno reducido.', 'warning')
+        fallback_url = None
+        for endpoint in ('obras.lista', 'supplier_portal.dashboard', 'index'):
+            try:
+                fallback_url = url_for(endpoint)
+                break
+            except BuildError:
+                continue
+
+        return render_template(
+            'errors/dashboard_unavailable.html',
+            fallback_url=fallback_url,
+        ), 200
 
 
 # === MEDIA SERVING ENDPOINT ===
