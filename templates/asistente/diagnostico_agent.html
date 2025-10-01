@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Diagnóstico del Agente IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
+    <div>
+      <h1 class="h3 mb-1">Diagnóstico del Agente IA</h1>
+      <p class="text-muted mb-0">Revisa el estado de tu agente inteligente y accede rápidamente a las herramientas de soporte.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary" href="{{ url_for('agent_local.auditoria_consultas') }}">
+        <i class="fas fa-clipboard-list me-1"></i> Auditoría de consultas
+      </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('reportes.dashboard') }}">
+        <i class="fas fa-tachometer-alt me-1"></i> Volver al dashboard
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 text-uppercase text-muted mb-0">Organización</h2>
+            <span class="badge bg-primary-subtle text-primary">Perfil</span>
+          </div>
+          <h3 class="h5 mb-1">{{ user.organizacion.nombre if user and user.organizacion else "Sin organización" }}</h3>
+          <p class="text-muted mb-0">Administrador: {{ user.nombre_completo if user else "-" }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 text-uppercase text-muted mb-0">Estado del agente</h2>
+            <i class="fas fa-microchip text-primary"></i>
+          </div>
+          <p class="mb-2">El agente está listo para procesar consultas en base a los datos registrados en la plataforma.</p>
+          <ul class="list-unstyled small text-muted mb-0">
+            <li><i class="fas fa-check-circle text-success me-1"></i> Acceso a obras, presupuestos e inventario.</li>
+            <li><i class="fas fa-check-circle text-success me-1"></i> Auditoría automática de cada interacción.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 text-uppercase text-muted mb-0">Próximos pasos</h2>
+            <i class="fas fa-lightbulb text-warning"></i>
+          </div>
+          <ol class="mb-0 small text-muted ps-3">
+            <li>Capacita a tu equipo en el uso del agente.</li>
+            <li>Monitorea la auditoría para detectar oportunidades.</li>
+            <li>Refina la información de tus obras y presupuestos.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0 pb-0">
+          <h2 class="h5 mb-1">¿Cómo funciona el agente?</h2>
+          <p class="text-muted small mb-0">El agente IA responde preguntas en tiempo real utilizando los datos de tu organización.</p>
+        </div>
+        <div class="card-body">
+          <div class="timeline">
+            <div class="timeline-item mb-4">
+              <div class="timeline-marker bg-primary"></div>
+              <div class="timeline-content ps-4">
+                <h3 class="h6 mb-1">1. Recepción de la consulta</h3>
+                <p class="text-muted small mb-0">La consulta se almacena con los datos del usuario, IP y contexto para auditoría.</p>
+              </div>
+            </div>
+            <div class="timeline-item mb-4">
+              <div class="timeline-marker bg-primary"></div>
+              <div class="timeline-content ps-4">
+                <h3 class="h6 mb-1">2. Clasificación inteligente</h3>
+                <p class="text-muted small mb-0">Determinamos si la pregunta corresponde a obras, presupuestos, inventario u otra categoría.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker bg-primary"></div>
+              <div class="timeline-content ps-4">
+                <h3 class="h6 mb-1">3. Generación de respuesta</h3>
+                <p class="text-muted small mb-0">Se combinan los datos reales de la organización con recomendaciones accionables.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-white border-0 pb-0">
+          <h2 class="h5 mb-1">Recursos recomendados</h2>
+          <p class="text-muted small mb-0">Mantén tu información actualizada para mejorar la precisión de las respuestas.</p>
+        </div>
+        <div class="card-body">
+          <div class="list-group list-group-flush">
+            <a href="{{ url_for('obras.lista') }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
+              <span><i class="fas fa-building me-2 text-primary"></i>Gestionar obras</span>
+              <i class="fas fa-chevron-right"></i>
+            </a>
+            <a href="{{ url_for('inventario.listar_items') if current_app.view_functions.get('inventario.listar_items') else '#' }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
+              <span><i class="fas fa-boxes me-2 text-success"></i>Actualizar inventario</span>
+              <i class="fas fa-chevron-right"></i>
+            </a>
+            <a href="{{ url_for('presupuestos.lista') if current_app.view_functions.get('presupuestos.lista') else '#' }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between{% if not current_app.view_functions.get('presupuestos.lista') %} disabled text-muted{% endif %}">
+              <span><i class="fas fa-coins me-2 text-warning"></i>Revisar presupuestos</span>
+              <i class="fas fa-chevron-right"></i>
+            </a>
+          </div>
+          <div class="alert alert-info mt-3 mb-0" role="alert">
+            <div class="d-flex">
+              <i class="fas fa-info-circle me-2"></i>
+              <span>Todos los accesos quedan registrados automáticamente para auditoría.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.timeline {
+  position: relative;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.75rem;
+  width: 2px;
+  background-color: var(--bs-border-color);
+}
+.timeline-item {
+  position: relative;
+  padding-left: 2.5rem;
+}
+.timeline-marker {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.35rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,494 @@
+openapi: 3.0.3
+info:
+  title: OBYRA Platform v2 API
+  version: 0.1.0
+  description: >-
+    API incrementales protegidas por feature flags para proveedores, billing,
+    órdenes de compra y analytics. Todas las rutas requieren autenticación JWT
+    con `org_id` y scopes específicos según módulo.
+servers:
+  - url: https://api.staging.obyra.com
+    description: Staging
+  - url: https://api.obyra.com
+    description: Producción (flags controlan disponibilidad)
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantHeader:
+      in: header
+      name: X-Tenant-ID
+      required: true
+      schema:
+        type: string
+      description: UUID del tenant (empresa)
+security:
+  - bearerAuth: []
+paths:
+  /api/v2/suppliers:
+    get:
+      summary: Listar proveedores
+      description: Requiere `scope: suppliers.read` y `FF_SUPPLIERS` activo.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Lista paginada de proveedores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Supplier'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      summary: Crear proveedor
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierCreate'
+      responses:
+        '201':
+          description: Proveedor creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+  /api/v2/suppliers/{supplier_id}:
+    patch:
+      summary: Actualizar proveedor
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: supplier_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierUpdate'
+      responses:
+        '200':
+          description: Proveedor actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+  /api/v2/suppliers/{supplier_id}/users/invite:
+    post:
+      summary: Invitar usuario proveedor
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: supplier_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierUserInvite'
+      responses:
+        '202':
+          description: Invitación enviada
+  /api/v2/suppliers/{supplier_id}/products/bulk:
+    post:
+      summary: Carga masiva de productos
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: supplier_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '202':
+          description: Importación en curso
+  /api/v2/billing/payment-method:
+    post:
+      summary: Registrar método de pago tokenizado
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentMethodCreate'
+      responses:
+        '201':
+          description: Método registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+  /api/v2/billing/subscribe:
+    post:
+      summary: Crear suscripción
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionCreate'
+      responses:
+        '201':
+          description: Suscripción creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+  /api/v2/billing/invoices:
+    get:
+      summary: Listar facturas
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Facturas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invoice'
+  /api/v2/po:
+    post:
+      summary: Crear orden de compra
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderCreate'
+      responses:
+        '201':
+          description: PO creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+    get:
+      summary: Listar órdenes de compra
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de POs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PurchaseOrder'
+  /api/v2/po/{po_id}:
+    get:
+      summary: Obtener detalle de PO
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: po_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalle PO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /api/v2/po/{po_id}/confirm:
+    patch:
+      summary: Confirmar orden (proveedor)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: po_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [confirmed, rejected]
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Estado actualizado
+  /api/v2/po/{po_id}/deliveries:
+    post:
+      summary: Registrar entrega parcial o total
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: po_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryCreate'
+      responses:
+        '201':
+          description: Entrega registrada
+  /api/v2/analytics/events:
+    post:
+      summary: Emitir evento manual (shadow)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyticsEventCreate'
+      responses:
+        '202':
+          description: Evento encolado
+components:
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        tax_id:
+          type: string
+        country_code:
+          type: string
+        metadata:
+          type: object
+    SupplierCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        tax_id:
+          type: string
+        country_code:
+          type: string
+        metadata:
+          type: object
+    SupplierUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        tax_id:
+          type: string
+        metadata:
+          type: object
+    SupplierUserInvite:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+    PaymentMethodCreate:
+      type: object
+      required: [provider, token]
+      properties:
+        provider:
+          type: string
+        token:
+          type: string
+        billing_details:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+    PaymentMethod:
+      type: object
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+        brand:
+          type: string
+        last4:
+          type: string
+        exp_month:
+          type: integer
+        exp_year:
+          type: integer
+    SubscriptionCreate:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+        trial_days:
+          type: integer
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+        plan:
+          type: string
+        status:
+          type: string
+        current_period_end:
+          type: string
+          format: date-time
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        amount_due:
+          type: number
+          format: float
+        currency:
+          type: string
+        status:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+    PurchaseOrderCreate:
+      type: object
+      required: [supplier_id, currency, items]
+      properties:
+        supplier_id:
+          type: string
+        currency:
+          type: string
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseOrderItemInput'
+    PurchaseOrderItemInput:
+      type: object
+      required: [product_id, quantity, unit_price]
+      properties:
+        product_id:
+          type: string
+        quantity:
+          type: number
+        unit_price:
+          type: number
+    PurchaseOrder:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        total_amount:
+          type: number
+        currency:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseOrderItem'
+    PurchaseOrderItem:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        quantity:
+          type: number
+        unit_price:
+          type: number
+    DeliveryCreate:
+      type: object
+      required: [items]
+      properties:
+        delivered_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            type: object
+            required: [purchase_order_item_id, quantity]
+            properties:
+              purchase_order_item_id:
+                type: string
+              quantity:
+                type: number
+    AnalyticsEventCreate:
+      type: object
+      required: [event_name]
+      properties:
+        event_name:
+          type: string
+        payload:
+          type: object
+        occurred_at:
+          type: string
+          format: date-time
