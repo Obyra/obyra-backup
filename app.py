@@ -4,6 +4,7 @@ from flask import Flask, render_template, redirect, url_for, flash, send_from_di
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
+from werkzeug.routing import BuildError
 from extensions import db, login_manager
 
 # create the app
@@ -117,6 +118,12 @@ def index():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
+    return redirect(url_for('auth.login'))
+
+
+@app.route('/login', endpoint='auth_login')
+def legacy_login_redirect():
+    """Mantener compatibilidad con rutas antiguas /login"""
     return redirect(url_for('auth.login'))
 
 
@@ -296,6 +303,8 @@ with app.app_context():
     print("📊 Database tables created successfully")
 
 # Register blueprints after database initialization to avoid circular imports
+auth_blueprint_registered = False
+
 try:
     from auth import auth_bp
     from obras import obras_bp
@@ -318,6 +327,7 @@ try:
     oauth.init_app(app)
     
     app.register_blueprint(auth_bp, url_prefix='/auth')
+    auth_blueprint_registered = True
     app.register_blueprint(obras_bp, url_prefix='/obras')
     app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
     app.register_blueprint(equipos_bp, url_prefix='/equipos')
@@ -336,6 +346,16 @@ try:
     print("✅ Core blueprints registered successfully")
 except ImportError as e:
     print(f"⚠️ Some core blueprints not available: {e}")
+
+if not auth_blueprint_registered:
+
+    @app.route('/auth/login', endpoint='auth.login')
+    def fallback_auth_login():
+        """Fallback login that routes to the supplier portal when auth blueprint is missing."""
+        try:
+            return redirect(url_for('supplier_auth.login'))
+        except BuildError:
+            return "Login no disponible temporalmente.", 503
 
 # Try to register optional blueprints
 try:
