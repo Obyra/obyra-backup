@@ -392,6 +392,8 @@ for module_name, attr_name, prefix in [
     ('planes', 'planes_bp', None),
     ('events_service', 'events_bp', None),
     ('reports_service', 'reports_bp', None),
+    ('account', 'account_bp', None),
+    ('onboarding', 'onboarding_bp', '/onboarding'),
 ]:
     try:
         blueprint = _import_blueprint(module_name, attr_name)

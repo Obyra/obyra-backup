@@ -3,13 +3,14 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from extensions import db
-from models import Usuario, Organizacion, PerfilUsuario
+from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus
 from sqlalchemy import func
 from datetime import datetime
 from typing import Dict, Optional, Tuple, Union
 import os
 import re
 import uuid
+from werkzeug.routing import BuildError
 
 
 def normalizar_cuit(valor: Optional[str]) -> str:
@@ -121,6 +122,53 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
     login_user(usuario, remember=remember)
     return True, usuario
 
+
+def _resolve_dashboard_url() -> str:
+    """Obtiene la URL más adecuada para enviar al usuario autenticado."""
+    for endpoint in (
+        'reportes.dashboard',
+        'obras.lista',
+        'supplier_portal.dashboard',
+        'index',
+    ):
+        try:
+            return url_for(endpoint)
+        except BuildError:
+            continue
+    return '/'
+
+
+def _determine_onboarding_redirect(usuario: Usuario) -> Optional[str]:
+    """Devuelve la ruta del siguiente paso de onboarding o None si está completo."""
+    status = usuario.ensure_onboarding_status()
+    db.session.commit()
+
+    if not status.profile_completed:
+        return url_for('onboarding.profile')
+
+    if not status.billing_completed:
+        return url_for('onboarding.billing')
+
+    return None
+
+
+def _post_login_destination(usuario: Usuario, next_page: Optional[str] = None) -> str:
+    """Determina la redirección apropiada tras el login o registro."""
+    if next_page:
+        return next_page
+
+    onboarding_url = _determine_onboarding_redirect(usuario)
+    if onboarding_url:
+        return onboarding_url
+
+    if getattr(usuario, 'role', None) == 'operario':
+        try:
+            return url_for('obras.mis_tareas')
+        except BuildError:
+            pass
+
+    return _resolve_dashboard_url()
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     next_page = request.args.get('next') or request.form.get('next')
@@ -138,11 +186,8 @@ def login():
 
         if success:
             usuario = payload
-            if next_page:
-                return redirect(next_page)
-            if getattr(usuario, "role", None) == "operario":
-                return redirect(url_for("obras.mis_tareas"))
-            return redirect(url_for('reportes.dashboard'))
+            destino = _post_login_destination(usuario, next_page)
+            return redirect(destino)
 
         message = ''
         category = 'danger'
@@ -249,12 +294,16 @@ def register():
             )
             db.session.add(perfil_usuario)
 
+            onboarding_status = OnboardingStatus(usuario=nuevo_usuario)
+            db.session.add(onboarding_status)
+
             db.session.commit()
 
             # Auto-login después del registro
             login_user(nuevo_usuario)
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
-            return redirect(url_for('reportes.dashboard'))
+            destino = _post_login_destination(nuevo_usuario)
+            return redirect(destino)
             
         except Exception as e:
             db.session.rollback()
@@ -339,10 +388,8 @@ def google_callback():
                 db.session.commit()
                 login_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
-                # Redirección post-login por rol (UX prolija)
-                if current_user.role == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
+                destino = _post_login_destination(usuario)
+                return redirect(destino)
             else:
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
                 return redirect(url_for('auth.login'))
@@ -411,14 +458,13 @@ def google_callback():
                     mensaje = f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu organización ha sido creada.'
                 
                 db.session.add(nuevo_usuario)
+                db.session.add(OnboardingStatus(usuario=nuevo_usuario))
                 db.session.commit()
-                
+
                 login_user(nuevo_usuario)
                 flash(mensaje, 'success')
-                # Redirección post-login por rol (UX prolija)
-                if current_user.role == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
+                destino = _post_login_destination(nuevo_usuario)
+                return redirect(destino)
                 
             except Exception as e:
                 db.session.rollback()
