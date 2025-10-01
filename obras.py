@@ -3054,24 +3054,19 @@ def wizard_preview():
         data = request.get_json()
         etapa_ids = data.get("etapa_ids", [])
         obra_id = data.get("obra_id")
-        
+
         if not etapa_ids:
             return jsonify({"ok": False, "error": "etapa_ids requeridos"}), 400
-            
+
         if not obra_id:
             return jsonify({"ok": False, "error": "obra_id requerido"}), 400
-            
+
         # Verificar permisos
         obra = Obra.query.get_or_404(obra_id)
         if not can_manage_obra(obra):
             return jsonify({"ok": False, "error": "Sin permisos"}), 403
-        
+
         # 🎯 CORRECCIÓN: etapa_ids son IDs del CATÁLOGO, no de etapas existentes
-<<<<<<< HEAD
-        from tareas_predefinidas import TAREAS_POR_ETAPA
-        
-=======
->>>>>>> codex/analizar-el-wizard-de-obra
         catalogo = obtener_etapas_disponibles()
         catalogo_por_id = {str(etapa.get("id")): etapa for etapa in catalogo}
 
@@ -3104,10 +3099,6 @@ def wizard_preview():
 
             # Tareas del catálogo por tipo de etapa
             tareas_catalogo = []
-<<<<<<< HEAD
-            
-=======
->>>>>>> codex/analizar-el-wizard-de-obra
             if etapa_nombre in TAREAS_POR_ETAPA:
                 current_app.logger.debug(
                     "✅ DEBUG WIZARD: Encontrada etapa '%s' en catálogo de tareas", etapa_nombre
@@ -3134,11 +3125,7 @@ def wizard_preview():
                 "tareas_catalogo": tareas_catalogo,
                 "tareas_existentes": tareas_existentes
             })
-<<<<<<< HEAD
-            
-=======
 
->>>>>>> codex/analizar-el-wizard-de-obra
             current_app.logger.debug(
                 "📊 DEBUG WIZARD: Etapa %s - %s tareas catálogo",
                 etapa_nombre,
@@ -3154,7 +3141,7 @@ def wizard_preview():
             "obra_id": obra_id,
             "etapas": etapas_data
         })
-        
+
     except Exception as e:
         current_app.logger.exception("Error en wizard preview")
         return jsonify({"ok": False, "error": f"Error interno: {str(e)}"}), 500
@@ -3199,23 +3186,23 @@ def wizard_create():
         data = request.get_json()
         obra_id = data.get("obra_id")
         tareas_in = data.get("tareas", [])
-        
+
         if not obra_id:
             return jsonify({"error": "obra_id requerido"}), 400
-            
+
         if not tareas_in:
             return jsonify({"error": "No hay tareas para crear"}), 400
-        
+
         # Verificar permisos
         obra = Obra.query.get_or_404(obra_id)
         if not can_manage_obra(obra):
             return jsonify({"error": "Sin permisos"}), 403
-        
+
         creadas = []
         duplicados = []
-        
+
         current_app.logger.info(f"🧙‍♂️ WIZARD CREATE: Procesando {len(tareas_in)} tareas para obra {obra_id}")
-        
+
         catalogo_etapas = obtener_etapas_disponibles()
         slug_to_nombre = {
             etapa.get('slug'): etapa.get('nombre')
@@ -3232,8 +3219,6 @@ def wizard_create():
             for etapa in catalogo_etapas
             if etapa.get('id') is not None
         }
-<<<<<<< HEAD
-=======
         nombre_to_catalogo = {
             (etapa.get('nombre') or '').strip().lower(): etapa
             for etapa in catalogo_etapas
@@ -3434,7 +3419,6 @@ def wizard_create():
                 return etapa_real, resolved_slug, resolved_nombre, resolved_catalog_id
 
             return None, None, None, None
->>>>>>> codex/analizar-el-wizard-de-obra
 
         def _safe_number(value):
             if value in (None, '', 'null'):
@@ -3469,11 +3453,7 @@ def wizard_create():
                         "⚠️ WIZARD: Tarea sin nombre descartada (payload: %s)", t
                     )
                     continue
-<<<<<<< HEAD
-                    
-=======
 
->>>>>>> codex/analizar-el-wizard-de-obra
                 etapa_catalogo_id = None
                 if etapa_catalogo_id_raw not in (None, ""):
                     etapa_catalogo_id = str(etapa_catalogo_id_raw)
@@ -3488,27 +3468,6 @@ def wizard_create():
                 if not etapa_nombre and etapa_nombre_payload:
                     etapa_nombre = etapa_nombre_payload
 
-<<<<<<< HEAD
-                if not etapa_nombre:
-                    current_app.logger.warning(
-                        "⚠️ WIZARD: No se pudo determinar la etapa para '%s' (slug=%s, id=%s)",
-                        nombre,
-                        etapa_slug,
-                        etapa_catalogo_id,
-                    )
-                    continue
-                    
-                # Buscar etapa real en la obra
-                etapa_real = (EtapaObra.query
-                             .filter(EtapaObra.obra_id == obra_id)
-                             .filter(EtapaObra.nombre == etapa_nombre)
-                             .first())
-                
-                if not etapa_real:
-                    current_app.logger.warning(
-                        "⚠️ WIZARD: Etapa '%s' no encontrada en obra %s", 
-                        etapa_nombre, obra_id
-=======
                 etapa_real, etapa_slug_resolved, etapa_nombre_resolved, etapa_catalogo_id_resolved = _ensure_etapa(
                     etapa_slug,
                     etapa_nombre,
@@ -3521,7 +3480,6 @@ def wizard_create():
                         nombre,
                         etapa_slug,
                         etapa_catalogo_id_raw,
->>>>>>> codex/analizar-el-wizard-de-obra
                     )
                     continue
 
@@ -3560,7 +3518,7 @@ def wizard_create():
                         fecha_inicio = datetime.strptime(t["fecha_inicio"], '%Y-%m-%d').date()
                     except ValueError:
                         pass
-                        
+
                 if t.get("fecha_fin"):
                     try:
                         fecha_fin = datetime.strptime(t["fecha_fin"], '%Y-%m-%d').date()
@@ -3575,38 +3533,24 @@ def wizard_create():
                 tarea = TareaEtapa(
                     etapa_id=etapa_id,
                     nombre=nombre,
-                    descripcion=f"Creada via wizard masivo",
+                    descripcion="Creada via wizard masivo",
                     estado='pendiente',
                     unidad=(t.get("unidad") or "h"),
                     fecha_inicio_plan=fecha_inicio,
                     fecha_fin_plan=fecha_fin,
-<<<<<<< HEAD
-                    horas_estimadas=_safe_number(t.get("horas")),
-                    cantidad_planificada=_safe_number(t.get("cantidad")),
-                    responsable_id=_safe_user_id(t.get("asignado_usuario_id"))
-=======
                     horas_estimadas=horas_estimadas,
                     cantidad_planificada=cantidad_planificada,
                     responsable_id=asignado_usuario_id,
->>>>>>> codex/analizar-el-wizard-de-obra
                 )
 
                 db.session.add(tarea)
                 db.session.flush()  # Para obtener el ID
 
                 # Asignar usuario en tarea_miembros si viene asignado_usuario_id
-<<<<<<< HEAD
-                user_id = _safe_user_id(t.get("asignado_usuario_id"))
-                if user_id:
-                    asignacion = TareaMiembro(
-                        tarea_id=tarea.id,
-                        usuario_id=user_id
-=======
                 if asignado_usuario_id:
                     asignacion = TareaMiembro(
                         tarea_id=tarea.id,
                         user_id=asignado_usuario_id,
->>>>>>> codex/analizar-el-wizard-de-obra
                     )
                     db.session.add(asignacion)
 
@@ -3623,22 +3567,22 @@ def wizard_create():
                     tarea.id,
                     etapa_nombre,
                 )
-            
+
             # Confirmar transacción
             db.session.commit()
             current_app.logger.info(f"🎉 WIZARD CREATE: {len(creadas)} creadas, {len(duplicados)} duplicadas")
-            
+
             return jsonify({
                 "ok": True,
                 "creadas": creadas,
                 "duplicados": duplicados
             })
-            
+
         except Exception as e:
             db.session.rollback()
             current_app.logger.exception("Error en transacción wizard create")
             raise e
-        
+
     except Exception as e:
         current_app.logger.exception("Error en wizard create")
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
