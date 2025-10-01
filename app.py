@@ -415,7 +415,14 @@ def unauthorized(error):
 
 @app.errorhandler(404)
 def not_found(error):
-    return render_template('errors/404.html'), 404
+    try:
+        dashboard_url = url_for('reportes.dashboard')
+    except BuildError:
+        try:
+            dashboard_url = url_for('supplier_portal.dashboard')
+        except BuildError:
+            dashboard_url = url_for('index')
+    return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
