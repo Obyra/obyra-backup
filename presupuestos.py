@@ -2,17 +2,42 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from datetime import date, datetime
 from io import BytesIO
+import importlib.util
 import json
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from typing import Any
+
+REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
+if REPORTLAB_AVAILABLE:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+else:  # pragma: no cover - executed only when optional deps missing
+    letter = A4 = None  # type: ignore[assignment]
+    colors = None  # type: ignore[assignment]
+    inch = 72  # type: ignore[assignment]
+
+    def _missing_reportlab(*args: Any, **kwargs: Any):
+        raise RuntimeError(
+            "La librería reportlab no está instalada. Ejecuta 'pip install reportlab' para habilitar la generación de PDFs."
+        )
+
+    SimpleDocTemplate = Table = TableStyle = Paragraph = Spacer = _missing_reportlab  # type: ignore[assignment]
+    getSampleStyleSheet = ParagraphStyle = _missing_reportlab  # type: ignore[assignment]
+    TA_CENTER = TA_RIGHT = None  # type: ignore[assignment]
+
+
+XLSXWRITER_AVAILABLE = importlib.util.find_spec("xlsxwriter") is not None
+if XLSXWRITER_AVAILABLE:
+    import xlsxwriter
+else:  # pragma: no cover - executed only when optional deps missing
+    xlsxwriter = None  # type: ignore[assignment]
+
 from app import db
 from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
 from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
-import xlsxwriter
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
@@ -517,7 +542,15 @@ def exportar_excel_ia():
     """Exporta los resultados de la calculadora IA a Excel"""
     if not current_user.puede_acceder_modulo('presupuestos'):
         return jsonify({'error': 'Sin permisos'}), 403
-    
+
+    if not XLSXWRITER_AVAILABLE:
+        return (
+            jsonify({
+                'error': "La exportación a Excel requiere la librería xlsxwriter. Instálala con 'pip install xlsxwriter'."
+            }),
+            500,
+        )
+
     try:
         data = request.get_json()
         if not data or not data.get('presupuesto'):
@@ -749,10 +782,17 @@ def generar_pdf(id):
     if not current_user.puede_acceder_modulo('presupuestos'):
         flash('No tienes permisos para generar PDFs.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    if not REPORTLAB_AVAILABLE:
+        flash(
+            "La generación de PDF requiere la librería reportlab. Instálala ejecutando 'pip install reportlab'.",
+            'danger'
+        )
+        return redirect(url_for('presupuestos.detalle', id=id))
+
     presupuesto = Presupuesto.query.get_or_404(id)
     items = presupuesto.items.all()
-    
+
     # Crear buffer para el PDF
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)

@@ -2,16 +2,33 @@
 OBYRA Marketplace - Purchase Order PDF Generation Service
 """
 
+import importlib.util
 import os
 from datetime import datetime
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
-def generate_po_pdf(oc_number: str, supplier_name: str, buyer_name: str, buyer_cuit: str, 
+REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
+if REPORTLAB_AVAILABLE:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+else:  # pragma: no cover - executed only when optional deps missing
+    colors = None  # type: ignore[assignment]
+    A4 = None  # type: ignore[assignment]
+    inch = 72  # type: ignore[assignment]
+
+    def _missing_reportlab(*args, **kwargs):
+        raise RuntimeError(
+            "La generación de órdenes de compra en PDF requiere la librería reportlab. Instálala con 'pip install reportlab'."
+        )
+
+    SimpleDocTemplate = Table = TableStyle = Paragraph = Spacer = _missing_reportlab  # type: ignore[assignment]
+    getSampleStyleSheet = ParagraphStyle = _missing_reportlab  # type: ignore[assignment]
+    TA_CENTER = TA_RIGHT = None  # type: ignore[assignment]
+
+def generate_po_pdf(oc_number: str, supplier_name: str, buyer_name: str, buyer_cuit: str,
                    delivery_addr: str, items: list[dict]) -> tuple[str, str]:
     """
     Generate purchase order PDF
@@ -27,6 +44,11 @@ def generate_po_pdf(oc_number: str, supplier_name: str, buyer_name: str, buyer_c
     Returns:
         Tuple of (public_url, abs_path)
     """
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError(
+            "La generación de órdenes de compra en PDF requiere la librería reportlab. Instálala con 'pip install reportlab'."
+        )
+
     # Create storage directory
     storage_dir = os.environ.get('STORAGE_DIR', './storage')
     po_dir = os.path.join(storage_dir, 'po')

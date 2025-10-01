@@ -3,16 +3,32 @@ from flask_login import current_user, login_required
 from models import Obra, Presupuesto, ItemInventario, Usuario, ConsultaAgente, db, Organizacion
 from sqlalchemy import func, desc, or_, and_
 from datetime import datetime, timedelta
+import importlib.util
 import time
 import json
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
+
+REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
+if REPORTLAB_AVAILABLE:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+else:  # pragma: no cover - executed only when optional deps missing
+    colors = None  # type: ignore[assignment]
+    letter = A4 = None  # type: ignore[assignment]
+    inch = 72  # type: ignore[assignment]
+
+    def _missing_reportlab(*args, **kwargs):
+        raise RuntimeError(
+            "La librería reportlab no está instalada. Ejecuta 'pip install reportlab' para habilitar la generación de PDFs."
+        )
+
+    SimpleDocTemplate = Table = TableStyle = Paragraph = Spacer = _missing_reportlab  # type: ignore[assignment]
+    getSampleStyleSheet = ParagraphStyle = _missing_reportlab  # type: ignore[assignment]
 
 agent_bp = Blueprint('agent_local', __name__)
 
@@ -542,6 +558,11 @@ def exportar_excel(consultas):
 
 def exportar_pdf(consultas):
     """Exportar consultas a PDF"""
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({
+            'error': "La exportación a PDF requiere la librería reportlab. Instálala con 'pip install reportlab'."
+        }), 500
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     
