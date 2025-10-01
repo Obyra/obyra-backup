@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
@@ -9,7 +9,11 @@ from extensions import db, login_manager
 
 # create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
+app.secret_key = (
+    os.environ.get("SESSION_SECRET")
+    or os.environ.get("SECRET_KEY")
+    or "dev-secret-key-change-me"
+)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
@@ -49,7 +53,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+login_manager.login_view = 'index'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
 
@@ -67,8 +71,8 @@ def unauthorized():
     # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
-    # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    # For regular web requests, redirect to the main landing page preserving "next"
+    return redirect(url_for('index', next=request.url))
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
@@ -110,15 +114,66 @@ def verificar_periodo_prueba():
             flash(f'Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    """Redirigir automáticamente al dashboard después del login"""
+    """Landing principal con acceso a inicio de sesión y portal de proveedores."""
     if current_user.is_authenticated:
         # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+
+    next_page = request.values.get('next')
+    form_data = {
+        'email': request.form.get('email', ''),
+        'remember': bool(request.form.get('remember')),
+    }
+
+    google_available = False
+    login_helper = None
+    try:
+        from auth import google, authenticate_manual_user  # type: ignore
+
+        google_available = bool(google)
+        login_helper = authenticate_manual_user
+    except ImportError:
+        login_helper = None
+
+    if request.method == 'POST':
+        if login_helper is None:
+            flash('El módulo de autenticación no está disponible en este entorno.', 'danger')
+        else:
+            success, payload = login_helper(
+                form_data['email'],
+                request.form.get('password', ''),
+                remember=form_data['remember'],
+            )
+
+            if success:
+                usuario = payload
+                if next_page:
+                    return redirect(next_page)
+                if getattr(usuario, "role", None) == "operario":
+                    return redirect(url_for("obras.mis_tareas"))
+                return redirect(url_for('reportes.dashboard'))
+
+            else:
+                message = ''
+                category = 'danger'
+                if isinstance(payload, dict):
+                    message = payload.get('message', '')
+                    category = payload.get('category', category)
+                else:
+                    message = str(payload)
+                if message:
+                    flash(message, category)
+
+    return render_template(
+        'public/home.html',
+        google_available=google_available,
+        form_data=form_data,
+        next_value=next_page,
+    )
 
 
 @app.route('/login', endpoint='auth_login')

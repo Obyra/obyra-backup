@@ -12,14 +12,18 @@
         </div>
 
         <form method="POST" class="auth-form">
+            {% if next_value %}
+            <input type="hidden" name="next" value="{{ next_value }}">
+            {% endif %}
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
                 <div class="input-group">
                     <span class="input-group-text">
                         <i class="fas fa-envelope"></i>
                     </span>
-                    <input type="email" class="form-control" id="email" name="email" 
-                           placeholder="tu@email.com" value="{{ request.form.email or '' }}" required>
+                    <input type="email" class="form-control" id="email" name="email"
+                           placeholder="tu@email.com"
+                           value="{{ form_data.email if form_data is defined else request.form.email or '' }}" required>
                 </div>
             </div>
 
@@ -35,7 +39,8 @@
             </div>
 
             <div class="mb-3 form-check">
-                <input type="checkbox" class="form-check-input" id="remember" name="remember">
+                <input type="checkbox" class="form-check-input" id="remember" name="remember"
+                       {% if form_data is defined and form_data.remember %}checked{% endif %}>
                 <label class="form-check-label" for="remember">
                     Recordar mi sesión
                 </label>

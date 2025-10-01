@@ -6,6 +6,7 @@ from extensions import db
 from models import Usuario, Organizacion
 from sqlalchemy import func
 from datetime import datetime
+from typing import Dict, Optional, Tuple, Union
 import os
 import re
 import uuid
@@ -49,37 +50,89 @@ else:
 Para más información: https://docs.replit.com/additional-resources/google-auth-in-flask
     """)
 
+
+AuthResult = Tuple[bool, Union[Usuario, Dict[str, str]]]
+
+
+def authenticate_manual_user(email: Optional[str], password: Optional[str], *, remember: bool = False) -> AuthResult:
+    """Autentica a un usuario interno y devuelve (success, payload)."""
+    normalized_email = (email or '').strip()
+    password = password or ''
+
+    if not normalized_email or not password:
+        return False, {
+            'message': 'Por favor, completa todos los campos.',
+            'category': 'danger',
+        }
+
+    usuario = Usuario.query.filter(func.lower(Usuario.email) == normalized_email.lower()).first()
+
+    if not usuario or not usuario.activo:
+        return False, {
+            'message': 'Email o contraseña incorrectos, o cuenta inactiva.',
+            'category': 'danger',
+        }
+
+    if usuario.auth_provider == 'google':
+        return False, {
+            'message': 'Esta cuenta está vinculada con Google. Usa "Iniciar sesión con Google".',
+            'category': 'warning',
+        }
+
+    if usuario.auth_provider != 'manual' or not usuario.password_hash:
+        return False, {
+            'message': 'Credenciales incorrectas.',
+            'category': 'danger',
+        }
+
+    if not check_password_hash(usuario.password_hash, password):
+        return False, {
+            'message': 'Credenciales incorrectas.',
+            'category': 'danger',
+        }
+
+    login_user(usuario, remember=remember)
+    return True, usuario
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    next_page = request.args.get('next') or request.form.get('next')
+    form_data = {
+        'email': request.form.get('email', ''),
+        'remember': bool(request.form.get('remember')),
+    }
+
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        
-        if not email or not password:
-            flash('Por favor, completa todos los campos.', 'danger')
-            return render_template('auth/login.html', google_available=bool(google))
-        
-        usuario = Usuario.query.filter_by(email=email).first()
-        
-        if usuario and usuario.activo:
-            # Verificar si es usuario manual con contraseña
-            if usuario.auth_provider == 'manual' and usuario.password_hash and check_password_hash(usuario.password_hash, password):
-                login_user(usuario, remember=request.form.get('remember'))
-                next_page = request.args.get('next')
-                if next_page:
-                    return redirect(next_page)
-                # Redirección post-login por rol (UX prolija)
-                if current_user.role == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
-            elif usuario.auth_provider == 'google':
-                flash('Esta cuenta está vinculada con Google. Use "Iniciar sesión con Google".', 'warning')
-            else:
-                flash('Credenciales incorrectas.', 'danger')
+        success, payload = authenticate_manual_user(
+            form_data['email'],
+            request.form.get('password', ''),
+            remember=form_data['remember'],
+        )
+
+        if success:
+            usuario = payload
+            if next_page:
+                return redirect(next_page)
+            if getattr(usuario, "role", None) == "operario":
+                return redirect(url_for("obras.mis_tareas"))
+            return redirect(url_for('reportes.dashboard'))
+
+        message = ''
+        category = 'danger'
+        if isinstance(payload, dict):
+            message = payload.get('message', '')
+            category = payload.get('category', category)
         else:
-            flash('Email o contraseña incorrectos, o cuenta inactiva.', 'danger')
-    
-    return render_template('auth/login.html', google_available=bool(google))
+            message = str(payload)
+        if message:
+            flash(message, category)
+
+    return render_template(
+        'auth/login.html',
+        google_available=bool(google),
+        form_data=form_data,
+        next_value=next_page,
+    )
 
 @auth_bp.route('/logout')
 @login_required
