@@ -1,7 +1,12 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
-from authlib.integrations.flask_client import OAuth
+try:
+    from authlib.integrations.flask_client import OAuth  # type: ignore
+except ImportError:
+    OAuth = None  # type: ignore
+    print("⚠️ authlib no está instalado. Google OAuth permanecerá deshabilitado.")
+
 from extensions import db
 from models import Usuario, Organizacion
 from sqlalchemy import func
@@ -12,8 +17,23 @@ import uuid
 
 auth_bp = Blueprint('auth', __name__)
 
+
+class _DummyOAuth:
+    """Fallback liviano cuando authlib no está disponible."""
+
+    def init_app(self, app):  # pragma: no cover - simple print de diagnóstico
+        print("⚠️ OAuth.init_app omitido: authlib no disponible")
+
+    def register(self, *_, **__):  # pragma: no cover - simple print de diagnóstico
+        print("⚠️ OAuth.register omitido: authlib no disponible")
+        return None
+
+
 # Configuración OAuth con Google
-oauth = OAuth()
+if 'OAuth' in globals() and OAuth:  # authlib disponible
+    oauth = OAuth()
+else:
+    oauth = _DummyOAuth()
 google = None
 
 # Lista blanca de emails para administradores automáticos
@@ -26,16 +46,19 @@ ADMIN_EMAILS = [
 
 # Solo configurar Google OAuth si las variables están disponibles
 if os.environ.get('GOOGLE_OAUTH_CLIENT_ID') and os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'):
-    google = oauth.register(
-        name='google',
-        client_id=os.environ.get('GOOGLE_OAUTH_CLIENT_ID'),
-        client_secret=os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'),
-        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_kwargs={
-            'scope': 'openid email profile'
-        }
-    )
-else:
+    if isinstance(oauth, _DummyOAuth):
+        print("⚠️ Variables de Google OAuth presentes pero authlib no está instalado; flujo OAuth deshabilitado.")
+    else:
+        google = oauth.register(
+            name='google',
+            client_id=os.environ.get('GOOGLE_OAUTH_CLIENT_ID'),
+            client_secret=os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'),
+            server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+            client_kwargs={
+                'scope': 'openid email profile'
+            }
+        )
+elif not isinstance(oauth, _DummyOAuth):
     print("""
 🔗 Para habilitar Google OAuth en OBYRA IA:
 1. Ve a https://console.cloud.google.com/apis/credentials

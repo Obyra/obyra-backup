@@ -367,14 +367,17 @@ function initWizard() {
 
     const html = tareas.map((tarea, index) => {
       const slug = tarea.etapa_slug || '';
+      const catalogIdRaw = tarea.catalogo_id ?? tarea.catalogoId ?? tarea.etapa_id ?? null;
       const meta = resolveEtapaMeta({
         slug,
-        catalogId: tarea.catalogo_id || tarea.catalogoId || tarea.etapa_id,
+        catalogId: catalogIdRaw,
         nombre: tarea.etapa_nombre,
       });
       const nombreEtapa = meta.nombre || tarea.etapa_nombre || slug || 'Etapa';
       const id = tarea.id ? String(tarea.id) : `${slug}-${index}`;
-      const catalogAttr = meta.id || '';
+      const catalogAttr = normalizeCatalogId(catalogIdRaw ?? meta.id) || '';
+      const unidadDefault = tarea.unidad_default || tarea.unidad || 'h';
+      const horasAttr = Number.isFinite(Number(tarea.horas)) ? Number(tarea.horas) : '';
       return `
         <div class="col-md-6 mb-2">
           <div class="form-check">
@@ -384,8 +387,10 @@ function initWizard() {
                    data-etapa-slug="${slug}"
                    data-etapa-nombre="${nombreEtapa}"
                    data-etapa-id="${catalogAttr}"
-                   data-unidad="${tarea.unidad_default || tarea.unidad || 'h'}"
-                   data-horas="${tarea.horas || ''}">
+                   data-unidad="${unidadDefault}"
+                   data-horas="${horasAttr}"
+                   data-catalogo-id="${catalogAttr}"
+                   data-unidad-default="${unidadDefault}">
             <label class="form-check-label" for="tarea-${id}">
               <strong>${tarea.nombre || 'Tarea sin nombre'}</strong>
               <div class="text-muted small">${nombreEtapa}</div>
@@ -410,19 +415,23 @@ function initWizard() {
     const seleccionadas = [];
     modal.querySelectorAll('.tarea-checkbox:checked').forEach((checkbox) => {
       const slug = checkbox.dataset.etapaSlug || '';
-      const catalogId = normalizeCatalogId(checkbox.dataset.etapaId || '');
+      const catalogId = normalizeCatalogId(checkbox.dataset.etapaId || checkbox.dataset.catalogoId || '');
       const meta = resolveEtapaMeta({
         slug,
         catalogId,
         nombre: checkbox.dataset.etapaNombre || '',
       });
+      const etapaNombre = checkbox.dataset.etapaNombre || meta.nombre || '';
+      const etapaSlug = slug || meta.slug || slugify(etapaNombre) || null;
+      const catalogoId = meta.id ? normalizeCatalogId(meta.id) : catalogId;
       seleccionadas.push({
         nombre: checkbox.dataset.tareaNombre || '',
-        etapa_slug: slug || meta.slug || null,
-        etapa_nombre: checkbox.dataset.etapaNombre || meta.nombre || '',
-        unidad: checkbox.dataset.unidad || 'h',
+        etapa_slug: etapaSlug,
+        etapa_nombre: etapaNombre,
+        unidad: checkbox.dataset.unidad || checkbox.dataset.unidadDefault || 'h',
         horas: checkbox.dataset.horas ? Number(checkbox.dataset.horas) : null,
-        catalogo_id: meta.id ? normalizeCatalogId(meta.id) : null,
+        catalogo_id: catalogoId,
+        etapa_id: catalogoId,
       });
     });
 
@@ -489,7 +498,7 @@ function initWizard() {
           catalogId: task.catalogo_id,
           nombre: task.etapa_nombre,
         });
-        const etapaId = meta?.id || '';
+        const etapaId = normalizeCatalogId(task.etapa_id || task.catalogo_id || meta?.id) || '';
         const slug = task.etapa_slug || meta?.slug || '';
         const etapaNombre = task.etapa_nombre || meta?.nombre || '';
         const horas = task.horas && Number(task.horas) > 0 ? Number(task.horas) : 8;
@@ -503,7 +512,10 @@ function initWizard() {
         `)].join('');
 
         return `
-          <tr data-index="${index}" data-etapa-slug="${slug}" data-etapa-id="${etapaId || ''}" data-etapa-nombre="${etapaNombre}">
+          <tr data-index="${index}"
+              data-etapa-slug="${slug}"
+              data-etapa-id="${etapaId || ''}"
+              data-etapa-nombre="${etapaNombre}">
             <td class="small text-muted">${etapaNombre || slug || 'Sin etapa'}</td>
             <td class="fw-semibold tarea-nombre">${task.nombre}</td>
             <td><input type="date" class="form-control form-control-sm fecha-inicio" required></td>
@@ -585,7 +597,7 @@ function initWizard() {
       const index = Number(row.getAttribute('data-index')) || 0;
       const task = state.selectedTasks[index] || {};
       const slugRaw = row.getAttribute('data-etapa-slug') || task.etapa_slug || null;
-      const idRaw = row.getAttribute('data-etapa-id') || task.catalogo_id;
+      const idRaw = row.getAttribute('data-etapa-id') || task.catalogo_id || task.etapa_id;
       const etapaNombreRaw = row.getAttribute('data-etapa-nombre') || task.etapa_nombre || '';
       const meta = resolveEtapaMeta({ slug: slugRaw, catalogId: idRaw, nombre: etapaNombreRaw });
       const etapaSlug = meta.slug || slugify(etapaNombreRaw) || slugRaw || null;
