@@ -1,10 +1,10 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app
 from flask_login import login_required, current_user
 from datetime import date, datetime
 from io import BytesIO
 import importlib.util
 import json
-from typing import Any
+from typing import Any, Optional
 
 REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
 if REPORTLAB_AVAILABLE:
@@ -38,6 +38,35 @@ else:  # pragma: no cover - executed only when optional deps missing
 from app import db
 from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
 from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
+
+
+def _clean_text(value: Any) -> Optional[str]:
+    """Normaliza cadenas eliminando espacios y devolviendo None para vacíos."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return str(value)
+
+
+def _parse_date(value: Any) -> Optional[date]:
+    """Intenta parsear una fecha en formatos comunes (ISO o DD/MM/YYYY)."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+    if not value:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(str(value), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
@@ -933,34 +962,95 @@ def editar_obra(id):
     """Editar información de la obra asociada al presupuesto"""
     if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
         return jsonify({'error': 'Sin permisos'}), 403
-    
+
     presupuesto = Presupuesto.query.get_or_404(id)
-    obra = presupuesto.obra
-    
-    data = request.get_json()
-    
+    if presupuesto.organizacion_id != current_user.organizacion_id:
+        return jsonify({'error': 'Presupuesto no pertenece a tu organización'}), 403
+
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    if not payload:
+        return jsonify({'error': 'No se recibieron datos para actualizar la obra.'}), 400
+
+    obra: Optional[Obra] = None
+    new_obra_created = False
+
+    raw_obra_id = payload.get('obra_id') or presupuesto.obra_id
+    if raw_obra_id:
+        try:
+            obra_id = int(raw_obra_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Identificador de obra inválido.'}), 400
+
+        obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first()
+        if obra is None:
+            return jsonify({'error': 'Obra asociada no encontrada.'}), 404
+    else:
+        obra = presupuesto.obra
+
+    if obra and obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'error': 'No tienes permisos para modificar esta obra.'}), 403
+
+    if obra is None:
+        obra = Obra(
+            organizacion_id=current_user.organizacion_id,
+            estado='planificacion',
+            cliente='Cliente sin especificar'
+        )
+        presupuesto.obra = obra
+        db.session.add(obra)
+        new_obra_created = True
+
     try:
-        # Actualizar campos de la obra
-        if 'nombre' in data:
-            obra.nombre = data['nombre']
-        if 'cliente' in data:
-            obra.cliente = data['cliente']
-        if 'descripcion' in data:
-            obra.descripcion = data['descripcion']
-        if 'direccion' in data:
-            obra.direccion = data['direccion']
-        if 'fecha_inicio' in data and data['fecha_inicio']:
-            obra.fecha_inicio = datetime.strptime(data['fecha_inicio'], '%Y-%m-%d').date()
-        if 'fecha_fin_estimada' in data and data['fecha_fin_estimada']:
-            obra.fecha_fin_estimada = datetime.strptime(data['fecha_fin_estimada'], '%Y-%m-%d').date()
-        if 'presupuesto_total' in data and data['presupuesto_total']:
-            obra.presupuesto_total = float(data['presupuesto_total'])
-        
+        if 'nombre' in payload:
+            nombre = _clean_text(payload.get('nombre'))
+            if not nombre:
+                return jsonify({'error': 'El nombre de la obra no puede estar vacío.'}), 400
+            obra.nombre = nombre
+        elif new_obra_created:
+            return jsonify({'error': 'El nombre de la obra es obligatorio.'}), 400
+
+        if 'cliente' in payload:
+            cliente = _clean_text(payload.get('cliente')) or 'Cliente sin especificar'
+            obra.cliente = cliente
+        elif new_obra_created and not obra.cliente:
+            obra.cliente = 'Cliente sin especificar'
+
+        for campo in ('descripcion', 'direccion'):
+            if campo in payload:
+                setattr(obra, campo, _clean_text(payload.get(campo)))
+
+        if 'fecha_inicio' in payload:
+            parsed = _parse_date(payload.get('fecha_inicio'))
+            if payload.get('fecha_inicio') and parsed is None:
+                return jsonify({'error': 'Formato de fecha de inicio inválido.'}), 400
+            obra.fecha_inicio = parsed
+
+        if 'fecha_fin_estimada' in payload:
+            parsed = _parse_date(payload.get('fecha_fin_estimada'))
+            if payload.get('fecha_fin_estimada') and parsed is None:
+                return jsonify({'error': 'Formato de fecha de finalización inválido.'}), 400
+            obra.fecha_fin_estimada = parsed
+
+        if 'presupuesto_total' in payload:
+            bruto_presupuesto = payload.get('presupuesto_total')
+            if bruto_presupuesto in (None, ''):
+                obra.presupuesto_total = None
+            else:
+                try:
+                    obra.presupuesto_total = float(bruto_presupuesto)
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'El presupuesto total debe ser numérico.'}), 400
+
         db.session.commit()
-        return jsonify({'exito': True, 'mensaje': 'Obra actualizada correctamente'})
-        
+        return jsonify({
+            'exito': True,
+            'mensaje': 'Obra actualizada correctamente',
+            'obra_id': obra.id
+        })
+
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception('Error actualizando la obra asociada al presupuesto %s', id)
         return jsonify({'error': f'Error actualizando obra: {str(e)}'}), 500
 
 @presupuestos_bp.route('/item/<int:item_id>/editar', methods=['POST'])

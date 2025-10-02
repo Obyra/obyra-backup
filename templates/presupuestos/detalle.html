@@ -3,6 +3,9 @@
 {% block title %}{{ presupuesto.numero }} - OBYRA IA{% endblock %}
 
 {% block content %}
+{% set obra = presupuesto.obra %}
+{% set obra_nombre = obra.nombre if obra else 'Sin obra asociada' %}
+{% set obra_cliente = obra.cliente if obra and obra.cliente else 'Sin especificar' %}
 <div class="container-fluid mt-4">
     <!-- Header -->
     <div class="row">
@@ -10,8 +13,8 @@
             <div class="d-flex justify-content-between align-items-start mb-4">
                 <div>
                     <h2><i class="fas fa-calculator me-2"></i>{{ presupuesto.numero }}</h2>
-                    <p class="text-muted mb-0">Obra: {{ presupuesto.obra.nombre }}</p>
-                    <p class="text-muted mb-0">Cliente: {{ presupuesto.obra.cliente }}</p>
+                    <p class="text-muted mb-0">Obra: <span id="obra-nombre-resumen">{{ obra_nombre }}</span></p>
+                    <p class="text-muted mb-0">Cliente: <span id="obra-cliente-resumen">{{ obra_cliente }}</span></p>
                 </div>
                 <div class="text-end">
                     <span class="badge {{ presupuesto.estado|estado_badge }} fs-6 mb-2">
@@ -60,14 +63,14 @@
                     <div id="info-obra-view">
                         <div class="row">
                             <div class="col-md-6">
-                                <strong>Nombre:</strong> <span id="obra-nombre">{{ presupuesto.obra.nombre }}</span><br>
-                                <strong>Cliente:</strong> <span id="obra-cliente">{{ presupuesto.obra.cliente }}</span><br>
-                                <strong>Descripción:</strong> <span id="obra-descripcion">{{ presupuesto.obra.descripcion or 'Sin descripción' }}</span><br>
+                                <strong>Nombre:</strong> <span id="obra-nombre">{{ obra_nombre }}</span><br>
+                                <strong>Cliente:</strong> <span id="obra-cliente">{{ obra_cliente }}</span><br>
+                                <strong>Descripción:</strong> <span id="obra-descripcion">{{ obra.descripcion if obra and obra.descripcion else 'Sin descripción' }}</span><br>
                             </div>
                             <div class="col-md-6">
-                                <strong>Dirección:</strong> <span id="obra-direccion">{{ presupuesto.obra.direccion or 'Sin especificar' }}</span><br>
-                                <strong>Fecha Inicio:</strong> <span id="obra-fecha-inicio">{{ presupuesto.obra.fecha_inicio.strftime('%d/%m/%Y') if presupuesto.obra.fecha_inicio else 'Sin definir' }}</span><br>
-                                <strong>Fecha Fin Est.:</strong> <span id="obra-fecha-fin">{{ presupuesto.obra.fecha_fin_estimada.strftime('%d/%m/%Y') if presupuesto.obra.fecha_fin_estimada else 'Sin definir' }}</span><br>
+                                <strong>Dirección:</strong> <span id="obra-direccion">{{ obra.direccion if obra and obra.direccion else 'Sin especificar' }}</span><br>
+                                <strong>Fecha Inicio:</strong> <span id="obra-fecha-inicio">{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra and obra.fecha_inicio else 'Sin definir' }}</span><br>
+                                <strong>Fecha Fin Est.:</strong> <span id="obra-fecha-fin">{{ obra.fecha_fin_estimada.strftime('%d/%m/%Y') if obra and obra.fecha_fin_estimada else 'Sin definir' }}</span><br>
                             </div>
                         </div>
                     </div>
@@ -77,31 +80,31 @@
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Nombre:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ presupuesto.obra.nombre }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ obra.nombre if obra else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Cliente:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ presupuesto.obra.cliente }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ obra.cliente if obra else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Descripción:</label>
-                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ presupuesto.obra.descripcion or '' }}</textarea>
+                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ obra.descripcion if obra and obra.descripcion else '' }}</textarea>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Dirección:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion" value="{{ presupuesto.obra.direccion or '' }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion" value="{{ obra.direccion if obra and obra.direccion else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Fecha Inicio:</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-inicio" 
-                                           value="{{ presupuesto.obra.fecha_inicio.strftime('%Y-%m-%d') if presupuesto.obra.fecha_inicio else '' }}">
+                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-inicio"
+                                           value="{{ obra.fecha_inicio.strftime('%Y-%m-%d') if obra and obra.fecha_inicio else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Fecha Fin Estimada:</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-fin" 
-                                           value="{{ presupuesto.obra.fecha_fin_estimada.strftime('%Y-%m-%d') if presupuesto.obra.fecha_fin_estimada else '' }}">
+                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-fin"
+                                           value="{{ obra.fecha_fin_estimada.strftime('%Y-%m-%d') if obra and obra.fecha_fin_estimada else '' }}">
                                 </div>
                             </div>
                         </div>
@@ -525,6 +528,9 @@
 
 {% block scripts %}
 <script>
+const initialObraId = {{ (obra.id if obra else None)|tojson }};
+let currentObraId = initialObraId;
+
 function abrirModalItem(tipo) {
     const tipos = {
         'material': 'Material',
@@ -558,14 +564,24 @@ function cancelarEditarObra() {
 
 async function guardarObra() {
     const data = {
-        nombre: document.getElementById('edit-obra-nombre').value,
-        cliente: document.getElementById('edit-obra-cliente').value,
-        descripcion: document.getElementById('edit-obra-descripcion').value,
-        direccion: document.getElementById('edit-obra-direccion').value,
+        obra_id: currentObraId,
+        nombre: document.getElementById('edit-obra-nombre').value.trim(),
+        cliente: document.getElementById('edit-obra-cliente').value.trim(),
+        descripcion: document.getElementById('edit-obra-descripcion').value.trim(),
+        direccion: document.getElementById('edit-obra-direccion').value.trim(),
         fecha_inicio: document.getElementById('edit-obra-fecha-inicio').value,
         fecha_fin_estimada: document.getElementById('edit-obra-fecha-fin').value
     };
-    
+
+    if (!data.nombre) {
+        showAlert('El nombre de la obra es obligatorio.', 'warning');
+        return;
+    }
+
+    if (data.obra_id === null) {
+        delete data.obra_id;
+    }
+
     try {
         const response = await fetch(`/presupuestos/{{ presupuesto.id }}/editar-obra`, {
             method: 'POST',
@@ -574,16 +590,35 @@ async function guardarObra() {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
+        if (!response.ok) {
+            showAlert(result.error || 'Error al actualizar la obra', 'danger');
+            return;
+        }
+
         if (result.exito) {
+            if (result.obra_id) {
+                currentObraId = result.obra_id;
+            }
+
             // Actualizar los valores mostrados
-            document.getElementById('obra-nombre').textContent = data.nombre;
-            document.getElementById('obra-cliente').textContent = data.cliente;
+            const nombre = data.nombre || 'Sin obra asociada';
+            const cliente = data.cliente || 'Sin especificar';
+            document.getElementById('obra-nombre').textContent = nombre;
+            document.getElementById('obra-cliente').textContent = cliente;
+            const resumenNombre = document.getElementById('obra-nombre-resumen');
+            if (resumenNombre) {
+                resumenNombre.textContent = nombre;
+            }
+            const resumenCliente = document.getElementById('obra-cliente-resumen');
+            if (resumenCliente) {
+                resumenCliente.textContent = cliente;
+            }
             document.getElementById('obra-descripcion').textContent = data.descripcion || 'Sin descripción';
             document.getElementById('obra-direccion').textContent = data.direccion || 'Sin especificar';
-            
+
             // Formatear fechas para mostrar
             if (data.fecha_inicio) {
                 const fechaInicio = new Date(data.fecha_inicio + 'T00:00:00');
@@ -603,7 +638,7 @@ async function guardarObra() {
             cancelarEditarObra();
             
             // Mostrar mensaje de éxito
-            showAlert('Obra actualizada correctamente', 'success');
+            showAlert(result.mensaje || 'Obra actualizada correctamente', 'success');
         } else {
             showAlert(result.error || 'Error al actualizar la obra', 'danger');
         }
