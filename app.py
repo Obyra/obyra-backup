@@ -81,7 +81,16 @@ def unauthorized():
 @app.context_processor
 def utility_processor():
     from tareas_predefinidas import TAREAS_POR_ETAPA
-    return dict(obtener_tareas_para_etapa=lambda nombre_etapa: TAREAS_POR_ETAPA.get(nombre_etapa, []))
+    def obtener_tareas_para_etapa(nombre_etapa):
+        return TAREAS_POR_ETAPA.get(nombre_etapa, [])
+
+    def has_endpoint(endpoint_name: str) -> bool:
+        return endpoint_name in app.view_functions
+
+    return dict(
+        obtener_tareas_para_etapa=obtener_tareas_para_etapa,
+        has_endpoint=has_endpoint,
+    )
 
 
 

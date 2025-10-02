@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, jsonify, make_response, send_file
+from flask import Blueprint, render_template, redirect, url_for, request, jsonify, make_response, send_file, flash
 from flask_login import current_user, login_required
 from models import Obra, Presupuesto, ItemInventario, Usuario, ConsultaAgente, db, Organizacion
 from sqlalchemy import func, desc, or_, and_
@@ -7,8 +7,14 @@ import importlib.util
 import time
 import json
 import io
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    OPENPYXL_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - executed when optional dep missing
+    openpyxl = None  # type: ignore[assignment]
+    Font = PatternFill = Alignment = None  # type: ignore[assignment]
+    OPENPYXL_AVAILABLE = False
 
 REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
 if REPORTLAB_AVAILABLE:
@@ -497,6 +503,14 @@ def detalle_consulta(consulta_id):
 
 def exportar_excel(consultas):
     """Exportar consultas a Excel"""
+    if not OPENPYXL_AVAILABLE:
+        flash(
+            "La exportación a Excel requiere la librería openpyxl. Ejecuta 'pip install openpyxl' para habilitarla.",
+            'warning'
+        )
+        destino = request.referrer or url_for('agent_local.auditoria_consultas')
+        return redirect(destino)
+
     # Crear workbook
     wb = openpyxl.Workbook()
     ws = wb.active

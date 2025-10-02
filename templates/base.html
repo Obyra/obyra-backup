@@ -221,10 +221,18 @@
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
-                            <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
-                                <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
+                                {% set auditoria_endpoint = None %}
+                                {% if has_endpoint('agent_local.auditoria_consultas') %}
+                                    {% set auditoria_endpoint = 'agent_local.auditoria_consultas' %}
+                                {% elif has_endpoint('seguridad.auditorias') %}
+                                    {% set auditoria_endpoint = 'seguridad.auditorias' %}
+                                {% endif %}
+                                {% if auditoria_endpoint %}
+                                <li><a class="dropdown-item" href="{{ url_for(auditoria_endpoint) }}">
+                                    <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                {% endif %}
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('account.perfil') }}">
                                 <i class="fas fa-id-badge me-2"></i>Perfil
