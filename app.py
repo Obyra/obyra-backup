@@ -4,7 +4,6 @@ import importlib
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.security import generate_password_hash
 from werkzeug.routing import BuildError
 from extensions import db, login_manager
 
@@ -357,6 +356,58 @@ with app.app_context():
         print(f"⚠️ Marketplace initialization skipped: {e}")
     
     print("📊 Database tables created successfully")
+
+    # Ensure default admin credentials exist and are hashed correctly
+    try:
+        admin_email = 'admin@obyra.com'
+        admin = Usuario.query.filter_by(email=admin_email).first()
+
+        if not admin:
+            admin_org = Organizacion(nombre='OBYRA - Administración Central')
+            db.session.add(admin_org)
+            db.session.flush()
+
+            admin = Usuario(
+                nombre='Administrador',
+                apellido='OBYRA',
+                email=admin_email,
+                rol='administrador',
+                role='administrador',
+                auth_provider='manual',
+                activo=True,
+                organizacion_id=admin_org.id
+            )
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+            print('👤 Usuario administrador creado: admin@obyra.com / admin123')
+        else:
+            updated = False
+
+            hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')
+            stored_hash = admin.password_hash or ''
+            if not stored_hash or not stored_hash.startswith(hashed_markers):
+                original_secret = stored_hash or 'admin123'
+                admin.set_password(original_secret)
+                updated = True
+
+            if admin.auth_provider != 'manual':
+                admin.auth_provider = 'manual'
+                updated = True
+
+            if not admin.organizacion:
+                admin_org = Organizacion(nombre='OBYRA - Administración Central')
+                db.session.add(admin_org)
+                db.session.flush()
+                admin.organizacion_id = admin_org.id
+                updated = True
+
+            if updated:
+                db.session.commit()
+                print('🔐 Credenciales del administrador principal verificadas y aseguradas.')
+    except Exception as ensure_admin_exc:
+        db.session.rollback()
+        print(f"⚠️ No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""

@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from extensions import db
 from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus
@@ -116,7 +115,7 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
             'category': 'danger',
         }
 
-    if not check_password_hash(usuario.password_hash, password):
+    if not usuario.check_password(password):
         return False, {
             'message': 'Credenciales incorrectas.',
             'category': 'danger',
@@ -260,10 +259,7 @@ def forgot_password():
         if usuario and usuario.auth_provider == 'manual' and usuario.activo:
             token = _generate_reset_token(usuario)
             reset_url = url_for('auth.reset_password', token=token, _external=True)
-            if current_app.debug or current_app.config.get('ENV') == 'development':
-                print(f"🔐 Enlace de restablecimiento para {usuario.email}: {reset_url}")
-            else:
-                current_app.logger.info('Enlace de restablecimiento generado para %s: %s', usuario.email, reset_url)
+            _deliver_reset_link(usuario, reset_url)
 
         flash('Si el email corresponde a una cuenta activa, te enviamos las instrucciones para restablecer la contraseña.', 'info')
         return redirect(url_for('auth.forgot_password'))
@@ -298,7 +294,7 @@ def reset_password(token: str):
             flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
             return render_template('auth/reset.html', token=token)
 
-        usuario.password_hash = generate_password_hash(password)
+        usuario.set_password(password)
         usuario.auth_provider = 'manual'
         db.session.commit()
 
@@ -377,13 +373,14 @@ def register():
                 apellido=apellido,
                 email=email.lower(),
                 telefono=telefono,
-                password_hash=generate_password_hash(password),
                 rol=rol_usuario,
                 role=rol_usuario,
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=nueva_organizacion.id
             )
+
+            nuevo_usuario.set_password(password)
 
             db.session.add(nuevo_usuario)
             db.session.flush()
@@ -620,12 +617,13 @@ def admin_register():
                 apellido=apellido,
                 email=email.lower(),
                 telefono=telefono,
-                password_hash=generate_password_hash(password),
                 rol=rol,
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=current_user.organizacion_id
             )
+
+            nuevo_usuario.set_password(password)
             
             db.session.add(nuevo_usuario)
             db.session.commit()
@@ -859,7 +857,7 @@ def aceptar_invitacion():
             # Activar usuario existente
             usuario.nombre = nombre
             usuario.apellido = apellido
-            usuario.password_hash = generate_password_hash(password)
+            usuario.set_password(password)
             usuario.activo = True
             
             db.session.commit()
@@ -875,3 +873,20 @@ def aceptar_invitacion():
             flash('Error al procesar la invitación.', 'danger')
     
     return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
+def _deliver_reset_link(usuario: Usuario, reset_url: str) -> None:
+    """Envía o registra el enlace de reseteo usando el canal configurado."""
+    delivery_mode = current_app.config.get('PASSWORD_RESET_DELIVERY', 'email')
+
+    if current_app.debug or current_app.config.get('ENV') == 'development':
+        print(f"🔐 Enlace de restablecimiento para {usuario.email}: {reset_url}")
+        return
+
+    if delivery_mode == 'email':
+        current_app.logger.info('Enlace de restablecimiento generado para %s: %s', usuario.email, reset_url)
+    else:
+        current_app.logger.info(
+            'Password reset link for %s via %s pending integration: %s',
+            usuario.email,
+            delivery_mode,
+            reset_url,
+        )

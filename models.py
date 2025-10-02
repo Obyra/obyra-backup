@@ -2,6 +2,7 @@ from datetime import datetime, date
 from flask_login import UserMixin
 from extensions import db
 from sqlalchemy import func
+from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import json
 import os
@@ -91,6 +92,21 @@ class Usuario(UserMixin, db.Model):
     
     def __repr__(self):
         return f'<Usuario {self.nombre} {self.apellido}>'
+
+    # -----------------------------------------------------
+    # Gestión de contraseñas
+    # -----------------------------------------------------
+    def set_password(self, password: str) -> None:
+        """Genera y almacena el hash seguro de la contraseña suministrada."""
+        if not password:
+            raise ValueError('La contraseña no puede estar vacía.')
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        """Compara una contraseña en texto plano con el hash almacenado."""
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
     
     def esta_en_periodo_prueba(self):
         """Verifica si el usuario aún está en periodo de prueba"""
@@ -1498,11 +1514,9 @@ class SupplierUser(db.Model):
         return f'<SupplierUser {self.email}>'
     
     def check_password(self, password):
-        from werkzeug.security import check_password_hash
         return check_password_hash(self.password_hash, password)
-    
+
     def set_password(self, password):
-        from werkzeug.security import generate_password_hash
         self.password_hash = generate_password_hash(password)
     
     @property
