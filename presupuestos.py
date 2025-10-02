@@ -108,7 +108,12 @@ def _quantize_quantity(value: Decimal) -> Decimal:
     return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
 
 
-def _persistir_resultados_etapas(presupuesto: Presupuesto, etapas_resultado: list, superficie: float, tipo_calculo: str):
+def _persistir_resultados_etapas(
+    presupuesto: Presupuesto,
+    etapas_resultado: list,
+    superficie: Optional[Decimal],
+    tipo_calculo: str,
+):
     """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
 
     if not etapas_resultado:
@@ -277,9 +282,15 @@ def crear():
         ia_payload = None
         if ia_payload_raw:
             try:
-                ia_payload = json.loads(ia_payload_raw)
-            except (TypeError, ValueError):
-                current_app.logger.warning('Payload IA de etapas inválido, se omitirá durante la creación del presupuesto.')
+                ia_payload = json.loads(
+                    ia_payload_raw,
+                    parse_float=Decimal,
+                    parse_int=Decimal,
+                )
+            except (TypeError, ValueError, InvalidOperation):
+                current_app.logger.warning(
+                    'Payload IA de etapas inválido, se omitirá durante la creación del presupuesto.'
+                )
                 ia_payload = None
 
         # Validaciones
@@ -287,13 +298,9 @@ def crear():
             flash('Completa todos los campos obligatorios.', 'danger')
             return render_template('presupuestos/crear.html')
         
-        try:
-            superficie_float = float(superficie_m2)
-            if superficie_float <= 0:
-                flash('La superficie debe ser mayor a 0.', 'danger')
-                return render_template('presupuestos/crear.html')
-        except ValueError:
-            flash('La superficie debe ser un número válido.', 'danger')
+        superficie_decimal = _quantize_quantity(_to_decimal(superficie_m2, '0'))
+        if superficie_decimal <= DECIMAL_ZERO:
+            flash('La superficie debe ser mayor a 0.', 'danger')
             return render_template('presupuestos/crear.html')
         
         # Crear nueva obra basada en los datos del formulario
@@ -315,9 +322,9 @@ def crear():
         # Procesar presupuesto disponible
         if presupuesto_disponible:
             try:
-                presupuesto_float = float(presupuesto_disponible)
-                nueva_obra.presupuesto_total = presupuesto_float
-            except ValueError:
+                presupuesto_decimal = _quantize_currency(_to_decimal(presupuesto_disponible, '0'))
+                nueva_obra.presupuesto_total = presupuesto_decimal
+            except (InvalidOperation, ValueError, TypeError):
                 pass
         
         try:
@@ -346,7 +353,7 @@ def crear():
             nuevo_presupuesto = Presupuesto()
             nuevo_presupuesto.obra_id = nueva_obra.id
             nuevo_presupuesto.numero = numero
-            nuevo_presupuesto.iva_porcentaje = 21.0  # Fijo según lo solicitado
+            nuevo_presupuesto.iva_porcentaje = Decimal('21.00')  # Fijo según lo solicitado
             nuevo_presupuesto.organizacion_id = current_user.organizacion_id
             vigencia_form = request.form.get('vigencia_dias')
             try:
@@ -359,7 +366,7 @@ def crear():
             observaciones_proyecto = []
             observaciones_proyecto.append(f"Tipo de obra: {tipo_obra.replace('_', ' ').title()}")
             observaciones_proyecto.append(f"Tipo de construcción: {tipo_construccion.title()}")
-            observaciones_proyecto.append(f"Superficie: {superficie_float} m²")
+            observaciones_proyecto.append(f"Superficie: {superficie_decimal} m²")
             if presupuesto_disponible:
                 observaciones_proyecto.append(f"Presupuesto disponible: {moneda} {presupuesto_disponible}")
             if plano_pdf and plano_pdf.filename:
@@ -419,25 +426,18 @@ def crear():
                             tipo_item = 'material'
                         tipo_item = tipo_item if tipo_item in tipos_validos else 'material'
 
-                        cantidad = item_data.get('cantidad', 0) or 0
-                        precio_unitario = item_data.get('precio_unit', 0) or 0
-                        try:
-                            cantidad_float = float(cantidad)
-                        except (TypeError, ValueError):
-                            cantidad_float = 0.0
-                        try:
-                            precio_unitario_float = float(precio_unitario)
-                        except (TypeError, ValueError):
-                            precio_unitario_float = 0.0
+                        cantidad_dec = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
+                        precio_unitario_dec = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
+                        total_dec = _quantize_currency(cantidad_dec * precio_unitario_dec)
 
                         nuevo_item = ItemPresupuesto(
                             presupuesto_id=nuevo_presupuesto.id,
                             tipo=tipo_item,
                             descripcion=item_data.get('descripcion', 'Item IA de etapa'),
                             unidad=item_data.get('unidad', 'unidades'),
-                            cantidad=cantidad_float,
-                            precio_unitario=precio_unitario_float,
-                            total=cantidad_float * precio_unitario_float,
+                            cantidad=cantidad_dec,
+                            precio_unitario=precio_unitario_dec,
+                            total=total_dec,
                             origen='ia',
                         )
                         if etapa_modelo:
@@ -550,10 +550,14 @@ def calcular_etapas_ia():
     if superficie is None:
         return jsonify({'ok': False, 'error': 'Debes indicar la superficie en m² para calcular.'}), 400
 
+    superficie_decimal = _quantize_quantity(_to_decimal(superficie, '0'))
+    if superficie_decimal <= DECIMAL_ZERO:
+        return jsonify({'ok': False, 'error': 'La superficie debe ser mayor a 0.'}), 400
+
     try:
         resultado = calcular_etapas_seleccionadas(
             etapas_payload=etapa_payload,
-            superficie_m2=superficie,
+            superficie_m2=str(superficie_decimal),
             tipo_calculo=tipo_calculo,
             contexto=contexto,
             presupuesto_id=presupuesto_id,
@@ -564,7 +568,7 @@ def calcular_etapas_ia():
         current_app.logger.exception('Error calculando etapas IA')
         return jsonify({'ok': False, 'error': 'No se pudo calcular las etapas seleccionadas.'}), 500
 
-    resultado['superficie_usada'] = float(superficie)
+    resultado['superficie_usada'] = float(superficie_decimal)
     resultado['tipo_calculo'] = tipo_calculo
     resultado['ok'] = True
     resultado['presupuesto_id'] = presupuesto_id
@@ -585,7 +589,7 @@ def calcular_etapas_ia():
             cambios, _ = _persistir_resultados_etapas(
                 presupuesto,
                 resultado.get('etapas', []),
-                float(superficie),
+                superficie_decimal,
                 tipo_calculo,
             )
             if cambios:
@@ -605,7 +609,7 @@ def calcular_etapas_ia():
                         'etapas': [e.get('slug') or e.get('nombre') for e in (resultado.get('etapas') or [])],
                         'total_antes': total_antes,
                         'total_despues': total_despues,
-                        'superficie': float(superficie),
+                        'superficie': float(superficie_decimal),
                         'tipo_calculo': tipo_calculo,
                     },
                 )
@@ -772,14 +776,15 @@ def crear_desde_ia():
                     'sellador': 'litros'
                 }
                 
+                cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0'))
                 item = ItemPresupuesto()
                 item.presupuesto_id = nuevo_presupuesto.id
                 item.tipo = 'material'
                 item.descripcion = descripciones.get(material, material.title())
                 item.unidad = unidades.get(material, 'unidades')
-                item.cantidad = cantidad
-                item.precio_unitario = 0.0  # Se puede actualizar manualmente después
-                item.total = 0.0
+                item.cantidad = cantidad_dec
+                item.precio_unitario = DECIMAL_ZERO
+                item.total = DECIMAL_ZERO
                 item.origen = 'ia'
                 db.session.add(item)
         
@@ -821,9 +826,9 @@ def crear_desde_ia():
                     item.descripcion = base_desc
                     
                 item.unidad = 'días' if equipo in ['hormigonera', 'andamios', 'nivel_laser'] else 'unidades'
-                item.cantidad = float(cantidad)
-                item.precio_unitario = 0.0
-                item.total = 0.0
+                item.cantidad = _quantize_quantity(_to_decimal(cantidad, '0'))
+                item.precio_unitario = DECIMAL_ZERO
+                item.total = DECIMAL_ZERO
                 item.origen = 'ia'
                 db.session.add(item)
         
@@ -831,8 +836,8 @@ def crear_desde_ia():
         herramientas = presupuesto_ia.get('herramientas', {})
         for herramienta, cantidad in herramientas.items():
             try:
-                cantidad_float = float(cantidad) if cantidad else 0.0
-                if cantidad_float > 0:
+                cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0')) if cantidad else DECIMAL_ZERO
+                if cantidad_dec > DECIMAL_ZERO:
                     descripciones_herramientas = {
                         'palas': 'Palas',
                         'baldes': 'Baldes',
@@ -857,9 +862,9 @@ def crear_desde_ia():
                     item.tipo = 'herramienta'
                     item.descripcion = descripciones_herramientas.get(herramienta, herramienta.replace('_', ' ').title())
                     item.unidad = 'unidades'
-                    item.cantidad = cantidad_float
-                    item.precio_unitario = 0.0
-                    item.total = 0.0
+                    item.cantidad = cantidad_dec
+                    item.precio_unitario = DECIMAL_ZERO
+                    item.total = DECIMAL_ZERO
                     item.origen = 'ia'
                     db.session.add(item)
             except (ValueError, TypeError):
@@ -1051,21 +1056,21 @@ def agregar_item(id):
         return redirect(url_for('presupuestos.detalle', id=id))
     
     try:
-        cantidad_float = float(cantidad) if cantidad else 0.0
-        precio_unitario_float = float(precio_unitario) if precio_unitario else 0.0
-        total = cantidad_float * precio_unitario_float
-    except ValueError:
+        cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0'))
+        precio_unitario_dec = _quantize_currency(_to_decimal(precio_unitario, '0'))
+        total_dec = _quantize_currency(cantidad_dec * precio_unitario_dec)
+    except (InvalidOperation, ValueError, TypeError):
         flash('Cantidad y precio deben ser números válidos.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
-    
+
     nuevo_item = ItemPresupuesto()
     nuevo_item.presupuesto_id = id
     nuevo_item.tipo = tipo
     nuevo_item.descripcion = descripcion
     nuevo_item.unidad = unidad
-    nuevo_item.cantidad = cantidad_float
-    nuevo_item.precio_unitario = precio_unitario_float
-    nuevo_item.total = total
+    nuevo_item.cantidad = cantidad_dec
+    nuevo_item.precio_unitario = precio_unitario_dec
+    nuevo_item.total = total_dec
     nuevo_item.origen = 'manual'
 
     try:
@@ -1382,8 +1387,8 @@ def editar_obra(id):
                 obra.presupuesto_total = None
             else:
                 try:
-                    obra.presupuesto_total = float(bruto_presupuesto)
-                except (TypeError, ValueError):
+                    obra.presupuesto_total = _quantize_currency(_to_decimal(bruto_presupuesto, '0'))
+                except (InvalidOperation, ValueError, TypeError):
                     return jsonify({'error': 'El presupuesto total debe ser numérico.'}), 400
 
         db.session.commit()
@@ -1423,12 +1428,15 @@ def editar_item(item_id):
         if 'unidad' in data:
             item.unidad = data['unidad']
         if 'cantidad' in data:
-            item.cantidad = float(data['cantidad'])
+            item.cantidad = _quantize_quantity(_to_decimal(data['cantidad'], '0'))
         if 'precio_unitario' in data:
-            item.precio_unitario = float(data['precio_unitario'])
-        
+            item.precio_unitario = _quantize_currency(_to_decimal(data['precio_unitario'], '0'))
+
+        cantidad_dec = _to_decimal(item.cantidad, '0')
+        precio_unitario_dec = _to_decimal(item.precio_unitario, '0')
+
         # Recalcular total
-        item.total = item.cantidad * item.precio_unitario
+        item.total = _quantize_currency(cantidad_dec * precio_unitario_dec)
         
         # Recalcular totales del presupuesto
         presupuesto.calcular_totales()
@@ -1490,7 +1498,7 @@ def confirmar_como_obra(id):
         nueva_obra.descripcion = f"Superficie: {datos_proyecto.get('superficie', 0)}m² - {datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
         nueva_obra.direccion = datos_proyecto.get('ubicacion', 'Por especificar')
         nueva_obra.estado = 'planificacion'
-        nueva_obra.presupuesto_total = float(presupuesto.total_con_iva)
+        nueva_obra.presupuesto_total = _quantize_currency(_to_decimal(presupuesto.total_con_iva, '0'))
         nueva_obra.organizacion_id = current_user.organizacion_id
         
         # Geocodificar si hay ubicación

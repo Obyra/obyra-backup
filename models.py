@@ -1,5 +1,5 @@
 from datetime import datetime, date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask_login import UserMixin
 from extensions import db
 from sqlalchemy import func
@@ -779,9 +779,19 @@ class Presupuesto(db.Model):
         items = self.items.all() if hasattr(self.items, 'all') else list(self.items)
         cero = Decimal('0')
 
-        self.subtotal_materiales = sum((Decimal(item.total or 0) for item in items if item.tipo == 'material'), cero)
-        self.subtotal_mano_obra = sum((Decimal(item.total or 0) for item in items if item.tipo == 'mano_obra'), cero)
-        self.subtotal_equipos = sum((Decimal(item.total or 0) for item in items if item.tipo == 'equipo'), cero)
+        def _as_decimal(value):
+            if isinstance(value, Decimal):
+                return value
+            if value is None:
+                return Decimal('0')
+            try:
+                return Decimal(str(value))
+            except (InvalidOperation, ValueError, TypeError):
+                return Decimal('0')
+
+        self.subtotal_materiales = sum((_as_decimal(item.total) for item in items if item.tipo == 'material'), cero)
+        self.subtotal_mano_obra = sum((_as_decimal(item.total) for item in items if item.tipo == 'mano_obra'), cero)
+        self.subtotal_equipos = sum((_as_decimal(item.total) for item in items if item.tipo == 'equipo'), cero)
 
         self.subtotal_materiales = self.subtotal_materiales.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         self.subtotal_mano_obra = self.subtotal_mano_obra.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
