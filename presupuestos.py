@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from datetime import date, datetime, timedelta
 from io import BytesIO
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import importlib.util
 import json
 from typing import Any, Optional
@@ -74,6 +75,39 @@ def _parse_date(value: Any) -> Optional[date]:
     return None
 
 
+DECIMAL_ZERO = Decimal("0")
+CURRENCY_QUANT = Decimal("0.01")
+QUANTITY_QUANT = Decimal("0.001")
+
+
+def _to_decimal(value: Any, default: str = "0") -> Decimal:
+    """Convierte un valor arbitrario a Decimal utilizando '.' como separador."""
+
+    if isinstance(value, Decimal):
+        return value
+    if value is None:
+        return Decimal(default)
+    if isinstance(value, (int, float)):
+        normalized = str(value)
+    else:
+        text = str(value).strip()
+        if not text:
+            return Decimal(default)
+        normalized = text.replace(",", ".")
+    try:
+        return Decimal(normalized)
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal(default)
+
+
+def _quantize_currency(value: Decimal) -> Decimal:
+    return value.quantize(CURRENCY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _quantize_quantity(value: Decimal) -> Decimal:
+    return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
+
+
 def _persistir_resultados_etapas(presupuesto: Presupuesto, etapas_resultado: list, superficie: float, tipo_calculo: str):
     """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
 
@@ -125,15 +159,9 @@ def _persistir_resultados_etapas(presupuesto: Presupuesto, etapas_resultado: lis
             if tipo_item not in {'material', 'mano_obra', 'equipo', 'herramienta'}:
                 tipo_item = 'material'
 
-            try:
-                cantidad = float(item_data.get('cantidad') or 0)
-            except (TypeError, ValueError):
-                cantidad = 0.0
-
-            try:
-                precio_unitario = float(item_data.get('precio_unit') or 0)
-            except (TypeError, ValueError):
-                precio_unitario = 0.0
+            cantidad = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
+            precio_unitario = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
+            total = _quantize_currency(cantidad * precio_unitario)
 
             nuevo_item = ItemPresupuesto(
                 presupuesto_id=presupuesto.id,
@@ -142,7 +170,7 @@ def _persistir_resultados_etapas(presupuesto: Presupuesto, etapas_resultado: lis
                 unidad=item_data.get('unidad') or 'unidades',
                 cantidad=cantidad,
                 precio_unitario=precio_unitario,
-                total=cantidad * precio_unitario,
+                total=total,
                 origen='ia',
             )
 
@@ -1664,7 +1692,7 @@ def guardar_presupuesto():
         return jsonify({'error': 'Sin permisos'}), 403
     
     data = request.form or request.json
-    
+
     obra_id = data.get("obra_id")  # id si seleccionó obra existente
     crear_nueva = data.get("crear_nueva_obra") == "1"
     
@@ -1691,7 +1719,7 @@ def guardar_presupuesto():
             obra_id = obra.id
         else:
             obra = Obra.query.get(obra_id) if obra_id else None
-        
+
         # Generar número de presupuesto único
         ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
         if ultimo_numero and ultimo_numero.startswith('PRES-'):
@@ -1701,7 +1729,7 @@ def guardar_presupuesto():
                 siguiente_num = 1
         else:
             siguiente_num = 1
-        
+
         # Asegurar que el número sea único
         while True:
             numero = f"PRES-{siguiente_num:04d}"
@@ -1709,37 +1737,39 @@ def guardar_presupuesto():
             if not existe:
                 break
             siguiente_num += 1
-        
+
+        iva_valor = _to_decimal(data.get("iva_porcentaje") or '21')
+        try:
+            iva_valor = iva_valor.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        except InvalidOperation:
+            iva_valor = Decimal('21.00')
+
         # Crear presupuesto asociado
         p = Presupuesto(
             obra_id = obra_id,
             numero = numero,
             organizacion_id = current_user.organizacion_id,
             observaciones = data.get("observaciones"),
-            iva_porcentaje = 21.0,
+            iva_porcentaje = iva_valor,
             estado = 'borrador'
         )
-        
+
         # Agregar campos adicionales si están disponibles
-        if data.get("superficie"):
-            try:
-                superficie_float = float(data.get("superficie"))
-                p.observaciones = f"{p.observaciones or ''} | Superficie: {superficie_float} m²"
-            except ValueError:
-                pass
-        
+        superficie_val = data.get("superficie")
+        superficie_decimal = _to_decimal(superficie_val) if superficie_val else None
+        if superficie_decimal is not None and superficie_decimal != DECIMAL_ZERO:
+            p.observaciones = f"{p.observaciones or ''} | Superficie: {superficie_decimal} m²"
+
         if data.get("tipo_construccion"):
             p.observaciones = f"{p.observaciones or ''} | Tipo: {data.get('tipo_construccion')}"
-        
+
         if data.get("calculo_json"):
             p.datos_proyecto = data.get("calculo_json")
-        
+
         if data.get("total_estimado"):
-            try:
-                p.total_con_iva = float(data.get("total_estimado"))
-            except ValueError:
-                pass
-        
+            total_estimado = _quantize_currency(_to_decimal(data.get("total_estimado")))
+            p.total_con_iva = total_estimado
+
         db.session.add(p)
         db.session.commit()
         
