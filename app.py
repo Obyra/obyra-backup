@@ -1,7 +1,9 @@
 import os
 import logging
 import importlib
+import click
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
+from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
@@ -56,6 +58,23 @@ login_manager.init_app(app)
 login_manager.login_view = 'index'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
+
+db_cli = AppGroup('db')
+
+
+@db_cli.command('upgrade')
+def db_upgrade():
+    """Apply pending lightweight database migrations."""
+    with app.app_context():
+        from migrations_runtime import ensure_avance_audit_columns, ensure_presupuesto_state_columns
+
+        ensure_avance_audit_columns()
+        ensure_presupuesto_state_columns()
+
+    click.echo('✅ Database upgraded successfully.')
+
+
+app.cli.add_command(db_cli)
 
 
 @login_manager.user_loader
@@ -278,8 +297,9 @@ with app.app_context():
     from models import Usuario, Organizacion
     
     # Run startup migrations before creating tables
-    from migrations_runtime import ensure_avance_audit_columns
+    from migrations_runtime import ensure_avance_audit_columns, ensure_presupuesto_state_columns
     ensure_avance_audit_columns()
+    ensure_presupuesto_state_columns()
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
     try:

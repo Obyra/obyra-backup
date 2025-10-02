@@ -1,6 +1,7 @@
 from app import db
 import os
 from flask import current_app
+from sqlalchemy import inspect
 
 def ensure_avance_audit_columns():
     """Add audit columns to tarea_avances table if they don't exist"""
@@ -33,3 +34,75 @@ def ensure_avance_audit_columns():
         # log but don't leave partial sentinel
         if current_app:
             current_app.logger.exception('❌ Migration failed: add avance audit columns')
+
+
+def ensure_presupuesto_state_columns():
+    """Ensure presupuesto state management columns exist and are backfilled."""
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250316_presupuesto_states.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    try:
+        engine = db.engine
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('presupuestos')}
+            except Exception:
+                columns = set()
+
+            statements = []
+
+            if 'estado' not in columns:
+                if engine.url.get_backend_name() == 'postgresql':
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN estado VARCHAR(20) DEFAULT 'borrador'")
+                else:
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN estado TEXT DEFAULT 'borrador'")
+            else:
+                # Even if the column exists, make sure NULL/empty rows are updated below
+                pass
+
+            if 'perdido_motivo' not in columns:
+                statements.append("ALTER TABLE presupuestos ADD COLUMN perdido_motivo TEXT")
+
+            if 'perdido_fecha' not in columns:
+                if engine.url.get_backend_name() == 'postgresql':
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN perdido_fecha TIMESTAMP")
+                else:
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN perdido_fecha DATETIME")
+
+            if 'deleted_at' not in columns:
+                if engine.url.get_backend_name() == 'postgresql':
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN deleted_at TIMESTAMP")
+                else:
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN deleted_at DATETIME")
+
+            for stmt in statements:
+                conn.exec_driver_sql(stmt)
+
+            # Backfill estado column after creation/update
+            conn.exec_driver_sql(
+                """
+                UPDATE presupuestos
+                SET estado = CASE
+                    WHEN confirmado_como_obra = 1 OR confirmado_como_obra = TRUE THEN 'confirmado'
+                    ELSE 'borrador'
+                END
+                WHERE estado IS NULL OR estado = ''
+                """
+            )
+
+        with open(sentinel, 'w') as f:
+            f.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: presupuesto state columns ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: presupuesto state columns')
+        raise
