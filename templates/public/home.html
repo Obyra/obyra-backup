@@ -60,6 +60,11 @@
                                     <i class="fas fa-sign-in-alt me-2"></i>Iniciar sesión
                                 </button>
                             </div>
+                            <div class="text-center mb-3">
+                                <a href="{{ url_for('auth.forgot_password') }}" class="auth-link small">
+                                    ¿Olvidaste tu contraseña?
+                                </a>
+                            </div>
                             <div class="text-center text-muted mb-3">o</div>
                             <div class="d-grid gap-2">
                                 {% if google_available %}
