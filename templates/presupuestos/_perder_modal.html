@@ -1,0 +1,38 @@
+<div class="modal fade" id="modalMarcarPerdido" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-archive me-2"></i>Marcar como perdido
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    Estás marcando el presupuesto <strong id="perderPresupuestoNumero">-</strong> como perdido.
+                </p>
+                <div class="mb-3">
+                    <label for="motivoPerdido" class="form-label">Motivo principal</label>
+                    <select class="form-select" id="motivoPerdido">
+                        <option value="">Selecciona un motivo</option>
+                        <option value="Precio fuera del presupuesto del cliente">Precio fuera del presupuesto del cliente</option>
+                        <option value="Cliente eligió a otro proveedor">Cliente eligió a otro proveedor</option>
+                        <option value="Proyecto suspendido o cancelado">Proyecto suspendido o cancelado</option>
+                        <option value="Documentación incompleta">Documentación incompleta</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+                <div class="mb-0">
+                    <label for="detallePerdido" class="form-label">Detalle adicional (opcional)</label>
+                    <textarea class="form-control" id="detallePerdido" rows="3" placeholder="Agrega notas internas"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="btnConfirmarPerdido">
+                    <i class="fas fa-archive me-1"></i>Marcar como perdido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

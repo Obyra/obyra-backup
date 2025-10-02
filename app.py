@@ -239,6 +239,8 @@ def estado_badge_filter(estado):
         'enviado': 'bg-warning',
         'aprobado': 'bg-success',
         'rechazado': 'bg-danger',
+        'perdido': 'bg-dark',
+        'eliminado': 'bg-dark',
         'planificacion': 'bg-secondary',
         'en_progreso': 'bg-primary',
         'pausada': 'bg-warning',

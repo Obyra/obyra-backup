@@ -78,16 +78,26 @@ def lista():
         return redirect(url_for('reportes.dashboard'))
     
     estado = request.args.get('estado', '')
+    if estado == 'eliminado' and current_user.rol != 'administrador':
+        estado = ''
+    incluir_eliminados = estado == 'eliminado'
     buscar = request.args.get('buscar', '')
-    
+
     # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir convertidos
     query = Presupuesto.query.outerjoin(Obra).filter(
         Presupuesto.organizacion_id == current_user.organizacion_id,
         Presupuesto.estado != 'convertido'  # Excluir presupuestos ya convertidos en obras
     )
-    
-    if estado:
+
+    if incluir_eliminados:
+        query = query.filter(Presupuesto.deleted_at.isnot(None))
+    else:
+        query = query.filter(Presupuesto.deleted_at.is_(None))
+
+    if estado and estado != 'eliminado':
         query = query.filter(Presupuesto.estado == estado)
+    elif not incluir_eliminados:
+        query = query.filter(Presupuesto.estado != 'eliminado')
     
     if buscar:
         query = query.filter(
@@ -688,7 +698,11 @@ def detalle(id):
         flash('No tienes permisos para ver presupuestos.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
     items = presupuesto.items.all()
     
     # Agrupar items por tipo
@@ -711,7 +725,11 @@ def agregar_item(id):
         flash('No tienes permisos para agregar items.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
     
     if presupuesto.estado != 'borrador':
         flash('Solo se pueden agregar items a presupuestos en borrador.', 'danger')
@@ -764,6 +782,10 @@ def eliminar_item(id):
     
     item = ItemPresupuesto.query.get_or_404(id)
     presupuesto = item.presupuesto
+
+    if presupuesto.organizacion_id != current_user.organizacion_id or presupuesto.deleted_at is not None:
+        flash('No tienes permisos para eliminar este item.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
     
     if presupuesto.estado != 'borrador':
         flash('Solo se pueden eliminar items de presupuestos en borrador.', 'danger')
@@ -787,7 +809,15 @@ def cambiar_estado(id):
         flash('No tienes permisos para cambiar el estado.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado in ['perdido', 'eliminado']:
+        flash('No puedes modificar el estado de un presupuesto archivado.', 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
     nuevo_estado = request.form.get('estado')
     
     if nuevo_estado not in ['borrador', 'enviado', 'aprobado', 'rechazado']:
@@ -819,7 +849,11 @@ def generar_pdf(id):
         )
         return redirect(url_for('presupuestos.detalle', id=id))
 
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
     items = presupuesto.items.all()
 
     # Crear buffer para el PDF
@@ -963,9 +997,14 @@ def editar_obra(id):
     if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
         return jsonify({'error': 'Sin permisos'}), 403
 
-    presupuesto = Presupuesto.query.get_or_404(id)
-    if presupuesto.organizacion_id != current_user.organizacion_id:
-        return jsonify({'error': 'Presupuesto no pertenece a tu organización'}), 403
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado != 'borrador':
+        return jsonify({'error': 'Solo puedes editar presupuestos en borrador.'}), 400
 
     payload = request.get_json(silent=True) or request.form.to_dict()
     if not payload:
@@ -1062,6 +1101,12 @@ def editar_item(item_id):
     
     item = ItemPresupuesto.query.get_or_404(item_id)
     presupuesto = item.presupuesto
+
+    if presupuesto.organizacion_id != current_user.organizacion_id or presupuesto.deleted_at is not None:
+        return jsonify({'error': 'No tienes permisos para editar este item.'}), 403
+
+    if presupuesto.estado != 'borrador':
+        return jsonify({'error': 'Solo puedes editar items en presupuestos en borrador.'}), 400
     
     data = request.get_json()
     
@@ -1107,14 +1152,21 @@ def confirmar_como_obra(id):
         flash('No tienes permisos para confirmar obras.', 'danger')
         return redirect(url_for('presupuestos.lista'))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
-    
-    if presupuesto.organizacion_id != current_user.organizacion_id:
-        flash('No tienes permisos para acceder a este presupuesto.', 'danger')
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id
+    ).first_or_404()
+
+    if presupuesto.deleted_at is not None:
+        flash('No puedes confirmar un presupuesto eliminado.', 'danger')
         return redirect(url_for('presupuestos.lista'))
-    
+
     if presupuesto.confirmado_como_obra:
         flash('Este presupuesto ya fue confirmado como obra.', 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.estado != 'borrador':
+        flash('Solo los presupuestos en borrador pueden confirmarse como obra.', 'warning')
         return redirect(url_for('presupuestos.detalle', id=id))
     
     try:
@@ -1204,6 +1256,126 @@ def confirmar_como_obra(id):
         db.session.rollback()
         flash(f'Error al confirmar obra: {str(e)}', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route('/<int:id>/perder', methods=['POST'])
+@login_required
+def marcar_presupuesto_perdido(id: int):
+    """Marca un presupuesto como perdido y registra el motivo."""
+
+    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado != 'borrador':
+        return jsonify({'error': 'Solo los presupuestos en borrador pueden marcarse como perdidos.'}), 400
+
+    data = request.get_json(silent=True) or request.form
+    motivo_principal = _clean_text(data.get('motivo')) if data else None
+    detalle = _clean_text(data.get('detalle')) if data else None
+
+    if not motivo_principal and not detalle:
+        return jsonify({'error': 'Indica al menos un motivo para registrar el cambio.'}), 400
+
+    if motivo_principal and detalle:
+        motivo = f"{motivo_principal} - {detalle}"
+    else:
+        motivo = motivo_principal or detalle
+
+    presupuesto.estado = 'perdido'
+    presupuesto.perdido_motivo = motivo
+    presupuesto.perdido_fecha = datetime.utcnow()
+    presupuesto.confirmado_como_obra = False
+
+    try:
+        db.session.commit()
+        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
+        current_app.logger.info(
+            'Presupuesto %s marcado como perdido por %s',
+            presupuesto.numero,
+            actor
+        )
+        return jsonify({'mensaje': 'Presupuesto archivado como perdido.'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error marcando presupuesto %s como perdido', id)
+        return jsonify({'error': 'No se pudo actualizar el presupuesto.'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/restaurar', methods=['POST'])
+@login_required
+def restaurar_presupuesto(id: int):
+    """Restaura un presupuesto perdido a estado borrador."""
+
+    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado != 'perdido':
+        return jsonify({'error': 'Solo los presupuestos perdidos pueden restaurarse.'}), 400
+
+    presupuesto.estado = 'borrador'
+    presupuesto.perdido_fecha = None
+    presupuesto.perdido_motivo = None
+
+    try:
+        db.session.commit()
+        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
+        current_app.logger.info(
+            'Presupuesto %s restaurado a borrador por %s',
+            presupuesto.numero,
+            actor
+        )
+        return jsonify({'mensaje': 'Presupuesto restaurado a borrador.'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error restaurando presupuesto %s', id)
+        return jsonify({'error': 'No se pudo restaurar el presupuesto.'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_presupuesto(id: int):
+    """Realiza un soft-delete del presupuesto seleccionado."""
+
+    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol != 'administrador':
+        return jsonify({'error': 'Solo los administradores pueden eliminar presupuestos.'}), 403
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado not in ['borrador', 'perdido']:
+        return jsonify({'error': 'Solo los presupuestos en borrador o perdidos pueden eliminarse.'}), 400
+
+    presupuesto.estado = 'eliminado'
+    presupuesto.deleted_at = datetime.utcnow()
+
+    try:
+        db.session.commit()
+        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
+        current_app.logger.info(
+            'Presupuesto %s eliminado por %s',
+            presupuesto.numero,
+            actor
+        )
+        return jsonify({'mensaje': 'Presupuesto eliminado correctamente.'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error eliminando presupuesto %s', id)
+        return jsonify({'error': 'No se pudo eliminar el presupuesto.'}), 500
 
 
 @presupuestos_bp.route("/guardar", methods=["POST"])

@@ -749,7 +749,7 @@ class Presupuesto(db.Model):
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     numero = db.Column(db.String(50), unique=True, nullable=False)
     fecha = db.Column(db.Date, default=date.today)
-    estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado
+    estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado, perdido, eliminado
     confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra
     datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
     subtotal_materiales = db.Column(db.Numeric(15, 2), default=0)
@@ -760,6 +760,9 @@ class Presupuesto(db.Model):
     total_con_iva = db.Column(db.Numeric(15, 2), default=0)
     observaciones = db.Column(db.Text)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    perdido_motivo = db.Column(db.Text)
+    perdido_fecha = db.Column(db.DateTime)
+    deleted_at = db.Column(db.DateTime)
     
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')

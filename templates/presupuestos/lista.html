@@ -34,6 +34,10 @@
                         <option value="enviado" {{ 'selected' if estado == 'enviado' }}>Enviado</option>
                         <option value="aprobado" {{ 'selected' if estado == 'aprobado' }}>Aprobado</option>
                         <option value="rechazado" {{ 'selected' if estado == 'rechazado' }}>Rechazado</option>
+                        <option value="perdido" {{ 'selected' if estado == 'perdido' }}>Perdido</option>
+                        {% if current_user.rol == 'administrador' %}
+                        <option value="eliminado" {{ 'selected' if estado == 'eliminado' }}>Eliminado</option>
+                        {% endif %}
                     </select>
                 </div>
                 <div class="col-md-6">
@@ -104,32 +108,73 @@
                                 <strong class="text-success">{{ presupuesto.total_con_iva|moneda }}</strong>
                             </div>
                         </div>
-                        
-                        {% if presupuesto.items.count() > 0 %}
-                        <div class="mb-3">
-                            <small class="text-muted">
-                                <i class="fas fa-list me-1"></i>{{ presupuesto.items.count() }} items
-                            </small>
+
+                        {% if presupuesto.estado == 'perdido' %}
+                        <div class="alert alert-warning py-2">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-archive me-2 mt-1"></i>
+                                <div>
+                                    <strong>Presupuesto perdido</strong>
+                                    {% if presupuesto.perdido_motivo %}
+                                    <div class="small mt-1">{{ presupuesto.perdido_motivo }}</div>
+                                    {% endif %}
+                                    {% if presupuesto.perdido_fecha %}
+                                    <div class="small text-muted mt-1">{{ presupuesto.perdido_fecha.strftime('%d/%m/%Y %H:%M') }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    {% if presupuesto.items.count() > 0 %}
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <i class="fas fa-list me-1"></i>{{ presupuesto.items.count() }} items
+                        </small>
                         </div>
                         {% endif %}
                     </div>
                     <div class="card-footer bg-transparent">
                         <div class="d-grid gap-2">
-                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" 
+                            {% if presupuesto.estado == 'eliminado' %}
+                            <button class="btn btn-outline-secondary" disabled>
+                                <i class="fas fa-box-archive me-1"></i>Presupuesto eliminado
+                            </button>
+                            {% else %}
+                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}"
                                class="btn btn-outline-primary">
                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                             </a>
                             {% if presupuesto.items.count() > 0 %}
-                            <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}" 
+                            <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
                                class="btn btn-outline-success btn-sm" target="_blank">
                                 <i class="fas fa-file-pdf me-1"></i>Descargar PDF
                             </a>
                             {% endif %}
+                            {% endif %}
                             
                             <!-- Botón Confirmar Obra para presupuestos sin obra -->
-                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and current_user.rol in ['administrador', 'tecnico'] %}
+                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                             <button class="btn btn-success btn-sm" onclick="confirmarComoObra({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-check-circle me-1"></i>Confirmar como Obra
+                            </button>
+                            {% endif %}
+
+                            {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                            <button class="btn btn-outline-warning btn-sm" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
+                                <i class="fas fa-archive me-1"></i>Marcar como perdido
+                            </button>
+                            {% endif %}
+
+                            {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'perdido' %}
+                            <button class="btn btn-outline-secondary btn-sm" onclick="restaurarPresupuesto({{ presupuesto.id }})">
+                                <i class="fas fa-undo me-1"></i>Restaurar a borrador
+                            </button>
+                            {% endif %}
+
+                            {% if current_user.rol == 'administrador' and presupuesto.estado in ['borrador', 'perdido'] %}
+                            <button class="btn btn-outline-danger btn-sm" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
+                                <i class="fas fa-trash me-1"></i>Eliminar
                             </button>
                             {% endif %}
                         </div>
@@ -159,6 +204,7 @@
         {% endif %}
     </div>
 </div>
+{% include 'presupuestos/_perder_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
@@ -183,6 +229,134 @@ function confirmarComoObra(presupuestoId, numeroPresupuesto) {
         document.body.appendChild(form);
         form.submit();
     }
+}
+
+let presupuestoSeleccionado = null;
+const modalPerdidoEl = document.getElementById('modalMarcarPerdido');
+const modalPerdido = modalPerdidoEl ? new bootstrap.Modal(modalPerdidoEl) : null;
+const botonConfirmarPerdido = document.getElementById('btnConfirmarPerdido');
+if (botonConfirmarPerdido) {
+    botonConfirmarPerdido.addEventListener('click', confirmarMarcarPerdido);
+}
+
+function abrirPerderModal(id, numero) {
+    if (!modalPerdido) return;
+    presupuestoSeleccionado = { id, numero };
+    document.getElementById('perderPresupuestoNumero').textContent = numero;
+    document.getElementById('motivoPerdido').value = '';
+    document.getElementById('detallePerdido').value = '';
+    modalPerdido.show();
+}
+
+async function confirmarMarcarPerdido() {
+    if (!presupuestoSeleccionado) return;
+    const motivo = document.getElementById('motivoPerdido').value.trim();
+    const detalle = document.getElementById('detallePerdido').value.trim();
+
+    if (!motivo && !detalle) {
+        showAlert('Selecciona un motivo o agrega un detalle para registrar el motivo.', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${presupuestoSeleccionado.id}/perder`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ motivo, detalle })
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al marcar el presupuesto como perdido.', 'danger');
+            return;
+        }
+
+        if (modalPerdido) {
+            modalPerdido.hide();
+        }
+        showAlert(result.mensaje || 'Presupuesto marcado como perdido.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+async function restaurarPresupuesto(id) {
+    if (!confirm('¿Restaurar este presupuesto a borrador?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${id}/restaurar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al restaurar el presupuesto.', 'danger');
+            return;
+        }
+
+        showAlert(result.mensaje || 'Presupuesto restaurado a borrador.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+async function eliminarPresupuesto(id, numero) {
+    if (!confirm(`¿Eliminar el presupuesto ${numero}? Esta acción lo archivará y podrás verlo solo desde el filtro de eliminados.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${id}/eliminar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al eliminar el presupuesto.', 'danger');
+            return;
+        }
+
+        showAlert(result.mensaje || 'Presupuesto eliminado correctamente.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+function showAlert(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(alertDiv);
+
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
 }
 </script>
 {% endblock %}
