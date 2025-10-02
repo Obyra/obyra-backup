@@ -782,7 +782,7 @@ class Presupuesto(db.Model):
 
 class ItemPresupuesto(db.Model):
     __tablename__ = 'items_presupuesto'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     presupuesto_id = db.Column(db.Integer, db.ForeignKey('presupuestos.id'), nullable=False)
     tipo = db.Column(db.String(20), nullable=False)  # material, mano_obra, equipo
@@ -791,10 +791,13 @@ class ItemPresupuesto(db.Model):
     cantidad = db.Column(db.Numeric(10, 3), nullable=False)
     precio_unitario = db.Column(db.Numeric(10, 2), nullable=False)
     total = db.Column(db.Numeric(15, 2), nullable=False)
-    
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)
+    origen = db.Column(db.String(20), default='manual')  # manual, ia, importado
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
-    
+    etapa = db.relationship('EtapaObra', lazy='joined')
+
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'
 

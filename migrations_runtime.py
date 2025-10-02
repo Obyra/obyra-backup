@@ -106,3 +106,53 @@ def ensure_presupuesto_state_columns():
         if current_app:
             current_app.logger.exception('❌ Migration failed: presupuesto state columns')
         raise
+
+
+def ensure_item_presupuesto_stage_columns():
+    """Ensure ItemPresupuesto tiene columnas para vincular etapas y origen."""
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250317_item_stage_cols.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    try:
+        engine = db.engine
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('items_presupuesto')}
+            except Exception:
+                columns = set()
+
+            statements = []
+
+            if 'etapa_id' not in columns:
+                statements.append("ALTER TABLE items_presupuesto ADD COLUMN etapa_id INTEGER")
+
+            if 'origen' not in columns:
+                default_clause = "DEFAULT 'manual'" if engine.url.get_backend_name() != 'postgresql' else "DEFAULT 'manual'"
+                statements.append(f"ALTER TABLE items_presupuesto ADD COLUMN origen VARCHAR(20) {default_clause}")
+
+            for stmt in statements:
+                conn.exec_driver_sql(stmt)
+
+            conn.exec_driver_sql(
+                """
+                UPDATE items_presupuesto
+                SET origen = COALESCE(NULLIF(origen, ''), 'manual')
+                """
+            )
+
+        with open(sentinel, 'w') as f:
+            f.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: item presupuesto stage columns ensured')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: item presupuesto stage columns')
+        raise

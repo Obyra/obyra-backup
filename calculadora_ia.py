@@ -6,7 +6,10 @@ Sistema inteligente para analizar planos y calcular materiales automáticamente
 import os
 import base64
 import json
+import math
+from copy import deepcopy
 from datetime import datetime
+from unicodedata import normalize
 try:  # La librería openai es opcional en entornos locales/lightweight
     from openai import OpenAI
 except ModuleNotFoundError:  # pragma: no cover - se ejecuta sólo sin dependencia
@@ -536,8 +539,461 @@ def calcular_equipos_herramientas(superficie_m2, tipo_construccion):
     herramientas_calculadas = {}
     for herramienta, data in herramientas_total.items():
         herramientas_calculadas[herramienta] = data["cantidad"]
-    
+
     return equipos_calculados, herramientas_calculadas
+
+
+# --- Nueva lógica de etapas IA determinísticas ---
+
+TIPO_MULTIPLICADOR = {
+    'economica': 0.85,
+    'económica': 0.85,
+    'estandar': 1.0,
+    'estándar': 1.0,
+    'premium': 1.18,
+}
+
+PRECIO_REFERENCIA = {
+    'MAT-ARENA': 12500.0,
+    'MAT-PIEDRA': 18200.0,
+    'MAT-CEMENTO': 8500.0,
+    'MAT-HIERRO8': 2200.0,
+    'MAT-HORMIGON': 23000.0,
+    'MAT-LADRILLO': 320.0,
+    'MAT-YESO': 5100.0,
+    'MAT-AISLACION': 17800.0,
+    'MAT-MADERA': 21500.0,
+    'MAT-CABLE': 9800.0,
+    'MAT-CAÑO-AGUA': 7600.0,
+    'MAT-CAÑO-GAS': 8200.0,
+    'MAT-CAÑO-CLOACA': 6900.0,
+    'MAT-REVESTIMIENTO': 18500.0,
+    'MAT-PINTURA-INT': 8600.0,
+    'MAT-PINTURA-EXT': 9200.0,
+    'MAT-SELLADOR': 5400.0,
+    'MAT-LIMPIEZA': 3500.0,
+    'MAT-ABERTURAS': 48000.0,
+    'MAT-VIDRIO': 31000.0,
+    'MAT-IMPER': 15700.0,
+    'MO-MOVSUE': 42000.0,
+    'MO-FUND': 44500.0,
+    'MO-ESTR': 46000.0,
+    'MO-MAMPO': 43500.0,
+    'MO-TECH': 45200.0,
+    'MO-ELEC': 47200.0,
+    'MO-SANIT': 46800.0,
+    'MO-GAS': 47800.0,
+    'MO-REV': 41000.0,
+    'MO-PISOS': 42500.0,
+    'MO-CARP': 48800.0,
+    'MO-PINT': 40500.0,
+    'MO-SERV': 39800.0,
+    'MO-LIM': 32000.0,
+    'EQ-RETRO': 95000.0,
+    'EQ-HORMIG': 58000.0,
+    'EQ-ANDAMIOS': 27000.0,
+    'EQ-PLUMA': 112000.0,
+    'EQ-MEZCLADORA': 36000.0,
+    'EQ-ANDAMIOS-LIV': 19000.0,
+    'EQ-ELEVADOR': 78500.0,
+    'EQ-HIDROLAVADORA': 15500.0,
+}
+
+ETAPA_REGLAS_BASE = {
+    'excavacion': {
+        'nombre': 'Excavación',
+        'materiales': [
+            {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena gruesa para estabilización', 'unidad': 'm³', 'coef_por_m2': 0.04},
+            {'codigo': 'MAT-PIEDRA', 'material_key': 'piedra', 'descripcion': 'Piedra partida 3/4"', 'unidad': 'm³', 'coef_por_m2': 0.03}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos', 'unidad': 'jornal', 'coef_por_m2': 0.06}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora con operador', 'unidad': 'día', 'dias_por_m2': 0.008, 'min_dias': 1}
+        ],
+        'notas': 'Movimiento de suelos, replanteo y perfilado del terreno.'
+    },
+    'fundaciones': {
+        'nombre': 'Fundaciones',
+        'materiales': [
+            {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Bolsas de cemento Portland', 'unidad': 'bolsa', 'coef_por_m2': 0.32},
+            {'codigo': 'MAT-HIERRO8', 'material_key': 'hierro_8', 'descripcion': 'Barra de acero 8mm', 'unidad': 'kg', 'coef_por_m2': 2.9},
+            {'codigo': 'MAT-HORMIGON', 'material_key': 'hormigon', 'descripcion': 'Hormigón elaborado H21', 'unidad': 'm³', 'coef_por_m2': 0.12}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-FUND', 'descripcion': 'Cuadrilla de fundaciones', 'unidad': 'jornal', 'coef_por_m2': 0.065}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-HORMIG', 'descripcion': 'Hormigonera o bomba de hormigón', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1}
+        ],
+        'notas': 'Zapatas, vigas de fundación y hormigonados primarios.'
+    },
+    'estructura': {
+        'nombre': 'Estructura',
+        'materiales': [
+            {'codigo': 'MAT-HIERRO8', 'material_key': 'hierro_8', 'descripcion': 'Acero para armaduras', 'unidad': 'kg', 'coef_por_m2': 3.6},
+            {'codigo': 'MAT-HORMIGON', 'material_key': 'hormigon', 'descripcion': 'Hormigón elaborado estructural', 'unidad': 'm³', 'coef_por_m2': 0.15},
+            {'codigo': 'MAT-MADERA', 'material_key': 'madera_estructural', 'descripcion': 'Madera para encofrado', 'unidad': 'm³', 'coef_por_m2': 0.06}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-ESTR', 'descripcion': 'Cuadrilla de estructura', 'unidad': 'jornal', 'coef_por_m2': 0.075}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-PLUMA', 'descripcion': 'Grúa/pluma o elevador', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Elevación de columnas, losas y vigas principales.'
+    },
+    'mamposteria': {
+        'nombre': 'Mampostería',
+        'materiales': [
+            {'codigo': 'MAT-LADRILLO', 'material_key': 'ladrillos', 'descripcion': 'Ladrillos cerámicos portantes', 'unidad': 'unidades', 'coef_por_m2': 55},
+            {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento para mortero', 'unidad': 'bolsa', 'coef_por_m2': 0.26}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-MAMPO', 'descripcion': 'Oficial + ayudante de albañilería', 'unidad': 'jornal', 'coef_por_m2': 0.07}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios tubulares', 'unidad': 'día', 'dias_por_m2': 0.0045, 'min_dias': 2}
+        ],
+        'notas': 'Levantamiento de muros exteriores e interiores.'
+    },
+    'techos': {
+        'nombre': 'Techos y Cubiertas',
+        'materiales': [
+            {'codigo': 'MAT-AISLACION', 'material_key': 'aislacion_termica', 'descripcion': 'Paneles de aislación térmica', 'unidad': 'm²', 'coef_por_m2': 1.1},
+            {'codigo': 'MAT-IMPER', 'material_key': 'membrana', 'descripcion': 'Membrana asfáltica', 'unidad': 'm²', 'coef_por_m2': 1.05}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-TECH', 'descripcion': 'Equipo montaje de cubiertas', 'unidad': 'jornal', 'coef_por_m2': 0.055}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios y líneas de vida', 'unidad': 'día', 'dias_por_m2': 0.0035, 'min_dias': 2}
+        ],
+        'notas': 'Estructura de techos, aislaciones y terminaciones impermeables.'
+    },
+    'instalaciones-electricas': {
+        'nombre': 'Instalaciones Eléctricas',
+        'materiales': [
+            {'codigo': 'MAT-CABLE', 'material_key': 'cables_electricos', 'descripcion': 'Cableado y conductores', 'unidad': 'm', 'coef_por_m2': 12},
+            {'codigo': 'MAT-ABERTURAS', 'material_key': 'aberturas_metal', 'descripcion': 'Tableros y cajas de distribución', 'unidad': 'unidades', 'coef_por_m2': 0.12}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-ELEC', 'descripcion': 'Electricista matriculado + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.045}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Herramienta eléctrica especializada', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1}
+        ],
+        'notas': 'Canalizaciones, cableado y tableros seccionales.'
+    },
+    'instalaciones-sanitarias': {
+        'nombre': 'Instalaciones Sanitarias',
+        'materiales': [
+            {'codigo': 'MAT-CAÑO-AGUA', 'material_key': 'caños_agua', 'descripcion': 'Caños de agua y accesorios', 'unidad': 'm', 'coef_por_m2': 5.5},
+            {'codigo': 'MAT-CAÑO-CLOACA', 'material_key': 'caños_cloacas', 'descripcion': 'Desagües cloacales y pluviales', 'unidad': 'm', 'coef_por_m2': 3.2}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-SANIT', 'descripcion': 'Instalador sanitario', 'unidad': 'jornal', 'coef_por_m2': 0.042}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Herramientas rotativas y prensado', 'unidad': 'día', 'dias_por_m2': 0.0015, 'min_dias': 1}
+        ],
+        'notas': 'Redes de agua fría/caliente y desagües interiores.'
+    },
+    'instalaciones-gas': {
+        'nombre': 'Instalaciones de Gas',
+        'materiales': [
+            {'codigo': 'MAT-CAÑO-GAS', 'material_key': 'caños_gas', 'descripcion': 'Caños de gas y conexiones', 'unidad': 'm', 'coef_por_m2': 2.2}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-GAS', 'descripcion': 'Gasista matriculado', 'unidad': 'jornal', 'coef_por_m2': 0.028}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Herramientas de calibración y prueba', 'unidad': 'día', 'dias_por_m2': 0.001, 'min_dias': 1}
+        ],
+        'notas': 'Colocación de cañerías, pruebas y certificaciones.'
+    },
+    'revoque-grueso': {
+        'nombre': 'Revoque Grueso',
+        'materiales': [
+            {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento para revoque', 'unidad': 'bolsa', 'coef_por_m2': 0.22},
+            {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena fina seleccionada', 'unidad': 'm³', 'coef_por_m2': 0.055}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador', 'unidad': 'jornal', 'coef_por_m2': 0.05}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios y fratasadoras', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Aplicación de base gruesa y nivelación.'
+    },
+    'revoque-fino': {
+        'nombre': 'Revoque Fino',
+        'materiales': [
+            {'codigo': 'MAT-YESO', 'material_key': 'yeso', 'descripcion': 'Yeso de terminación', 'unidad': 'kg', 'coef_por_m2': 3.4}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-REV', 'descripcion': 'Terminación de yeseros', 'unidad': 'jornal', 'coef_por_m2': 0.038}
+        ],
+        'equipos': [],
+        'notas': 'Alisado y terminación fina interior.'
+    },
+    'pisos': {
+        'nombre': 'Pisos y Revestimientos',
+        'materiales': [
+            {'codigo': 'MAT-REVESTIMIENTO', 'material_key': 'porcelanato', 'descripcion': 'Revestimiento cerámico/porcelanato', 'unidad': 'm²', 'coef_por_m2': 1.05}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador especializado', 'unidad': 'jornal', 'coef_por_m2': 0.05}
+        ],
+        'equipos': [],
+        'notas': 'Colocación de pisos y zócalos principales.'
+    },
+    'carpinteria': {
+        'nombre': 'Carpintería y Aberturas',
+        'materiales': [
+            {'codigo': 'MAT-ABERTURAS', 'material_key': 'aberturas_metal', 'descripcion': 'Puertas y ventanas metálicas/madera', 'unidad': 'unidades', 'coef_por_m2': 0.09},
+            {'codigo': 'MAT-VIDRIO', 'material_key': 'vidrios', 'descripcion': 'DVH / vidrio templado', 'unidad': 'm²', 'coef_por_m2': 0.14}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-CARP', 'descripcion': 'Carpintero instalador', 'unidad': 'jornal', 'coef_por_m2': 0.04}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-ELEVADOR', 'descripcion': 'Elevador/ventosas para cristales', 'unidad': 'día', 'dias_por_m2': 0.0025, 'min_dias': 1}
+        ],
+        'notas': 'Colocación de carpinterías exteriores e interiores.'
+    },
+    'pintura': {
+        'nombre': 'Pintura',
+        'materiales': [
+            {'codigo': 'MAT-PINTURA-INT', 'material_key': 'pintura', 'descripcion': 'Pintura interior lavable', 'unidad': 'litros', 'coef_por_m2': 0.14},
+            {'codigo': 'MAT-PINTURA-EXT', 'material_key': 'pintura_exterior', 'descripcion': 'Revestimiento exterior acrílico', 'unidad': 'litros', 'coef_por_m2': 0.11},
+            {'codigo': 'MAT-SELLADOR', 'material_key': 'sellador', 'descripcion': 'Sellador acrílico', 'unidad': 'litros', 'coef_por_m2': 0.04}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-PINT', 'descripcion': 'Equipo de pintores', 'unidad': 'jornal', 'coef_por_m2': 0.045}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-HIDROLAVADORA', 'descripcion': 'Hidrolavadora y compresor', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1}
+        ],
+        'notas': 'Preparación de superficies y aplicación de terminaciones.'
+    },
+    'instalaciones-complementarias': {
+        'nombre': 'Instalaciones Complementarias',
+        'materiales': [
+            {'codigo': 'MAT-AISLACION', 'material_key': 'aislacion_termica', 'descripcion': 'Aislación adicional HVAC', 'unidad': 'm²', 'coef_por_m2': 0.4}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-SERV', 'descripcion': 'Técnicos especializados', 'unidad': 'jornal', 'coef_por_m2': 0.03}
+        ],
+        'equipos': [],
+        'notas': 'Climatización, domótica y sistemas especiales.'
+    },
+    'limpieza-final': {
+        'nombre': 'Limpieza Final y Puesta en Marcha',
+        'materiales': [
+            {'codigo': 'MAT-LIMPIEZA', 'material_key': 'limpieza', 'descripcion': 'Insumos de limpieza y protección', 'unidad': 'kit', 'coef_por_m2': 0.015}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-LIM', 'descripcion': 'Equipo de limpieza profesional', 'unidad': 'jornal', 'coef_por_m2': 0.02}
+        ],
+        'equipos': [],
+        'notas': 'Limpieza fina, sellado y entrega de obra.'
+    },
+}
+
+STAGE_CALC_CACHE = {}
+
+
+def slugify_etapa(nombre):
+    if not nombre:
+        return ''
+    ascii_text = normalize('NFKD', str(nombre)).encode('ascii', 'ignore').decode('ascii')
+    slug = ''.join(ch if ch.isalnum() else '-' for ch in ascii_text.lower())
+    slug = '-'.join(filter(None, slug.split('-')))
+    return slug
+
+
+def obtener_multiplicador_tipo(tipo):
+    if not tipo:
+        return 1.0, 'Estándar'
+    clave = str(tipo).strip()
+    clave_norm = clave.lower()
+    if clave_norm in TIPO_MULTIPLICADOR:
+        return TIPO_MULTIPLICADOR[clave_norm], clave.title()
+    return 1.0, clave.title()
+
+
+def _precio_referencia(codigo):
+    return PRECIO_REFERENCIA.get(codigo, 0.0)
+
+
+def _redondear(valor, ndigits=2):
+    return round(valor + 1e-9, ndigits)
+
+
+def calcular_etapa_por_reglas(etapa_slug, superficie_m2, tipo_construccion, contexto=None, etiqueta=None, etapa_id=None):
+    reglas = ETAPA_REGLAS_BASE.get(etapa_slug)
+    nombre = etiqueta or (reglas['nombre'] if reglas else etapa_slug.replace('-', ' ').title())
+
+    if not reglas:
+        return {
+            'slug': etapa_slug,
+            'nombre': nombre,
+            'etapa_id': etapa_id,
+            'items': [],
+            'subtotal_materiales': 0.0,
+            'subtotal_mano_obra': 0.0,
+            'subtotal_equipos': 0.0,
+            'subtotal_total': 0.0,
+            'confianza': 0.25,
+            'notas': f'No hay reglas configuradas para la etapa {nombre}.',
+            'metodo': 'sin_reglas',
+        }
+
+    multiplicador, tipo_legible = obtener_multiplicador_tipo(tipo_construccion)
+    items = []
+    subtotal_materiales = 0.0
+    subtotal_mano_obra = 0.0
+    subtotal_equipos = 0.0
+
+    for material in reglas.get('materiales', []):
+        cantidad = _redondear(superficie_m2 * material['coef_por_m2'] * multiplicador, 2)
+        precio = _precio_referencia(material['codigo'])
+        subtotal_materiales += cantidad * precio
+        items.append({
+            'tipo': 'material',
+            'codigo': material['codigo'],
+            'descripcion': material['descripcion'],
+            'unidad': material.get('unidad', 'unidades'),
+            'cantidad': cantidad,
+            'precio_unit': precio,
+            'origen': 'ia',
+            'just': 'Coeficiente por m² ajustado por tipología',
+            'material_key': material.get('material_key'),
+        })
+
+    for mano_obra in reglas.get('mano_obra', []):
+        cantidad = max(1.0, superficie_m2 * mano_obra['coef_por_m2'] * multiplicador)
+        cantidad = _redondear(cantidad, 2)
+        precio = _precio_referencia(mano_obra['codigo'])
+        subtotal_mano_obra += cantidad * precio
+        items.append({
+            'tipo': 'mano_obra',
+            'codigo': mano_obra['codigo'],
+            'descripcion': mano_obra['descripcion'],
+            'unidad': mano_obra.get('unidad', 'jornal'),
+            'cantidad': cantidad,
+            'precio_unit': precio,
+            'origen': 'ia',
+            'just': 'Escala de jornales por m²',
+        })
+
+    for equipo in reglas.get('equipos', []):
+        base = superficie_m2 * equipo.get('dias_por_m2', 0) * multiplicador
+        dias = max(equipo.get('min_dias', 0), base)
+        dias = _redondear(dias if dias else base, 2)
+        precio = _precio_referencia(equipo['codigo'])
+        subtotal_equipos += dias * precio
+        items.append({
+            'tipo': 'equipo',
+            'codigo': equipo['codigo'],
+            'descripcion': equipo['descripcion'],
+            'unidad': equipo.get('unidad', 'día'),
+            'cantidad': dias,
+            'precio_unit': precio,
+            'origen': 'ia',
+            'just': 'Dimensionamiento de apoyo mecánico por superficie',
+        })
+
+    subtotal_total = subtotal_materiales + subtotal_mano_obra + subtotal_equipos
+    confianza = min(0.6 + 0.03 * len(items), 0.9)
+
+    return {
+        'slug': etapa_slug,
+        'nombre': nombre,
+        'etapa_id': etapa_id,
+        'items': items,
+        'subtotal_materiales': _redondear(subtotal_materiales),
+        'subtotal_mano_obra': _redondear(subtotal_mano_obra),
+        'subtotal_equipos': _redondear(subtotal_equipos),
+        'subtotal_total': _redondear(subtotal_total),
+        'confianza': _redondear(confianza, 2),
+        'notas': f"Cálculo determinístico para etapa {nombre} ({tipo_legible}). {reglas.get('notas', '')}",
+        'metodo': 'reglas',
+    }
+
+
+def calcular_etapas_seleccionadas(
+    etapas_payload,
+    superficie_m2,
+    tipo_calculo='Estándar',
+    contexto=None,
+    presupuesto_id=None,
+):
+    if superficie_m2 is None:
+        raise ValueError('superficie_m2 es obligatoria')
+
+    try:
+        superficie_float = float(superficie_m2)
+    except (TypeError, ValueError):
+        raise ValueError('superficie_m2 debe ser numérico')
+
+    if superficie_float <= 0:
+        raise ValueError('superficie_m2 debe ser mayor a cero')
+
+    etapas_payload = etapas_payload or []
+    etapa_identificadores = []
+    for etapa in etapas_payload:
+        if isinstance(etapa, dict):
+            nombre = etapa.get('nombre')
+            slug = etapa.get('slug') or slugify_etapa(nombre)
+            etapa_identificadores.append({'slug': slug, 'nombre': nombre, 'id': etapa.get('id')})
+        else:
+            slug = slugify_etapa(etapa)
+            etapa_identificadores.append({'slug': slug, 'nombre': etapa, 'id': None})
+
+    if not etapa_identificadores:
+        raise ValueError('Debes seleccionar al menos una etapa para calcular')
+
+    cache_key = json.dumps({
+        'presupuesto_id': str(presupuesto_id) if presupuesto_id else None,
+        'slugs': [e['slug'] for e in etapa_identificadores],
+        'superficie': superficie_float,
+        'tipo': tipo_calculo,
+        'contexto': contexto or {},
+    }, sort_keys=True)
+
+    if cache_key in STAGE_CALC_CACHE:
+        return deepcopy(STAGE_CALC_CACHE[cache_key])
+
+    etapas_resultado = []
+    total_parcial = 0.0
+
+    for etapa in etapa_identificadores:
+        resultado = calcular_etapa_por_reglas(
+            etapa['slug'],
+            superficie_float,
+            tipo_calculo,
+            contexto=contexto,
+            etiqueta=etapa.get('nombre'),
+            etapa_id=etapa.get('id'),
+        )
+        etapas_resultado.append(resultado)
+        total_parcial += resultado.get('subtotal_total', 0.0)
+
+    respuesta = {
+        'ok': True,
+        'etapas': etapas_resultado,
+        'total_parcial': _redondear(total_parcial),
+        'moneda': 'ARS',
+        'metodo': 'reglas',
+        'presupuesto_id': presupuesto_id,
+    }
+
+    STAGE_CALC_CACHE[cache_key] = deepcopy(respuesta)
+    return respuesta
+
 
 def generar_presupuesto_completo(superficie_m2, tipo_construccion, analisis_ia=None):
     """

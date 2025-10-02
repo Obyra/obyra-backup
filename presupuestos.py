@@ -37,7 +37,12 @@ else:  # pragma: no cover - executed only when optional deps missing
 
 from app import db
 from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
-from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
+from calculadora_ia import (
+    procesar_presupuesto_ia,
+    COEFICIENTES_CONSTRUCCION,
+    calcular_etapas_seleccionadas,
+    slugify_etapa,
+)
 
 
 def _clean_text(value: Any) -> Optional[str]:
@@ -137,7 +142,15 @@ def crear():
         moneda = request.form.get('moneda', 'ARS')
         cliente_nombre = request.form.get('cliente_nombre')
         plano_pdf = request.files.get('plano_pdf')
-        
+        ia_payload_raw = request.form.get('ia_etapas_payload')
+        ia_payload = None
+        if ia_payload_raw:
+            try:
+                ia_payload = json.loads(ia_payload_raw)
+            except (TypeError, ValueError):
+                current_app.logger.warning('Payload IA de etapas inválido, se omitirá durante la creación del presupuesto.')
+                ia_payload = None
+
         # Validaciones
         if not all([nombre_obra, tipo_obra, ubicacion, tipo_construccion, superficie_m2]):
             flash('Completa todos los campos obligatorios.', 'danger')
@@ -223,19 +236,23 @@ def crear():
             # Procesar etapas si se enviaron
             etapas_count = 0
             etapa_index = 0
+            etapas_creadas_por_slug = {}
             while True:
                 etapa_nombre = request.form.get(f'etapas[{etapa_index}][nombre]')
                 if not etapa_nombre:
                     break
-                
+
                 etapa_descripcion = request.form.get(f'etapas[{etapa_index}][descripcion]', '')
                 etapa_orden = request.form.get(f'etapas[{etapa_index}][orden]', etapa_index + 1)
-                
+                etapa_slug = request.form.get(f'etapas[{etapa_index}][slug]')
+
                 try:
                     orden_int = int(etapa_orden)
                 except ValueError:
                     orden_int = etapa_index + 1
-                
+
+                slug_normalizado = slugify_etapa(etapa_slug or etapa_nombre)
+
                 # Crear etapa para la obra
                 nueva_etapa = EtapaObra(
                     obra_id=nueva_obra.id,
@@ -245,13 +262,57 @@ def crear():
                     estado='pendiente',
                     organizacion_id=current_user.organizacion_id
                 )
-                
+
                 db.session.add(nueva_etapa)
+                db.session.flush()
+                etapas_creadas_por_slug[slug_normalizado] = nueva_etapa
                 etapas_count += 1
                 etapa_index += 1
-            
+
+            # Crear items a partir del cálculo IA por etapas si llegó payload
+            if ia_payload and ia_payload.get('etapas'):
+                tipos_validos = {'material', 'mano_obra', 'equipo', 'herramienta'}
+                for etapa_resultado in ia_payload.get('etapas', []):
+                    slug_etapa = slugify_etapa(etapa_resultado.get('slug') or etapa_resultado.get('nombre'))
+                    etapa_modelo = etapas_creadas_por_slug.get(slug_etapa)
+
+                    for item_data in etapa_resultado.get('items', []):
+                        try:
+                            tipo_item = (item_data.get('tipo') or 'material').strip()
+                        except AttributeError:
+                            tipo_item = 'material'
+                        tipo_item = tipo_item if tipo_item in tipos_validos else 'material'
+
+                        cantidad = item_data.get('cantidad', 0) or 0
+                        precio_unitario = item_data.get('precio_unit', 0) or 0
+                        try:
+                            cantidad_float = float(cantidad)
+                        except (TypeError, ValueError):
+                            cantidad_float = 0.0
+                        try:
+                            precio_unitario_float = float(precio_unitario)
+                        except (TypeError, ValueError):
+                            precio_unitario_float = 0.0
+
+                        nuevo_item = ItemPresupuesto(
+                            presupuesto_id=nuevo_presupuesto.id,
+                            tipo=tipo_item,
+                            descripcion=item_data.get('descripcion', 'Item IA de etapa'),
+                            unidad=item_data.get('unidad', 'unidades'),
+                            cantidad=cantidad_float,
+                            precio_unitario=precio_unitario_float,
+                            total=cantidad_float * precio_unitario_float,
+                            origen='ia',
+                        )
+                        if etapa_modelo:
+                            nuevo_item.etapa_id = etapa_modelo.id
+
+                        db.session.add(nuevo_item)
+
+                nuevo_presupuesto.calcular_totales()
+
             db.session.commit()
-            
+
             mensaje_exito = f'Obra "{nombre_obra}" y presupuesto {numero} creados exitosamente.'
             if etapas_count > 0:
                 mensaje_exito += f' Se agregaron {etapas_count} etapas al proyecto.'
@@ -331,6 +392,53 @@ def procesar_calculadora_ia():
         
     except Exception as e:
         return jsonify({'error': f'Error procesando calculadora: {str(e)}'}), 500
+
+
+@presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
+@login_required
+def calcular_etapas_ia():
+    """Calcula con IA determinística las etapas seleccionadas de un presupuesto."""
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'ok': False, 'error': 'Sin permisos para usar la IA de presupuestos'}), 403
+
+    data = request.get_json(silent=True) or {}
+    etapa_payload = data.get('etapa_ids') or []
+    superficie = data.get('superficie_m2')
+    tipo_calculo = data.get('tipo_calculo') or data.get('tipo_construccion') or 'Estándar'
+    contexto = data.get('parametros_contexto') or {}
+    presupuesto_id = data.get('presupuesto_id')
+
+    if superficie is None:
+        return jsonify({'ok': False, 'error': 'Debes indicar la superficie en m² para calcular.'}), 400
+
+    try:
+        resultado = calcular_etapas_seleccionadas(
+            etapas_payload=etapa_payload,
+            superficie_m2=superficie,
+            tipo_calculo=tipo_calculo,
+            contexto=contexto,
+            presupuesto_id=presupuesto_id,
+        )
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - logging de errores inesperados
+        current_app.logger.exception('Error calculando etapas IA')
+        return jsonify({'ok': False, 'error': 'No se pudo calcular las etapas seleccionadas.'}), 500
+
+    resultado['superficie_usada'] = float(superficie)
+    resultado['tipo_calculo'] = tipo_calculo
+    resultado['ok'] = True
+    resultado['presupuesto_id'] = presupuesto_id
+    current_app.logger.info(
+        '🧠 IA etapas calculada',
+        extra={
+            'usuario_id': current_user.id,
+            'organizacion_id': current_user.organizacion_id,
+            'etapas_solicitadas': [e.get('slug') if isinstance(e, dict) else e for e in (etapa_payload or [])],
+            'presupuesto_id': presupuesto_id,
+        },
+    )
+    return jsonify(resultado)
 
 @presupuestos_bp.route('/crear-desde-ia', methods=['POST'])
 @login_required  
@@ -478,6 +586,7 @@ def crear_desde_ia():
                 item.cantidad = cantidad
                 item.precio_unitario = 0.0  # Se puede actualizar manualmente después
                 item.total = 0.0
+                item.origen = 'ia'
                 db.session.add(item)
         
         # Agregar equipos
@@ -521,6 +630,7 @@ def crear_desde_ia():
                 item.cantidad = float(cantidad)
                 item.precio_unitario = 0.0
                 item.total = 0.0
+                item.origen = 'ia'
                 db.session.add(item)
         
         # Agregar herramientas
@@ -556,6 +666,7 @@ def crear_desde_ia():
                     item.cantidad = cantidad_float
                     item.precio_unitario = 0.0
                     item.total = 0.0
+                    item.origen = 'ia'
                     db.session.add(item)
             except (ValueError, TypeError):
                 # Omitir herramientas con valores inválidos
@@ -761,7 +872,8 @@ def agregar_item(id):
     nuevo_item.cantidad = cantidad_float
     nuevo_item.precio_unitario = precio_unitario_float
     nuevo_item.total = total
-    
+    nuevo_item.origen = 'manual'
+
     try:
         db.session.add(nuevo_item)
         presupuesto.calcular_totales()

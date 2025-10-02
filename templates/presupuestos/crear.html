@@ -33,6 +33,7 @@
                 </div>
                 <div class="card-body">
                     <form id="nuevoPresupuestoForm" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" id="iaEtapasPayload" name="ia_etapas_payload">
                         
                         <!-- Primera fila: Nombre y Tipo de Obra -->
                         <div class="row mb-4">
@@ -197,6 +198,18 @@
                                     <i class="fas fa-info-circle"></i> No se han seleccionado etapas aún. Haz clic en "Nueva Etapa" para agregar.
                                 </div>
                             </div>
+
+                            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mt-3">
+                                <div class="text-muted small">
+                                    <i class="fas fa-info-circle"></i>
+                                    Marca las etapas que quieres recalcular con IA y ajusta los datos antes de guardar.
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-outline-success btn-sm" onclick="calcularEtapasSeleccionadasIA()">
+                                        <i class="fas fa-brain"></i> Calcular etapas seleccionadas con IA
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Botones de acción -->
@@ -208,6 +221,9 @@
                                     </button>
                                     <button type="button" class="btn btn-success btn-lg" onclick="calcularConIA()">
                                         <i class="fas fa-brain"></i> Calcular con IA
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success btn-lg" onclick="calcularEtapasSeleccionadasIA()">
+                                        <i class="fas fa-layer-group"></i> Calcular etapas seleccionadas con IA
                                     </button>
                                     <button type="button" class="btn btn-outline-secondary" onclick="limpiarFormulario()">
                                         <i class="fas fa-broom"></i> Limpiar
@@ -344,198 +360,466 @@
     </div>
 </div>
 
+<!-- Modal de vista previa IA por etapas -->
+<div class="modal fade" id="modalResultadoEtapasIA" tabindex="-1" aria-labelledby="modalResultadoEtapasIALabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalResultadoEtapasIALabel">
+                    <i class="fas fa-brain me-2"></i>Resultados IA por etapas seleccionadas
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="resultadoEtapasIAContenido" class="mb-3">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p class="mt-2">Calculando...</p>
+                    </div>
+                </div>
+                <div class="alert alert-info" id="resumenEtapasIAMetadatos" style="display: none;"></div>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <div class="text-muted small">
+                    <i class="fas fa-robot me-1"></i>
+                    Los valores calculados se guardarán con el presupuesto cuando confirmes la creación.
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="aplicarResultadosEtapasIA()">
+                        <i class="fas fa-save"></i> Aplicar al presupuesto
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+const currencyFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+
 let datosCalculoIA = null;
 let etapasSeleccionadasArray = [];
+let etapasSeleccionadasIA = new Set();
+let resultadoEtapasIA = null;
+const presupuestoId = (typeof window !== 'undefined' && window.PRESUPUESTO_ID) ? window.PRESUPUESTO_ID : null;
 
-// Etapas predefinidas (se cargan desde el servidor)
+function slugifyEtapa(nombre) {
+    if (!nombre) return '';
+    return nombre
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+}
+
+function generarSlugUnico(nombre) {
+    const base = slugifyEtapa(nombre);
+    let slug = base || `etapa-${Date.now()}`;
+    let contador = 1;
+    const slugExistente = (valor) => {
+        return ETAPAS_PREDEFINIDAS.some(e => e.slug === valor) || etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === valor);
+    };
+    while (slugExistente(slug)) {
+        slug = `${base}-${contador++}`;
+    }
+    return slug;
+}
+
+function limpiarResultadosEtapasIA(resetBadges = true) {
+    resultadoEtapasIA = null;
+    const hidden = document.getElementById('iaEtapasPayload');
+    if (hidden) hidden.value = '';
+    if (resetBadges) {
+        etapasSeleccionadasArray.forEach(etapa => {
+            etapa.ia_aplicada = false;
+        });
+        actualizarVistaEtapas(false);
+    }
+}
+
+function obtenerEtapaPorSlug(slug) {
+    return etapasSeleccionadasArray.find(etapa => (etapa.slug || slugifyEtapa(etapa.nombre)) === slug);
+}
+
 const ETAPAS_PREDEFINIDAS = [
-    { nombre: 'Excavación', descripcion: 'Movimiento de suelos y preparación del terreno', orden: 1 },
-    { nombre: 'Fundaciones', descripcion: 'Construcción de cimientos y estructuras de base', orden: 2 },
-    { nombre: 'Estructura', descripcion: 'Construcción de estructura principal (hormigón, acero)', orden: 3 },
-    { nombre: 'Mampostería', descripcion: 'Construcción de muros y paredes', orden: 4 },
-    { nombre: 'Techos', descripcion: 'Construcción e impermeabilización de techos', orden: 5 },
-    { nombre: 'Instalaciones Eléctricas', descripcion: 'Instalación del sistema eléctrico', orden: 6 },
-    { nombre: 'Instalaciones Sanitarias', descripcion: 'Instalación de sistemas de agua y desagües', orden: 7 },
-    { nombre: 'Instalaciones de Gas', descripcion: 'Instalación del sistema de gas natural', orden: 8 },
-    { nombre: 'Revoque Grueso', descripcion: 'Aplicación de revoque base en paredes', orden: 9 },
-    { nombre: 'Revoque Fino', descripcion: 'Aplicación de revoque terminación', orden: 10 },
-    { nombre: 'Pisos', descripcion: 'Colocación de pisos y revestimientos', orden: 11 },
-    { nombre: 'Carpintería', descripcion: 'Instalación de puertas, ventanas y muebles', orden: 12 },
-    { nombre: 'Pintura', descripcion: 'Trabajos de pintura interior y exterior', orden: 13 },
-    { nombre: 'Instalaciones Complementarias', descripcion: 'Aire acondicionado, calefacción, etc.', orden: 14 },
-    { nombre: 'Limpieza Final', descripcion: 'Limpieza y acondicionamiento final', orden: 15 }
+    { nombre: 'Excavación', descripcion: 'Movimiento de suelos y preparación del terreno', orden: 1, slug: 'excavacion' },
+    { nombre: 'Fundaciones', descripcion: 'Construcción de cimientos y estructuras de base', orden: 2, slug: 'fundaciones' },
+    { nombre: 'Estructura', descripcion: 'Construcción de estructura principal (hormigón, acero)', orden: 3, slug: 'estructura' },
+    { nombre: 'Mampostería', descripcion: 'Construcción de muros y paredes', orden: 4, slug: 'mamposteria' },
+    { nombre: 'Techos', descripcion: 'Construcción e impermeabilización de techos', orden: 5, slug: 'techos' },
+    { nombre: 'Instalaciones Eléctricas', descripcion: 'Instalación del sistema eléctrico', orden: 6, slug: 'instalaciones-electricas' },
+    { nombre: 'Instalaciones Sanitarias', descripcion: 'Instalación de sistemas de agua y desagües', orden: 7, slug: 'instalaciones-sanitarias' },
+    { nombre: 'Instalaciones de Gas', descripcion: 'Instalación del sistema de gas natural', orden: 8, slug: 'instalaciones-gas' },
+    { nombre: 'Revoque Grueso', descripcion: 'Aplicación de revoque base en paredes', orden: 9, slug: 'revoque-grueso' },
+    { nombre: 'Revoque Fino', descripcion: 'Aplicación de revoque terminación', orden: 10, slug: 'revoque-fino' },
+    { nombre: 'Pisos', descripcion: 'Colocación de pisos y revestimientos', orden: 11, slug: 'pisos' },
+    { nombre: 'Carpintería', descripcion: 'Instalación de puertas, ventanas y muebles', orden: 12, slug: 'carpinteria' },
+    { nombre: 'Pintura', descripcion: 'Trabajos de pintura interior y exterior', orden: 13, slug: 'pintura' },
+    { nombre: 'Instalaciones Complementarias', descripcion: 'Aire acondicionado, calefacción, etc.', orden: 14, slug: 'instalaciones-complementarias' },
+    { nombre: 'Limpieza Final', descripcion: 'Limpieza y acondicionamiento final', orden: 15, slug: 'limpieza-final' }
 ];
 
-// Mostrar panel de etapas
 function mostrarPanelEtapas() {
-    console.log('🏗️ Abriendo panel de selección de etapas');
-    
-    // Cargar etapas predefinidas en el modal
     cargarEtapasPredefinidas();
-    
-    // Mostrar modal
     const modal = new bootstrap.Modal(document.getElementById('modalEtapas'));
     modal.show();
 }
 
-// Cargar etapas predefinidas en el modal
 function cargarEtapasPredefinidas() {
     const container = document.getElementById('etapasPredefinidas');
     container.innerHTML = '';
-    
-    ETAPAS_PREDEFINIDAS.forEach((etapa, index) => {
-        const yaSeleccionada = etapasSeleccionadasArray.some(e => e.nombre === etapa.nombre);
-        
+    ETAPAS_PREDEFINIDAS.forEach((etapa) => {
+        const yaSeleccionada = etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === etapa.slug);
+        const checkboxId = `etapa_${etapa.slug}`;
         const etapaHTML = `
             <div class="col-md-6 mb-2">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="etapa_${index}" 
-                           ${yaSeleccionada ? 'checked' : ''} 
-                           onchange="toggleEtapaPredefinida(${index})">
-                    <label class="form-check-label" for="etapa_${index}">
+                    <input class="form-check-input" type="checkbox" id="${checkboxId}" ${yaSeleccionada ? 'checked' : ''}
+                           onchange="toggleEtapaPredefinida('${etapa.slug}')">
+                    <label class="form-check-label" for="${checkboxId}">
                         <strong>${etapa.nombre}</strong>
                         <br><small class="text-muted">${etapa.descripcion}</small>
                     </label>
                 </div>
             </div>
         `;
-        
-        container.innerHTML += etapaHTML;
+        container.insertAdjacentHTML('beforeend', etapaHTML);
     });
 }
 
-// Toggle etapa predefinida
-function toggleEtapaPredefinida(index) {
-    const etapa = ETAPAS_PREDEFINIDAS[index];
-    const checkbox = document.getElementById(`etapa_${index}`);
-    
+function toggleEtapaPredefinida(slug) {
+    const etapa = ETAPAS_PREDEFINIDAS.find(e => e.slug === slug);
+    const checkbox = document.getElementById(`etapa_${slug}`);
+    if (!etapa || !checkbox) return;
+
     if (checkbox.checked) {
-        // Agregar si no existe
-        if (!etapasSeleccionadasArray.some(e => e.nombre === etapa.nombre)) {
-            etapasSeleccionadasArray.push({
-                nombre: etapa.nombre,
-                descripcion: etapa.descripcion,
-                orden: etapa.orden,
-                personalizada: false
-            });
+        if (!etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === slug)) {
+            etapasSeleccionadasArray.push({ ...etapa, personalizada: false });
+            etapasSeleccionadasIA.add(slug);
         }
     } else {
-        // Remover si existe
-        etapasSeleccionadasArray = etapasSeleccionadasArray.filter(e => e.nombre !== etapa.nombre);
+        etapasSeleccionadasArray = etapasSeleccionadasArray.filter(e => (e.slug || slugifyEtapa(e.nombre)) !== slug);
+        etapasSeleccionadasIA.delete(slug);
     }
-    
+    limpiarResultadosEtapasIA();
     console.log(`📋 Etapas seleccionadas: ${etapasSeleccionadasArray.length}`);
 }
 
-// Agregar etapa personalizada
 function agregarEtapaPersonalizada() {
     const nombre = document.getElementById('etapaPersonalizadaNombre').value.trim();
     const descripcion = document.getElementById('etapaPersonalizadaDescripcion').value.trim();
-    
+
     if (!nombre) {
         alert('Ingresa el nombre de la etapa personalizada');
         return;
     }
-    
-    // Verificar que no exista ya
+
     if (etapasSeleccionadasArray.some(e => e.nombre.toLowerCase() === nombre.toLowerCase())) {
         alert('Ya existe una etapa con ese nombre');
         return;
     }
-    
-    // Agregar etapa personalizada
+
+    const slug = generarSlugUnico(nombre);
     const nuevaEtapa = {
-        nombre: nombre,
+        nombre,
         descripcion: descripcion || 'Etapa personalizada',
-        orden: etapasSeleccionadasArray.length + 100, // Orden alto para personalizadas
-        personalizada: true
+        orden: etapasSeleccionadasArray.length + 100,
+        personalizada: true,
+        slug
     };
-    
+
     etapasSeleccionadasArray.push(nuevaEtapa);
-    
-    // Limpiar campos
+    etapasSeleccionadasIA.add(slug);
     document.getElementById('etapaPersonalizadaNombre').value = '';
     document.getElementById('etapaPersonalizadaDescripcion').value = '';
-    
-    // Actualizar vista
+    limpiarResultadosEtapasIA();
     actualizarVistaEtapas();
-    
     console.log(`✅ Etapa personalizada agregada: ${nombre}`);
 }
 
-// Confirmar etapas seleccionadas
 function confirmarEtapasSeleccionadas() {
     if (etapasSeleccionadasArray.length === 0) {
         alert('Selecciona al menos una etapa antes de confirmar');
         return;
     }
-    
-    // Actualizar vista
+
+    if (etapasSeleccionadasIA.size === 0) {
+        etapasSeleccionadasArray.forEach(etapa => etapasSeleccionadasIA.add(etapa.slug || slugifyEtapa(etapa.nombre)));
+    }
+
     actualizarVistaEtapas();
-    
-    // Cerrar modal
     const modal = bootstrap.Modal.getInstance(document.getElementById('modalEtapas'));
     modal.hide();
-    
     console.log(`✅ Confirmadas ${etapasSeleccionadasArray.length} etapas`);
 }
 
-// Actualizar vista de etapas seleccionadas
-function actualizarVistaEtapas() {
+function actualizarVistaEtapas(renderBadges = true) {
     const listaEtapas = document.getElementById('listaEtapas');
-    
+
     if (etapasSeleccionadasArray.length === 0) {
         listaEtapas.innerHTML = '<i class="fas fa-info-circle"></i> No se han seleccionado etapas aún. Haz clic en "Nueva Etapa" para agregar.';
         listaEtapas.className = 'text-muted small';
         return;
     }
-    
-    // Ordenar etapas por orden
+
+    if (etapasSeleccionadasIA.size === 0) {
+        etapasSeleccionadasArray.forEach(etapa => etapasSeleccionadasIA.add(etapa.slug || slugifyEtapa(etapa.nombre)));
+    }
+
     const etapasOrdenadas = [...etapasSeleccionadasArray].sort((a, b) => a.orden - b.orden);
-    
     let html = '<div class="row">';
-    etapasOrdenadas.forEach((etapa, index) => {
+
+    etapasOrdenadas.forEach((etapa) => {
+        const slug = etapa.slug || slugifyEtapa(etapa.nombre);
+        const checked = etapasSeleccionadasIA.has(slug);
         const esPersonalizada = etapa.personalizada;
+        const iaBadge = etapa.ia_aplicada && renderBadges ? '<span class="badge bg-success-subtle text-success ms-2">IA aplicada</span>' : '';
+        const descripcion = etapa.descripcion || 'Sin descripción definida';
+        const inputId = `etapaCheck_${slug}`;
         html += `
-            <div class="col-md-6 mb-2">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
-                        <strong class="${esPersonalizada ? 'text-success' : 'text-primary'}">${etapa.nombre}</strong>
-                        ${esPersonalizada ? '<span class="badge bg-success ms-1">Personalizada</span>' : ''}
-                        <br><small class="text-muted">${etapa.descripcion}</small>
+            <div class="col-md-6 col-xl-4 mb-3">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div class="flex-grow-1">
+                                <div class="form-check">
+                                    <input class="form-check-input etapa-ia-checkbox" type="checkbox" id="${inputId}"
+                                           data-stage-slug="${slug}" data-stage-nombre="${etapa.nombre.replace(/"/g, '&quot;')}" data-etapa-id="${etapa.id || ''}"
+                                           ${checked ? 'checked' : ''} onchange="toggleEtapaIA(this)">
+                                    <label class="form-check-label fw-bold text-primary" for="${inputId}">
+                                        ${etapa.nombre}
+                                        ${esPersonalizada ? '<span class="badge bg-success ms-1">Personalizada</span>' : ''}
+                                        ${iaBadge}
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block">${descripcion}</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerEtapa('${slug}')" title="Remover etapa">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" 
-                            onclick="removerEtapa(${index})" title="Remover etapa">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div class="card-footer bg-transparent border-0 pt-0 d-flex justify-content-between align-items-center">
+                        <span class="badge bg-light text-muted">Orden ${etapa.orden}</span>
+                        <button type="button" class="btn btn-link btn-sm text-decoration-none" onclick="calcularEtapaIndividualIA('${slug}')">
+                            <i class="fas fa-bolt me-1"></i>Calcular esta etapa
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
     });
     html += '</div>';
-    
     listaEtapas.innerHTML = html;
     listaEtapas.className = '';
 }
 
-// Remover etapa
-function removerEtapa(index) {
-    const etapasOrdenadas = [...etapasSeleccionadasArray].sort((a, b) => a.orden - b.orden);
-    const etapaARemover = etapasOrdenadas[index];
-    
-    etapasSeleccionadasArray = etapasSeleccionadasArray.filter(e => e.nombre !== etapaARemover.nombre);
+function removerEtapa(slug) {
+    etapasSeleccionadasArray = etapasSeleccionadasArray.filter(e => (e.slug || slugifyEtapa(e.nombre)) !== slug);
+    etapasSeleccionadasIA.delete(slug);
+    limpiarResultadosEtapasIA();
     actualizarVistaEtapas();
-    
-    console.log(`🗑️ Etapa removida: ${etapaARemover.nombre}`);
+    console.log(`🗑️ Etapa removida: ${slug}`);
 }
 
-// Manejo de archivo de plano
+function toggleEtapaIA(input) {
+    const slug = input.dataset.stageSlug;
+    if (!slug) return;
+    if (input.checked) {
+        etapasSeleccionadasIA.add(slug);
+    } else {
+        etapasSeleccionadasIA.delete(slug);
+    }
+    limpiarResultadosEtapasIA(false);
+}
+
+function calcularEtapasSeleccionadasIA() {
+    const seleccionadas = Array.from(document.querySelectorAll('.etapa-ia-checkbox:checked')).map(cb => cb.dataset.stageSlug).filter(Boolean);
+    if (seleccionadas.length === 0) {
+        alert('Selecciona al menos una etapa para calcular con IA.');
+        return;
+    }
+    const etapas = seleccionadas.map(slug => obtenerEtapaPorSlug(slug)).filter(Boolean);
+    solicitarCalculoEtapas(etapas);
+}
+
+function calcularEtapaIndividualIA(slug) {
+    const etapa = obtenerEtapaPorSlug(slug);
+    if (!etapa) {
+        alert('No encontramos la etapa solicitada.');
+        return;
+    }
+    solicitarCalculoEtapas([etapa]);
+}
+
+function solicitarCalculoEtapas(etapas) {
+    if (!etapas || etapas.length === 0) {
+        alert('No hay etapas para calcular.');
+        return;
+    }
+
+    const superficie = parseFloat(document.getElementById('superficie_m2').value || '0');
+    if (!superficie || superficie <= 0) {
+        alert('Ingresa la superficie en m² antes de calcular con IA por etapas.');
+        return;
+    }
+
+    const tipoCalculo = document.getElementById('tipo_construccion').value || 'Estándar';
+    const contexto = {
+        ubicacion: document.getElementById('ubicacion').value || null,
+        tipo_obra: document.getElementById('tipo_obra').value || null
+    };
+
+    const payload = {
+        etapa_ids: etapas.map(etapa => ({
+            slug: etapa.slug || slugifyEtapa(etapa.nombre),
+            nombre: etapa.nombre,
+            id: etapa.id || null
+        })),
+        superficie_m2: superficie,
+        tipo_calculo: tipoCalculo,
+        parametros_contexto: contexto,
+        presupuesto_id: presupuestoId
+    };
+
+    const modalEl = document.getElementById('modalResultadoEtapasIA');
+    const modal = new bootstrap.Modal(modalEl);
+    document.getElementById('resultadoEtapasIAContenido').innerHTML = `
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p class="mt-2 mb-0">Calculando con IA…</p>
+        </div>
+    `;
+    document.getElementById('resumenEtapasIAMetadatos').style.display = 'none';
+    modal.show();
+
+    fetch('/presupuestos/ia/calcular/etapas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(resp => resp.json())
+        .then(data => {
+            if (!data || data.ok === false) {
+                const mensaje = data && data.error ? data.error : 'No se pudo calcular las etapas seleccionadas.';
+                document.getElementById('resultadoEtapasIAContenido').innerHTML = `<div class="alert alert-danger mb-0">${mensaje}</div>`;
+                return;
+            }
+            resultadoEtapasIA = data;
+            renderResultadoEtapasIA(data);
+        })
+        .catch(error => {
+            console.error('Error IA etapas:', error);
+            document.getElementById('resultadoEtapasIAContenido').innerHTML = `<div class="alert alert-danger mb-0">Error de conexión con la IA: ${error.message}</div>`;
+        });
+}
+
+function renderResultadoEtapasIA(data) {
+    const contenedor = document.getElementById('resultadoEtapasIAContenido');
+    const resumen = document.getElementById('resumenEtapasIAMetadatos');
+    const etapas = data.etapas || [];
+
+    if (etapas.length === 0) {
+        contenedor.innerHTML = '<div class="alert alert-warning mb-0">La IA no generó items para las etapas seleccionadas.</div>';
+        resumen.style.display = 'none';
+        return;
+    }
+
+    const htmlEtapas = etapas.map(etapa => {
+        const items = etapa.items || [];
+        const filas = items.map(item => {
+            const subtotal = (item.cantidad || 0) * (item.precio_unit || 0);
+            const precioUnit = item.precio_unit ? currencyFormatter.format(item.precio_unit) : '<span class="badge bg-warning text-dark">Sin precio</span>';
+            const subtotalFmt = item.precio_unit ? currencyFormatter.format(subtotal) : '<span class="text-muted">--</span>';
+            return `
+                <tr>
+                    <td class="text-capitalize">${item.tipo || '-'}</td>
+                    <td>${item.codigo || '-'}</td>
+                    <td>${item.descripcion || '-'}</td>
+                    <td class="text-end">${Number(item.cantidad || 0).toFixed(2)}</td>
+                    <td>${item.unidad || ''}</td>
+                    <td class="text-end">${precioUnit}</td>
+                    <td class="text-end">${subtotalFmt}</td>
+                    <td>${item.just || 'Regla determinística'}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const subtotalTotal = etapa.subtotal_total ? currencyFormatter.format(etapa.subtotal_total) : currencyFormatter.format(0);
+        const confianza = etapa.confianza ? Math.round(etapa.confianza * 100) : null;
+
+        return `
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0 text-primary">${etapa.nombre}</h6>
+                    <div class="d-flex align-items-center gap-2">
+                        ${confianza ? `<span class="badge bg-info-subtle text-info">Confianza ${confianza}%</span>` : ''}
+                        <span class="badge bg-secondary-subtle text-secondary">${subtotalTotal}</span>
+                    </div>
+                </div>
+                ${items.length ? `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th>Código</th>
+                                    <th>Descripción</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th>Unidad</th>
+                                    <th class="text-end">Precio unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                    <th>Justificación</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filas}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<div class="alert alert-warning mb-0">Sin items sugeridos para esta etapa.</div>'}
+                ${etapa.notas ? `<p class="small text-muted mt-2 mb-0">${etapa.notas}</p>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    contenedor.innerHTML = htmlEtapas;
+    const totalParcial = data.total_parcial ? currencyFormatter.format(data.total_parcial) : currencyFormatter.format(0);
+    resumen.style.display = 'block';
+    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas.`;
+}
+
+function aplicarResultadosEtapasIA() {
+    if (!resultadoEtapasIA || resultadoEtapasIA.ok === false) {
+        alert('Calcula las etapas con IA antes de aplicar los resultados.');
+        return;
+    }
+
+    const hidden = document.getElementById('iaEtapasPayload');
+    hidden.value = JSON.stringify(resultadoEtapasIA);
+
+    (resultadoEtapasIA.etapas || []).forEach(etapa => {
+        const registro = obtenerEtapaPorSlug(etapa.slug);
+        if (registro) {
+            registro.ia_aplicada = true;
+        }
+    });
+
+    actualizarVistaEtapas();
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalResultadoEtapasIA'));
+    if (modal) modal.hide();
+    alert('Se aplicaron los resultados de IA. Se guardarán al crear el presupuesto.');
+}
+
 function mostrarArchivoPlano() {
     const input = document.getElementById('plano_pdf');
     const info = document.getElementById('archivoPlanoInfo');
     const nombre = document.getElementById('nombreArchivoPlano');
-    
+
     if (input.files.length > 0) {
         nombre.textContent = input.files[0].name;
         info.style.display = 'block';
@@ -549,7 +833,6 @@ function removerArchivo() {
     document.getElementById('archivoPlanoInfo').style.display = 'none';
 }
 
-// Drag and drop para planos
 const dropZone = document.getElementById('dropZone');
 
 dropZone.addEventListener('dragover', (e) => {
@@ -568,7 +851,7 @@ dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropZone.style.borderColor = '#dee2e6';
     dropZone.style.backgroundColor = 'transparent';
-    
+
     const files = e.dataTransfer.files;
     if (files.length > 0 && files[0].type === 'application/pdf') {
         document.getElementById('plano_pdf').files = files;
@@ -578,66 +861,61 @@ dropZone.addEventListener('drop', (e) => {
     }
 });
 
-// Calcular con IA
 function calcularConIA() {
     const superficie = document.getElementById('superficie_m2').value;
     const tipo = document.getElementById('tipo_construccion').value;
     const archivo = document.getElementById('plano_pdf').files[0];
-    
+
     if (!superficie && !archivo) {
         alert('Debes especificar la superficie o subir un plano PDF para usar la IA');
         return;
     }
-    
+
     if (!tipo) {
         alert('Selecciona el tipo de construcción');
         return;
     }
-    
-    // Crear FormData
+
     const formData = new FormData();
     if (superficie) formData.append('metros_cuadrados', superficie);
     if (tipo) formData.append('tipo_construccion', tipo);
     if (archivo) formData.append('archivo_pdf', archivo);
-    
-    // Mostrar loading
+
     const btn = event.target;
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculando...';
     btn.disabled = true;
-    
-    // Llamar a la IA
+
     fetch('/presupuestos/procesar-calculadora-ia', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
-    .then(data => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        
-        if (data.exito) {
-            datosCalculoIA = data;
-            mostrarResultadoIA(data);
-        } else {
-            alert('Error en el cálculo IA: ' + (data.error || 'Error desconocido'));
-        }
-    })
-    .catch(error => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        alert('Error de conexión: ' + error.message);
-    });
+        .then(response => response.json())
+        .then(data => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+
+            if (data.exito) {
+                datosCalculoIA = data;
+                mostrarResultadoIA(data);
+            } else {
+                alert('Error en el cálculo IA: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            alert('Error de conexión: ' + error.message);
+        });
 }
 
-// Mostrar resultado del cálculo IA
 function mostrarResultadoIA(data) {
     const panel = document.getElementById('calculoIAPanel');
     const resumen = document.getElementById('resultadoIAResumen');
-    
+
     const materiales = Object.keys(data.presupuesto.materiales).length;
     const equipos = Object.keys(data.presupuesto.equipos).length;
-    
+
     resumen.innerHTML = `
         <div class="row text-center">
             <div class="col-6">
@@ -655,74 +933,82 @@ function mostrarResultadoIA(data) {
             Tipo: ${data.tipo_usado}
         </p>
     `;
-    
+
     panel.style.display = 'block';
 }
 
-// Ver cálculo completo
 function verCalculoCompleto() {
     if (datosCalculoIA) {
         window.open('/presupuestos/calculadora-ia', '_blank');
     }
 }
 
-// Limpiar formulario
 function limpiarFormulario() {
     if (confirm('¿Estás seguro de que quieres limpiar todos los campos?')) {
         document.getElementById('nuevoPresupuestoForm').reset();
         document.getElementById('archivoPlanoInfo').style.display = 'none';
         document.getElementById('calculoIAPanel').style.display = 'none';
         datosCalculoIA = null;
-        
-        // Limpiar etapas seleccionadas
         etapasSeleccionadasArray = [];
+        etapasSeleccionadasIA.clear();
+        limpiarResultadosEtapasIA();
         actualizarVistaEtapas();
     }
 }
 
-// Validación del formulario antes de enviar
 document.getElementById('nuevoPresupuestoForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
-    // Validaciones básicas
+
     const nombre = document.getElementById('nombre_obra').value.trim();
     const tipo = document.getElementById('tipo_obra').value;
     const ubicacion = document.getElementById('ubicacion').value.trim();
     const tipoConst = document.getElementById('tipo_construccion').value;
     const superficie = document.getElementById('superficie_m2').value;
-    
+
     if (!nombre || !tipo || !ubicacion || !tipoConst || !superficie) {
         alert('Por favor, completa todos los campos obligatorios marcados con *');
         return;
     }
-    
-    // Agregar etapas seleccionadas al formulario
+
+    this.querySelectorAll('.etapa-hidden-field').forEach(el => el.remove());
+
     if (etapasSeleccionadasArray.length > 0) {
-        // Crear campos ocultos para las etapas
         etapasSeleccionadasArray.forEach((etapa, index) => {
+            const slug = etapa.slug || slugifyEtapa(etapa.nombre);
+
             const inputNombre = document.createElement('input');
             inputNombre.type = 'hidden';
             inputNombre.name = `etapas[${index}][nombre]`;
             inputNombre.value = etapa.nombre;
+            inputNombre.classList.add('etapa-hidden-field');
             this.appendChild(inputNombre);
-            
+
             const inputDescripcion = document.createElement('input');
             inputDescripcion.type = 'hidden';
             inputDescripcion.name = `etapas[${index}][descripcion]`;
-            inputDescripcion.value = etapa.descripcion;
+            inputDescripcion.value = etapa.descripcion || '';
+            inputDescripcion.classList.add('etapa-hidden-field');
             this.appendChild(inputDescripcion);
-            
+
             const inputOrden = document.createElement('input');
             inputOrden.type = 'hidden';
             inputOrden.name = `etapas[${index}][orden]`;
             inputOrden.value = etapa.orden;
+            inputOrden.classList.add('etapa-hidden-field');
             this.appendChild(inputOrden);
+
+            const inputSlug = document.createElement('input');
+            inputSlug.type = 'hidden';
+            inputSlug.name = `etapas[${index}][slug]`;
+            inputSlug.value = slug;
+            inputSlug.classList.add('etapa-hidden-field');
+            this.appendChild(inputSlug);
         });
     }
-    
-    // Si todo está bien, enviar
+
     this.submit();
 });
 </script>
+
 
 {% endblock %}

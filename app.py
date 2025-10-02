@@ -66,10 +66,15 @@ db_cli = AppGroup('db')
 def db_upgrade():
     """Apply pending lightweight database migrations."""
     with app.app_context():
-        from migrations_runtime import ensure_avance_audit_columns, ensure_presupuesto_state_columns
+        from migrations_runtime import (
+            ensure_avance_audit_columns,
+            ensure_presupuesto_state_columns,
+            ensure_item_presupuesto_stage_columns,
+        )
 
         ensure_avance_audit_columns()
         ensure_presupuesto_state_columns()
+        ensure_item_presupuesto_stage_columns()
 
     click.echo('✅ Database upgraded successfully.')
 
@@ -297,9 +302,14 @@ with app.app_context():
     from models import Usuario, Organizacion
     
     # Run startup migrations before creating tables
-    from migrations_runtime import ensure_avance_audit_columns, ensure_presupuesto_state_columns
+    from migrations_runtime import (
+        ensure_avance_audit_columns,
+        ensure_presupuesto_state_columns,
+        ensure_item_presupuesto_stage_columns,
+    )
     ensure_avance_audit_columns()
     ensure_presupuesto_state_columns()
+    ensure_item_presupuesto_stage_columns()
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
     try:
