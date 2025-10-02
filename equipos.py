@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from app import db
 from models import Usuario, AsignacionObra, Obra, RegistroTiempo
-from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
 
 equipos_bp = Blueprint('equipos', __name__)
@@ -94,21 +93,20 @@ def usuarios_nuevo():
         return redirect(url_for('equipos.usuarios_nuevo'))
 
     try:
-        from werkzeug.security import generate_password_hash
-        
         # Crear usuario invitado
         user = Usuario(
             nombre=nombre,
             apellido=apellido,
             email=email.lower(),
             telefono=telefono,
-            password_hash=generate_password_hash(password),
             rol=role,
             auth_provider='manual',
             activo=True,
             organizacion_id=current_user.organizacion_id
         )
-        
+
+        user.set_password(password)
+
         db.session.add(user)
         db.session.flush()  # Para obtener el ID
 
@@ -172,21 +170,20 @@ def crear():
             return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
         
         try:
-            from werkzeug.security import generate_password_hash
-            
             # Crear nuevo usuario
             nuevo_usuario = Usuario(
                 nombre=nombre,
                 apellido=apellido,
                 email=email.lower(),
                 telefono=telefono,
-                password_hash=generate_password_hash(password),
                 rol=rol,
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=current_user.organizacion_id if current_user.organizacion_id else None
             )
-            
+
+            nuevo_usuario.set_password(password)
+
             db.session.add(nuevo_usuario)
             db.session.commit()
             
@@ -359,6 +356,8 @@ def usuarios_crear():
     role = (f.get('role') or 'operario').strip()
     org_id = getattr(current_user, 'organizacion_id', None)
     
+    raw_password = (f.get('password', '').strip() or 'temp123456')
+
     u = Usuario(
         nombre=f.get('nombre', '').strip(),
         apellido=f.get('apellido', '').strip(),
@@ -366,10 +365,14 @@ def usuarios_crear():
         role=role,
         rol='operario',  # Mantener rol legado por compatibilidad
         organizacion_id=org_id,
-        password_hash=generate_password_hash(f.get('password', '').strip()),
         auth_provider='manual',
     )
-    
+
+    try:
+        u.set_password(raw_password)
+    except ValueError:
+        return jsonify(ok=False, error="La contraseña no puede estar vacía."), 400
+
     db.session.add(u)
     try:
         db.session.commit()

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Restablecer contraseña - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header text-center mb-4">
+            <i class="fas fa-key fa-3x text-primary mb-3"></i>
+            <h2>Restablecer contraseña</h2>
+            <p class="text-muted">Define una nueva contraseña para tu cuenta</p>
+        </div>
+
+        <form method="POST" class="auth-form" action="{{ submit_url }}">
+            <input type="hidden" name="portal" value="{{ portal }}">
+            <div class="mb-3">
+                <label for="password" class="form-label">Nueva contraseña</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-lock"></i>
+                    </span>
+                    <input type="password" class="form-control" id="password" name="password"
+                           placeholder="Nueva contraseña" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="confirm_password" class="form-label">Confirmar contraseña</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-lock"></i>
+                    </span>
+                    <input type="password" class="form-control" id="confirm_password" name="confirm_password"
+                           placeholder="Repite la contraseña" required>
+                </div>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save me-2"></i>Guardar nueva contraseña
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-4 text-center">
+            <a href="{{ back_url }}" class="auth-link">Volver al inicio de sesión</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.auth-container {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+.auth-card {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+}
+
+.auth-form .form-control {
+    border-radius: 0.5rem;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.auth-form .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
+}
+
+.auth-form .input-group-text {
+    border-radius: 0.5rem 0 0 0.5rem;
+    border: 2px solid #e9ecef;
+    border-right: none;
+    background: #f8f9fa;
+}
+
+.auth-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.auth-link:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+@media (max-width: 576px) {
+    .auth-card {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+}
+</style>
+{% endblock %}

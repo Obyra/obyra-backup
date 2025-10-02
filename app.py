@@ -1,14 +1,19 @@
 import os
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
+import importlib
+from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.security import generate_password_hash
+from werkzeug.routing import BuildError
 from extensions import db, login_manager
 
 # create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
+app.secret_key = (
+    os.environ.get("SESSION_SECRET")
+    or os.environ.get("SECRET_KEY")
+    or "dev-secret-key-change-me"
+)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
@@ -48,7 +53,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+login_manager.login_view = 'index'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
 
@@ -66,8 +71,8 @@ def unauthorized():
     # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
-    # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    # For regular web requests, redirect to the main landing page preserving "next"
+    return redirect(url_for('index', next=request.url))
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
@@ -109,14 +114,71 @@ def verificar_periodo_prueba():
             flash(f'Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    """Redirigir automáticamente al dashboard después del login"""
+    """Landing principal con acceso a inicio de sesión y portal de proveedores."""
     if current_user.is_authenticated:
         # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
+
+    next_page = request.values.get('next')
+    form_data = {
+        'email': request.form.get('email', ''),
+        'remember': bool(request.form.get('remember')),
+    }
+
+    google_available = False
+    login_helper = None
+    try:
+        from auth import google, authenticate_manual_user  # type: ignore
+
+        google_available = bool(google)
+        login_helper = authenticate_manual_user
+    except ImportError:
+        login_helper = None
+
+    if request.method == 'POST':
+        if login_helper is None:
+            flash('El módulo de autenticación no está disponible en este entorno.', 'danger')
+        else:
+            success, payload = login_helper(
+                form_data['email'],
+                request.form.get('password', ''),
+                remember=form_data['remember'],
+            )
+
+            if success:
+                usuario = payload
+                if next_page:
+                    return redirect(next_page)
+                if getattr(usuario, "role", None) == "operario":
+                    return redirect(url_for("obras.mis_tareas"))
+                return redirect(url_for('reportes.dashboard'))
+
+            else:
+                message = ''
+                category = 'danger'
+                if isinstance(payload, dict):
+                    message = payload.get('message', '')
+                    category = payload.get('category', category)
+                else:
+                    message = str(payload)
+                if message:
+                    flash(message, category)
+
+    return render_template(
+        'public/home.html',
+        google_available=google_available,
+        form_data=form_data,
+        next_value=next_page,
+    )
+
+
+@app.route('/login', endpoint='auth_login')
+def legacy_login_redirect():
+    """Mantener compatibilidad con rutas antiguas /login"""
     return redirect(url_for('auth.login'))
 
 
@@ -295,47 +357,124 @@ with app.app_context():
     
     print("📊 Database tables created successfully")
 
+    # Ensure default admin credentials exist and are hashed correctly
+    try:
+        admin_email = 'admin@obyra.com'
+        admin = Usuario.query.filter_by(email=admin_email).first()
+
+        if not admin:
+            admin_org = Organizacion(nombre='OBYRA - Administración Central')
+            db.session.add(admin_org)
+            db.session.flush()
+
+            admin = Usuario(
+                nombre='Administrador',
+                apellido='OBYRA',
+                email=admin_email,
+                rol='administrador',
+                role='administrador',
+                auth_provider='manual',
+                activo=True,
+                organizacion_id=admin_org.id
+            )
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+            print('👤 Usuario administrador creado: admin@obyra.com / admin123')
+        else:
+            updated = False
+
+            hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')
+            stored_hash = admin.password_hash or ''
+            if not stored_hash or not stored_hash.startswith(hashed_markers):
+                original_secret = stored_hash or 'admin123'
+                admin.set_password(original_secret)
+                updated = True
+
+            if admin.auth_provider != 'manual':
+                admin.auth_provider = 'manual'
+                updated = True
+
+            if not admin.organizacion:
+                admin_org = Organizacion(nombre='OBYRA - Administración Central')
+                db.session.add(admin_org)
+                db.session.flush()
+                admin.organizacion_id = admin_org.id
+                updated = True
+
+            if updated:
+                db.session.commit()
+                print('🔐 Credenciales del administrador principal verificadas y aseguradas.')
+    except Exception as ensure_admin_exc:
+        db.session.rollback()
+        print(f"⚠️ No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
+
+def _import_blueprint(module_name, attr_name):
+    """Importa un blueprint de manera segura sin interrumpir el resto."""
+    module = importlib.import_module(module_name)
+    return getattr(module, attr_name)
+
+
 # Register blueprints after database initialization to avoid circular imports
+auth_blueprint_registered = False
+core_failures = []
+
 try:
-    from auth import auth_bp
-    from obras import obras_bp
-    from presupuestos import presupuestos_bp
-    from equipos import equipos_bp
-    from inventario import inventario_bp
-    from marketplaces import marketplaces_bp
-    from reportes import reportes_bp
-    from asistente_ia import asistente_bp
-    from cotizacion_inteligente import cotizacion_bp
-    from control_documentos import documentos_bp
-    from seguridad_cumplimiento import seguridad_bp
-    from agent_local import agent_bp
-    from planes import planes_bp
-    from events_service import events_bp
-    from reports_service import reports_bp
-    
-    # Initialize OAuth with app before registering auth blueprint
-    from auth import oauth
+    from auth import oauth  # type: ignore
+    auth_bp = _import_blueprint('auth', 'auth_bp')
     oauth.init_app(app)
-    
     app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(obras_bp, url_prefix='/obras')
-    app.register_blueprint(presupuestos_bp, url_prefix='/presupuestos')
-    app.register_blueprint(equipos_bp, url_prefix='/equipos')
-    app.register_blueprint(inventario_bp, url_prefix='/inventario')
-    app.register_blueprint(marketplaces_bp, url_prefix='/marketplaces')
-    app.register_blueprint(reportes_bp, url_prefix='/reportes')
-    app.register_blueprint(asistente_bp, url_prefix='/asistente')
-    app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
-    app.register_blueprint(documentos_bp, url_prefix='/documentos')
-    app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
-    app.register_blueprint(agent_bp)
-    app.register_blueprint(planes_bp)
-    app.register_blueprint(events_bp)
-    app.register_blueprint(reports_bp)
-    
+    auth_blueprint_registered = True
+except Exception as exc:
+    core_failures.append(f"auth ({exc})")
+
+for module_name, attr_name, prefix in [
+    ('obras', 'obras_bp', '/obras'),
+    ('presupuestos', 'presupuestos_bp', '/presupuestos'),
+    ('equipos', 'equipos_bp', '/equipos'),
+    ('inventario', 'inventario_bp', '/inventario'),
+    ('marketplaces', 'marketplaces_bp', '/marketplaces'),
+    ('reportes', 'reportes_bp', '/reportes'),
+    ('asistente_ia', 'asistente_bp', '/asistente'),
+    ('cotizacion_inteligente', 'cotizacion_bp', '/cotizacion'),
+    ('control_documentos', 'documentos_bp', '/documentos'),
+    ('seguridad_cumplimiento', 'seguridad_bp', '/seguridad'),
+    ('agent_local', 'agent_bp', None),
+    ('planes', 'planes_bp', None),
+    ('events_service', 'events_bp', None),
+    ('reports_service', 'reports_bp', None),
+    ('account', 'account_bp', None),
+    ('onboarding', 'onboarding_bp', '/onboarding'),
+]:
+    try:
+        blueprint = _import_blueprint(module_name, attr_name)
+        app.register_blueprint(blueprint, url_prefix=prefix)
+    except Exception as exc:
+        core_failures.append(f"{module_name} ({exc})")
+
+if core_failures:
+    print("⚠️ Some core blueprints not available: " + "; ".join(core_failures))
+else:
     print("✅ Core blueprints registered successfully")
-except ImportError as e:
-    print(f"⚠️ Some core blueprints not available: {e}")
+
+if not auth_blueprint_registered:
+
+    @app.route('/auth/login', endpoint='auth.login')
+    def fallback_auth_login():
+        """Fallback login that routes to the supplier portal when auth blueprint is missing."""
+        try:
+            return redirect(url_for('supplier_auth.login'))
+        except BuildError:
+            return "Login no disponible temporalmente.", 503
+
+    @app.route('/auth/register', methods=['GET', 'POST'], endpoint='auth.register')
+    def fallback_auth_register():
+        """Mensaje claro cuando el registro estándar no está disponible."""
+        flash('El registro de usuarios no está disponible en este entorno.', 'warning')
+        try:
+            return redirect(url_for('supplier_auth.registro'))
+        except BuildError:
+            return "Registro de usuarios no disponible temporalmente.", 503
 
 # Try to register optional blueprints
 try:
@@ -368,6 +507,48 @@ except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
 
 
+# --- Public legal pages fallbacks ---------------------------------------
+# Algunas implementaciones históricas definen estas rutas en módulos
+# separados (p.ej. main.py), pero cuando esos blueprints no están
+# disponibles la plantilla base sigue apuntando a los endpoints
+# ``terminos`` y ``privacidad``. Para evitar nuevos BuildError cuando
+# el proyecto se ejecuta en entornos mínimos (Replit, Visual Studio,
+# etc.), agregamos reglas lightweight sólo si aún no existen.
+if 'terminos' not in app.view_functions:
+    app.add_url_rule(
+        '/terminos',
+        endpoint='terminos',
+        view_func=lambda: render_template('legal/terminos.html')
+    )
+
+if 'privacidad' not in app.view_functions:
+    app.add_url_rule(
+        '/privacidad',
+        endpoint='privacidad',
+        view_func=lambda: render_template('legal/privacidad.html')
+    )
+
+if 'reportes.dashboard' not in app.view_functions:
+
+    @app.route('/reportes/dashboard', endpoint='reportes.dashboard')
+    @login_required
+    def fallback_reportes_dashboard():
+        """Proporciona un dashboard básico cuando el módulo de reportes falta."""
+        flash('El dashboard avanzado no está disponible en este entorno reducido.', 'warning')
+        fallback_url = None
+        for endpoint in ('obras.lista', 'supplier_portal.dashboard', 'index'):
+            try:
+                fallback_url = url_for(endpoint)
+                break
+            except BuildError:
+                continue
+
+        return render_template(
+            'errors/dashboard_unavailable.html',
+            fallback_url=fallback_url,
+        ), 200
+
+
 # === MEDIA SERVING ENDPOINT ===
 
 @app.route("/media/<path:relpath>")
@@ -395,7 +576,14 @@ def unauthorized(error):
 
 @app.errorhandler(404)
 def not_found(error):
-    return render_template('errors/404.html'), 404
+    try:
+        dashboard_url = url_for('reportes.dashboard')
+    except BuildError:
+        try:
+            dashboard_url = url_for('supplier_portal.dashboard')
+        except BuildError:
+            dashboard_url = url_for('index')
+    return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

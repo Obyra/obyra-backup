@@ -1,20 +1,80 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from extensions import db
-from models import Usuario, Organizacion
+from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser
 from sqlalchemy import func
 from datetime import datetime
+from typing import Dict, Optional, Tuple, Union, Any
 import os
 import re
 import uuid
+from werkzeug.routing import BuildError
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
+
+def normalizar_cuit(valor: Optional[str]) -> str:
+    """Elimina caracteres no numéricos y limita a 11 dígitos."""
+    if not valor:
+        return ''
+    return re.sub(r'[^0-9]', '', valor)[:11]
+
+
+def validar_cuit(valor: Optional[str]) -> bool:
+    """Valida CUIL/CUIT usando el algoritmo estándar de verificación."""
+    cuit = normalizar_cuit(valor)
+    if len(cuit) != 11:
+        return False
+
+    try:
+        base = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+        total = sum(int(cuit[i]) * base[i] for i in range(10))
+        resto = total % 11
+        verificador = 11 - resto
+        if verificador == 11:
+            verificador = 0
+        elif verificador == 10:
+            verificador = 9
+        return int(cuit[-1]) == verificador
+    except ValueError:
+        return False
 
 auth_bp = Blueprint('auth', __name__)
 
 # Configuración OAuth con Google
 oauth = OAuth()
 google = None
+
+PASSWORD_RESET_SALT = 'obyra-password-reset'
+
+ResettableAccount = Union[Usuario, SupplierUser]
+
+
+def _normalize_portal(portal: Optional[str]) -> str:
+    if not portal:
+        return 'user'
+    portal_value = portal.lower()
+    if portal_value in {'supplier', 'proveedor', 'supplier_portal'}:
+        return 'supplier'
+    return 'user'
+
+
+def _portal_login_endpoint(portal: str) -> str:
+    return 'supplier_auth.login' if portal == 'supplier' else 'auth.login'
+
+
+def _portal_label_for_account(account: ResettableAccount) -> str:
+    return 'supplier' if isinstance(account, SupplierUser) else 'user'
+
+
+def _extract_portal_from_payload(payload: Optional[Any]) -> str:
+    if isinstance(payload, dict):
+        return _normalize_portal(payload.get('portal'))
+    return 'user'
+
+
+def _forgot_url_for_portal(portal: str) -> str:
+    return url_for('auth.forgot_password', portal=portal) if portal == 'supplier' else url_for('auth.forgot_password')
 
 # Lista blanca de emails para administradores automáticos
 ADMIN_EMAILS = [
@@ -49,37 +109,276 @@ else:
 Para más información: https://docs.replit.com/additional-resources/google-auth-in-flask
     """)
 
+
+AuthResult = Tuple[bool, Union[Usuario, Dict[str, str]]]
+
+
+def authenticate_manual_user(email: Optional[str], password: Optional[str], *, remember: bool = False) -> AuthResult:
+    """Autentica a un usuario interno y devuelve (success, payload)."""
+    normalized_email = (email or '').strip()
+    password = password or ''
+
+    if not normalized_email or not password:
+        return False, {
+            'message': 'Por favor, completa todos los campos.',
+            'category': 'danger',
+        }
+
+    usuario = Usuario.query.filter(func.lower(Usuario.email) == normalized_email.lower()).first()
+
+    if not usuario or not usuario.activo:
+        return False, {
+            'message': 'Email o contraseña incorrectos, o cuenta inactiva.',
+            'category': 'danger',
+        }
+
+    if usuario.auth_provider == 'google':
+        return False, {
+            'message': 'Esta cuenta está vinculada con Google. Usa "Iniciar sesión con Google".',
+            'category': 'warning',
+        }
+
+    if usuario.auth_provider != 'manual' or not usuario.password_hash:
+        return False, {
+            'message': 'Credenciales incorrectas.',
+            'category': 'danger',
+        }
+
+    if not usuario.check_password(password):
+        return False, {
+            'message': 'Credenciales incorrectas.',
+            'category': 'danger',
+        }
+
+    login_user(usuario, remember=remember)
+    return True, usuario
+
+
+def _resolve_dashboard_url() -> str:
+    """Obtiene la URL más adecuada para enviar al usuario autenticado."""
+    for endpoint in (
+        'reportes.dashboard',
+        'obras.lista',
+        'supplier_portal.dashboard',
+        'index',
+    ):
+        try:
+            return url_for(endpoint)
+        except BuildError:
+            continue
+    return '/'
+
+
+def _determine_onboarding_redirect(usuario: Usuario) -> Optional[str]:
+    """Devuelve la ruta del siguiente paso de onboarding o None si está completo."""
+    status = usuario.ensure_onboarding_status()
+    db.session.commit()
+
+    if not status.profile_completed:
+        return url_for('onboarding.profile')
+
+    if not status.billing_completed:
+        return url_for('onboarding.billing')
+
+    return None
+
+
+def _post_login_destination(usuario: Usuario, next_page: Optional[str] = None) -> str:
+    """Determina la redirección apropiada tras el login o registro."""
+    if next_page:
+        return next_page
+
+    onboarding_url = _determine_onboarding_redirect(usuario)
+    if onboarding_url:
+        return onboarding_url
+
+    if getattr(usuario, 'role', None) == 'operario':
+        try:
+            return url_for('obras.mis_tareas')
+        except BuildError:
+            pass
+
+    return _resolve_dashboard_url()
+
+
+def _get_reset_serializer() -> URLSafeTimedSerializer:
+    secret_key = current_app.config.get('SECRET_KEY')
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY no está configurado, no se puede generar tokens seguros.')
+    return URLSafeTimedSerializer(secret_key)
+
+
+def _generate_reset_token(account: ResettableAccount, portal: str) -> str:
+    serializer = _get_reset_serializer()
+    payload = {
+        'account_id': account.id,
+        'email': account.email,
+        'account_type': _portal_label_for_account(account),
+        'portal': _normalize_portal(portal),
+    }
+    # Include legacy key for backwards compatibility with older tokens
+    payload['user_id'] = payload['account_id']
+    return serializer.dumps(payload, salt=PASSWORD_RESET_SALT)
+
+
+def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccount, str]:
+    serializer = _get_reset_serializer()
+    try:
+        data = serializer.loads(token, salt=PASSWORD_RESET_SALT, max_age=max_age)
+    except SignatureExpired as exc:
+        payload = getattr(exc, 'payload', None)
+        new_exc = SignatureExpired('El enlace para restablecer la contraseña ha expirado.')
+        setattr(new_exc, 'payload', payload)
+        raise new_exc from exc
+    except BadSignature as exc:
+        payload = getattr(exc, 'payload', None)
+        new_exc = BadSignature('El enlace de restablecimiento no es válido.')
+        setattr(new_exc, 'payload', payload)
+        raise new_exc from exc
+
+    account_id = data.get('account_id') or data.get('user_id')
+    email = data.get('email')
+    account_type = data.get('account_type', 'user')
+    portal = _normalize_portal(data.get('portal'))
+
+    if not account_id or not email:
+        raise BadSignature('Token de restablecimiento incompleto.')
+
+    account: Optional[ResettableAccount]
+    if account_type == 'supplier':
+        account = SupplierUser.query.get(account_id)
+    else:
+        account = Usuario.query.get(account_id)
+
+    if not account or account.email.lower() != email.lower():
+        raise BadSignature('El token no coincide con ninguna cuenta válida.')
+
+    return account, portal
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    next_page = request.args.get('next') or request.form.get('next')
+    form_data = {
+        'email': request.form.get('email', ''),
+        'remember': bool(request.form.get('remember')),
+    }
+
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        
-        if not email or not password:
-            flash('Por favor, completa todos los campos.', 'danger')
-            return render_template('auth/login.html', google_available=bool(google))
-        
-        usuario = Usuario.query.filter_by(email=email).first()
-        
-        if usuario and usuario.activo:
-            # Verificar si es usuario manual con contraseña
-            if usuario.auth_provider == 'manual' and usuario.password_hash and check_password_hash(usuario.password_hash, password):
-                login_user(usuario, remember=request.form.get('remember'))
-                next_page = request.args.get('next')
-                if next_page:
-                    return redirect(next_page)
-                # Redirección post-login por rol (UX prolija)
-                if current_user.role == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
-            elif usuario.auth_provider == 'google':
-                flash('Esta cuenta está vinculada con Google. Use "Iniciar sesión con Google".', 'warning')
-            else:
-                flash('Credenciales incorrectas.', 'danger')
+        success, payload = authenticate_manual_user(
+            form_data['email'],
+            request.form.get('password', ''),
+            remember=form_data['remember'],
+        )
+
+        if success:
+            usuario = payload
+            destino = _post_login_destination(usuario, next_page)
+            return redirect(destino)
+
+        message = ''
+        category = 'danger'
+        if isinstance(payload, dict):
+            message = payload.get('message', '')
+            category = payload.get('category', category)
         else:
-            flash('Email o contraseña incorrectos, o cuenta inactiva.', 'danger')
-    
-    return render_template('auth/login.html', google_available=bool(google))
+            message = str(payload)
+        if message:
+            flash(message, category)
+
+    return render_template(
+        'auth/login.html',
+        google_available=bool(google),
+        form_data=form_data,
+        next_value=next_page,
+    )
+
+
+@auth_bp.route('/forgot', methods=['GET', 'POST'])
+def forgot_password():
+    portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
+    submit_url = url_for('auth.forgot_password', portal=portal) if portal != 'user' else url_for('auth.forgot_password')
+    back_url = url_for(_portal_login_endpoint(portal))
+
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+
+        if not email:
+            flash('Por favor, ingresa tu email para continuar.', 'warning')
+            return render_template('auth/forgot.html', portal=portal, submit_url=submit_url, back_url=back_url)
+
+        account: Optional[ResettableAccount] = None
+        if portal == 'supplier':
+            account = SupplierUser.query.filter(func.lower(SupplierUser.email) == email).first()
+            if account and not account.activo:
+                account = None
+        else:
+            account = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+            if account and (account.auth_provider not in (None, 'manual') or not account.activo):
+                account = None
+
+        if account:
+            token = _generate_reset_token(account, portal)
+            reset_kwargs = {'token': token, '_external': True}
+            if portal != 'user':
+                reset_kwargs['portal'] = portal
+            reset_url = url_for('auth.reset_password', **reset_kwargs)
+            _deliver_reset_link(account, reset_url, portal)
+
+        flash('Si el email corresponde a una cuenta activa, te enviamos las instrucciones para restablecer la contraseña.', 'info')
+        return redirect(submit_url)
+
+    return render_template('auth/forgot.html', portal=portal, submit_url=submit_url, back_url=back_url)
+
+
+@auth_bp.route('/reset/<token>', methods=['GET', 'POST'])
+def reset_password(token: str):
+    requested_portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
+
+    try:
+        account, token_portal = _load_reset_token(token)
+        portal = token_portal or requested_portal
+    except SignatureExpired as exc:
+        portal = _extract_portal_from_payload(getattr(exc, 'payload', None)) or requested_portal
+        flash('El enlace ha expirado. Por favor, solicita uno nuevo.', 'warning')
+        return redirect(_forgot_url_for_portal(portal))
+    except BadSignature as exc:
+        portal = _extract_portal_from_payload(getattr(exc, 'payload', None)) or requested_portal
+        flash('El enlace no es válido. Solicita uno nuevo para continuar.', 'danger')
+        return redirect(_forgot_url_for_portal(portal))
+
+    def render_form() -> Any:
+        submit_kwargs = {'token': token}
+        if portal != 'user':
+            submit_kwargs['portal'] = portal
+        submit_url = url_for('auth.reset_password', **submit_kwargs)
+        back_url = url_for(_portal_login_endpoint(portal))
+        return render_template('auth/reset.html', token=token, portal=portal, submit_url=submit_url, back_url=back_url)
+
+    if request.method == 'POST':
+        password = request.form.get('password') or ''
+        confirm = request.form.get('confirm_password') or ''
+
+        if not password or not confirm:
+            flash('Debes ingresar y confirmar tu nueva contraseña.', 'warning')
+            return render_form()
+
+        if password != confirm:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return render_form()
+
+        if len(password) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+            return render_form()
+
+        account.set_password(password)
+        if isinstance(account, Usuario):
+            account.auth_provider = 'manual'
+        db.session.commit()
+
+        flash('Tu contraseña fue actualizada. Ahora puedes iniciar sesión.', 'success')
+        return redirect(url_for(_portal_login_endpoint(portal)))
+
+    return render_form()
 
 @auth_bp.route('/logout')
 @login_required
@@ -95,56 +394,91 @@ def register():
         return redirect(url_for('reportes.dashboard'))
     
     if request.method == 'POST':
-        nombre = request.form.get('nombre')
-        apellido = request.form.get('apellido')
-        email = request.form.get('email')
-        telefono = request.form.get('telefono')
+        nombre = (request.form.get('nombre') or '').strip()
+        apellido = (request.form.get('apellido') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        telefono = (request.form.get('telefono') or '').strip()
+        cuit_input = (request.form.get('cuit') or '').strip()
+        direccion = (request.form.get('direccion') or '').strip()
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
-        
+
         # Validaciones
-        if not all([nombre, apellido, email, password]):
+        if not all([nombre, apellido, email, password, cuit_input, direccion]):
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
         # Validar formato de email
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
             flash('Por favor, ingresa un email válido.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
+        cuit_normalizado = normalizar_cuit(cuit_input)
+        if not validar_cuit(cuit_normalizado):
+            flash('El CUIL/CUIT ingresado no es válido.', 'danger')
+            return render_template('auth/register.html', google_available=bool(google))
+
         if password != confirm_password:
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
         if len(password) < 6:
             flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
         
         # Verificar que el email no exista
-        if Usuario.query.filter_by(email=email).first():
+        if Usuario.query.filter(func.lower(Usuario.email) == email.lower()).first():
             flash('Ya existe un usuario con ese email.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
-        
+
+        if PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first():
+            flash('Ya existe un usuario registrado con ese CUIL/CUIT.', 'danger')
+            return render_template('auth/register.html', google_available=bool(google))
+
         try:
+            nueva_organizacion = Organizacion(
+                nombre=f"Organización de {nombre} {apellido}",
+                fecha_creacion=datetime.utcnow()
+            )
+            db.session.add(nueva_organizacion)
+            db.session.flush()
+
+            rol_usuario = 'administrador'
             # Crear nuevo usuario
             nuevo_usuario = Usuario(
                 nombre=nombre,
                 apellido=apellido,
                 email=email.lower(),
                 telefono=telefono,
-                password_hash=generate_password_hash(password),
-                rol='operario',  # Por defecto
+                rol=rol_usuario,
+                role=rol_usuario,
                 auth_provider='manual',
-                activo=True
+                activo=True,
+                organizacion_id=nueva_organizacion.id
             )
-            
+
+            nuevo_usuario.set_password(password)
+
             db.session.add(nuevo_usuario)
+            db.session.flush()
+
+            perfil_usuario = PerfilUsuario(
+                usuario_id=nuevo_usuario.id,
+                cuit=cuit_normalizado,
+                direccion=direccion
+            )
+            db.session.add(perfil_usuario)
+
+            onboarding_status = OnboardingStatus(usuario=nuevo_usuario)
+            db.session.add(onboarding_status)
+
             db.session.commit()
-            
+
             # Auto-login después del registro
             login_user(nuevo_usuario)
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
-            return redirect(url_for('reportes.dashboard'))
+            destino = _post_login_destination(nuevo_usuario)
+            return redirect(destino)
             
         except Exception as e:
             db.session.rollback()
@@ -229,10 +563,8 @@ def google_callback():
                 db.session.commit()
                 login_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
-                # Redirección post-login por rol (UX prolija)
-                if current_user.role == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
+                destino = _post_login_destination(usuario)
+                return redirect(destino)
             else:
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
                 return redirect(url_for('auth.login'))
@@ -301,14 +633,13 @@ def google_callback():
                     mensaje = f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu organización ha sido creada.'
                 
                 db.session.add(nuevo_usuario)
+                db.session.add(OnboardingStatus(usuario=nuevo_usuario))
                 db.session.commit()
-                
+
                 login_user(nuevo_usuario)
                 flash(mensaje, 'success')
-                # Redirección post-login por rol (UX prolija)
-                if current_user.role == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
+                destino = _post_login_destination(nuevo_usuario)
+                return redirect(destino)
                 
             except Exception as e:
                 db.session.rollback()
@@ -363,12 +694,13 @@ def admin_register():
                 apellido=apellido,
                 email=email.lower(),
                 telefono=telefono,
-                password_hash=generate_password_hash(password),
                 rol=rol,
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=current_user.organizacion_id
             )
+
+            nuevo_usuario.set_password(password)
             
             db.session.add(nuevo_usuario)
             db.session.commit()
@@ -602,7 +934,7 @@ def aceptar_invitacion():
             # Activar usuario existente
             usuario.nombre = nombre
             usuario.apellido = apellido
-            usuario.password_hash = generate_password_hash(password)
+            usuario.set_password(password)
             usuario.activo = True
             
             db.session.commit()
@@ -618,3 +950,22 @@ def aceptar_invitacion():
             flash('Error al procesar la invitación.', 'danger')
     
     return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
+def _deliver_reset_link(account: ResettableAccount, reset_url: str, portal: str) -> None:
+    """Envía o registra el enlace de reseteo usando el canal configurado."""
+    delivery_mode = current_app.config.get('PASSWORD_RESET_DELIVERY', 'email')
+    portal = _normalize_portal(portal)
+    email = getattr(account, 'email', 'cuenta')
+
+    if current_app.debug or current_app.config.get('ENV') == 'development':
+        print(f"🔐 Enlace de restablecimiento ({portal}) para {email}: {reset_url}")
+        return
+
+    if delivery_mode == 'email':
+        current_app.logger.info('Enlace de restablecimiento generado para %s (%s): %s', email, portal, reset_url)
+    else:
+        current_app.logger.info(
+            'Password reset link for %s via %s pending integration: %s',
+            email,
+            delivery_mode,
+            reset_url,
+        )

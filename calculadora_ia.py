@@ -7,10 +7,16 @@ import os
 import base64
 import json
 from datetime import datetime
-from openai import OpenAI
-
-# Inicializar cliente OpenAI
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+try:  # La librería openai es opcional en entornos locales/lightweight
+    from openai import OpenAI
+except ModuleNotFoundError:  # pragma: no cover - se ejecuta sólo sin dependencia
+    OpenAI = None  # type: ignore[assignment]
+    client = None  # type: ignore[assignment]
+    OPENAI_AVAILABLE = False
+else:
+    # Inicializar cliente OpenAI sólo cuando la librería esté instalada
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    OPENAI_AVAILABLE = True
 
 # Coeficientes de construcción expandidos por tipo y m² - Estilo Togal.AI
 COEFICIENTES_CONSTRUCCION = {
@@ -336,6 +342,22 @@ def analizar_plano_con_ia(archivo_pdf_base64, metros_cuadrados_manual=None):
     Para PDFs, se usa análisis de texto, para superficie manual se sugiere el tipo
     """
     try:
+        if not client:  # OpenAI no disponible → devolver un resultado estimado
+            superficie_fallback = (
+                float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0
+            )
+            return {
+                "superficie_total_m2": superficie_fallback,
+                "tipo_construccion_sugerido": "Estándar",
+                "observaciones": (
+                    "OpenAI no está instalado o configurado. Se devolvió una estimación "
+                    "basada en los datos proporcionados."
+                ),
+                "confianza_analisis": 0.2 if not metros_cuadrados_manual else 0.6,
+                "superficie_origen": "manual" if metros_cuadrados_manual else "estimado",
+                "openai_disponible": False,
+            }
+
         # Si hay superficie manual, hacer análisis inteligente sin imagen
         if metros_cuadrados_manual:
             superficie_float = float(metros_cuadrados_manual)

@@ -226,6 +226,13 @@
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('account.perfil') }}">
+                                <i class="fas fa-id-badge me-2"></i>Perfil
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('account.facturacion') }}">
+                                <i class="fas fa-file-invoice-dollar me-2"></i>Facturación
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
                             </a></li>

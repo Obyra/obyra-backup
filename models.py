@@ -2,6 +2,7 @@ from datetime import datetime, date
 from flask_login import UserMixin
 from extensions import db
 from sqlalchemy import func
+from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import json
 import os
@@ -68,11 +69,44 @@ class Usuario(UserMixin, db.Model):
     
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='usuarios')
+    perfil = db.relationship(
+        'PerfilUsuario',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+    onboarding_status = db.relationship(
+        'OnboardingStatus',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+    billing_profile = db.relationship(
+        'BillingProfile',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
     obras_asignadas = db.relationship('AsignacionObra', back_populates='usuario', lazy='dynamic')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='usuario', lazy='dynamic')
     
     def __repr__(self):
         return f'<Usuario {self.nombre} {self.apellido}>'
+
+    # -----------------------------------------------------
+    # Gestión de contraseñas
+    # -----------------------------------------------------
+    def set_password(self, password: str) -> None:
+        """Genera y almacena el hash seguro de la contraseña suministrada."""
+        if not password:
+            raise ValueError('La contraseña no puede estar vacía.')
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        """Compara una contraseña en texto plano con el hash almacenado."""
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
     
     def esta_en_periodo_prueba(self):
         """Verifica si el usuario aún está en periodo de prueba"""
@@ -191,7 +225,7 @@ class Usuario(UserMixin, db.Model):
     def es_admin(self):
         """Verifica si el usuario es administrador (rol administrador o admin completo)"""
         return self.rol == 'administrador' or self.es_admin_completo()
-    
+
     def tiene_acceso_sin_restricciones(self):
         """Verifica si el usuario tiene acceso completo al sistema"""
         # Administradores especiales tienen acceso completo
@@ -205,8 +239,96 @@ class Usuario(UserMixin, db.Model):
         # Usuarios en periodo de prueba válido
         if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
             return True
-            
+
         return False
+
+    def ensure_onboarding_status(self):
+        """Garantiza que exista un registro de onboarding para el usuario."""
+        status = self.onboarding_status
+        if not status:
+            status = OnboardingStatus(usuario=self)
+            db.session.add(status)
+            db.session.flush()
+        return status
+
+    def ensure_billing_profile(self):
+        """Garantiza que exista un perfil de facturación asociado al usuario."""
+        profile = self.billing_profile
+        if not profile:
+            profile = BillingProfile(usuario=self)
+            db.session.add(profile)
+            db.session.flush()
+        return profile
+
+
+class PerfilUsuario(db.Model):
+    __tablename__ = 'perfiles_usuario'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    cuit = db.Column(db.String(20), nullable=False, unique=True)
+    direccion = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='perfil')
+
+    def __repr__(self):
+        return f'<PerfilUsuario usuario_id={self.usuario_id} cuit={self.cuit}>'
+
+
+class OnboardingStatus(db.Model):
+    __tablename__ = 'onboarding_status'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    profile_completed = db.Column(db.Boolean, default=False)
+    billing_completed = db.Column(db.Boolean, default=False)
+    completed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='onboarding_status')
+
+    def mark_profile_completed(self):
+        self.profile_completed = True
+        self._update_completion_timestamp()
+
+    def mark_billing_completed(self):
+        self.billing_completed = True
+        self._update_completion_timestamp()
+
+    def _update_completion_timestamp(self):
+        if self.profile_completed and self.billing_completed:
+            self.completed_at = datetime.utcnow()
+
+
+class BillingProfile(db.Model):
+    __tablename__ = 'billing_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    razon_social = db.Column(db.String(255))
+    tax_id = db.Column(db.String(20))
+    billing_email = db.Column(db.String(120))
+    billing_phone = db.Column(db.String(50))
+    address_line1 = db.Column(db.String(255))
+    address_line2 = db.Column(db.String(255))
+    city = db.Column(db.String(120))
+    province = db.Column(db.String(120))
+    postal_code = db.Column(db.String(20))
+    country = db.Column(db.String(100), default='Argentina')
+    stripe_customer_id = db.Column(db.String(120))
+    mercadopago_customer_id = db.Column(db.String(120))
+    cardholder_name = db.Column(db.String(120))
+    card_last4 = db.Column(db.String(4))
+    card_brand = db.Column(db.String(50))
+    card_exp_month = db.Column(db.String(2))
+    card_exp_year = db.Column(db.String(4))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='billing_profile')
 
 
 class Obra(db.Model):
@@ -1392,11 +1514,9 @@ class SupplierUser(db.Model):
         return f'<SupplierUser {self.email}>'
     
     def check_password(self, password):
-        from werkzeug.security import check_password_hash
         return check_password_hash(self.password_hash, password)
-    
+
     def set_password(self, password):
-        from werkzeug.security import generate_password_hash
         self.password_hash = generate_password_hash(password)
     
     @property
