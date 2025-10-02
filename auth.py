@@ -11,6 +11,7 @@ import os
 import re
 import uuid
 from werkzeug.routing import BuildError
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 
 def normalizar_cuit(valor: Optional[str]) -> str:
@@ -44,6 +45,8 @@ auth_bp = Blueprint('auth', __name__)
 # Configuración OAuth con Google
 oauth = OAuth()
 google = None
+
+PASSWORD_RESET_SALT = 'obyra-password-reset'
 
 # Lista blanca de emails para administradores automáticos
 ADMIN_EMAILS = [
@@ -169,6 +172,42 @@ def _post_login_destination(usuario: Usuario, next_page: Optional[str] = None) -
 
     return _resolve_dashboard_url()
 
+
+def _get_reset_serializer() -> URLSafeTimedSerializer:
+    secret_key = current_app.config.get('SECRET_KEY')
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY no está configurado, no se puede generar tokens seguros.')
+    return URLSafeTimedSerializer(secret_key)
+
+
+def _generate_reset_token(usuario: Usuario) -> str:
+    serializer = _get_reset_serializer()
+    payload = {
+        'user_id': usuario.id,
+        'email': usuario.email,
+    }
+    return serializer.dumps(payload, salt=PASSWORD_RESET_SALT)
+
+
+def _load_reset_token(token: str, max_age: int = 3600) -> Usuario:
+    serializer = _get_reset_serializer()
+    try:
+        data = serializer.loads(token, salt=PASSWORD_RESET_SALT, max_age=max_age)
+    except SignatureExpired as exc:
+        raise SignatureExpired('El enlace para restablecer la contraseña ha expirado.') from exc
+    except BadSignature as exc:
+        raise BadSignature('El enlace de restablecimiento no es válido.') from exc
+
+    user_id = data.get('user_id')
+    email = data.get('email')
+    if not user_id or not email:
+        raise BadSignature('Token de restablecimiento incompleto.')
+
+    usuario = Usuario.query.get(user_id)
+    if not usuario or usuario.email.lower() != email.lower():
+        raise BadSignature('El token no coincide con ningún usuario válido.')
+    return usuario
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     next_page = request.args.get('next') or request.form.get('next')
@@ -205,6 +244,68 @@ def login():
         form_data=form_data,
         next_value=next_page,
     )
+
+
+@auth_bp.route('/forgot', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+
+        if not email:
+            flash('Por favor, ingresa tu email para continuar.', 'warning')
+            return render_template('auth/forgot.html')
+
+        usuario = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+
+        if usuario and usuario.auth_provider == 'manual' and usuario.activo:
+            token = _generate_reset_token(usuario)
+            reset_url = url_for('auth.reset_password', token=token, _external=True)
+            if current_app.debug or current_app.config.get('ENV') == 'development':
+                print(f"🔐 Enlace de restablecimiento para {usuario.email}: {reset_url}")
+            else:
+                current_app.logger.info('Enlace de restablecimiento generado para %s: %s', usuario.email, reset_url)
+
+        flash('Si el email corresponde a una cuenta activa, te enviamos las instrucciones para restablecer la contraseña.', 'info')
+        return redirect(url_for('auth.forgot_password'))
+
+    return render_template('auth/forgot.html')
+
+
+@auth_bp.route('/reset/<token>', methods=['GET', 'POST'])
+def reset_password(token: str):
+    try:
+        usuario = _load_reset_token(token)
+    except SignatureExpired:
+        flash('El enlace ha expirado. Por favor, solicita uno nuevo.', 'warning')
+        return redirect(url_for('auth.forgot_password'))
+    except BadSignature:
+        flash('El enlace no es válido. Solicita uno nuevo para continuar.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+
+    if request.method == 'POST':
+        password = request.form.get('password') or ''
+        confirm = request.form.get('confirm_password') or ''
+
+        if not password or not confirm:
+            flash('Debes ingresar y confirmar tu nueva contraseña.', 'warning')
+            return render_template('auth/reset.html', token=token)
+
+        if password != confirm:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return render_template('auth/reset.html', token=token)
+
+        if len(password) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+            return render_template('auth/reset.html', token=token)
+
+        usuario.password_hash = generate_password_hash(password)
+        usuario.auth_provider = 'manual'
+        db.session.commit()
+
+        flash('Tu contraseña fue actualizada. Ahora puedes iniciar sesión.', 'success')
+        return redirect(url_for('auth.login'))
+
+    return render_template('auth/reset.html', token=token)
 
 @auth_bp.route('/logout')
 @login_required
