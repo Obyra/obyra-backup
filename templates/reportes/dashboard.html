@@ -13,6 +13,22 @@
             </div>
         </div>
     </div>
+
+    {% if presupuestos_vencidos and presupuestos_vencidos > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-danger shadow-sm d-flex justify-content-between align-items-center">
+                <div>
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>{{ presupuestos_vencidos }} presupuestos vencidos</strong>
+                    <div class="small mt-1">Revisá y actualizá su vigencia para mantenerlos en estado pendiente.</div>
+                </div>
+                <a href="{{ url_for('presupuestos.lista', vigencia='vencidos') }}" class="btn btn-sm btn-light">
+                    Ver presupuestos vencidos
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
     
     <!-- KPIs Principales - 4 Tarjetas Compactas -->
     <div class="row mb-4">

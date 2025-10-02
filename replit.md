@@ -10,7 +10,7 @@ After pulling the latest changes, run:
 flask db upgrade
 ```
 
-This command applies the lightweight migrations (including the new presupuesto state columns) against your local database before launching the app.
+This command applies the lightweight migrations (incluyendo las columnas de estado y vigencia de presupuestos) contra tu base local antes de lanzar la app.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

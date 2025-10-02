@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask_login import UserMixin
 from extensions import db
 from sqlalchemy import func
@@ -743,7 +743,7 @@ class ObraMiembro(db.Model):
 
 class Presupuesto(db.Model):
     __tablename__ = 'presupuestos'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)  # Ahora puede ser NULL
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
@@ -763,7 +763,9 @@ class Presupuesto(db.Model):
     perdido_motivo = db.Column(db.Text)
     perdido_fecha = db.Column(db.DateTime)
     deleted_at = db.Column(db.DateTime)
-    
+    vigencia_dias = db.Column(db.Integer, default=30)
+    fecha_vigencia = db.Column(db.Date)
+
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
     organizacion = db.relationship('Organizacion', overlaps="presupuestos")
@@ -778,6 +780,27 @@ class Presupuesto(db.Model):
         self.subtotal_equipos = sum(item.total for item in self.items if item.tipo == 'equipo')
         self.total_sin_iva = self.subtotal_materiales + self.subtotal_mano_obra + self.subtotal_equipos
         self.total_con_iva = self.total_sin_iva * (1 + self.iva_porcentaje / 100)
+        self.asegurar_vigencia()
+
+    def asegurar_vigencia(self, fecha_base=None):
+        dias = self.vigencia_dias if self.vigencia_dias and self.vigencia_dias > 0 else 30
+        self.vigencia_dias = dias
+        if fecha_base is None:
+            if self.fecha:
+                fecha_base = self.fecha
+            elif self.fecha_creacion:
+                fecha_base = self.fecha_creacion.date()
+            else:
+                fecha_base = date.today()
+        if not self.fecha_vigencia or fecha_base + timedelta(days=dias) != self.fecha_vigencia:
+            self.fecha_vigencia = fecha_base + timedelta(days=dias)
+        return self.fecha_vigencia
+
+    @property
+    def esta_vencido(self):
+        if not self.fecha_vigencia:
+            return False
+        return self.fecha_vigencia < date.today()
 
 
 class ItemPresupuesto(db.Model):
@@ -800,6 +823,16 @@ class ItemPresupuesto(db.Model):
 
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'
+
+
+@db.event.listens_for(Presupuesto, 'before_insert')
+def _presupuesto_before_insert(mapper, connection, target):
+    target.asegurar_vigencia()
+
+
+@db.event.listens_for(Presupuesto, 'before_update')
+def _presupuesto_before_update(mapper, connection, target):
+    target.asegurar_vigencia()
 
 
 class CategoriaInventario(db.Model):

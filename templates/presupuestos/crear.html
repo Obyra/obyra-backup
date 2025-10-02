@@ -34,6 +34,7 @@
                 <div class="card-body">
                     <form id="nuevoPresupuestoForm" method="POST" enctype="multipart/form-data">
                         <input type="hidden" id="iaEtapasPayload" name="ia_etapas_payload">
+                        <input type="hidden" id="presupuestoIdInput" name="presupuesto_id" value="{{ presupuesto.id if presupuesto is defined and presupuesto else '' }}">
                         
                         <!-- Primera fila: Nombre y Tipo de Obra -->
                         <div class="row mb-4">
@@ -398,6 +399,11 @@
 </div>
 
 <script>
+const hiddenPresupuestoIdInput = document.getElementById('presupuestoIdInput');
+if (typeof window !== 'undefined') {
+    window.PRESUPUESTO_ID = hiddenPresupuestoIdInput ? (hiddenPresupuestoIdInput.value || null) : null;
+}
+
 const currencyFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
 
 let datosCalculoIA = null;
@@ -709,6 +715,7 @@ function solicitarCalculoEtapas(etapas) {
                 document.getElementById('resultadoEtapasIAContenido').innerHTML = `<div class="alert alert-danger mb-0">${mensaje}</div>`;
                 return;
             }
+            data.parametros_contexto = payload.parametros_contexto;
             resultadoEtapasIA = data;
             renderResultadoEtapasIA(data);
         })
@@ -809,10 +816,47 @@ function aplicarResultadosEtapasIA() {
         }
     });
 
+    if (presupuestoId) {
+        const persistPayload = {
+            etapa_ids: (resultadoEtapasIA.etapas || []).map(etapa => ({
+                slug: etapa.slug || slugifyEtapa(etapa.nombre),
+                nombre: etapa.nombre,
+                id: etapa.etapa_id || etapa.id || null
+            })),
+            superficie_m2: resultadoEtapasIA.superficie_usada || parseFloat(document.getElementById('superficie_m2').value || '0'),
+            tipo_calculo: resultadoEtapasIA.tipo_calculo || document.getElementById('tipo_construccion').value || 'Estándar',
+            parametros_contexto: resultadoEtapasIA.parametros_contexto || {},
+            presupuesto_id: presupuestoId,
+            persistir: true
+        };
+
+        fetch('/presupuestos/ia/calcular/etapas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(persistPayload)
+        })
+            .then(resp => resp.json())
+            .then(respuesta => {
+                if (!respuesta || respuesta.ok === false) {
+                    console.error('No se pudo guardar el cálculo IA en el presupuesto existente:', respuesta);
+                    alert(respuesta && respuesta.error ? respuesta.error : 'No pudimos guardar los ítems calculados. Intentalo nuevamente.');
+                } else {
+                    console.log('🧾 Resultados IA guardados en presupuesto', respuesta);
+                }
+            })
+            .catch(error => {
+                console.error('Error persistiendo resultados IA:', error);
+            });
+    }
+
     actualizarVistaEtapas();
     const modal = bootstrap.Modal.getInstance(document.getElementById('modalResultadoEtapasIA'));
     if (modal) modal.hide();
-    alert('Se aplicaron los resultados de IA. Se guardarán al crear el presupuesto.');
+    if (presupuestoId) {
+        alert('Se aplicaron los resultados de IA y se guardaron en el presupuesto.');
+    } else {
+        alert('Se aplicaron los resultados de IA. Se guardarán al crear el presupuesto.');
+    }
 }
 
 function mostrarArchivoPlano() {

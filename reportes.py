@@ -54,6 +54,24 @@ def dashboard():
     presupuestos_recientes = Presupuesto.query.filter(
         Presupuesto.organizacion_id == current_user.organizacion_id
     ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
+
+    presupuestos_expirados = Presupuesto.query.filter(
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None),
+        Presupuesto.fecha_vigencia.isnot(None),
+        Presupuesto.fecha_vigencia < date.today(),
+    ).all()
+
+    cambios_estado = 0
+    for presupuesto in presupuestos_expirados:
+        if presupuesto.estado not in ['vencido', 'convertido', 'eliminado']:
+            presupuesto.estado = 'vencido'
+            cambios_estado += 1
+
+    if cambios_estado:
+        db.session.commit()
+
+    presupuestos_vencidos = len(presupuestos_expirados)
     
     # Items con stock bajo  
     items_stock_bajo = ItemInventario.query.filter(
@@ -100,7 +118,8 @@ def dashboard():
                          eventos_recientes=eventos_recientes,
                          alertas=alertas,
                          fecha_desde=fecha_desde,
-                         fecha_hasta=fecha_hasta)
+                         fecha_hasta=fecha_hasta,
+                         presupuestos_vencidos=presupuestos_vencidos)
 
 def calcular_kpis(fecha_desde, fecha_hasta):
     """Calcula los KPIs principales del dashboard"""

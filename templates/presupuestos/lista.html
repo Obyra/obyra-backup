@@ -35,17 +35,26 @@
                         <option value="aprobado" {{ 'selected' if estado == 'aprobado' }}>Aprobado</option>
                         <option value="rechazado" {{ 'selected' if estado == 'rechazado' }}>Rechazado</option>
                         <option value="perdido" {{ 'selected' if estado == 'perdido' }}>Perdido</option>
+                        <option value="vencido" {{ 'selected' if estado == 'vencido' }}>Vencido</option>
                         {% if current_user.rol == 'administrador' %}
                         <option value="eliminado" {{ 'selected' if estado == 'eliminado' }}>Eliminado</option>
                         {% endif %}
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-3">
+                    <label for="vigencia" class="form-label">Vigencia</label>
+                    <select class="form-select" id="vigencia" name="vigencia">
+                        <option value="">Todas</option>
+                        <option value="por_vencer" {{ 'selected' if vigencia == 'por_vencer' }}>Por vencer (7 días)</option>
+                        <option value="vencidos" {{ 'selected' if vigencia == 'vencidos' }}>Vencidos</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
                     <label for="buscar" class="form-label">Buscar</label>
-                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                    <input type="text" class="form-control" id="buscar" name="buscar"
                            value="{{ buscar }}" placeholder="Número, obra o cliente...">
                 </div>
-                <div class="col-md-3 d-flex align-items-end">
+                <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-outline-primary me-2">
                         <i class="fas fa-search me-1"></i>Filtrar
                     </button>
@@ -96,6 +105,16 @@
                         {% endif %}
                         <p class="text-muted mb-3">
                             <i class="fas fa-calendar me-1"></i>{{ presupuesto.fecha|fecha }}
+                            {% if presupuesto.fecha_vigencia %}
+                                <span class="ms-2 {{ 'text-danger fw-bold' if presupuesto.esta_vencido else 'text-secondary' }}">
+                                    <i class="fas fa-hourglass-half me-1"></i>
+                                    {% if presupuesto.esta_vencido %}
+                                        Vencido el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                        Vence el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                                    {% endif %}
+                                </span>
+                            {% endif %}
                         </p>
                         
                         <div class="row text-center mb-3">

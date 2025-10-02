@@ -1,5 +1,6 @@
 from app import db
 import os
+from datetime import date, timedelta
 from flask import current_app
 from sqlalchemy import inspect
 
@@ -155,4 +156,65 @@ def ensure_item_presupuesto_stage_columns():
             os.remove(sentinel)
         if current_app:
             current_app.logger.exception('❌ Migration failed: item presupuesto stage columns')
+        raise
+
+
+def ensure_presupuesto_validity_columns():
+    """Ensure presupuesto vigencia columns exist and are populated."""
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250318_presupuesto_validity.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    try:
+        engine = db.engine
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('presupuestos')}
+            except Exception:
+                columns = set()
+
+            statements = []
+
+            if 'vigencia_dias' not in columns:
+                default_clause = "INTEGER DEFAULT 30" if engine.url.get_backend_name() != 'postgresql' else "INTEGER DEFAULT 30"
+                statements.append(f"ALTER TABLE presupuestos ADD COLUMN vigencia_dias {default_clause}")
+
+            if 'fecha_vigencia' not in columns:
+                statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
+
+            for stmt in statements:
+                conn.exec_driver_sql(stmt)
+
+            rows = conn.exec_driver_sql("SELECT id, fecha, vigencia_dias FROM presupuestos").fetchall()
+
+            update_sqlite = "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ? WHERE id = ?"
+            update_pg = "UPDATE presupuestos SET vigencia_dias = %s, fecha_vigencia = %s WHERE id = %s"
+
+            for presupuesto_id, fecha_valor, vigencia_valor in rows:
+                dias = vigencia_valor if vigencia_valor and vigencia_valor > 0 else 30
+                if not fecha_valor:
+                    fecha_base = date.today()
+                elif isinstance(fecha_valor, str):
+                    fecha_base = date.fromisoformat(fecha_valor)
+                else:
+                    fecha_base = fecha_valor
+                fecha_vigencia = fecha_base + timedelta(days=dias)
+
+                update_sql = update_pg if engine.url.get_backend_name() == 'postgresql' else update_sqlite
+                conn.exec_driver_sql(update_sql, (dias, fecha_vigencia, presupuesto_id))
+
+        with open(sentinel, 'w') as f:
+            f.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: presupuesto validity columns ensured')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: presupuesto validity columns')
         raise

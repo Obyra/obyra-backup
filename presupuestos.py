@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app
 from flask_login import login_required, current_user
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 import importlib.util
 import json
@@ -73,6 +73,92 @@ def _parse_date(value: Any) -> Optional[date]:
             continue
     return None
 
+
+def _persistir_resultados_etapas(presupuesto: Presupuesto, etapas_resultado: list, superficie: float, tipo_calculo: str):
+    """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
+
+    if not etapas_resultado:
+        return False, 'Sin etapas para aplicar'
+
+    obra = presupuesto.obra
+    slug_a_etapa = {}
+    orden_base = 0
+    if obra:
+        etapas_existentes = obra.etapas.order_by(EtapaObra.orden.asc()).all()
+        slug_a_etapa = {slugify_etapa(e.nombre): e for e in etapas_existentes}
+        orden_base = len(etapas_existentes)
+
+    hubo_cambios = False
+
+    for index, etapa_data in enumerate(etapas_resultado, start=1):
+        slug = slugify_etapa(etapa_data.get('slug') or etapa_data.get('nombre') or f'etapa-{index}')
+        etapa_modelo = slug_a_etapa.get(slug)
+
+        if obra and not etapa_modelo:
+            etapa_modelo = EtapaObra(
+                obra_id=obra.id,
+                nombre=etapa_data.get('nombre') or f'Etapa {index}',
+                descripcion=etapa_data.get('notas') or f'Etapa generada automáticamente ({tipo_calculo})',
+                orden=orden_base + index,
+                estado='pendiente',
+            )
+            db.session.add(etapa_modelo)
+            db.session.flush()
+            slug_a_etapa[slug] = etapa_modelo
+            hubo_cambios = True
+
+        query = ItemPresupuesto.query.filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id,
+            ItemPresupuesto.origen == 'ia',
+        )
+        if etapa_modelo:
+            query = query.filter(ItemPresupuesto.etapa_id == etapa_modelo.id)
+        else:
+            query = query.filter(ItemPresupuesto.etapa_id.is_(None))
+
+        eliminados = query.delete(synchronize_session=False)
+        if eliminados:
+            hubo_cambios = True
+
+        for item_data in etapa_data.get('items', []):
+            tipo_item = (item_data.get('tipo') or 'material').strip().lower()
+            if tipo_item not in {'material', 'mano_obra', 'equipo', 'herramienta'}:
+                tipo_item = 'material'
+
+            try:
+                cantidad = float(item_data.get('cantidad') or 0)
+            except (TypeError, ValueError):
+                cantidad = 0.0
+
+            try:
+                precio_unitario = float(item_data.get('precio_unit') or 0)
+            except (TypeError, ValueError):
+                precio_unitario = 0.0
+
+            nuevo_item = ItemPresupuesto(
+                presupuesto_id=presupuesto.id,
+                tipo=tipo_item,
+                descripcion=item_data.get('descripcion') or f'Ítem {tipo_item} etapa {etapa_data.get("nombre") or index}',
+                unidad=item_data.get('unidad') or 'unidades',
+                cantidad=cantidad,
+                precio_unitario=precio_unitario,
+                total=cantidad * precio_unitario,
+                origen='ia',
+            )
+
+            if etapa_modelo:
+                nuevo_item.etapa_id = etapa_modelo.id
+
+            db.session.add(nuevo_item)
+            hubo_cambios = True
+
+    if hubo_cambios:
+        presupuesto.calcular_totales()
+        db.session.add(presupuesto)
+
+    return hubo_cambios, None
+
+
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
 @presupuestos_bp.route('/')
@@ -83,6 +169,7 @@ def lista():
         return redirect(url_for('reportes.dashboard'))
     
     estado = request.args.get('estado', '')
+    vigencia = request.args.get('vigencia', '')
     if estado == 'eliminado' and current_user.rol != 'administrador':
         estado = ''
     incluir_eliminados = estado == 'eliminado'
@@ -104,6 +191,21 @@ def lista():
     elif not incluir_eliminados:
         query = query.filter(Presupuesto.estado != 'eliminado')
     
+    if vigencia == 'vencidos':
+        query = query.filter(
+            Presupuesto.fecha_vigencia.isnot(None),
+            Presupuesto.fecha_vigencia < date.today(),
+            Presupuesto.estado.in_(['borrador', 'perdido', 'enviado', 'rechazado', 'vencido'])
+        )
+    elif vigencia == 'por_vencer':
+        limite = date.today() + timedelta(days=7)
+        query = query.filter(
+            Presupuesto.fecha_vigencia.isnot(None),
+            Presupuesto.fecha_vigencia >= date.today(),
+            Presupuesto.fecha_vigencia <= limite,
+            Presupuesto.estado.in_(['borrador', 'enviado'])
+        )
+
     if buscar:
         query = query.filter(
             db.or_(
@@ -113,13 +215,14 @@ def lista():
                 Obra.cliente.contains(buscar) if Obra.cliente else False
             )
         )
-    
+
     presupuestos = query.order_by(Presupuesto.fecha_creacion.desc()).all()
-    
-    return render_template('presupuestos/lista.html', 
-                         presupuestos=presupuestos, 
-                         estado=estado, 
-                         buscar=buscar)
+
+    return render_template('presupuestos/lista.html',
+                         presupuestos=presupuestos,
+                         estado=estado,
+                         buscar=buscar,
+                         vigencia=vigencia)
 
 
 @presupuestos_bp.route('/crear', methods=['GET', 'POST'])
@@ -217,7 +320,13 @@ def crear():
             nuevo_presupuesto.numero = numero
             nuevo_presupuesto.iva_porcentaje = 21.0  # Fijo según lo solicitado
             nuevo_presupuesto.organizacion_id = current_user.organizacion_id
-            
+            vigencia_form = request.form.get('vigencia_dias')
+            try:
+                nuevo_presupuesto.vigencia_dias = int(vigencia_form) if vigencia_form else 30
+            except (TypeError, ValueError):
+                nuevo_presupuesto.vigencia_dias = 30
+            nuevo_presupuesto.asegurar_vigencia()
+
             # Agregar observaciones con detalles del proyecto
             observaciones_proyecto = []
             observaciones_proyecto.append(f"Tipo de obra: {tipo_obra.replace('_', ' ').title()}")
@@ -259,8 +368,7 @@ def crear():
                     nombre=etapa_nombre,
                     descripcion=etapa_descripcion,
                     orden=orden_int,
-                    estado='pendiente',
-                    organizacion_id=current_user.organizacion_id
+                    estado='pendiente'
                 )
 
                 db.session.add(nueva_etapa)
@@ -310,6 +418,8 @@ def crear():
                         db.session.add(nuevo_item)
 
                 nuevo_presupuesto.calcular_totales()
+            else:
+                nuevo_presupuesto.asegurar_vigencia()
 
             db.session.commit()
 
@@ -407,6 +517,7 @@ def calcular_etapas_ia():
     tipo_calculo = data.get('tipo_calculo') or data.get('tipo_construccion') or 'Estándar'
     contexto = data.get('parametros_contexto') or {}
     presupuesto_id = data.get('presupuesto_id')
+    persistir = bool(data.get('persistir'))
 
     if superficie is None:
         return jsonify({'ok': False, 'error': 'Debes indicar la superficie en m² para calcular.'}), 400
@@ -429,6 +540,55 @@ def calcular_etapas_ia():
     resultado['tipo_calculo'] = tipo_calculo
     resultado['ok'] = True
     resultado['presupuesto_id'] = presupuesto_id
+    resultado['parametros_contexto'] = contexto
+
+    if presupuesto_id and persistir:
+        presupuesto = Presupuesto.query.filter_by(
+            id=presupuesto_id,
+            organizacion_id=current_user.organizacion_id,
+        ).first()
+
+        if not presupuesto:
+            return jsonify({'ok': False, 'error': 'No encontramos el presupuesto indicado para aplicar los resultados.'}), 404
+
+        total_antes = float(presupuesto.total_con_iva or 0)
+
+        try:
+            cambios, _ = _persistir_resultados_etapas(
+                presupuesto,
+                resultado.get('etapas', []),
+                float(superficie),
+                tipo_calculo,
+            )
+            if cambios:
+                db.session.commit()
+                total_despues = float(presupuesto.total_con_iva or 0)
+                resultado['guardado'] = True
+                resultado['total_actualizado'] = {
+                    'antes': total_antes,
+                    'despues': total_despues,
+                }
+                current_app.logger.info(
+                    '💾 Etapas IA aplicadas al presupuesto',
+                    extra={
+                        'usuario_id': current_user.id,
+                        'organizacion_id': current_user.organizacion_id,
+                        'presupuesto_id': presupuesto.id,
+                        'etapas': [e.get('slug') or e.get('nombre') for e in (resultado.get('etapas') or [])],
+                        'total_antes': total_antes,
+                        'total_despues': total_despues,
+                        'superficie': float(superficie),
+                        'tipo_calculo': tipo_calculo,
+                    },
+                )
+            else:
+                db.session.rollback()
+                resultado['guardado'] = False
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Error persistiendo resultados de etapas IA en presupuesto')
+            return jsonify({'ok': False, 'error': 'El cálculo se generó pero no pudimos guardarlo en el presupuesto.'}), 500
+
     current_app.logger.info(
         '🧠 IA etapas calculada',
         extra={
@@ -491,6 +651,12 @@ def crear_desde_ia():
         nuevo_presupuesto.confirmado_como_obra = False
         nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto)  # Guardar datos para posterior conversión
         nuevo_presupuesto.organizacion_id = current_user.organizacion_id
+        vigencia_config = datos_proyecto.get('vigencia_dias') if isinstance(datos_proyecto, dict) else None
+        try:
+            nuevo_presupuesto.vigencia_dias = int(vigencia_config) if vigencia_config else 30
+        except (TypeError, ValueError):
+            nuevo_presupuesto.vigencia_dias = 30
+        nuevo_presupuesto.asegurar_vigencia()
         
         db.session.add(nuevo_presupuesto)
         db.session.flush()  # Para obtener el ID

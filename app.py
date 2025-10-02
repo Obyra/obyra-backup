@@ -70,11 +70,13 @@ def db_upgrade():
             ensure_avance_audit_columns,
             ensure_presupuesto_state_columns,
             ensure_item_presupuesto_stage_columns,
+            ensure_presupuesto_validity_columns,
         )
 
         ensure_avance_audit_columns()
         ensure_presupuesto_state_columns()
         ensure_item_presupuesto_stage_columns()
+        ensure_presupuesto_validity_columns()
 
     click.echo('✅ Database upgraded successfully.')
 
@@ -264,6 +266,7 @@ def estado_badge_filter(estado):
         'aprobado': 'bg-success',
         'rechazado': 'bg-danger',
         'perdido': 'bg-dark',
+        'vencido': 'bg-danger',
         'eliminado': 'bg-dark',
         'planificacion': 'bg-secondary',
         'en_progreso': 'bg-primary',
@@ -306,10 +309,12 @@ with app.app_context():
         ensure_avance_audit_columns,
         ensure_presupuesto_state_columns,
         ensure_item_presupuesto_stage_columns,
+        ensure_presupuesto_validity_columns,
     )
     ensure_avance_audit_columns()
     ensure_presupuesto_state_columns()
     ensure_item_presupuesto_stage_columns()
+    ensure_presupuesto_validity_columns()
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
     try:
