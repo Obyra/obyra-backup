@@ -11,7 +11,8 @@
             <p class="text-muted">Define una nueva contraseña para tu cuenta</p>
         </div>
 
-        <form method="POST" class="auth-form">
+        <form method="POST" class="auth-form" action="{{ submit_url }}">
+            <input type="hidden" name="portal" value="{{ portal }}">
             <div class="mb-3">
                 <label for="password" class="form-label">Nueva contraseña</label>
                 <div class="input-group">
@@ -42,7 +43,7 @@
         </form>
 
         <div class="mt-4 text-center">
-            <a href="{{ url_for('auth.login') }}" class="auth-link">Volver al inicio de sesión</a>
+            <a href="{{ back_url }}" class="auth-link">Volver al inicio de sesión</a>
         </div>
     </div>
 </div>

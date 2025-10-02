@@ -2,10 +2,10 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
 from extensions import db
-from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus
+from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser
 from sqlalchemy import func
 from datetime import datetime
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union, Any
 import os
 import re
 import uuid
@@ -46,6 +46,35 @@ oauth = OAuth()
 google = None
 
 PASSWORD_RESET_SALT = 'obyra-password-reset'
+
+ResettableAccount = Union[Usuario, SupplierUser]
+
+
+def _normalize_portal(portal: Optional[str]) -> str:
+    if not portal:
+        return 'user'
+    portal_value = portal.lower()
+    if portal_value in {'supplier', 'proveedor', 'supplier_portal'}:
+        return 'supplier'
+    return 'user'
+
+
+def _portal_login_endpoint(portal: str) -> str:
+    return 'supplier_auth.login' if portal == 'supplier' else 'auth.login'
+
+
+def _portal_label_for_account(account: ResettableAccount) -> str:
+    return 'supplier' if isinstance(account, SupplierUser) else 'user'
+
+
+def _extract_portal_from_payload(payload: Optional[Any]) -> str:
+    if isinstance(payload, dict):
+        return _normalize_portal(payload.get('portal'))
+    return 'user'
+
+
+def _forgot_url_for_portal(portal: str) -> str:
+    return url_for('auth.forgot_password', portal=portal) if portal == 'supplier' else url_for('auth.forgot_password')
 
 # Lista blanca de emails para administradores automáticos
 ADMIN_EMAILS = [
@@ -179,33 +208,52 @@ def _get_reset_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(secret_key)
 
 
-def _generate_reset_token(usuario: Usuario) -> str:
+def _generate_reset_token(account: ResettableAccount, portal: str) -> str:
     serializer = _get_reset_serializer()
     payload = {
-        'user_id': usuario.id,
-        'email': usuario.email,
+        'account_id': account.id,
+        'email': account.email,
+        'account_type': _portal_label_for_account(account),
+        'portal': _normalize_portal(portal),
     }
+    # Include legacy key for backwards compatibility with older tokens
+    payload['user_id'] = payload['account_id']
     return serializer.dumps(payload, salt=PASSWORD_RESET_SALT)
 
 
-def _load_reset_token(token: str, max_age: int = 3600) -> Usuario:
+def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccount, str]:
     serializer = _get_reset_serializer()
     try:
         data = serializer.loads(token, salt=PASSWORD_RESET_SALT, max_age=max_age)
     except SignatureExpired as exc:
-        raise SignatureExpired('El enlace para restablecer la contraseña ha expirado.') from exc
+        payload = getattr(exc, 'payload', None)
+        new_exc = SignatureExpired('El enlace para restablecer la contraseña ha expirado.')
+        setattr(new_exc, 'payload', payload)
+        raise new_exc from exc
     except BadSignature as exc:
-        raise BadSignature('El enlace de restablecimiento no es válido.') from exc
+        payload = getattr(exc, 'payload', None)
+        new_exc = BadSignature('El enlace de restablecimiento no es válido.')
+        setattr(new_exc, 'payload', payload)
+        raise new_exc from exc
 
-    user_id = data.get('user_id')
+    account_id = data.get('account_id') or data.get('user_id')
     email = data.get('email')
-    if not user_id or not email:
+    account_type = data.get('account_type', 'user')
+    portal = _normalize_portal(data.get('portal'))
+
+    if not account_id or not email:
         raise BadSignature('Token de restablecimiento incompleto.')
 
-    usuario = Usuario.query.get(user_id)
-    if not usuario or usuario.email.lower() != email.lower():
-        raise BadSignature('El token no coincide con ningún usuario válido.')
-    return usuario
+    account: Optional[ResettableAccount]
+    if account_type == 'supplier':
+        account = SupplierUser.query.get(account_id)
+    else:
+        account = Usuario.query.get(account_id)
+
+    if not account or account.email.lower() != email.lower():
+        raise BadSignature('El token no coincide con ninguna cuenta válida.')
+
+    return account, portal
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -247,36 +295,64 @@ def login():
 
 @auth_bp.route('/forgot', methods=['GET', 'POST'])
 def forgot_password():
+    portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
+    submit_url = url_for('auth.forgot_password', portal=portal) if portal != 'user' else url_for('auth.forgot_password')
+    back_url = url_for(_portal_login_endpoint(portal))
+
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
 
         if not email:
             flash('Por favor, ingresa tu email para continuar.', 'warning')
-            return render_template('auth/forgot.html')
+            return render_template('auth/forgot.html', portal=portal, submit_url=submit_url, back_url=back_url)
 
-        usuario = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+        account: Optional[ResettableAccount] = None
+        if portal == 'supplier':
+            account = SupplierUser.query.filter(func.lower(SupplierUser.email) == email).first()
+            if account and not account.activo:
+                account = None
+        else:
+            account = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+            if account and (account.auth_provider not in (None, 'manual') or not account.activo):
+                account = None
 
-        if usuario and usuario.auth_provider == 'manual' and usuario.activo:
-            token = _generate_reset_token(usuario)
-            reset_url = url_for('auth.reset_password', token=token, _external=True)
-            _deliver_reset_link(usuario, reset_url)
+        if account:
+            token = _generate_reset_token(account, portal)
+            reset_kwargs = {'token': token, '_external': True}
+            if portal != 'user':
+                reset_kwargs['portal'] = portal
+            reset_url = url_for('auth.reset_password', **reset_kwargs)
+            _deliver_reset_link(account, reset_url, portal)
 
         flash('Si el email corresponde a una cuenta activa, te enviamos las instrucciones para restablecer la contraseña.', 'info')
-        return redirect(url_for('auth.forgot_password'))
+        return redirect(submit_url)
 
-    return render_template('auth/forgot.html')
+    return render_template('auth/forgot.html', portal=portal, submit_url=submit_url, back_url=back_url)
 
 
 @auth_bp.route('/reset/<token>', methods=['GET', 'POST'])
 def reset_password(token: str):
+    requested_portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
+
     try:
-        usuario = _load_reset_token(token)
-    except SignatureExpired:
+        account, token_portal = _load_reset_token(token)
+        portal = token_portal or requested_portal
+    except SignatureExpired as exc:
+        portal = _extract_portal_from_payload(getattr(exc, 'payload', None)) or requested_portal
         flash('El enlace ha expirado. Por favor, solicita uno nuevo.', 'warning')
-        return redirect(url_for('auth.forgot_password'))
-    except BadSignature:
+        return redirect(_forgot_url_for_portal(portal))
+    except BadSignature as exc:
+        portal = _extract_portal_from_payload(getattr(exc, 'payload', None)) or requested_portal
         flash('El enlace no es válido. Solicita uno nuevo para continuar.', 'danger')
-        return redirect(url_for('auth.forgot_password'))
+        return redirect(_forgot_url_for_portal(portal))
+
+    def render_form() -> Any:
+        submit_kwargs = {'token': token}
+        if portal != 'user':
+            submit_kwargs['portal'] = portal
+        submit_url = url_for('auth.reset_password', **submit_kwargs)
+        back_url = url_for(_portal_login_endpoint(portal))
+        return render_template('auth/reset.html', token=token, portal=portal, submit_url=submit_url, back_url=back_url)
 
     if request.method == 'POST':
         password = request.form.get('password') or ''
@@ -284,24 +360,25 @@ def reset_password(token: str):
 
         if not password or not confirm:
             flash('Debes ingresar y confirmar tu nueva contraseña.', 'warning')
-            return render_template('auth/reset.html', token=token)
+            return render_form()
 
         if password != confirm:
             flash('Las contraseñas no coinciden.', 'danger')
-            return render_template('auth/reset.html', token=token)
+            return render_form()
 
         if len(password) < 6:
             flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
-            return render_template('auth/reset.html', token=token)
+            return render_form()
 
-        usuario.set_password(password)
-        usuario.auth_provider = 'manual'
+        account.set_password(password)
+        if isinstance(account, Usuario):
+            account.auth_provider = 'manual'
         db.session.commit()
 
         flash('Tu contraseña fue actualizada. Ahora puedes iniciar sesión.', 'success')
-        return redirect(url_for('auth.login'))
+        return redirect(url_for(_portal_login_endpoint(portal)))
 
-    return render_template('auth/reset.html', token=token)
+    return render_form()
 
 @auth_bp.route('/logout')
 @login_required
@@ -873,20 +950,22 @@ def aceptar_invitacion():
             flash('Error al procesar la invitación.', 'danger')
     
     return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
-def _deliver_reset_link(usuario: Usuario, reset_url: str) -> None:
+def _deliver_reset_link(account: ResettableAccount, reset_url: str, portal: str) -> None:
     """Envía o registra el enlace de reseteo usando el canal configurado."""
     delivery_mode = current_app.config.get('PASSWORD_RESET_DELIVERY', 'email')
+    portal = _normalize_portal(portal)
+    email = getattr(account, 'email', 'cuenta')
 
     if current_app.debug or current_app.config.get('ENV') == 'development':
-        print(f"🔐 Enlace de restablecimiento para {usuario.email}: {reset_url}")
+        print(f"🔐 Enlace de restablecimiento ({portal}) para {email}: {reset_url}")
         return
 
     if delivery_mode == 'email':
-        current_app.logger.info('Enlace de restablecimiento generado para %s: %s', usuario.email, reset_url)
+        current_app.logger.info('Enlace de restablecimiento generado para %s (%s): %s', email, portal, reset_url)
     else:
         current_app.logger.info(
             'Password reset link for %s via %s pending integration: %s',
-            usuario.email,
+            email,
             delivery_mode,
             reset_url,
         )
