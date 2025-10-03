@@ -185,16 +185,30 @@ def ensure_presupuesto_validity_columns():
             if 'fecha_vigencia' not in columns:
                 statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
 
+            if 'vigencia_bloqueada' not in columns:
+                default_bool = 'BOOLEAN DEFAULT 1' if engine.url.get_backend_name() != 'postgresql' else 'BOOLEAN DEFAULT TRUE'
+                statements.append(f"ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada {default_bool}")
+
             for stmt in statements:
                 conn.exec_driver_sql(stmt)
 
-            rows = conn.exec_driver_sql("SELECT id, fecha, vigencia_dias FROM presupuestos").fetchall()
+            rows = conn.exec_driver_sql(
+                "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, 1) FROM presupuestos"
+            ).fetchall()
 
-            update_sqlite = "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ? WHERE id = ?"
-            update_pg = "UPDATE presupuestos SET vigencia_dias = %s, fecha_vigencia = %s WHERE id = %s"
+            update_sqlite = (
+                "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ?, vigencia_bloqueada = ? WHERE id = ?"
+            )
+            update_pg = (
+                "UPDATE presupuestos SET vigencia_dias = %s, fecha_vigencia = %s, vigencia_bloqueada = %s WHERE id = %s"
+            )
 
-            for presupuesto_id, fecha_valor, vigencia_valor in rows:
+            for presupuesto_id, fecha_valor, vigencia_valor, bloqueada in rows:
                 dias = vigencia_valor if vigencia_valor and vigencia_valor > 0 else 30
+                if dias < 1:
+                    dias = 1
+                elif dias > 180:
+                    dias = 180
                 if not fecha_valor:
                     fecha_base = date.today()
                 elif isinstance(fecha_valor, str):
@@ -204,7 +218,7 @@ def ensure_presupuesto_validity_columns():
                 fecha_vigencia = fecha_base + timedelta(days=dias)
 
                 update_sql = update_pg if engine.url.get_backend_name() == 'postgresql' else update_sqlite
-                conn.exec_driver_sql(update_sql, (dias, fecha_vigencia, presupuesto_id))
+                conn.exec_driver_sql(update_sql, (dias, fecha_vigencia, bool(bloqueada), presupuesto_id))
 
         with open(sentinel, 'w') as f:
             f.write('ok')

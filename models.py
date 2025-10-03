@@ -2,7 +2,7 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask_login import UserMixin
 from extensions import db
-from sqlalchemy import func
+from sqlalchemy import func, inspect
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import json
@@ -766,6 +766,7 @@ class Presupuesto(db.Model):
     deleted_at = db.Column(db.DateTime)
     vigencia_dias = db.Column(db.Integer, default=30)
     fecha_vigencia = db.Column(db.Date)
+    vigencia_bloqueada = db.Column(db.Boolean, nullable=False, default=True)
 
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
@@ -809,7 +810,12 @@ class Presupuesto(db.Model):
 
     def asegurar_vigencia(self, fecha_base=None):
         dias = self.vigencia_dias if self.vigencia_dias and self.vigencia_dias > 0 else 30
-        self.vigencia_dias = dias
+        if dias < 1:
+            dias = 1
+        elif dias > 180:
+            dias = 180
+        if self.vigencia_dias != dias:
+            self.vigencia_dias = dias
         if fecha_base is None:
             if self.fecha:
                 fecha_base = self.fecha
@@ -826,6 +832,36 @@ class Presupuesto(db.Model):
         if not self.fecha_vigencia:
             return False
         return self.fecha_vigencia < date.today()
+
+    @property
+    def dias_restantes_vigencia(self):
+        if not self.fecha_vigencia:
+            return None
+        return (self.fecha_vigencia - date.today()).days
+
+    @property
+    def estado_vigencia(self):
+        dias = self.dias_restantes_vigencia
+        if dias is None:
+            return None
+        if dias < 0:
+            return 'vencido'
+        if dias <= 3:
+            return 'critico'
+        if dias <= 15:
+            return 'alerta'
+        return 'normal'
+
+    @property
+    def clase_vigencia_badge(self):
+        estado = self.estado_vigencia
+        mapping = {
+            'critico': 'bg-danger text-white',
+            'alerta': 'bg-warning text-dark',
+            'normal': 'bg-success text-white',
+            'vencido': 'bg-secondary text-white',
+        }
+        return mapping.get(estado, 'bg-secondary text-white')
 
 
 class ItemPresupuesto(db.Model):
@@ -852,12 +888,23 @@ class ItemPresupuesto(db.Model):
 
 @db.event.listens_for(Presupuesto, 'before_insert')
 def _presupuesto_before_insert(mapper, connection, target):
+    if target.vigencia_bloqueada is None:
+        target.vigencia_bloqueada = True
     target.asegurar_vigencia()
 
 
 @db.event.listens_for(Presupuesto, 'before_update')
 def _presupuesto_before_update(mapper, connection, target):
-    target.asegurar_vigencia()
+    state = inspect(target)
+    if target.vigencia_bloqueada:
+        cambios_vigencia = (
+            state.attrs['vigencia_dias'].history.has_changes()
+            or state.attrs['fecha_vigencia'].history.has_changes()
+        )
+        if cambios_vigencia:
+            raise ValueError('La vigencia del presupuesto está bloqueada y no puede modificarse.')
+    else:
+        target.asegurar_vigencia()
 
 
 class CategoriaInventario(db.Model):

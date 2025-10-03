@@ -106,12 +106,15 @@
                         <p class="text-muted mb-3">
                             <i class="fas fa-calendar me-1"></i>{{ presupuesto.fecha|fecha }}
                             {% if presupuesto.fecha_vigencia %}
-                                <span class="ms-2 {{ 'text-danger fw-bold' if presupuesto.esta_vencido else 'text-secondary' }}">
-                                    <i class="fas fa-hourglass-half me-1"></i>
+                                {% set dias_restantes = presupuesto.dias_restantes_vigencia %}
+                                <span class="badge {{ presupuesto.clase_vigencia_badge }} ms-2">
                                     {% if presupuesto.esta_vencido %}
-                                        Vencido el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Vencido el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
                                     {% else %}
-                                        Vence el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                                        <i class="fas fa-hourglass-half me-1"></i>{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                                        {% if dias_restantes is not none %}
+                                            <span class="ms-1">(faltan {{ dias_restantes }} días)</span>
+                                        {% endif %}
                                     {% endif %}
                                 </span>
                             {% endif %}

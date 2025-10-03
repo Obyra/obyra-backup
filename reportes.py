@@ -72,8 +72,40 @@ def dashboard():
         db.session.commit()
 
     presupuestos_vencidos = len(presupuestos_expirados)
-    
-    # Items con stock bajo  
+
+    vigencia_alertas = {
+        'criticos': [],
+        'proximos': [],
+        'seguimiento': [],
+    }
+
+    presupuestos_monitoreo = Presupuesto.query.filter(
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None),
+        Presupuesto.fecha_vigencia.isnot(None),
+        Presupuesto.estado.in_(['borrador', 'enviado', 'rechazado'])
+    ).all()
+
+    for presupuesto in presupuestos_monitoreo:
+        dias = presupuesto.dias_restantes_vigencia
+        if dias is None:
+            continue
+        if dias < 0:
+            continue  # Ya se contabilizan como vencidos
+        if dias <= 3:
+            vigencia_alertas['criticos'].append(presupuesto)
+        elif dias <= 15:
+            vigencia_alertas['proximos'].append(presupuesto)
+        else:
+            vigencia_alertas['seguimiento'].append(presupuesto)
+
+    for clave in vigencia_alertas:
+        vigencia_alertas[clave] = sorted(
+            vigencia_alertas[clave],
+            key=lambda p: p.dias_restantes_vigencia if p.dias_restantes_vigencia is not None else 999
+        )[:5]
+
+    # Items con stock bajo
     items_stock_bajo = ItemInventario.query.filter(
         ItemInventario.organizacion_id == current_user.organizacion_id,
         ItemInventario.stock_actual <= ItemInventario.stock_minimo,
@@ -119,7 +151,8 @@ def dashboard():
                          alertas=alertas,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,
-                         presupuestos_vencidos=presupuestos_vencidos)
+                         presupuestos_vencidos=presupuestos_vencidos,
+                         vigencia_alertas=vigencia_alertas)
 
 def calcular_kpis(fecha_desde, fecha_hasta):
     """Calcula los KPIs principales del dashboard"""

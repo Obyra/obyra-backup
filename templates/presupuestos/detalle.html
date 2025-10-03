@@ -66,13 +66,18 @@
                     </div>
                 </div>
                 {% if presupuesto.fecha_vigencia %}
-                <div class="mt-3">
-                    {% set vencido = presupuesto.esta_vencido %}
-                    <span class="badge {{ 'bg-danger text-white' if vencido else 'bg-info text-dark' }} fs-6">
-                        {% if vencido %}
+                <div class="mt-3 text-end">
+                    {% set dias_restantes = presupuesto.dias_restantes_vigencia %}
+                    {% set badge_class = presupuesto.clase_vigencia_badge %}
+                    <span class="badge {{ badge_class }} fs-6" data-bs-toggle="tooltip"
+                          title="Quedan {{ dias_restantes if dias_restantes is not none else '—' }} días para el vencimiento">
+                        {% if presupuesto.esta_vencido %}
                             <i class="fas fa-exclamation-triangle me-1"></i>Vencido el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
                         {% else %}
                             <i class="fas fa-hourglass-half me-1"></i>Vence el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                            {% if dias_restantes is not none %}
+                                <span class="ms-1">(faltan {{ dias_restantes }} días)</span>
+                            {% endif %}
                         {% endif %}
                     </span>
                 </div>
@@ -95,7 +100,9 @@
                             <strong>Items:</strong> {{ presupuesto.items.count() }}<br>
                             <strong>Creado:</strong> {{ presupuesto.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}<br>
                             {% if presupuesto.fecha_vigencia %}
-                            <strong>Vigencia:</strong> {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }} ({{ presupuesto.vigencia_dias }} días)<br>
+                            {% set dias_restantes = presupuesto.dias_restantes_vigencia %}
+                            <strong>Vigencia:</strong> {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                            ({{ presupuesto.vigencia_dias }} días{% if dias_restantes is not none %}, faltan {{ dias_restantes if dias_restantes >= 0 else 0 }} días{% endif %})<br>
                             {% endif %}
                         </div>
                     </div>
@@ -175,8 +182,156 @@
                     {% endif %}
                 </div>
             </div>
+            {% set total_items_ia = ia_materiales|length + ia_mano_obra|length + ia_equipos|length + ia_herramientas|length %}
+            {% if total_items_ia > 0 %}
+            <div class="card mt-4">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 text-primary"><i class="fas fa-robot me-2"></i>Ítems generados por IA</h6>
+                    <span class="badge bg-light text-dark">
+                        Total IA: {{ totales_ia.general|moneda }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    {% if ia_materiales %}
+                    <h6 class="text-secondary">Materiales</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_materiales %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal materiales IA</th>
+                                    <th class="text-end">{{ totales_ia.materiales|moneda }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if ia_mano_obra %}
+                    <h6 class="text-secondary">Mano de Obra</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_mano_obra %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal mano de obra IA</th>
+                                    <th class="text-end">{{ totales_ia.mano_obra|moneda }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if ia_equipos %}
+                    <h6 class="text-secondary">Equipos</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_equipos %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal equipos IA</th>
+                                    <th class="text-end">{{ totales_ia.equipos|moneda }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if ia_herramientas %}
+                    <h6 class="text-secondary">Herramientas</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_herramientas %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal herramientas IA</th>
+                                    <th class="text-end">{{ totales_ia.herramientas|moneda }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
-        
+
         <div class="col-lg-4">
             <div class="card">
                 <div class="card-body text-center">

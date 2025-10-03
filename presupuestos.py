@@ -108,6 +108,25 @@ def _quantize_quantity(value: Decimal) -> Decimal:
     return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
 
 
+def _parse_vigencia_dias(raw_value: Any) -> Optional[int]:
+    if raw_value is None:
+        return None
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return None
+    if value < 1 or value > 180:
+        return None
+    return value
+
+
+def _sumar_totales(items) -> Decimal:
+    total = DECIMAL_ZERO
+    for item in items:
+        total += _quantize_currency(_to_decimal(getattr(item, 'total', 0), '0'))
+    return _quantize_currency(total)
+
+
 def _persistir_resultados_etapas(
     presupuesto: Presupuesto,
     etapas_resultado: list,
@@ -355,11 +374,17 @@ def crear():
             nuevo_presupuesto.numero = numero
             nuevo_presupuesto.iva_porcentaje = Decimal('21.00')  # Fijo según lo solicitado
             nuevo_presupuesto.organizacion_id = current_user.organizacion_id
-            vigencia_form = request.form.get('vigencia_dias')
-            try:
-                nuevo_presupuesto.vigencia_dias = int(vigencia_form) if vigencia_form else 30
-            except (TypeError, ValueError):
-                nuevo_presupuesto.vigencia_dias = 30
+            vigencia_form = request.form.get('vigencia_dias', '').strip()
+            if vigencia_form:
+                vigencia_dias = _parse_vigencia_dias(vigencia_form)
+                if vigencia_dias is None:
+                    flash('La vigencia debe ser un número entre 1 y 180 días.', 'danger')
+                    return render_template('presupuestos/crear.html')
+            else:
+                vigencia_dias = 30
+
+            nuevo_presupuesto.vigencia_dias = vigencia_dias
+            nuevo_presupuesto.vigencia_bloqueada = True
             nuevo_presupuesto.asegurar_vigencia()
 
             # Agregar observaciones con detalles del proyecto
@@ -684,10 +709,11 @@ def crear_desde_ia():
         nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto)  # Guardar datos para posterior conversión
         nuevo_presupuesto.organizacion_id = current_user.organizacion_id
         vigencia_config = datos_proyecto.get('vigencia_dias') if isinstance(datos_proyecto, dict) else None
-        try:
-            nuevo_presupuesto.vigencia_dias = int(vigencia_config) if vigencia_config else 30
-        except (TypeError, ValueError):
-            nuevo_presupuesto.vigencia_dias = 30
+        vigencia_dias = _parse_vigencia_dias(vigencia_config) if vigencia_config is not None else 30
+        if vigencia_dias is None:
+            vigencia_dias = 30
+        nuevo_presupuesto.vigencia_dias = vigencia_dias
+        nuevo_presupuesto.vigencia_bloqueada = True
         nuevo_presupuesto.asegurar_vigencia()
         
         db.session.add(nuevo_presupuesto)
@@ -1020,13 +1046,33 @@ def detalle(id):
     mano_obra = [item for item in items if item.tipo == 'mano_obra']
     equipos = [item for item in items if item.tipo == 'equipo']
     herramientas = [item for item in items if item.tipo == 'herramienta']
-    
-    return render_template('presupuestos/detalle.html', 
+
+    ia_materiales = [item for item in materiales if item.origen == 'ia']
+    ia_mano_obra = [item for item in mano_obra if item.origen == 'ia']
+    ia_equipos = [item for item in equipos if item.origen == 'ia']
+    ia_herramientas = [item for item in herramientas if item.origen == 'ia']
+
+    totales_ia = {
+        'materiales': _sumar_totales(ia_materiales),
+        'mano_obra': _sumar_totales(ia_mano_obra),
+        'equipos': _sumar_totales(ia_equipos),
+        'herramientas': _sumar_totales(ia_herramientas),
+    }
+    totales_ia['general'] = _quantize_currency(
+        totales_ia['materiales'] + totales_ia['mano_obra'] + totales_ia['equipos'] + totales_ia['herramientas']
+    )
+
+    return render_template('presupuestos/detalle.html',
                          presupuesto=presupuesto,
                          materiales=materiales,
                          mano_obra=mano_obra,
                          equipos=equipos,
-                         herramientas=herramientas)
+                         herramientas=herramientas,
+                         ia_materiales=ia_materiales,
+                         ia_mano_obra=ia_mano_obra,
+                         ia_equipos=ia_equipos,
+                         ia_herramientas=ia_herramientas,
+                         totales_ia=totales_ia)
 
 @presupuestos_bp.route('/<int:id>/item', methods=['POST'])
 @login_required
