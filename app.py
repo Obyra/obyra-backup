@@ -4,7 +4,7 @@ import importlib
 import click
 from decimal import Decimal, InvalidOperation
 from typing import Optional
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request, g
+from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request, g, session
 from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -237,6 +237,33 @@ def utility_processor():
     def has_endpoint(endpoint_name: str) -> bool:
         return endpoint_name in app.view_functions
 
+    def tiene_rol_helper(rol: str) -> bool:
+        if not current_user.is_authenticated:
+            return False
+
+        membership = get_current_membership()
+        if membership and membership.status == 'active':
+            return (membership.role or '').lower() == (rol or '').lower()
+
+        org_id = session.get('current_org_id')
+        if not org_id:
+            return False
+
+        from models import OrgMembership  # Importación perezosa para evitar ciclos
+
+        registro = OrgMembership.query.filter_by(
+            org_id=org_id,
+            user_id=current_user.id,
+            archived=False,
+        ).first()
+        if not registro:
+            return False
+
+        if registro.status != 'active':
+            return False
+
+        return (registro.role or '').lower() == (rol or '').lower()
+
     membership = get_current_membership()
     current_org = None
     if membership:
@@ -247,6 +274,7 @@ def utility_processor():
     return dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
+        tiene_rol=tiene_rol_helper,
         mostrar_calculadora_ia_header=app.config.get("SHOW_IA_CALCULATOR_BUTTON", False),
         current_membership=membership,
         current_organization=current_org,

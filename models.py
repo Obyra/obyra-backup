@@ -1,5 +1,6 @@
 from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from flask import session
 from flask_login import UserMixin
 from extensions import db
 from sqlalchemy import func, inspect
@@ -144,6 +145,43 @@ class Usuario(UserMixin, db.Model):
             if membership.org_id == org_id and not membership.archived:
                 return membership
         return None
+
+    def tiene_rol(self, rol: str) -> bool:
+        """Determina si el usuario tiene el rol solicitado en la organización activa."""
+        if not rol:
+            return False
+
+        objetivo = rol.strip().lower()
+        org_id = session.get('current_org_id')
+        membership = None
+
+        if org_id:
+            # Preferir membresía ya cargada en la sesión para evitar consultas extras
+            for candidate in self.memberships:
+                if candidate.org_id == org_id and not candidate.archived:
+                    membership = candidate
+                    break
+
+            if membership is None:
+                membership = OrgMembership.query.filter_by(
+                    org_id=org_id,
+                    user_id=self.id,
+                    archived=False,
+                ).first()
+
+            if membership:
+                return membership.status == 'active' and (membership.role or '').lower() == objetivo
+
+        # Compatibilidad hacia atrás: usar el rol global almacenado en el usuario
+        role_global = (getattr(self, 'role', None) or '').lower()
+        if role_global:
+            return role_global == objetivo
+
+        rol_legacy = (getattr(self, 'rol', None) or '').lower()
+        if rol_legacy in {'administrador', 'admin'} and objetivo == 'admin':
+            return True
+
+        return False
 
     def ensure_membership(self, org_id: int, *, role: str | None = None, status: str = 'active'):
         existing = self.membership_for_org(org_id)
@@ -368,8 +406,8 @@ class OrgMembership(db.Model):
         return self.email in emails_admin_completo
     
     def es_admin(self):
-        """Verifica si el usuario es administrador (rol administrador o admin completo)"""
-        return self.rol == 'administrador' or self.es_admin_completo()
+        """Verifica si el usuario tiene rol de administrador en la organización activa."""
+        return self.tiene_rol('admin') or self.es_admin_completo()
 
     def tiene_acceso_sin_restricciones(self):
         """Verifica si el usuario tiene acceso completo al sistema"""

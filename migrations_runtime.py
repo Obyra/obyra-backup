@@ -406,7 +406,11 @@ def ensure_exchange_currency_columns():
                     )
 
             conn.exec_driver_sql(
-                "UPDATE pricing_indices SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)"
+                """
+                UPDATE pricing_indices
+                   SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
+                       updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+                """
             )
 
             if 'as_of_date' not in exchange_columns:
@@ -523,18 +527,19 @@ def ensure_exchange_currency_columns():
                 "SELECT COUNT(1) FROM pricing_indices WHERE name = 'CAC'"
             ).scalar()
             if not existing_index:
+                now = datetime.utcnow()
                 if backend == 'postgresql':
                     insert_sql = (
-                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at) VALUES (%s, %s, %s, %s, %s)"
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)"
                     )
                     conn.exec_driver_sql(
                         insert_sql,
-                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', datetime.utcnow()),
+                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', now, now),
                     )
                 else:
                     conn.exec_driver_sql(
-                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at) VALUES (?, ?, ?, ?, ?)",
-                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', datetime.utcnow()),
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', now, now),
                     )
 
         with open(sentinel, 'w') as f:
