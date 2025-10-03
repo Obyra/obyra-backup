@@ -18,6 +18,13 @@ app.secret_key = (
     or os.environ.get("SECRET_KEY")
     or "dev-secret-key-change-me"
 )
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
@@ -53,6 +60,8 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "max_overflow": 0,             # No overflow connections
     "pool_size": 5,                # Tamaño del pool
 }
+
+app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
 
 # initialize extensions
 db.init_app(app)
@@ -223,6 +232,7 @@ def utility_processor():
     return dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
+        mostrar_calculadora_ia_header=app.config.get("SHOW_IA_CALCULATOR_BUTTON", False),
     )
 
 
