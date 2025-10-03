@@ -4,11 +4,17 @@ import importlib
 import click
 from decimal import Decimal, InvalidOperation
 from typing import Optional
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
+from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request, g
 from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
+from services.memberships import (
+    initialize_membership_session,
+    load_membership_into_context,
+    get_current_membership,
+    get_current_org_id,
+)
 from extensions import db, login_manager
 
 # create the app
@@ -83,6 +89,7 @@ def db_upgrade():
             ensure_item_presupuesto_stage_columns,
             ensure_presupuesto_validity_columns,
             ensure_exchange_currency_columns,
+            ensure_org_memberships_table,
         )
 
         ensure_avance_audit_columns()
@@ -90,6 +97,7 @@ def db_upgrade():
         ensure_item_presupuesto_stage_columns()
         ensure_presupuesto_validity_columns()
         ensure_exchange_currency_columns()
+        ensure_org_memberships_table()
 
     click.echo('✅ Database upgraded successfully.')
 
@@ -229,13 +237,28 @@ def utility_processor():
     def has_endpoint(endpoint_name: str) -> bool:
         return endpoint_name in app.view_functions
 
+    membership = get_current_membership()
+    current_org = None
+    if membership:
+        current_org = membership.organizacion
+    elif hasattr(current_user, 'organizacion'):
+        current_org = current_user.organizacion
+
     return dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
         mostrar_calculadora_ia_header=app.config.get("SHOW_IA_CALCULATOR_BUTTON", False),
+        current_membership=membership,
+        current_organization=current_org,
+        current_org_id=get_current_org_id,
     )
-
-
+@app.before_request
+def sincronizar_membresia_actual():
+    """Carga la membresía activa en cada request para usuarios autenticados."""
+    try:
+        load_membership_into_context()
+    except Exception:
+        app.logger.exception('No se pudo sincronizar la membresía actual')
 
 
 @app.before_request
@@ -432,6 +455,7 @@ with app.app_context():
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
+        ensure_org_memberships_table,
     )
 
     runtime_migrations = [
@@ -440,6 +464,7 @@ with app.app_context():
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
+        ensure_org_memberships_table,
     ]
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
@@ -547,7 +572,8 @@ with app.app_context():
                 role='administrador',
                 auth_provider='manual',
                 activo=True,
-                organizacion_id=admin_org.id
+                organizacion_id=admin_org.id,
+                primary_org_id=admin_org.id,
             )
             admin.set_password('admin123')
             db.session.add(admin)
@@ -572,6 +598,8 @@ with app.app_context():
                 db.session.add(admin_org)
                 db.session.flush()
                 admin.organizacion_id = admin_org.id
+                if not admin.primary_org_id:
+                    admin.primary_org_id = admin_org.id
                 updated = True
 
             if updated:

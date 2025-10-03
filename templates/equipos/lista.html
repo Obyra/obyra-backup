@@ -66,8 +66,9 @@
     
     <!-- Lista de usuarios -->
     <div class="row">
-        {% if usuarios %}
-            {% for usuario in usuarios %}
+        {% if miembros %}
+            {% for miembro in miembros %}
+            {% set usuario = miembro.usuario %}
             <div class="col-lg-6 col-xl-4 mb-4">
                 <div class="card h-100 shadow-sm">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -84,10 +85,18 @@
                             <h6 class="mb-0 fw-bold">{{ usuario.nombre_completo }}</h6>
                         </div>
                         <div>
-                            <span class="badge bg-info me-1">{{ usuario.rol.title() }}</span>
-                            <span class="badge {{ 'bg-success' if usuario.activo else 'bg-secondary' }}">
-                                {{ 'Activo' if usuario.activo else 'Inactivo' }}
-                            </span>
+                            {% if miembro.role == 'admin' %}
+                                <span class="badge bg-danger me-1">Administrador</span>
+                            {% else %}
+                                <span class="badge bg-success me-1">Operario</span>
+                            {% endif %}
+                            {% if miembro.status == 'active' and usuario.activo %}
+                                <span class="badge bg-success">Activo</span>
+                            {% elif miembro.status == 'pending' %}
+                                <span class="badge bg-warning text-dark">Pendiente</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                            {% endif %}
                             {% if usuario.auth_provider == 'google' %}
                                 <span class="badge bg-warning text-dark">
                                     <i class="fab fa-google"></i>
@@ -123,13 +132,13 @@
                             <a href="{{ url_for('equipos.detalle', id=usuario.id) }}" class="btn btn-outline-primary">
                                 <i class="fas fa-eye me-1"></i>Ver Perfil
                             </a>
-                            {% if current_user.rol == 'administrador' and usuario.id != current_user.id %}
-                            <form method="POST" action="{{ url_for('equipos.toggle_activo', id=usuario.id) }}" 
-                                  style="display: inline;" 
-                                  onsubmit="return confirm('¿{{ 'Desactivar' if usuario.activo else 'Activar' }} este usuario?')">
-                                <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if usuario.activo else 'btn-outline-success' }} w-100">
-                                    <i class="fas fa-{{ 'user-slash' if usuario.activo else 'user-check' }} me-1"></i>
-                                    {{ 'Desactivar' if usuario.activo else 'Activar' }}
+                            {% if current_membership and current_membership.role == 'admin' and usuario.id != current_user.id %}
+                            <form method="POST" action="{{ url_for('equipos.toggle_activo', id=usuario.id) }}"
+                                  style="display: inline;"
+                                  onsubmit="return confirm('¿{{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }} este usuario?')">
+                                <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if miembro.status == 'active' and usuario.activo else 'btn-outline-success' }} w-100">
+                                    <i class="fas fa-{{ 'user-slash' if miembro.status == 'active' and usuario.activo else 'user-check' }} me-1"></i>
+                                    {{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }}
                                 </button>
                             </form>
                             {% endif %}
@@ -144,13 +153,13 @@
                     <i class="fas fa-users fa-3x text-muted mb-3"></i>
                     <h4 class="text-muted">No hay usuarios registrados</h4>
                     <p class="text-muted">
-                        {% if current_user.rol == 'administrador' %}
+                        {% if current_membership and current_membership.role == 'admin' %}
                             Comienza registrando usuarios para tu equipo.
                         {% else %}
                             No hay usuarios disponibles para visualizar.
                         {% endif %}
                     </p>
-                    {% if current_user.rol == 'administrador' %}
+                    {% if current_membership and current_membership.role == 'admin' %}
                     <a href="{{ url_for('auth.register') }}" class="btn btn-primary">
                         <i class="fas fa-user-plus me-1"></i>Registrar Primer Usuario
                     </a>

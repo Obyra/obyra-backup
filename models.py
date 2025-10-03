@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask_login import UserMixin
 from extensions import db
 from sqlalchemy import func, inspect
+from sqlalchemy.orm import backref
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import json
@@ -11,7 +12,7 @@ import os
 
 class Organizacion(db.Model):
     __tablename__ = 'organizaciones'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(200), nullable=False)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
@@ -20,6 +21,12 @@ class Organizacion(db.Model):
     
     # Relaciones
     usuarios = db.relationship('Usuario', back_populates='organizacion', lazy='dynamic')
+    memberships = db.relationship(
+        'OrgMembership',
+        back_populates='organizacion',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
     obras = db.relationship('Obra', back_populates='organizacion', lazy='dynamic')
     inventario = db.relationship('ItemInventario', back_populates='organizacion', lazy='dynamic')
     presupuestos = db.relationship('Presupuesto', lazy='dynamic')
@@ -48,7 +55,7 @@ class Organizacion(db.Model):
 
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuarios'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     apellido = db.Column(db.String(100), nullable=False)
@@ -65,11 +72,19 @@ class Usuario(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    primary_org_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True)
     plan_activo = db.Column(db.String(50), default='prueba')  # prueba, standard, premium
     fecha_expiracion_plan = db.Column(db.DateTime)  # Para controlar la expiración del plan
     
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='usuarios')
+    primary_organizacion = db.relationship('Organizacion', foreign_keys=[primary_org_id], lazy='joined')
+    memberships = db.relationship(
+        'OrgMembership',
+        foreign_keys='OrgMembership.user_id',
+        back_populates='usuario',
+        cascade='all, delete-orphan'
+    )
     perfil = db.relationship(
         'PerfilUsuario',
         back_populates='usuario',
@@ -90,9 +105,70 @@ class Usuario(UserMixin, db.Model):
     )
     obras_asignadas = db.relationship('AsignacionObra', back_populates='usuario', lazy='dynamic')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='usuario', lazy='dynamic')
-    
+
     def __repr__(self):
         return f'<Usuario {self.nombre} {self.apellido}>'
+
+    def active_memberships(self):
+        """Devuelve las membresías activas no archivadas del usuario."""
+        return [
+            membership
+            for membership in self.memberships
+            if not membership.archived and membership.status == 'active'
+        ]
+
+    def membership_for_org(self, org_id: int):
+        for membership in self.memberships:
+            if membership.org_id == org_id and not membership.archived:
+                return membership
+        return None
+
+    def ensure_membership(self, org_id: int, *, role: str | None = None, status: str = 'active'):
+        existing = self.membership_for_org(org_id)
+        if existing:
+            return existing
+
+        resolved_role = role or (self.role if getattr(self, 'role', None) else 'operario')
+        normalized_role = 'admin' if resolved_role in ('administrador', 'admin', 'administrador_general') else 'operario'
+
+        membership = OrgMembership(
+            org_id=org_id,
+            usuario=self,
+            role=normalized_role,
+            status=status,
+        )
+        db.session.add(membership)
+
+        if not self.primary_org_id:
+            self.primary_org_id = org_id
+        if not self.organizacion_id:
+            self.organizacion_id = org_id
+        return membership
+
+    def get_current_org_id(self):
+        """Obtiene la organización actual desde la sesión, falling back a la primaria."""
+        try:
+            from flask import session, g
+        except RuntimeError:  # pragma: no cover - fuera de contexto de aplicación
+            session = {}
+            g = type('obj', (), {})()
+
+        current_membership = getattr(g, 'current_membership', None)
+        if current_membership and not current_membership.archived:
+            return current_membership.org_id
+
+        org_id = session.get('current_org_id')
+        if org_id:
+            return org_id
+
+        if self.organizacion_id:
+            return self.organizacion_id
+
+        active = self.active_memberships()
+        if active:
+            return active[0].org_id
+
+        return None
 
     # -----------------------------------------------------
     # Gestión de contraseñas
@@ -197,6 +273,44 @@ class Usuario(UserMixin, db.Model):
             'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'operario': ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
         })
+
+
+class OrgMembership(db.Model):
+    __tablename__ = 'org_memberships'
+
+    id = db.Column(db.Integer, primary_key=True)
+    org_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='operario')
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    archived = db.Column(db.Boolean, nullable=False, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    invited_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    invited_at = db.Column(db.DateTime, server_default=func.now())
+    accepted_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('org_id', 'user_id', name='uq_membership_org_user'),
+        db.Index('ix_membership_user', 'user_id'),
+        db.Index('ix_membership_org', 'org_id'),
+    )
+
+    organizacion = db.relationship('Organizacion', back_populates='memberships')
+    usuario = db.relationship('Usuario', foreign_keys=[user_id], back_populates='memberships')
+    invitador = db.relationship(
+        'Usuario',
+        foreign_keys=[invited_by],
+        backref=backref('memberships_invitadas', lazy='dynamic'),
+    )
+
+    def marcar_activa(self):
+        self.status = 'active'
+        self.archived = False
+        self.accepted_at = datetime.utcnow()
+
+    def marcar_archivada(self):
+        self.archived = True
+        self.archived_at = datetime.utcnow()
         
         return modulo in permisos.get(self.rol, [])
     

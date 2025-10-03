@@ -20,10 +20,11 @@
         <div class="card">
             <h1>¡Hola {{ usuario.nombre }}!</h1>
             <p>
-                Te dieron de alta en la organización <strong>{{ usuario.organizacion.nombre }}</strong> dentro de OBYRA IA.
-                Para empezar a trabajar solo necesitas iniciar sesión con las credenciales temporales que generamos para vos.
+                Te dieron de alta en la organización <strong>{{ membership.organizacion.nombre if membership else 'tu organización' }}</strong> dentro de OBYRA IA.
             </p>
 
+            {% if temp_password %}
+            <p>Para empezar a trabajar solo necesitás iniciar sesión con las credenciales temporales que generamos para vos.</p>
             <div class="credentials">
                 <p style="margin-top: 0;">Estas son tus credenciales iniciales:</p>
                 <strong>Correo:</strong>
@@ -31,6 +32,11 @@
                 <strong>Contraseña temporal:</strong>
                 <div style="font-size: 18px; font-weight: 600; letter-spacing: 0.08em;">{{ temp_password }}</div>
             </div>
+            {% else %}
+            <p>
+                Podés ingresar con tu correo <strong>{{ usuario.email }}</strong>. Te compartimos un enlace para que definas una nueva contraseña si lo necesitás.
+            </p>
+            {% endif %}
 
             {% if reset_url %}
             <p>

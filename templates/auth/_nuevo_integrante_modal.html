@@ -4,7 +4,7 @@
             <form id="formNuevoIntegrante" action="{{ url_for('auth.crear_integrante_desde_panel') }}">
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalNuevoIntegranteLabel">
-                        <i class="fas fa-user-plus me-2"></i>Agregar integrante a {{ current_user.organizacion.nombre }}
+                        <i class="fas fa-user-plus me-2"></i>Agregar integrante a {{ current_organization.nombre if current_organization else 'tu organización' }}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
@@ -46,7 +46,7 @@
                             <div class="border rounded p-3 bg-light h-100">
                                 <h6 class="fw-semibold mb-2"><i class="fas fa-shield-alt me-2 text-primary"></i>Acceso y permisos</h6>
                                 <p class="mb-1 small text-muted">Generaremos una contraseña temporal y enviaremos un enlace para que el integrante active su cuenta.</p>
-                                <p class="mb-0 small text-muted">La cuenta quedará vinculada a {{ current_user.organizacion.nombre }}.</p>
+                                <p class="mb-0 small text-muted">La cuenta quedará vinculada a {{ current_organization.nombre if current_organization else 'tu organización' }}.</p>
                             </div>
                         </div>
                     </div>

@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from app import db
-from models import Usuario, AsignacionObra, Obra, RegistroTiempo
+from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership
+from services.memberships import get_current_membership
 from sqlalchemy.exc import IntegrityError
 
 equipos_bp = Blueprint('equipos', __name__)
@@ -12,16 +13,25 @@ def lista():
     if not current_user.puede_acceder_modulo('equipos'):
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    membership = get_current_membership()
+    if not membership:
+        flash('Selecciona una organización para ver tus equipos.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion', next=request.url))
+
     rol_filtro = request.args.get('rol', '')
     buscar = request.args.get('buscar', '')
     activo = request.args.get('activo', '')
-    
-    query = Usuario.query
-    
+
+    query = (
+        OrgMembership.query
+        .filter_by(org_id=membership.org_id, archived=False)
+        .join(Usuario)
+    )
+
     if rol_filtro:
-        query = query.filter(Usuario.rol == rol_filtro)
-    
+        query = query.filter(OrgMembership.role == rol_filtro)
+
     if buscar:
         query = query.filter(
             db.or_(
@@ -30,21 +40,21 @@ def lista():
                 Usuario.email.contains(buscar)
             )
         )
-    
+
     if activo:
-        query = query.filter(Usuario.activo == (activo == 'true'))
-    
-    usuarios = query.order_by(Usuario.apellido, Usuario.nombre).all()
-    
-    # Obtener estadísticas de asignaciones para cada usuario
-    for usuario in usuarios:
+        query = query.filter(OrgMembership.status == ('active' if activo == 'true' else 'inactive'))
+
+    miembros = query.order_by(Usuario.apellido, Usuario.nombre).all()
+
+    for membership_usuario in miembros:
+        usuario = membership_usuario.usuario
         usuario.obras_activas = usuario.obras_asignadas.join(Obra).filter(
             AsignacionObra.activo == True,
             Obra.estado.in_(['planificacion', 'en_curso'])
         ).count()
-    
-    return render_template('equipos/lista.html', 
-                         usuarios=usuarios, 
+
+    return render_template('equipos/lista.html',
+                         miembros=miembros,
                          rol_filtro=rol_filtro,
                          buscar=buscar,
                          activo=activo)
@@ -100,15 +110,25 @@ def usuarios_nuevo():
             email=email.lower(),
             telefono=telefono,
             rol=role,
+            role='admin' if role in ('administrador', 'admin') else 'operario',
             auth_provider='manual',
             activo=True,
-            organizacion_id=current_user.organizacion_id
+            organizacion_id=current_user.organizacion_id,
+            primary_org_id=current_user.primary_org_id or current_user.organizacion_id,
         )
 
         user.set_password(password)
 
         db.session.add(user)
         db.session.flush()  # Para obtener el ID
+
+        active_membership = get_current_membership()
+        if active_membership:
+            user.ensure_membership(
+                active_membership.org_id,
+                role='admin' if role in ('administrador', 'admin') else 'operario',
+                status='active',
+            )
 
         # Overrides de módulos (opcional)
         if customize:
@@ -177,14 +197,26 @@ def crear():
                 email=email.lower(),
                 telefono=telefono,
                 rol=rol,
+                role='admin' if rol in ('administrador', 'admin') else 'operario',
                 auth_provider='manual',
                 activo=True,
-                organizacion_id=current_user.organizacion_id if current_user.organizacion_id else None
+                organizacion_id=current_user.organizacion_id if current_user.organizacion_id else None,
+                primary_org_id=current_user.primary_org_id or current_user.organizacion_id,
             )
 
             nuevo_usuario.set_password(password)
 
             db.session.add(nuevo_usuario)
+            db.session.flush()
+
+            active_membership = get_current_membership()
+            if active_membership:
+                nuevo_usuario.ensure_membership(
+                    active_membership.org_id,
+                    role='admin' if rol in ('administrador', 'admin') else 'operario',
+                    status='active',
+                )
+
             db.session.commit()
             
             flash(f'Usuario {nombre} {apellido} creado exitosamente.', 'success')
@@ -260,26 +292,33 @@ def editar(id):
 @equipos_bp.route('/<int:id>/toggle', methods=['POST'])
 @login_required
 def toggle_activo(id):
-    if current_user.rol != 'administrador':
+    membership = get_current_membership()
+    if not membership or membership.role != 'admin':
         flash('No tienes permisos para activar/desactivar usuarios.', 'danger')
         return redirect(url_for('equipos.lista'))
-    
-    usuario = Usuario.query.get_or_404(id)
-    
-    if usuario.id == current_user.id:
+
+    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=id, archived=False).first()
+
+    if not objetivo:
+        flash('El usuario no pertenece a tu organización.', 'danger')
+        return redirect(url_for('equipos.lista'))
+
+    if objetivo.user_id == current_user.id:
         flash('No puedes desactivar tu propia cuenta.', 'danger')
         return redirect(url_for('equipos.lista'))
-    
-    usuario.activo = not usuario.activo
-    
+
+    activar = not (objetivo.status == 'active' and objetivo.usuario.activo)
+    objetivo.status = 'active' if activar else 'inactive'
+    objetivo.usuario.activo = activar
+
     try:
         db.session.commit()
-        estado = "activado" if usuario.activo else "desactivado"
-        flash(f'Usuario {usuario.nombre_completo} {estado} exitosamente.', 'success')
-    except Exception as e:
+        estado = "activado" if activar else "desactivado"
+        flash(f'Usuario {objetivo.usuario.nombre_completo} {estado} exitosamente.', 'success')
+    except Exception:
         db.session.rollback()
         flash('Error al cambiar el estado del usuario.', 'danger')
-    
+
     return redirect(url_for('equipos.lista'))
 
 @equipos_bp.route('/rendimiento')
@@ -355,16 +394,19 @@ def usuarios_crear():
     f = request.form
     role = (f.get('role') or 'operario').strip()
     org_id = getattr(current_user, 'organizacion_id', None)
-    
+
     raw_password = (f.get('password', '').strip() or 'temp123456')
+
+    normalized_role = 'admin' if role in ('admin', 'administrador') else 'operario'
 
     u = Usuario(
         nombre=f.get('nombre', '').strip(),
         apellido=f.get('apellido', '').strip(),
         email=f.get('email', '').lower().strip(),
-        role=role,
-        rol='operario',  # Mantener rol legado por compatibilidad
+        role=normalized_role,
+        rol='administrador' if normalized_role == 'admin' else 'operario',  # Mantener rol legado por compatibilidad
         organizacion_id=org_id,
+        primary_org_id=org_id,
         auth_provider='manual',
     )
 
@@ -375,6 +417,16 @@ def usuarios_crear():
 
     db.session.add(u)
     try:
+        db.session.flush()
+
+        active_membership = get_current_membership()
+        if active_membership:
+            u.ensure_membership(
+                active_membership.org_id,
+                role=normalized_role,
+                status='active',
+            )
+
         db.session.commit()
         return jsonify(ok=True)
     except IntegrityError:

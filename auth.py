@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
 from extensions import db
-from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser
+from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser, OrgMembership
 from sqlalchemy import func
 from datetime import datetime
 from typing import Dict, Optional, Tuple, Union, Any
@@ -15,6 +15,14 @@ from werkzeug.routing import BuildError
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from services.email_service import send_email
+from services.memberships import (
+    initialize_membership_session,
+    get_current_org_id,
+    get_current_membership,
+    require_membership,
+    set_current_membership,
+    activate_pending_memberships,
+)
 
 
 def normalizar_cuit(valor: Optional[str]) -> str:
@@ -267,8 +275,8 @@ def _generate_temporary_password(length: int = 12) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-def _send_new_member_invitation(usuario: Usuario, temp_password: str) -> Optional[str]:
-    """Envía (o registra) el correo de bienvenida con contraseña temporal y enlace de activación."""
+def _send_new_member_invitation(usuario: Usuario, membership: OrgMembership, temp_password: Optional[str] = None) -> Optional[str]:
+    """Envía (o registra) el correo de bienvenida con enlace de activación."""
     try:
         token = _generate_reset_token(usuario, 'user')
         reset_url = url_for('auth.reset_password', token=token, _external=True)
@@ -279,6 +287,7 @@ def _send_new_member_invitation(usuario: Usuario, temp_password: str) -> Optiona
     html_content = render_template(
         'emails/nuevo_integrante.html',
         usuario=usuario,
+        membership=membership,
         temp_password=temp_password,
         reset_url=reset_url,
     )
@@ -295,12 +304,19 @@ def _send_new_member_invitation(usuario: Usuario, temp_password: str) -> Optiona
         email_sent = False
 
     if not email_sent:
-        current_app.logger.info(
-            'Credenciales temporales generadas para %s | contraseña: %s | enlace: %s',
-            usuario.email,
-            temp_password,
-            reset_url or 'N/D',
-        )
+        if temp_password:
+            current_app.logger.info(
+                'Credenciales temporales generadas para %s | contraseña: %s | enlace: %s',
+                usuario.email,
+                temp_password,
+                reset_url or 'N/D',
+            )
+        else:
+            current_app.logger.info(
+                'Invitación registrada para %s | enlace: %s',
+                usuario.email,
+                reset_url or 'N/D',
+            )
     else:
         current_app.logger.info('Email de bienvenida enviado a %s', usuario.email)
 
@@ -323,6 +339,9 @@ def login():
 
         if success:
             usuario = payload
+            membership_redirect = initialize_membership_session(usuario)
+            if membership_redirect:
+                return redirect(membership_redirect)
             destino = _post_login_destination(usuario, next_page)
             return redirect(destino)
 
@@ -342,6 +361,40 @@ def login():
         form_data=form_data,
         next_value=next_page,
     )
+
+
+@auth_bp.route('/organizaciones/seleccionar', methods=['GET', 'POST'])
+@login_required
+def seleccionar_organizacion():
+    memberships = (
+        OrgMembership.query
+        .filter_by(user_id=current_user.id, archived=False)
+        .order_by(OrgMembership.accepted_at.desc().nullslast(), OrgMembership.invited_at.desc())
+        .all()
+    )
+
+    if not memberships:
+        flash('Tu cuenta no tiene organizaciones asociadas. Solicita una invitación.', 'danger')
+        return redirect(url_for('auth.logout'))
+
+    next_url = request.args.get('next') or request.form.get('next') or url_for('reportes.dashboard')
+
+    if request.method == 'POST':
+        membership_id = request.form.get('membership_id')
+        try:
+            membership_id_int = int(membership_id)
+        except (TypeError, ValueError):
+            flash('Selecciona una organización válida.', 'danger')
+            return redirect(url_for('auth.seleccionar_organizacion', next=next_url))
+
+        if not set_current_membership(membership_id_int):
+            flash('No tienes acceso activo a esa organización.', 'danger')
+            return redirect(url_for('auth.seleccionar_organizacion', next=next_url))
+
+        flash('Organización seleccionada correctamente.', 'success')
+        return redirect(next_url)
+
+    return render_template('auth/seleccionar_organizacion.html', memberships=memberships, next_url=next_url)
 
 
 @auth_bp.route('/forgot', methods=['GET', 'POST'])
@@ -424,6 +477,7 @@ def reset_password(token: str):
         account.set_password(password)
         if isinstance(account, Usuario):
             account.auth_provider = 'manual'
+            activate_pending_memberships(account)
         db.session.commit()
 
         flash('Tu contraseña fue actualizada. Ahora puedes iniciar sesión.', 'success')
@@ -435,6 +489,9 @@ def reset_password(token: str):
 @login_required
 def logout():
     logout_user()
+    session.pop('current_membership_id', None)
+    session.pop('current_org_id', None)
+    session.pop('membership_selection_confirmed', None)
     flash('Sesión cerrada exitosamente.', 'info')
     return redirect(url_for('index'))
 
@@ -495,6 +552,7 @@ def register():
             db.session.flush()
 
             rol_usuario = 'administrador'
+            role_front = 'admin'
             # Crear nuevo usuario
             nuevo_usuario = Usuario(
                 nombre=nombre,
@@ -502,16 +560,23 @@ def register():
                 email=email.lower(),
                 telefono=telefono,
                 rol=rol_usuario,
-                role=rol_usuario,
+                role=role_front,
                 auth_provider='manual',
                 activo=True,
-                organizacion_id=nueva_organizacion.id
+                organizacion_id=nueva_organizacion.id,
+                primary_org_id=nueva_organizacion.id,
             )
 
             nuevo_usuario.set_password(password)
 
             db.session.add(nuevo_usuario)
             db.session.flush()
+
+            nuevo_usuario.ensure_membership(
+                nueva_organizacion.id,
+                role=role_front,
+                status='active',
+            )
 
             perfil_usuario = PerfilUsuario(
                 usuario_id=nuevo_usuario.id,
@@ -632,6 +697,8 @@ def google_callback():
                 token_invitacion = session.get('token_invitacion')
                 organizacion_id = session.get('organizacion_invitacion')
                 
+                role_front = 'operario'
+
                 if token_invitacion and organizacion_id:
                     # Usuario viene por invitación - se une a organización existente
                     organizacion = Organizacion.query.get(organizacion_id)
@@ -644,9 +711,11 @@ def google_callback():
                             google_id=google_id,
                             profile_picture=profile_picture,
                             rol='operario',  # Invitados son operarios por defecto
+                            role=role_front,
                             activo=True,
                             password_hash=None,
-                            organizacion_id=organizacion_id
+                            organizacion_id=organizacion_id,
+                            primary_org_id=organizacion_id,
                         )
                         
                         # Limpiar sesión
@@ -660,6 +729,7 @@ def google_callback():
                 else:
                     # Usuario nuevo - crear organización propia
                     rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'administrador'
+                    role_front = 'admin'
                     
                     nueva_organizacion = Organizacion(
                         nombre=f"Organización de {nombre} {apellido}",
@@ -676,14 +746,26 @@ def google_callback():
                         google_id=google_id,
                         profile_picture=profile_picture,
                         rol=rol_usuario,
+                        role=role_front,
                         activo=True,
                         password_hash=None,
-                        organizacion_id=nueva_organizacion.id
+                        organizacion_id=nueva_organizacion.id,
+                        primary_org_id=nueva_organizacion.id,
                     )
-                    
+
                     mensaje = f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu organización ha sido creada.'
-                
+
                 db.session.add(nuevo_usuario)
+                db.session.flush()
+
+                target_org_id = nuevo_usuario.organizacion_id or nuevo_usuario.primary_org_id
+                if target_org_id:
+                    nuevo_usuario.ensure_membership(
+                        target_org_id,
+                        role=nuevo_usuario.role or role_front,
+                        status='active',
+                    )
+
                 db.session.add(OnboardingStatus(usuario=nuevo_usuario))
                 db.session.commit()
 
@@ -746,14 +828,26 @@ def admin_register():
                 email=email.lower(),
                 telefono=telefono,
                 rol=rol,
+                role='admin' if rol in ('administrador', 'admin') else 'operario',
                 auth_provider='manual',
                 activo=True,
-                organizacion_id=current_user.organizacion_id
+                organizacion_id=current_user.organizacion_id,
+                primary_org_id=current_user.primary_org_id or current_user.organizacion_id,
             )
 
             nuevo_usuario.set_password(password)
-            
+
             db.session.add(nuevo_usuario)
+            db.session.flush()
+
+            target_org = get_current_membership()
+            if target_org:
+                nuevo_usuario.ensure_membership(
+                    target_org.org_id,
+                    role='admin' if rol in ('administrador', 'admin') else 'operario',
+                    status='active',
+                )
+
             db.session.commit()
             flash(f'Usuario {nombre} {apellido} registrado exitosamente.', 'success')
             return redirect(url_for('auth.usuarios_admin'))
@@ -769,25 +863,29 @@ def admin_register():
 @login_required
 def usuarios_admin():
     """Panel de administración de usuarios - solo para administradores"""
-    if current_user.rol != 'administrador':
+    membership = get_current_membership()
+    if not membership or membership.role != 'admin':
         flash('No tienes permisos para acceder a la gestión de usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     # Filtros
     rol_filtro = request.args.get('rol', '')
     auth_provider_filtro = request.args.get('auth_provider', '')
     buscar = request.args.get('buscar', '')
-    
-    # Query base - solo usuarios de la misma organización
-    query = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id)
-    
+
+    query = (
+        OrgMembership.query
+        .filter_by(org_id=membership.org_id, archived=False)
+        .join(Usuario)
+    )
+
     # Aplicar filtros
     if rol_filtro:
-        query = query.filter(Usuario.rol == rol_filtro)
-    
+        query = query.filter(OrgMembership.role == rol_filtro)
+
     if auth_provider_filtro:
         query = query.filter(Usuario.auth_provider == auth_provider_filtro)
-    
+
     if buscar:
         query = query.filter(
             db.or_(
@@ -796,17 +894,16 @@ def usuarios_admin():
                 Usuario.email.contains(buscar)
             )
         )
-    
-    usuarios = query.order_by(Usuario.apellido, Usuario.nombre).all()
-    
-    # Estadísticas - solo de la organización
-    total_usuarios = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id).count()
-    usuarios_activos = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, activo=True).count()
-    admins_count = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, rol='administrador').count()
-    usuarios_google = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, auth_provider='google').count()
-    
+
+    miembros = query.order_by(Usuario.apellido, Usuario.nombre).all()
+
+    total_usuarios = len(miembros)
+    usuarios_activos = sum(1 for miembro in miembros if miembro.status == 'active' and miembro.usuario.activo)
+    admins_count = sum(1 for miembro in miembros if miembro.role == 'admin')
+    usuarios_google = sum(1 for miembro in miembros if miembro.usuario.auth_provider == 'google')
+
     return render_template('auth/usuarios_admin.html',
-                         usuarios=usuarios,
+                         miembros=miembros,
                          total_usuarios=total_usuarios,
                          usuarios_activos=usuarios_activos,
                          admins_count=admins_count,
@@ -818,11 +915,9 @@ def usuarios_admin():
 
 @auth_bp.route('/usuarios/integrantes', methods=['POST'])
 @login_required
+@require_membership('admin')
 def crear_integrante_desde_panel():
-    """Crea un nuevo integrante de la organización desde el panel administrativo."""
-    if current_user.rol != 'administrador':
-        return jsonify({'success': False, 'message': 'No tienes permisos para realizar esta acción.'}), 403
-
+    """Invita o crea un integrante dentro de la organización activa."""
     payload = request.get_json(silent=True) or request.form
 
     nombre = (payload.get('nombre') or '').strip()
@@ -854,53 +949,126 @@ def crear_integrante_desde_panel():
 
     rol_interno, role_front = rol_map[rol_solicitado]
 
-    email_existente = Usuario.query.filter(func.lower(Usuario.email) == email).first()
-    if email_existente:
-        return jsonify({'success': False, 'message': 'Ya existe un usuario con ese email.'}), 409
-
-    cuit_existente = PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first()
-    if cuit_existente:
-        return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
-
-    direccion_final = direccion if direccion else 'Sin especificar'
     telefono_sanitizado = re.sub(r'[^0-9+\s-]', '', telefono)
     if not telefono_sanitizado.strip():
         return jsonify({'success': False, 'message': 'El teléfono ingresado no es válido.'}), 400
-    temp_password = _generate_temporary_password()
+
+    membership = get_current_membership()
+    if not membership:
+        return jsonify({'success': False, 'message': 'No se pudo determinar la organización activa.'}), 400
+
+    organizacion = membership.organizacion
+    org_id = organizacion.id if organizacion else current_user.organizacion_id
+
+    if not org_id:
+        return jsonify({'success': False, 'message': 'La organización actual no es válida.'}), 400
+
+    email_existente = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+    temp_password: Optional[str] = None
 
     try:
-        nuevo_usuario = Usuario(
-            nombre=nombre,
-            apellido=apellido,
-            email=email,
-            telefono=telefono_sanitizado,
-            rol=rol_interno,
-            role=role_front,
-            auth_provider='manual',
-            activo=True,
-            organizacion_id=current_user.organizacion_id,
-        )
-        nuevo_usuario.set_password(temp_password)
-        db.session.add(nuevo_usuario)
-        db.session.flush()
+        if email_existente:
+            usuario_objetivo = email_existente
 
-        perfil = PerfilUsuario(
-            usuario_id=nuevo_usuario.id,
-            cuit=cuit_normalizado,
-            direccion=direccion_final or 'Sin especificar',
-        )
-        db.session.add(perfil)
+            membership_existente = OrgMembership.query.filter_by(org_id=org_id, user_id=usuario_objetivo.id).first()
+            if membership_existente and not membership_existente.archived:
+                estado = membership_existente.status
+                return jsonify({
+                    'success': False,
+                    'message': f'Este usuario ya pertenece a la organización con estado "{estado}".',
+                }), 409
 
-        nuevo_usuario.ensure_onboarding_status()
+            if membership_existente and membership_existente.archived:
+                membership_existente.archived = False
+                membership_existente.status = 'pending'
+                membership_existente.invited_by = current_user.id
+                membership_existente.invited_at = datetime.utcnow()
+                membership_nuevo = membership_existente
+            else:
+                membership_nuevo = OrgMembership(
+                    org_id=org_id,
+                    user_id=usuario_objetivo.id,
+                    role=role_front,
+                    status='pending',
+                    invited_by=current_user.id,
+                )
+                db.session.add(membership_nuevo)
+
+            perfil = usuario_objetivo.perfil
+            if perfil and perfil.cuit and perfil.cuit != cuit_normalizado:
+                return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
+
+            if not perfil:
+                perfil = PerfilUsuario(usuario_id=usuario_objetivo.id)
+                db.session.add(perfil)
+
+            perfil.cuit = perfil.cuit or cuit_normalizado
+            if direccion:
+                perfil.direccion = direccion
+
+            usuario_objetivo.nombre = usuario_objetivo.nombre or nombre
+            usuario_objetivo.apellido = usuario_objetivo.apellido or apellido
+            usuario_objetivo.telefono = telefono_sanitizado
+            usuario_objetivo.rol = rol_interno
+            usuario_objetivo.role = role_front
+            usuario_objetivo.activo = True
+            if not usuario_objetivo.organizacion_id:
+                usuario_objetivo.organizacion_id = org_id
+            if not getattr(usuario_objetivo, 'primary_org_id', None):
+                usuario_objetivo.primary_org_id = org_id
+
+            if not usuario_objetivo.password_hash:
+                temp_password = _generate_temporary_password()
+                usuario_objetivo.set_password(temp_password)
+
+            usuario_objetivo.ensure_onboarding_status()
+        else:
+            if PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first():
+                return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
+
+            temp_password = _generate_temporary_password()
+            usuario_objetivo = Usuario(
+                nombre=nombre,
+                apellido=apellido,
+                email=email,
+                telefono=telefono_sanitizado,
+                rol=rol_interno,
+                role=role_front,
+                auth_provider='manual',
+                activo=True,
+                organizacion_id=org_id,
+                primary_org_id=org_id,
+            )
+            usuario_objetivo.set_password(temp_password)
+            db.session.add(usuario_objetivo)
+            db.session.flush()
+
+            perfil = PerfilUsuario(
+                usuario_id=usuario_objetivo.id,
+                cuit=cuit_normalizado,
+                direccion=direccion or 'Sin especificar',
+            )
+            db.session.add(perfil)
+
+            membership_nuevo = OrgMembership(
+                org_id=org_id,
+                user_id=usuario_objetivo.id,
+                role=role_front,
+                status='pending',
+                invited_by=current_user.id,
+            )
+            db.session.add(membership_nuevo)
+
+            usuario_objetivo.ensure_onboarding_status()
 
         db.session.commit()
-    except Exception as exc:  # pragma: no cover - mantenemos resiliencia
+    except Exception:
         db.session.rollback()
-        current_app.logger.exception('Error al crear el nuevo integrante')
-        return jsonify({'success': False, 'message': 'No se pudo crear el usuario. Intenta nuevamente.'}), 500
+        current_app.logger.exception('Error al crear/invitar integrante')
+        return jsonify({'success': False, 'message': 'No se pudo crear el integrante. Intenta nuevamente.'}), 500
 
-    _send_new_member_invitation(nuevo_usuario, temp_password)
-    flash(f'Se creó el usuario {nombre} {apellido} y se enviaron las credenciales temporales a {email}.', 'success')
+    _send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
+    flash('Invitación enviada correctamente.', 'success')
 
     return jsonify({
         'success': True,
@@ -909,63 +1077,82 @@ def crear_integrante_desde_panel():
 
 @auth_bp.route('/usuarios/cambiar_rol', methods=['POST'])
 @login_required
+@require_membership('admin')
 def cambiar_rol():
-    """Cambiar el rol de un usuario"""
-    if current_user.rol != 'administrador':
-        return jsonify({'success': False, 'message': 'No tienes permisos para cambiar roles'})
-    
+    """Cambiar el rol de un usuario dentro de la organización actual."""
     usuario_id = request.form.get('usuario_id')
     nuevo_rol = request.form.get('nuevo_rol')
-    
+
     if not usuario_id or not nuevo_rol:
         return jsonify({'success': False, 'message': 'Datos incompletos'})
-    
-    # Importar roles válidos
-    from roles_construccion import ROLES_CONSTRUCCION
-    if nuevo_rol not in ROLES_CONSTRUCCION.keys():
-        return jsonify({'success': False, 'message': 'Rol no válido'})
-    
-    # No permitir cambiar el rol del usuario actual
-    if int(usuario_id) == current_user.id:
-        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol'})
-    
+
     try:
-        usuario = Usuario.query.get_or_404(usuario_id)
-        usuario.rol = nuevo_rol
+        usuario_id_int = int(usuario_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Identificador inválido'})
+
+    if usuario_id_int == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol'})
+
+    rol_map = {
+        'administrador': 'admin',
+        'admin': 'admin',
+        'operario': 'operario',
+    }
+
+    if nuevo_rol not in rol_map:
+        return jsonify({'success': False, 'message': 'Rol no válido'})
+
+    membership = get_current_membership()
+    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=usuario_id_int, archived=False).first()
+
+    if not objetivo:
+        return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
+
+    try:
+        objetivo.role = rol_map[nuevo_rol]
+        objetivo.usuario.rol = nuevo_rol
+        objetivo.usuario.role = rol_map[nuevo_rol]
         db.session.commit()
-        
-        return jsonify({'success': True, 'message': f'Rol cambiado a {nuevo_rol} exitosamente'})
-    
-    except Exception as e:
+        return jsonify({'success': True, 'message': 'Rol actualizado correctamente.'})
+    except Exception:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el rol'})
 
 @auth_bp.route('/usuarios/toggle_usuario', methods=['POST'])
 @login_required
+@require_membership('admin')
 def toggle_usuario():
-    """Activar/desactivar un usuario"""
-    if current_user.rol != 'administrador':
-        return jsonify({'success': False, 'message': 'No tienes permisos para gestionar usuarios'})
-    
+    """Activar o desactivar un integrante dentro de la organización actual."""
     usuario_id = request.form.get('usuario_id')
     nuevo_estado = request.form.get('nuevo_estado')
-    
+
     if not usuario_id or nuevo_estado is None:
         return jsonify({'success': False, 'message': 'Datos incompletos'})
-    
-    # No permitir desactivar el usuario actual
-    if int(usuario_id) == current_user.id:
-        return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
-    
+
     try:
-        usuario = Usuario.query.get_or_404(usuario_id)
-        usuario.activo = nuevo_estado.lower() == 'true'
+        usuario_id_int = int(usuario_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Identificador inválido'})
+
+    if usuario_id_int == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
+
+    membership = get_current_membership()
+    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=usuario_id_int, archived=False).first()
+    if not objetivo:
+        return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
+
+    activar = str(nuevo_estado).lower() == 'true'
+
+    try:
+        objetivo.status = 'active' if activar else 'inactive'
+        objetivo.usuario.activo = activar
         db.session.commit()
-        
-        estado_texto = 'activado' if usuario.activo else 'desactivado'
+
+        estado_texto = 'activado' if activar else 'desactivado'
         return jsonify({'success': True, 'message': f'Usuario {estado_texto} exitosamente'})
-    
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
 

@@ -520,3 +520,154 @@ def ensure_exchange_currency_columns():
         if current_app:
             current_app.logger.exception('❌ Migration failed: exchange rates and currency columns')
         raise
+
+
+def ensure_org_memberships_table():
+    """Ensure org_memberships table exists and memberships are backfilled."""
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250321_org_memberships_v2.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            tables = inspector.get_table_names()
+
+            if 'usuarios' in tables:
+                usuario_columns = {col['name'] for col in inspector.get_columns('usuarios')}
+                if 'primary_org_id' not in usuario_columns:
+                    conn.exec_driver_sql("ALTER TABLE usuarios ADD COLUMN primary_org_id INTEGER")
+
+                conn.exec_driver_sql(
+                    """
+                    UPDATE usuarios
+                    SET primary_org_id = organizacion_id
+                    WHERE primary_org_id IS NULL AND organizacion_id IS NOT NULL
+                    """
+                )
+
+            if 'org_memberships' not in tables:
+                if backend == 'postgresql':
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS org_memberships (
+                            id SERIAL PRIMARY KEY,
+                            org_id INTEGER NOT NULL,
+                            user_id INTEGER NOT NULL,
+                            role VARCHAR(20) NOT NULL DEFAULT 'operario',
+                            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                            archived BOOLEAN NOT NULL DEFAULT FALSE,
+                            archived_at TIMESTAMP,
+                            invited_by INTEGER,
+                            invited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            accepted_at TIMESTAMP,
+                            CONSTRAINT uq_membership_org_user UNIQUE (org_id, user_id)
+                        )
+                        """
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS org_memberships (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            org_id INTEGER NOT NULL,
+                            user_id INTEGER NOT NULL,
+                            role TEXT NOT NULL DEFAULT 'operario',
+                            status TEXT NOT NULL DEFAULT 'pending',
+                            archived INTEGER NOT NULL DEFAULT 0,
+                            archived_at DATETIME,
+                            invited_by INTEGER,
+                            invited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            accepted_at DATETIME,
+                            CONSTRAINT uq_membership_org_user UNIQUE (org_id, user_id)
+                        )
+                        """
+                    )
+            else:
+                columns = {col['name'] for col in inspector.get_columns('org_memberships')}
+                alterations = []
+                if 'role' not in columns:
+                    column_type = 'VARCHAR(20)' if backend == 'postgresql' else 'TEXT'
+                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN role {column_type} DEFAULT 'operario'")
+                if 'status' not in columns:
+                    column_type = 'VARCHAR(20)' if backend == 'postgresql' else 'TEXT'
+                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN status {column_type} DEFAULT 'pending'")
+                if 'archived' not in columns:
+                    column_type = 'BOOLEAN' if backend == 'postgresql' else 'INTEGER'
+                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN archived {column_type} DEFAULT 0")
+                if 'archived_at' not in columns:
+                    column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN archived_at {column_type}")
+                if 'invited_by' not in columns:
+                    alterations.append("ALTER TABLE org_memberships ADD COLUMN invited_by INTEGER")
+                if 'invited_at' not in columns:
+                    column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN invited_at {column_type} DEFAULT CURRENT_TIMESTAMP")
+                if 'accepted_at' not in columns:
+                    column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN accepted_at {column_type}")
+
+                for statement in alterations:
+                    conn.exec_driver_sql(statement)
+
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_membership_user ON org_memberships(user_id)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_membership_org ON org_memberships(org_id)"
+            )
+
+            if backend == 'postgresql':
+                conn.exec_driver_sql(
+                    """
+                    INSERT INTO org_memberships (org_id, user_id, role, status, archived, invited_at, accepted_at)
+                    SELECT u.organizacion_id,
+                           u.id,
+                           CASE WHEN u.rol IN ('administrador', 'admin', 'administrador_general') THEN 'admin' ELSE 'operario' END,
+                           CASE WHEN u.activo IS NULL OR u.activo = TRUE THEN 'active' ELSE 'inactive' END,
+                           FALSE,
+                           CURRENT_TIMESTAMP,
+                           CASE WHEN u.activo IS NULL OR u.activo = TRUE THEN CURRENT_TIMESTAMP ELSE NULL END
+                    FROM usuarios u
+                    WHERE u.organizacion_id IS NOT NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM org_memberships m WHERE m.org_id = u.organizacion_id AND m.user_id = u.id
+                    )
+                    """
+                )
+            else:
+                conn.exec_driver_sql(
+                    """
+                    INSERT INTO org_memberships (org_id, user_id, role, status, archived, invited_at, accepted_at)
+                    SELECT u.organizacion_id,
+                           u.id,
+                           CASE WHEN u.rol IN ('administrador', 'admin', 'administrador_general') THEN 'admin' ELSE 'operario' END,
+                           CASE WHEN u.activo IS NULL OR u.activo = 1 THEN 'active' ELSE 'inactive' END,
+                           0,
+                           CURRENT_TIMESTAMP,
+                           CASE WHEN u.activo IS NULL OR u.activo = 1 THEN CURRENT_TIMESTAMP ELSE NULL END
+                    FROM usuarios u
+                    WHERE u.organizacion_id IS NOT NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM org_memberships m WHERE m.org_id = u.organizacion_id AND m.user_id = u.id
+                    )
+                    """
+                )
+
+        with open(sentinel, 'w') as handle:
+            handle.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: org_memberships table ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: org_memberships table')
+        raise

@@ -101,8 +101,7 @@
                     <label for="rol" class="form-label">Filtrar por Rol</label>
                     <select class="form-select" id="rol" name="rol">
                         <option value="">Todos los roles</option>
-                        <option value="administrador" {{ 'selected' if rol_filtro == 'administrador' }}>Administrador</option>
-                        <option value="tecnico" {{ 'selected' if rol_filtro == 'tecnico' }}>Técnico</option>
+                        <option value="admin" {{ 'selected' if rol_filtro == 'admin' }}>Administrador</option>
                         <option value="operario" {{ 'selected' if rol_filtro == 'operario' }}>Operario</option>
                     </select>
                 </div>
@@ -136,7 +135,7 @@
         <div class="card-header">
             <h5 class="mb-0">
                 <i class="fas fa-table me-2"></i>Lista de Usuarios
-                <span class="badge bg-secondary ms-2">{{ usuarios|length }} usuarios</span>
+                <span class="badge bg-secondary ms-2">{{ miembros|length }} usuarios</span>
             </h5>
         </div>
         <div class="card-body p-0">
@@ -154,7 +153,8 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for usuario in usuarios %}
+                        {% for miembro in miembros %}
+                        {% set usuario = miembro.usuario %}
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center">
@@ -177,9 +177,11 @@
                             </td>
                             <td>{{ usuario.email }}</td>
                             <td>
-                                <span class="badge bg-{{ 'danger' if usuario.rol == 'administrador' else 'primary' if usuario.rol == 'tecnico' else 'success' }}">
-                                    {{ usuario.rol.replace('_', ' ').title() }}
-                                </span>
+                                {% if miembro.role == 'admin' %}
+                                    <span class="badge bg-danger">Administrador</span>
+                                {% else %}
+                                    <span class="badge bg-success">Operario</span>
+                                {% endif %}
                             </td>
                             <td>
                                 {% if usuario.auth_provider == 'google' %}
@@ -193,18 +195,22 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge bg-{{ 'success' if usuario.activo else 'secondary' }}">
-                                    {{ 'Activo' if usuario.activo else 'Inactivo' }}
-                                </span>
+                                {% if miembro.status == 'active' and usuario.activo %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% elif miembro.status == 'pending' %}
+                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
                             </td>
                             <td>{{ usuario.fecha_creacion.strftime('%d/%m/%Y') }}</td>
                             <td>
                                 <div class="btn-group" role="group">
                                     <!-- Dropdown para cambiar rol -->
                                     <div class="dropdown me-2">
-                                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" 
-                                                type="button" id="dropdownRol{{ usuario.id }}" 
-                                                data-bs-toggle="dropdown" 
+                                        <button class="btn btn-sm btn-outline-primary dropdown-toggle"
+                                                type="button" id="dropdownRol{{ usuario.id }}"
+                                                data-bs-toggle="dropdown"
                                                 {{ 'disabled' if usuario.id == current_user.id else '' }}>
                                             <i class="fas fa-user-cog me-1"></i>Cambiar Rol
                                         </button>
@@ -225,11 +231,11 @@
                                     </div>
                                     
                                     <!-- Botón para activar/desactivar usuario -->
-                                    <button class="btn btn-sm btn-outline-{{ 'warning' if usuario.activo else 'success' }}" 
-                                            onclick="toggleUsuario({{ usuario.id }}, {{ 'false' if usuario.activo else 'true' }})"
+                                    <button class="btn btn-sm btn-outline-{{ 'warning' if miembro.status == 'active' and usuario.activo else 'success' }}"
+                                            onclick="toggleUsuario({{ usuario.id }}, {{ 'false' if miembro.status == 'active' and usuario.activo else 'true' }})"
                                             {{ 'disabled' if usuario.id == current_user.id else '' }}>
-                                        <i class="fas fa-{{ 'user-slash' if usuario.activo else 'user-check' }} me-1"></i>
-                                        {{ 'Desactivar' if usuario.activo else 'Activar' }}
+                                        <i class="fas fa-{{ 'user-slash' if miembro.status == 'active' and usuario.activo else 'user-check' }} me-1"></i>
+                                        {{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }}
                                     </button>
                                 </div>
                             </td>
@@ -241,7 +247,7 @@
         </div>
     </div>
 
-    {% if not usuarios %}
+    {% if not miembros %}
     <div class="card">
         <div class="card-body text-center py-5">
             <i class="fas fa-users fa-3x text-muted mb-3"></i>
