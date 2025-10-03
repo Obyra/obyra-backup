@@ -1,6 +1,6 @@
 from app import db
 import os
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from flask import current_app
 from sqlalchemy import inspect
 
@@ -262,4 +262,175 @@ def ensure_presupuesto_validity_columns():
             os.remove(sentinel)
         if current_app:
             current_app.logger.exception('❌ Migration failed: presupuesto validity columns')
+        raise
+
+
+def ensure_exchange_currency_columns():
+    """Ensure exchange rate tables and currency columns exist."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250320_exchange_currency.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            if backend == 'postgresql':
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS exchange_rates (
+                        id SERIAL PRIMARY KEY,
+                        provider VARCHAR(50) NOT NULL,
+                        base_currency VARCHAR(3) NOT NULL DEFAULT 'ARS',
+                        quote_currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+                        rate NUMERIC(18,6) NOT NULL,
+                        fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        source_url VARCHAR(255),
+                        notes VARCHAR(255),
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS pricing_indices (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL,
+                        value NUMERIC(18,6) NOT NULL,
+                        valid_from DATE NOT NULL,
+                        notes VARCHAR(255),
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_pricing_indices_name_valid_from UNIQUE (name, valid_from)
+                    )
+                    """
+                )
+            else:
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS exchange_rates (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        provider TEXT NOT NULL,
+                        base_currency TEXT NOT NULL DEFAULT 'ARS',
+                        quote_currency TEXT NOT NULL DEFAULT 'USD',
+                        rate NUMERIC(18,6) NOT NULL,
+                        fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        source_url TEXT,
+                        notes TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS pricing_indices (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        value NUMERIC(18,6) NOT NULL,
+                        valid_from DATE NOT NULL,
+                        notes TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(name, valid_from)
+                    )
+                    """
+                )
+
+            inspector = inspect(conn)
+            try:
+                presupuesto_columns = {col['name'] for col in inspector.get_columns('presupuestos')}
+            except Exception:
+                presupuesto_columns = set()
+
+            try:
+                item_columns = {col['name'] for col in inspector.get_columns('items_presupuesto')}
+            except Exception:
+                item_columns = set()
+
+            pres_alter_statements = []
+            if 'currency' not in presupuesto_columns:
+                default_clause = "DEFAULT 'ARS'" if backend != 'postgresql' else "DEFAULT 'ARS'"
+                pres_alter_statements.append(f"ALTER TABLE presupuestos ADD COLUMN currency VARCHAR(3) {default_clause}")
+            if 'exchange_rate_id' not in presupuesto_columns:
+                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_id INTEGER")
+            if 'exchange_rate_value' not in presupuesto_columns:
+                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_value NUMERIC(18,6)")
+            if 'exchange_rate_provider' not in presupuesto_columns:
+                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_provider VARCHAR(50)")
+            if 'exchange_rate_fetched_at' not in presupuesto_columns:
+                if backend == 'postgresql':
+                    pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at TIMESTAMP")
+                else:
+                    pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at DATETIME")
+
+            for stmt in pres_alter_statements:
+                conn.exec_driver_sql(stmt)
+
+            item_alter_statements = []
+            if 'currency' not in item_columns:
+                default_clause = "DEFAULT 'ARS'" if backend != 'postgresql' else "DEFAULT 'ARS'"
+                item_alter_statements.append(f"ALTER TABLE items_presupuesto ADD COLUMN currency VARCHAR(3) {default_clause}")
+            if 'price_unit_currency' not in item_columns:
+                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN price_unit_currency NUMERIC(15,2)")
+            if 'total_currency' not in item_columns:
+                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN total_currency NUMERIC(15,2)")
+
+            for stmt in item_alter_statements:
+                conn.exec_driver_sql(stmt)
+
+            # Backfill defaults
+            conn.exec_driver_sql(
+                """
+                UPDATE presupuestos
+                SET currency = COALESCE(NULLIF(currency, ''), 'ARS')
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                UPDATE items_presupuesto
+                SET currency = COALESCE(NULLIF(currency, ''), 'ARS')
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                UPDATE items_presupuesto
+                SET price_unit_currency = COALESCE(price_unit_currency, precio_unitario),
+                    total_currency = COALESCE(total_currency, total)
+                """
+            )
+
+            # Seed CAC index if empty
+            existing_index = conn.exec_driver_sql(
+                "SELECT COUNT(1) FROM pricing_indices WHERE name = 'CAC'"
+            ).scalar()
+            if not existing_index:
+                if backend == 'postgresql':
+                    insert_sql = (
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes) VALUES (%s, %s, %s, %s)"
+                    )
+                    conn.exec_driver_sql(
+                        insert_sql,
+                        ('CAC', 1.0, date.today(), 'Valor inicial CAC'),
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes) VALUES (?, ?, ?, ?)",
+                        ('CAC', 1.0, date.today(), 'Valor inicial CAC'),
+                    )
+
+        with open(sentinel, 'w') as f:
+            f.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: exchange rates and currency columns ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: exchange rates and currency columns')
         raise

@@ -1,10 +1,11 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app, g
 from flask_login import login_required, current_user
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import importlib.util
 import json
+import os
 from typing import Any, Optional
 
 REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
@@ -44,6 +45,8 @@ from calculadora_ia import (
     calcular_etapas_seleccionadas,
     slugify_etapa,
 )
+from services.exchange import base as exchange_service
+from services.exchange.providers import bna as bna_provider
 
 
 def _clean_text(value: Any) -> Optional[str]:
@@ -78,6 +81,47 @@ def _parse_date(value: Any) -> Optional[date]:
 DECIMAL_ZERO = Decimal("0")
 CURRENCY_QUANT = Decimal("0.01")
 QUANTITY_QUANT = Decimal("0.001")
+ALLOWED_CURRENCIES = {"ARS", "USD"}
+
+
+def _resolve_currency_context(raw_currency: Any):
+    """Determina la moneda solicitada y obtiene el tipo de cambio si aplica."""
+
+    currency = str(raw_currency).upper() if raw_currency else 'ARS'
+    if currency not in ALLOWED_CURRENCIES:
+        currency = 'ARS'
+
+    snapshot = None
+    if currency != 'ARS':
+        provider = (os.environ.get('FX_PROVIDER') or 'bna').lower()
+        if provider != 'bna':
+            provider = 'bna'
+        fallback_env = os.environ.get('EXCHANGE_FALLBACK_RATE')
+        fallback = Decimal(str(fallback_env)) if fallback_env else None
+        try:
+            snapshot = exchange_service.ensure_rate(
+                provider,
+                base_currency='ARS',
+                quote_currency=currency,
+                fetcher=bna_provider.fetch_official_rate,
+                freshness_minutes=15,
+                fallback_rate=fallback,
+            )
+        except Exception as exc:
+            current_app.logger.warning('No se pudo obtener el tipo de cambio: %s', exc)
+            if fallback is not None:
+                snapshot = exchange_service.ensure_rate(
+                    provider,
+                    base_currency='ARS',
+                    quote_currency=currency,
+                    fetcher=lambda: None,
+                    freshness_minutes=0,
+                    fallback_rate=fallback,
+                )
+            else:
+                raise
+
+    return currency, snapshot
 
 
 def _to_decimal(value: Any, default: str = "0") -> Decimal:
@@ -123,7 +167,10 @@ def _parse_vigencia_dias(raw_value: Any) -> Optional[int]:
 def _sumar_totales(items) -> Decimal:
     total = DECIMAL_ZERO
     for item in items:
-        total += _quantize_currency(_to_decimal(getattr(item, 'total', 0), '0'))
+        valor = getattr(item, 'total_currency', None)
+        if valor is None:
+            valor = getattr(item, 'total', 0)
+        total += _quantize_currency(_to_decimal(valor, '0'))
     return _quantize_currency(total)
 
 
@@ -132,11 +179,19 @@ def _persistir_resultados_etapas(
     etapas_resultado: list,
     superficie: Optional[Decimal],
     tipo_calculo: str,
+    currency: str,
+    fx_snapshot,
 ):
     """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
 
     if not etapas_resultado:
         return False, 'Sin etapas para aplicar'
+
+    presupuesto.currency = currency
+    try:
+        presupuesto.registrar_tipo_cambio(fx_snapshot)
+    except AttributeError:
+        pass
 
     obra = presupuesto.obra
     slug_a_etapa = {}
@@ -196,6 +251,9 @@ def _persistir_resultados_etapas(
                 precio_unitario=precio_unitario,
                 total=total,
                 origen='ia',
+                currency=currency,
+                price_unit_currency=precio_unitario,
+                total_currency=total,
             )
 
             if etapa_modelo:
@@ -321,7 +379,14 @@ def crear():
         if superficie_decimal <= DECIMAL_ZERO:
             flash('La superficie debe ser mayor a 0.', 'danger')
             return render_template('presupuestos/crear.html')
-        
+
+        try:
+            currency, fx_snapshot = _resolve_currency_context(moneda)
+        except Exception as exc:
+            current_app.logger.exception('Error obteniendo tipo de cambio para crear presupuesto')
+            flash('No pudimos obtener el tipo de cambio solicitado. Intenta nuevamente más tarde.', 'danger')
+            return render_template('presupuestos/crear.html')
+
         # Crear nueva obra basada en los datos del formulario
         nueva_obra = Obra()
         nueva_obra.nombre = nombre_obra
@@ -374,6 +439,7 @@ def crear():
             nuevo_presupuesto.numero = numero
             nuevo_presupuesto.iva_porcentaje = Decimal('21.00')  # Fijo según lo solicitado
             nuevo_presupuesto.organizacion_id = current_user.organizacion_id
+            nuevo_presupuesto.currency = currency
             vigencia_form = request.form.get('vigencia_dias', '').strip()
             if vigencia_form:
                 vigencia_dias = _parse_vigencia_dias(vigencia_form)
@@ -393,15 +459,20 @@ def crear():
             observaciones_proyecto.append(f"Tipo de construcción: {tipo_construccion.title()}")
             observaciones_proyecto.append(f"Superficie: {superficie_decimal} m²")
             if presupuesto_disponible:
-                observaciones_proyecto.append(f"Presupuesto disponible: {moneda} {presupuesto_disponible}")
+                observaciones_proyecto.append(f"Presupuesto disponible: {currency} {presupuesto_disponible}")
             if plano_pdf and plano_pdf.filename:
                 observaciones_proyecto.append(f"Plano PDF: {plano_pdf.filename}")
             
             nuevo_presupuesto.observaciones = " | ".join(observaciones_proyecto)
-            
+
             db.session.add(nuevo_presupuesto)
             db.session.flush()  # Para obtener el ID del presupuesto
-            
+
+            try:
+                nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
+            except AttributeError:
+                pass
+
             # Procesar etapas si se enviaron
             etapas_count = 0
             etapa_index = 0
@@ -464,6 +535,9 @@ def crear():
                             precio_unitario=precio_unitario_dec,
                             total=total_dec,
                             origen='ia',
+                            currency=currency,
+                            price_unit_currency=precio_unitario_dec,
+                            total_currency=total_dec,
                         )
                         if etapa_modelo:
                             nuevo_item.etapa_id = etapa_modelo.id
@@ -571,6 +645,13 @@ def calcular_etapas_ia():
     contexto = data.get('parametros_contexto') or {}
     presupuesto_id = data.get('presupuesto_id')
     persistir = bool(data.get('persistir'))
+    moneda_raw = data.get('currency') or data.get('moneda')
+
+    try:
+        currency, fx_snapshot = _resolve_currency_context(moneda_raw)
+    except Exception as exc:
+        current_app.logger.exception('No se pudo resolver la moneda para la IA de presupuestos')
+        return jsonify({'ok': False, 'error': f'No se pudo obtener el tipo de cambio: {exc}'}), 500
 
     if superficie is None:
         return jsonify({'ok': False, 'error': 'Debes indicar la superficie en m² para calcular.'}), 400
@@ -586,6 +667,8 @@ def calcular_etapas_ia():
             tipo_calculo=tipo_calculo,
             contexto=contexto,
             presupuesto_id=presupuesto_id,
+            currency=currency,
+            fx_snapshot=fx_snapshot,
         )
     except ValueError as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 400
@@ -598,6 +681,7 @@ def calcular_etapas_ia():
     resultado['ok'] = True
     resultado['presupuesto_id'] = presupuesto_id
     resultado['parametros_contexto'] = contexto
+    resultado['moneda'] = currency
 
     if presupuesto_id and persistir:
         presupuesto = Presupuesto.query.filter_by(
@@ -616,6 +700,8 @@ def calcular_etapas_ia():
                 resultado.get('etapas', []),
                 superficie_decimal,
                 tipo_calculo,
+                currency,
+                fx_snapshot,
             )
             if cambios:
                 db.session.commit()
@@ -676,7 +762,14 @@ def crear_desde_ia():
         
         if not presupuesto_ia:
             return jsonify({'error': 'Datos del presupuesto incompletos'}), 400
-        
+
+        currency_raw = datos_proyecto.get('currency') if isinstance(datos_proyecto, dict) else data.get('currency')
+        try:
+            currency, fx_snapshot = _resolve_currency_context(currency_raw)
+        except Exception as exc:
+            current_app.logger.exception('Error obteniendo tipo de cambio para crear presupuesto desde IA')
+            return jsonify({'error': 'No se pudo obtener el tipo de cambio solicitado.'}), 500
+
         # NO CREAR OBRA AUTOMÁTICAMENTE - Solo guardar datos del proyecto
         # Los presupuestos quedan como "borrador" hasta que se confirmen explícitamente
         
@@ -708,6 +801,7 @@ def crear_desde_ia():
         nuevo_presupuesto.confirmado_como_obra = False
         nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto)  # Guardar datos para posterior conversión
         nuevo_presupuesto.organizacion_id = current_user.organizacion_id
+        nuevo_presupuesto.currency = currency
         vigencia_config = datos_proyecto.get('vigencia_dias') if isinstance(datos_proyecto, dict) else None
         vigencia_dias = _parse_vigencia_dias(vigencia_config) if vigencia_config is not None else 30
         if vigencia_dias is None:
@@ -715,9 +809,14 @@ def crear_desde_ia():
         nuevo_presupuesto.vigencia_dias = vigencia_dias
         nuevo_presupuesto.vigencia_bloqueada = True
         nuevo_presupuesto.asegurar_vigencia()
-        
+
         db.session.add(nuevo_presupuesto)
         db.session.flush()  # Para obtener el ID
+
+        try:
+            nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
+        except AttributeError:
+            pass
         
         # Agregar items de materiales
         materiales = presupuesto_ia.get('materiales', {})
@@ -812,6 +911,9 @@ def crear_desde_ia():
                 item.precio_unitario = DECIMAL_ZERO
                 item.total = DECIMAL_ZERO
                 item.origen = 'ia'
+                item.currency = currency
+                item.price_unit_currency = DECIMAL_ZERO
+                item.total_currency = DECIMAL_ZERO
                 db.session.add(item)
         
         # Agregar equipos
@@ -856,6 +958,9 @@ def crear_desde_ia():
                 item.precio_unitario = DECIMAL_ZERO
                 item.total = DECIMAL_ZERO
                 item.origen = 'ia'
+                item.currency = currency
+                item.price_unit_currency = DECIMAL_ZERO
+                item.total_currency = DECIMAL_ZERO
                 db.session.add(item)
         
         # Agregar herramientas
@@ -892,6 +997,9 @@ def crear_desde_ia():
                     item.precio_unitario = DECIMAL_ZERO
                     item.total = DECIMAL_ZERO
                     item.origen = 'ia'
+                    item.currency = currency
+                    item.price_unit_currency = DECIMAL_ZERO
+                    item.total_currency = DECIMAL_ZERO
                     db.session.add(item)
             except (ValueError, TypeError):
                 # Omitir herramientas con valores inválidos
@@ -1062,6 +1170,8 @@ def detalle(id):
         totales_ia['materiales'] + totales_ia['mano_obra'] + totales_ia['equipos'] + totales_ia['herramientas']
     )
 
+    g.currency_context = presupuesto.currency
+
     return render_template('presupuestos/detalle.html',
                          presupuesto=presupuesto,
                          materiales=materiales,
@@ -1118,6 +1228,9 @@ def agregar_item(id):
     nuevo_item.precio_unitario = precio_unitario_dec
     nuevo_item.total = total_dec
     nuevo_item.origen = 'manual'
+    nuevo_item.currency = presupuesto.currency or 'ARS'
+    nuevo_item.price_unit_currency = precio_unitario_dec
+    nuevo_item.total_currency = total_dec
 
     try:
         db.session.add(nuevo_item)

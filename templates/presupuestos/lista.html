@@ -123,11 +123,11 @@
                         <div class="row text-center mb-3">
                             <div class="col-6">
                                 <small class="text-muted d-block">Sin IVA</small>
-                                <strong class="text-primary">{{ presupuesto.total_sin_iva|moneda }}</strong>
+                                <strong class="text-primary">{{ presupuesto.total_sin_iva|moneda(presupuesto.currency) }}</strong>
                             </div>
                             <div class="col-6">
                                 <small class="text-muted d-block">Total</small>
-                                <strong class="text-success">{{ presupuesto.total_con_iva|moneda }}</strong>
+                                <strong class="text-success">{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}</strong>
                             </div>
                         </div>
 

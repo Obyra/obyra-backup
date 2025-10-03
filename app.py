@@ -2,6 +2,8 @@ import os
 import logging
 import importlib
 import click
+from decimal import Decimal, InvalidOperation
+from typing import Optional
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request
 from flask.cli import AppGroup
 from flask_login import login_required, current_user
@@ -71,17 +73,85 @@ def db_upgrade():
             ensure_presupuesto_state_columns,
             ensure_item_presupuesto_stage_columns,
             ensure_presupuesto_validity_columns,
+            ensure_exchange_currency_columns,
         )
 
         ensure_avance_audit_columns()
         ensure_presupuesto_state_columns()
         ensure_item_presupuesto_stage_columns()
         ensure_presupuesto_validity_columns()
+        ensure_exchange_currency_columns()
 
     click.echo('✅ Database upgraded successfully.')
 
 
+
 app.cli.add_command(db_cli)
+
+
+fx_cli = AppGroup('fx')
+
+
+@fx_cli.command('update')
+@click.option('--provider', default='bna', help='Proveedor de tipo de cambio (ej. bna)')
+def fx_update(provider: str):
+    """Actualiza el tipo de cambio almacenado."""
+
+    provider_key = (provider or 'bna').lower()
+
+    with app.app_context():
+        from decimal import Decimal
+
+        from services.exchange import base as exchange_base
+        from services.exchange.providers import bna as bna_provider
+
+        if provider_key != 'bna':
+            click.echo('⚠️ Por ahora solo se admite el proveedor "bna". Se usará Banco Nación.')
+            provider_key = 'bna'
+
+        fallback_env = app.config.get('EXCHANGE_FALLBACK_RATE')
+        fallback = Decimal(str(fallback_env)) if fallback_env else None
+
+        snapshot = exchange_base.ensure_rate(
+            provider_key,
+            base_currency='ARS',
+            quote_currency='USD',
+            fetcher=bna_provider.fetch_official_rate,
+            freshness_minutes=0,
+            fallback_rate=fallback,
+        )
+
+        click.echo(
+            f"✅ Tipo de cambio actualizado: {snapshot.rate} ({snapshot.provider.upper()} {snapshot.fetched_at:%d/%m/%Y %H:%M})"
+        )
+
+
+app.cli.add_command(fx_cli)
+
+
+cac_cli = AppGroup('cac')
+
+
+@cac_cli.command('set')
+@click.option('--value', required=True, type=float, help='Valor numérico del índice CAC')
+@click.option('--valid-from', type=click.DateTime(formats=['%Y-%m-%d']), help='Fecha de vigencia (YYYY-MM-DD)')
+@click.option('--notes', default=None, help='Notas opcionales')
+def cac_set(value: float, valid_from, notes: Optional[str]):
+    """Registra un nuevo valor para el índice CAC."""
+
+    with app.app_context():
+        from decimal import Decimal
+
+        from services.pricing.cac import set_cac_index
+
+        valid_date = valid_from.date() if valid_from else None
+        registro = set_cac_index(Decimal(str(value)), valid_date, notes)
+        click.echo(
+            f"✅ Índice CAC registrado: {registro.value} (vigencia {registro.valid_from:%Y-%m-%d})"
+        )
+
+
+app.cli.add_command(cac_cli)
 
 
 @login_manager.user_loader
@@ -236,10 +306,14 @@ def fecha_filter(fecha):
 
 
 @app.template_filter('moneda')
-def moneda_filter(valor):
-    if valor is None:
-        return '$0'
-    return f'${valor:,.2f}'
+def moneda_filter(valor, currency: str = 'ARS'):
+    try:
+        monto = Decimal(str(valor))
+    except (InvalidOperation, ValueError, TypeError):
+        monto = Decimal('0')
+
+    symbol = 'US$' if (currency or 'ARS').upper() == 'USD' else '$'
+    return f"{symbol}{monto:,.2f}"
 
 
 @app.template_filter('porcentaje')
@@ -310,11 +384,13 @@ with app.app_context():
         ensure_presupuesto_state_columns,
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
+        ensure_exchange_currency_columns,
     )
     ensure_avance_audit_columns()
     ensure_presupuesto_state_columns()
     ensure_item_presupuesto_stage_columns()
     ensure_presupuesto_validity_columns()
+    ensure_exchange_currency_columns()
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
     try:

@@ -742,6 +742,44 @@ class ObraMiembro(db.Model):
         return f'<ObraMiembro Obra:{self.obra_id} Usuario:{self.usuario_id}>'
 
 
+class ExchangeRate(db.Model):
+    __tablename__ = 'exchange_rates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(50), nullable=False)
+    base_currency = db.Column(db.String(3), nullable=False, default='ARS')
+    quote_currency = db.Column(db.String(3), nullable=False, default='USD')
+    rate = db.Column(db.Numeric(18, 6), nullable=False)
+    fetched_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    source_url = db.Column(db.String(255))
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    presupuestos = db.relationship('Presupuesto', back_populates='exchange_rate', lazy='dynamic')
+
+    def __repr__(self):
+        return f"<ExchangeRate {self.provider} {self.base_currency}/{self.quote_currency} {self.rate}>"
+
+
+class PricingIndex(db.Model):
+    __tablename__ = 'pricing_indices'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)
+    value = db.Column(db.Numeric(18, 6), nullable=False)
+    valid_from = db.Column(db.Date, nullable=False, default=date.today)
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('name', 'valid_from', name='uq_pricing_indices_name_valid_from'),
+    )
+
+    def __repr__(self):
+        return f"<PricingIndex {self.name} {self.value} ({self.valid_from})>"
+
+
 class Presupuesto(db.Model):
     __tablename__ = 'presupuestos'
 
@@ -767,11 +805,17 @@ class Presupuesto(db.Model):
     vigencia_dias = db.Column(db.Integer, default=30)
     fecha_vigencia = db.Column(db.Date)
     vigencia_bloqueada = db.Column(db.Boolean, nullable=False, default=True)
+    currency = db.Column(db.String(3), nullable=False, default='ARS')
+    exchange_rate_id = db.Column(db.Integer, db.ForeignKey('exchange_rates.id'))
+    exchange_rate_value = db.Column(db.Numeric(18, 6))
+    exchange_rate_provider = db.Column(db.String(50))
+    exchange_rate_fetched_at = db.Column(db.DateTime)
 
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
     organizacion = db.relationship('Organizacion', overlaps="presupuestos")
     items = db.relationship('ItemPresupuesto', back_populates='presupuesto', cascade='all, delete-orphan', lazy='dynamic')
+    exchange_rate = db.relationship('ExchangeRate', back_populates='presupuestos', lazy='joined')
     
     def __repr__(self):
         return f'<Presupuesto {self.numero}>'
@@ -790,9 +834,15 @@ class Presupuesto(db.Model):
             except (InvalidOperation, ValueError, TypeError):
                 return Decimal('0')
 
-        self.subtotal_materiales = sum((_as_decimal(item.total) for item in items if item.tipo == 'material'), cero)
-        self.subtotal_mano_obra = sum((_as_decimal(item.total) for item in items if item.tipo == 'mano_obra'), cero)
-        self.subtotal_equipos = sum((_as_decimal(item.total) for item in items if item.tipo == 'equipo'), cero)
+        def _item_total(item):
+            valor = getattr(item, 'total_currency', None)
+            if valor is not None:
+                return _as_decimal(valor)
+            return _as_decimal(getattr(item, 'total', None))
+
+        self.subtotal_materiales = sum((_item_total(item) for item in items if item.tipo == 'material'), cero)
+        self.subtotal_mano_obra = sum((_item_total(item) for item in items if item.tipo == 'mano_obra'), cero)
+        self.subtotal_equipos = sum((_item_total(item) for item in items if item.tipo == 'equipo'), cero)
 
         self.subtotal_materiales = self.subtotal_materiales.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         self.subtotal_mano_obra = self.subtotal_mano_obra.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
@@ -863,6 +913,22 @@ class Presupuesto(db.Model):
         }
         return mapping.get(estado, 'bg-secondary text-white')
 
+    def registrar_tipo_cambio(self, snapshot):
+        """Actualiza los metadatos de tipo de cambio según el snapshot recibido."""
+
+        if snapshot is None:
+            self.exchange_rate_id = None
+            self.exchange_rate_value = None
+            self.exchange_rate_provider = None
+            self.exchange_rate_fetched_at = None
+            return
+
+        self.exchange_rate_id = snapshot.id
+        self.exchange_rate_value = snapshot.rate
+        self.exchange_rate_provider = snapshot.provider
+        self.exchange_rate_fetched_at = snapshot.fetched_at
+
+
 
 class ItemPresupuesto(db.Model):
     __tablename__ = 'items_presupuesto'
@@ -877,6 +943,9 @@ class ItemPresupuesto(db.Model):
     total = db.Column(db.Numeric(15, 2), nullable=False)
     etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)
     origen = db.Column(db.String(20), default='manual')  # manual, ia, importado
+    currency = db.Column(db.String(3), nullable=False, default='ARS')
+    price_unit_currency = db.Column(db.Numeric(15, 2))
+    total_currency = db.Column(db.Numeric(15, 2))
 
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')

@@ -9,6 +9,8 @@ import json
 import math
 from copy import deepcopy
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from typing import Any, Dict, Optional
 from unicodedata import normalize
 try:  # La librería openai es opcional en entornos locales/lightweight
     from openai import OpenAI
@@ -20,6 +22,9 @@ else:
     # Inicializar cliente OpenAI sólo cuando la librería esté instalada
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     OPENAI_AVAILABLE = True
+
+from services.pricing.cac import get_current_cac_index
+from services.exchange.base import ExchangeRateSnapshot
 
 # Coeficientes de construcción expandidos por tipo y m² - Estilo Togal.AI
 COEFICIENTES_CONSTRUCCION = {
@@ -126,6 +131,57 @@ COEFICIENTES_CONSTRUCCION = {
         "factor_precio": 1.8
     }
 }
+
+DECIMAL_ZERO = Decimal('0')
+CURRENCY_QUANT = Decimal('0.01')
+QUANTITY_QUANT = Decimal('0.001')
+_CAC_CACHE: Dict[str, Any] = {'valor': None, 'timestamp': None}
+
+
+def _to_decimal(value: Any, default: str = '0') -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    if value is None:
+        return Decimal(default)
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal(default)
+
+
+def _quantize_currency(value: Decimal) -> Decimal:
+    return value.quantize(CURRENCY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _quantize_quantity(value: Decimal) -> Decimal:
+    return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _get_cac_multiplier() -> Decimal:
+    """Obtiene y cachea el índice CAC vigente."""
+
+    now = datetime.utcnow()
+    cache_value = _CAC_CACHE.get('valor')
+    cache_timestamp = _CAC_CACHE.get('timestamp')
+
+    if cache_value and cache_timestamp and (now - cache_timestamp).total_seconds() < 3600:
+        return cache_value
+
+    multiplier = get_current_cac_index()
+    if multiplier <= DECIMAL_ZERO:
+        multiplier = Decimal('1')
+    _CAC_CACHE['valor'] = multiplier
+    _CAC_CACHE['timestamp'] = now
+    return multiplier
+
+
+def _convert_currency(amount: Decimal, currency: str, fx_rate: Optional[Decimal]) -> Decimal:
+    currency = (currency or 'ARS').upper()
+    if currency == 'USD':
+        if not fx_rate or fx_rate <= DECIMAL_ZERO:
+            raise ValueError('Tipo de cambio inválido para la conversión a USD.')
+        return _quantize_currency(amount / fx_rate)
+    return _quantize_currency(amount)
 
 # Sistema exhaustivo de cálculo por etapas de construcción con maquinaria completa
 ETAPAS_CONSTRUCCION = {
@@ -824,15 +880,27 @@ def obtener_multiplicador_tipo(tipo):
     return 1.0, clave.title()
 
 
-def _precio_referencia(codigo):
-    return PRECIO_REFERENCIA.get(codigo, 0.0)
+def _precio_referencia(codigo: str) -> Decimal:
+    base = _to_decimal(PRECIO_REFERENCIA.get(codigo), '0')
+    multiplier = _get_cac_multiplier()
+    return _quantize_currency(base * multiplier)
 
 
-def _redondear(valor, ndigits=2):
-    return round(valor + 1e-9, ndigits)
+def _redondear(valor: Decimal, ndigits: int = 2) -> Decimal:
+    quant = Decimal('1').scaleb(-ndigits)
+    return valor.quantize(quant, rounding=ROUND_HALF_UP)
 
 
-def calcular_etapa_por_reglas(etapa_slug, superficie_m2, tipo_construccion, contexto=None, etiqueta=None, etapa_id=None):
+def calcular_etapa_por_reglas(
+    etapa_slug,
+    superficie_m2,
+    tipo_construccion,
+    contexto=None,
+    etiqueta=None,
+    etapa_id=None,
+    currency: str = 'ARS',
+    fx_rate: Optional[Decimal] = None,
+):
     reglas = ETAPA_REGLAS_BASE.get(etapa_slug)
     nombre = etiqueta or (reglas['nombre'] if reglas else etapa_slug.replace('-', ' ').title())
 
@@ -851,59 +919,79 @@ def calcular_etapa_por_reglas(etapa_slug, superficie_m2, tipo_construccion, cont
             'metodo': 'sin_reglas',
         }
 
+    superficie_dec = _quantize_quantity(_to_decimal(superficie_m2, '0'))
     multiplicador, tipo_legible = obtener_multiplicador_tipo(tipo_construccion)
+    multiplicador_dec = _to_decimal(multiplicador, '1')
     items = []
-    subtotal_materiales = 0.0
-    subtotal_mano_obra = 0.0
-    subtotal_equipos = 0.0
+    subtotal_materiales = DECIMAL_ZERO
+    subtotal_mano_obra = DECIMAL_ZERO
+    subtotal_equipos = DECIMAL_ZERO
+    currency = (currency or 'ARS').upper()
+    tasa = fx_rate if currency != 'ARS' else None
 
     for material in reglas.get('materiales', []):
-        cantidad = _redondear(superficie_m2 * material['coef_por_m2'] * multiplicador, 2)
+        coef = _to_decimal(material['coef_por_m2'], '0')
+        cantidad = _quantize_quantity(superficie_dec * coef * multiplicador_dec)
         precio = _precio_referencia(material['codigo'])
-        subtotal_materiales += cantidad * precio
+        precio_moneda = _convert_currency(precio, currency, tasa)
+        subtotal_materiales += _quantize_currency(cantidad * precio_moneda)
         items.append({
             'tipo': 'material',
             'codigo': material['codigo'],
             'descripcion': material['descripcion'],
             'unidad': material.get('unidad', 'unidades'),
-            'cantidad': cantidad,
-            'precio_unit': precio,
+            'cantidad': float(cantidad),
+            'precio_unit': float(precio_moneda),
+            'precio_unit_ars': float(precio),
             'origen': 'ia',
             'just': 'Coeficiente por m² ajustado por tipología',
             'material_key': material.get('material_key'),
+            'moneda': currency,
+            'subtotal': float(_quantize_currency(cantidad * precio_moneda)),
         })
 
     for mano_obra in reglas.get('mano_obra', []):
-        cantidad = max(1.0, superficie_m2 * mano_obra['coef_por_m2'] * multiplicador)
-        cantidad = _redondear(cantidad, 2)
+        coef = _to_decimal(mano_obra['coef_por_m2'], '0')
+        cantidad = superficie_dec * coef * multiplicador_dec
+        cantidad = _quantize_quantity(max(_to_decimal(1, '1'), cantidad))
         precio = _precio_referencia(mano_obra['codigo'])
-        subtotal_mano_obra += cantidad * precio
+        precio_moneda = _convert_currency(precio, currency, tasa)
+        subtotal_mano_obra += _quantize_currency(cantidad * precio_moneda)
         items.append({
             'tipo': 'mano_obra',
             'codigo': mano_obra['codigo'],
             'descripcion': mano_obra['descripcion'],
             'unidad': mano_obra.get('unidad', 'jornal'),
-            'cantidad': cantidad,
-            'precio_unit': precio,
+            'cantidad': float(cantidad),
+            'precio_unit': float(precio_moneda),
+            'precio_unit_ars': float(precio),
             'origen': 'ia',
             'just': 'Escala de jornales por m²',
+            'moneda': currency,
+            'subtotal': float(_quantize_currency(cantidad * precio_moneda)),
         })
 
     for equipo in reglas.get('equipos', []):
-        base = superficie_m2 * equipo.get('dias_por_m2', 0) * multiplicador
-        dias = max(equipo.get('min_dias', 0), base)
-        dias = _redondear(dias if dias else base, 2)
+        dias_por_m2 = _to_decimal(equipo.get('dias_por_m2', 0), '0')
+        base = superficie_dec * dias_por_m2 * multiplicador_dec
+        dias_min = _to_decimal(equipo.get('min_dias', 0), '0')
+        dias = base if base > dias_min else dias_min
+        dias = _quantize_quantity(dias if dias > DECIMAL_ZERO else base)
         precio = _precio_referencia(equipo['codigo'])
-        subtotal_equipos += dias * precio
+        precio_moneda = _convert_currency(precio, currency, tasa)
+        subtotal_equipos += _quantize_currency(dias * precio_moneda)
         items.append({
             'tipo': 'equipo',
             'codigo': equipo['codigo'],
             'descripcion': equipo['descripcion'],
             'unidad': equipo.get('unidad', 'día'),
-            'cantidad': dias,
-            'precio_unit': precio,
+            'cantidad': float(dias),
+            'precio_unit': float(precio_moneda),
+            'precio_unit_ars': float(precio),
             'origen': 'ia',
             'just': 'Dimensionamiento de apoyo mecánico por superficie',
+            'moneda': currency,
+            'subtotal': float(_quantize_currency(dias * precio_moneda)),
         })
 
     subtotal_total = subtotal_materiales + subtotal_mano_obra + subtotal_equipos
@@ -914,13 +1002,14 @@ def calcular_etapa_por_reglas(etapa_slug, superficie_m2, tipo_construccion, cont
         'nombre': nombre,
         'etapa_id': etapa_id,
         'items': items,
-        'subtotal_materiales': _redondear(subtotal_materiales),
-        'subtotal_mano_obra': _redondear(subtotal_mano_obra),
-        'subtotal_equipos': _redondear(subtotal_equipos),
-        'subtotal_total': _redondear(subtotal_total),
-        'confianza': _redondear(confianza, 2),
+        'subtotal_materiales': float(_quantize_currency(subtotal_materiales)),
+        'subtotal_mano_obra': float(_quantize_currency(subtotal_mano_obra)),
+        'subtotal_equipos': float(_quantize_currency(subtotal_equipos)),
+        'subtotal_total': float(_quantize_currency(subtotal_total)),
+        'confianza': float(_redondear(Decimal(str(confianza)), 2)),
         'notas': f"Cálculo determinístico para etapa {nombre} ({tipo_legible}). {reglas.get('notas', '')}",
         'metodo': 'reglas',
+        'moneda': currency,
     }
 
 
@@ -930,16 +1019,14 @@ def calcular_etapas_seleccionadas(
     tipo_calculo='Estándar',
     contexto=None,
     presupuesto_id=None,
+    currency: str = 'ARS',
+    fx_snapshot: Optional[ExchangeRateSnapshot] = None,
 ):
     if superficie_m2 is None:
         raise ValueError('superficie_m2 es obligatoria')
 
-    try:
-        superficie_float = float(superficie_m2)
-    except (TypeError, ValueError):
-        raise ValueError('superficie_m2 debe ser numérico')
-
-    if superficie_float <= 0:
+    superficie_decimal = _quantize_quantity(_to_decimal(superficie_m2, '0'))
+    if superficie_decimal <= DECIMAL_ZERO:
         raise ValueError('superficie_m2 debe ser mayor a cero')
 
     etapas_payload = etapas_payload or []
@@ -956,40 +1043,57 @@ def calcular_etapas_seleccionadas(
     if not etapa_identificadores:
         raise ValueError('Debes seleccionar al menos una etapa para calcular')
 
+    currency = (currency or 'ARS').upper()
+    fx_rate = fx_snapshot.rate if fx_snapshot else None
+
     cache_key = json.dumps({
         'presupuesto_id': str(presupuesto_id) if presupuesto_id else None,
         'slugs': [e['slug'] for e in etapa_identificadores],
-        'superficie': superficie_float,
+        'superficie': float(superficie_decimal),
         'tipo': tipo_calculo,
         'contexto': contexto or {},
+        'currency': currency,
+        'fx_rate': str(fx_rate) if fx_rate else None,
     }, sort_keys=True)
 
     if cache_key in STAGE_CALC_CACHE:
         return deepcopy(STAGE_CALC_CACHE[cache_key])
 
     etapas_resultado = []
-    total_parcial = 0.0
+    total_parcial = DECIMAL_ZERO
 
     for etapa in etapa_identificadores:
         resultado = calcular_etapa_por_reglas(
             etapa['slug'],
-            superficie_float,
+            superficie_decimal,
             tipo_calculo,
             contexto=contexto,
             etiqueta=etapa.get('nombre'),
             etapa_id=etapa.get('id'),
+            currency=currency,
+            fx_rate=fx_rate,
         )
         etapas_resultado.append(resultado)
-        total_parcial += resultado.get('subtotal_total', 0.0)
+        total_parcial += _to_decimal(resultado.get('subtotal_total'), '0')
 
     respuesta = {
         'ok': True,
         'etapas': etapas_resultado,
-        'total_parcial': _redondear(total_parcial),
-        'moneda': 'ARS',
+        'total_parcial': float(_quantize_currency(total_parcial)),
+        'moneda': currency,
         'metodo': 'reglas',
         'presupuesto_id': presupuesto_id,
+        'tipo_cambio': None,
     }
+
+    if fx_snapshot:
+        respuesta['tipo_cambio'] = {
+            'valor': float(_to_decimal(fx_snapshot.rate, '0')),
+            'proveedor': fx_snapshot.provider,
+            'base_currency': fx_snapshot.base_currency,
+            'quote_currency': fx_snapshot.quote_currency,
+            'fetched_at': fx_snapshot.fetched_at.isoformat(),
+        }
 
     STAGE_CALC_CACHE[cache_key] = deepcopy(respuesta)
     return respuesta

@@ -418,7 +418,21 @@ if (typeof window !== 'undefined') {
     window.PRESUPUESTO_ID = hiddenPresupuestoIdInput ? (hiddenPresupuestoIdInput.value || null) : null;
 }
 
-const currencyFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+let currencyFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+
+function updateCurrencyFormatter(selectedCurrency) {
+    const currency = (selectedCurrency || 'ARS').toUpperCase();
+    const locale = currency === 'USD' ? 'en-US' : 'es-AR';
+    currencyFormatter = new Intl.NumberFormat(locale, { style: 'currency', currency });
+}
+
+const monedaSelect = document.getElementById('moneda');
+if (monedaSelect) {
+    updateCurrencyFormatter(monedaSelect.value);
+    monedaSelect.addEventListener('change', (event) => {
+        updateCurrencyFormatter(event.target.value);
+    });
+}
 
 let datosCalculoIA = null;
 let etapasSeleccionadasArray = [];
@@ -694,6 +708,10 @@ function solicitarCalculoEtapas(etapas) {
         tipo_obra: document.getElementById('tipo_obra').value || null
     };
 
+    const monedaSelectEl = document.getElementById('moneda');
+    const currency = monedaSelectEl ? monedaSelectEl.value : 'ARS';
+    updateCurrencyFormatter(currency);
+
     const payload = {
         etapa_ids: etapas.map(etapa => ({
             slug: etapa.slug || slugifyEtapa(etapa.nombre),
@@ -703,7 +721,9 @@ function solicitarCalculoEtapas(etapas) {
         superficie_m2: superficie,
         tipo_calculo: tipoCalculo,
         parametros_contexto: contexto,
-        presupuesto_id: presupuestoId
+        presupuesto_id: presupuestoId,
+        currency: currency,
+        moneda: currency
     };
 
     const modalEl = document.getElementById('modalResultadoEtapasIA');
@@ -740,6 +760,9 @@ function solicitarCalculoEtapas(etapas) {
 }
 
 function renderResultadoEtapasIA(data) {
+    if (data.moneda) {
+        updateCurrencyFormatter(data.moneda);
+    }
     const contenedor = document.getElementById('resultadoEtapasIAContenido');
     const resumen = document.getElementById('resumenEtapasIAMetadatos');
     const etapas = data.etapas || [];
@@ -811,7 +834,15 @@ function renderResultadoEtapasIA(data) {
     contenedor.innerHTML = htmlEtapas;
     const totalParcial = data.total_parcial ? currencyFormatter.format(data.total_parcial) : currencyFormatter.format(0);
     resumen.style.display = 'block';
-    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas.`;
+    let tipoCambioTexto = '';
+    if (data.tipo_cambio && data.tipo_cambio.valor) {
+        const fxFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+        const proveedor = (data.tipo_cambio.proveedor || '').toUpperCase();
+        const fechaFx = data.tipo_cambio.fetched_at ? new Date(data.tipo_cambio.fetched_at) : null;
+        const fechaTexto = fechaFx ? fechaFx.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        tipoCambioTexto = ` · TC ${proveedor} ${fxFormatter.format(data.tipo_cambio.valor)}${fechaTexto ? ' (' + fechaTexto + ')' : ''}`;
+    }
+    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas${tipoCambioTexto}.`;
 }
 
 function aplicarResultadosEtapasIA() {
@@ -831,6 +862,7 @@ function aplicarResultadosEtapasIA() {
     });
 
     if (presupuestoId) {
+        const persistCurrency = (resultadoEtapasIA.moneda || (monedaSelect ? monedaSelect.value : 'ARS'));
         const persistPayload = {
             etapa_ids: (resultadoEtapasIA.etapas || []).map(etapa => ({
                 slug: etapa.slug || slugifyEtapa(etapa.nombre),
@@ -841,7 +873,9 @@ function aplicarResultadosEtapasIA() {
             tipo_calculo: resultadoEtapasIA.tipo_calculo || document.getElementById('tipo_construccion').value || 'Estándar',
             parametros_contexto: resultadoEtapasIA.parametros_contexto || {},
             presupuesto_id: presupuestoId,
-            persistir: true
+            persistir: true,
+            currency: persistCurrency,
+            moneda: persistCurrency
         };
 
         fetch('/presupuestos/ia/calcular/etapas', {

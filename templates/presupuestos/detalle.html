@@ -188,7 +188,7 @@
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 text-primary"><i class="fas fa-robot me-2"></i>Ítems generados por IA</h6>
                     <span class="badge bg-light text-dark">
-                        Total IA: {{ totales_ia.general|moneda }}
+                        Total IA: {{ totales_ia.general|moneda(presupuesto.currency) }}
                     </span>
                 </div>
                 <div class="card-body">
@@ -211,15 +211,15 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot>
                                 <tr>
                                     <th colspan="4" class="text-end">Subtotal materiales IA</th>
-                                    <th class="text-end">{{ totales_ia.materiales|moneda }}</th>
+                                    <th class="text-end">{{ totales_ia.materiales|moneda(presupuesto.currency) }}</th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -245,15 +245,15 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot>
                                 <tr>
                                     <th colspan="4" class="text-end">Subtotal mano de obra IA</th>
-                                    <th class="text-end">{{ totales_ia.mano_obra|moneda }}</th>
+                                    <th class="text-end">{{ totales_ia.mano_obra|moneda(presupuesto.currency) }}</th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -279,15 +279,15 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot>
                                 <tr>
                                     <th colspan="4" class="text-end">Subtotal equipos IA</th>
-                                    <th class="text-end">{{ totales_ia.equipos|moneda }}</th>
+                                    <th class="text-end">{{ totales_ia.equipos|moneda(presupuesto.currency) }}</th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -313,15 +313,15 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
-                                    <td class="text-end">{{ item.total|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot>
                                 <tr>
                                     <th colspan="4" class="text-end">Subtotal herramientas IA</th>
-                                    <th class="text-end">{{ totales_ia.herramientas|moneda }}</th>
+                                    <th class="text-end">{{ totales_ia.herramientas|moneda(presupuesto.currency) }}</th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -332,6 +332,17 @@
             {% endif %}
         </div>
 
+{% if presupuesto.currency != 'ARS' and presupuesto.exchange_rate_value %}
+<div class="alert alert-info">
+    <i class="fas fa-exchange-alt me-2"></i>
+    Tipo de cambio {{ presupuesto.exchange_rate_provider|upper }}
+    {{ presupuesto.exchange_rate_value|moneda('ARS') }}
+    {% if presupuesto.exchange_rate_fetched_at %}
+    ({{ presupuesto.exchange_rate_fetched_at.strftime('%d/%m/%Y %H:%M') }})
+    {% endif %}
+</div>
+{% endif %}
+
         <div class="col-lg-4">
             <div class="card">
                 <div class="card-body text-center">
@@ -339,15 +350,15 @@
                     
                     <div class="row text-center mb-3">
                         <div class="col-4">
-                            <strong class="text-info d-block">{{ presupuesto.subtotal_materiales|moneda }}</strong>
+                            <strong class="text-info d-block">{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Materiales</small>
                         </div>
                         <div class="col-4">
-                            <strong class="text-warning d-block">{{ presupuesto.subtotal_mano_obra|moneda }}</strong>
+                            <strong class="text-warning d-block">{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Mano de Obra</small>
                         </div>
                         <div class="col-4">
-                            <strong class="text-secondary d-block">{{ presupuesto.subtotal_equipos|moneda }}</strong>
+                            <strong class="text-secondary d-block">{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Equipos</small>
                         </div>
                     </div>
@@ -356,11 +367,11 @@
                     
                     <div class="row text-center">
                         <div class="col-6">
-                            <strong class="text-primary d-block">{{ presupuesto.total_sin_iva|moneda }}</strong>
+                            <strong class="text-primary d-block">{{ presupuesto.total_sin_iva|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Sin IVA</small>
                         </div>
                         <div class="col-6">
-                            <strong class="text-success d-block h5">{{ presupuesto.total_con_iva|moneda }}</strong>
+                            <strong class="text-success d-block h5">{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Total</small>
                         </div>
 </div>
@@ -415,9 +426,9 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda }}
+                                        {{ item.total|moneda(item.currency or presupuesto.currency) }}
                                         {% if current_user.rol in ['administrador', 'tecnico'] %}
                                         <button class="btn btn-outline-primary btn-sm ms-2" 
                                                 onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
@@ -441,7 +452,7 @@
                             <tfoot>
                                 <tr class="table-info">
                                     <th colspan="4" class="text-end">Subtotal Materiales:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_materiales|moneda }}</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -496,9 +507,9 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda }}
+                                        {{ item.total|moneda(item.currency or presupuesto.currency) }}
                                         {% if current_user.rol in ['administrador', 'tecnico'] %}
                                         <button class="btn btn-outline-primary btn-sm ms-2" 
                                                 onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
@@ -522,7 +533,7 @@
                             <tfoot>
                                 <tr class="table-warning">
                                     <th colspan="4" class="text-end">Subtotal Mano de Obra:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_mano_obra|moneda }}</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -577,9 +588,9 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda }}
+                                        {{ item.total|moneda(item.currency or presupuesto.currency) }}
                                         {% if current_user.rol in ['administrador', 'tecnico'] %}
                                         <button class="btn btn-outline-primary btn-sm ms-2" 
                                                 onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
@@ -603,7 +614,7 @@
                             <tfoot>
                                 <tr class="table-secondary">
                                     <th colspan="4" class="text-end">Subtotal Equipos:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_equipos|moneda }}</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
