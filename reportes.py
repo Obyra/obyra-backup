@@ -6,6 +6,8 @@ from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia
+from services.memberships import get_current_org_id
+from services.obras_filters import obras_visibles_clause
 
 try:  # pragma: no cover - optional dependency check
     import matplotlib  # noqa: F401
@@ -41,29 +43,40 @@ def dashboard():
         fecha_desde = fecha_desde_obj.strftime('%Y-%m-%d')
         fecha_hasta = fecha_hasta_obj.strftime('%Y-%m-%d')
     
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('Selecciona una organización para ver el tablero.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion'))
+
+    visible_clause = obras_visibles_clause(Obra)
+
     # KPIs principales
-    kpis = calcular_kpis(fecha_desde_obj, fecha_hasta_obj)
-    
+    kpis = calcular_kpis(fecha_desde_obj, fecha_hasta_obj, org_id=org_id, visible_clause=visible_clause)
+
     # Obras por estado
     obras_por_estado = db.session.query(
         Obra.estado,
         func.count(Obra.id)
-    ).filter(Obra.organizacion_id == current_user.organizacion_id).group_by(Obra.estado).all()
-    
+    ).filter(
+        Obra.organizacion_id == org_id,
+        visible_clause
+    ).group_by(Obra.estado).all()
+
     # Obras con ubicación para el mapa (filtradas por organización)
     obras_con_ubicacion = Obra.query.filter(
-        Obra.organizacion_id == current_user.organizacion_id,
+        Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.direccion.isnot(None),
         Obra.direccion != ''
     ).all()
-    
+
     # Presupuestos recientes
     presupuestos_recientes = Presupuesto.query.filter(
-        Presupuesto.organizacion_id == current_user.organizacion_id
+        Presupuesto.organizacion_id == org_id
     ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
 
     presupuestos_expirados = Presupuesto.query.filter(
-        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.organizacion_id == org_id,
         Presupuesto.deleted_at.is_(None),
         Presupuesto.fecha_vigencia.isnot(None),
         Presupuesto.fecha_vigencia < date.today(),
@@ -81,7 +94,7 @@ def dashboard():
     presupuestos_vencidos = len(presupuestos_expirados)
 
     presupuestos_monitoreo = Presupuesto.query.filter(
-        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.organizacion_id == org_id,
         Presupuesto.deleted_at.is_(None),
         Presupuesto.fecha_vigencia.isnot(None),
         Presupuesto.estado.in_(['borrador', 'enviado', 'rechazado'])
@@ -113,40 +126,42 @@ def dashboard():
 
     # Items con stock bajo
     items_stock_bajo = ItemInventario.query.filter(
-        ItemInventario.organizacion_id == current_user.organizacion_id,
+        ItemInventario.organizacion_id == org_id,
         ItemInventario.stock_actual <= ItemInventario.stock_minimo,
         ItemInventario.activo == True
     ).order_by(ItemInventario.stock_actual).limit(10).all()
-    
+
     # Obras próximas a vencer
     fecha_limite = date.today() + timedelta(days=7)
     obras_vencimiento = Obra.query.filter(
-        Obra.organizacion_id == current_user.organizacion_id,
+        Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.fecha_fin_estimada <= fecha_limite,
         Obra.fecha_fin_estimada >= date.today(),
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).order_by(Obra.fecha_fin_estimada).limit(5).all()
-    
+
     # Rendimiento del equipo (últimos 30 días)
     rendimiento_equipo = calcular_rendimiento_equipo(fecha_desde_obj, fecha_hasta_obj)
     
     # Obras activas para el dashboard
     obras_activas = Obra.query.filter(
-        Obra.organizacion_id == current_user.organizacion_id,
+        Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).order_by(desc(Obra.fecha_creacion)).limit(10).all()
-    
+
     # Alertas del sistema - obtener eventos recientes
     from models import Event
-    
+
     # Feed de eventos para "Actividad Reciente" - últimos 25
     eventos_recientes = Event.query.filter(
-        Event.company_id == current_user.organizacion_id
+        Event.company_id == org_id
     ).order_by(desc(Event.created_at)).limit(25).all()
-    
+
     # Alertas de alta prioridad para el panel lateral
     alertas = Event.query.filter(
-        Event.company_id == current_user.organizacion_id,
+        Event.company_id == org_id,
         Event.severity.in_(['media', 'alta', 'critica'])
     ).order_by(desc(Event.created_at)).limit(10).all()
     
@@ -160,30 +175,46 @@ def dashboard():
                          presupuestos_vencidos=presupuestos_vencidos,
                          charts_enabled=CHARTS_ENABLED)
 
-def calcular_kpis(fecha_desde, fecha_hasta):
+def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None):
     """Calcula los KPIs principales del dashboard"""
-    
-    # Filtrar por organización del usuario actual
-    org_id = current_user.organizacion_id
-    
+
+    org_id = org_id or get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        return {
+            'obras_activas': 0,
+            'obras_nuevas_mes': 0,
+            'costo_total': 0,
+            'variacion_presupuesto': 0,
+            'avance_promedio': 0,
+            'obras_retrasadas': 0,
+            'personal_activo': 0,
+            'obras_con_personal': 0,
+        }
+
+    if visible_clause is None:
+        visible_clause = obras_visibles_clause(Obra)
+
     # Obras activas
     obras_activas = Obra.query.filter(
         Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).count()
-    
+
     # Obras nuevas este mes
     primer_dia_mes = date.today().replace(day=1)
     obras_nuevas_mes = Obra.query.filter(
         Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.fecha_creacion >= primer_dia_mes
     ).count()
-    
+
     # Costo total de obras activas (en millones)
     costo_total = db.session.query(
         func.sum(Obra.presupuesto_total)
     ).filter(
         Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
     costo_total_millones = float(costo_total) / 1000000 if costo_total else 0
@@ -193,6 +224,7 @@ def calcular_kpis(fecha_desde, fecha_hasta):
         func.sum(Obra.costo_real)
     ).filter(
         Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso']),
         Obra.costo_real.isnot(None)
     ).scalar() or 0
@@ -206,12 +238,14 @@ def calcular_kpis(fecha_desde, fecha_hasta):
         func.avg(Obra.progreso)
     ).filter(
         Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
     
     # Obras retrasadas (progreso menor al esperado)
     obras_retrasadas = Obra.query.filter(
         Obra.organizacion_id == org_id,
+        visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).filter(
         Obra.progreso < 50  # Simplificado: menos del 50% se considera retrasado
@@ -222,12 +256,13 @@ def calcular_kpis(fecha_desde, fecha_hasta):
         Usuario.organizacion_id == org_id,
         Usuario.activo == True
     ).count()
-    
+
     # Obras con personal asignado
     obras_con_personal = db.session.query(
         func.count(func.distinct(AsignacionObra.obra_id))
     ).join(Obra).filter(
-        Obra.organizacion_id == org_id
+        Obra.organizacion_id == org_id,
+        visible_clause
     ).scalar() or 0
     
     return {

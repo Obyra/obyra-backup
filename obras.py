@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
+from flask import (Blueprint, render_template, request, flash, redirect,
+                   url_for, jsonify, current_app, abort)
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
@@ -6,11 +7,17 @@ import requests
 from app import db
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
-from models import Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario, CertificacionAvance, TareaResponsables, ObraMiembro, TareaMiembro, TareaAvance, TareaAdjunto, TareaAvanceFoto
+from models import (Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario,
+                    CertificacionAvance, TareaResponsables, ObraMiembro,
+                    TareaMiembro, TareaAvance, TareaAdjunto,
+                    TareaAvanceFoto)
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
 from geocoding import geocodificar_direccion, normalizar_direccion_argentina
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
+from services.memberships import get_current_org_id
+from services.obras_filters import (obras_visibles_clause,
+                                    obra_tiene_presupuesto_confirmado)
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -221,27 +228,50 @@ def lista():
     if not current_user.puede_acceder_modulo('obras') and current_user.rol != 'operario':
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     estado = request.args.get('estado', '')
-    buscar = request.args.get('buscar', '')
-    
-    query = Obra.query
-    
-    if estado:
-        query = query.filter(Obra.estado == estado)
-    
-    if buscar:
-        query = query.filter(
-            db.or_(
-                Obra.nombre.contains(buscar),
-                Obra.cliente.contains(buscar),
-                Obra.direccion.contains(buscar)
+    buscar = (request.args.get('buscar', '') or '').strip()
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+
+    chequear_admin = getattr(current_user, 'tiene_rol', None)
+    puede_ver_borradores = bool(callable(chequear_admin) and current_user.tiene_rol('admin'))
+    if not puede_ver_borradores:
+        puede_ver_borradores = getattr(current_user, 'rol', '') in ['administrador', 'admin']
+
+    mostrar_borradores = puede_ver_borradores and request.args.get('mostrar_borradores') == '1'
+
+    obras = []
+    if org_id:
+        query = Obra.query.filter(Obra.organizacion_id == org_id)
+
+        if not mostrar_borradores:
+            query = query.filter(obras_visibles_clause(Obra))
+
+        if estado:
+            query = query.filter(Obra.estado == estado)
+
+        if buscar:
+            query = query.filter(
+                db.or_(
+                    Obra.nombre.contains(buscar),
+                    Obra.cliente.contains(buscar),
+                    Obra.direccion.contains(buscar)
+                )
             )
-        )
-    
-    obras = query.order_by(Obra.fecha_creacion.desc()).all()
-    
-    return render_template('obras/lista.html', obras=obras, estado=estado, buscar=buscar)
+
+        obras = query.order_by(Obra.fecha_creacion.desc()).all()
+    else:
+        flash('Selecciona una organización para ver tus obras.', 'warning')
+
+    return render_template(
+        'obras/lista.html',
+        obras=obras,
+        estado=estado,
+        buscar=buscar,
+        mostrar_borradores=mostrar_borradores,
+        puede_ver_borradores=puede_ver_borradores,
+    )
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
@@ -331,16 +361,22 @@ def detalle(id):
     if not current_user.puede_acceder_modulo('obras') and current_user.rol != 'operario':
         flash('No tienes permisos para ver obras.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     # Para operarios, verificar membresía en la obra
     if current_user.rol == 'operario' and not es_miembro_obra(id, current_user.id):
         flash('No tienes permisos para ver esta obra.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
-    obra = Obra.query.get_or_404(id)
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        abort(404)
+
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    if not obra_tiene_presupuesto_confirmado(obra):
+        abort(404)
     etapas = obra.etapas.order_by(EtapaObra.orden).all()
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
-    usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=current_user.organizacion_id).all()
+    usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=org_id).all()
     etapas_disponibles = obtener_etapas_disponibles()
     
     # Load assigned members as specified by user

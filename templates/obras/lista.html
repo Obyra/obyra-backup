@@ -49,11 +49,23 @@
                         <option value="cancelada" {{ 'selected' if estado == 'cancelada' }}>Cancelada</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label for="buscar" class="form-label">Buscar</label>
-                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                    <input type="text" class="form-control" id="buscar" name="buscar"
                            value="{{ buscar }}" placeholder="Nombre, cliente o dirección...">
                 </div>
+{% if puede_ver_borradores %}
+                <div class="col-md-2 d-flex align-items-end">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="mostrar_borradores" name="mostrar_borradores" value="1"
+                               {% if mostrar_borradores %}checked{% endif %}>
+                        <label class="form-check-label" for="mostrar_borradores">
+                            Mostrar borradores
+                        </label>
+                    </div>
+                </div>
+{% endif %}
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-outline-primary me-2">
                         <i class="fas fa-search me-1"></i>Filtrar
@@ -89,6 +101,11 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-list me-2"></i>📋 Lista de Obras
+                        {% if mostrar_borradores %}
+                            <span class="badge bg-warning text-dark ms-2" title="Incluye obras en borrador o sin presupuesto confirmado">
+                                Mostrando borradores
+                            </span>
+                        {% endif %}
                     </h5>
                 </div>
                 <div class="card-body">
