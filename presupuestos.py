@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app, g
 from flask_login import login_required, current_user
-from datetime import date, datetime, timedelta
+import datetime as dt
+from datetime import date, timedelta
 from io import BytesIO
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import importlib.util
@@ -74,7 +75,7 @@ def _parse_date(value: Any) -> Optional[date]:
 
     for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
-            return datetime.strptime(str(value), fmt).date()
+            return dt.datetime.strptime(str(value), fmt).date()
         except (ValueError, TypeError):
             continue
     return None
@@ -477,16 +478,15 @@ def crear():
             nueva_obra.geocode_status = geocode_status
             raw_payload = geocode_payload.get('raw')
             nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else nueva_obra.geocode_raw
-            nueva_obra.geocode_actualizado = datetime.utcnow()
+            nueva_obra.geocode_actualizado = dt.datetime.utcnow()
         elif geocode_status:
             nueva_obra.geocode_status = geocode_status
         
         # Procesar fechas
         if fecha_inicio:
-            from datetime import datetime
-            nueva_obra.fecha_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            nueva_obra.fecha_inicio = dt.datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
         if fecha_fin:
-            nueva_obra.fecha_fin_estimada = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+            nueva_obra.fecha_fin_estimada = dt.datetime.strptime(fecha_fin, '%Y-%m-%d').date()
         
         # Procesar presupuesto disponible
         if presupuesto_disponible:
@@ -568,7 +568,7 @@ def crear():
             if geocode_payload:
                 raw_payload = geocode_payload.get('raw')
                 nuevo_presupuesto.geocode_raw = json.dumps(raw_payload) if raw_payload else nuevo_presupuesto.geocode_raw
-                nuevo_presupuesto.geocode_actualizado = datetime.utcnow()
+                nuevo_presupuesto.geocode_actualizado = dt.datetime.utcnow()
 
             datos_proyecto = {
                 'nombre': nombre_obra,
@@ -1282,7 +1282,7 @@ def exportar_excel_ia():
         # Crear respuesta
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        response.headers['Content-Disposition'] = f'attachment; filename=presupuesto_ia_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        response.headers['Content-Disposition'] = f'attachment; filename=presupuesto_ia_{dt.datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
         
         return response
         
@@ -1843,7 +1843,7 @@ def confirmar_como_obra(id):
                     nueva_obra.geocode_status = resolved.get('status') or 'ok'
                     raw_payload = resolved.get('raw')
                     nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else None
-                    nueva_obra.geocode_actualizado = datetime.utcnow()
+                    nueva_obra.geocode_actualizado = dt.datetime.utcnow()
 
         nueva_obra.geocode_place_id = presupuesto.geocode_place_id or nueva_obra.geocode_place_id
         nueva_obra.geocode_provider = presupuesto.geocode_provider or nueva_obra.geocode_provider
@@ -1943,7 +1943,7 @@ def marcar_presupuesto_perdido(id: int):
 
     presupuesto.estado = 'perdido'
     presupuesto.perdido_motivo = motivo
-    presupuesto.perdido_fecha = datetime.utcnow()
+    presupuesto.perdido_fecha = dt.datetime.utcnow()
     presupuesto.confirmado_como_obra = False
 
     try:
@@ -2015,7 +2015,7 @@ def eliminar_presupuesto(id: int):
         return jsonify({'error': 'Solo los presupuestos en borrador o perdidos pueden eliminarse.'}), 400
 
     presupuesto.estado = 'eliminado'
-    presupuesto.deleted_at = datetime.utcnow()
+    presupuesto.deleted_at = dt.datetime.utcnow()
 
     try:
         db.session.commit()
