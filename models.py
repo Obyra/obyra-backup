@@ -334,6 +334,84 @@ class Usuario(UserMixin, db.Model):
             'operario': ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
         })
 
+        return modulo in permisos.get(self.rol, [])
+
+    def puede_editar_modulo(self, modulo):
+        """Verifica si el usuario puede editar en un módulo usando RBAC"""
+        # Primero verificar si hay override específico de usuario
+        user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
+        if user_override:
+            return user_override.can_edit
+
+        # Si no hay override, usar permisos del rol
+        role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
+        if role_perm:
+            return role_perm.can_edit
+
+        # Fallback: admins y tecnicos pueden editar la mayoría
+        if self.rol in ['administrador', 'tecnico', 'jefe_obra']:
+            return True
+
+        return False
+
+    def es_admin_completo(self):
+        """Verifica si el usuario es administrador con acceso completo sin restricciones de plan"""
+        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
+        return self.email in emails_admin_completo
+
+    def es_admin(self):
+        """Compatibilidad para plantillas antiguas que consultan current_user.es_admin()."""
+        try:
+            if self.tiene_rol('admin'):
+                return True
+        except Exception:
+            # En caso de que la sesión aún no esté inicializada seguimos con los fallbacks legacy
+            pass
+
+        role_global = (getattr(self, 'role', None) or '').lower()
+        if role_global in {'admin', 'administrador', 'administrador_general'}:
+            return True
+
+        rol_legacy = (getattr(self, 'rol', None) or '').lower()
+        if rol_legacy in {'admin', 'administrador', 'administrador_general'}:
+            return True
+
+        return self.es_admin_completo()
+
+    def tiene_acceso_sin_restricciones(self):
+        """Verifica si el usuario tiene acceso completo al sistema"""
+        # Administradores especiales tienen acceso completo
+        if self.es_admin_completo():
+            return True
+
+        # Usuarios con planes activos (standard/premium) también tienen acceso
+        if self.plan_activo in ['standard', 'premium']:
+            return True
+
+        # Usuarios en periodo de prueba válido
+        if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
+            return True
+
+        return False
+
+    def ensure_onboarding_status(self):
+        """Garantiza que exista un registro de onboarding para el usuario."""
+        status = self.onboarding_status
+        if not status:
+            status = OnboardingStatus(usuario=self)
+            db.session.add(status)
+            db.session.flush()
+        return status
+
+    def ensure_billing_profile(self):
+        """Garantiza que exista un perfil de facturación asociado al usuario."""
+        profile = self.billing_profile
+        if not profile:
+            profile = BillingProfile(usuario=self)
+            db.session.add(profile)
+            db.session.flush()
+        return profile
+
 
 class OrgMembership(db.Model):
     __tablename__ = 'org_memberships'
@@ -379,69 +457,6 @@ class OrgMembership(db.Model):
     def marcar_archivada(self):
         self.archived = True
         self.archived_at = datetime.utcnow()
-        
-        return modulo in permisos.get(self.rol, [])
-    
-    def puede_editar_modulo(self, modulo):
-        """Verifica si el usuario puede editar en un módulo usando RBAC"""
-        # Primero verificar si hay override específico de usuario
-        user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
-        if user_override:
-            return user_override.can_edit
-        
-        # Si no hay override, usar permisos del rol
-        role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
-        if role_perm:
-            return role_perm.can_edit
-        
-        # Fallback: admins y tecnicos pueden editar la mayoría
-        if self.rol in ['administrador', 'tecnico', 'jefe_obra']:
-            return True
-        
-        return False
-    
-    def es_admin_completo(self):
-        """Verifica si el usuario es administrador con acceso completo sin restricciones de plan"""
-        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        return self.email in emails_admin_completo
-    
-    def es_admin(self):
-        """Verifica si el usuario tiene rol de administrador en la organización activa."""
-        return self.tiene_rol('admin') or self.es_admin_completo()
-
-    def tiene_acceso_sin_restricciones(self):
-        """Verifica si el usuario tiene acceso completo al sistema"""
-        # Administradores especiales tienen acceso completo
-        if self.es_admin_completo():
-            return True
-        
-        # Usuarios con planes activos (standard/premium) también tienen acceso
-        if self.plan_activo in ['standard', 'premium']:
-            return True
-            
-        # Usuarios en periodo de prueba válido
-        if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
-            return True
-
-        return False
-
-    def ensure_onboarding_status(self):
-        """Garantiza que exista un registro de onboarding para el usuario."""
-        status = self.onboarding_status
-        if not status:
-            status = OnboardingStatus(usuario=self)
-            db.session.add(status)
-            db.session.flush()
-        return status
-
-    def ensure_billing_profile(self):
-        """Garantiza que exista un perfil de facturación asociado al usuario."""
-        profile = self.billing_profile
-        if not profile:
-            profile = BillingProfile(usuario=self)
-            db.session.add(profile)
-            db.session.flush()
-        return profile
 
 
 class PerfilUsuario(db.Model):
@@ -1895,7 +1910,7 @@ class Supplier(db.Model):
 
 class SupplierUser(db.Model):
     __tablename__ = 'supplier_user'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
@@ -1917,10 +1932,14 @@ class SupplierUser(db.Model):
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
-    
+
     @property
     def is_owner(self):
         return self.rol == 'owner'
+
+    # Compatibilidad con plantillas que consultan current_user.es_admin()
+    def es_admin(self):
+        return False
 
 
 class Category(db.Model):

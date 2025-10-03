@@ -413,6 +413,14 @@ def ensure_exchange_currency_columns():
                 """
             )
 
+            if backend == 'postgresql':
+                conn.exec_driver_sql(
+                    "ALTER TABLE pricing_indices ALTER COLUMN created_at SET DEFAULT NOW()"
+                )
+                conn.exec_driver_sql(
+                    "ALTER TABLE pricing_indices ALTER COLUMN updated_at SET DEFAULT NOW()"
+                )
+
             if 'as_of_date' not in exchange_columns:
                 conn.exec_driver_sql("ALTER TABLE exchange_rates ADD COLUMN as_of_date DATE")
 
