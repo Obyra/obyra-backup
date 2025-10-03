@@ -20,7 +20,20 @@ class Organizacion(db.Model):
     activa = db.Column(db.Boolean, default=True)
     
     # Relaciones
-    usuarios = db.relationship('Usuario', back_populates='organizacion', lazy='dynamic')
+    usuarios = db.relationship(
+        'Usuario',
+        back_populates='organizacion',
+        foreign_keys='Usuario.organizacion_id',
+        primaryjoin='Organizacion.id == Usuario.organizacion_id',
+        lazy='dynamic'
+    )
+    usuarios_primarios = db.relationship(
+        'Usuario',
+        back_populates='primary_organizacion',
+        foreign_keys='Usuario.primary_org_id',
+        primaryjoin='Organizacion.id == Usuario.primary_org_id',
+        lazy='dynamic'
+    )
     memberships = db.relationship(
         'OrgMembership',
         back_populates='organizacion',
@@ -77,8 +90,17 @@ class Usuario(UserMixin, db.Model):
     fecha_expiracion_plan = db.Column(db.DateTime)  # Para controlar la expiración del plan
     
     # Relaciones
-    organizacion = db.relationship('Organizacion', back_populates='usuarios')
-    primary_organizacion = db.relationship('Organizacion', foreign_keys=[primary_org_id], lazy='joined')
+    organizacion = db.relationship(
+        'Organizacion',
+        back_populates='usuarios',
+        foreign_keys=[organizacion_id]
+    )
+    primary_organizacion = db.relationship(
+        'Organizacion',
+        foreign_keys=[primary_org_id],
+        back_populates='usuarios_primarios',
+        lazy='joined'
+    )
     memberships = db.relationship(
         'OrgMembership',
         foreign_keys='OrgMembership.user_id',
@@ -295,8 +317,16 @@ class OrgMembership(db.Model):
         db.Index('ix_membership_org', 'org_id'),
     )
 
-    organizacion = db.relationship('Organizacion', back_populates='memberships')
-    usuario = db.relationship('Usuario', foreign_keys=[user_id], back_populates='memberships')
+    organizacion = db.relationship(
+        'Organizacion',
+        back_populates='memberships',
+        foreign_keys=[org_id]
+    )
+    usuario = db.relationship(
+        'Usuario',
+        foreign_keys=[user_id],
+        back_populates='memberships'
+    )
     invitador = db.relationship(
         'Usuario',
         foreign_keys=[invited_by],

@@ -380,6 +380,35 @@ def ensure_exchange_currency_columns():
             except Exception:
                 exchange_columns = set()
 
+            try:
+                pricing_columns = {col['name'] for col in inspector.get_columns('pricing_indices')}
+            except Exception:
+                pricing_columns = set()
+
+            if 'created_at' not in pricing_columns:
+                if backend == 'postgresql':
+                    conn.exec_driver_sql(
+                        "ALTER TABLE pricing_indices ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW()"
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE pricing_indices ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                    )
+
+            if 'updated_at' not in pricing_columns:
+                if backend == 'postgresql':
+                    conn.exec_driver_sql(
+                        "ALTER TABLE pricing_indices ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW()"
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE pricing_indices ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                    )
+
+            conn.exec_driver_sql(
+                "UPDATE pricing_indices SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)"
+            )
+
             if 'as_of_date' not in exchange_columns:
                 conn.exec_driver_sql("ALTER TABLE exchange_rates ADD COLUMN as_of_date DATE")
 
@@ -496,16 +525,16 @@ def ensure_exchange_currency_columns():
             if not existing_index:
                 if backend == 'postgresql':
                     insert_sql = (
-                        "INSERT INTO pricing_indices (name, value, valid_from, notes) VALUES (%s, %s, %s, %s)"
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at) VALUES (%s, %s, %s, %s, %s)"
                     )
                     conn.exec_driver_sql(
                         insert_sql,
-                        ('CAC', 1.0, date.today(), 'Valor inicial CAC'),
+                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', datetime.utcnow()),
                     )
                 else:
                     conn.exec_driver_sql(
-                        "INSERT INTO pricing_indices (name, value, valid_from, notes) VALUES (?, ?, ?, ?)",
-                        ('CAC', 1.0, date.today(), 'Valor inicial CAC'),
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at) VALUES (?, ?, ?, ?, ?)",
+                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', datetime.utcnow()),
                     )
 
         with open(sentinel, 'w') as f:
