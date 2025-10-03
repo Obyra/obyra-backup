@@ -47,6 +47,7 @@ from calculadora_ia import (
 )
 from services.exchange import base as exchange_service
 from services.exchange.providers import bna as bna_provider
+from services.cac.cac_service import get_cac_context
 
 
 def _clean_text(value: Any) -> Optional[str]:
@@ -104,7 +105,7 @@ def _resolve_currency_context(raw_currency: Any):
                 base_currency='ARS',
                 quote_currency=currency,
                 fetcher=bna_provider.fetch_official_rate,
-                freshness_minutes=15,
+                as_of=date.today(),
                 fallback_rate=fallback,
             )
         except Exception as exc:
@@ -114,8 +115,8 @@ def _resolve_currency_context(raw_currency: Any):
                     provider,
                     base_currency='ARS',
                     quote_currency=currency,
-                    fetcher=lambda: None,
-                    freshness_minutes=0,
+                    fetcher=lambda *_args, **_kwargs: None,
+                    as_of=date.today(),
                     fallback_rate=fallback,
                 )
             else:
@@ -181,6 +182,7 @@ def _persistir_resultados_etapas(
     tipo_calculo: str,
     currency: str,
     fx_snapshot,
+    cac_context,
 ):
     """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
 
@@ -192,6 +194,10 @@ def _persistir_resultados_etapas(
         presupuesto.registrar_tipo_cambio(fx_snapshot)
     except AttributeError:
         pass
+
+    if cac_context:
+        presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(cac_context.value, '0'))
+        presupuesto.indice_cac_fecha = cac_context.period
 
     obra = presupuesto.obra
     slug_a_etapa = {}
@@ -239,8 +245,14 @@ def _persistir_resultados_etapas(
                 tipo_item = 'material'
 
             cantidad = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
-            precio_unitario = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
-            total = _quantize_currency(cantidad * precio_unitario)
+            precio_moneda = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
+            precio_ars = _quantize_currency(_to_decimal(item_data.get('precio_unit_ars'), '0'))
+
+            if precio_ars <= DECIMAL_ZERO and fx_snapshot and getattr(fx_snapshot, 'value', None):
+                precio_ars = _quantize_currency(precio_moneda * _to_decimal(fx_snapshot.value, '1'))
+
+            total_currency = _quantize_currency(cantidad * precio_moneda)
+            total_ars = _quantize_currency(cantidad * (precio_ars if precio_ars > DECIMAL_ZERO else precio_moneda))
 
             nuevo_item = ItemPresupuesto(
                 presupuesto_id=presupuesto.id,
@@ -248,12 +260,14 @@ def _persistir_resultados_etapas(
                 descripcion=item_data.get('descripcion') or f'Ítem {tipo_item} etapa {etapa_data.get("nombre") or index}',
                 unidad=item_data.get('unidad') or 'unidades',
                 cantidad=cantidad,
-                precio_unitario=precio_unitario,
-                total=total,
+                precio_unitario=precio_ars,
+                total=total_ars,
                 origen='ia',
                 currency=currency,
-                price_unit_currency=precio_unitario,
-                total_currency=total,
+                price_unit_currency=precio_moneda,
+                total_currency=total_currency,
+                price_unit_ars=precio_ars,
+                total_ars=total_ars,
             )
 
             if etapa_modelo:
@@ -473,6 +487,11 @@ def crear():
             except AttributeError:
                 pass
 
+            cac_context = get_cac_context()
+            if cac_context:
+                nuevo_presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(cac_context.value, '0'))
+                nuevo_presupuesto.indice_cac_fecha = cac_context.period
+
             # Procesar etapas si se enviaron
             etapas_count = 0
             etapa_index = 0
@@ -523,8 +542,13 @@ def crear():
                         tipo_item = tipo_item if tipo_item in tipos_validos else 'material'
 
                         cantidad_dec = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
-                        precio_unitario_dec = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
-                        total_dec = _quantize_currency(cantidad_dec * precio_unitario_dec)
+                        precio_moneda = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
+                        precio_ars = _quantize_currency(_to_decimal(item_data.get('precio_unit_ars'), '0'))
+                        if precio_ars <= DECIMAL_ZERO and fx_snapshot and getattr(fx_snapshot, 'value', None):
+                            precio_ars = _quantize_currency(precio_moneda * _to_decimal(fx_snapshot.value, '1'))
+
+                        total_currency = _quantize_currency(cantidad_dec * precio_moneda)
+                        total_ars = _quantize_currency(cantidad_dec * (precio_ars if precio_ars > DECIMAL_ZERO else precio_moneda))
 
                         nuevo_item = ItemPresupuesto(
                             presupuesto_id=nuevo_presupuesto.id,
@@ -532,12 +556,14 @@ def crear():
                             descripcion=item_data.get('descripcion', 'Item IA de etapa'),
                             unidad=item_data.get('unidad', 'unidades'),
                             cantidad=cantidad_dec,
-                            precio_unitario=precio_unitario_dec,
-                            total=total_dec,
+                            precio_unitario=precio_ars,
+                            total=total_ars,
                             origen='ia',
                             currency=currency,
-                            price_unit_currency=precio_unitario_dec,
-                            total_currency=total_dec,
+                            price_unit_currency=precio_moneda,
+                            total_currency=total_currency,
+                            price_unit_ars=precio_ars,
+                            total_ars=total_ars,
                         )
                         if etapa_modelo:
                             nuevo_item.etapa_id = etapa_modelo.id
@@ -695,6 +721,7 @@ def calcular_etapas_ia():
         total_antes = float(presupuesto.total_con_iva or 0)
 
         try:
+            cac_context = get_cac_context()
             cambios, _ = _persistir_resultados_etapas(
                 presupuesto,
                 resultado.get('etapas', []),
@@ -702,6 +729,7 @@ def calcular_etapas_ia():
                 tipo_calculo,
                 currency,
                 fx_snapshot,
+                cac_context,
             )
             if cambios:
                 db.session.commit()

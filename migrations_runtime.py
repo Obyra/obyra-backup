@@ -269,7 +269,7 @@ def ensure_exchange_currency_columns():
     """Ensure exchange rate tables and currency columns exist."""
 
     os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250320_exchange_currency.done'
+    sentinel = 'instance/migrations/20250321_exchange_currency_fx_cac.done'
 
     if os.path.exists(sentinel):
         return
@@ -288,24 +288,27 @@ def ensure_exchange_currency_columns():
                         base_currency VARCHAR(3) NOT NULL DEFAULT 'ARS',
                         quote_currency VARCHAR(3) NOT NULL DEFAULT 'USD',
                         rate NUMERIC(18,6) NOT NULL,
+                        as_of_date DATE NOT NULL DEFAULT CURRENT_DATE,
                         fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         source_url VARCHAR(255),
                         notes VARCHAR(255),
-                        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_exchange_rate_daily UNIQUE(provider, base_currency, quote_currency, as_of_date)
                     )
                     """
                 )
                 conn.exec_driver_sql(
                     """
-                    CREATE TABLE IF NOT EXISTS pricing_indices (
+                    CREATE TABLE IF NOT EXISTS cac_indices (
                         id SERIAL PRIMARY KEY,
-                        name VARCHAR(50) NOT NULL,
-                        value NUMERIC(18,6) NOT NULL,
-                        valid_from DATE NOT NULL,
-                        notes VARCHAR(255),
+                        year INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        value NUMERIC(12,2) NOT NULL,
+                        provider VARCHAR(50) NOT NULL,
+                        source_url VARCHAR(255),
+                        fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                        CONSTRAINT uq_pricing_indices_name_valid_from UNIQUE (name, valid_from)
+                        CONSTRAINT uq_cac_index_period_provider UNIQUE(year, month, provider)
                     )
                     """
                 )
@@ -318,29 +321,40 @@ def ensure_exchange_currency_columns():
                         base_currency TEXT NOT NULL DEFAULT 'ARS',
                         quote_currency TEXT NOT NULL DEFAULT 'USD',
                         rate NUMERIC(18,6) NOT NULL,
+                        as_of_date DATE NOT NULL DEFAULT CURRENT_DATE,
                         fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         source_url TEXT,
                         notes TEXT,
-                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(provider, base_currency, quote_currency, as_of_date)
                     )
                     """
                 )
                 conn.exec_driver_sql(
                     """
-                    CREATE TABLE IF NOT EXISTS pricing_indices (
+                    CREATE TABLE IF NOT EXISTS cac_indices (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        value NUMERIC(18,6) NOT NULL,
-                        valid_from DATE NOT NULL,
-                        notes TEXT,
+                        year INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        value NUMERIC(12,2) NOT NULL,
+                        provider TEXT NOT NULL,
+                        source_url TEXT,
+                        fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(name, valid_from)
+                        UNIQUE(year, month, provider)
                     )
                     """
                 )
 
             inspector = inspect(conn)
+            try:
+                exchange_columns = {col['name'] for col in inspector.get_columns('exchange_rates')}
+            except Exception:
+                exchange_columns = set()
+
+            if 'as_of_date' not in exchange_columns:
+                conn.exec_driver_sql("ALTER TABLE exchange_rates ADD COLUMN as_of_date DATE")
+
             try:
                 presupuesto_columns = {col['name'] for col in inspector.get_columns('presupuestos')}
             except Exception:
@@ -362,10 +376,17 @@ def ensure_exchange_currency_columns():
             if 'exchange_rate_provider' not in presupuesto_columns:
                 pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_provider VARCHAR(50)")
             if 'exchange_rate_fetched_at' not in presupuesto_columns:
-                if backend == 'postgresql':
-                    pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at TIMESTAMP")
-                else:
-                    pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at DATETIME")
+                column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+                pres_alter_statements.append(f"ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at {column_type}")
+            if 'exchange_rate_as_of' not in presupuesto_columns:
+                column_type = 'DATE'
+                pres_alter_statements.append(f"ALTER TABLE presupuestos ADD COLUMN exchange_rate_as_of {column_type}")
+            if 'tasa_usd_venta' not in presupuesto_columns:
+                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN tasa_usd_venta NUMERIC(10,4)")
+            if 'indice_cac_valor' not in presupuesto_columns:
+                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN indice_cac_valor NUMERIC(12,2)")
+            if 'indice_cac_fecha' not in presupuesto_columns:
+                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN indice_cac_fecha DATE")
 
             for stmt in pres_alter_statements:
                 conn.exec_driver_sql(stmt)
@@ -378,6 +399,10 @@ def ensure_exchange_currency_columns():
                 item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN price_unit_currency NUMERIC(15,2)")
             if 'total_currency' not in item_columns:
                 item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN total_currency NUMERIC(15,2)")
+            if 'price_unit_ars' not in item_columns:
+                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN price_unit_ars NUMERIC(15,2)")
+            if 'total_ars' not in item_columns:
+                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN total_ars NUMERIC(15,2)")
 
             for stmt in item_alter_statements:
                 conn.exec_driver_sql(stmt)

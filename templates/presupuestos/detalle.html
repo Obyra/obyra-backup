@@ -211,8 +211,18 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
-                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -245,8 +255,18 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
-                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -279,8 +299,18 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
-                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -313,8 +343,18 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
-                                    <td class="text-end">{{ item.total|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -332,13 +372,29 @@
             {% endif %}
         </div>
 
-{% if presupuesto.currency != 'ARS' and presupuesto.exchange_rate_value %}
-<div class="alert alert-info">
-    <i class="fas fa-exchange-alt me-2"></i>
-    Tipo de cambio {{ presupuesto.exchange_rate_provider|upper }}
-    {{ presupuesto.exchange_rate_value|moneda('ARS') }}
-    {% if presupuesto.exchange_rate_fetched_at %}
-    ({{ presupuesto.exchange_rate_fetched_at.strftime('%d/%m/%Y %H:%M') }})
+{% if presupuesto.currency != 'ARS' %}
+    {% if presupuesto.tasa_usd_venta or presupuesto.exchange_rate_value %}
+    <div class="alert alert-info">
+        <i class="fas fa-exchange-alt me-2"></i>
+        Tipo de cambio utilizado:
+        {{ (presupuesto.tasa_usd_venta or presupuesto.exchange_rate_value)|moneda('ARS') }}
+        {% if presupuesto.exchange_rate_provider %}
+            — {{ presupuesto.exchange_rate_provider|upper }}
+        {% endif %}
+        {% set fecha_tc = presupuesto.exchange_rate_as_of or (presupuesto.exchange_rate_fetched_at.date() if presupuesto.exchange_rate_fetched_at else None) %}
+        {% if fecha_tc %}
+            <span class="ms-2 text-muted">({{ fecha_tc.strftime('%d/%m/%Y') }})</span>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endif %}
+
+{% if presupuesto.indice_cac_valor %}
+<div class="alert alert-secondary">
+    <i class="fas fa-chart-line me-2"></i>
+    Índice CAC aplicado: {{ '{:,.2f}'.format(presupuesto.indice_cac_valor) }}
+    {% if presupuesto.indice_cac_fecha %}
+        <span class="ms-2 text-muted">({{ presupuesto.indice_cac_fecha.strftime('%B %Y')|title }})</span>
     {% endif %}
 </div>
 {% endif %}
@@ -369,10 +425,16 @@
                         <div class="col-6">
                             <strong class="text-primary d-block">{{ presupuesto.total_sin_iva|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Sin IVA</small>
+                            {% if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta %}
+                                <div class="small text-muted">≈ {{ (presupuesto.total_sin_iva * presupuesto.tasa_usd_venta)|moneda('ARS') }}</div>
+                            {% endif %}
                         </div>
                         <div class="col-6">
                             <strong class="text-success d-block h5">{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Total</small>
+                            {% if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta %}
+                                <div class="small text-muted">≈ {{ (presupuesto.total_con_iva * presupuesto.tasa_usd_venta)|moneda('ARS') }}</div>
+                            {% endif %}
                         </div>
 </div>
 
@@ -426,9 +488,17 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda(item.currency or presupuesto.currency) }}
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
                                         {% if current_user.rol in ['administrador', 'tecnico'] %}
                                         <button class="btn btn-outline-primary btn-sm ms-2" 
                                                 onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
@@ -507,9 +577,17 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda(item.currency or presupuesto.currency) }}
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
                                         {% if current_user.rol in ['administrador', 'tecnico'] %}
                                         <button class="btn btn-outline-primary btn-sm ms-2" 
                                                 onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
@@ -588,9 +666,17 @@
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda(item.currency or presupuesto.currency) }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda(item.currency or presupuesto.currency) }}
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
                                         {% if current_user.rol in ['administrador', 'tecnico'] %}
                                         <button class="btn btn-outline-primary btn-sm ms-2" 
                                                 onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">

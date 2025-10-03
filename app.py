@@ -117,12 +117,15 @@ def fx_update(provider: str):
             base_currency='ARS',
             quote_currency='USD',
             fetcher=bna_provider.fetch_official_rate,
-            freshness_minutes=0,
             fallback_rate=fallback,
         )
 
         click.echo(
-            f"✅ Tipo de cambio actualizado: {snapshot.rate} ({snapshot.provider.upper()} {snapshot.fetched_at:%d/%m/%Y %H:%M})"
+            "✅ Tipo de cambio actualizado: {valor} ({prov} {fecha:%d/%m/%Y})".format(
+                valor=snapshot.value,
+                prov=snapshot.provider.upper(),
+                fecha=snapshot.as_of_date,
+            )
         )
 
 
@@ -142,12 +145,46 @@ def cac_set(value: float, valid_from, notes: Optional[str]):
     with app.app_context():
         from decimal import Decimal
 
-        from services.pricing.cac import set_cac_index
+        from datetime import date
 
-        valid_date = valid_from.date() if valid_from else None
-        registro = set_cac_index(Decimal(str(value)), valid_date, notes)
+        from services.cac.cac_service import record_manual_index
+
+        valid_date = valid_from.date() if valid_from else date.today().replace(day=1)
+        registro = record_manual_index(valid_date.year, valid_date.month, Decimal(str(value)), notes)
         click.echo(
-            f"✅ Índice CAC registrado: {registro.value} (vigencia {registro.valid_from:%Y-%m-%d})"
+            "✅ Índice CAC registrado: {valor} ({anio}-{mes:02d}, proveedor {prov})".format(
+                valor=registro.value,
+                anio=registro.year,
+                mes=registro.month,
+                prov=registro.provider,
+            )
+        )
+
+
+@cac_cli.command('refresh-current')
+def cac_refresh_current():
+    """Descarga el índice CAC del mes actual utilizando el proveedor configurado."""
+
+    with app.app_context():
+        from services.cac.cac_service import get_cac_context, refresh_from_provider
+
+        registro = refresh_from_provider()
+        contexto = get_cac_context()
+        if registro:
+            click.echo(
+                "✅ CAC actualizado automáticamente: {valor} ({anio}-{mes:02d})".format(
+                    valor=registro.value,
+                    anio=registro.year,
+                    mes=registro.month,
+                )
+            )
+        else:
+            click.echo('⚠️ No se pudo obtener el índice CAC automáticamente. Se mantiene el valor vigente.')
+        click.echo(
+            "ℹ️ Contexto actual: valor={valor} multiplicador={mult}".format(
+                valor=contexto.value,
+                mult=contexto.multiplier,
+            )
         )
 
 

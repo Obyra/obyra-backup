@@ -23,7 +23,7 @@ else:
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     OPENAI_AVAILABLE = True
 
-from services.pricing.cac import get_current_cac_index
+from services.cac.cac_service import CACContext, get_cac_context
 from services.exchange.base import ExchangeRateSnapshot
 
 # Coeficientes de construcción expandidos por tipo y m² - Estilo Togal.AI
@@ -135,7 +135,7 @@ COEFICIENTES_CONSTRUCCION = {
 DECIMAL_ZERO = Decimal('0')
 CURRENCY_QUANT = Decimal('0.01')
 QUANTITY_QUANT = Decimal('0.001')
-_CAC_CACHE: Dict[str, Any] = {'valor': None, 'timestamp': None}
+_CAC_CONTEXT_CACHE: Dict[str, Any] = {'context': None, 'timestamp': None}
 
 
 def _to_decimal(value: Any, default: str = '0') -> Decimal:
@@ -157,22 +157,20 @@ def _quantize_quantity(value: Decimal) -> Decimal:
     return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
 
 
-def _get_cac_multiplier() -> Decimal:
-    """Obtiene y cachea el índice CAC vigente."""
+def _get_cac_context_cached() -> CACContext:
+    """Obtiene y cachea el contexto CAC vigente."""
 
     now = datetime.utcnow()
-    cache_value = _CAC_CACHE.get('valor')
-    cache_timestamp = _CAC_CACHE.get('timestamp')
+    cache_context = _CAC_CONTEXT_CACHE.get('context')
+    cache_timestamp = _CAC_CONTEXT_CACHE.get('timestamp')
 
-    if cache_value and cache_timestamp and (now - cache_timestamp).total_seconds() < 3600:
-        return cache_value
+    if cache_context and cache_timestamp and (now - cache_timestamp).total_seconds() < 3600:
+        return cache_context
 
-    multiplier = get_current_cac_index()
-    if multiplier <= DECIMAL_ZERO:
-        multiplier = Decimal('1')
-    _CAC_CACHE['valor'] = multiplier
-    _CAC_CACHE['timestamp'] = now
-    return multiplier
+    context = get_cac_context()
+    _CAC_CONTEXT_CACHE['context'] = context
+    _CAC_CONTEXT_CACHE['timestamp'] = now
+    return context
 
 
 def _convert_currency(amount: Decimal, currency: str, fx_rate: Optional[Decimal]) -> Decimal:
@@ -880,10 +878,9 @@ def obtener_multiplicador_tipo(tipo):
     return 1.0, clave.title()
 
 
-def _precio_referencia(codigo: str) -> Decimal:
+def _precio_referencia(codigo: str, cac_context: CACContext) -> Decimal:
     base = _to_decimal(PRECIO_REFERENCIA.get(codigo), '0')
-    multiplier = _get_cac_multiplier()
-    return _quantize_currency(base * multiplier)
+    return _quantize_currency(base * cac_context.multiplier)
 
 
 def _redondear(valor: Decimal, ndigits: int = 2) -> Decimal:
@@ -928,11 +925,12 @@ def calcular_etapa_por_reglas(
     subtotal_equipos = DECIMAL_ZERO
     currency = (currency or 'ARS').upper()
     tasa = fx_rate if currency != 'ARS' else None
+    cac_context = _get_cac_context_cached()
 
     for material in reglas.get('materiales', []):
         coef = _to_decimal(material['coef_por_m2'], '0')
         cantidad = _quantize_quantity(superficie_dec * coef * multiplicador_dec)
-        precio = _precio_referencia(material['codigo'])
+        precio = _precio_referencia(material['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_materiales += _quantize_currency(cantidad * precio_moneda)
         items.append({
@@ -954,7 +952,7 @@ def calcular_etapa_por_reglas(
         coef = _to_decimal(mano_obra['coef_por_m2'], '0')
         cantidad = superficie_dec * coef * multiplicador_dec
         cantidad = _quantize_quantity(max(_to_decimal(1, '1'), cantidad))
-        precio = _precio_referencia(mano_obra['codigo'])
+        precio = _precio_referencia(mano_obra['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_mano_obra += _quantize_currency(cantidad * precio_moneda)
         items.append({
@@ -977,7 +975,7 @@ def calcular_etapa_por_reglas(
         dias_min = _to_decimal(equipo.get('min_dias', 0), '0')
         dias = base if base > dias_min else dias_min
         dias = _quantize_quantity(dias if dias > DECIMAL_ZERO else base)
-        precio = _precio_referencia(equipo['codigo'])
+        precio = _precio_referencia(equipo['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_equipos += _quantize_currency(dias * precio_moneda)
         items.append({
@@ -1010,6 +1008,12 @@ def calcular_etapa_por_reglas(
         'notas': f"Cálculo determinístico para etapa {nombre} ({tipo_legible}). {reglas.get('notas', '')}",
         'metodo': 'reglas',
         'moneda': currency,
+        'cac': {
+            'valor': float(cac_context.value),
+            'periodo': cac_context.period.isoformat(),
+            'multiplicador': float(cac_context.multiplier),
+            'proveedor': cac_context.provider,
+        },
     }
 
 
@@ -1044,7 +1048,7 @@ def calcular_etapas_seleccionadas(
         raise ValueError('Debes seleccionar al menos una etapa para calcular')
 
     currency = (currency or 'ARS').upper()
-    fx_rate = fx_snapshot.rate if fx_snapshot else None
+    fx_rate = fx_snapshot.value if fx_snapshot else None
 
     cache_key = json.dumps({
         'presupuesto_id': str(presupuesto_id) if presupuesto_id else None,
@@ -1061,6 +1065,7 @@ def calcular_etapas_seleccionadas(
 
     etapas_resultado = []
     total_parcial = DECIMAL_ZERO
+    cac_context = _get_cac_context_cached()
 
     for etapa in etapa_identificadores:
         resultado = calcular_etapa_por_reglas(
@@ -1088,12 +1093,20 @@ def calcular_etapas_seleccionadas(
 
     if fx_snapshot:
         respuesta['tipo_cambio'] = {
-            'valor': float(_to_decimal(fx_snapshot.rate, '0')),
+            'valor': float(_to_decimal(fx_snapshot.value, '0')),
             'proveedor': fx_snapshot.provider,
             'base_currency': fx_snapshot.base_currency,
             'quote_currency': fx_snapshot.quote_currency,
             'fetched_at': fx_snapshot.fetched_at.isoformat(),
+            'as_of': fx_snapshot.as_of_date.isoformat(),
         }
+
+    respuesta['cac'] = {
+        'valor': float(cac_context.value),
+        'periodo': cac_context.period.isoformat(),
+        'multiplicador': float(cac_context.multiplier),
+        'proveedor': cac_context.provider,
+    }
 
     STAGE_CALC_CACHE[cache_key] = deepcopy(respuesta)
     return respuesta

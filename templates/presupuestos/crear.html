@@ -133,11 +133,13 @@
                                         <option value="ARS">ARS</option>
                                         <option value="USD">USD</option>
                                     </select>
-                                    <input type="number" class="form-control" 
-                                           id="presupuesto_disponible" name="presupuesto_disponible" 
+                                    <input type="number" class="form-control"
+                                           id="presupuesto_disponible" name="presupuesto_disponible"
                                            step="0.01" min="0" placeholder="0.00">
                                 </div>
-                                <div class="form-text">Presupuesto máximo disponible (opcional)</div>
+                                <div class="form-text">
+                                    Presupuesto máximo disponible (opcional). Si eliges USD usaremos la cotización oficial del Banco Nación.
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label for="cliente_nombre" class="form-label fw-bold">
@@ -838,11 +840,16 @@ function renderResultadoEtapasIA(data) {
     if (data.tipo_cambio && data.tipo_cambio.valor) {
         const fxFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
         const proveedor = (data.tipo_cambio.proveedor || '').toUpperCase();
-        const fechaFx = data.tipo_cambio.fetched_at ? new Date(data.tipo_cambio.fetched_at) : null;
-        const fechaTexto = fechaFx ? fechaFx.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const fechaFx = data.tipo_cambio.as_of ? new Date(data.tipo_cambio.as_of) : (data.tipo_cambio.fetched_at ? new Date(data.tipo_cambio.fetched_at) : null);
+        const fechaTexto = fechaFx ? fechaFx.toLocaleDateString('es-AR') : '';
         tipoCambioTexto = ` · TC ${proveedor} ${fxFormatter.format(data.tipo_cambio.valor)}${fechaTexto ? ' (' + fechaTexto + ')' : ''}`;
     }
-    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas${tipoCambioTexto}.`;
+    let cacTexto = '';
+    if (data.cac && data.cac.valor) {
+        const periodo = data.cac.periodo ? new Date(data.cac.periodo).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : '';
+        cacTexto = ` · CAC ${Number(data.cac.valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${periodo ? ' (' + periodo + ')' : ''}`;
+    }
+    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas${tipoCambioTexto}${cacTexto}.`;
 }
 
 function aplicarResultadosEtapasIA() {

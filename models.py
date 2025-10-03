@@ -749,16 +749,44 @@ class ExchangeRate(db.Model):
     provider = db.Column(db.String(50), nullable=False)
     base_currency = db.Column(db.String(3), nullable=False, default='ARS')
     quote_currency = db.Column(db.String(3), nullable=False, default='USD')
-    rate = db.Column(db.Numeric(18, 6), nullable=False)
+    value = db.Column('rate', db.Numeric(18, 6), nullable=False)
+    as_of_date = db.Column(db.Date, nullable=False, default=date.today)
     fetched_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     source_url = db.Column(db.String(255))
     notes = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
+    __table_args__ = (
+        db.UniqueConstraint('provider', 'base_currency', 'quote_currency', 'as_of_date', name='uq_exchange_rate_daily'),
+    )
+
     presupuestos = db.relationship('Presupuesto', back_populates='exchange_rate', lazy='dynamic')
 
     def __repr__(self):
-        return f"<ExchangeRate {self.provider} {self.base_currency}/{self.quote_currency} {self.rate}>"
+        return (
+            f"<ExchangeRate {self.provider} {self.base_currency}/{self.quote_currency} "
+            f"{self.value} ({self.as_of_date})>"
+        )
+
+
+class CACIndex(db.Model):
+    __tablename__ = 'cac_indices'
+
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    value = db.Column(db.Numeric(12, 2), nullable=False)
+    provider = db.Column(db.String(50), nullable=False)
+    source_url = db.Column(db.String(255))
+    fetched_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('year', 'month', 'provider', name='uq_cac_index_period_provider'),
+    )
+
+    def __repr__(self):
+        return f"<CACIndex {self.year}-{self.month:02d} {self.value} ({self.provider})>"
 
 
 class PricingIndex(db.Model):
@@ -810,6 +838,10 @@ class Presupuesto(db.Model):
     exchange_rate_value = db.Column(db.Numeric(18, 6))
     exchange_rate_provider = db.Column(db.String(50))
     exchange_rate_fetched_at = db.Column(db.DateTime)
+    exchange_rate_as_of = db.Column(db.Date)
+    tasa_usd_venta = db.Column(db.Numeric(10, 4))
+    indice_cac_valor = db.Column(db.Numeric(12, 2))
+    indice_cac_fecha = db.Column(db.Date)
 
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
@@ -924,9 +956,12 @@ class Presupuesto(db.Model):
             return
 
         self.exchange_rate_id = snapshot.id
-        self.exchange_rate_value = snapshot.rate
+        self.exchange_rate_value = snapshot.value
         self.exchange_rate_provider = snapshot.provider
         self.exchange_rate_fetched_at = snapshot.fetched_at
+        self.exchange_rate_as_of = snapshot.as_of_date
+        if snapshot.quote_currency.upper() == 'USD' and snapshot.base_currency.upper() == 'ARS':
+            self.tasa_usd_venta = snapshot.value
 
 
 
@@ -946,6 +981,8 @@ class ItemPresupuesto(db.Model):
     currency = db.Column(db.String(3), nullable=False, default='ARS')
     price_unit_currency = db.Column(db.Numeric(15, 2))
     total_currency = db.Column(db.Numeric(15, 2))
+    price_unit_ars = db.Column(db.Numeric(15, 2))
+    total_ars = db.Column(db.Numeric(15, 2))
 
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
