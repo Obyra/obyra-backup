@@ -536,8 +536,14 @@ class Obra(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text)
     direccion = db.Column(db.String(300))
+    direccion_normalizada = db.Column(db.String(300))
     latitud = db.Column(db.Numeric(10, 8))  # Para geolocalización en mapa
     longitud = db.Column(db.Numeric(11, 8))  # Para geolocalización en mapa
+    geocode_place_id = db.Column(db.String(120))
+    geocode_provider = db.Column(db.String(50))
+    geocode_status = db.Column(db.String(20), default='pending')
+    geocode_raw = db.Column(db.Text)
+    geocode_actualizado = db.Column(db.DateTime)
     cliente = db.Column(db.String(200), nullable=False)
     telefono_cliente = db.Column(db.String(20))
     email_cliente = db.Column(db.String(120))
@@ -1016,6 +1022,15 @@ class Presupuesto(db.Model):
     estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado, perdido, eliminado
     confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra
     datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
+    ubicacion_texto = db.Column(db.String(300))
+    ubicacion_normalizada = db.Column(db.String(300))
+    geo_latitud = db.Column(db.Numeric(10, 8))
+    geo_longitud = db.Column(db.Numeric(11, 8))
+    geocode_place_id = db.Column(db.String(120))
+    geocode_provider = db.Column(db.String(50))
+    geocode_status = db.Column(db.String(20))
+    geocode_raw = db.Column(db.Text)
+    geocode_actualizado = db.Column(db.DateTime)
     subtotal_materiales = db.Column(db.Numeric(15, 2), default=0)
     subtotal_mano_obra = db.Column(db.Numeric(15, 2), default=0)
     subtotal_equipos = db.Column(db.Numeric(15, 2), default=0)
@@ -1187,6 +1202,60 @@ class ItemPresupuesto(db.Model):
 
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'
+
+
+class GeocodeCache(db.Model):
+    __tablename__ = 'geocode_cache'
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(50), nullable=False)
+    query_text = db.Column(db.String(400), nullable=False)
+    normalized_text = db.Column(db.String(400), nullable=False)
+    display_name = db.Column(db.String(400))
+    place_id = db.Column(db.String(120))
+    latitud = db.Column(db.Numeric(10, 8))
+    longitud = db.Column(db.Numeric(11, 8))
+    raw_response = db.Column(db.Text)
+    status = db.Column(db.String(20), default='ok')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('provider', 'normalized_text', name='uq_geocode_provider_norm'),
+        db.Index('ix_geocode_norm', 'normalized_text'),
+    )
+
+    def to_payload(self) -> dict:
+        def _to_float(value):
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        payload = {
+            'provider': self.provider,
+            'query': self.query_text,
+            'normalized': self.normalized_text,
+            'display_name': self.display_name,
+            'place_id': self.place_id,
+            'lat': _to_float(self.latitud),
+            'lng': _to_float(self.longitud),
+            'status': self.status or 'ok',
+        }
+
+        if self.raw_response:
+            try:
+                payload['raw'] = json.loads(self.raw_response)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                payload['raw'] = None
+        else:
+            payload['raw'] = None
+
+        payload['created_at'] = self.created_at
+        payload['updated_at'] = self.updated_at
+        return payload
 
 
 @db.event.listens_for(Presupuesto, 'before_insert')

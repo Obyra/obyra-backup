@@ -69,6 +69,8 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
+app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").strip().lower()
+app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 
 # initialize extensions
 db.init_app(app)
@@ -90,6 +92,7 @@ def db_upgrade():
             ensure_item_presupuesto_stage_columns,
             ensure_presupuesto_validity_columns,
             ensure_exchange_currency_columns,
+            ensure_geocode_columns,
             ensure_org_memberships_table,
         )
 
@@ -98,6 +101,7 @@ def db_upgrade():
         ensure_item_presupuesto_stage_columns()
         ensure_presupuesto_validity_columns()
         ensure_exchange_currency_columns()
+        ensure_geocode_columns()
         ensure_org_memberships_table()
 
     click.echo('✅ Database upgraded successfully.')
@@ -484,6 +488,7 @@ with app.app_context():
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
+        ensure_geocode_columns,
         ensure_org_memberships_table,
     )
 
@@ -493,6 +498,7 @@ with app.app_context():
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
+        ensure_geocode_columns,
         ensure_org_memberships_table,
     ]
 

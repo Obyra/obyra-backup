@@ -564,6 +564,103 @@ def ensure_exchange_currency_columns():
         raise
 
 
+def ensure_geocode_columns():
+    """Ensure geocoding metadata tables and columns exist."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250320_geocode_columns.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+
+            try:
+                obras_columns = {col['name'] for col in inspector.get_columns('obras')}
+            except Exception:
+                obras_columns = set()
+
+            try:
+                presup_columns = {col['name'] for col in inspector.get_columns('presupuestos')}
+            except Exception:
+                presup_columns = set()
+
+            from models import GeocodeCache  # Lazy import to avoid circular deps
+
+            GeocodeCache.__table__.create(bind=conn, checkfirst=True)
+
+            obras_statements = []
+            if 'direccion_normalizada' not in obras_columns:
+                obras_statements.append("ALTER TABLE obras ADD COLUMN direccion_normalizada TEXT")
+            if 'geocode_place_id' not in obras_columns:
+                obras_statements.append("ALTER TABLE obras ADD COLUMN geocode_place_id TEXT")
+            if 'geocode_provider' not in obras_columns:
+                obras_statements.append("ALTER TABLE obras ADD COLUMN geocode_provider TEXT")
+            if 'geocode_status' not in obras_columns:
+                default_clause = "DEFAULT 'pending'" if backend != 'postgresql' else "DEFAULT 'pending'"
+                obras_statements.append(f"ALTER TABLE obras ADD COLUMN geocode_status TEXT {default_clause}")
+            if 'geocode_raw' not in obras_columns:
+                obras_statements.append("ALTER TABLE obras ADD COLUMN geocode_raw TEXT")
+            if 'geocode_actualizado' not in obras_columns:
+                column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+                obras_statements.append(f"ALTER TABLE obras ADD COLUMN geocode_actualizado {column_type}")
+
+            for stmt in obras_statements:
+                conn.exec_driver_sql(stmt)
+
+            presup_statements = []
+            if 'ubicacion_texto' not in presup_columns:
+                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN ubicacion_texto TEXT")
+            if 'ubicacion_normalizada' not in presup_columns:
+                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN ubicacion_normalizada TEXT")
+            if 'geo_latitud' not in presup_columns:
+                column_def = "NUMERIC(10,8)" if backend == 'postgresql' else "NUMERIC"
+                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geo_latitud {column_def}")
+            if 'geo_longitud' not in presup_columns:
+                column_def = "NUMERIC(11,8)" if backend == 'postgresql' else "NUMERIC"
+                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geo_longitud {column_def}")
+            if 'geocode_place_id' not in presup_columns:
+                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN geocode_place_id TEXT")
+            if 'geocode_provider' not in presup_columns:
+                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN geocode_provider TEXT")
+            if 'geocode_status' not in presup_columns:
+                default_clause = "DEFAULT 'pending'" if backend != 'postgresql' else "DEFAULT 'pending'"
+                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geocode_status TEXT {default_clause}")
+            if 'geocode_raw' not in presup_columns:
+                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN geocode_raw TEXT")
+            if 'geocode_actualizado' not in presup_columns:
+                column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geocode_actualizado {column_type}")
+
+            for stmt in presup_statements:
+                conn.exec_driver_sql(stmt)
+
+            conn.exec_driver_sql(
+                "UPDATE obras SET geocode_status = COALESCE(NULLIF(geocode_status, ''), 'pending')"
+            )
+            conn.exec_driver_sql(
+                "UPDATE presupuestos SET geocode_status = COALESCE(NULLIF(geocode_status, ''), 'pending')"
+            )
+
+        with open(sentinel, 'w') as handler:
+            handler.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Geocoding columns ensured')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: geocoding columns')
+        raise
+
+
 def ensure_org_memberships_table():
     """Ensure org_memberships table exists and memberships are backfilled."""
     os.makedirs('instance/migrations', exist_ok=True)

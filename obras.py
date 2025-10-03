@@ -3,6 +3,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
+import json
 import requests
 from app import db
 from sqlalchemy import text, func
@@ -13,7 +14,8 @@ from models import (Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario,
                     TareaAvanceFoto)
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import TAREAS_POR_ETAPA
-from geocoding import geocodificar_direccion, normalizar_direccion_argentina
+from geocoding import normalizar_direccion_argentina
+from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
 from services.memberships import get_current_org_id
 from services.obras_filters import (obras_visibles_clause,
@@ -318,17 +320,22 @@ def crear():
             flash('La fecha de fin debe ser posterior a la fecha de inicio.', 'danger')
             return render_template('obras/crear.html')
         
-        # Geolocalizar dirección si se proporciona
+        geocode_payload = None
         latitud, longitud = None, None
+        direccion_normalizada = None
         if direccion:
             direccion_normalizada = normalizar_direccion_argentina(direccion)
-            latitud, longitud = geocodificar_direccion(direccion_normalizada)
-        
+            geocode_payload = resolve_geocode(direccion_normalizada)
+            if geocode_payload:
+                latitud = geocode_payload.get('lat')
+                longitud = geocode_payload.get('lng')
+
         # Crear obra
         nueva_obra = Obra(
             nombre=nombre,
             descripcion=descripcion if 'descripcion' in request.form else None,
             direccion=direccion,
+            direccion_normalizada=direccion_normalizada,
             latitud=latitud,
             longitud=longitud,
             cliente=cliente,
@@ -340,7 +347,14 @@ def crear():
             estado='planificacion',
             organizacion_id=current_user.organizacion_id
         )
-        
+
+        if geocode_payload:
+            nueva_obra.geocode_place_id = geocode_payload.get('place_id')
+            nueva_obra.geocode_provider = geocode_payload.get('provider')
+            nueva_obra.geocode_status = geocode_payload.get('status') or 'ok'
+            nueva_obra.geocode_raw = json.dumps(geocode_payload.get('raw')) if geocode_payload.get('raw') else None
+            nueva_obra.geocode_actualizado = datetime.utcnow()
+
         try:
             db.session.add(nueva_obra)
             db.session.commit()

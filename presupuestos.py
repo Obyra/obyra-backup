@@ -48,6 +48,7 @@ from calculadora_ia import (
 from services.exchange import base as exchange_service
 from services.exchange.providers import bna as bna_provider
 from services.cac.cac_service import get_cac_context
+from services.geocoding_service import resolve as resolve_geocode, search as search_geocode
 
 
 def _clean_text(value: Any) -> Optional[str]:
@@ -83,6 +84,7 @@ DECIMAL_ZERO = Decimal("0")
 CURRENCY_QUANT = Decimal("0.01")
 QUANTITY_QUANT = Decimal("0.001")
 ALLOWED_CURRENCIES = {"ARS", "USD"}
+COORD_QUANT = Decimal("0.00000001")
 
 
 def _resolve_currency_context(raw_currency: Any):
@@ -151,6 +153,16 @@ def _quantize_currency(value: Decimal) -> Decimal:
 
 def _quantize_quantity(value: Decimal) -> Decimal:
     return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _quantize_coord(value: Any) -> Optional[Decimal]:
+    if value is None:
+        return None
+    try:
+        coord = _to_decimal(value, '0')
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return coord.quantize(COORD_QUANT, rounding=ROUND_HALF_UP)
 
 
 def _parse_vigencia_dias(raw_value: Any) -> Optional[int]:
@@ -384,6 +396,13 @@ def crear():
                 )
                 ia_payload = None
 
+        ubicacion_lat = request.form.get('ubicacion_lat')
+        ubicacion_lng = request.form.get('ubicacion_lng')
+        ubicacion_normalizada = request.form.get('ubicacion_normalizada') or None
+        ubicacion_place_id = request.form.get('ubicacion_place_id') or None
+        ubicacion_provider = request.form.get('ubicacion_provider') or None
+        ubicacion_geocode_status = request.form.get('ubicacion_geocode_status') or None
+
         # Validaciones
         if not all([nombre_obra, tipo_obra, ubicacion, tipo_construccion, superficie_m2]):
             flash('Completa todos los campos obligatorios.', 'danger')
@@ -401,14 +420,66 @@ def crear():
             flash('No pudimos obtener el tipo de cambio solicitado. Intenta nuevamente más tarde.', 'danger')
             return render_template('presupuestos/crear.html')
 
+        geocode_payload = None
+        geocode_status = ubicacion_geocode_status or 'pending'
+        geocode_provider = ubicacion_provider or current_app.config.get('MAPS_PROVIDER') or 'nominatim'
+        geocode_place_id = ubicacion_place_id
+        direccion_normalizada = ubicacion_normalizada
+
+        lat_decimal = _quantize_coord(ubicacion_lat)
+        lng_decimal = _quantize_coord(ubicacion_lng)
+
+        if lat_decimal is not None and lng_decimal is not None:
+            geocode_payload = {
+                'lat': float(lat_decimal),
+                'lng': float(lng_decimal),
+                'provider': geocode_provider,
+                'place_id': geocode_place_id,
+                'normalized': direccion_normalizada or _clean_text(ubicacion),
+                'status': geocode_status or 'ok',
+                'raw': None,
+            }
+
+        if geocode_payload is None:
+            try:
+                resolved = resolve_geocode(ubicacion)
+            except Exception as exc:  # pragma: no cover - logging fallback
+                current_app.logger.warning('No se pudo geocodificar la dirección %s: %s', ubicacion, exc)
+                resolved = None
+
+            if resolved:
+                geocode_payload = resolved
+                direccion_normalizada = resolved.get('normalized') or direccion_normalizada
+                geocode_provider = resolved.get('provider') or geocode_provider
+                geocode_place_id = resolved.get('place_id') or geocode_place_id
+                geocode_status = resolved.get('status') or 'ok'
+                lat_decimal = _quantize_coord(resolved.get('lat'))
+                lng_decimal = _quantize_coord(resolved.get('lng'))
+            else:
+                geocode_status = 'fail'
+
         # Crear nueva obra basada en los datos del formulario
         nueva_obra = Obra()
         nueva_obra.nombre = nombre_obra
         nueva_obra.descripcion = f"Obra {tipo_obra.replace('_', ' ').title()} - {tipo_construccion.title()}"
         nueva_obra.direccion = ubicacion
+        nueva_obra.direccion_normalizada = direccion_normalizada
         nueva_obra.cliente = cliente_nombre or "Cliente Sin Especificar"
         nueva_obra.estado = 'planificacion'
         nueva_obra.organizacion_id = current_user.organizacion_id
+
+        if lat_decimal is not None and lng_decimal is not None:
+            nueva_obra.latitud = lat_decimal
+            nueva_obra.longitud = lng_decimal
+        if geocode_payload:
+            nueva_obra.geocode_place_id = geocode_place_id
+            nueva_obra.geocode_provider = geocode_provider
+            nueva_obra.geocode_status = geocode_status
+            raw_payload = geocode_payload.get('raw')
+            nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else nueva_obra.geocode_raw
+            nueva_obra.geocode_actualizado = datetime.utcnow()
+        elif geocode_status:
+            nueva_obra.geocode_status = geocode_status
         
         # Procesar fechas
         if fecha_inicio:
@@ -476,8 +547,15 @@ def crear():
                 observaciones_proyecto.append(f"Presupuesto disponible: {currency} {presupuesto_disponible}")
             if plano_pdf and plano_pdf.filename:
                 observaciones_proyecto.append(f"Plano PDF: {plano_pdf.filename}")
-            
+
             nuevo_presupuesto.observaciones = " | ".join(observaciones_proyecto)
+            nuevo_presupuesto.ubicacion_texto = ubicacion
+            nuevo_presupuesto.ubicacion_normalizada = direccion_normalizada
+            nuevo_presupuesto.geo_latitud = lat_decimal
+            nuevo_presupuesto.geo_longitud = lng_decimal
+            nuevo_presupuesto.geocode_place_id = geocode_place_id
+            nuevo_presupuesto.geocode_provider = geocode_provider
+            nuevo_presupuesto.geocode_status = geocode_status
 
             db.session.add(nuevo_presupuesto)
             db.session.flush()  # Para obtener el ID del presupuesto
@@ -486,6 +564,26 @@ def crear():
                 nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
             except AttributeError:
                 pass
+
+            if geocode_payload:
+                raw_payload = geocode_payload.get('raw')
+                nuevo_presupuesto.geocode_raw = json.dumps(raw_payload) if raw_payload else nuevo_presupuesto.geocode_raw
+                nuevo_presupuesto.geocode_actualizado = datetime.utcnow()
+
+            datos_proyecto = {
+                'nombre': nombre_obra,
+                'tipo_obra': tipo_obra,
+                'tipo_construccion': tipo_construccion,
+                'superficie': float(superficie_decimal),
+                'ubicacion': ubicacion,
+                'ubicacion_normalizada': direccion_normalizada,
+                'latitud': float(lat_decimal) if lat_decimal is not None else None,
+                'longitud': float(lng_decimal) if lng_decimal is not None else None,
+                'geocode_provider': geocode_provider,
+                'geocode_status': geocode_status,
+                'geocode_place_id': geocode_place_id,
+            }
+            nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
 
             cac_context = get_cac_context()
             if cac_context:
@@ -600,9 +698,37 @@ def calculadora_ia():
     obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
     tipos_construccion = list(COEFICIENTES_CONSTRUCCION.keys())
     
-    return render_template('presupuestos/calculadora_ia.html', 
-                         obras=obras, 
+    return render_template('presupuestos/calculadora_ia.html',
+                         obras=obras,
                          tipos_construccion=tipos_construccion)
+
+
+@presupuestos_bp.route('/geo/sugerencias')
+@login_required
+def sugerencias_geograficas():
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'ok': False, 'error': 'Sin permisos para geocodificar'}), 403
+
+    consulta = (request.args.get('q') or '').strip()
+    if not consulta:
+        return jsonify({'ok': True, 'resultados': []})
+
+    provider = request.args.get('provider')
+    resultados = search_geocode(consulta, provider=provider, limit=5)
+
+    serializados = []
+    for resultado in resultados:
+        serializados.append({
+            'display_name': resultado.get('display_name'),
+            'lat': resultado.get('lat'),
+            'lng': resultado.get('lng'),
+            'provider': resultado.get('provider'),
+            'place_id': resultado.get('place_id'),
+            'normalized': resultado.get('normalized'),
+            'status': resultado.get('status'),
+        })
+
+    return jsonify({'ok': True, 'resultados': serializados})
 
 @presupuestos_bp.route('/procesar-calculadora-ia', methods=['POST'])
 @login_required
@@ -1682,22 +1808,49 @@ def confirmar_como_obra(id):
         nueva_obra = Obra()
         nueva_obra.nombre = nombre_obra
         nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde presupuesto')
-        nueva_obra.descripcion = f"Superficie: {datos_proyecto.get('superficie', 0)}m² - {datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
-        nueva_obra.direccion = datos_proyecto.get('ubicacion', 'Por especificar')
+        nueva_obra.descripcion = (
+            f"Superficie: {datos_proyecto.get('superficie', 0)}m² - "
+            f"{datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - "
+            f"Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
+        )
+        nueva_obra.direccion = presupuesto.ubicacion_texto or datos_proyecto.get('ubicacion', 'Por especificar')
+        nueva_obra.direccion_normalizada = (
+            presupuesto.ubicacion_normalizada or datos_proyecto.get('ubicacion_normalizada')
+        )
         nueva_obra.estado = 'planificacion'
         nueva_obra.presupuesto_total = _quantize_currency(_to_decimal(presupuesto.total_con_iva, '0'))
         nueva_obra.organizacion_id = current_user.organizacion_id
-        
-        # Geocodificar si hay ubicación
-        if datos_proyecto.get('ubicacion'):
+
+        lat_decimal = presupuesto.geo_latitud or datos_proyecto.get('latitud')
+        lng_decimal = presupuesto.geo_longitud or datos_proyecto.get('longitud')
+
+        if lat_decimal is not None and lng_decimal is not None:
             try:
-                from geocoding import geocodificar_direccion
-                coords = geocodificar_direccion(datos_proyecto['ubicacion'])
-                if coords:
-                    nueva_obra.latitud = coords['lat']
-                    nueva_obra.longitud = coords['lng']
-            except:
-                pass  # Si falla geocodificación, continúa sin coordenadas
+                nueva_obra.latitud = _quantize_coord(lat_decimal)
+                nueva_obra.longitud = _quantize_coord(lng_decimal)
+            except Exception:
+                nueva_obra.latitud = _quantize_coord(lat_decimal)
+                nueva_obra.longitud = _quantize_coord(lng_decimal)
+        else:
+            ubicacion_texto = presupuesto.ubicacion_texto or datos_proyecto.get('ubicacion')
+            if ubicacion_texto:
+                resolved = resolve_geocode(ubicacion_texto)
+                if resolved:
+                    nueva_obra.latitud = _quantize_coord(resolved.get('lat'))
+                    nueva_obra.longitud = _quantize_coord(resolved.get('lng'))
+                    nueva_obra.geocode_place_id = resolved.get('place_id')
+                    nueva_obra.geocode_provider = resolved.get('provider')
+                    nueva_obra.geocode_status = resolved.get('status') or 'ok'
+                    raw_payload = resolved.get('raw')
+                    nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else None
+                    nueva_obra.geocode_actualizado = datetime.utcnow()
+
+        nueva_obra.geocode_place_id = presupuesto.geocode_place_id or nueva_obra.geocode_place_id
+        nueva_obra.geocode_provider = presupuesto.geocode_provider or nueva_obra.geocode_provider
+        nueva_obra.geocode_status = presupuesto.geocode_status or nueva_obra.geocode_status
+        nueva_obra.geocode_raw = presupuesto.geocode_raw or nueva_obra.geocode_raw
+        if presupuesto.geocode_actualizado:
+            nueva_obra.geocode_actualizado = presupuesto.geocode_actualizado
         
         db.session.add(nueva_obra)
         db.session.flush()  # Para obtener el ID

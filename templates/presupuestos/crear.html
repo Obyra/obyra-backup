@@ -67,10 +67,25 @@
                                 <label for="ubicacion" class="form-label fw-bold">
                                     <i class="fas fa-map-marker-alt text-danger"></i> Ubicación *
                                 </label>
-                                <input type="text" class="form-control form-control-lg" 
-                                       id="ubicacion" name="ubicacion" required
-                                       placeholder="Dirección completa o zona">
-                                <div class="form-text">Ciudad, provincia o dirección específica</div>
+                                <div class="input-group input-group-lg">
+                                    <input type="text" class="form-control" id="ubicacion" name="ubicacion" required
+                                           placeholder="Dirección completa o zona">
+                                    <button class="btn btn-outline-secondary" type="button" id="btnValidarUbicacion">
+                                        <i class="fas fa-search-location"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text" id="ubicacion_feedback">Ciudad, provincia o dirección específica</div>
+                                <div id="ubicacion_sugerencias" class="list-group shadow-sm mt-2 d-none"></div>
+                                <div id="ubicacion_mapa_wrapper" class="mt-3 d-none">
+                                    <div id="ubicacion_mapa" style="height: 220px; border-radius: 12px;"></div>
+                                    <small class="text-muted d-block mt-2" id="ubicacion_meta"></small>
+                                </div>
+                                <input type="hidden" id="ubicacion_lat" name="ubicacion_lat">
+                                <input type="hidden" id="ubicacion_lng" name="ubicacion_lng">
+                                <input type="hidden" id="ubicacion_normalizada" name="ubicacion_normalizada">
+                                <input type="hidden" id="ubicacion_place_id" name="ubicacion_place_id">
+                                <input type="hidden" id="ubicacion_provider" name="ubicacion_provider">
+                                <input type="hidden" id="ubicacion_geocode_status" name="ubicacion_geocode_status">
                             </div>
                             <div class="col-md-6">
                                 <label for="tipo_construccion" class="form-label fw-bold">
@@ -414,6 +429,8 @@
     </div>
 </div>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const hiddenPresupuestoIdInput = document.getElementById('presupuestoIdInput');
 if (typeof window !== 'undefined') {
@@ -441,6 +458,199 @@ let etapasSeleccionadasArray = [];
 let etapasSeleccionadasIA = new Set();
 let resultadoEtapasIA = null;
 const presupuestoId = (typeof window !== 'undefined' && window.PRESUPUESTO_ID) ? window.PRESUPUESTO_ID : null;
+
+let ubicacionMap = null;
+let ubicacionMarker = null;
+let sugerenciasActuales = [];
+let sugerenciaSeleccionada = -1;
+
+const ubicacionInput = document.getElementById('ubicacion');
+const btnValidarUbicacion = document.getElementById('btnValidarUbicacion');
+const ubicacionFeedback = document.getElementById('ubicacion_feedback');
+const ubicacionSugerencias = document.getElementById('ubicacion_sugerencias');
+const ubicacionMapaWrapper = document.getElementById('ubicacion_mapa_wrapper');
+const ubicacionMeta = document.getElementById('ubicacion_meta');
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (ubicacionInput) {
+        ubicacionInput.addEventListener('input', () => limpiarGeocodificacion(true));
+    }
+    if (btnValidarUbicacion) {
+        btnValidarUbicacion.addEventListener('click', buscarUbicacion);
+    }
+});
+
+function actualizarFeedbackUbicacion(texto, tipo = 'muted') {
+    if (!ubicacionFeedback) return;
+    ubicacionFeedback.textContent = texto;
+    ubicacionFeedback.classList.remove('text-success', 'text-danger', 'text-muted');
+    if (tipo === 'success') {
+        ubicacionFeedback.classList.add('text-success');
+    } else if (tipo === 'danger') {
+        ubicacionFeedback.classList.add('text-danger');
+    } else {
+        ubicacionFeedback.classList.add('text-muted');
+    }
+}
+
+function limpiarGeocodificacion(resetVisual = false) {
+    ['ubicacion_lat', 'ubicacion_lng', 'ubicacion_normalizada', 'ubicacion_place_id', 'ubicacion_provider', 'ubicacion_geocode_status']
+        .forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.value = '';
+            }
+        });
+
+    sugerenciaSeleccionada = -1;
+    sugerenciasActuales = [];
+    if (ubicacionSugerencias) {
+        ubicacionSugerencias.classList.add('d-none');
+        ubicacionSugerencias.innerHTML = '';
+    }
+
+    if (resetVisual) {
+        if (ubicacionMapaWrapper) {
+            ubicacionMapaWrapper.classList.add('d-none');
+        }
+        if (ubicacionMeta) {
+            ubicacionMeta.textContent = '';
+        }
+        if (ubicacionMarker) {
+            ubicacionMarker.remove();
+            ubicacionMarker = null;
+        }
+        actualizarFeedbackUbicacion('Ciudad, provincia o dirección específica', 'muted');
+    }
+}
+
+function inicializarMapaUbicacion(lat, lng) {
+    if (typeof L === 'undefined') {
+        console.warn('Leaflet no está disponible.');
+        return;
+    }
+    if (!ubicacionMap) {
+        ubicacionMap = L.map('ubicacion_mapa');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+        }).addTo(ubicacionMap);
+    }
+    ubicacionMap.setView([lat, lng], 15);
+    if (ubicacionMarker) {
+        ubicacionMarker.setLatLng([lat, lng]);
+    } else {
+        ubicacionMarker = L.marker([lat, lng]).addTo(ubicacionMap);
+    }
+    setTimeout(() => ubicacionMap.invalidateSize(), 150);
+}
+
+function renderSugerencias(selectedIndex = null) {
+    if (!ubicacionSugerencias) return;
+    ubicacionSugerencias.innerHTML = '';
+    if (!sugerenciasActuales || sugerenciasActuales.length === 0) {
+        ubicacionSugerencias.classList.add('d-none');
+        return;
+    }
+
+    sugerenciasActuales.forEach((item, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action';
+        if (selectedIndex !== null && index === selectedIndex) {
+            button.classList.add('active');
+        }
+        button.textContent = item.display_name || item.normalized || 'Dirección sugerida';
+        button.addEventListener('click', () => aplicarGeocodificacion(item, index));
+        ubicacionSugerencias.appendChild(button);
+    });
+    ubicacionSugerencias.classList.remove('d-none');
+}
+
+function aplicarGeocodificacion(data, index = 0) {
+    if (!data) {
+        return;
+    }
+
+    const latNum = Number(data.lat);
+    const lngNum = Number(data.lng);
+    if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
+        const latInput = document.getElementById('ubicacion_lat');
+        const lngInput = document.getElementById('ubicacion_lng');
+        if (latInput) latInput.value = latNum;
+        if (lngInput) lngInput.value = lngNum;
+        if (ubicacionMapaWrapper) {
+            ubicacionMapaWrapper.classList.remove('d-none');
+        }
+        inicializarMapaUbicacion(latNum, lngNum);
+    }
+
+    const normalizada = data.normalized || data.display_name || (ubicacionInput ? ubicacionInput.value.trim() : '');
+    const normalizedInput = document.getElementById('ubicacion_normalizada');
+    if (normalizedInput) normalizedInput.value = normalizada;
+
+    const placeInput = document.getElementById('ubicacion_place_id');
+    if (placeInput) placeInput.value = data.place_id || '';
+
+    const providerInput = document.getElementById('ubicacion_provider');
+    if (providerInput) providerInput.value = data.provider || '';
+
+    const statusInput = document.getElementById('ubicacion_geocode_status');
+    if (statusInput) statusInput.value = data.status || 'ok';
+
+    if (ubicacionMeta) {
+        const fuente = (data.provider || 'nominatim').toUpperCase();
+        ubicacionMeta.textContent = `Fuente: ${fuente} · Lat ${latNum.toFixed(5)}, Lng ${lngNum.toFixed(5)}`;
+    }
+
+    actualizarFeedbackUbicacion('Ubicación validada correctamente.', 'success');
+    sugerenciaSeleccionada = index;
+    renderSugerencias(index);
+}
+
+async function buscarUbicacion() {
+    if (!ubicacionInput) {
+        return;
+    }
+    const direccion = ubicacionInput.value.trim();
+    if (!direccion) {
+        actualizarFeedbackUbicacion('Ingresa una dirección para validar.', 'danger');
+        limpiarGeocodificacion(true);
+        return;
+    }
+
+    actualizarFeedbackUbicacion('Buscando coincidencias…', 'muted');
+
+    if (btnValidarUbicacion) {
+        btnValidarUbicacion.disabled = true;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/geo/sugerencias?q=${encodeURIComponent(direccion)}`);
+        if (!response.ok) {
+            throw new Error('No se pudo validar la dirección');
+        }
+        const data = await response.json();
+        sugerenciasActuales = (data && data.resultados) ? data.resultados : [];
+
+        if (sugerenciasActuales.length === 0) {
+            limpiarGeocodificacion(true);
+            actualizarFeedbackUbicacion('No encontramos coincidencias para la dirección ingresada.', 'danger');
+            return;
+        }
+
+        renderSugerencias(0);
+        aplicarGeocodificacion(sugerenciasActuales[0], 0);
+    } catch (error) {
+        console.error('Error geocodificando:', error);
+        limpiarGeocodificacion(true);
+        actualizarFeedbackUbicacion('No se pudo validar la ubicación. Intenta nuevamente más tarde.', 'danger');
+    } finally {
+        if (btnValidarUbicacion) {
+            btnValidarUbicacion.disabled = false;
+        }
+    }
+}
 
 function slugifyEtapa(nombre) {
     if (!nombre) return '';
