@@ -39,7 +39,7 @@ else:  # pragma: no cover - executed only when optional deps missing
     xlsxwriter = None  # type: ignore[assignment]
 
 from app import db
-from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra, TareaEtapa
+from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra, TareaEtapa, Event
 from calculadora_ia import (
     procesar_presupuesto_ia,
     COEFICIENTES_CONSTRUCCION,
@@ -88,6 +88,60 @@ CURRENCY_QUANT = Decimal("0.01")
 QUANTITY_QUANT = Decimal("0.001")
 ALLOWED_CURRENCIES = {"ARS", "USD"}
 COORD_QUANT = Decimal("0.00000001")
+
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    """Convierte entradas típicas de formularios/JSON a booleanos reales."""
+
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "t", "on", "yes", "si", "sí"}:
+            return True
+        if normalized in {"0", "false", "f", "off", "no"}:
+            return False
+    return default
+
+
+def _registrar_evento_confirmacion(org_id: Optional[int], obra_id: Optional[int],
+                                   presupuesto_id: Optional[int], usuario_id: Optional[int],
+                                   trigger: str) -> None:
+    """Registra un evento de auditoría para la confirmación de presupuestos."""
+
+    if not org_id or not obra_id or not presupuesto_id:
+        return
+
+    try:
+        evento = Event(
+            company_id=org_id,
+            project_id=obra_id,
+            user_id=usuario_id,
+            type='status_change',
+            severity='media',
+            title='Presupuesto confirmado',
+            description=(
+                f'El presupuesto #{presupuesto_id} fue confirmado y se creó la obra #{obra_id}.'
+            ),
+            meta={
+                'source': trigger,
+                'presupuesto_id': presupuesto_id,
+                'obra_id': obra_id,
+            },
+            created_by=usuario_id,
+        )
+        db.session.add(evento)
+        db.session.commit()
+    except Exception:  # pragma: no cover - logging auxiliar
+        db.session.rollback()
+        current_app.logger.exception(
+            'No se pudo registrar el evento de confirmación del presupuesto %s',
+            presupuesto_id,
+        )
 
 
 def _resolve_currency_context(raw_currency: Any):
@@ -1801,14 +1855,31 @@ def editar_item(item_id):
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
 @login_required
 def confirmar_como_obra(id):
-    """Convierte un presupuesto borrador en una obra confirmada"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para confirmar obras.', 'danger')
+    """Convierte un presupuesto borrador en una obra confirmada."""
+
+    wants_json = request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    payload = request.get_json(silent=True) if request.is_json else None
+    payload = payload or request.form
+
+    crear_tareas = _to_bool(payload.get('crear_tareas'), True)
+    normalizar_slugs = _to_bool(payload.get('normalizar_slugs'), True)
+    notificar = _to_bool(payload.get('notificar'), True)
+    trigger_source = 'list_modal' if wants_json else 'detail_view'
+
+    puede_acceder = getattr(current_user, 'puede_acceder_modulo', lambda modulo: True)
+    if not puede_acceder('presupuestos') or getattr(current_user, 'rol', None) not in ['administrador', 'tecnico']:
+        mensaje = 'No tienes permisos para confirmar obras.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 403
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.lista'))
-    
+
     org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     if not org_id:
-        flash('No se pudo determinar la organización activa.', 'danger')
+        mensaje = 'No se pudo determinar la organización activa.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.lista'))
 
     presupuesto = Presupuesto.query.filter(
@@ -1817,44 +1888,117 @@ def confirmar_como_obra(id):
     ).first_or_404()
 
     if presupuesto.deleted_at is not None:
-        flash('No puedes confirmar un presupuesto eliminado.', 'danger')
+        mensaje = 'No puedes confirmar un presupuesto eliminado.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.lista'))
 
     if presupuesto.confirmado_como_obra:
-        flash('Este presupuesto ya fue confirmado como obra.', 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+        obra_url = url_for('obras.detalle', id=presupuesto.obra_id) if presupuesto.obra_id else None
+        mensaje = 'Este presupuesto ya fue confirmado como obra.'
+        if wants_json:
+            return jsonify({
+                'status': 'already_confirmed',
+                'message': mensaje,
+                'obra_id': presupuesto.obra_id,
+                'obra_url': obra_url,
+                'presupuesto_estado': presupuesto.estado
+            })
+        flash(mensaje, 'warning')
+        return redirect(obra_url or url_for('presupuestos.detalle', id=id))
 
     if presupuesto.estado != 'borrador':
-        flash('Solo los presupuestos en borrador pueden confirmarse como obra.', 'warning')
+        mensaje = 'Solo los presupuestos en borrador pueden confirmarse como obra.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
         return redirect(url_for('presupuestos.detalle', id=id))
-    
-    try:
-        # Recuperar datos del proyecto
-        datos_proyecto = {}
-        if presupuesto.datos_proyecto:
+
+    datos_proyecto: dict[str, Any] = {}
+    if presupuesto.datos_proyecto:
+        try:
             datos_proyecto = json.loads(presupuesto.datos_proyecto)
-        
-        # Crear nueva obra desde los datos del presupuesto
-        nombre_obra = datos_proyecto.get('nombre', f'Obra desde Presupuesto {presupuesto.numero}')
-        
+        except json.JSONDecodeError:
+            datos_proyecto = {}
+
+    cliente = None
+    if presupuesto.obra:
+        cliente = presupuesto.obra.cliente
+    elif isinstance(datos_proyecto, dict):
+        cliente = datos_proyecto.get('cliente')
+    if not cliente:
+        mensaje = 'Completa los datos del cliente antes de confirmar el presupuesto.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    ubicacion_texto = presupuesto.ubicacion_texto
+    if not ubicacion_texto and isinstance(datos_proyecto, dict):
+        ubicacion_texto = datos_proyecto.get('ubicacion')
+    if not ubicacion_texto:
+        mensaje = 'Debes indicar una ubicación válida antes de confirmar el presupuesto.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.currency not in ALLOWED_CURRENCIES:
+        mensaje = 'La moneda seleccionada no es compatible con la conversión a obra.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.currency != 'ARS' and not presupuesto.tasa_usd_venta:
+        mensaje = 'No se encontró el tipo de cambio aplicado para este presupuesto. Vuelve a calcular antes de confirmar.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.indice_cac_valor is None:
+        mensaje = 'Debes aplicar el índice CAC vigente antes de confirmar el presupuesto.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    nueva_obra = None
+    try:
+        nombre_obra = None
+        if isinstance(datos_proyecto, dict):
+            nombre_obra = datos_proyecto.get('nombre')
+        if not nombre_obra:
+            nombre_obra = f'Obra desde Presupuesto {presupuesto.numero}'
+
         nueva_obra = Obra()
         nueva_obra.nombre = nombre_obra
-        nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde presupuesto')
-        nueva_obra.descripcion = (
-            f"Superficie: {datos_proyecto.get('superficie', 0)}m² - "
-            f"{datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - "
-            f"Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
-        )
-        nueva_obra.direccion = presupuesto.ubicacion_texto or datos_proyecto.get('ubicacion', 'Por especificar')
-        nueva_obra.direccion_normalizada = (
-            presupuesto.ubicacion_normalizada or datos_proyecto.get('ubicacion_normalizada')
+        nueva_obra.cliente = cliente
+        if isinstance(datos_proyecto, dict):
+            descripcion = (
+                f"Superficie: {datos_proyecto.get('superficie', 0)}m² - "
+                f"{datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - "
+                f"Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
+            )
+        else:
+            descripcion = f'Obra creada a partir del presupuesto {presupuesto.numero}'
+        nueva_obra.descripcion = descripcion
+        nueva_obra.direccion = presupuesto.ubicacion_texto or ubicacion_texto or 'Por especificar'
+        nueva_obra.direccion_normalizada = presupuesto.ubicacion_normalizada or (
+            datos_proyecto.get('ubicacion_normalizada') if isinstance(datos_proyecto, dict) else None
         )
         nueva_obra.estado = 'planificacion'
         nueva_obra.presupuesto_total = _quantize_currency(_to_decimal(presupuesto.total_con_iva, '0'))
         nueva_obra.organizacion_id = org_id
 
-        lat_decimal = presupuesto.geo_latitud or datos_proyecto.get('latitud')
-        lng_decimal = presupuesto.geo_longitud or datos_proyecto.get('longitud')
+        lat_decimal = presupuesto.geo_latitud
+        if lat_decimal is None and isinstance(datos_proyecto, dict):
+            lat_decimal = datos_proyecto.get('latitud')
+        lng_decimal = presupuesto.geo_longitud
+        if lng_decimal is None and isinstance(datos_proyecto, dict):
+            lng_decimal = datos_proyecto.get('longitud')
 
         if lat_decimal is not None and lng_decimal is not None:
             try:
@@ -1864,18 +2008,16 @@ def confirmar_como_obra(id):
                 nueva_obra.latitud = _quantize_coord(lat_decimal)
                 nueva_obra.longitud = _quantize_coord(lng_decimal)
         else:
-            ubicacion_texto = presupuesto.ubicacion_texto or datos_proyecto.get('ubicacion')
-            if ubicacion_texto:
-                resolved = resolve_geocode(ubicacion_texto)
-                if resolved:
-                    nueva_obra.latitud = _quantize_coord(resolved.get('lat'))
-                    nueva_obra.longitud = _quantize_coord(resolved.get('lng'))
-                    nueva_obra.geocode_place_id = resolved.get('place_id')
-                    nueva_obra.geocode_provider = resolved.get('provider')
-                    nueva_obra.geocode_status = resolved.get('status') or 'ok'
-                    raw_payload = resolved.get('raw')
-                    nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else None
-                    nueva_obra.geocode_actualizado = dt.datetime.utcnow()
+            resolved = resolve_geocode(ubicacion_texto)
+            if resolved:
+                nueva_obra.latitud = _quantize_coord(resolved.get('lat'))
+                nueva_obra.longitud = _quantize_coord(resolved.get('lng'))
+                nueva_obra.geocode_place_id = resolved.get('place_id')
+                nueva_obra.geocode_provider = resolved.get('provider')
+                nueva_obra.geocode_status = resolved.get('status') or 'ok'
+                raw_payload = resolved.get('raw')
+                nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else None
+                nueva_obra.geocode_actualizado = dt.datetime.utcnow()
 
         nueva_obra.geocode_place_id = presupuesto.geocode_place_id or nueva_obra.geocode_place_id
         nueva_obra.geocode_provider = presupuesto.geocode_provider or nueva_obra.geocode_provider
@@ -1883,48 +2025,36 @@ def confirmar_como_obra(id):
         nueva_obra.geocode_raw = presupuesto.geocode_raw or nueva_obra.geocode_raw
         if presupuesto.geocode_actualizado:
             nueva_obra.geocode_actualizado = presupuesto.geocode_actualizado
-        
+
         db.session.add(nueva_obra)
-        db.session.flush()  # Para obtener el ID
-        
-        # Asociar presupuesto con la obra y marcarlo como convertido
+        db.session.flush()
+
         presupuesto.obra_id = nueva_obra.id
         presupuesto.confirmado_como_obra = True
-        presupuesto.estado = 'convertido'  # Cambiar estado para ocultarlo de la lista
-        
-        # Verificar si la obra ya tiene etapas para evitar duplicados
+        presupuesto.estado = 'convertido'
+
         etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
-        
+
         if etapas_existentes == 0:
             raw_etapas = []
             if isinstance(datos_proyecto, dict):
                 raw_etapas = datos_proyecto.get('etapas') or []
 
             etapas_config = []
-            for idx, etapa_info in enumerate(raw_etapas, start=1):
-                if isinstance(etapa_info, dict):
-                    nombre = (etapa_info.get('nombre') or etapa_info.get('etapa_nombre') or '').strip()
-                    if not nombre:
-                        continue
-                    descripcion = etapa_info.get('descripcion') or ''
-                    try:
-                        orden = int(etapa_info.get('orden') or idx)
-                    except (TypeError, ValueError):
-                        orden = idx
-                    slug = slugify_etapa(etapa_info.get('slug') or nombre)
-                else:
-                    nombre = str(etapa_info).strip()
-                    if not nombre:
-                        continue
-                    descripcion = ''
-                    orden = idx
-                    slug = slugify_etapa(nombre)
-
+            for etapa in raw_etapas:
+                if not isinstance(etapa, dict):
+                    continue
+                nombre_etapa = (etapa.get('nombre') or '').strip()
+                if not nombre_etapa:
+                    continue
+                descripcion_etapa = (etapa.get('descripcion') or '').strip()
+                slug_original = etapa.get('slug') or nombre_etapa
+                slug_etapa = slugify_etapa(slug_original) if normalizar_slugs else slug_original.strip()
                 etapas_config.append({
-                    'nombre': nombre,
-                    'descripcion': descripcion,
-                    'orden': orden,
-                    'slug': slug
+                    'nombre': nombre_etapa,
+                    'descripcion': descripcion_etapa,
+                    'orden': etapa.get('orden'),
+                    'slug': slug_etapa
                 })
 
             if not etapas_config:
@@ -1946,7 +2076,8 @@ def confirmar_como_obra(id):
                     orden = int(etapa_data.get('orden') or idx)
                 except (TypeError, ValueError):
                     orden = idx
-                slug = slugify_etapa(etapa_data.get('slug') or nombre)
+                slug_fuente = etapa_data.get('slug') or nombre
+                slug = slugify_etapa(slug_fuente) if normalizar_slugs else slug_fuente.strip()
                 if slug in slugs_creados:
                     continue
                 slugs_creados.add(slug)
@@ -1961,12 +2092,15 @@ def confirmar_como_obra(id):
 
                 db.session.add(nueva_etapa)
                 db.session.flush()
-                creadas = seed_tareas_para_etapa(
-                    nueva_etapa,
-                    auto_commit=False,
-                    slug=slug,
-                ) or 0
-                if creadas == 0:
+
+                creadas = 0
+                if crear_tareas:
+                    creadas = seed_tareas_para_etapa(
+                        nueva_etapa,
+                        auto_commit=False,
+                        slug=slug,
+                    ) or 0
+                if not crear_tareas or creadas == 0:
                     db.session.add(TareaEtapa(
                         etapa_id=nueva_etapa.id,
                         nombre=f'Tarea inicial de {nombre}',
@@ -1974,21 +2108,53 @@ def confirmar_como_obra(id):
                         estado='pendiente'
                     ))
 
+                etapa_data['slug'] = slug
+
             if isinstance(datos_proyecto, dict):
                 datos_proyecto['etapas'] = etapas_config
                 presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
-        
+
         db.session.commit()
-        
-        flash(f'¡Presupuesto convertido exitosamente en obra "{nombre_obra}"!', 'success')
-        return redirect(url_for('obras.detalle', id=nueva_obra.id))
-        
-    except Exception as e:
+
+    except Exception as exc:
         db.session.rollback()
-        flash(f'Error al confirmar obra: {str(e)}', 'danger')
+        current_app.logger.exception('Error confirmando presupuesto %s: %s', id, exc)
+        mensaje = f'Error al confirmar obra: {str(exc)}'
+        if wants_json:
+            return jsonify({'error': mensaje}), 500
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 
+    obra_creada_id = nueva_obra.id if nueva_obra else None
+    obra_nombre = nueva_obra.nombre if nueva_obra else ''
+    estado_respuesta = presupuesto.estado
 
+    _registrar_evento_confirmacion(
+        org_id=org_id,
+        obra_id=obra_creada_id,
+        presupuesto_id=presupuesto.id,
+        usuario_id=getattr(current_user, 'id', None),
+        trigger=trigger_source,
+    )
+
+    if notificar:
+        current_app.logger.info(
+            'Confirmación de presupuesto %s solicitó notificación por email (pendiente de implementación).',
+            presupuesto.numero
+        )
+
+    if wants_json:
+        return jsonify({
+            'status': 'ok',
+            'message': 'Obra creada correctamente.',
+            'obra_id': obra_creada_id,
+            'obra_url': url_for('obras.detalle', id=obra_creada_id) if obra_creada_id else None,
+            'presupuesto_estado': estado_respuesta,
+            'trigger': trigger_source
+        })
+
+    flash(f'¡Presupuesto convertido exitosamente en obra "{obra_nombre}"!', 'success')
+    return redirect(url_for('obras.detalle', id=obra_creada_id))
 @presupuestos_bp.route('/<int:id>/perder', methods=['POST'])
 @login_required
 def marcar_presupuesto_perdido(id: int):

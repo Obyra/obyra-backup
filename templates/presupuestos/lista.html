@@ -73,38 +73,26 @@
         {% if presupuestos %}
             {% for presupuesto in presupuestos %}
             <div class="col-lg-6 col-xl-4 mb-4">
-                <div class="card h-100 shadow-sm">
+                <div class="card h-100 shadow-sm" id="presupuesto-card-{{ presupuesto.id }}"
+                     data-presupuesto-card="{{ presupuesto.id }}"
+                     data-presupuesto-estado="{{ presupuesto.estado }}">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h6 class="mb-0 fw-bold">{{ presupuesto.numero }}</h6>
-                        <span class="badge {{ presupuesto.estado|estado_badge }}">
+                        <span class="badge {{ presupuesto.estado|estado_badge }}"
+                              data-presupuesto-estado-badge="{{ presupuesto.id }}">
                             {{ presupuesto.estado.title() }}
                         </span>
                     </div>
+                    {% set datos_raw = presupuesto.datos_proyecto %}
+                    {% set proyecto_json = datos_raw|from_json if datos_raw else {} %}
+                    {% set nombre_proyecto = presupuesto.obra.nombre if presupuesto.obra else (proyecto_json.nombre if proyecto_json and proyecto_json.nombre else 'Presupuesto sin obra') %}
+                    {% set cliente_proyecto = presupuesto.obra.cliente if presupuesto.obra else (proyecto_json.cliente if proyecto_json and proyecto_json.cliente else 'Cliente por confirmar') %}
+                    {% set ubicacion_proyecto = presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or (proyecto_json.ubicacion if proyecto_json and proyecto_json.ubicacion else None) %}
                     <div class="card-body">
-                        {% if presupuesto.obra %}
-                            <h6 class="card-title">{{ presupuesto.obra.nombre }}</h6>
-                            <p class="text-muted mb-2">
-                                <i class="fas fa-user me-1"></i>{{ presupuesto.obra.cliente }}
-                            </p>
-                        {% else %}
-                            <h6 class="card-title">
-                                {% set datos = presupuesto.datos_proyecto|safe %}
-                                {% if datos %}
-                                    {% set proyecto_json = datos|from_json %}
-                                    {{ proyecto_json.nombre if proyecto_json.nombre else 'Presupuesto sin obra' }}
-                                {% else %}
-                                    Presupuesto sin obra
-                                {% endif %}
-                            </h6>
-                            <p class="text-muted mb-2">
-                                <i class="fas fa-user me-1"></i>
-                                {% if datos and proyecto_json.cliente %}
-                                    {{ proyecto_json.cliente }}
-                                {% else %}
-                                    Cliente por confirmar
-                                {% endif %}
-                            </p>
-                        {% endif %}
+                        <h6 class="card-title">{{ nombre_proyecto }}</h6>
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-user me-1"></i>{{ cliente_proyecto }}
+                        </p>
                         <p class="text-muted mb-3">
                             <i class="fas fa-calendar me-1"></i>{{ presupuesto.fecha|fecha }}
                             {% if presupuesto.fecha_vigencia %}
@@ -173,8 +161,35 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div class="card-footer bg-transparent">
-                        <div class="d-grid gap-2">
+                    <div class="card-footer bg-transparent" data-presupuesto-footer="{{ presupuesto.id }}">
+                        <div class="d-grid gap-2" data-confirm-container="{{ presupuesto.id }}">
+                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                            <button type="button" class="btn btn-success btn-sm btn-confirmar-presupuesto"
+                                    data-action="abrir-confirmar"
+                                    data-presupuesto-id="{{ presupuesto.id }}"
+                                    data-numero="{{ presupuesto.numero }}"
+                                    data-cliente="{{ cliente_proyecto|e }}"
+                                    data-obra="{{ nombre_proyecto|e }}"
+                                    data-ubicacion="{{ (ubicacion_proyecto or 'Ubicación no especificada')|e }}"
+                                    data-ubicacion-valid="{{ 'true' if presupuesto.geocode_status == 'ok' or (presupuesto.geo_latitud and presupuesto.geo_longitud) else 'false' }}"
+                                    data-moneda="{{ presupuesto.currency }}"
+                                    data-currency-symbol="{{ '$' if presupuesto.currency == 'ARS' else 'USD' }}"
+                                    data-tasa="{{ presupuesto.tasa_usd_venta|moneda('ARS') if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta else '' }}"
+                                    data-tasa-provider="{{ presupuesto.exchange_rate_provider or 'bna' }}"
+                                    data-cac="{{ '{:,.0f}'.format(presupuesto.indice_cac_valor) if presupuesto.indice_cac_valor else '' }}"
+                                    data-cac-fecha="{{ presupuesto.indice_cac_fecha.strftime('%m/%Y') if presupuesto.indice_cac_fecha else '' }}"
+                                    data-subtotal-materiales="{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}"
+                                    data-subtotal-mano-obra="{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}"
+                                    data-subtotal-equipos="{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}"
+                                    data-total="{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}"
+                                    data-geo-lat="{{ presupuesto.geo_latitud if presupuesto.geo_latitud is not none else '' }}"
+                                    data-geo-lng="{{ presupuesto.geo_longitud if presupuesto.geo_longitud is not none else '' }}"
+                                    data-geocode-status="{{ presupuesto.geocode_status or '' }}"
+                                    data-geocode-provider="{{ presupuesto.geocode_provider or '' }}"
+                                    aria-label="Confirmar presupuesto {{ presupuesto.numero }} y crear obra">
+                                <i class="fas fa-check-circle me-1"></i>Confirmar
+                            </button>
+                            {% endif %}
                             {% if presupuesto.estado == 'eliminado' %}
                             <button class="btn btn-outline-secondary" disabled>
                                 <i class="fas fa-box-archive me-1"></i>Presupuesto eliminado
@@ -192,13 +207,6 @@
                             {% endif %}
                             {% endif %}
                             
-                            <!-- Botón Confirmar Obra para presupuestos sin obra -->
-                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
-                            <button class="btn btn-success btn-sm" onclick="confirmarComoObra({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
-                                <i class="fas fa-check-circle me-1"></i>Confirmar como Obra
-                            </button>
-                            {% endif %}
-
                             {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                             <button class="btn btn-outline-warning btn-sm" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-archive me-1"></i>Marcar como perdido
@@ -242,31 +250,302 @@
             </div>
         {% endif %}
     </div>
+    </div>
 </div>
+
+<div class="modal fade" id="modalConfirmarPresupuesto" tabindex="-1"
+     aria-labelledby="modalConfirmarPresupuestoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalConfirmarPresupuestoLabel">
+                    Confirmar presupuesto y crear obra
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form id="confirmarPresupuestoForm">
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Revisa los datos clave antes de confirmar. Podrás ajustar las tareas luego desde la obra.
+                    </p>
+                    <div id="confirmModalMessage" class="alert alert-danger d-none" role="alert"></div>
+                    <dl class="row mb-3">
+                        <dt class="col-sm-4">Presupuesto</dt>
+                        <dd class="col-sm-8 fw-semibold" id="confirmPresupuestoNumero"></dd>
+                        <dt class="col-sm-4">Obra</dt>
+                        <dd class="col-sm-8" id="confirmPresupuestoObra"></dd>
+                        <dt class="col-sm-4">Cliente</dt>
+                        <dd class="col-sm-8" id="confirmPresupuestoCliente"></dd>
+                        <dt class="col-sm-4">Ubicación</dt>
+                        <dd class="col-sm-8" id="confirmPresupuestoUbicacion"></dd>
+                        <dt class="col-sm-4">Moneda</dt>
+                        <dd class="col-sm-8" id="confirmPresupuestoMoneda"></dd>
+                        <dt class="col-sm-4">Tipo de cambio</dt>
+                        <dd class="col-sm-8" id="confirmPresupuestoTipoCambio"></dd>
+                        <dt class="col-sm-4">Índice CAC</dt>
+                        <dd class="col-sm-8" id="confirmPresupuestoCAC"></dd>
+                    </dl>
+                    <div id="confirmUbicacionEstado" class="mb-3"></div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small">Materiales</div>
+                                <div class="fw-semibold" id="confirmSubtotalMateriales"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small">Mano de obra</div>
+                                <div class="fw-semibold" id="confirmSubtotalManoObra"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small">Equipos</div>
+                                <div class="fw-semibold" id="confirmSubtotalEquipos"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Total estimado (con IVA)</span>
+                            <span class="fs-5 fw-bold" id="confirmTotalGeneral"></span>
+                        </div>
+                    </div>
+                    <div class="border rounded p-3">
+                        <input type="hidden" id="confirmPresupuestoId" value="">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="confirmCrearTareas" checked>
+                            <label class="form-check-label" for="confirmCrearTareas">
+                                Crear tareas sugeridas para cada etapa
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="confirmNormalizarSlugs" checked>
+                            <label class="form-check-label" for="confirmNormalizarSlugs">
+                                Asignar slug y etapa normalizada automáticamente
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="confirmNotificar" checked>
+                            <label class="form-check-label" for="confirmNotificar">
+                                Notificar por email al confirmar
+                            </label>
+                            <div class="form-text">
+                                Las notificaciones se enviarán cuando el canal esté configurado.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnConfirmarPresupuesto">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"
+                              id="spinnerConfirmarPresupuesto"></span>
+                        Confirmar y crear obra
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% include 'presupuestos/_perder_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-function confirmarComoObra(presupuestoId, numeroPresupuesto) {
-    if (confirm(`¿Estás seguro de que deseas convertir el presupuesto ${numeroPresupuesto} en una obra activa?`)) {
-        // Crear un formulario para enviar la solicitud POST
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `/presupuestos/${presupuestoId}/confirmar-obra`;
-        
-        // Agregar token CSRF si existe
-        const csrfToken = document.querySelector('meta[name="csrf-token"]');
-        if (csrfToken) {
-            const tokenInput = document.createElement('input');
-            tokenInput.type = 'hidden';
-            tokenInput.name = 'csrf_token';
-            tokenInput.value = csrfToken.content;
-            form.appendChild(tokenInput);
+const confirmModalEl = document.getElementById('modalConfirmarPresupuesto');
+const confirmModal = confirmModalEl ? new bootstrap.Modal(confirmModalEl) : null;
+const confirmForm = document.getElementById('confirmarPresupuestoForm');
+const confirmMessage = document.getElementById('confirmModalMessage');
+const confirmSpinner = document.getElementById('spinnerConfirmarPresupuesto');
+const confirmSubmitBtn = document.getElementById('btnConfirmarPresupuesto');
+const confirmPresupuestoIdInput = document.getElementById('confirmPresupuestoId');
+const campoNumero = document.getElementById('confirmPresupuestoNumero');
+const campoObra = document.getElementById('confirmPresupuestoObra');
+const campoCliente = document.getElementById('confirmPresupuestoCliente');
+const campoUbicacion = document.getElementById('confirmPresupuestoUbicacion');
+const campoMoneda = document.getElementById('confirmPresupuestoMoneda');
+const campoTipoCambio = document.getElementById('confirmPresupuestoTipoCambio');
+const campoIndiceCAC = document.getElementById('confirmPresupuestoCAC');
+const campoSubtotalMateriales = document.getElementById('confirmSubtotalMateriales');
+const campoSubtotalManoObra = document.getElementById('confirmSubtotalManoObra');
+const campoSubtotalEquipos = document.getElementById('confirmSubtotalEquipos');
+const campoTotalGeneral = document.getElementById('confirmTotalGeneral');
+const campoUbicacionEstado = document.getElementById('confirmUbicacionEstado');
+const checkboxCrearTareas = document.getElementById('confirmCrearTareas');
+const checkboxNormalizarSlugs = document.getElementById('confirmNormalizarSlugs');
+const checkboxNotificar = document.getElementById('confirmNotificar');
+let presupuestoSeleccionadoConfirmacion = null;
+
+const confirmButtons = document.querySelectorAll('.btn-confirmar-presupuesto');
+confirmButtons.forEach((btn) => {
+    btn.addEventListener('click', () => abrirModalConfirmacion(btn));
+});
+
+function abrirModalConfirmacion(button) {
+    if (!confirmModal) {
+        return;
+    }
+    presupuestoSeleccionadoConfirmacion = button;
+    confirmForm.dataset.presupuestoId = button.dataset.presupuestoId;
+    if (confirmPresupuestoIdInput) {
+        confirmPresupuestoIdInput.value = button.dataset.presupuestoId || '';
+    }
+    campoNumero.textContent = button.dataset.numero || '';
+    campoObra.textContent = button.dataset.obra || '';
+    campoCliente.textContent = button.dataset.cliente || '—';
+    campoUbicacion.textContent = button.dataset.ubicacion || 'Ubicación no especificada';
+    campoMoneda.textContent = button.dataset.moneda || 'ARS';
+    campoTipoCambio.textContent = button.dataset.tasa ? `${button.dataset.tasa} (${(button.dataset.tasaProvider || '').toUpperCase()})` : '—';
+    campoIndiceCAC.textContent = button.dataset.cac ? `${button.dataset.cac}${button.dataset.cacFecha ? ' (vigencia ' + button.dataset.cacFecha + ')' : ''}` : '—';
+    campoSubtotalMateriales.textContent = button.dataset.subtotalMateriales || '—';
+    campoSubtotalManoObra.textContent = button.dataset.subtotalManoObra || '—';
+    campoSubtotalEquipos.textContent = button.dataset.subtotalEquipos || '—';
+    campoTotalGeneral.textContent = button.dataset.total || '—';
+
+    if (button.dataset.ubicacionValid === 'true') {
+        campoUbicacionEstado.innerHTML = '<span class="badge bg-success"><i class="fas fa-map-marker-alt me-1"></i>Ubicación validada correctamente.</span>';
+    } else {
+        campoUbicacionEstado.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-map-marker-alt me-1"></i>Ubicación pendiente de validación. Se intentará geocodificar al confirmar.</span>';
+    }
+
+    if (confirmMessage) {
+        confirmMessage.classList.add('d-none');
+        confirmMessage.textContent = '';
+    }
+    if (confirmSpinner) {
+        confirmSpinner.classList.add('d-none');
+    }
+    if (confirmSubmitBtn) {
+        confirmSubmitBtn.disabled = false;
+    }
+    if (checkboxCrearTareas) checkboxCrearTareas.checked = true;
+    if (checkboxNormalizarSlugs) checkboxNormalizarSlugs.checked = true;
+    if (checkboxNotificar) checkboxNotificar.checked = true;
+
+    confirmModal.show();
+}
+
+if (confirmForm) {
+    confirmForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const presupuestoId = confirmForm.dataset.presupuestoId;
+        if (!presupuestoId) {
+            return;
         }
-        
-        document.body.appendChild(form);
-        form.submit();
+        if (confirmSubmitBtn) {
+            confirmSubmitBtn.disabled = true;
+        }
+        if (confirmSpinner) {
+            confirmSpinner.classList.remove('d-none');
+        }
+        if (confirmMessage) {
+            confirmMessage.classList.add('d-none');
+            confirmMessage.textContent = '';
+        }
+
+        const payload = {
+            crear_tareas: checkboxCrearTareas ? checkboxCrearTareas.checked : true,
+            normalizar_slugs: checkboxNormalizarSlugs ? checkboxNormalizarSlugs.checked : true,
+            notificar: checkboxNotificar ? checkboxNotificar.checked : true,
+        };
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        };
+        const csrf = document.querySelector('meta[name="csrf-token"]');
+        if (csrf) {
+            headers['X-CSRFToken'] = csrf.getAttribute('content');
+        }
+
+        try {
+            const response = await fetch(`/presupuestos/${presupuestoId}/confirmar-obra`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || result.error) {
+                const mensaje = result.error || 'No se pudo confirmar el presupuesto. Intenta nuevamente.';
+                if (confirmMessage) {
+                    confirmMessage.textContent = mensaje;
+                    confirmMessage.classList.remove('d-none');
+                } else {
+                    showAlert(mensaje, 'danger');
+                }
+                return;
+            }
+
+            if (confirmModal) {
+                confirmModal.hide();
+            }
+
+            actualizarTarjetaTrasConfirmacion(presupuestoId, result);
+
+            let mensajeExito = result.message || 'Obra creada correctamente.';
+            if (result.obra_url) {
+                mensajeExito += ` <a href="${result.obra_url}" class="alert-link ms-1">Ir a la obra</a>`;
+            }
+            showAlert(mensajeExito, 'success');
+        } catch (error) {
+            console.error(error);
+            if (confirmMessage) {
+                confirmMessage.textContent = 'No se pudo confirmar el presupuesto. Intenta nuevamente.';
+                confirmMessage.classList.remove('d-none');
+            } else {
+                showAlert('No se pudo confirmar el presupuesto. Intenta nuevamente.', 'danger');
+            }
+        } finally {
+            if (confirmSubmitBtn) {
+                confirmSubmitBtn.disabled = false;
+            }
+            if (confirmSpinner) {
+                confirmSpinner.classList.add('d-none');
+            }
+        }
+    });
+}
+
+function actualizarTarjetaTrasConfirmacion(presupuestoId, payload) {
+    const card = document.querySelector(`[data-presupuesto-card="${presupuestoId}"]`);
+    if (!card) {
+        return;
+    }
+    const estadoAnterior = card.dataset.presupuestoEstado || '';
+    const nuevoEstado = payload.presupuesto_estado || 'convertido';
+    card.dataset.presupuestoEstado = nuevoEstado;
+
+    const badge = card.querySelector(`[data-presupuesto-estado-badge="${presupuestoId}"]`);
+    if (badge) {
+        badge.className = 'badge bg-success';
+        const texto = nuevoEstado.replace(/_/g, ' ');
+        badge.textContent = texto.charAt(0).toUpperCase() + texto.slice(1);
+    }
+
+    const container = card.querySelector('[data-confirm-container]');
+    if (container) {
+        const btn = container.querySelector('.btn-confirmar-presupuesto');
+        if (btn) {
+            btn.remove();
+        }
+        if (payload.obra_url) {
+            const enlace = document.createElement('a');
+            enlace.href = payload.obra_url;
+            enlace.className = 'btn btn-success';
+            enlace.innerHTML = '<i class="fas fa-project-diagram me-1"></i>Ir a la obra';
+            enlace.setAttribute('aria-label', 'Ir a la obra creada');
+            container.prepend(enlace);
+        }
+    }
+
+    if (estadoAnterior === 'borrador' && nuevoEstado !== 'borrador') {
+        const estadoFiltro = new URLSearchParams(window.location.search).get('estado');
+        if (estadoFiltro && estadoFiltro.toLowerCase() === 'borrador') {
+            setTimeout(() => card.remove(), 1200);
+        }
     }
 }
 
@@ -398,4 +677,5 @@ function showAlert(message, type = 'info') {
     }, 3000);
 }
 </script>
+
 {% endblock %}
