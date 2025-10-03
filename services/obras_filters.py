@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from sqlalchemy import and_, exists, not_, or_
+from sqlalchemy import and_, exists, or_
 
 from models import Obra, Presupuesto
 
@@ -12,13 +12,6 @@ CONFIRMED_PRESUPUESTO_STATES = ("aprobado", "convertido")
 
 def obras_visibles_clause(model: type[Obra]):
     """Devuelve la cláusula que define qué obras se consideran visibles."""
-    presupuesto_activo = exists().where(
-        and_(
-            Presupuesto.obra_id == model.id,
-            Presupuesto.deleted_at.is_(None),
-        )
-    )
-
     presupuesto_confirmado = exists().where(
         and_(
             Presupuesto.obra_id == model.id,
@@ -30,7 +23,7 @@ def obras_visibles_clause(model: type[Obra]):
         )
     )
 
-    return or_(not_(presupuesto_activo), presupuesto_confirmado)
+    return presupuesto_confirmado
 
 
 def obra_tiene_presupuesto_confirmado(obra: Obra) -> bool:

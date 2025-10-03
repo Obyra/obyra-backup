@@ -165,6 +165,24 @@ def dashboard():
         Event.severity.in_(['media', 'alta', 'critica'])
     ).order_by(desc(Event.created_at)).limit(10).all()
     
+    # Mostrar banner solo para administradores en entornos de desarrollo cuando los reportes están deshabilitados
+    admin_checker = getattr(current_user, 'es_admin', None)
+    if callable(admin_checker):
+        is_admin_user = bool(admin_checker())
+    else:
+        role_attr = getattr(current_user, 'role', '') or getattr(current_user, 'rol', '')
+        is_admin_user = str(role_attr).lower() in {'admin', 'administrador'}
+        if not is_admin_user:
+            role_helper = getattr(current_user, 'tiene_rol', None)
+            if callable(role_helper):
+                is_admin_user = bool(role_helper('admin'))
+
+    env_name = (current_app.config.get('ENV') or '').lower()
+    is_dev_env = current_app.debug or env_name in {'development', 'dev'}
+    reports_service_enabled = bool(current_app.config.get('ENABLE_REPORTS_SERVICE'))
+    should_warn_reports = (not reports_service_enabled) or (not CHARTS_ENABLED)
+    show_reports_banner = is_admin_user and is_dev_env and should_warn_reports
+
     return render_template('reportes/dashboard.html',
                          kpis=kpis,
                          obras_activas=obras_activas,
@@ -173,7 +191,8 @@ def dashboard():
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,
                          presupuestos_vencidos=presupuestos_vencidos,
-                         charts_enabled=CHARTS_ENABLED)
+                         charts_enabled=CHARTS_ENABLED,
+                         show_reports_banner=show_reports_banner)
 
 def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None):
     """Calcula los KPIs principales del dashboard"""
