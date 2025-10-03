@@ -9,8 +9,12 @@ from typing import Dict, Optional, Tuple, Union, Any
 import os
 import re
 import uuid
+import secrets
+import string
 from werkzeug.routing import BuildError
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
+from services.email_service import send_email
 
 
 def normalizar_cuit(valor: Optional[str]) -> str:
@@ -254,6 +258,53 @@ def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccoun
         raise BadSignature('El token no coincide con ninguna cuenta válida.')
 
     return account, portal
+
+
+def _generate_temporary_password(length: int = 12) -> str:
+    """Genera una contraseña aleatoria segura para nuevos integrantes."""
+    length = max(length, 8)
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _send_new_member_invitation(usuario: Usuario, temp_password: str) -> Optional[str]:
+    """Envía (o registra) el correo de bienvenida con contraseña temporal y enlace de activación."""
+    try:
+        token = _generate_reset_token(usuario, 'user')
+        reset_url = url_for('auth.reset_password', token=token, _external=True)
+    except Exception as exc:  # pragma: no cover - prefer resiliencia en producción
+        current_app.logger.exception('No se pudo generar el enlace de activación para %s', usuario.email)
+        reset_url = None
+
+    html_content = render_template(
+        'emails/nuevo_integrante.html',
+        usuario=usuario,
+        temp_password=temp_password,
+        reset_url=reset_url,
+    )
+
+    email_sent = False
+    try:
+        email_sent = send_email(
+            usuario.email,
+            'Tu acceso a OBYRA IA',
+            html_content,
+        )
+    except Exception:
+        current_app.logger.exception('Fallo al enviar el email de bienvenida a %s', usuario.email)
+        email_sent = False
+
+    if not email_sent:
+        current_app.logger.info(
+            'Credenciales temporales generadas para %s | contraseña: %s | enlace: %s',
+            usuario.email,
+            temp_password,
+            reset_url or 'N/D',
+        )
+    else:
+        current_app.logger.info('Email de bienvenida enviado a %s', usuario.email)
+
+    return reset_url
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -754,7 +805,7 @@ def usuarios_admin():
     admins_count = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, rol='administrador').count()
     usuarios_google = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id, auth_provider='google').count()
     
-    return render_template('auth/usuarios_admin.html', 
+    return render_template('auth/usuarios_admin.html',
                          usuarios=usuarios,
                          total_usuarios=total_usuarios,
                          usuarios_activos=usuarios_activos,
@@ -763,6 +814,98 @@ def usuarios_admin():
                          rol_filtro=rol_filtro,
                          auth_provider_filtro=auth_provider_filtro,
                          buscar=buscar)
+
+
+@auth_bp.route('/usuarios/integrantes', methods=['POST'])
+@login_required
+def crear_integrante_desde_panel():
+    """Crea un nuevo integrante de la organización desde el panel administrativo."""
+    if current_user.rol != 'administrador':
+        return jsonify({'success': False, 'message': 'No tienes permisos para realizar esta acción.'}), 403
+
+    payload = request.get_json(silent=True) or request.form
+
+    nombre = (payload.get('nombre') or '').strip()
+    apellido = (payload.get('apellido') or '').strip()
+    cuit_raw = (payload.get('cuit') or '').strip()
+    direccion = (payload.get('direccion') or '').strip()
+    telefono = (payload.get('telefono') or '').strip()
+    email = (payload.get('email') or '').strip().lower()
+    rol_solicitado = (payload.get('rol') or 'operario').strip().lower()
+
+    if not all([nombre, apellido, cuit_raw, telefono, email]):
+        return jsonify({'success': False, 'message': 'Por favor, completa todos los campos obligatorios.'}), 400
+
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        return jsonify({'success': False, 'message': 'El email ingresado no es válido.'}), 400
+
+    cuit_normalizado = normalizar_cuit(cuit_raw)
+    if not validar_cuit(cuit_normalizado):
+        return jsonify({'success': False, 'message': 'El CUIT/CUIL ingresado no es válido.'}), 400
+
+    rol_map = {
+        'administrador': ('administrador', 'admin'),
+        'admin': ('administrador', 'admin'),
+        'operario': ('operario', 'operario'),
+    }
+
+    if rol_solicitado not in rol_map:
+        return jsonify({'success': False, 'message': 'El rol seleccionado no es válido.'}), 400
+
+    rol_interno, role_front = rol_map[rol_solicitado]
+
+    email_existente = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+    if email_existente:
+        return jsonify({'success': False, 'message': 'Ya existe un usuario con ese email.'}), 409
+
+    cuit_existente = PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first()
+    if cuit_existente:
+        return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
+
+    direccion_final = direccion if direccion else 'Sin especificar'
+    telefono_sanitizado = re.sub(r'[^0-9+\s-]', '', telefono)
+    if not telefono_sanitizado.strip():
+        return jsonify({'success': False, 'message': 'El teléfono ingresado no es válido.'}), 400
+    temp_password = _generate_temporary_password()
+
+    try:
+        nuevo_usuario = Usuario(
+            nombre=nombre,
+            apellido=apellido,
+            email=email,
+            telefono=telefono_sanitizado,
+            rol=rol_interno,
+            role=role_front,
+            auth_provider='manual',
+            activo=True,
+            organizacion_id=current_user.organizacion_id,
+        )
+        nuevo_usuario.set_password(temp_password)
+        db.session.add(nuevo_usuario)
+        db.session.flush()
+
+        perfil = PerfilUsuario(
+            usuario_id=nuevo_usuario.id,
+            cuit=cuit_normalizado,
+            direccion=direccion_final or 'Sin especificar',
+        )
+        db.session.add(perfil)
+
+        nuevo_usuario.ensure_onboarding_status()
+
+        db.session.commit()
+    except Exception as exc:  # pragma: no cover - mantenemos resiliencia
+        db.session.rollback()
+        current_app.logger.exception('Error al crear el nuevo integrante')
+        return jsonify({'success': False, 'message': 'No se pudo crear el usuario. Intenta nuevamente.'}), 500
+
+    _send_new_member_invitation(nuevo_usuario, temp_password)
+    flash(f'Se creó el usuario {nombre} {apellido} y se enviaron las credenciales temporales a {email}.', 'success')
+
+    return jsonify({
+        'success': True,
+        'redirect_url': url_for('auth.usuarios_admin'),
+    })
 
 @auth_bp.route('/usuarios/cambiar_rol', methods=['POST'])
 @login_required
