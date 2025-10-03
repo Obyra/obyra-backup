@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Cuadro de Stock - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                    <div>
+                        <h5 class="mb-1"><i class="fas fa-clipboard-list me-2"></i>Cuadro de Stock</h5>
+                        <p class="mb-0 small">Resumen consolidado por depósito y categoría</p>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-success me-2">Disponible: {{ '%.2f'|format(total_disponible) }}</span>
+                        <span class="badge bg-warning text-dark">Alertas: {{ total_bajo }}</span>
+                    </div>
+                </div>
+                <div class="card-body border-bottom">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Depósito</label>
+                            <select name="warehouse" class="form-select">
+                                <option value="">Todos</option>
+                                {% for warehouse in warehouses %}
+                                <option value="{{ warehouse.id }}" {% if filtros.warehouse == warehouse.id %}selected{% endif %}>{{ warehouse.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Categoría</label>
+                            <select name="categoria" class="form-select">
+                                <option value="">Todas</option>
+                                {% for categoria in categorias %}
+                                <option value="{{ categoria.id }}" {% if filtros.categoria == categoria.id %}selected{% endif %}>{{ categoria.full_path }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Buscar</label>
+                            <div class="input-group">
+                                <input type="text" name="buscar" class="form-control" placeholder="SKU o nombre" value="{{ filtros.buscar }}">
+                                <button class="btn btn-outline-primary" type="submit"><i class="fas fa-search"></i></button>
+                                <a href="{{ url_for('inventario_new.cuadro_stock') }}" class="btn btn-outline-secondary"><i class="fas fa-times"></i></a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-body">
+                    {% if resumen %}
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Item</th>
+                                    <th>Depósito</th>
+                                    <th class="text-end">Stock</th>
+                                    <th class="text-end">Stock mínimo</th>
+                                    <th>Estado</th>
+                                    <th>Último movimiento</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for fila in resumen %}
+                                <tr class="{% if fila.is_low_stock %}table-warning{% endif %}">
+                                    <td><code>{{ fila.sku }}</code></td>
+                                    <td>
+                                        <strong>{{ fila.item_nombre }}</strong><br>
+                                        <small class="text-muted">{{ fila.categoria }}</small>
+                                    </td>
+                                    <td>{{ fila.warehouse_nombre }}</td>
+                                    <td class="text-end">
+                                        {{ '%.2f'|format(fila.cantidad) }} {{ fila.unidad }}
+                                    </td>
+                                    <td class="text-end">{{ '%.2f'|format(fila.min_stock) }} {{ fila.unidad }}</td>
+                                    <td>
+                                        {% if fila.is_low_stock %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Stock bajo</span>
+                                        {% else %}
+                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>OK</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if fila.last_movement %}
+                                        <span class="small text-muted"><i class="far fa-clock me-1"></i>{{ fila.last_movement|fecha_hora }}</span>
+                                        {% else %}
+                                        <span class="text-muted small">Sin movimientos</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No se encontraron registros para los filtros seleccionados.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12 text-end">
+            <a href="{{ url_for('inventario_new.items') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver al inventario
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

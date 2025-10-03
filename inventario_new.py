@@ -1,12 +1,23 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    flash,
+    redirect,
+    url_for,
+    jsonify,
+)
 from flask_login import login_required, current_user
 from app import db
 from models import (
-    InventoryCategory, InventoryItem, Warehouse, Stock, 
+    InventoryCategory, InventoryItem, Warehouse, Stock,
     StockMovement, StockReservation, Obra
 )
 from datetime import datetime
 from sqlalchemy import func, and_
+from sqlalchemy.orm import aliased
+
+from services.memberships import get_current_org_id
 
 inventario_new_bp = Blueprint('inventario_new', __name__, url_prefix='/inventario')
 
@@ -32,6 +43,103 @@ def get_json_response(data, status=200, error=None):
         return jsonify(data), status
     return None
 
+
+def _resolve_company_id() -> int | None:
+    """Obtiene la organización actual respetando multi-tenant."""
+    org_id = get_current_org_id()
+    if org_id:
+        return org_id
+    return getattr(current_user, 'organizacion_id', None)
+
+
+def _build_stock_summary(company_id: int, *, warehouse_id: int | None = None,
+                         categoria_id: int | None = None, buscar: str | None = None):
+    """Devuelve un resumen de stock por item y depósito."""
+    item_alias = aliased(InventoryItem)
+    warehouse_alias = aliased(Warehouse)
+
+    query = (
+        db.session.query(
+            item_alias.id.label('item_id'),
+            item_alias.sku.label('sku'),
+            item_alias.nombre.label('item_nombre'),
+            item_alias.unidad.label('unidad'),
+            InventoryCategory.nombre.label('categoria'),
+            warehouse_alias.id.label('warehouse_id'),
+            warehouse_alias.nombre.label('warehouse_nombre'),
+            func.coalesce(func.sum(Stock.cantidad), 0).label('cantidad'),
+            func.coalesce(func.max(item_alias.min_stock), 0).label('min_stock')
+        )
+        .select_from(item_alias)
+        .join(InventoryCategory, InventoryCategory.id == item_alias.categoria_id)
+        .outerjoin(Stock, Stock.item_id == item_alias.id)
+        .outerjoin(warehouse_alias, warehouse_alias.id == Stock.warehouse_id)
+        .filter(item_alias.company_id == company_id)
+    )
+
+    if warehouse_id:
+        query = query.filter(warehouse_alias.id == warehouse_id)
+
+    if categoria_id:
+        query = query.filter(item_alias.categoria_id == categoria_id)
+
+    if buscar:
+        like_pattern = f"%{buscar.lower()}%"
+        query = query.filter(
+            db.or_(
+                func.lower(item_alias.sku).like(like_pattern),
+                func.lower(item_alias.nombre).like(like_pattern)
+            )
+        )
+
+    query = query.group_by(
+        item_alias.id,
+        item_alias.sku,
+        item_alias.nombre,
+        item_alias.unidad,
+        InventoryCategory.nombre,
+        warehouse_alias.id,
+        warehouse_alias.nombre,
+    ).order_by(item_alias.nombre.asc(), warehouse_alias.nombre.asc())
+
+    rows = query.all()
+
+    if not rows:
+        return []
+
+    item_ids = {row.item_id for row in rows}
+    last_movement_map = {
+        item_id: last_date
+        for item_id, last_date in (
+            db.session.query(
+                StockMovement.item_id,
+                func.max(StockMovement.fecha)
+            )
+            .filter(StockMovement.item_id.in_(item_ids))
+            .group_by(StockMovement.item_id)
+            .all()
+        )
+    }
+
+    summary = []
+    for row in rows:
+        last_date = last_movement_map.get(row.item_id)
+        summary.append({
+            'item_id': row.item_id,
+            'sku': row.sku,
+            'item_nombre': row.item_nombre,
+            'categoria': row.categoria,
+            'unidad': row.unidad,
+            'warehouse_id': row.warehouse_id,
+            'warehouse_nombre': row.warehouse_nombre or 'Sin depósito asignado',
+            'cantidad': float(row.cantidad or 0),
+            'min_stock': float(row.min_stock or 0),
+            'is_low_stock': (row.cantidad or 0) <= (row.min_stock or 0),
+            'last_movement': last_date.isoformat() if last_date else None,
+        })
+
+    return summary
+
 @inventario_new_bp.route('/')
 @inventario_new_bp.route('/items')
 @login_required
@@ -39,13 +147,18 @@ def items():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     # Filtros
     categoria_id = request.args.get('categoria')
     buscar = request.args.get('buscar')
     stock_bajo = request.args.get('stock_bajo')
-    
-    query = InventoryItem.query.filter_by(company_id=current_user.organizacion_id, activo=True)
+
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    query = InventoryItem.query.filter_by(company_id=company_id, activo=True)
     
     if categoria_id:
         query = query.filter(InventoryItem.categoria_id == categoria_id)
@@ -83,12 +196,69 @@ def items():
         return json_resp
     
     # Obtener categorías para filtros
-    categorias = InventoryCategory.query.filter_by(company_id=current_user.organizacion_id).all()
-    
-    return render_template('inventario_new/items.html', 
-                         items=items, 
+    categorias = InventoryCategory.query.filter_by(company_id=company_id).all()
+
+    return render_template('inventario_new/items.html',
+                         items=items,
                          categorias=categorias,
                          filtros={'categoria': categoria_id, 'buscar': buscar, 'stock_bajo': stock_bajo})
+
+
+@inventario_new_bp.route('/cuadro-stock')
+@login_required
+def cuadro_stock():
+    if not current_user.puede_acceder_modulo('inventario'):
+        flash('No tienes permisos para acceder a este módulo.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
+        return redirect(url_for('inventario_new.items'))
+
+    warehouse_id = request.args.get('warehouse', type=int)
+    categoria_id = request.args.get('categoria', type=int)
+    buscar = request.args.get('buscar', type=str)
+
+    summary = _build_stock_summary(
+        company_id,
+        warehouse_id=warehouse_id,
+        categoria_id=categoria_id,
+        buscar=buscar,
+    )
+
+    total_disponible = sum(row['cantidad'] for row in summary)
+    total_bajo = sum(1 for row in summary if row['is_low_stock'])
+
+    json_resp = get_json_response({
+        'data': summary,
+        'meta': {
+            'total_disponible': total_disponible,
+            'items': len(summary),
+            'alertas': total_bajo,
+        }
+    })
+    if json_resp:
+        return json_resp
+
+    warehouses = Warehouse.query.filter_by(company_id=company_id, activo=True).order_by(Warehouse.nombre).all()
+    categorias = InventoryCategory.query.filter_by(company_id=company_id).order_by(InventoryCategory.nombre).all()
+
+    filtros = {
+        'warehouse': warehouse_id,
+        'categoria': categoria_id,
+        'buscar': buscar or '',
+    }
+
+    return render_template(
+        'inventario_new/cuadro_stock.html',
+        resumen=summary,
+        filtros=filtros,
+        warehouses=warehouses,
+        categorias=categorias,
+        total_disponible=total_disponible,
+        total_bajo=total_bajo,
+    )
 
 @inventario_new_bp.route('/items/nuevo', methods=['GET', 'POST'])
 @login_required
