@@ -312,6 +312,20 @@ def ensure_exchange_currency_columns():
                     )
                     """
                 )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS pricing_indices (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL,
+                        value NUMERIC(18,6) NOT NULL,
+                        valid_from DATE NOT NULL DEFAULT CURRENT_DATE,
+                        notes VARCHAR(255),
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_pricing_indices_name_valid_from UNIQUE(name, valid_from)
+                    )
+                    """
+                )
             else:
                 conn.exec_driver_sql(
                     """
@@ -342,6 +356,20 @@ def ensure_exchange_currency_columns():
                         fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         UNIQUE(year, month, provider)
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS pricing_indices (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        value NUMERIC(18,6) NOT NULL,
+                        valid_from DATE NOT NULL DEFAULT CURRENT_DATE,
+                        notes TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(name, valid_from)
                     )
                     """
                 )
@@ -406,6 +434,39 @@ def ensure_exchange_currency_columns():
 
             for stmt in item_alter_statements:
                 conn.exec_driver_sql(stmt)
+
+            currency_column_sql = "VARCHAR(3) DEFAULT 'ARS'" if backend == 'postgresql' else "TEXT DEFAULT 'ARS'"
+            fx_rate_sql = "NUMERIC(18,6)"
+            fx_source_sql = "VARCHAR(100)" if backend == 'postgresql' else "TEXT"
+            fx_date_sql = 'DATE'
+
+            for catalog_table in ('materiales', 'mano_obra', 'equipos'):
+                try:
+                    catalog_columns = {col['name'] for col in inspector.get_columns(catalog_table)}
+                except Exception:
+                    # Tabla inexistente en esta instalación, continuar sin error
+                    continue
+
+                catalog_alter_statements = []
+                if 'currency_code' not in catalog_columns:
+                    catalog_alter_statements.append(
+                        f"ALTER TABLE {catalog_table} ADD COLUMN currency_code {currency_column_sql}"
+                    )
+                if 'fx_rate' not in catalog_columns:
+                    catalog_alter_statements.append(
+                        f"ALTER TABLE {catalog_table} ADD COLUMN fx_rate {fx_rate_sql}"
+                    )
+                if 'fx_source' not in catalog_columns:
+                    catalog_alter_statements.append(
+                        f"ALTER TABLE {catalog_table} ADD COLUMN fx_source {fx_source_sql}"
+                    )
+                if 'fx_date' not in catalog_columns:
+                    catalog_alter_statements.append(
+                        f"ALTER TABLE {catalog_table} ADD COLUMN fx_date {fx_date_sql}"
+                    )
+
+                for stmt in catalog_alter_statements:
+                    conn.exec_driver_sql(stmt)
 
             # Backfill defaults
             conn.exec_driver_sql(

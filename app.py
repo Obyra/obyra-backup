@@ -423,11 +423,14 @@ with app.app_context():
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
     )
-    ensure_avance_audit_columns()
-    ensure_presupuesto_state_columns()
-    ensure_item_presupuesto_stage_columns()
-    ensure_presupuesto_validity_columns()
-    ensure_exchange_currency_columns()
+
+    runtime_migrations = [
+        ensure_avance_audit_columns,
+        ensure_presupuesto_state_columns,
+        ensure_item_presupuesto_stage_columns,
+        ensure_presupuesto_validity_columns,
+        ensure_exchange_currency_columns,
+    ]
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
     try:
@@ -567,6 +570,14 @@ with app.app_context():
     except Exception as ensure_admin_exc:
         db.session.rollback()
         print(f"⚠️ No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
+
+    # Ejecutar migraciones en tiempo de ejecución después de crear tablas y
+    # sembrar datos esenciales para evitar consultas a tablas inexistentes.
+    for migration in runtime_migrations:
+        try:
+            migration()
+        except Exception as runtime_exc:
+            print(f"⚠️ Runtime migration failed: {migration.__name__}: {runtime_exc}")
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
