@@ -624,7 +624,11 @@ def crear():
 
                 db.session.add(nueva_etapa)
                 db.session.flush()
-                seed_tareas_para_etapa(nueva_etapa, auto_commit=False)
+                seed_tareas_para_etapa(
+                    nueva_etapa,
+                    auto_commit=False,
+                    slug=slug_normalizado,
+                )
                 if nueva_etapa.tareas.count() == 0:
                     db.session.add(TareaEtapa(
                         etapa_id=nueva_etapa.id,
@@ -1957,7 +1961,11 @@ def confirmar_como_obra(id):
 
                 db.session.add(nueva_etapa)
                 db.session.flush()
-                creadas = seed_tareas_para_etapa(nueva_etapa, auto_commit=False) or 0
+                creadas = seed_tareas_para_etapa(
+                    nueva_etapa,
+                    auto_commit=False,
+                    slug=slug,
+                ) or 0
                 if creadas == 0:
                     db.session.add(TareaEtapa(
                         etapa_id=nueva_etapa.id,

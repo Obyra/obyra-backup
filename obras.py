@@ -13,7 +13,11 @@ from models import (Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario,
                     TareaMiembro, TareaAvance, TareaAdjunto,
                     TareaAvanceFoto)
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
-from tareas_predefinidas import TAREAS_POR_ETAPA
+from tareas_predefinidas import (
+    TAREAS_POR_ETAPA,
+    obtener_tareas_por_etapa,
+    slugify_nombre_etapa,
+)
 from geocoding import normalizar_direccion_argentina
 from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
@@ -177,10 +181,11 @@ def D(x):
         return Decimal('0')
     return x if isinstance(x, Decimal) else Decimal(str(x))
 
-def seed_tareas_para_etapa(nueva_etapa, auto_commit=True):
+def seed_tareas_para_etapa(nueva_etapa, auto_commit=True, slug=None):
     """Función idempotente para crear tareas predefinidas en una etapa"""
     try:
-        tareas = TAREAS_POR_ETAPA.get(nueva_etapa.nombre, [])
+        slug_normalizado = slugify_nombre_etapa(slug or nueva_etapa.nombre)
+        tareas = obtener_tareas_por_etapa(nueva_etapa.nombre, slug_normalizado)
         tareas_creadas = 0
         
         for t in tareas:
@@ -642,9 +647,10 @@ def agregar_etapas(id):
                 
                 db.session.add(nueva_etapa)
                 db.session.flush()  # Para obtener el ID de la etapa
-                
+
                 # Crear tareas predefinidas automáticamente usando la función seed
-                seed_tareas_para_etapa(nueva_etapa)
+                slug_normalizado = slugify_nombre_etapa(nombre)
+                seed_tareas_para_etapa(nueva_etapa, slug=slug_normalizado)
                 
                 # Crear tareas adicionales del formulario si las hay
                 tareas_adicionales = etapa_data.get('tareas', [])
@@ -802,7 +808,8 @@ def agregar_etapa(id):
         print(f"✅ DEBUG: Creando etapa '{nombre}' en obra {id}")
         
         # AUTO-CREAR TAREAS PREDEFINIDAS PARA LA ETAPA
-        seed_tareas_para_etapa(nueva_etapa)
+        slug_normalizado = slugify_nombre_etapa(nombre)
+        seed_tareas_para_etapa(nueva_etapa, slug=slug_normalizado)
         
         db.session.commit()
         flash(f'Etapa "{nombre}" agregada exitosamente con tareas predefinidas.', 'success')
