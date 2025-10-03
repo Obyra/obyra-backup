@@ -4,6 +4,7 @@ from app import db
 from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership
 from services.memberships import get_current_membership
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 equipos_bp = Blueprint('equipos', __name__)
 
@@ -26,7 +27,7 @@ def lista():
     query = (
         OrgMembership.query
         .filter_by(org_id=membership.org_id, archived=False)
-        .join(Usuario)
+        .join(Usuario, OrgMembership.user_id == Usuario.id)
     )
 
     if rol_filtro:
@@ -235,7 +236,23 @@ def detalle(id):
         flash('No tienes permisos para ver detalles de equipos.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
-    usuario = Usuario.query.get_or_404(id)
+    membership = get_current_membership()
+    if not membership:
+        flash('Selecciona una organización para ver tus equipos.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion', next=request.url))
+
+    miembro = (
+        OrgMembership.query
+        .filter_by(org_id=membership.org_id, user_id=id, archived=False)
+        .options(joinedload(OrgMembership.usuario))
+        .first()
+    )
+
+    if not miembro:
+        flash('El usuario no pertenece a tu organización.', 'danger')
+        return redirect(url_for('equipos.lista'))
+
+    usuario = miembro.usuario
     
     # Obtener asignaciones activas
     asignaciones_activas = usuario.obras_asignadas.filter_by(activo=True).all()
