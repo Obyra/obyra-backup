@@ -39,17 +39,19 @@ else:  # pragma: no cover - executed only when optional deps missing
     xlsxwriter = None  # type: ignore[assignment]
 
 from app import db
-from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
+from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra, TareaEtapa
 from calculadora_ia import (
     procesar_presupuesto_ia,
     COEFICIENTES_CONSTRUCCION,
     calcular_etapas_seleccionadas,
     slugify_etapa,
 )
+from obras import seed_tareas_para_etapa
 from services.exchange import base as exchange_service
 from services.exchange.providers import bna as bna_provider
 from services.cac.cac_service import get_cac_context
 from services.geocoding_service import resolve as resolve_geocode, search as search_geocode
+from services.memberships import get_current_org_id
 
 
 def _clean_text(value: Any) -> Optional[str]:
@@ -594,6 +596,7 @@ def crear():
             etapas_count = 0
             etapa_index = 0
             etapas_creadas_por_slug = {}
+            etapas_serializadas = []
             while True:
                 etapa_nombre = request.form.get(f'etapas[{etapa_index}][nombre]')
                 if not etapa_nombre:
@@ -621,7 +624,22 @@ def crear():
 
                 db.session.add(nueva_etapa)
                 db.session.flush()
+                seed_tareas_para_etapa(nueva_etapa, auto_commit=False)
+                if nueva_etapa.tareas.count() == 0:
+                    db.session.add(TareaEtapa(
+                        etapa_id=nueva_etapa.id,
+                        nombre=f'Tarea inicial de {etapa_nombre}',
+                        descripcion='Tarea generada automáticamente a partir del presupuesto.',
+                        estado='pendiente'
+                    ))
+
                 etapas_creadas_por_slug[slug_normalizado] = nueva_etapa
+                etapas_serializadas.append({
+                    'nombre': etapa_nombre,
+                    'descripcion': etapa_descripcion or '',
+                    'orden': orden_int,
+                    'slug': slug_normalizado
+                })
                 etapas_count += 1
                 etapa_index += 1
 
@@ -671,6 +689,11 @@ def crear():
                 nuevo_presupuesto.calcular_totales()
             else:
                 nuevo_presupuesto.asegurar_vigencia()
+
+            if etapas_serializadas:
+                datos_proyecto['etapas'] = etapas_serializadas
+
+            nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
 
             db.session.commit()
 
@@ -1779,9 +1802,14 @@ def confirmar_como_obra(id):
         flash('No tienes permisos para confirmar obras.', 'danger')
         return redirect(url_for('presupuestos.lista'))
     
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('No se pudo determinar la organización activa.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+
     presupuesto = Presupuesto.query.filter(
         Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id
+        Presupuesto.organizacion_id == org_id
     ).first_or_404()
 
     if presupuesto.deleted_at is not None:
@@ -1819,7 +1847,7 @@ def confirmar_como_obra(id):
         )
         nueva_obra.estado = 'planificacion'
         nueva_obra.presupuesto_total = _quantize_currency(_to_decimal(presupuesto.total_con_iva, '0'))
-        nueva_obra.organizacion_id = current_user.organizacion_id
+        nueva_obra.organizacion_id = org_id
 
         lat_decimal = presupuesto.geo_latitud or datos_proyecto.get('latitud')
         lng_decimal = presupuesto.geo_longitud or datos_proyecto.get('longitud')
@@ -1864,42 +1892,83 @@ def confirmar_como_obra(id):
         etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
         
         if etapas_existentes == 0:
-            # Solo crear etapas si no existen
-            etapas_basicas = [
-                {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
-                {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
-                {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
-                {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
-                {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
-                {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
-                {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
-            ]
-        
-            from tareas_predefinidas import TAREAS_POR_ETAPA
-            
-            for etapa_data in etapas_basicas:
+            raw_etapas = []
+            if isinstance(datos_proyecto, dict):
+                raw_etapas = datos_proyecto.get('etapas') or []
+
+            etapas_config = []
+            for idx, etapa_info in enumerate(raw_etapas, start=1):
+                if isinstance(etapa_info, dict):
+                    nombre = (etapa_info.get('nombre') or etapa_info.get('etapa_nombre') or '').strip()
+                    if not nombre:
+                        continue
+                    descripcion = etapa_info.get('descripcion') or ''
+                    try:
+                        orden = int(etapa_info.get('orden') or idx)
+                    except (TypeError, ValueError):
+                        orden = idx
+                    slug = slugify_etapa(etapa_info.get('slug') or nombre)
+                else:
+                    nombre = str(etapa_info).strip()
+                    if not nombre:
+                        continue
+                    descripcion = ''
+                    orden = idx
+                    slug = slugify_etapa(nombre)
+
+                etapas_config.append({
+                    'nombre': nombre,
+                    'descripcion': descripcion,
+                    'orden': orden,
+                    'slug': slug
+                })
+
+            if not etapas_config:
+                etapas_config = [
+                    {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
+                    {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
+                    {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
+                    {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
+                    {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
+                    {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
+                    {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
+                ]
+
+            slugs_creados = set()
+            for idx, etapa_data in enumerate(etapas_config, start=1):
+                nombre = (etapa_data.get('nombre') or '').strip() or f'Etapa {idx}'
+                descripcion = etapa_data.get('descripcion') or ''
+                try:
+                    orden = int(etapa_data.get('orden') or idx)
+                except (TypeError, ValueError):
+                    orden = idx
+                slug = slugify_etapa(etapa_data.get('slug') or nombre)
+                if slug in slugs_creados:
+                    continue
+                slugs_creados.add(slug)
+
                 nueva_etapa = EtapaObra(
                     obra_id=nueva_obra.id,
-                    nombre=etapa_data['nombre'],
-                    descripcion=etapa_data['descripcion'],
-                    orden=etapa_data['orden'],
+                    nombre=nombre,
+                    descripcion=descripcion,
+                    orden=orden,
                     estado='pendiente'
                 )
-                
+
                 db.session.add(nueva_etapa)
-                db.session.flush()  # Para obtener el ID de la etapa
-                
-                # Agregar tareas predefinidas si existen
-                tareas_etapa = TAREAS_POR_ETAPA.get(etapa_data['nombre'], [])
-                for idx, nombre_tarea in enumerate(tareas_etapa[:10]):  # Limitar a 10 tareas por etapa
-                    from models import TareaEtapa
-                    nueva_tarea = TareaEtapa(
+                db.session.flush()
+                creadas = seed_tareas_para_etapa(nueva_etapa, auto_commit=False) or 0
+                if creadas == 0:
+                    db.session.add(TareaEtapa(
                         etapa_id=nueva_etapa.id,
-                        nombre=nombre_tarea,
-                        descripcion=f"Tarea predefinida para {etapa_data['nombre']}",
+                        nombre=f'Tarea inicial de {nombre}',
+                        descripcion='Tarea generada automáticamente al confirmar el presupuesto.',
                         estado='pendiente'
-                    )
-                    db.session.add(nueva_tarea)
+                    ))
+
+            if isinstance(datos_proyecto, dict):
+                datos_proyecto['etapas'] = etapas_config
+                presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
         
         db.session.commit()
         
