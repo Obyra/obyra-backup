@@ -1,10 +1,11 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario)
+from services.alerts import upsert_alert_vigencia, log_activity_vigencia
 
 reportes_bp = Blueprint('reportes', __name__)
 
@@ -73,12 +74,6 @@ def dashboard():
 
     presupuestos_vencidos = len(presupuestos_expirados)
 
-    vigencia_alertas = {
-        'criticos': [],
-        'proximos': [],
-        'seguimiento': [],
-    }
-
     presupuestos_monitoreo = Presupuesto.query.filter(
         Presupuesto.organizacion_id == current_user.organizacion_id,
         Presupuesto.deleted_at.is_(None),
@@ -86,6 +81,7 @@ def dashboard():
         Presupuesto.estado.in_(['borrador', 'enviado', 'rechazado'])
     ).all()
 
+    hoy = date.today()
     for presupuesto in presupuestos_monitoreo:
         dias = presupuesto.dias_restantes_vigencia
         if dias is None:
@@ -93,17 +89,21 @@ def dashboard():
         if dias < 0:
             continue  # Ya se contabilizan como vencidos
         if dias <= 3:
-            vigencia_alertas['criticos'].append(presupuesto)
+            nivel = 'danger'
         elif dias <= 15:
-            vigencia_alertas['proximos'].append(presupuesto)
+            nivel = 'warning'
         else:
-            vigencia_alertas['seguimiento'].append(presupuesto)
+            nivel = 'info'
 
-    for clave in vigencia_alertas:
-        vigencia_alertas[clave] = sorted(
-            vigencia_alertas[clave],
-            key=lambda p: p.dias_restantes_vigencia if p.dias_restantes_vigencia is not None else 999
-        )[:5]
+        upsert_alert_vigencia(presupuesto, dias, nivel, hoy)
+        log_activity_vigencia(presupuesto, dias, hoy)
+
+    if db.session.new or db.session.dirty:
+        try:
+            db.session.commit()
+        except Exception as exc:  # pragma: no cover - logging defensivo
+            current_app.logger.exception("Error guardando alertas de vigencia: %s", exc)
+            db.session.rollback()
 
     # Items con stock bajo
     items_stock_bajo = ItemInventario.query.filter(
@@ -141,7 +141,7 @@ def dashboard():
     # Alertas de alta prioridad para el panel lateral
     alertas = Event.query.filter(
         Event.company_id == current_user.organizacion_id,
-        Event.severity.in_(['alta', 'critica'])
+        Event.severity.in_(['media', 'alta', 'critica'])
     ).order_by(desc(Event.created_at)).limit(10).all()
     
     return render_template('reportes/dashboard.html',
@@ -151,8 +151,7 @@ def dashboard():
                          alertas=alertas,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,
-                         presupuestos_vencidos=presupuestos_vencidos,
-                         vigencia_alertas=vigencia_alertas)
+                         presupuestos_vencidos=presupuestos_vencidos)
 
 def calcular_kpis(fecha_desde, fecha_hasta):
     """Calcula los KPIs principales del dashboard"""

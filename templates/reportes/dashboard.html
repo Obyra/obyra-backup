@@ -30,93 +30,6 @@
     </div>
     {% endif %}
 
-    {% set criticos = vigencia_alertas['criticos'] if vigencia_alertas is defined else [] %}
-    {% set proximos = vigencia_alertas['proximos'] if vigencia_alertas is defined else [] %}
-    {% set seguimiento = vigencia_alertas['seguimiento'] if vigencia_alertas is defined else [] %}
-    {% set hay_vigencia = (criticos|length + proximos|length + seguimiento|length) > 0 %}
-    {% if hay_vigencia %}
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0 fw-bold"><i class="fas fa-hourglass-half me-2 text-primary"></i>Presupuestos por vencer</h5>
-                    <a href="{{ url_for('presupuestos.lista', vigencia='por_vencer') }}" class="btn btn-sm btn-outline-primary">Ver todos</a>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-lg-4 mb-3">
-                            <div class="border rounded p-3 h-100 bg-light">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0 text-danger"><i class="fas fa-exclamation-circle me-1"></i>Críticos (≤ 3 días)</h6>
-                                    <span class="badge bg-danger">{{ criticos|length }}</span>
-                                </div>
-                                {% if criticos %}
-                                    <ul class="list-unstyled mb-0 small">
-                                        {% for presupuesto in criticos %}
-                                        <li class="mb-2">
-                                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="text-decoration-none">
-                                                <strong>{{ presupuesto.numero }}</strong>
-                                                <span class="d-block text-muted">Faltan {{ presupuesto.dias_restantes_vigencia }} días</span>
-                                            </a>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                {% else %}
-                                    <p class="text-muted mb-0">Sin presupuestos críticos.</p>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="col-lg-4 mb-3">
-                            <div class="border rounded p-3 h-100 bg-light">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0 text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Próximos (7-15 días)</h6>
-                                    <span class="badge bg-warning text-dark">{{ proximos|length }}</span>
-                                </div>
-                                {% if proximos %}
-                                    <ul class="list-unstyled mb-0 small">
-                                        {% for presupuesto in proximos %}
-                                        <li class="mb-2">
-                                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="text-decoration-none">
-                                                <strong>{{ presupuesto.numero }}</strong>
-                                                <span class="d-block text-muted">Faltan {{ presupuesto.dias_restantes_vigencia }} días</span>
-                                            </a>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                {% else %}
-                                    <p class="text-muted mb-0">Sin vencimientos en las próximas semanas.</p>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="col-lg-4 mb-3">
-                            <div class="border rounded p-3 h-100 bg-light">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0 text-success"><i class="fas fa-calendar-check me-1"></i>Seguimiento (> 15 días)</h6>
-                                    <span class="badge bg-success">{{ seguimiento|length }}</span>
-                                </div>
-                                {% if seguimiento %}
-                                    <ul class="list-unstyled mb-0 small">
-                                        {% for presupuesto in seguimiento %}
-                                        <li class="mb-2">
-                                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="text-decoration-none">
-                                                <strong>{{ presupuesto.numero }}</strong>
-                                                <span class="d-block text-muted">Faltan {{ presupuesto.dias_restantes_vigencia }} días</span>
-                                            </a>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                {% else %}
-                                    <p class="text-muted mb-0">Todo en orden por ahora.</p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     <!-- KPIs Principales - 4 Tarjetas Compactas -->
     <div class="row mb-4">
         <div class="col-lg-3 col-md-6 mb-3">
@@ -407,20 +320,40 @@
                 <div class="card-body">
                     {% if alertas %}
                         {% for alerta in alertas %}
-                        <div class="alert-item mb-3 p-3 rounded" 
+                        {% set meta = alerta.meta or {} %}
+                        {% set presupuesto_id = meta.get('presupuesto_id') %}
+                        {% set numero = meta.get('presupuesto_numero') %}
+                        {% set dias_restantes = meta.get('dias_restantes') %}
+                        <div class="alert-item mb-3 p-3 rounded position-relative"
                              data-event-id="{{ alerta.id }}"
-                             style="background: linear-gradient(135deg, 
-                             {% if alerta.severity == 'critica' %}#dc3545, #fd7e14{% elif alerta.severity == 'alta' %}#fd7e14, #ffc107{% else %}#17a2b8, #6f42c1{% endif %});">
+                             style="background: linear-gradient(135deg,
+                             {% if alerta.severity == 'critica' %}#dc3545, #c82333{% elif alerta.severity == 'alta' %}#fd7e14, #ffc107{% else %}#198754, #20c997{% endif %});">
                             <div class="d-flex align-items-start">
-                                <div class="flex-grow-1 text-white">
+                                <div class="flex-grow-1 text-white pe-4">
                                     <div class="fw-bold mb-1">{{ alerta.title }}</div>
-                                    <div class="small mb-1">{{ alerta.description }}</div>
+                                    <div class="small mb-1">
+                                        {% if numero %}<strong>{{ numero }}</strong>{% endif %}
+                                        {% if meta.get('cliente') %}
+                                            <span class="ms-1">{{ meta.get('cliente') }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="small mb-1">
+                                        {% if dias_restantes is not none %}
+                                            Faltan {{ dias_restantes }} día{% if dias_restantes != 1 %}s{% endif %}
+                                        {% else %}
+                                            {{ alerta.description }}
+                                        {% endif %}
+                                    </div>
                                     {% if alerta.project %}
                                     <div class="small opacity-75">{{ alerta.project.nombre }}</div>
                                     {% endif %}
                                 </div>
-                                <span class="badge bg-white text-dark">{{ alerta.severity }}</span>
+                                <span class="badge bg-white text-dark text-uppercase">{{ alerta.severity }}</span>
                             </div>
+                            {% if presupuesto_id %}
+                            <a class="stretched-link" href="{{ url_for('presupuestos.detalle', id=presupuesto_id) }}"
+                               aria-label="Ver presupuesto {{ numero }}"></a>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     {% else %}
