@@ -7,6 +7,12 @@ from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia
 
+try:  # pragma: no cover - optional dependency check
+    import matplotlib  # noqa: F401
+    CHARTS_ENABLED = True
+except Exception:  # pragma: no cover - fallback for dev environments
+    CHARTS_ENABLED = False
+
 reportes_bp = Blueprint('reportes', __name__)
 
 @reportes_bp.route('/dashboard')
@@ -151,7 +157,8 @@ def dashboard():
                          alertas=alertas,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,
-                         presupuestos_vencidos=presupuestos_vencidos)
+                         presupuestos_vencidos=presupuestos_vencidos,
+                         charts_enabled=CHARTS_ENABLED)
 
 def calcular_kpis(fecha_desde, fecha_hasta):
     """Calcula los KPIs principales del dashboard"""

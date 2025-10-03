@@ -97,6 +97,13 @@ ADMIN_EMAILS = [
 ]
 
 # Solo configurar Google OAuth si las variables están disponibles
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
 if os.environ.get('GOOGLE_OAUTH_CLIENT_ID') and os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'):
     google = oauth.register(
         name='google',
@@ -108,7 +115,8 @@ if os.environ.get('GOOGLE_OAUTH_CLIENT_ID') and os.environ.get('GOOGLE_OAUTH_CLI
         }
     )
 else:
-    print("""
+    if _env_flag('ENABLE_GOOGLE_OAUTH_HELP', False):
+        print("""
 🔗 Para habilitar Google OAuth en OBYRA IA:
 1. Ve a https://console.cloud.google.com/apis/credentials
 2. Crea un OAuth 2.0 Client ID
@@ -119,7 +127,7 @@ else:
    - GOOGLE_OAUTH_CLIENT_SECRET
 
 Para más información: https://docs.replit.com/additional-resources/google-auth-in-flask
-    """)
+        """)
 
 
 AuthResult = Tuple[bool, Union[Usuario, Dict[str, str]]]

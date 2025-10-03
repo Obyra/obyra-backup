@@ -68,6 +68,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 }
 
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
+app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
 
 # initialize extensions
 db.init_app(app)
@@ -678,7 +679,6 @@ for module_name, attr_name, prefix in [
     ('agent_local', 'agent_bp', None),
     ('planes', 'planes_bp', None),
     ('events_service', 'events_bp', None),
-    ('reports_service', 'reports_bp', None),
     ('account', 'account_bp', None),
     ('onboarding', 'onboarding_bp', '/onboarding'),
 ]:
@@ -692,6 +692,17 @@ if core_failures:
     print("⚠️ Some core blueprints not available: " + "; ".join(core_failures))
 else:
     print("✅ Core blueprints registered successfully")
+
+if app.config.get("ENABLE_REPORTS_SERVICE"):
+    try:
+        import matplotlib  # noqa: F401 - sanity check for optional dependency
+        reports_service_bp = _import_blueprint('reports_service', 'reports_bp')
+        app.register_blueprint(reports_service_bp)
+        print("✅ Reports service enabled")
+    except Exception as exc:
+        app.logger.warning("Reports service disabled: %s", exc)
+else:
+    app.logger.info("Reports service disabled (set ENABLE_REPORTS=1 to enable)")
 
 if not auth_blueprint_registered:
 
