@@ -42,3 +42,5 @@ instance/media/
 *.jpeg
 *.webp
 >>>>>>> codex/analizar-el-wizard-de-obra
+
+instance/migrations/*.done
