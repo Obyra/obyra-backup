@@ -50,8 +50,8 @@
                                 {% for categoria, roles_lista in roles.items() %}
                                     <optgroup label="{{ categoria }}">
                                         {% for rol in roles_lista %}
-                                            <option value="{{ rol }}" 
-                                                    {% if usuario.rol == rol %}selected{% endif %}>
+                                            <option value="{{ rol }}"
+                                                    {% if rol_seleccionado == rol %}selected{% endif %}>
                                                 {{ rol|title }}
                                             </option>
                                         {% endfor %}

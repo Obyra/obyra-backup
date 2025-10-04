@@ -1,9 +1,11 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from app import db
-from models import Usuario, AsignacionObra, Obra, RegistroTiempo
+from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
+from roles_construccion import obtener_roles_por_categoria
+import re
 
 equipos_bp = Blueprint('equipos', __name__)
 
@@ -58,15 +60,15 @@ def usuarios_nuevo():
     if current_user.rol not in ['administrador', 'admin_empresa', 'superadmin']:
         flash('No tienes permisos para crear usuarios.', 'danger')
         return redirect(url_for('auth.usuarios_admin'))
-    
-    from roles_construccion import ROLES_DISPONIBLES
+
     from models import RoleModule, upsert_user_module
-    
+    roles_catalog = obtener_roles_por_categoria()
+
     if request.method == 'GET':
         # Cargar permisos por rol seleccionado (default 'operario')
         role = request.args.get('role', 'operario')
         role_perms = RoleModule.query.filter_by(role=role).all()
-        return render_template('equipos/invitar.html', role=role, role_perms=role_perms, roles=ROLES_DISPONIBLES)
+        return render_template('equipos/invitar.html', role=role, role_perms=role_perms, roles=roles_catalog)
     
     # POST: crear usuario e invitar
     email = request.form.get('email')
@@ -135,9 +137,9 @@ def crear():
     if not current_user.puede_acceder_modulo('equipos') or current_user.rol != 'administrador':
         flash('No tienes permisos para crear usuarios.', 'danger')
         return redirect(url_for('equipos.lista'))
-    
-    from roles_construccion import ROLES_DISPONIBLES
-    
+
+    roles_catalog = obtener_roles_por_categoria()
+
     if request.method == 'POST':
         nombre = request.form.get('nombre')
         apellido = request.form.get('apellido')
@@ -150,26 +152,26 @@ def crear():
         # Validaciones
         if not all([nombre, apellido, email, rol, password]):
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
-            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+            return render_template('equipos/crear.html', roles=roles_catalog)
         
         # Validar formato de email
         import re
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
             flash('Por favor, ingresa un email válido.', 'danger')
-            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+            return render_template('equipos/crear.html', roles=roles_catalog)
         
         if password != confirm_password:
             flash('Las contraseñas no coinciden.', 'danger')
-            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+            return render_template('equipos/crear.html', roles=roles_catalog)
         
         if len(password) < 6:
             flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
-            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+            return render_template('equipos/crear.html', roles=roles_catalog)
         
         # Verificar que el email no exista
         if Usuario.query.filter_by(email=email).first():
             flash('Ya existe un usuario con ese email.', 'danger')
-            return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+            return render_template('equipos/crear.html', roles=roles_catalog)
         
         try:
             from werkzeug.security import generate_password_hash
@@ -197,7 +199,7 @@ def crear():
             db.session.rollback()
             flash('Error al crear el usuario. Por favor, intenta de nuevo.', 'danger')
     
-    return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+    return render_template('equipos/crear.html', roles=roles_catalog)
 
 @equipos_bp.route('/<int:id>')
 @login_required
@@ -226,39 +228,78 @@ def detalle(id):
 @equipos_bp.route('/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar(id):
-    if current_user.rol != 'administrador':
-        flash('No tienes permisos para editar usuarios.', 'danger')
+    usuario = Usuario.query.filter_by(
+        id=id,
+        organizacion_id=current_user.organizacion_id
+    ).first_or_404()
+
+    membership_admin = current_user.active_membership
+    if not membership_admin or membership_admin.role != 'administrador':
+        flash('Solo los administradores de la organización pueden editar integrantes.', 'danger')
         return redirect(url_for('equipos.detalle', id=id))
-    
-    usuario = Usuario.query.get_or_404(id)
-    from roles_construccion import ROLES_DISPONIBLES
-    
+    roles_catalog = obtener_roles_por_categoria()
+    roles_validos = {rol for lista in roles_catalog.values() for rol in lista}
+    membership = usuario.active_membership
+    rol_actual = membership.role if membership else usuario.rol
+
     if request.method == 'POST':
-        usuario.nombre = request.form.get('nombre', usuario.nombre)
-        usuario.apellido = request.form.get('apellido', usuario.apellido)
-        usuario.email = request.form.get('email', usuario.email)
-        usuario.telefono = request.form.get('telefono', usuario.telefono)
-        usuario.rol = request.form.get('rol', usuario.rol)
-        
+        nuevo_nombre = request.form.get('nombre', usuario.nombre)
+        nuevo_apellido = request.form.get('apellido', usuario.apellido)
+        nuevo_email = request.form.get('email', usuario.email)
+        nuevo_telefono = request.form.get('telefono', usuario.telefono)
+        nuevo_rol = request.form.get('rol')
+
+        if not nuevo_rol:
+            flash('Debes seleccionar un rol organizacional.', 'danger')
+            return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=rol_actual)
+
+        if nuevo_rol not in roles_validos:
+            flash('El rol seleccionado no es válido.', 'danger')
+            return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=rol_actual)
+
         # Validar email único
         email_existente = Usuario.query.filter(
-            Usuario.email == usuario.email,
+            Usuario.email == nuevo_email,
             Usuario.id != usuario.id
         ).first()
-        
+
         if email_existente:
             flash('Ya existe otro usuario con ese email.', 'danger')
-            return render_template('equipos/editar.html', usuario=usuario, roles=ROLES_DISPONIBLES)
-        
+            return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=nuevo_rol)
+
+        rol_actual = nuevo_rol
+
         try:
+            usuario.nombre = nuevo_nombre
+            usuario.apellido = nuevo_apellido
+            usuario.email = nuevo_email
+            usuario.telefono = nuevo_telefono
+            # Asegurar membresía activa en la organización actual
+            membership = usuario.active_membership
+            if membership:
+                membership.role = nuevo_rol
+                membership.is_active = True
+            else:
+                membership = OrgMembership(
+                    user_id=usuario.id,
+                    organization_id=usuario.organizacion_id,
+                    role=nuevo_rol,
+                    is_active=True
+                )
+                db.session.add(membership)
+
+            # Mantener sincronizado el campo legacy mientras migramos a RBAC por membresía
+            usuario.rol = nuevo_rol
+
             db.session.commit()
             flash('Usuario actualizado exitosamente.', 'success')
             return redirect(url_for('equipos.detalle', id=id))
         except Exception as e:
             db.session.rollback()
             flash('Error al actualizar el usuario.', 'danger')
-    
-    return render_template('equipos/editar.html', usuario=usuario, roles=ROLES_DISPONIBLES)
+            return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=rol_actual)
+
+    return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=rol_actual)
 
 @equipos_bp.route('/<int:id>/toggle', methods=['POST'])
 @login_required
