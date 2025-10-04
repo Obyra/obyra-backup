@@ -338,7 +338,7 @@ def editar(id):
         .filter_by(org_id=membership.org_id, user_id=id, archived=False)
         .options(
             joinedload(OrgMembership.usuario),
-            joinedload(OrgMembership.org),
+            joinedload(OrgMembership.organizacion),
         )
         .first()
     )
