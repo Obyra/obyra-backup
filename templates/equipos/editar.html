@@ -44,21 +44,37 @@
                         </div>
                         
                         <div class="col-md-6">
-                            <label for="rol" class="form-label">Rol *</label>
-                            <select class="form-select" id="rol" name="rol" required>
+                            <label for="rol" class="form-label">Rol / Puesto interno</label>
+                            <select class="form-select" id="rol" name="rol">
                                 <option value="">Seleccionar rol...</option>
                                 {% for categoria, roles_lista in roles.items() %}
                                     <optgroup label="{{ categoria }}">
                                         {% for rol in roles_lista %}
-                                            <option value="{{ rol }}" 
+                                            <option value="{{ rol }}"
                                                     {% if usuario.rol == rol %}selected{% endif %}>
-                                                {{ rol|title }}
+                                                {{ rol|replace('_', ' ')|title }}
                                             </option>
                                         {% endfor %}
                                     </optgroup>
                                 {% endfor %}
                             </select>
+                            <div class="form-text">Este rol describe el puesto operativo del integrante.</div>
                         </div>
+
+                        {% if membership_roles %}
+                        <div class="col-md-6">
+                            <label for="rol_membresia" class="form-label">Rol en la organización *</label>
+                            <select class="form-select" id="rol_membresia" name="rol_membresia" required>
+                                {% for rol_sistema in membership_roles %}
+                                    <option value="{{ rol_sistema }}"
+                                            {% if membership_objetivo and membership_objetivo.role == rol_sistema %}selected{% endif %}>
+                                        {{ membership_role_labels.get(rol_sistema, rol_sistema|replace('_', ' ')|title) }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Define los permisos en {{ membership_objetivo.org.nombre if membership_objetivo else 'la organización' }}.</div>
+                        </div>
+                        {% endif %}
                         
                         <div class="col-md-6">
                             <label class="form-label">Estado Actual</label>
