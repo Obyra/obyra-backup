@@ -228,21 +228,25 @@ def detalle(id):
 @equipos_bp.route('/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar(id):
-    if current_user.rol != 'administrador':
-        flash('No tienes permisos para editar usuarios.', 'danger')
-        return redirect(url_for('equipos.detalle', id=id))
+    usuario = Usuario.query.filter_by(
+        id=id,
+        organizacion_id=current_user.organizacion_id
+    ).first_or_404()
 
-    usuario = Usuario.query.get_or_404(id)
+    membership_admin = current_user.active_membership
+    if not membership_admin or membership_admin.role != 'administrador':
+        flash('Solo los administradores de la organización pueden editar integrantes.', 'danger')
+        return redirect(url_for('equipos.detalle', id=id))
     roles_catalog = obtener_roles_por_categoria()
     roles_validos = {rol for lista in roles_catalog.values() for rol in lista}
     membership = usuario.active_membership
     rol_actual = membership.role if membership else usuario.rol
 
     if request.method == 'POST':
-        usuario.nombre = request.form.get('nombre', usuario.nombre)
-        usuario.apellido = request.form.get('apellido', usuario.apellido)
-        usuario.email = request.form.get('email', usuario.email)
-        usuario.telefono = request.form.get('telefono', usuario.telefono)
+        nuevo_nombre = request.form.get('nombre', usuario.nombre)
+        nuevo_apellido = request.form.get('apellido', usuario.apellido)
+        nuevo_email = request.form.get('email', usuario.email)
+        nuevo_telefono = request.form.get('telefono', usuario.telefono)
         nuevo_rol = request.form.get('rol')
 
         if not nuevo_rol:
@@ -255,7 +259,7 @@ def editar(id):
 
         # Validar email único
         email_existente = Usuario.query.filter(
-            Usuario.email == usuario.email,
+            Usuario.email == nuevo_email,
             Usuario.id != usuario.id
         ).first()
 
@@ -266,6 +270,10 @@ def editar(id):
         rol_actual = nuevo_rol
 
         try:
+            usuario.nombre = nuevo_nombre
+            usuario.apellido = nuevo_apellido
+            usuario.email = nuevo_email
+            usuario.telefono = nuevo_telefono
             # Asegurar membresía activa en la organización actual
             membership = usuario.active_membership
             if membership:
@@ -289,6 +297,7 @@ def editar(id):
         except Exception as e:
             db.session.rollback()
             flash('Error al actualizar el usuario.', 'danger')
+            return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=rol_actual)
 
     return render_template('equipos/editar.html', usuario=usuario, roles=roles_catalog, rol_seleccionado=rol_actual)
 
