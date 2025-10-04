@@ -94,6 +94,7 @@ def db_upgrade():
             ensure_exchange_currency_columns,
             ensure_geocode_columns,
             ensure_org_memberships_table,
+            ensure_work_certification_tables,
         )
 
         ensure_avance_audit_columns()
@@ -103,6 +104,7 @@ def db_upgrade():
         ensure_exchange_currency_columns()
         ensure_geocode_columns()
         ensure_org_memberships_table()
+        ensure_work_certification_tables()
 
     click.echo('✅ Database upgraded successfully.')
 
@@ -490,6 +492,7 @@ with app.app_context():
         ensure_exchange_currency_columns,
         ensure_geocode_columns,
         ensure_org_memberships_table,
+        ensure_work_certification_tables,
     )
 
     runtime_migrations = [
@@ -500,6 +503,7 @@ with app.app_context():
         ensure_exchange_currency_columns,
         ensure_geocode_columns,
         ensure_org_memberships_table,
+        ensure_work_certification_tables,
     ]
 
     # 🔥 Intento crear tablas con fallback automático a SQLite

@@ -1867,7 +1867,19 @@ def confirmar_como_obra(id):
     trigger_source = 'list_modal' if wants_json else 'detail_view'
 
     puede_acceder = getattr(current_user, 'puede_acceder_modulo', lambda modulo: True)
-    if not puede_acceder('presupuestos') or getattr(current_user, 'rol', None) not in ['administrador', 'tecnico']:
+    role_checker = getattr(current_user, 'tiene_rol', None)
+    is_admin_membership = bool(callable(role_checker) and role_checker('admin'))
+    es_admin_compat = False
+    es_admin_method = getattr(current_user, 'es_admin', None)
+    if callable(es_admin_method):
+        try:
+            es_admin_compat = bool(es_admin_method())
+        except Exception:  # pragma: no cover - compatibilidad legacy
+            es_admin_compat = False
+    legacy_role = (getattr(current_user, 'rol', None) or '').lower()
+    legacy_is_admin = legacy_role in {'administrador', 'administrador_general', 'admin'}
+
+    if not puede_acceder('presupuestos') or not (is_admin_membership or es_admin_compat or legacy_is_admin):
         mensaje = 'No tienes permisos para confirmar obras.'
         if wants_json:
             return jsonify({'error': mensaje}), 403

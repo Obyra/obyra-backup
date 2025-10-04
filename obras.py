@@ -8,10 +8,22 @@ import requests
 from app import db
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
-from models import (Obra, EtapaObra, TareaEtapa, AsignacionObra, Usuario,
-                    CertificacionAvance, TareaResponsables, ObraMiembro,
-                    TareaMiembro, TareaAvance, TareaAdjunto,
-                    TareaAvanceFoto)
+from models import (
+    Obra,
+    EtapaObra,
+    TareaEtapa,
+    AsignacionObra,
+    Usuario,
+    CertificacionAvance,
+    TareaResponsables,
+    ObraMiembro,
+    TareaMiembro,
+    TareaAvance,
+    TareaAdjunto,
+    TareaAvanceFoto,
+    WorkCertification,
+    WorkPayment,
+)
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import (
     TAREAS_POR_ETAPA,
@@ -21,9 +33,18 @@ from tareas_predefinidas import (
 from geocoding import normalizar_direccion_argentina
 from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
-from services.memberships import get_current_org_id
+from services.memberships import get_current_org_id, get_current_membership
 from services.obras_filters import (obras_visibles_clause,
                                     obra_tiene_presupuesto_confirmado)
+from services.certifications import (
+    approved_entries,
+    build_pending_entries,
+    certification_totals,
+    create_certification,
+    pending_percentage,
+    register_payment,
+    resolve_budget_context,
+)
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -38,6 +59,17 @@ def _to_coord_decimal(value):
         return Decimal(str(value)).quantize(_COORD_PRECISION)
     except (InvalidOperation, ValueError, TypeError):
         return None
+
+
+def _parse_date(value):
+    if not value:
+        return None
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 # Error handlers for AJAX requests to return JSON instead of HTML
 @obras_bp.errorhandler(404)
@@ -490,10 +522,18 @@ def detalle(id):
     ]
     
     from tareas_predefinidas import TAREAS_POR_ETAPA
-    
-    return render_template('obras/detalle.html', 
-                         obra=obra, 
-                         etapas=etapas, 
+
+    cert_resumen = certification_totals(obra)
+    cert_recientes = (
+        obra.work_certifications.filter_by(estado='aprobada')
+        .order_by(WorkCertification.approved_at.desc().nullslast(), WorkCertification.created_at.desc())
+        .limit(3)
+        .all()
+    )
+
+    return render_template('obras/detalle.html',
+                         obra=obra,
+                         etapas=etapas,
                          asignaciones=asignaciones,
                          usuarios_disponibles=usuarios_disponibles,
                          miembros=miembros,
@@ -503,7 +543,9 @@ def detalle(id):
                          roles_por_categoria=obtener_roles_por_categoria(),
                          TAREAS_POR_ETAPA=TAREAS_POR_ETAPA,
                          can_manage=can_manage_obra(obra),
-                         current_user_id=current_user.id)
+                         current_user_id=current_user.id,
+                         certificaciones_resumen=cert_resumen,
+                         certificaciones_recientes=cert_recientes)
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
@@ -2216,57 +2258,42 @@ def reiniciar_sistema():
 @obras_bp.route('/<int:id>/certificar_avance', methods=['POST'])
 @login_required
 def certificar_avance(id):
-    """Crear nueva certificación de avance para una obra"""
-    if current_user.rol not in ['administrador', 'tecnico']:
+    """Compat wrapper: crea certificación usando el flujo 2.0."""
+    obra = Obra.query.get_or_404(id)
+
+    membership = get_current_membership()
+    if not membership or membership.org_id != obra.organizacion_id or membership.role not in ('admin', 'project_manager'):
         flash('No tienes permisos para certificar avances.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
-    
-    obra = Obra.query.get_or_404(id)
-    
-    porcentaje_avance = request.form.get('porcentaje_avance')
-    costo_certificado = request.form.get('costo_certificado')
-    notas = request.form.get('notas')
-    
+
+    porcentaje_avance = request.form.get('porcentaje_avance') or request.form.get('porcentaje')
     if not porcentaje_avance:
         flash('El porcentaje de avance es obligatorio.', 'danger')
         return redirect(url_for('obras.detalle', id=id))
-    
+
+    periodo_desde = _parse_date(request.form.get('periodo_desde'))
+    periodo_hasta = _parse_date(request.form.get('periodo_hasta'))
+    notas = request.form.get('notas')
+
     try:
-        porcentaje = Decimal(porcentaje_avance)
-        costo = Decimal(costo_certificado) if costo_certificado else Decimal('0')
-        
-        # Validar certificación
-        valida, mensaje = CertificacionAvance.validar_certificacion(id, porcentaje)
-        if not valida:
-            flash(mensaje, 'danger')
-            return redirect(url_for('obras.detalle', id=id))
-        
-        # Crear certificación
-        certificacion = CertificacionAvance(
-            obra_id=id,
-            usuario_id=current_user.id,
-            porcentaje_avance=porcentaje,
-            costo_certificado=costo,
-            notas=notas
+        porcentaje = Decimal(str(porcentaje_avance).replace(',', '.'))
+        cert = create_certification(
+            obra,
+            current_user,
+            porcentaje,
+            periodo=(periodo_desde, periodo_hasta),
+            notas=notas,
+            aprobar=True,
         )
-        
-        db.session.add(certificacion)
-        
-        # Actualizar costo real de la obra
-        obra.costo_real += costo
-        
-        # Recalcular progreso automático
-        obra.calcular_progreso_automatico()
-        
         db.session.commit()
-        flash(f'Certificación de {porcentaje}% registrada exitosamente.', 'success')
-        
-    except ValueError:
-        flash('Los valores numéricos no son válidos.', 'danger')
-    except Exception as e:
+        flash(
+            f'Se registró la certificación #{cert.id} por {porcentaje}% correctamente.',
+            'success',
+        )
+    except Exception as exc:
         db.session.rollback()
-        flash(f'Error al registrar certificación: {str(e)}', 'danger')
-    
+        flash(f'Error al registrar certificación: {exc}', 'danger')
+
     return redirect(url_for('obras.detalle', id=id))
 
 
@@ -2385,16 +2412,131 @@ def tarea_asignar(tarea_id):
         return jsonify(ok=False, error=str(e)), 500
 
 
-@obras_bp.route('/<int:id>/certificaciones')
+@obras_bp.route('/<int:id>/certificaciones', methods=['GET', 'POST'])
 @login_required
 def historial_certificaciones(id):
-    """Ver historial de certificaciones de una obra"""
-    obra = Obra.query.get_or_404(id)
-    certificaciones = obra.certificaciones.order_by(CertificacionAvance.fecha.desc()).all()
-    
-    return render_template('obras/certificaciones.html', 
-                         obra=obra, 
-                         certificaciones=certificaciones)
+    """Pantalla principal de certificaciones (pendientes + certificadas)."""
+    obra = Obra.query.filter_by(id=id, organizacion_id=get_current_org_id()).first_or_404()
+    membership = get_current_membership()
+
+    if request.method == 'POST':
+        payload = request.get_json(silent=True) or request.form
+        if not membership or membership.role not in ('admin', 'project_manager'):
+            error_msg = 'No tienes permisos para crear certificaciones.'
+            if request.is_json:
+                return jsonify(ok=False, error=error_msg), 403
+            flash(error_msg, 'danger')
+            return redirect(url_for('obras.historial_certificaciones', id=id))
+
+        cert_id = payload.get('certificacion_id')
+        periodo = (
+            _parse_date(payload.get('periodo_desde')),
+            _parse_date(payload.get('periodo_hasta')),
+        )
+        aprobar_flag = str(payload.get('aprobar', 'true')).lower() in {'1', 'true', 'yes', 'y', 'on'}
+        notas = payload.get('notas')
+
+        try:
+            if cert_id:
+                cert = WorkCertification.query.get_or_404(int(cert_id))
+                if cert.obra_id != obra.id:
+                    abort(404)
+                if payload.get('porcentaje'):
+                    cert.porcentaje_avance = Decimal(str(payload['porcentaje']).replace(',', '.'))
+                if aprobar_flag and cert.estado != 'aprobada':
+                    cert.marcar_aprobada(current_user)
+                if periodo[0] or periodo[1]:
+                    cert.periodo_desde, cert.periodo_hasta = periodo
+                if notas is not None:
+                    cert.notas = notas
+                db.session.commit()
+                response = {'ok': True, 'certificacion_id': cert.id, 'estado': cert.estado}
+                if request.is_json:
+                    return jsonify(response)
+                flash('Certificación actualizada correctamente.', 'success')
+                return redirect(url_for('obras.historial_certificaciones', id=id))
+
+            porcentaje_raw = payload.get('porcentaje') or payload.get('porcentaje_avance')
+            if not porcentaje_raw:
+                raise ValueError('Debes indicar el porcentaje de avance a certificar.')
+
+            porcentaje = Decimal(str(porcentaje_raw).replace(',', '.'))
+            cert = create_certification(
+                obra,
+                current_user,
+                porcentaje,
+                periodo=periodo,
+                notas=notas,
+                aprobar=aprobar_flag,
+                fuente=payload.get('fuente', 'tareas'),
+            )
+            db.session.commit()
+            response = {
+                'ok': True,
+                'certificacion_id': cert.id,
+                'estado': cert.estado,
+            }
+            if request.is_json:
+                return jsonify(response)
+            flash('Certificación creada correctamente.', 'success')
+            return redirect(url_for('obras.historial_certificaciones', id=id))
+        except Exception as exc:
+            db.session.rollback()
+            if request.is_json:
+                return jsonify(ok=False, error=str(exc)), 400
+            flash(f'Error al crear la certificación: {exc}', 'danger')
+            return redirect(url_for('obras.historial_certificaciones', id=id))
+
+    resumen = certification_totals(obra)
+    pendientes = build_pending_entries(obra)
+    aprobadas = approved_entries(obra)
+    pct_aprobado, pct_borrador, pct_sugerido = pending_percentage(obra)
+    context = resolve_budget_context(obra)
+    puede_aprobar = membership and membership.role in ('admin', 'project_manager')
+
+    if request.args.get('format') == 'json':
+        return jsonify(
+            ok=True,
+            resumen={k: str(v) for k, v in resumen.items()},
+            pendientes=[
+                {
+                    **row,
+                    'porcentaje': str(row['porcentaje']),
+                    'monto_ars': str(row['monto_ars']),
+                    'monto_usd': str(row['monto_usd']),
+                }
+                for row in pendientes
+            ],
+            aprobadas=[
+                {
+                    **row,
+                    'porcentaje': str(row['porcentaje']),
+                    'monto_ars': str(row['monto_ars']),
+                    'monto_usd': str(row['monto_usd']),
+                    'pagado_ars': str(row['pagado_ars']),
+                    'pagado_usd': str(row['pagado_usd']),
+                    'saldo_ars': str(row['saldo_ars']),
+                    'saldo_usd': str(row['saldo_usd']),
+                }
+                for row in aprobadas
+            ],
+            porcentajes={
+                'aprobado': str(pct_aprobado),
+                'borrador': str(pct_borrador),
+                'sugerido': str(pct_sugerido),
+            },
+        )
+
+    return render_template(
+        'obras/certificaciones.html',
+        obra=obra,
+        pendientes=pendientes,
+        certificaciones_aprobadas=aprobadas,
+        resumen=resumen,
+        porcentajes=(pct_aprobado, pct_borrador, pct_sugerido),
+        puede_aprobar=bool(puede_aprobar),
+        contexto=context,
+    )
 
 
 @obras_bp.route('/certificacion/<int:id>/desactivar', methods=['POST'])
@@ -2425,6 +2567,73 @@ def desactivar_certificacion(id):
         db.session.rollback()
         flash(f'Error al desactivar certificación: {str(e)}', 'danger')
     
+    return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+
+@obras_bp.route('/certificaciones/<int:cert_id>/pagos', methods=['POST'])
+@login_required
+def registrar_pago_certificacion(cert_id):
+    certificacion = WorkCertification.query.get_or_404(cert_id)
+    obra = certificacion.obra
+
+    membership = get_current_membership()
+    if not membership or membership.org_id != obra.organizacion_id or membership.role not in ('admin', 'project_manager'):
+        error_msg = 'No tienes permisos para registrar pagos.'
+        if request.is_json:
+            return jsonify(ok=False, error=error_msg), 403
+        flash(error_msg, 'danger')
+        return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+    data = request.get_json(silent=True) or request.form
+    monto_raw = data.get('monto')
+    metodo = data.get('metodo') or data.get('metodo_pago')
+    if not monto_raw or not metodo:
+        msg = 'Debe indicar monto y método de pago.'
+        if request.is_json:
+            return jsonify(ok=False, error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+    moneda = (data.get('moneda') or 'ARS').upper()
+    notas = data.get('notas')
+    tc_usd = data.get('tc_usd') or data.get('tc_usd_pago')
+    fecha_pago = _parse_date(data.get('fecha_pago'))
+    operario_id = data.get('operario_id') or data.get('usuario_id')
+    try:
+        operario_id = int(operario_id) if operario_id else None
+    except (TypeError, ValueError):
+        operario_id = None
+
+    try:
+        monto = Decimal(str(monto_raw).replace(',', '.'))
+        payment = register_payment(
+            certificacion,
+            obra,
+            current_user,
+            monto=monto,
+            metodo=metodo,
+            moneda=moneda,
+            fecha=fecha_pago,
+            tc_usd=Decimal(str(tc_usd).replace(',', '.')) if tc_usd else None,
+            notas=notas,
+            operario_id=operario_id,
+            comprobante_url=data.get('comprobante_url'),
+        )
+        db.session.commit()
+        payload = {
+            'ok': True,
+            'pago_id': payment.id,
+            'certificacion_id': certificacion.id,
+        }
+        if request.is_json:
+            return jsonify(payload)
+        flash('Pago registrado correctamente.', 'success')
+    except Exception as exc:
+        db.session.rollback()
+        if request.is_json:
+            return jsonify(ok=False, error=str(exc)), 400
+        flash(f'Error al registrar el pago: {exc}', 'danger')
+
     return redirect(url_for('obras.historial_certificaciones', id=obra.id))
 
 

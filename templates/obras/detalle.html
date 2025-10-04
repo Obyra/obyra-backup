@@ -297,26 +297,34 @@
                             <span class="fw-bold">Certificaciones</span>
                         </div>
                         <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-light">
-                            <i class="fas fa-cog"></i>
+                            <i class="fas fa-chevron-right"></i>
                         </a>
                     </div>
-                    
-                    {% set certificaciones_recientes = obra.certificaciones.filter_by(activa=True).limit(3).all() %}
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <div>
+                            <small class="text-uppercase text-white-50">Certificado</small>
+                            <div class="h5 mb-0">{{ certificaciones_resumen['certificado_ars']|moneda }}</div>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-uppercase text-white-50">Pagado</small>
+                            <div class="h5 mb-0">{{ certificaciones_resumen['pagado_ars']|moneda }}</div>
+                        </div>
+                    </div>
+
                     {% if certificaciones_recientes %}
                         {% for cert in certificaciones_recientes %}
                         <div class="bg-white text-dark rounded p-2 mb-2">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="badge bg-success">{{ cert.porcentaje_avance }}%</span>
-                                <small class="text-muted">{{ cert.fecha|fecha }}</small>
+                                <small class="text-muted">{{ (cert.approved_at or cert.created_at)|fecha }}</small>
                             </div>
-                            {% if cert.costo_certificado > 0 %}
-                            <small class="text-success fw-bold">${{ "%.0f"|format(cert.costo_certificado) }}</small>
-                            {% endif %}
+                            <small class="text-success fw-bold">{{ cert.monto_certificado_ars|moneda }}</small>
                         </div>
                         {% endfor %}
                     {% else %}
                         <div class="text-center">
-                            <p class="mb-0">No hay certificaciones</p>
+                            <p class="mb-0">No hay certificaciones aprobadas.</p>
                         </div>
                     {% endif %}
                 </div>

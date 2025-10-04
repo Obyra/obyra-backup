@@ -810,3 +810,229 @@ def ensure_org_memberships_table():
         if current_app:
             current_app.logger.exception('❌ Migration failed: org_memberships table')
         raise
+
+
+def ensure_work_certification_tables():
+    """Ensure work certification & payment tables exist."""
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250901_work_certifications.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    def numeric_type(precision, scale):
+        if backend == 'postgresql':
+            return f'NUMERIC({precision},{scale})'
+        return 'NUMERIC'
+
+    def timestamp_type():
+        return 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            tables = set(inspector.get_table_names())
+
+            if 'work_certifications' not in tables:
+                if backend == 'postgresql':
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS work_certifications (
+                            id SERIAL PRIMARY KEY,
+                            obra_id INTEGER NOT NULL,
+                            organizacion_id INTEGER NOT NULL,
+                            periodo_desde DATE,
+                            periodo_hasta DATE,
+                            porcentaje_avance NUMERIC(7,3) DEFAULT 0,
+                            monto_certificado_ars NUMERIC(15,2) DEFAULT 0,
+                            monto_certificado_usd NUMERIC(15,2) DEFAULT 0,
+                            moneda_base VARCHAR(3) DEFAULT 'ARS',
+                            tc_usd NUMERIC(12,4),
+                            indice_cac NUMERIC(12,4),
+                            estado VARCHAR(20) DEFAULT 'borrador',
+                            notas TEXT,
+                            created_by_id INTEGER,
+                            approved_by_id INTEGER,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            approved_at TIMESTAMP
+                        )
+                        """
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS work_certifications (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            obra_id INTEGER NOT NULL,
+                            organizacion_id INTEGER NOT NULL,
+                            periodo_desde DATE,
+                            periodo_hasta DATE,
+                            porcentaje_avance NUMERIC DEFAULT 0,
+                            monto_certificado_ars NUMERIC DEFAULT 0,
+                            monto_certificado_usd NUMERIC DEFAULT 0,
+                            moneda_base TEXT DEFAULT 'ARS',
+                            tc_usd NUMERIC,
+                            indice_cac NUMERIC,
+                            estado TEXT DEFAULT 'borrador',
+                            notas TEXT,
+                            created_by_id INTEGER,
+                            approved_by_id INTEGER,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            approved_at DATETIME
+                        )
+                        """
+                    )
+            else:
+                columns = {col['name'] for col in inspector.get_columns('work_certifications')}
+                alterations = []
+                for name, col_type, default in [
+                    ('moneda_base', 'VARCHAR(3)' if backend == 'postgresql' else 'TEXT', "DEFAULT 'ARS'"),
+                    ('tc_usd', numeric_type(12, 4), None),
+                    ('indice_cac', numeric_type(12, 4), None),
+                    ('notas', 'TEXT', None),
+                    ('approved_at', timestamp_type(), None),
+                    ('updated_at', timestamp_type(), "DEFAULT CURRENT_TIMESTAMP"),
+                ]:
+                    if name not in columns:
+                        stmt = f"ALTER TABLE work_certifications ADD COLUMN {name} {col_type}"
+                        if default:
+                            stmt += f" {default}"
+                        alterations.append(stmt)
+                for stmt in alterations:
+                    conn.exec_driver_sql(stmt)
+
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_work_certifications_obra_estado ON work_certifications(obra_id, estado)"
+            )
+
+            if 'work_certification_items' not in tables:
+                if backend == 'postgresql':
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS work_certification_items (
+                            id SERIAL PRIMARY KEY,
+                            certificacion_id INTEGER NOT NULL,
+                            etapa_id INTEGER,
+                            tarea_id INTEGER,
+                            porcentaje_aplicado NUMERIC(7,3) DEFAULT 0,
+                            monto_ars NUMERIC(15,2) DEFAULT 0,
+                            monto_usd NUMERIC(15,2) DEFAULT 0,
+                            fuente_avance VARCHAR(20) DEFAULT 'manual',
+                            resumen_avance TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS work_certification_items (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            certificacion_id INTEGER NOT NULL,
+                            etapa_id INTEGER,
+                            tarea_id INTEGER,
+                            porcentaje_aplicado NUMERIC DEFAULT 0,
+                            monto_ars NUMERIC DEFAULT 0,
+                            monto_usd NUMERIC DEFAULT 0,
+                            fuente_avance TEXT DEFAULT 'manual',
+                            resumen_avance TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+            else:
+                columns = {col['name'] for col in inspector.get_columns('work_certification_items')}
+                if 'created_at' not in columns:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE work_certification_items ADD COLUMN created_at {timestamp_type()}"
+                    )
+
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_work_certification_items_certificacion ON work_certification_items(certificacion_id)"
+            )
+
+            if 'work_payments' not in tables:
+                if backend == 'postgresql':
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS work_payments (
+                            id SERIAL PRIMARY KEY,
+                            certificacion_id INTEGER,
+                            obra_id INTEGER NOT NULL,
+                            organizacion_id INTEGER NOT NULL,
+                            operario_id INTEGER,
+                            metodo_pago VARCHAR(30) NOT NULL,
+                            moneda VARCHAR(3) DEFAULT 'ARS',
+                            monto NUMERIC(15,2) NOT NULL,
+                            tc_usd_pago NUMERIC(12,4),
+                            fecha_pago DATE DEFAULT CURRENT_DATE,
+                            comprobante_url TEXT,
+                            notas TEXT,
+                            estado VARCHAR(20) DEFAULT 'pendiente',
+                            created_by_id INTEGER,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+                else:
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE IF NOT EXISTS work_payments (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            certificacion_id INTEGER,
+                            obra_id INTEGER NOT NULL,
+                            organizacion_id INTEGER NOT NULL,
+                            operario_id INTEGER,
+                            metodo_pago TEXT NOT NULL,
+                            moneda TEXT DEFAULT 'ARS',
+                            monto NUMERIC NOT NULL,
+                            tc_usd_pago NUMERIC,
+                            fecha_pago DATE DEFAULT CURRENT_DATE,
+                            comprobante_url TEXT,
+                            notas TEXT,
+                            estado TEXT DEFAULT 'pendiente',
+                            created_by_id INTEGER,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+            else:
+                columns = {col['name'] for col in inspector.get_columns('work_payments')}
+                for name, col_type, default in [
+                    ('tc_usd_pago', numeric_type(12, 4), None),
+                    ('comprobante_url', 'TEXT', None),
+                    ('notas', 'TEXT', None),
+                    ('updated_at', timestamp_type(), "DEFAULT CURRENT_TIMESTAMP"),
+                ]:
+                    if name not in columns:
+                        stmt = f"ALTER TABLE work_payments ADD COLUMN {name} {col_type}"
+                        if default:
+                            stmt += f" {default}"
+                        conn.exec_driver_sql(stmt)
+
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_work_payments_certificacion ON work_payments(certificacion_id)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_work_payments_estado ON work_payments(estado)"
+            )
+
+        with open(sentinel, 'w') as handle:
+            handle.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Work certification tables ensured')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: work certification tables')
+        raise

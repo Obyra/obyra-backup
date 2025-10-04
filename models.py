@@ -579,6 +579,8 @@ class Obra(db.Model):
     presupuestos = db.relationship('Presupuesto', back_populates='obra', lazy='dynamic')
     uso_inventario = db.relationship('UsoInventario', back_populates='obra', lazy='dynamic')
     certificaciones = db.relationship('CertificacionAvance', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
+    work_certifications = db.relationship('WorkCertification', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
+    work_payments = db.relationship('WorkPayment', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     
     def __repr__(self):
         return f'<Obra {self.nombre}>'
@@ -1569,8 +1571,136 @@ class CertificacionAvance(db.Model):
         
         if nuevo_total > 100:
             return False, f"El total de avance sería {nuevo_total}%, excede el 100% permitido"
-        
+
         return True, "Certificación válida"
+
+
+class WorkCertification(db.Model):
+    __tablename__ = 'work_certifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False, index=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
+    periodo_desde = db.Column(db.Date)
+    periodo_hasta = db.Column(db.Date)
+    porcentaje_avance = db.Column(db.Numeric(7, 3), default=0)
+    monto_certificado_ars = db.Column(db.Numeric(15, 2), default=0)
+    monto_certificado_usd = db.Column(db.Numeric(15, 2), default=0)
+    moneda_base = db.Column(db.String(3), default='ARS')
+    tc_usd = db.Column(db.Numeric(12, 4))
+    indice_cac = db.Column(db.Numeric(12, 4))
+    estado = db.Column(db.String(20), default='borrador')
+    notas = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    approved_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+
+    obra = db.relationship('Obra', back_populates='work_certifications')
+    organizacion = db.relationship('Organizacion')
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    approved_by = db.relationship('Usuario', foreign_keys=[approved_by_id])
+    items = db.relationship('WorkCertificationItem', back_populates='certificacion', cascade='all, delete-orphan', lazy='dynamic')
+    payments = db.relationship('WorkPayment', back_populates='certificacion', lazy='dynamic')
+
+    __table_args__ = (
+        db.Index('ix_work_certifications_obra_estado', 'obra_id', 'estado'),
+    )
+
+    def marcar_aprobada(self, usuario):
+        self.estado = 'aprobada'
+        self.approved_by = usuario
+        self.approved_at = datetime.utcnow()
+
+    @property
+    def porcentaje_pagado(self):
+        from decimal import Decimal
+
+        total_pagado = Decimal('0')
+        for payment in self.payments.filter_by(estado='confirmado'):
+            total_pagado += payment.monto_equivalente_ars
+        base = Decimal(str(self.monto_certificado_ars or 0))
+        if base <= 0:
+            return Decimal('0')
+        return (total_pagado / base).quantize(Decimal('0.01'))
+
+
+class WorkCertificationItem(db.Model):
+    __tablename__ = 'work_certification_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    certificacion_id = db.Column(db.Integer, db.ForeignKey('work_certifications.id'), nullable=False, index=True)
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'))
+    tarea_id = db.Column(db.Integer, db.ForeignKey('tareas_etapa.id'))
+    porcentaje_aplicado = db.Column(db.Numeric(7, 3), default=0)
+    monto_ars = db.Column(db.Numeric(15, 2), default=0)
+    monto_usd = db.Column(db.Numeric(15, 2), default=0)
+    fuente_avance = db.Column(db.String(20), default='manual')
+    resumen_avance = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    certificacion = db.relationship('WorkCertification', back_populates='items')
+    etapa = db.relationship('EtapaObra')
+    tarea = db.relationship('TareaEtapa')
+
+    def resumen_dict(self):
+        if not self.resumen_avance:
+            return {}
+        try:
+            return json.loads(self.resumen_avance)
+        except Exception:
+            return {}
+
+
+class WorkPayment(db.Model):
+    __tablename__ = 'work_payments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    certificacion_id = db.Column(db.Integer, db.ForeignKey('work_certifications.id'))
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False, index=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
+    operario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    metodo_pago = db.Column(db.String(30), nullable=False)
+    moneda = db.Column(db.String(3), default='ARS')
+    monto = db.Column(db.Numeric(15, 2), nullable=False)
+    tc_usd_pago = db.Column(db.Numeric(12, 4))
+    fecha_pago = db.Column(db.Date, default=date.today)
+    comprobante_url = db.Column(db.String(500))
+    notas = db.Column(db.Text)
+    estado = db.Column(db.String(20), default='pendiente')
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    certificacion = db.relationship('WorkCertification', back_populates='payments')
+    obra = db.relationship('Obra', back_populates='work_payments')
+    organizacion = db.relationship('Organizacion')
+    operario = db.relationship('Usuario', foreign_keys=[operario_id])
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        db.Index('ix_work_payments_certificacion', 'certificacion_id'),
+        db.Index('ix_work_payments_estado', 'estado'),
+    )
+
+    @property
+    def monto_equivalente_ars(self):
+        from decimal import Decimal
+
+        monto = Decimal(str(self.monto or 0))
+        if self.moneda == 'ARS' or not self.tc_usd_pago:
+            return monto
+        return monto * Decimal(str(self.tc_usd_pago))
+
+    @property
+    def monto_equivalente_usd(self):
+        from decimal import Decimal
+
+        monto = Decimal(str(self.monto or 0))
+        if self.moneda == 'USD' or not self.tc_usd_pago or Decimal(str(self.tc_usd_pago)) == 0:
+            return monto
+        return monto / Decimal(str(self.tc_usd_pago))
 
 
 class Proveedor(db.Model):
