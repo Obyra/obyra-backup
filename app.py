@@ -1,21 +1,34 @@
-import os
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
-from flask_login import login_required, current_user
+import os
+import secrets
+from flask import (
+    Flask,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    send_from_directory,
+    url_for,
+)
+from flask_login import login_required, current_user, logout_user
+from itsdangerous import BadData, BadSignature, BadTimeSignature, SignatureExpired
+import click
+
+from config import load_config
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
 from extensions import db, login_manager
 
 # create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
+app_config = load_config(app)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 # configure the database with fallback to SQLite
-database_url = os.environ.get("DATABASE_URL")
+database_url = app_config.database_url or os.environ.get("DATABASE_URL")
 
 # 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
 if not database_url:
@@ -79,6 +92,51 @@ def utility_processor():
     return dict(obtener_tareas_para_etapa=lambda nombre_etapa: TAREAS_POR_ETAPA.get(nombre_etapa, []))
 
 
+
+
+INVALID_REMEMBER_ERRORS = (
+    BadData,
+    BadSignature,
+    BadTimeSignature,
+    SignatureExpired,
+    TypeError,
+    ValueError,
+)
+
+
+@app.before_request
+def manejar_cookie_recordar_invalida():
+    """Catch remember-me validation errors and reset the session gracefully."""
+
+    try:
+        # Accessing the property triggers Flask-Login's lazy loader
+        current_user.is_authenticated
+    except INVALID_REMEMBER_ERRORS:
+        logging.warning(
+            "Cookie remember inválida detectada; cerrando sesión y redirigiendo al login"
+        )
+        logout_user()
+        flash('Sesión expirada, volvé a iniciar sesión.', 'warning')
+
+        response = redirect(url_for('auth.login'))
+
+        cookie_name = current_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token')
+        cookie_path = current_app.config.get('REMEMBER_COOKIE_PATH', '/')
+        cookie_domain = current_app.config.get('REMEMBER_COOKIE_DOMAIN')
+        cookie_secure = current_app.config.get('REMEMBER_COOKIE_SECURE')
+        cookie_httponly = current_app.config.get('REMEMBER_COOKIE_HTTPONLY', True)
+        cookie_samesite = current_app.config.get('REMEMBER_COOKIE_SAMESITE')
+
+        response.delete_cookie(
+            cookie_name,
+            path=cookie_path,
+            domain=cookie_domain,
+            secure=cookie_secure,
+            httponly=cookie_httponly,
+            samesite=cookie_samesite,
+        )
+
+        return response
 
 
 @app.before_request
@@ -197,6 +255,18 @@ def from_json_filter(json_str):
         return json.loads(json_str)
     except:
         return {}
+
+
+@app.cli.group()
+def secret():
+    """Comandos para trabajar con claves secretas."""
+
+
+@secret.command('gen')
+def secret_generate():
+    """Genera una SECRET_KEY aleatoria."""
+
+    click.echo(secrets.token_hex(32))
 
 
 # Create tables and initial data

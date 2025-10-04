@@ -9,6 +9,7 @@ venv/
 # Entorno / secretos
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 
