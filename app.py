@@ -1,21 +1,35 @@
-import os
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
-from flask_login import login_required, current_user
+import os
+import secrets
+from flask import (
+    Flask,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    send_from_directory,
+    url_for,
+)
+from flask_login import login_required, current_user, logout_user
+from itsdangerous import BadData, BadSignature, BadTimeSignature, SignatureExpired
+import click
+
+from config import load_config
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.routing import BuildError
 from werkzeug.security import generate_password_hash
 from extensions import db, login_manager
 
 # create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
+app_config = load_config(app)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 # configure the database with fallback to SQLite
-database_url = os.environ.get("DATABASE_URL")
+database_url = app_config.database_url or os.environ.get("DATABASE_URL")
 
 # 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
 if not database_url:
@@ -48,9 +62,60 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+login_manager.login_view = None
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
+
+
+def _resolve_login_url() -> str:
+    """Return the best-effort login URL, even if the endpoint is missing."""
+
+    candidates = []
+
+    if login_manager.login_view:
+        candidates.append(login_manager.login_view)
+
+    candidates.extend([
+        'auth.login',
+        'supplier_auth.login',
+        'login',
+    ])
+
+    seen = set()
+
+    for endpoint in candidates:
+        if not endpoint or endpoint in seen:
+            continue
+        seen.add(endpoint)
+
+        try:
+            return url_for(endpoint)
+        except BuildError:
+            continue
+
+    logging.error(
+        "No se pudo resolver la ruta de login esperada; usando '/auth/login' como fallback"
+    )
+    return '/auth/login'
+
+
+def _refresh_login_view() -> None:
+    """Set the login view to the first available auth endpoint."""
+
+    for endpoint in (
+        'auth.login',
+        'supplier_auth.login',
+        'login',
+    ):
+        if endpoint in app.view_functions:
+            if login_manager.login_view != endpoint:
+                logging.info("Login view configurada en %s", endpoint)
+            login_manager.login_view = endpoint
+            return
+
+    if login_manager.login_view is not None:
+        logging.warning("No se encontró endpoint de login registrado; limpiando login_view")
+    login_manager.login_view = None
 
 
 @login_manager.user_loader
@@ -59,15 +124,16 @@ def load_user(user_id):
     from models import Usuario
     return Usuario.query.get(int(user_id))
 
+
 @login_manager.unauthorized_handler
 def unauthorized():
     """Custom unauthorized handler that returns JSON for API routes"""
-    from flask import request, jsonify, redirect, url_for
+    from flask import request, jsonify
     # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
@@ -79,6 +145,51 @@ def utility_processor():
     return dict(obtener_tareas_para_etapa=lambda nombre_etapa: TAREAS_POR_ETAPA.get(nombre_etapa, []))
 
 
+
+
+INVALID_REMEMBER_ERRORS = (
+    BadData,
+    BadSignature,
+    BadTimeSignature,
+    SignatureExpired,
+    TypeError,
+    ValueError,
+)
+
+
+@app.before_request
+def manejar_cookie_recordar_invalida():
+    """Catch remember-me validation errors and reset the session gracefully."""
+
+    try:
+        # Accessing the property triggers Flask-Login's lazy loader
+        current_user.is_authenticated
+    except INVALID_REMEMBER_ERRORS:
+        logging.warning(
+            "Cookie remember inválida detectada; cerrando sesión y redirigiendo al login"
+        )
+        logout_user()
+        flash('Sesión expirada, volvé a iniciar sesión.', 'warning')
+
+        response = redirect(_resolve_login_url())
+
+        cookie_name = current_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token')
+        cookie_path = current_app.config.get('REMEMBER_COOKIE_PATH', '/')
+        cookie_domain = current_app.config.get('REMEMBER_COOKIE_DOMAIN')
+        cookie_secure = current_app.config.get('REMEMBER_COOKIE_SECURE')
+        cookie_httponly = current_app.config.get('REMEMBER_COOKIE_HTTPONLY', True)
+        cookie_samesite = current_app.config.get('REMEMBER_COOKIE_SAMESITE')
+
+        response.delete_cookie(
+            cookie_name,
+            path=cookie_path,
+            domain=cookie_domain,
+            secure=cookie_secure,
+            httponly=cookie_httponly,
+            samesite=cookie_samesite,
+        )
+
+        return response
 
 
 @app.before_request
@@ -117,7 +228,7 @@ def index():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 
 @app.route('/dashboard')
@@ -127,7 +238,7 @@ def dashboard():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 
 # Filtros personalizados
@@ -197,6 +308,18 @@ def from_json_filter(json_str):
         return json.loads(json_str)
     except:
         return {}
+
+
+@app.cli.group()
+def secret():
+    """Comandos para trabajar con claves secretas."""
+
+
+@secret.command('gen')
+def secret_generate():
+    """Genera una SECRET_KEY aleatoria."""
+
+    click.echo(secrets.token_hex(32))
 
 
 # Create tables and initial data
@@ -368,6 +491,9 @@ except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
 
 
+_refresh_login_view()
+
+
 # === MEDIA SERVING ENDPOINT ===
 
 @app.route("/media/<path:relpath>")
@@ -391,7 +517,7 @@ def unauthorized(error):
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 @app.errorhandler(404)
 def not_found(error):
