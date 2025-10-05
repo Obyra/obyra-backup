@@ -7,7 +7,7 @@ import os
 from flask import Flask, request, redirect, url_for, session, flash, render_template
 from flask_login import login_user, current_user
 from authlib.integrations.flask_client import OAuth
-from app import app, db
+from app import app, db, _login_redirect
 from models import Usuario
 from datetime import datetime
 
@@ -57,7 +57,7 @@ def google_login():
     
     if not google:
         flash('Google OAuth no está configurado. Contacta al administrador del sistema.', 'warning')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     # URL de callback para el proceso OAuth
     redirect_uri = url_for('google_callback', _external=True)
@@ -69,7 +69,7 @@ def google_callback():
     """Procesar callback de Google OAuth y autenticar usuario"""
     if not google:
         flash('Google OAuth no está configurado.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     try:
         # Obtener token de acceso de Google
@@ -80,7 +80,7 @@ def google_callback():
         
         if not user_info:
             flash('No se pudo obtener información del usuario de Google.', 'danger')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
         # Extraer datos necesarios
         google_id = user_info.get('sub')
@@ -91,7 +91,7 @@ def google_callback():
         
         if not email or not google_id:
             flash('Email o ID de Google no disponible.', 'danger')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
         # Buscar usuario existente por email o google_id
         usuario = Usuario.query.filter(
@@ -135,7 +135,7 @@ def google_callback():
         # Verificar que el usuario esté activo
         if not usuario.activo:
             flash('Tu cuenta está desactivada. Contacta al administrador.', 'warning')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
         # Realizar login del usuario
         login_user(usuario, remember=True)
@@ -154,7 +154,7 @@ def google_callback():
         print(f"Error en Google OAuth: {str(e)}")
         db.session.rollback()
         flash('Error durante el proceso de autenticación con Google. Intenta de nuevo.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
 
 def init_google_oauth():
     """Función para inicializar Google OAuth si es necesario"""
