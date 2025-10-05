@@ -423,6 +423,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
 
+_refresh_login_view()
+
 
 # === MEDIA SERVING ENDPOINT ===
 
