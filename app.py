@@ -68,45 +68,24 @@ login_manager.login_message_category = 'info'
 
 
 def _resolve_login_url() -> str:
-    """Return the best-effort login URL, even if the endpoint is missing."""
+    """Return a safe login URL even when auth blueprints are missing."""
 
-    candidates = []
-
-    if login_manager.login_view:
-        candidates.append(login_manager.login_view)
-
-    candidates.extend([
-        'auth.login',
-        'supplier_auth.login',
-        'login',
-    ])
-
-    seen = set()
-
-    for endpoint in candidates:
-        if not endpoint or endpoint in seen:
-            continue
-        seen.add(endpoint)
-
+    for endpoint in ('auth.login', 'supplier_auth.login'):
         try:
             return url_for(endpoint)
         except BuildError:
             continue
 
-    logging.error(
-        "No se pudo resolver la ruta de login esperada; usando '/auth/login' como fallback"
+    logging.warning(
+        "No se encontraron endpoints de login registrados; usando '/supplier/login'"
     )
-    return '/auth/login'
+    return '/supplier/login'
 
 
 def _refresh_login_view() -> None:
-    """Set the login view to the first available auth endpoint."""
+    """Configure the login view to match the available auth blueprint."""
 
-    for endpoint in (
-        'auth.login',
-        'supplier_auth.login',
-        'login',
-    ):
+    for endpoint in ('auth.login', 'supplier_auth.login'):
         if endpoint in app.view_functions:
             if login_manager.login_view != endpoint:
                 logging.info("Login view configurada en %s", endpoint)
