@@ -75,6 +75,23 @@ app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+def _resolve_login_endpoint(app) -> str:
+    """Return the first available login endpoint, falling back to the landing page."""
+
+    candidate_endpoints = (
+        'auth.login',
+        'supplier_auth.login',
+        'auth_login',
+        'index',
+    )
+
+    for endpoint in candidate_endpoints:
+        if endpoint in app.view_functions:
+            return endpoint
+
+    return 'index'
+
+
 login_manager.login_view = 'index'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
@@ -762,6 +779,8 @@ try:
     print("✅ Marketplace blueprint registered successfully")
 except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
+
+login_manager.login_view = _resolve_login_endpoint(app)
 
 
 # --- Public legal pages fallbacks ---------------------------------------
