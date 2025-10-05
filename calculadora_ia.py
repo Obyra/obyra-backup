@@ -6,11 +6,19 @@ Sistema inteligente para analizar planos y calcular materiales automáticamente
 import os
 import base64
 import json
+import logging
 from datetime import datetime
 from openai import OpenAI
 
-# Inicializar cliente OpenAI
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# Inicializar cliente OpenAI solo si la API key está disponible
+_openai_api_key = os.environ.get("OPENAI_API_KEY")
+if _openai_api_key:
+    client = OpenAI(api_key=_openai_api_key)
+else:
+    client = None
+    logging.warning(
+        "OPENAI_API_KEY no configurada; la calculadora IA se deshabilitará hasta definirla."
+    )
 
 # Coeficientes de construcción expandidos por tipo y m² - Estilo Togal.AI
 COEFICIENTES_CONSTRUCCION = {
@@ -335,6 +343,11 @@ def analizar_plano_con_ia(archivo_pdf_base64, metros_cuadrados_manual=None):
     Analiza un plano arquitectónico usando IA de OpenAI
     Para PDFs, se usa análisis de texto, para superficie manual se sugiere el tipo
     """
+    if client is None:
+        raise RuntimeError(
+            "OPENAI_API_KEY no configurada. Configurala para habilitar el análisis con IA."
+        )
+
     try:
         # Si hay superficie manual, hacer análisis inteligente sin imagen
         if metros_cuadrados_manual:

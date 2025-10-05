@@ -5,7 +5,7 @@ Blueprint del Carrito de Compras
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import current_user
 from sqlalchemy import func
-from app import db
+from app import db, _login_redirect
 from models import Cart, CartItem, ProductVariant, Product, Supplier, Order, OrderItem, OrderCommission
 from commission_utils import get_commission_summary
 from decimal import Decimal
@@ -213,7 +213,7 @@ def checkout_confirm():
     
     if not current_user.is_authenticated:
         flash('Debes iniciar sesión para completar la compra', 'error')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     # Agrupar items por proveedor
     items_by_supplier = defaultdict(list)

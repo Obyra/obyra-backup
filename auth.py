@@ -3,6 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from extensions import db
+from app import _login_redirect
 from models import Usuario, Organizacion
 from sqlalchemy import func
 from datetime import datetime
@@ -166,7 +167,7 @@ def google_login():
     
     if not google:
         flash('Google OAuth no está configurado. Contacta al administrador.', 'warning')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     # URL de callback para Google
     redirect_uri = url_for('auth.google_callback', _external=True)
@@ -178,7 +179,7 @@ def google_callback():
     """Callback de Google OAuth"""
     if not google:
         flash('Google OAuth no está configurado.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     try:
         token = google.authorize_access_token()
@@ -186,7 +187,7 @@ def google_callback():
         
         if not user_info:
             flash('Error al obtener información de Google.', 'danger')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
         email = user_info.get('email')
         nombre = user_info.get('given_name', '')
@@ -196,7 +197,7 @@ def google_callback():
         
         if not email:
             flash('No se pudo obtener el email de Google.', 'danger')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
         # Buscar usuario existente por email
         usuario = Usuario.query.filter_by(email=email.lower()).first()
@@ -235,13 +236,13 @@ def google_callback():
                 return redirect(url_for('reportes.dashboard'))
             else:
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
         else:
             # Verificar si el email ya existe en otra organización
             usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
             if usuario_existente:
                 flash('⚠️ Este correo ya está registrado. Debés ser invitado por un administrador de tu organización para acceder.', 'warning')
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
             
             # Crear nuevo usuario con Google
             try:
@@ -273,7 +274,7 @@ def google_callback():
                         mensaje = f'¡Bienvenido/a a {organizacion.nombre}, {nombre}!'
                     else:
                         flash('Token de invitación inválido.', 'danger')
-                        return redirect(url_for('auth.login'))
+                        return _login_redirect()
                 else:
                     # Usuario nuevo - crear organización propia
                     rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'administrador'
@@ -313,11 +314,11 @@ def google_callback():
             except Exception as e:
                 db.session.rollback()
                 flash('Error al crear la cuenta con Google. Intenta de nuevo.', 'danger')
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
                 
     except Exception as e:
         flash('Error en la autenticación con Google. Intenta de nuevo.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
 
 
 # ================================
@@ -505,20 +506,20 @@ def unirse_organizacion():
     
     if not token:
         flash('Token de invitación inválido.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     # Buscar organización por token
     organizacion = Organizacion.query.filter_by(token_invitacion=token).first()
     if not organizacion:
         flash('Token de invitación inválido o expirado.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     # Guardar token en sesión para usar después del login
     session['token_invitacion'] = token
     session['organizacion_invitacion'] = organizacion.id
     
     flash(f'Te han invitado a unirte a "{organizacion.nombre}". Inicia sesión para continuar.', 'info')
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 @auth_bp.route('/invitar', methods=['GET', 'POST'])
 @login_required
@@ -578,12 +579,12 @@ def aceptar_invitacion():
     
     if not token or not organizacion_id:
         flash('Sesión de invitación inválida.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     organizacion = Organizacion.query.get(organizacion_id)
     if not organizacion:
         flash('Organización no encontrada.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     if request.method == 'POST':
         nombre = request.form.get('nombre')

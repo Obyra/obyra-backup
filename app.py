@@ -1,9 +1,11 @@
 import os
 import logging
+from pathlib import Path
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
+from werkzeug.routing import BuildError
 from extensions import db, login_manager
 
 # create the app
@@ -17,9 +19,13 @@ logging.basicConfig(level=logging.DEBUG)
 # configure the database with fallback to SQLite
 database_url = os.environ.get("DATABASE_URL")
 
+base_dir = Path(__file__).resolve().parent
+default_sqlite_path = base_dir / "tmp" / "dev.db"
+
 # 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
 if not database_url:
-    database_url = "sqlite:///tmp/dev.db"
+    default_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    database_url = f"sqlite:///{default_sqlite_path.as_posix()}"
     print("⚠️  DATABASE_URL no disponible, usando SQLite fallback")
 else:
     # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
@@ -29,6 +35,15 @@ else:
         else:
             database_url += "?sslmode=require"
         print("🔒 SSL requerido agregado para Neon")
+
+    if database_url.startswith("sqlite:///"):
+        # Normalizar rutas relativas a la carpeta del proyecto
+        sqlite_path = database_url.replace("sqlite:///", "", 1)
+        sqlite_path_obj = Path(sqlite_path)
+        if not sqlite_path_obj.is_absolute():
+            sqlite_path_obj = (base_dir / sqlite_path_obj).resolve()
+            database_url = f"sqlite:///{sqlite_path_obj.as_posix()}"
+        sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
@@ -48,9 +63,35 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+login_manager.login_view = None
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
+
+
+def _resolve_login_url() -> str:
+    for endpoint in ('auth.login', 'supplier_auth.login'):
+        try:
+            return url_for(endpoint)
+        except BuildError:
+            continue
+    return '/proveedor/login'
+
+
+def _login_redirect():
+    return redirect(_resolve_login_url())
+
+
+def _refresh_login_view() -> None:
+    for endpoint in ('auth.login', 'supplier_auth.login'):
+        if endpoint in app.view_functions:
+            login_manager.login_view = endpoint
+            return
+    login_manager.login_view = None
+
+
+@app.context_processor
+def inject_login_url():
+    return {"login_url": _resolve_login_url()}
 
 
 @login_manager.user_loader
@@ -62,12 +103,12 @@ def load_user(user_id):
 @login_manager.unauthorized_handler
 def unauthorized():
     """Custom unauthorized handler that returns JSON for API routes"""
-    from flask import request, jsonify, redirect, url_for
+    from flask import request, jsonify
     # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
@@ -89,7 +130,8 @@ def verificar_periodo_prueba():
     # Rutas que no requieren verificación de plan
     rutas_excluidas = [
         'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
-        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
+        'auth.login', 'auth.register', 'auth.logout',
+        'supplier_auth.login', 'static', 'index'
     ]
     
     if (current_user.is_authenticated and 
@@ -117,7 +159,7 @@ def index():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 
 @app.route('/dashboard')
@@ -127,7 +169,14 @@ def dashboard():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
+
+
+@app.route('/login')
+def login_redirect():
+    """Ruta de compatibilidad que redirige al login activo."""
+
+    return _login_redirect()
 
 
 # Filtros personalizados
@@ -337,6 +386,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Some core blueprints not available: {e}")
 
+_refresh_login_view()
+
 # Try to register optional blueprints
 try:
     from equipos_new import equipos_new_bp
@@ -359,6 +410,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Supplier portal blueprints not available: {e}")
 
+_refresh_login_view()
+
 # Try to register marketplace blueprints
 try:
     from marketplace.routes import bp as marketplace_bp
@@ -366,6 +419,8 @@ try:
     print("✅ Marketplace blueprint registered successfully")
 except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
+
+_refresh_login_view()
 
 
 # === MEDIA SERVING ENDPOINT ===
@@ -386,12 +441,12 @@ def forbidden(error):
 
 @app.errorhandler(401)
 def unauthorized(error):
-    from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request  
+    from flask import request, jsonify
+    # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 @app.errorhandler(404)
 def not_found(error):
