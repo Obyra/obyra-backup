@@ -71,7 +71,6 @@ def _resolve_login_url() -> str:
 
 def _login_redirect():
     """Redirige al login disponible evitando BuildError."""
-
     return redirect(_resolve_login_url())
 
 
