@@ -17,6 +17,7 @@ import click
 from config import load_config
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash
+from werkzeug.routing import BuildError
 from extensions import db, login_manager
 
 # create the app
@@ -61,9 +62,39 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+login_manager.login_view = None
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
+
+
+def _resolve_login_url() -> str:
+    """Devuelve una URL de login válida aun si falta un blueprint."""
+
+    for endpoint in ('auth.login', 'supplier_auth.login'):
+        try:
+            return url_for(endpoint)
+        except BuildError:
+            continue
+
+    logging.warning(
+        "No se encontraron endpoints de login registrados; usando '/supplier/login'"
+    )
+    return '/supplier/login'
+
+
+def _refresh_login_view() -> None:
+    """Sincroniza login_view con el blueprint de autenticación disponible."""
+
+    for endpoint in ('auth.login', 'supplier_auth.login'):
+        if endpoint in app.view_functions:
+            if login_manager.login_view != endpoint:
+                logging.info("Login view configurada en %s", endpoint)
+            login_manager.login_view = endpoint
+            return
+
+    if login_manager.login_view is not None:
+        logging.warning("No se encontró endpoint de login registrado; limpiando login_view")
+    login_manager.login_view = None
 
 
 @login_manager.user_loader
@@ -75,12 +106,12 @@ def load_user(user_id):
 @login_manager.unauthorized_handler
 def unauthorized():
     """Custom unauthorized handler that returns JSON for API routes"""
-    from flask import request, jsonify, redirect, url_for
+    from flask import request, jsonify
     # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 
 # Register blueprints - moved after database initialization to avoid circular imports
@@ -147,7 +178,8 @@ def verificar_periodo_prueba():
     # Rutas que no requieren verificación de plan
     rutas_excluidas = [
         'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
-        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
+        'auth.login', 'auth.register', 'auth.logout',
+        'supplier_auth.login', 'static', 'index'
     ]
     
     if (current_user.is_authenticated and 
@@ -175,7 +207,7 @@ def index():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 
 @app.route('/dashboard')
@@ -185,7 +217,7 @@ def dashboard():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 
 # Filtros personalizados
@@ -407,6 +439,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Some core blueprints not available: {e}")
 
+_refresh_login_view()
+
 # Try to register optional blueprints
 try:
     from equipos_new import equipos_new_bp
@@ -428,6 +462,8 @@ try:
     print("✅ Supplier portal blueprints registered successfully")
 except ImportError as e:
     print(f"⚠️ Supplier portal blueprints not available: {e}")
+
+_refresh_login_view()
 
 # Try to register marketplace blueprints
 try:
@@ -456,12 +492,12 @@ def forbidden(error):
 
 @app.errorhandler(401)
 def unauthorized(error):
-    from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request  
+    from flask import request, jsonify
+    # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return redirect(_resolve_login_url())
 
 @app.errorhandler(404)
 def not_found(error):
