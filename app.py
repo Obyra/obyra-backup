@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -18,9 +19,13 @@ logging.basicConfig(level=logging.DEBUG)
 # configure the database with fallback to SQLite
 database_url = os.environ.get("DATABASE_URL")
 
+base_dir = Path(__file__).resolve().parent
+default_sqlite_path = base_dir / "tmp" / "dev.db"
+
 # 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
 if not database_url:
-    database_url = "sqlite:///tmp/dev.db"
+    default_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    database_url = f"sqlite:///{default_sqlite_path.as_posix()}"
     print("⚠️  DATABASE_URL no disponible, usando SQLite fallback")
 else:
     # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
@@ -30,6 +35,15 @@ else:
         else:
             database_url += "?sslmode=require"
         print("🔒 SSL requerido agregado para Neon")
+
+    if database_url.startswith("sqlite:///"):
+        # Normalizar rutas relativas a la carpeta del proyecto
+        sqlite_path = database_url.replace("sqlite:///", "", 1)
+        sqlite_path_obj = Path(sqlite_path)
+        if not sqlite_path_obj.is_absolute():
+            sqlite_path_obj = (base_dir / sqlite_path_obj).resolve()
+            database_url = f"sqlite:///{sqlite_path_obj.as_posix()}"
+        sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
