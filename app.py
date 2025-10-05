@@ -1,35 +1,22 @@
-import logging
 import os
-import secrets
-from flask import (
-    Flask,
-    current_app,
-    flash,
-    redirect,
-    render_template,
-    send_from_directory,
-    url_for,
-)
-from flask_login import login_required, current_user, logout_user
-from itsdangerous import BadData, BadSignature, BadTimeSignature, SignatureExpired
-import click
-
-from config import load_config
+import logging
+from flask import Flask, render_template, redirect, url_for, flash, send_from_directory
+from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.routing import BuildError
 from werkzeug.security import generate_password_hash
+from werkzeug.routing import BuildError
 from extensions import db, login_manager
 
 # create the app
 app = Flask(__name__)
-app_config = load_config(app)
+app.secret_key = os.environ.get("SESSION_SECRET")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 # configure the database with fallback to SQLite
-database_url = app_config.database_url or os.environ.get("DATABASE_URL")
+database_url = os.environ.get("DATABASE_URL")
 
 # 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
 if not database_url:
@@ -68,7 +55,7 @@ login_manager.login_message_category = 'info'
 
 
 def _resolve_login_url() -> str:
-    """Return a safe login URL even when auth blueprints are missing."""
+    """Devuelve una URL de login válida aun si falta un blueprint."""
 
     for endpoint in ('auth.login', 'supplier_auth.login'):
         try:
@@ -83,7 +70,7 @@ def _resolve_login_url() -> str:
 
 
 def _refresh_login_view() -> None:
-    """Configure the login view to match the available auth blueprint."""
+    """Sincroniza login_view con el blueprint de autenticación disponible."""
 
     for endpoint in ('auth.login', 'supplier_auth.login'):
         if endpoint in app.view_functions:
@@ -102,7 +89,6 @@ def load_user(user_id):
     # Import here to avoid circular imports
     from models import Usuario
     return Usuario.query.get(int(user_id))
-
 
 @login_manager.unauthorized_handler
 def unauthorized():
@@ -126,51 +112,6 @@ def utility_processor():
 
 
 
-INVALID_REMEMBER_ERRORS = (
-    BadData,
-    BadSignature,
-    BadTimeSignature,
-    SignatureExpired,
-    TypeError,
-    ValueError,
-)
-
-
-@app.before_request
-def manejar_cookie_recordar_invalida():
-    """Catch remember-me validation errors and reset the session gracefully."""
-
-    try:
-        # Accessing the property triggers Flask-Login's lazy loader
-        current_user.is_authenticated
-    except INVALID_REMEMBER_ERRORS:
-        logging.warning(
-            "Cookie remember inválida detectada; cerrando sesión y redirigiendo al login"
-        )
-        logout_user()
-        flash('Sesión expirada, volvé a iniciar sesión.', 'warning')
-
-        response = redirect(_resolve_login_url())
-
-        cookie_name = current_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token')
-        cookie_path = current_app.config.get('REMEMBER_COOKIE_PATH', '/')
-        cookie_domain = current_app.config.get('REMEMBER_COOKIE_DOMAIN')
-        cookie_secure = current_app.config.get('REMEMBER_COOKIE_SECURE')
-        cookie_httponly = current_app.config.get('REMEMBER_COOKIE_HTTPONLY', True)
-        cookie_samesite = current_app.config.get('REMEMBER_COOKIE_SAMESITE')
-
-        response.delete_cookie(
-            cookie_name,
-            path=cookie_path,
-            domain=cookie_domain,
-            secure=cookie_secure,
-            httponly=cookie_httponly,
-            samesite=cookie_samesite,
-        )
-
-        return response
-
-
 @app.before_request
 def verificar_periodo_prueba():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
@@ -179,7 +120,8 @@ def verificar_periodo_prueba():
     # Rutas que no requieren verificación de plan
     rutas_excluidas = [
         'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
-        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
+        'auth.login', 'auth.register', 'auth.logout',
+        'supplier_auth.login', 'static', 'index'
     ]
     
     if (current_user.is_authenticated and 
@@ -287,18 +229,6 @@ def from_json_filter(json_str):
         return json.loads(json_str)
     except:
         return {}
-
-
-@app.cli.group()
-def secret():
-    """Comandos para trabajar con claves secretas."""
-
-
-@secret.command('gen')
-def secret_generate():
-    """Genera una SECRET_KEY aleatoria."""
-
-    click.echo(secrets.token_hex(32))
 
 
 # Create tables and initial data
@@ -439,6 +369,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Some core blueprints not available: {e}")
 
+_refresh_login_view()
+
 # Try to register optional blueprints
 try:
     from equipos_new import equipos_new_bp
@@ -461,6 +393,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Supplier portal blueprints not available: {e}")
 
+_refresh_login_view()
+
 # Try to register marketplace blueprints
 try:
     from marketplace.routes import bp as marketplace_bp
@@ -468,9 +402,6 @@ try:
     print("✅ Marketplace blueprint registered successfully")
 except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
-
-
-_refresh_login_view()
 
 
 # === MEDIA SERVING ENDPOINT ===
@@ -491,8 +422,8 @@ def forbidden(error):
 
 @app.errorhandler(401)
 def unauthorized(error):
-    from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request  
+    from flask import request, jsonify
+    # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login

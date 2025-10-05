@@ -27,5 +27,4 @@ dependencies = [
     "matplotlib>=3.10.5",
     "pillow>=11.3.0",
     "mercadopago>=2.3.0",
-    "python-dotenv>=1.0.1",
 ]

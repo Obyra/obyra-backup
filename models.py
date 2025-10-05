@@ -20,7 +20,6 @@ class Organizacion(db.Model):
     usuarios = db.relationship('Usuario', back_populates='organizacion', lazy='dynamic')
     obras = db.relationship('Obra', back_populates='organizacion', lazy='dynamic')
     inventario = db.relationship('ItemInventario', back_populates='organizacion', lazy='dynamic')
-    memberships = db.relationship('OrgMembership', back_populates='organization', lazy='dynamic')
     presupuestos = db.relationship('Presupuesto', lazy='dynamic')
     
     def __repr__(self):
@@ -71,7 +70,6 @@ class Usuario(UserMixin, db.Model):
     organizacion = db.relationship('Organizacion', back_populates='usuarios')
     obras_asignadas = db.relationship('AsignacionObra', back_populates='usuario', lazy='dynamic')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='usuario', lazy='dynamic')
-    memberships = db.relationship('OrgMembership', back_populates='user', lazy='dynamic')
     
     def __repr__(self):
         return f'<Usuario {self.nombre} {self.apellido}>'
@@ -101,23 +99,7 @@ class Usuario(UserMixin, db.Model):
     @property
     def nombre_completo(self):
         return f"{self.nombre} {self.apellido}"
-
-    @property
-    def active_membership(self):
-        """Retorna la membresía activa del usuario dentro de su organización."""
-        if not self.organizacion_id:
-            return None
-        return self.memberships.filter_by(
-            organization_id=self.organizacion_id,
-            is_active=True
-        ).first()
-
-    @property
-    def rol_organizacion(self):
-        """Obtiene el rol asignado en la membresía activa, con fallback al campo legacy."""
-        membership = self.active_membership
-        return membership.role if membership else self.rol
-
+    
     def puede_acceder_modulo(self, modulo):
         """Verifica si el usuario puede acceder a un módulo usando RBAC"""
         # Primero verificar si hay override específico de usuario
@@ -215,42 +197,16 @@ class Usuario(UserMixin, db.Model):
         # Administradores especiales tienen acceso completo
         if self.es_admin_completo():
             return True
-
+        
         # Usuarios con planes activos (standard/premium) también tienen acceso
         if self.plan_activo in ['standard', 'premium']:
             return True
-
+            
         # Usuarios en periodo de prueba válido
         if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
             return True
-
+            
         return False
-
-
-class OrgMembership(db.Model):
-    __tablename__ = 'org_memberships'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
-    role = db.Column(db.String(100), nullable=False)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    user = db.relationship('Usuario', back_populates='memberships')
-    organization = db.relationship('Organizacion', back_populates='memberships')
-
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'organization_id', name='uq_org_membership_user_org'),
-    )
-
-    def __repr__(self):
-        return f'<OrgMembership user={self.user_id} org={self.organization_id} role={self.role}>'
-
-    def deactivate(self):
-        """Marca la membresía como inactiva."""
-        self.is_active = False
 
 
 class Obra(db.Model):
