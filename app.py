@@ -69,44 +69,28 @@ login_manager.login_message_category = 'info'
 
 
 def _resolve_login_url() -> str:
-    """Devuelve una URL de login válida aun si falta un blueprint."""
-
     for endpoint in ('auth.login', 'supplier_auth.login'):
         try:
             return url_for(endpoint)
         except BuildError:
             continue
-
-    logging.warning(
-        "No se encontraron endpoints de login registrados; usando '/proveedor/login'"
-    )
     return '/proveedor/login'
 
 
 def _login_redirect():
-    """Redirige al login disponible evitando BuildError."""
     return redirect(_resolve_login_url())
 
 
 def _refresh_login_view() -> None:
-    """Sincroniza login_view con el blueprint de autenticación disponible."""
-
     for endpoint in ('auth.login', 'supplier_auth.login'):
         if endpoint in app.view_functions:
-            if login_manager.login_view != endpoint:
-                logging.info("Login view configurada en %s", endpoint)
             login_manager.login_view = endpoint
             return
-
-    if login_manager.login_view is not None:
-        logging.warning("No se encontró endpoint de login registrado; limpiando login_view")
     login_manager.login_view = None
 
 
 @app.context_processor
 def inject_login_url():
-    """Hace disponible la URL de login en todos los templates."""
-
     return {"login_url": _resolve_login_url()}
 
 
