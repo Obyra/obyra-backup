@@ -300,7 +300,7 @@ def detalle(id):
     miembro = (
         OrgMembership.query
         .filter_by(org_id=membership.org_id, user_id=id, archived=False)
-        .options(joinedload(OrgMembership.usuario))
+        .options(joinedload('usuario'))
         .first()
     )
 
@@ -337,8 +337,8 @@ def editar(id):
         OrgMembership.query
         .filter_by(org_id=membership.org_id, user_id=id, archived=False)
         .options(
-            joinedload(OrgMembership.usuario),
-            joinedload(OrgMembership.organizacion),
+            joinedload('usuario'),
+            joinedload('organizacion'),
         )
         .first()
     )
