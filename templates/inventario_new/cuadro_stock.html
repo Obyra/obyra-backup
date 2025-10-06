@@ -1,114 +1,440 @@
 {% extends "base.html" %}
 
-{% block title %}Cuadro de Stock - OBYRA IA{% endblock %}
+{% block title %}Cuadro de Stock Inteligente - OBYRA IA{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
-    <div class="row mb-4">
+    <div class="row g-4 mb-3">
         <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+            <div class="card shadow-sm border-0">
+                <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
-                        <h5 class="mb-1"><i class="fas fa-clipboard-list me-2"></i>Cuadro de Stock</h5>
-                        <p class="mb-0 small">Resumen consolidado por depósito y categoría</p>
+                        <h4 class="mb-1 fw-bold text-primary"><i class="fas fa-layer-group me-2"></i>Cuadro de Stock Integral</h4>
+                        <p class="text-muted mb-0">Visibilidad completa de materiales, maquinarias y herramientas con impacto económico en tiempo real.</p>
                     </div>
-                    <div class="text-end">
-                        <span class="badge bg-success me-2">Disponible: {{ '%.2f'|format(total_disponible) }}</span>
-                        <span class="badge bg-warning text-dark">Alertas: {{ total_bajo }}</span>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-success-subtle text-success fw-semibold px-3 py-2">
+                            <i class="fas fa-box me-1"></i>Total disponible: {{ total_disponible|round(2) }}
+                        </span>
+                        <span class="badge bg-warning-subtle text-warning fw-semibold px-3 py-2">
+                            <i class="fas fa-bell me-1"></i>Alertas activas: {{ alertas|length }}
+                        </span>
+                        <a href="{{ url_for('inventario_new.items') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-arrow-left me-1"></i>Volver al inventario
+                        </a>
                     </div>
                 </div>
-                <div class="card-body border-bottom">
-                    <form method="get" class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Depósito</label>
-                            <select name="warehouse" class="form-select">
-                                <option value="">Todos</option>
-                                {% for warehouse in warehouses %}
-                                <option value="{{ warehouse.id }}" {% if filtros.warehouse == warehouse.id %}selected{% endif %}>{{ warehouse.nombre }}</option>
-                                {% endfor %}
-                            </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card h-100 border-0 shadow-sm bg-danger-subtle">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-danger text-uppercase small mb-1">Pérdidas acumuladas</p>
+                            <h4 class="mb-0 text-danger">${{ dashboard.perdidas|round(2) }}</h4>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Categoría</label>
-                            <select name="categoria" class="form-select">
-                                <option value="">Todas</option>
-                                {% for categoria in categorias %}
-                                <option value="{{ categoria.id }}" {% if filtros.categoria == categoria.id %}selected{% endif %}>{{ categoria.full_path }}</option>
-                                {% endfor %}
-                            </select>
+                        <span class="badge bg-danger text-white">💸</span>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Costo asociado al desperdicio histórico detectado.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card h-100 border-0 shadow-sm bg-success-subtle">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-success text-uppercase small mb-1">Ahorros generados</p>
+                            <h4 class="mb-0 text-success">${{ dashboard.ahorros|round(2) }}</h4>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Buscar</label>
-                            <div class="input-group">
-                                <input type="text" name="buscar" class="form-control" placeholder="SKU o nombre" value="{{ filtros.buscar }}">
-                                <button class="btn btn-outline-primary" type="submit"><i class="fas fa-search"></i></button>
-                                <a href="{{ url_for('inventario_new.cuadro_stock') }}" class="btn btn-outline-secondary"><i class="fas fa-times"></i></a>
-                            </div>
-                        </div>
-                    </form>
+                        <span class="badge bg-success text-white">✅</span>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Ganancias por optimización y devoluciones a tiempo.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <p class="text-primary text-uppercase small mb-1">Stock crítico</p>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h4 class="mb-0 text-primary">{{ dashboard.stock_critico }}</h4>
+                        <span class="badge bg-warning text-dark">📉</span>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Items que requieren reposición inmediata para no frenar la obra.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <p class="text-info text-uppercase small mb-1">Uso vs presupuesto</p>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h4 class="mb-0 text-info">{{ dashboard.consumo_promedio|round(1) }}%</h4>
+                        <span class="badge bg-info text-white">📊</span>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Promedio de consumo real frente a lo planificado.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                <div>
+                    <h5 class="mb-1"><i class="fas fa-filter me-2"></i>Filtros inteligentes</h5>
+                    <p class="text-muted small mb-0">Personalizá la vista para tomar decisiones rápidas.</p>
+                </div>
+                <div class="text-muted small">
+                    Alertas de desperdicio a partir de <strong>{{ waste_threshold }}%</strong>.
+                </div>
+            </div>
+        </div>
+        <div class="card-body border-top">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Depósito</label>
+                    <select name="warehouse" class="form-select">
+                        <option value="">Todos</option>
+                        {% for warehouse in warehouses %}
+                            <option value="{{ warehouse.id }}" {% if filtros.warehouse == warehouse.id %}selected{% endif %}>{{ warehouse.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Categoría / Tipo</label>
+                    <select name="categoria" class="form-select">
+                        <option value="">Todas</option>
+                        {% for categoria in categorias %}
+                            <option value="{{ categoria.id }}" {% if filtros.categoria == categoria.id %}selected{% endif %}>{{ categoria.full_path }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Buscar</label>
+                    <div class="input-group">
+                        <input type="text" name="buscar" class="form-control" placeholder="Código, descripción o responsable" value="{{ filtros.buscar }}">
+                        <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
+                        <a href="{{ url_for('inventario_new.cuadro_stock') }}" class="btn btn-outline-secondary" title="Limpiar filtros">
+                            <i class="fas fa-times"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <a href="{{ url_for('inventario_new.movimientos') }}" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-sign-out-alt me-1"></i>Check-out
+                    </a>
+                    <a href="{{ url_for('inventario_new.reservas') }}" class="btn btn-outline-success w-100">
+                        <i class="fas fa-sign-in-alt me-1"></i>Check-in
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                <div>
+                    <h5 class="mb-1"><i class="fas fa-table me-2"></i>Detalle operativo y económico</h5>
+                    <p class="text-muted small mb-0">Controlá consumos, mermas y responsables en un solo tablero.</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('inventario_new.movimientos') }}" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus me-1"></i>Registrar movimiento</a>
+                    <a href="{{ url_for('inventario_new.alertas') }}" class="btn btn-outline-warning btn-sm"><i class="fas fa-exclamation-triangle me-1"></i>Ver alertas</a>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if resumen %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo / Categoría</th>
+                                <th>Descripción</th>
+                                <th>Ubicaciones</th>
+                                <th class="text-end">Disponible</th>
+                                <th class="text-end">En uso</th>
+                                <th class="text-end">Consumido</th>
+                                <th class="text-end">Desperdicio</th>
+                                <th class="text-end">Costo unitario</th>
+                                <th class="text-end">Costo desperdicio</th>
+                                <th class="text-end">% consumo</th>
+                                <th class="text-end">% desperdicio</th>
+                                <th>Responsable</th>
+                                <th>Último movimiento</th>
+                                <th>Estado</th>
+                                <th class="text-end">Ganancia / ahorro</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for fila in resumen %}
+                                <tr class="{% if fila.is_low_stock %}table-warning{% endif %}">
+                                    <td>
+                                        <div class="fw-semibold">{{ fila.categoria or 'Sin categoría' }}</div>
+                                        <span class="badge bg-secondary-subtle text-secondary">{{ fila.sku }}</span>
+                                    </td>
+                                    <td>
+                                        <strong>{{ fila.item_nombre }}</strong>
+                                        <div class="small text-muted">{{ fila.unidad }}</div>
+                                        {% if fila.observacion %}
+                                            <div class="small text-muted mt-1">
+                                                <i class="fas fa-comment-dots me-1"></i>{{ fila.observacion }}
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <ul class="list-unstyled mb-0 small">
+                                            {% for ubicacion in fila.ubicaciones %}
+                                                <li>
+                                                    <i class="fas fa-location-arrow text-muted me-1"></i>
+                                                    {{ ubicacion.nombre }}
+                                                    <span class="text-muted">({{ ubicacion.cantidad|round(2) }} {{ fila.unidad }})</span>
+                                                    {% if ubicacion.is_low %}
+                                                        <span class="badge bg-warning text-dark ms-1">Crítico</span>
+                                                    {% endif %}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </td>
+                                    <td class="text-end fw-semibold">{{ fila.total_disponible|round(2) }}</td>
+                                    <td class="text-end text-primary">{{ fila.reservado_activo|round(2) }}</td>
+                                    <td class="text-end">{{ fila.consumido|round(2) }}</td>
+                                    <td class="text-end text-danger">{{ fila.desperdicio|round(2) }}</td>
+                                    <td class="text-end">{% if fila.costo_unitario %}${{ fila.costo_unitario|round(2) }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                                    <td class="text-end text-danger">{% if fila.costo_desperdicio %}${{ fila.costo_desperdicio|round(2) }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                                    <td class="text-end">
+                                        {% if fila.consumo_presupuesto_pct is not none %}
+                                            <span class="badge bg-info-subtle text-info">{{ fila.consumo_presupuesto_pct|round(1) }}%</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-flex flex-column align-items-end">
+                                            <span class="badge bg-danger-subtle text-danger">{{ fila.desperdicio_pct|round(1) }}%</span>
+                                            <div class="progress w-100 mt-1" style="height: 4px;">
+                                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ fila.desperdicio_pct|round(1) }}%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="fw-semibold">{{ fila.responsable }}</span>
+                                    </td>
+                                    <td>
+                                        {% if fila.ultimo_movimiento %}
+                                            <span class="small text-muted"><i class="far fa-clock me-1"></i>{{ fila.ultimo_movimiento|fecha_hora }}</span>
+                                        {% else %}
+                                            <span class="text-muted small">Sin movimientos recientes</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if fila.estado == 'Crítico' %}
+                                            <span class="badge bg-danger"><i class="fas fa-skull-crossbones me-1"></i>Crítico</span>
+                                        {% elif fila.estado == 'En uso' %}
+                                            <span class="badge bg-primary"><i class="fas fa-hard-hat me-1"></i>En uso</span>
+                                        {% elif fila.estado == 'En tránsito' %}
+                                            <span class="badge bg-info text-dark"><i class="fas fa-truck-moving me-1"></i>En tránsito</span>
+                                        {% else %}
+                                            <span class="badge bg-success"><i class="fas fa-check me-1"></i>Disponible</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if fila.ahorro_estimado %}
+                                            <span class="badge bg-success-subtle text-success">${{ fila.ahorro_estimado|round(2) }}</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No se encontraron registros para los filtros seleccionados.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-bell me-2 text-warning"></i>Alertas automáticas</h5>
                 </div>
                 <div class="card-body">
-                    {% if resumen %}
-                    <div class="table-responsive">
-                        <table class="table table-striped align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>SKU</th>
-                                    <th>Item</th>
-                                    <th>Depósito</th>
-                                    <th class="text-end">Stock</th>
-                                    <th class="text-end">Stock mínimo</th>
-                                    <th>Estado</th>
-                                    <th>Último movimiento</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for fila in resumen %}
-                                <tr class="{% if fila.is_low_stock %}table-warning{% endif %}">
-                                    <td><code>{{ fila.sku }}</code></td>
-                                    <td>
-                                        <strong>{{ fila.item_nombre }}</strong><br>
-                                        <small class="text-muted">{{ fila.categoria }}</small>
-                                    </td>
-                                    <td>{{ fila.warehouse_nombre }}</td>
-                                    <td class="text-end">
-                                        {{ '%.2f'|format(fila.cantidad) }} {{ fila.unidad }}
-                                    </td>
-                                    <td class="text-end">{{ '%.2f'|format(fila.min_stock) }} {{ fila.unidad }}</td>
-                                    <td>
-                                        {% if fila.is_low_stock %}
-                                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Stock bajo</span>
+                    {% if alertas %}
+                        <div class="list-group list-group-flush">
+                            {% for alerta in alertas %}
+                                <div class="list-group-item list-group-item-action d-flex align-items-start">
+                                    <div class="me-3">
+                                        {% if alerta.nivel == 'danger' %}
+                                            <i class="fas fa-fire text-danger"></i>
+                                        {% elif alerta.nivel == 'warning' %}
+                                            <i class="fas fa-exclamation-circle text-warning"></i>
                                         {% else %}
-                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>OK</span>
+                                            <i class="fas fa-info-circle text-info"></i>
                                         {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if fila.last_movement %}
-                                        <span class="small text-muted"><i class="far fa-clock me-1"></i>{{ fila.last_movement|fecha_hora }}</span>
-                                        {% else %}
-                                        <span class="text-muted small">Sin movimientos</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">{{ alerta.tipo }}</h6>
+                                        <p class="mb-0 small text-muted">{{ alerta.mensaje }}</p>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
                     {% else %}
-                    <div class="text-center py-5">
-                        <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
-                        <p class="text-muted">No se encontraron registros para los filtros seleccionados.</p>
-                    </div>
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-shield-alt fa-2x mb-2 text-success"></i>
+                            <p class="mb-0">Sin alertas activas. ¡Excelente control operativo!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2 text-success"></i>Ranking de obras más eficientes</h5>
+                    <span class="badge bg-success-subtle text-success">Top {{ ranking_obras|length }}</span>
+                </div>
+                <div class="card-body">
+                    {% if ranking_obras %}
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Obra</th>
+                                        <th class="text-end">Consumido</th>
+                                        <th class="text-end">Desperdicio</th>
+                                        <th class="text-end">Eficiencia</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for obra in ranking_obras %}
+                                        <tr>
+                                            <td>{{ obra.nombre }}</td>
+                                            <td class="text-end">{{ obra.consumido|round(2) }}</td>
+                                            <td class="text-end text-danger">{{ obra.desperdicio|round(2) }}</td>
+                                            <td class="text-end">
+                                                <span class="badge bg-success-subtle text-success">{{ obra.eficiencia|round(1) }}%</span>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-city fa-2x mb-2"></i>
+                            <p class="mb-0">Aún no hay consumos registrados por obra.</p>
+                        </div>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
-    <div class="row">
-        <div class="col-12 text-end">
-            <a href="{{ url_for('inventario_new.items') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i>Volver al inventario
-            </a>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-users me-2 text-primary"></i>Motivación y cultura de cuidado</h5>
+            <span class="text-muted small">Reconocé a los equipos que hacen la diferencia.</span>
+        </div>
+        <div class="card-body">
+            {% if operarios_top %}
+                <div class="row g-3">
+                    {% for operario in operarios_top %}
+                        <div class="col-md-4">
+                            <div class="border rounded-3 p-3 h-100 position-relative">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <h6 class="mb-1">{{ operario.nombre }}</h6>
+                                        <p class="small text-muted mb-0">{{ operario.movimientos }} movimientos</p>
+                                    </div>
+                                    <span class="badge bg-primary text-white">{{ loop.index }}°</span>
+                                </div>
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between small">
+                                        <span>Eficiencia</span>
+                                        <strong>{{ operario.eficiencia|round(1) }}%</strong>
+                                    </div>
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ operario.eficiencia|round(1) }}%"></div>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Puntos de ahorro</span>
+                                    <span class="badge bg-success-subtle text-success">{{ operario.puntos|round(2) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-user-friends fa-2x mb-2"></i>
+                    <p class="mb-0">Registrá movimientos para comenzar a premiar a tu equipo.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-primary">Acciones rápidas</h6>
+                    <p class="text-muted small">Simplificamos la carga de datos para que los operarios adopten el sistema.</p>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('inventario_new.movimientos') }}#egreso" class="btn btn-primary">
+                            <i class="fas fa-hand-holding-box me-1"></i> Registrar consumo/productivo
+                        </a>
+                        <a href="{{ url_for('inventario_new.movimientos') }}#desperdicio" class="btn btn-outline-danger">
+                            <i class="fas fa-trash-alt me-1"></i> Reportar desperdicio/daño
+                        </a>
+                        <a href="{{ url_for('inventario_new.reservas') }}" class="btn btn-outline-success">
+                            <i class="fas fa-undo-alt me-1"></i> Devolver / liberar material
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-8">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-success">Impacto económico y cultural</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-success-subtle rounded-3 h-100">
+                                <h6 class="text-success"><i class="fas fa-seedling me-1"></i>Ahorro tangible</h6>
+                                <p class="small mb-0">Cada desperdicio reportado se traduce en pesos. Compartimos métricas claras para motivar ahorros reales en la obra.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 bg-warning-subtle rounded-3 h-100">
+                                <h6 class="text-warning"><i class="fas fa-award me-1"></i>Reconocimiento inmediato</h6>
+                                <p class="small mb-0">Ranking de equipos eficientes, puntos de responsabilidad y mensajes visuales que celebran el buen uso de recursos.</p>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="p-3 bg-info-subtle rounded-3">
+                                <h6 class="text-info"><i class="fas fa-route me-1"></i>Trazabilidad total</h6>
+                                <p class="small mb-0">Historial completo de movimientos para auditorías, certificaciones y decisiones tácticas sin depender de planillas sueltas.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
