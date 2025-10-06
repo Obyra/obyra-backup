@@ -24,10 +24,23 @@ class InventoryCategory(db.Model):
 
     @property
     def full_path(self):
-        """Obtiene la ruta completa de la categoría"""
-        if self.parent:
-            return f"{self.parent.full_path} > {self.nombre}"
-        return self.nombre
+        """Obtiene la ruta completa de la categoría con separadores jerárquicos."""
+
+        parts = []
+        current = self
+        visited = set()
+
+        while current is not None:
+            current_id = getattr(current, "id", None)
+            if current_id is not None:
+                if current_id in visited:
+                    break
+                visited.add(current_id)
+
+            parts.append(current.nombre)
+            current = current.parent
+
+        return " \u2192 ".join(reversed(parts))
 
     @property
     def org_id(self):

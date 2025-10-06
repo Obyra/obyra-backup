@@ -613,7 +613,8 @@ def _seed_category_branch(
 
     stats[status] = stats.get(status, 0) + 1
 
-    current_path = f"{path} > {categoria.nombre}".strip(" >")
+    separator = " \u2192 " if path else ""
+    current_path = f"{path}{separator}{categoria.nombre}".strip()
     if verbose:
         indent = "  " * depth
         print(f"{indent}- {current_path} [{status}]")
