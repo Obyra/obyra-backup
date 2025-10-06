@@ -9,6 +9,7 @@ from models import (
     MaintenanceTask, InventoryCategory, InventoryItem, Warehouse,
     Stock, StockMovement, StockReservation, Obra, Usuario
 )
+from seed_inventory_categories import seed_inventory_categories_for_company
 from datetime import date, datetime, timedelta
 import random
 
@@ -32,11 +33,11 @@ def seed_equipos_inventario():
         
         # 2. Crear categorías de inventario
         print("\n📂 Creando categorías de inventario...")
-        categorias = crear_categorias_inventario(org.id)
-        
+        crear_categorias_inventario(org.id)
+
         # 3. Crear items de inventario
         print("\n📦 Creando items de inventario...")
-        items = crear_items_inventario(org.id, categorias)
+        items = crear_items_inventario(org.id)
         
         # 4. Crear stock inicial
         print("\n📊 Creando stock inicial...")
@@ -85,76 +86,193 @@ def crear_depositos(company_id):
     return depositos
 
 def crear_categorias_inventario(company_id):
-    """Crear categorías de inventario"""
-    categorias_data = [
-        {"nombre": "Materiales de Construcción", "parent_id": None},
-        {"nombre": "Cemento y Hormigón", "parent_id": None},
-        {"nombre": "Hierro y Acero", "parent_id": None},
-        {"nombre": "Herramientas", "parent_id": None},
-        {"nombre": "EPP - Equipos de Protección", "parent_id": None},
-        {"nombre": "Equipos Eléctricos", "parent_id": None}
-    ]
-    
-    categorias = []
-    for data in categorias_data:
-        categoria = InventoryCategory(
-            company_id=company_id,
-            **data
-        )
-        db.session.add(categoria)
-        categorias.append(categoria)
-        print(f"  ✓ {data['nombre']}")
-    
-    db.session.flush()
-    return categorias
+    """Asegura que la organización tenga el árbol completo de categorías."""
 
-def crear_items_inventario(company_id, categorias):
+    organizacion = Organizacion.query.get(company_id)
+    if not organizacion:
+        raise ValueError("La organización indicada no existe")
+
+    creadas = seed_inventory_categories_for_company(organizacion)
+    if creadas:
+        print(f"  ✓ Se crearon {creadas} categorías nuevas")
+    else:
+        print("  • Categorías ya existentes, no se crearon registros nuevos")
+
+def _obtener_categoria_por_path(company_id, path, cache):
+    if path not in cache:
+        nombres = [segment.strip() for segment in path.split('>')]
+        parent_id = None
+        categoria = None
+        for nombre in nombres:
+            categoria = InventoryCategory.query.filter_by(
+                company_id=company_id,
+                nombre=nombre,
+                parent_id=parent_id,
+            ).first()
+            if not categoria:
+                raise ValueError(f"No se encontró la categoría para la ruta '{path}'")
+            parent_id = categoria.id
+        cache[path] = categoria
+    return cache[path]
+
+
+def crear_items_inventario(company_id):
     """Crear items de inventario demo"""
     items_data = [
-        # Cemento y Hormigón
-        {"sku": "CEM-001", "nombre": "Cemento Portland", "categoria_idx": 1, "unidad": "bolsa", "min_stock": 50},
-        {"sku": "CEM-002", "nombre": "Cal Hidráulica", "categoria_idx": 1, "unidad": "bolsa", "min_stock": 20},
-        {"sku": "HOR-001", "nombre": "Hormigón H17", "categoria_idx": 1, "unidad": "m3", "min_stock": 5},
-        
-        # Hierro y Acero
-        {"sku": "HIE-010", "nombre": "Hierro 10mm", "categoria_idx": 2, "unidad": "kg", "min_stock": 500},
-        {"sku": "HIE-012", "nombre": "Hierro 12mm", "categoria_idx": 2, "unidad": "kg", "min_stock": 300},
-        {"sku": "HIE-016", "nombre": "Hierro 16mm", "categoria_idx": 2, "unidad": "kg", "min_stock": 200},
-        
-        # Materiales
-        {"sku": "LAD-001", "nombre": "Ladrillos Comunes", "categoria_idx": 0, "unidad": "u", "min_stock": 1000},
-        {"sku": "BLO-001", "nombre": "Bloques de Hormigón", "categoria_idx": 0, "unidad": "u", "min_stock": 200},
-        {"sku": "ARE-001", "nombre": "Arena Gruesa", "categoria_idx": 0, "unidad": "m3", "min_stock": 10},
-        {"sku": "PIE-001", "nombre": "Piedra Partida", "categoria_idx": 0, "unidad": "m3", "min_stock": 8},
-        
-        # Herramientas
-        {"sku": "HER-001", "nombre": "Pala Punta", "categoria_idx": 3, "unidad": "u", "min_stock": 5},
-        {"sku": "HER-002", "nombre": "Martillo 500g", "categoria_idx": 3, "unidad": "u", "min_stock": 3},
-        {"sku": "HER-003", "nombre": "Nivel de Burbuja", "categoria_idx": 3, "unidad": "u", "min_stock": 2},
-        
+        # Cementos y aglomerantes
+        {
+            "sku": "CEM-001",
+            "nombre": "Cemento Portland",
+            "categoria_path": "Materiales de Obra > Cementos y aglomerantes > Cemento Portland",
+            "unidad": "bolsa",
+            "min_stock": 50,
+        },
+        {
+            "sku": "CEM-002",
+            "nombre": "Cal Hidráulica",
+            "categoria_path": "Materiales de Obra > Cementos y aglomerantes > Cal hidráulica",
+            "unidad": "bolsa",
+            "min_stock": 20,
+        },
+        {
+            "sku": "HOR-001",
+            "nombre": "Hormigón H17",
+            "categoria_path": "Materiales de Obra > Cementos y aglomerantes > Morteros premezclados",
+            "unidad": "m3",
+            "min_stock": 5,
+        },
+
+        # Acero y estructuras
+        {
+            "sku": "HIE-010",
+            "nombre": "Hierro 10mm",
+            "categoria_path": "Materiales de Obra > Acero y estructuras > Barras corrugadas",
+            "unidad": "kg",
+            "min_stock": 500,
+        },
+        {
+            "sku": "HIE-012",
+            "nombre": "Hierro 12mm",
+            "categoria_path": "Materiales de Obra > Acero y estructuras > Barras corrugadas",
+            "unidad": "kg",
+            "min_stock": 300,
+        },
+        {
+            "sku": "HIE-016",
+            "nombre": "Hierro 16mm",
+            "categoria_path": "Materiales de Obra > Acero y estructuras > Barras corrugadas",
+            "unidad": "kg",
+            "min_stock": 200,
+        },
+
+        # Mampostería y áridos
+        {
+            "sku": "LAD-001",
+            "nombre": "Ladrillos Comunes",
+            "categoria_path": "Materiales de Obra > Mampostería > Ladrillos cerámicos comunes",
+            "unidad": "u",
+            "min_stock": 1000,
+        },
+        {
+            "sku": "BLO-001",
+            "nombre": "Bloques de Hormigón",
+            "categoria_path": "Materiales de Obra > Mampostería > Bloques de hormigón",
+            "unidad": "u",
+            "min_stock": 200,
+        },
+        {
+            "sku": "ARE-001",
+            "nombre": "Arena Gruesa",
+            "categoria_path": "Materiales de Obra > Áridos > Arena gruesa",
+            "unidad": "m3",
+            "min_stock": 10,
+        },
+        {
+            "sku": "PIE-001",
+            "nombre": "Piedra Partida",
+            "categoria_path": "Materiales de Obra > Áridos > Piedra partida",
+            "unidad": "m3",
+            "min_stock": 8,
+        },
+
+        # Herramientas manuales y eléctricas
+        {
+            "sku": "HER-001",
+            "nombre": "Pala Punta",
+            "categoria_path": "Maquinarias y Equipos > Herramientas manuales > Palas y picos",
+            "unidad": "u",
+            "min_stock": 5,
+        },
+        {
+            "sku": "HER-002",
+            "nombre": "Martillo 500g",
+            "categoria_path": "Maquinarias y Equipos > Herramientas manuales > Mazas y martillos",
+            "unidad": "u",
+            "min_stock": 3,
+        },
+        {
+            "sku": "HER-003",
+            "nombre": "Nivel de Burbuja",
+            "categoria_path": "Maquinarias y Equipos > Herramientas manuales > Niveles manuales",
+            "unidad": "u",
+            "min_stock": 2,
+        },
+
         # EPP
-        {"sku": "EPP-001", "nombre": "Casco de Seguridad", "categoria_idx": 4, "unidad": "u", "min_stock": 20},
-        {"sku": "EPP-002", "nombre": "Guantes de Trabajo", "categoria_idx": 4, "unidad": "u", "min_stock": 50},
-        {"sku": "EPP-003", "nombre": "Botas de Seguridad", "categoria_idx": 4, "unidad": "u", "min_stock": 15},
-        
-        # Equipos Eléctricos
-        {"sku": "ELE-001", "nombre": "Cable 2.5mm", "categoria_idx": 5, "unidad": "m", "min_stock": 100},
-        {"sku": "ELE-002", "nombre": "Toma Corriente", "categoria_idx": 5, "unidad": "u", "min_stock": 20}
+        {
+            "sku": "EPP-001",
+            "nombre": "Casco de Seguridad",
+            "categoria_path": "Seguridad e Higiene > Equipos de protección personal > Cascos",
+            "unidad": "u",
+            "min_stock": 20,
+        },
+        {
+            "sku": "EPP-002",
+            "nombre": "Guantes de Trabajo",
+            "categoria_path": "Seguridad e Higiene > Equipos de protección personal > Guantes",
+            "unidad": "u",
+            "min_stock": 50,
+        },
+        {
+            "sku": "EPP-003",
+            "nombre": "Botas de Seguridad",
+            "categoria_path": "Seguridad e Higiene > Equipos de protección personal > Calzado",
+            "unidad": "u",
+            "min_stock": 15,
+        },
+
+        # Instalaciones eléctricas
+        {
+            "sku": "ELE-001",
+            "nombre": "Cable 2.5mm",
+            "categoria_path": "Instalaciones > Instalaciones eléctricas > Conductores de baja tensión",
+            "unidad": "m",
+            "min_stock": 100,
+        },
+        {
+            "sku": "ELE-002",
+            "nombre": "Toma Corriente",
+            "categoria_path": "Instalaciones > Instalaciones eléctricas > Tomacorrientes y fichas",
+            "unidad": "u",
+            "min_stock": 20,
+        },
     ]
-    
+
+    cache = {}
     items = []
     for data in items_data:
-        categoria = categorias[data.pop('categoria_idx')]
+        path = data.pop("categoria_path")
+        categoria = _obtener_categoria_por_path(company_id, path, cache)
         item = InventoryItem(
             company_id=company_id,
             categoria_id=categoria.id,
             descripcion=f"Item de inventario para construcción - {data['nombre']}",
-            **data
+            **data,
         )
         db.session.add(item)
         items.append(item)
-        print(f"  ✓ {item.sku} - {item.nombre}")
-    
+        print(f"  ✓ {item.sku} - {item.nombre} ({categoria.full_path})")
+
     db.session.flush()
     return items
 
