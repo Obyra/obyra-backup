@@ -132,6 +132,8 @@ def serialize_category(categoria: InventoryCategory) -> Dict[str, object]:
         "parent_id": categoria.parent_id,
         "sort_order": categoria.sort_order,
         "is_active": categoria.is_active,
+        "org_id": categoria.company_id,
+        "company_id": categoria.company_id,
     }
 
 
