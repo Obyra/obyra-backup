@@ -284,12 +284,7 @@ def uso_obra():
 @inventario_bp.route('/categorias')
 @login_required
 def categorias():
-    if current_user.rol != 'administrador':
-        flash('No tienes permisos para gestionar categorías.', 'danger')
-        return redirect(url_for('inventario.lista'))
-    
-    categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
-    return render_template('inventario/categorias.html', categorias=categorias)
+    return redirect(url_for('inventario_new.categorias'))
 
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required

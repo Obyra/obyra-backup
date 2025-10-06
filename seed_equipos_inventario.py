@@ -92,7 +92,8 @@ def crear_categorias_inventario(company_id):
     if not organizacion:
         raise ValueError("La organización indicada no existe")
 
-    creadas = seed_inventory_categories_for_company(organizacion)
+    stats = seed_inventory_categories_for_company(organizacion)
+    creadas = stats.get('created', 0)
     if creadas:
         print(f"  ✓ Se crearon {creadas} categorías nuevas")
     else:

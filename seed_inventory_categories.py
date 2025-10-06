@@ -9,10 +9,14 @@ registros.
 
 from __future__ import annotations
 
+import argparse
+import sys
+from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from app import app, db
+from extensions import db
 from models import InventoryCategory, Organizacion
+from sqlalchemy import func
 
 DEFAULT_CATEGORY_TREE: List[Dict[str, object]] = [
     {
@@ -553,7 +557,8 @@ def _get_or_create_category(
     company_id: int,
     nombre: str,
     parent: Optional[InventoryCategory],
-) -> Tuple[InventoryCategory, bool]:
+    sort_order: int,
+) -> Tuple[InventoryCategory, str]:
     """Obtiene o crea una categoría para la organización dada."""
 
     existing = InventoryCategory.query.filter_by(
@@ -563,67 +568,203 @@ def _get_or_create_category(
     ).first()
 
     if existing:
-        return existing, False
+        status = 'existing'
+        if not getattr(existing, 'is_active', True):
+            existing.is_active = True
+            status = 'reactivated'
+
+        if getattr(existing, 'sort_order', sort_order) != sort_order:
+            existing.sort_order = sort_order
+
+        return existing, status
 
     categoria = InventoryCategory(
         company_id=company_id,
         nombre=nombre,
         parent_id=parent.id if parent else None,
+        sort_order=sort_order,
+        is_active=True,
     )
     db.session.add(categoria)
     db.session.flush()
-    return categoria, True
+    return categoria, 'created'
 
 
 def _seed_category_branch(
-    company_id: int, data: Dict[str, object], parent: Optional[InventoryCategory] = None
+    company_id: int,
+    data: Dict[str, object],
+    parent: Optional[InventoryCategory] = None,
+    *,
+    depth: int = 0,
+    position: int = 0,
+    path: str = "",
+    stats: Optional[Dict[str, int]] = None,
+    verbose: bool = False,
 ) -> int:
-    categoria, created = _get_or_create_category(
+    if stats is None:
+        stats = defaultdict(int)
+
+    categoria, status = _get_or_create_category(
         company_id=company_id,
         nombre=data["nombre"],
         parent=parent,
+        sort_order=position,
     )
 
-    total_created = int(created)
-    for child in data.get("children", []) or []:
-        total_created += _seed_category_branch(company_id, child, categoria)
+    stats[status] = stats.get(status, 0) + 1
+
+    current_path = f"{path} > {categoria.nombre}".strip(" >")
+    if verbose:
+        indent = "  " * depth
+        print(f"{indent}- {current_path} [{status}]")
+
+    total_created = 1 if status == 'created' else 0
+    for idx, child in enumerate(data.get("children", []) or []):
+        total_created += _seed_category_branch(
+            company_id,
+            child,
+            categoria,
+            depth=depth + 1,
+            position=idx,
+            path=current_path,
+            stats=stats,
+            verbose=verbose,
+        )
     return total_created
 
 
-def seed_inventory_categories_for_company(company: Organizacion) -> int:
+def seed_inventory_categories_for_company(
+    company: Organizacion,
+    *,
+    verbose: bool = False,
+) -> Dict[str, int]:
     """Crea la estructura completa de categorías para la organización dada."""
 
-    creadas = 0
-    for categoria in DEFAULT_CATEGORY_TREE:
-        creadas += _seed_category_branch(company.id, categoria)
-    return creadas
+    stats: Dict[str, int] = defaultdict(int)
+    for index, categoria in enumerate(DEFAULT_CATEGORY_TREE):
+        _seed_category_branch(
+            company.id,
+            categoria,
+            position=index,
+            stats=stats,
+            verbose=verbose,
+        )
+
+    # Aseguramos que todas las claves existan aunque no se hayan utilizado
+    for key in ("created", "existing", "reactivated"):
+        stats.setdefault(key, 0)
+
+    return dict(stats)
 
 
-def seed_inventory_categories_for_all() -> None:
+def seed_inventory_categories_for_all(*, verbose: bool = False) -> Dict[int, Dict[str, int]]:
     """Genera las categorías para todas las organizaciones registradas."""
 
     organizaciones = Organizacion.query.all()
     if not organizaciones:
         print("❌ No se encontraron organizaciones. Crea una antes de correr el seed.")
-        return
+        return {}
 
-    total_empresas = 0
-    total_categorias = 0
+    resultados: Dict[int, Dict[str, int]] = {}
     for organizacion in organizaciones:
-        creadas = seed_inventory_categories_for_company(organizacion)
-        total_empresas += 1
-        total_categorias += creadas
-        print(
-            f"🏗️  {organizacion.nombre}: {creadas} categorías nuevas (total: {len(organizacion.inventory_categories)})"
-        )
+        stats = seed_inventory_categories_for_company(organizacion, verbose=verbose)
+        resultados[organizacion.id] = stats
+        if verbose:
+            print(
+                "\n📂 Resumen:",
+                f"creadas={stats['created']}",
+                f"existentes={stats['existing']}",
+                f"reactivadas={stats['reactivated']}",
+            )
 
     db.session.commit()
-    print(
-        f"\n✅ Seed finalizado para {total_empresas} organizaciones. "
-        f"Se crearon {total_categorias} categorías nuevas."
+
+    return resultados
+
+
+def _resolve_organization(identifier: str) -> Optional[Organizacion]:
+    """Obtiene una organización por id, slug o nombre."""
+
+    identifier = identifier.strip()
+    if identifier.isdigit():
+        return Organizacion.query.get(int(identifier))
+
+    if hasattr(Organizacion, 'slug'):
+        org = Organizacion.query.filter_by(slug=identifier).first()
+        if org:
+            return org
+
+    by_token = Organizacion.query.filter_by(token_invitacion=identifier).first()
+    if by_token:
+        return by_token
+
+    lowered = identifier.lower()
+    return (
+        Organizacion.query
+        .filter(func.lower(Organizacion.nombre) == lowered)
+        .first()
     )
 
 
-if __name__ == "__main__":
+def _print_seed_summary(nombre: str, stats: Dict[str, int]) -> None:
+    """Imprime un resumen compacto del seed para una organización."""
+
+    created = stats.get('created', 0)
+    existing = stats.get('existing', 0)
+    reactivated = stats.get('reactivated', 0)
+    print(
+        f"🏗️  {nombre}: created={created}, existing={existing}, reactivated={reactivated}"
+    )
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """Punto de entrada CLI."""
+
+    parser = argparse.ArgumentParser(description='Seed de categorías de inventario')
+    parser.add_argument('--org', help='ID, slug, token o nombre de la organización destino')
+    parser.add_argument('--all', action='store_true', help='Sembrar todas las organizaciones')
+    parser.add_argument('--quiet', action='store_true', help='Oculta el detalle por categoría')
+
+    args = parser.parse_args(argv)
+
+    if args.org and args.all:
+        parser.error('Usa --org o --all, pero no ambos.')
+
+    verbose = not args.quiet
+
+    from app import app
+
     with app.app_context():
-        seed_inventory_categories_for_all()
+        if args.all or not args.org:
+            resultados = seed_inventory_categories_for_all(verbose=verbose)
+            if not resultados:
+                return 1
+
+            total_creadas = sum(stats.get('created', 0) for stats in resultados.values())
+            if not verbose:
+                for org_id, stats in resultados.items():
+                    organizacion = Organizacion.query.get(org_id)
+                    if organizacion:
+                        _print_seed_summary(organizacion.nombre, stats)
+            print(f"\n✅ Seed finalizado. Categorías nuevas: {total_creadas}")
+            return 0
+
+        organizacion = _resolve_organization(args.org)
+        if not organizacion:
+            print(f"❌ No se encontró la organización '{args.org}'.")
+            return 1
+
+        stats = seed_inventory_categories_for_company(organizacion, verbose=verbose)
+        db.session.commit()
+
+        if not verbose:
+            _print_seed_summary(organizacion.nombre, stats)
+        else:
+            print("\n📂 Resumen final:")
+            _print_seed_summary(organizacion.nombre, stats)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

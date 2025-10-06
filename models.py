@@ -1901,13 +1901,15 @@ class MaintenanceAttachment(db.Model):
 
 class InventoryCategory(db.Model):
     __tablename__ = 'inventory_category'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'))
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relaciones
     company = db.relationship('Organizacion', backref='inventory_categories')
     parent = db.relationship('InventoryCategory', remote_side=[id], backref='children')
@@ -1915,13 +1917,18 @@ class InventoryCategory(db.Model):
     
     def __repr__(self):
         return f'<InventoryCategory {self.nombre}>'
-    
+
     @property
     def full_path(self):
         """Obtiene la ruta completa de la categoría"""
         if self.parent:
             return f"{self.parent.full_path} > {self.nombre}"
         return self.nombre
+
+    @property
+    def org_id(self):
+        """Alias compatible con nomenclatura org_id"""
+        return self.company_id
 
 
 class InventoryItem(db.Model):

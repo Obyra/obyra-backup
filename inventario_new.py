@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -18,6 +19,7 @@ from models import (
     InventoryCategory,
     InventoryItem,
     ItemInventario,
+    Organizacion,
     Obra,
     Stock,
     StockMovement,
@@ -28,6 +30,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import aliased
 
 from services.memberships import get_current_org_id
+from seed_inventory_categories import seed_inventory_categories_for_company
 
 WASTE_KEYWORDS = (
     'desperd',
@@ -41,7 +44,12 @@ WASTE_KEYWORDS = (
     'averia',
 )
 
-inventario_new_bp = Blueprint('inventario_new', __name__, url_prefix='/inventario')
+inventario_new_bp = Blueprint(
+    'inventario_new',
+    __name__,
+    url_prefix='/inventario',
+    template_folder='templates',
+)
 
 def requires_role(*roles):
     """Decorator para verificar roles"""
@@ -64,6 +72,53 @@ def get_json_response(data, status=200, error=None):
             return jsonify({'error': error}), status
         return jsonify(data), status
     return None
+
+
+def _query_active_categories(company_id: int) -> List[InventoryCategory]:
+    """Obtiene categorías activas ordenadas para la organización."""
+
+    return (
+        InventoryCategory.query
+        .filter(
+            InventoryCategory.company_id == company_id,
+            InventoryCategory.is_active.is_(True),
+        )
+        .order_by(InventoryCategory.sort_order, InventoryCategory.nombre)
+        .all()
+    )
+
+
+def _build_category_tree(
+    categorias: List[InventoryCategory],
+) -> List[Dict[str, object]]:
+    """Arma un árbol jerárquico para renderizado."""
+
+    children_map: Dict[Optional[int], List[InventoryCategory]] = defaultdict(list)
+    for categoria in categorias:
+        children_map[categoria.parent_id].append(categoria)
+
+    for bucket in children_map.values():
+        bucket.sort(key=lambda cat: ((cat.sort_order or 0), cat.nombre.lower()))
+
+    def build(parent_id: Optional[int] = None) -> List[Dict[str, object]]:
+        nodes: List[Dict[str, object]] = []
+        for categoria in children_map.get(parent_id, []):
+            nodes.append({
+                'categoria': categoria,
+                'children': build(categoria.id),
+            })
+        return nodes
+
+    return build()
+
+
+def _resolve_company(company_id: int) -> Optional[Organizacion]:
+    """Obtiene la organización asociada al id."""
+
+    if getattr(current_user, 'organizacion', None) and current_user.organizacion.id == company_id:
+        return current_user.organizacion
+
+    return Organizacion.query.get(company_id)
 
 
 def _resolve_company_id() -> int | None:
@@ -458,7 +513,7 @@ def items():
         return json_resp
     
     # Obtener categorías para filtros
-    categorias = InventoryCategory.query.filter_by(company_id=company_id).all()
+    categorias = _query_active_categories(company_id)
 
     return render_template('inventario_new/items.html',
                          items=items,
@@ -710,12 +765,7 @@ def cuadro_stock():
         .order_by(Warehouse.nombre)
         .all()
     )
-    categorias = (
-        InventoryCategory.query
-        .filter_by(company_id=company_id)
-        .order_by(InventoryCategory.nombre)
-        .all()
-    )
+    categorias = _query_active_categories(company_id)
 
     filtros = {
         'warehouse': warehouse_id,
@@ -746,12 +796,97 @@ def cuadro_stock():
         waste_threshold=waste_threshold,
     )
 
+
+@inventario_new_bp.route('/categorias', methods=['GET'])
+@login_required
+@requires_role('administrador', 'compras')
+def categorias():
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    company = _resolve_company(company_id)
+    if not company:
+        flash('No pudimos cargar la organización seleccionada.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    categorias = _query_active_categories(company_id)
+    auto_seeded = False
+    seed_stats = {'created': 0, 'existing': 0, 'reactivated': 0}
+
+    if not categorias:
+        seed_stats = seed_inventory_categories_for_company(company)
+        if seed_stats.get('created') or seed_stats.get('reactivated'):
+            db.session.commit()
+            categorias = _query_active_categories(company_id)
+            auto_seeded = True
+
+    category_tree = _build_category_tree(categorias)
+
+    return render_template(
+        'inventario/categorias.html',
+        categorias=categorias,
+        category_tree=category_tree,
+        auto_seeded=auto_seeded,
+        seed_stats=seed_stats,
+        company=company,
+    )
+
+
+@inventario_new_bp.post('/categorias/seed')
+@login_required
+@requires_role('administrador', 'compras')
+def seed_categorias_manual():
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
+        return redirect(url_for('inventario_new.categorias'))
+
+    company = _resolve_company(company_id)
+    if not company:
+        flash('No encontramos la organización seleccionada.', 'danger')
+        return redirect(url_for('inventario_new.categorias'))
+
+    stats = seed_inventory_categories_for_company(company)
+    db.session.commit()
+
+    created = stats.get('created', 0)
+    existing = stats.get('existing', 0)
+    reactivated = stats.get('reactivated', 0)
+
+    message = (
+        f"Catálogo listo: {created} nuevas, {existing} existentes, {reactivated} reactivadas."
+    )
+    flash(message, 'success' if created else 'info')
+
+    return redirect(url_for('inventario_new.categorias'))
+
+
 @inventario_new_bp.route('/items/nuevo', methods=['GET', 'POST'])
 @login_required
 @requires_role('administrador', 'compras')
 def nuevo_item():
-    categorias = InventoryCategory.query.filter_by(company_id=current_user.organizacion_id).all()
-    
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
+        return redirect(url_for('inventario_new.items'))
+
+    categorias = _query_active_categories(company_id)
+    if not categorias:
+        company = _resolve_company(company_id)
+        if company:
+            stats = seed_inventory_categories_for_company(company)
+            if stats.get('created') or stats.get('reactivated'):
+                db.session.commit()
+                categorias = _query_active_categories(company_id)
+                created = stats.get('created', 0)
+                reactivated = stats.get('reactivated', 0)
+                flash(
+                    f'Se inicializó el catálogo (creadas: {created}, reactivadas: {reactivated}).',
+                    'info',
+                )
+
     if request.method == 'POST':
         # Validaciones
         required_fields = ['sku', 'nombre', 'categoria_id', 'unidad']
