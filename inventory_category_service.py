@@ -19,10 +19,14 @@ def _sort_categories(categorias: List[InventoryCategory]) -> List[InventoryCateg
     # `full_path` already walks the parent chain, so we can rely on it for
     # deterministic ordering inside dropdowns and reports. As a safety net we
     # fall back to the primary key to avoid unstable ordering when names repeat.
+    def _path_key(categoria: InventoryCategory) -> str:
+        path = categoria.full_path or categoria.nombre or ""
+        return path.casefold()
+
     return sorted(
         categorias,
         key=lambda categoria: (
-            (categoria.full_path or categoria.nombre or "").lower(),
+            _path_key(categoria),
             categoria.id or 0,
         ),
     )
@@ -69,12 +73,13 @@ def ensure_categories_for_company(
         return categorias, stats, auto_seeded
 
     stats = seed_inventory_categories_for_company(company)
-    if stats.get("created") or stats.get("reactivated"):
+
+    pending_changes = bool(db.session.new) or bool(db.session.dirty)
+    if pending_changes:
         db.session.commit()
-        categorias = get_active_categories(company.id)
-        auto_seeded = True
-    else:
-        categorias = []
+
+    categorias = get_active_categories(company.id)
+    auto_seeded = bool(stats.get("created") or stats.get("reactivated") or pending_changes)
 
     return _sort_categories(categorias), stats, auto_seeded
 
