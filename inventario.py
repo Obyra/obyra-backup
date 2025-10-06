@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from pathlib import Path
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
 from flask_login import login_required, current_user
 from datetime import date
 from collections import defaultdict
@@ -56,7 +57,9 @@ def _build_category_tree(categorias: List[InventoryCategory]) -> List[Dict[str, 
 
     return build()
 
-inventario_bp = Blueprint('inventario', __name__, template_folder='templates')
+TEMPLATE_ROOT = Path(__file__).resolve().parent / 'templates'
+
+inventario_bp = Blueprint('inventario', __name__, template_folder=str(TEMPLATE_ROOT))
 
 @inventario_bp.route('/')
 @login_required
@@ -295,6 +298,8 @@ def categorias():
     categorias, seed_stats, auto_seeded = ensure_categories_for_company(company)
 
     category_tree = _build_category_tree(categorias)
+
+    current_app.jinja_env.get_or_select_template('inventario/categorias.html')
 
     return render_template(
         'inventario/categorias.html',

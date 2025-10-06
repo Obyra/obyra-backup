@@ -1,4 +1,5 @@
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -50,11 +51,13 @@ WASTE_KEYWORDS = (
     'averia',
 )
 
+TEMPLATE_ROOT = Path(__file__).resolve().parent / 'templates'
+
 inventario_new_bp = Blueprint(
     'inventario_new',
     __name__,
     url_prefix='/inventario',
-    template_folder='templates',
+    template_folder=str(TEMPLATE_ROOT),
 )
 
 def requires_role(*roles):
