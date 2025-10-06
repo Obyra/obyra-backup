@@ -75,11 +75,32 @@ def ensure_categories_for_company(
     stats = seed_inventory_categories_for_company(company)
 
     pending_changes = bool(db.session.new) or bool(db.session.dirty)
-    if pending_changes:
+
+    # `seed_inventory_categories_for_company` ejecuta `db.session.flush()` para
+    # obtener los identificadores de las categorías recién creadas. Una vez que
+    # el flush ocurre, SQLAlchemy considera a esas filas como "persistentes",
+    # por lo que `db.session.new` queda vacío aunque todavía no se hayan
+    # confirmado en la base de datos. Esto provocaba que la siembra automática
+    # se revirtiera al final de la petición, dejando el catálogo vacío.
+    #
+    # Para evitarlo, confirmamos explícitamente el `commit` cuando la siembra
+    # reporta filas creadas o reactivadas, además de cuando detectamos cambios
+    # pendientes en la sesión.
+    should_commit = (
+        pending_changes
+        or bool(stats.get("created"))
+        or bool(stats.get("reactivated"))
+    )
+
+    if should_commit:
         db.session.commit()
 
     categorias = get_active_categories(company.id)
-    auto_seeded = bool(stats.get("created") or stats.get("reactivated") or pending_changes)
+    auto_seeded = bool(
+        stats.get("created")
+        or stats.get("reactivated")
+        or should_commit
+    )
 
     return _sort_categories(categorias), stats, auto_seeded
 
