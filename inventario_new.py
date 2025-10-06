@@ -35,6 +35,7 @@ from inventory_category_service import (
     ensure_categories_for_company,
     ensure_categories_for_company_id,
     get_active_categories,
+    get_active_category_options,
 )
 
 WASTE_KEYWORDS = (
@@ -843,6 +844,28 @@ def seed_categorias_manual():
     flash(message, 'success' if created else 'info')
 
     return redirect(url_for('inventario_new.categorias'))
+
+
+@inventario_new_bp.get('/api/categorias')
+@login_required
+def api_categorias():
+    company_id = _resolve_company_id()
+    if not company_id:
+        return jsonify({'error': 'Organización no seleccionada'}), 400
+
+    categorias = get_active_category_options(company_id)
+
+    payload = [
+        {
+            'id': categoria.id,
+            'nombre': categoria.nombre,
+            'full_path': categoria.full_path,
+            'parent_id': categoria.parent_id,
+        }
+        for categoria in categorias
+    ]
+
+    return jsonify({'categorias': payload})
 
 
 @inventario_new_bp.route('/items/nuevo', methods=['GET', 'POST'])

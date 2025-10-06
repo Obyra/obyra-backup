@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import func
+
 from extensions import db
 from models import InventoryCategory, Organizacion
 from seed_inventory_categories import seed_inventory_categories_for_company
@@ -11,15 +13,27 @@ from seed_inventory_categories import seed_inventory_categories_for_company
 def get_active_categories(company_id: int) -> List[InventoryCategory]:
     """Return ordered active categories for the given organization."""
 
+    sort_expr = [func.coalesce(InventoryCategory.sort_order, 0), InventoryCategory.nombre]
+
     return (
         InventoryCategory.query
         .filter(
             InventoryCategory.company_id == company_id,
             InventoryCategory.is_active.is_(True),
         )
-        .order_by(InventoryCategory.sort_order, InventoryCategory.nombre)
+        .order_by(*sort_expr)
         .all()
     )
+
+
+def get_active_category_options(company_id: int) -> List[InventoryCategory]:
+    """Return active categories, auto-seeding when the catalogue is empty."""
+
+    categorias, _, _, _ = ensure_categories_for_company_id(company_id)
+    if categorias:
+        return categorias
+
+    return get_active_categories(company_id)
 
 
 def ensure_categories_for_company(
