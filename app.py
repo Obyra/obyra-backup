@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import importlib
 import click
@@ -27,6 +28,39 @@ from services.memberships import (
     get_current_org_id,
 )
 from extensions import db, login_manager
+
+
+def _ensure_utf8_io() -> None:
+    """Force UTF-8 aware standard streams so CLI prints never fail."""
+
+    target_encoding = "utf-8"
+    os.environ.setdefault("PYTHONIOENCODING", target_encoding)
+
+    if not hasattr(sys, "stdout") or not hasattr(sys, "stderr"):
+        return
+
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            continue
+        try:
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding=target_encoding)
+            elif hasattr(stream, "buffer"):
+                import io
+
+                stream.flush()
+                wrapped = io.TextIOWrapper(
+                    stream.buffer,
+                    encoding=target_encoding,
+                    errors="replace",
+                )
+                setattr(sys, name, wrapped)
+        except Exception:
+            continue
+
+
+_ensure_utf8_io()
 
 # create the app
 app = Flask(__name__)

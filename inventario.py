@@ -1,11 +1,62 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_required, current_user
 from datetime import date
-from app import db
-from models import (ItemInventario, CategoriaInventario, MovimientoInventario, 
-                   UsoInventario, Obra)
+from collections import defaultdict
+from typing import Dict, List, Optional
 
-inventario_bp = Blueprint('inventario', __name__)
+from app import db
+from models import (
+    ItemInventario,
+    CategoriaInventario,
+    MovimientoInventario,
+    UsoInventario,
+    Obra,
+)
+from services.memberships import get_current_org_id
+
+from inventario_new import nuevo_item as nuevo_item_view
+from models import InventoryCategory, Organizacion
+from seed_inventory_categories import seed_inventory_categories_for_company
+from inventory_category_service import (
+    ensure_categories_for_company,
+    ensure_categories_for_company_id,
+    get_active_categories,
+)
+
+
+def _resolve_company_id() -> Optional[int]:
+    org_id = get_current_org_id()
+    if org_id:
+        return org_id
+    return getattr(current_user, 'organizacion_id', None)
+
+
+def _resolve_company(company_id: int) -> Optional[Organizacion]:
+    if getattr(current_user, 'organizacion', None) and current_user.organizacion.id == company_id:
+        return current_user.organizacion
+    return Organizacion.query.get(company_id)
+
+
+def _build_category_tree(categorias: List[InventoryCategory]) -> List[Dict[str, object]]:
+    children_map: Dict[Optional[int], List[InventoryCategory]] = defaultdict(list)
+    for categoria in categorias:
+        children_map[categoria.parent_id].append(categoria)
+
+    for bucket in children_map.values():
+        bucket.sort(key=lambda cat: ((cat.sort_order or 0), cat.nombre.lower()))
+
+    def build(parent_id: Optional[int] = None) -> List[Dict[str, object]]:
+        nodes: List[Dict[str, object]] = []
+        for categoria in children_map.get(parent_id, []):
+            nodes.append({
+                'categoria': categoria,
+                'children': build(categoria.id),
+            })
+        return nodes
+
+    return build()
+
+inventario_bp = Blueprint('inventario', __name__, template_folder='templates')
 
 @inventario_bp.route('/')
 @login_required
@@ -56,65 +107,8 @@ def crear():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para crear items de inventario.', 'danger')
         return redirect(url_for('inventario.lista'))
-    
-    categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
-    
-    if request.method == 'POST':
-        categoria_id = request.form.get('categoria_id')
-        codigo = request.form.get('codigo')
-        nombre = request.form.get('nombre')
-        descripcion = request.form.get('descripcion')
-        unidad = request.form.get('unidad')
-        stock_actual = request.form.get('stock_actual', 0)
-        stock_minimo = request.form.get('stock_minimo', 0)
-        precio_promedio = request.form.get('precio_promedio', 0)
-        
-        # Validaciones
-        if not all([categoria_id, codigo, nombre, unidad]):
-            flash('Por favor, completa todos los campos obligatorios.', 'danger')
-            return render_template('inventario/crear.html', categorias=categorias)
-        
-        # Verificar que el código no exista
-        if ItemInventario.query.filter_by(codigo=codigo).first():
-            flash('Ya existe un item con ese código.', 'danger')
-            return render_template('inventario/crear.html', categorias=categorias)
-        
-        try:
-            nuevo_item = ItemInventario(
-                categoria_id=categoria_id,
-                codigo=codigo,
-                nombre=nombre,
-                descripcion=descripcion,
-                unidad=unidad,
-                stock_actual=float(stock_actual),
-                stock_minimo=float(stock_minimo),
-                precio_promedio=float(precio_promedio)
-            )
-            
-            db.session.add(nuevo_item)
-            db.session.commit()
-            
-            # Registrar movimiento inicial si hay stock
-            if float(stock_actual) > 0:
-                movimiento = MovimientoInventario(
-                    item_id=nuevo_item.id,
-                    tipo='entrada',
-                    cantidad=float(stock_actual),
-                    precio_unitario=float(precio_promedio),
-                    motivo='Stock inicial',
-                    usuario_id=current_user.id
-                )
-                db.session.add(movimiento)
-                db.session.commit()
-            
-            flash(f'Item "{nombre}" creado exitosamente.', 'success')
-            return redirect(url_for('inventario.detalle', id=nuevo_item.id))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash('Error al crear el item. Intenta nuevamente.', 'danger')
-    
-    return render_template('inventario/crear.html', categorias=categorias)
+
+    return nuevo_item_view()
 
 @inventario_bp.route('/<int:id>')
 @login_required
@@ -284,44 +278,59 @@ def uso_obra():
 @inventario_bp.route('/categorias')
 @login_required
 def categorias():
-    if current_user.rol != 'administrador':
-        flash('No tienes permisos para gestionar categorías.', 'danger')
-        return redirect(url_for('inventario.lista'))
-    
-    categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
-    return render_template('inventario/categorias.html', categorias=categorias)
+    if not current_user.puede_acceder_modulo('inventario'):
+        flash('No tienes permisos para acceder al catálogo de categorías.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    company = _resolve_company(company_id)
+    if not company:
+        flash('No pudimos cargar la organización seleccionada.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    categorias, seed_stats, auto_seeded = ensure_categories_for_company(company)
+
+    category_tree = _build_category_tree(categorias)
+
+    return render_template(
+        'inventario/categorias.html',
+        categorias=categorias,
+        category_tree=category_tree,
+        auto_seeded=auto_seeded,
+        seed_stats=seed_stats,
+        company=company,
+    )
 
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required
 def crear_categoria():
-    if current_user.rol != 'administrador':
-        flash('No tienes permisos para crear categorías.', 'danger')
+    if not current_user.puede_acceder_modulo('inventario'):
+        flash('No tienes permisos para actualizar el catálogo.', 'danger')
         return redirect(url_for('inventario.categorias'))
-    
-    nombre = request.form.get('nombre')
-    descripcion = request.form.get('descripcion')
-    tipo = request.form.get('tipo')
-    
-    if not all([nombre, tipo]):
-        flash('Nombre y tipo son obligatorios.', 'danger')
+
+    company_id = _resolve_company_id()
+    if not company_id:
+        flash('No pudimos determinar la organización actual.', 'warning')
         return redirect(url_for('inventario.categorias'))
-    
-    if CategoriaInventario.query.filter_by(nombre=nombre).first():
-        flash('Ya existe una categoría con ese nombre.', 'danger')
+
+    company = _resolve_company(company_id)
+    if not company:
+        flash('No encontramos la organización seleccionada.', 'danger')
         return redirect(url_for('inventario.categorias'))
-    
-    nueva_categoria = CategoriaInventario(
-        nombre=nombre,
-        descripcion=descripcion,
-        tipo=tipo
+
+    stats = seed_inventory_categories_for_company(company)
+    db.session.commit()
+
+    created = stats.get('created', 0)
+    existing = stats.get('existing', 0)
+    reactivated = stats.get('reactivated', 0)
+    message = (
+        f"Catálogo listo: {created} nuevas, {existing} existentes, {reactivated} reactivadas."
     )
-    
-    try:
-        db.session.add(nueva_categoria)
-        db.session.commit()
-        flash(f'Categoría "{nombre}" creada exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al crear la categoría.', 'danger')
-    
+
+    flash(message, 'success' if created else 'info')
     return redirect(url_for('inventario.categorias'))

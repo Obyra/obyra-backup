@@ -30,8 +30,8 @@
                                     <select class="form-select" id="categoria_id" name="categoria_id" required>
                                         <option value="">Seleccionar categoría...</option>
                                         {% for categoria in categorias %}
-                                        <option value="{{ categoria.id }}" data-tipo="{{ categoria.tipo }}">
-                                            {{ categoria.nombre }} ({{ categoria.tipo.title() }})
+                                        <option value="{{ categoria.id }}">
+                                            {{ categoria.full_path }}
                                         </option>
                                         {% endfor %}
                                     </select>
