@@ -31,6 +31,11 @@ from sqlalchemy.orm import aliased
 
 from services.memberships import get_current_org_id
 from seed_inventory_categories import seed_inventory_categories_for_company
+from inventory_category_service import (
+    ensure_categories_for_company,
+    ensure_categories_for_company_id,
+    get_active_categories,
+)
 
 WASTE_KEYWORDS = (
     'desperd',
@@ -72,20 +77,6 @@ def get_json_response(data, status=200, error=None):
             return jsonify({'error': error}), status
         return jsonify(data), status
     return None
-
-
-def _query_active_categories(company_id: int) -> List[InventoryCategory]:
-    """Obtiene categorías activas ordenadas para la organización."""
-
-    return (
-        InventoryCategory.query
-        .filter(
-            InventoryCategory.company_id == company_id,
-            InventoryCategory.is_active.is_(True),
-        )
-        .order_by(InventoryCategory.sort_order, InventoryCategory.nombre)
-        .all()
-    )
 
 
 def _build_category_tree(
@@ -513,7 +504,7 @@ def items():
         return json_resp
     
     # Obtener categorías para filtros
-    categorias = _query_active_categories(company_id)
+    categorias = get_active_categories(company_id)
 
     return render_template('inventario_new/items.html',
                          items=items,
@@ -765,7 +756,7 @@ def cuadro_stock():
         .order_by(Warehouse.nombre)
         .all()
     )
-    categorias = _query_active_categories(company_id)
+    categorias = get_active_categories(company_id)
 
     filtros = {
         'warehouse': warehouse_id,
@@ -811,16 +802,7 @@ def categorias():
         flash('No pudimos cargar la organización seleccionada.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    categorias = _query_active_categories(company_id)
-    auto_seeded = False
-    seed_stats = {'created': 0, 'existing': 0, 'reactivated': 0}
-
-    if not categorias:
-        seed_stats = seed_inventory_categories_for_company(company)
-        if seed_stats.get('created') or seed_stats.get('reactivated'):
-            db.session.commit()
-            categorias = _query_active_categories(company_id)
-            auto_seeded = True
+    categorias, seed_stats, auto_seeded = ensure_categories_for_company(company)
 
     category_tree = _build_category_tree(categorias)
 
@@ -872,20 +854,14 @@ def nuevo_item():
         flash('No pudimos determinar la organización actual.', 'warning')
         return redirect(url_for('inventario_new.items'))
 
-    categorias = _query_active_categories(company_id)
-    if not categorias:
-        company = _resolve_company(company_id)
-        if company:
-            stats = seed_inventory_categories_for_company(company)
-            if stats.get('created') or stats.get('reactivated'):
-                db.session.commit()
-                categorias = _query_active_categories(company_id)
-                created = stats.get('created', 0)
-                reactivated = stats.get('reactivated', 0)
-                flash(
-                    f'Se inicializó el catálogo (creadas: {created}, reactivadas: {reactivated}).',
-                    'info',
-                )
+    categorias, seed_stats, auto_seeded, company = ensure_categories_for_company_id(company_id)
+    if auto_seeded:
+        created = seed_stats.get('created', 0)
+        reactivated = seed_stats.get('reactivated', 0)
+        flash(
+            f'Se inicializó el catálogo (creadas: {created}, reactivadas: {reactivated}).',
+            'info',
+        )
 
     if request.method == 'POST':
         # Validaciones

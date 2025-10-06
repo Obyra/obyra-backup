@@ -17,6 +17,11 @@ from services.memberships import get_current_org_id
 from inventario_new import nuevo_item as nuevo_item_view
 from models import InventoryCategory, Organizacion
 from seed_inventory_categories import seed_inventory_categories_for_company
+from inventory_category_service import (
+    ensure_categories_for_company,
+    ensure_categories_for_company_id,
+    get_active_categories,
+)
 
 
 def _resolve_company_id() -> Optional[int]:
@@ -30,18 +35,6 @@ def _resolve_company(company_id: int) -> Optional[Organizacion]:
     if getattr(current_user, 'organizacion', None) and current_user.organizacion.id == company_id:
         return current_user.organizacion
     return Organizacion.query.get(company_id)
-
-
-def _query_active_categories(company_id: int) -> List[InventoryCategory]:
-    return (
-        InventoryCategory.query
-        .filter(
-            InventoryCategory.company_id == company_id,
-            InventoryCategory.is_active.is_(True),
-        )
-        .order_by(InventoryCategory.sort_order, InventoryCategory.nombre)
-        .all()
-    )
 
 
 def _build_category_tree(categorias: List[InventoryCategory]) -> List[Dict[str, object]]:
@@ -299,16 +292,7 @@ def categorias():
         flash('No pudimos cargar la organización seleccionada.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    categorias = _query_active_categories(company_id)
-    auto_seeded = False
-    seed_stats = {'created': 0, 'existing': 0, 'reactivated': 0}
-
-    if not categorias:
-        seed_stats = seed_inventory_categories_for_company(company)
-        if seed_stats.get('created') or seed_stats.get('reactivated'):
-            db.session.commit()
-            categorias = _query_active_categories(company_id)
-            auto_seeded = True
+    categorias, seed_stats, auto_seeded = ensure_categories_for_company(company)
 
     category_tree = _build_category_tree(categorias)
 
