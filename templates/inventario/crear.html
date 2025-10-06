@@ -27,7 +27,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="categoria_id" class="form-label">Categoría *</label>
-                                    <select class="form-select" id="categoria_id" name="categoria_id" required>
+                                    <select class="form-select" id="categoria_id" name="categoria_id" required data-categories-endpoint="{{ url_for('inventario.api_categorias') }}">
                                         <option value="">Seleccionar categoría...</option>
                                         {% for categoria in categorias %}
                                         <option value="{{ categoria.id }}">
@@ -35,13 +35,11 @@
                                         </option>
                                         {% endfor %}
                                     </select>
-                                    {% if not categorias %}
-                                    <div class="form-text text-warning">
+                                    <div class="form-text text-warning" data-category-empty {% if categorias %}hidden{% endif %}>
                                         <i class="fas fa-exclamation-triangle me-1"></i>
-                                        No hay categorías disponibles. 
+                                        No hay categorías disponibles.
                                         <a href="{{ url_for('inventario.categorias') }}">Crear una categoría primero</a>.
                                     </div>
-                                    {% endif %}
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -148,68 +146,154 @@ document.addEventListener('DOMContentLoaded', function() {
     const codigoInput = document.getElementById('codigo');
     const nombreInput = document.getElementById('nombre');
     const categoriaSelect = document.getElementById('categoria_id');
-    
-    // Generar código automático basado en categoría y nombre
+    const categoryWarning = document.querySelector('[data-category-empty]');
+    const categoriesEndpoint = categoriaSelect ? categoriaSelect.dataset.categoriesEndpoint : null;
+    const initialCategoryOptions = {{ category_options|default([], true)|tojson }};
+
+    const toggleCategoryWarning = (show) => {
+        if (!categoryWarning) {
+            return;
+        }
+        if (show) {
+            categoryWarning.removeAttribute('hidden');
+        } else {
+            categoryWarning.setAttribute('hidden', 'hidden');
+        }
+    };
+
+    const populateCategorySelect = (options, { preserveSelection = true } = {}) => {
+        if (!categoriaSelect) {
+            return;
+        }
+
+        const previousValue = preserveSelection ? categoriaSelect.value : '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Seleccionar categoría...';
+
+        categoriaSelect.innerHTML = '';
+        categoriaSelect.appendChild(defaultOption);
+
+        (options || []).forEach((option) => {
+            if (!option || typeof option !== 'object') {
+                return;
+            }
+            const opt = document.createElement('option');
+            opt.value = option.id;
+            opt.textContent = option.full_path || option.nombre || '';
+            if (option.parent_id) {
+                opt.dataset.parentId = option.parent_id;
+            }
+            categoriaSelect.appendChild(opt);
+        });
+
+        if (preserveSelection && previousValue) {
+            const matchingOption = Array.from(categoriaSelect.options).find((opt) => opt.value === previousValue);
+            if (matchingOption) {
+                categoriaSelect.value = previousValue;
+            }
+        }
+    };
+
+    const refreshCategories = async () => {
+        if (!categoriesEndpoint || !categoriaSelect) {
+            return;
+        }
+
+        try {
+            const response = await fetch(categoriesEndpoint, { headers: { Accept: 'application/json' } });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const payload = await response.json();
+            const options = Array.isArray(payload?.categorias) ? payload.categorias : [];
+            if (options.length) {
+                populateCategorySelect(options);
+                toggleCategoryWarning(false);
+            } else {
+                toggleCategoryWarning(true);
+            }
+        } catch (error) {
+            console.warn('No se pudieron cargar las categorías del inventario', error);
+            if (!categoriaSelect || categoriaSelect.options.length <= 1) {
+                toggleCategoryWarning(true);
+            }
+        }
+    };
+
+    if (initialCategoryOptions.length) {
+        populateCategorySelect(initialCategoryOptions, { preserveSelection: false });
+        toggleCategoryWarning(false);
+    } else if (categoriaSelect && categoriaSelect.options.length > 1) {
+        toggleCategoryWarning(false);
+    }
+
+    refreshCategories();
+    window.addEventListener('obyra:org-changed', refreshCategories);
+    document.addEventListener('obyra:inventory-categories:refresh', refreshCategories);
+
     function generarCodigo() {
+        if (!categoriaSelect) {
+            return;
+        }
         const categoria = categoriaSelect.options[categoriaSelect.selectedIndex];
         const nombre = nombreInput.value;
-        
+
         if (categoria && categoria.value && nombre) {
             const categoriaNombre = categoria.text.split('(')[0].trim();
             const prefijo = categoriaNombre.substring(0, 3).toUpperCase();
             const sufijo = nombre.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
-            
+
             if (sufijo) {
                 const timestamp = Date.now().toString().slice(-3);
                 codigoInput.value = prefijo + sufijo + timestamp;
             }
         }
     }
-    
-    // Eventos para generar código automático
-    categoriaSelect.addEventListener('change', generarCodigo);
+
+    if (categoriaSelect) {
+        categoriaSelect.addEventListener('change', generarCodigo);
+        categoriaSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const tipo = selectedOption ? selectedOption.getAttribute('data-tipo') : null;
+
+            const descripcionInput = document.getElementById('descripcion');
+            let placeholder = '';
+
+            switch(tipo) {
+                case 'material':
+                    placeholder = 'Ej: Cemento Portland tipo I, bolsa de 50kg, marca Loma Negra...';
+                    break;
+                case 'herramienta':
+                    placeholder = 'Ej: Taladro eléctrico 850W, mandril 13mm, marca Bosch modelo GSB...';
+                    break;
+                case 'maquinaria':
+                    placeholder = 'Ej: Mezcladora de concreto 120L, motor 2HP, marca Stark...';
+                    break;
+                default:
+                    placeholder = '';
+                    break;
+            }
+
+            descripcionInput.placeholder = placeholder;
+        });
+    }
+
     nombreInput.addEventListener('blur', function() {
         if (!codigoInput.value) {
             generarCodigo();
         }
     });
-    
-    // Validar código único
+
     codigoInput.addEventListener('blur', function() {
         const codigo = this.value;
         if (codigo) {
-            // Aquí podrías agregar una validación AJAX para verificar unicidad
-            // Por ahora solo mostramos el formato esperado
             if (!/^[A-Z0-9]{6,10}$/.test(codigo)) {
                 this.setCustomValidity('El código debe tener entre 6-10 caracteres alfanuméricos en mayúsculas');
             } else {
                 this.setCustomValidity('');
             }
         }
-    });
-    
-    // Auto-complete sugerencias basadas en tipo
-    categoriaSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        const tipo = selectedOption.getAttribute('data-tipo');
-        
-        // Mostrar ayuda contextual según el tipo
-        const descripcionInput = document.getElementById('descripcion');
-        let placeholder = '';
-        
-        switch(tipo) {
-            case 'material':
-                placeholder = 'Ej: Cemento Portland tipo I, bolsa de 50kg, marca Loma Negra...';
-                break;
-            case 'herramienta':
-                placeholder = 'Ej: Taladro eléctrico 850W, mandril 13mm, marca Bosch modelo GSB...';
-                break;
-            case 'maquinaria':
-                placeholder = 'Ej: Mezcladora de concreto 120L, motor 2HP, marca Stark...';
-                break;
-        }
-        
-        descripcionInput.placeholder = placeholder;
     });
 });
 </script>

@@ -36,7 +36,8 @@ from inventory_category_service import (
     ensure_categories_for_company,
     ensure_categories_for_company_id,
     get_active_categories,
-    get_active_category_options,
+    get_active_category_payload,
+    serialize_category,
 )
 
 WASTE_KEYWORDS = (
@@ -856,24 +857,14 @@ def api_categorias():
     if not company_id:
         return jsonify({'error': 'Organización no seleccionada'}), 400
 
-    categorias = get_active_category_options(company_id)
-
-    payload = [
-        {
-            'id': categoria.id,
-            'nombre': categoria.nombre,
-            'full_path': categoria.full_path,
-            'parent_id': categoria.parent_id,
-        }
-        for categoria in categorias
-    ]
+    payload = get_active_category_payload(company_id)
 
     return jsonify({'categorias': payload})
 
 
 @inventario_new_bp.route('/items/nuevo', methods=['GET', 'POST'])
 @login_required
-@requires_role('administrador', 'compras')
+@requires_role('administrador', 'compras', 'tecnico')
 def nuevo_item():
     company_id = _resolve_company_id()
     if not company_id:
@@ -881,6 +872,7 @@ def nuevo_item():
         return redirect(url_for('inventario_new.items'))
 
     categorias, seed_stats, auto_seeded, company = ensure_categories_for_company_id(company_id)
+    category_options = [serialize_category(categoria) for categoria in categorias]
     if auto_seeded:
         created = seed_stats.get('created', 0)
         reactivated = seed_stats.get('reactivated', 0)
@@ -899,7 +891,11 @@ def nuevo_item():
                 if json_resp:
                     return json_resp
                 flash(error, 'danger')
-                return render_template('inventario_new/item_form.html', categorias=categorias)
+                return render_template(
+                    'inventario_new/item_form.html',
+                    categorias=categorias,
+                    category_options=category_options,
+                )
         
         # Verificar SKU único
         sku = request.form.get('sku')
@@ -909,7 +905,11 @@ def nuevo_item():
             if json_resp:
                 return json_resp
             flash(error, 'danger')
-            return render_template('inventario_new/item_form.html', categorias=categorias)
+            return render_template(
+                'inventario_new/item_form.html',
+                categorias=categorias,
+                category_options=category_options,
+            )
         
         try:
             item = InventoryItem(
@@ -928,7 +928,7 @@ def nuevo_item():
             json_resp = get_json_response({'id': item.id, 'mensaje': 'Item creado exitosamente'})
             if json_resp:
                 return json_resp
-                
+
             flash('Item creado exitosamente.', 'success')
             return redirect(url_for('inventario_new.detalle_item', id=item.id))
             
@@ -939,8 +939,13 @@ def nuevo_item():
             if json_resp:
                 return json_resp
             flash(error, 'danger')
-    
-    return render_template('inventario_new/item_form.html', categorias=categorias, item=None)
+
+    return render_template(
+        'inventario_new/item_form.html',
+        categorias=categorias,
+        category_options=category_options,
+        item=None,
+    )
 
 @inventario_new_bp.route('/items/<int:id>')
 @login_required

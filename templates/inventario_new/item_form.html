@@ -37,7 +37,7 @@
                         
                         <div class="col-md-6">
                             <label for="categoria_id" class="form-label">Categoría *</label>
-                            <select class="form-select" id="categoria_id" name="categoria_id" required>
+                            <select class="form-select" id="categoria_id" name="categoria_id" required data-categories-endpoint="{{ url_for('inventario.api_categorias') }}">
                                 <option value="">Seleccionar categoría...</option>
                                 {% for categoria in categorias %}
                                     <option value="{{ categoria.id }}" 
@@ -46,12 +46,10 @@
                                     </option>
                                 {% endfor %}
                             </select>
-                            {% if not categorias %}
-                                <div class="form-text text-warning">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Necesitas crear categorías primero
-                                </div>
-                            {% endif %}
+                            <div class="form-text text-warning" data-category-empty {% if categorias %}hidden{% endif %}>
+                                <i class="fas fa-info-circle me-1"></i>
+                                Necesitas crear categorías primero
+                            </div>
                         </div>
                         
                         <div class="col-md-6">
@@ -161,13 +159,112 @@
 </div>
 
 <script>
-// Función para crear categoría via AJAX (simplificado)
-document.getElementById('categoriaForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    // Aquí iría la llamada AJAX para crear la categoría
-    // Por simplicidad, recargamos la página
-    alert('Para crear categorías, usa el módulo de configuración del inventario');
-    $('#categoriaModal').modal('hide');
+document.addEventListener('DOMContentLoaded', () => {
+    const categoriaSelect = document.getElementById('categoria_id');
+    const categoryWarning = document.querySelector('[data-category-empty]');
+    const categoriesEndpoint = categoriaSelect ? categoriaSelect.dataset.categoriesEndpoint : null;
+    const initialCategoryOptions = {{ category_options|default([], true)|tojson }};
+
+    const toggleCategoryWarning = (show) => {
+        if (!categoryWarning) {
+            return;
+        }
+        if (show) {
+            categoryWarning.removeAttribute('hidden');
+        } else {
+            categoryWarning.setAttribute('hidden', 'hidden');
+        }
+    };
+
+    const populateCategorySelect = (options, { preserveSelection = true } = {}) => {
+        if (!categoriaSelect) {
+            return;
+        }
+
+        const previousValue = preserveSelection ? categoriaSelect.value : '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Seleccionar categoría...';
+
+        categoriaSelect.innerHTML = '';
+        categoriaSelect.appendChild(defaultOption);
+
+        (options || []).forEach((option) => {
+            if (!option || typeof option !== 'object') {
+                return;
+            }
+            const opt = document.createElement('option');
+            opt.value = option.id;
+            opt.textContent = option.full_path || option.nombre || '';
+            if (option.parent_id) {
+                opt.dataset.parentId = option.parent_id;
+            }
+            categoriaSelect.appendChild(opt);
+        });
+
+        if (preserveSelection && previousValue) {
+            const matchingOption = Array.from(categoriaSelect.options).find((opt) => opt.value === previousValue);
+            if (matchingOption) {
+                categoriaSelect.value = previousValue;
+            }
+        }
+    };
+
+    const refreshCategories = async () => {
+        if (!categoriesEndpoint || !categoriaSelect) {
+            return;
+        }
+
+        try {
+            const response = await fetch(categoriesEndpoint, { headers: { Accept: 'application/json' } });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const payload = await response.json();
+            const options = Array.isArray(payload?.categorias) ? payload.categorias : [];
+            if (options.length) {
+                populateCategorySelect(options);
+                toggleCategoryWarning(false);
+            } else {
+                toggleCategoryWarning(true);
+            }
+        } catch (error) {
+            console.warn('No se pudieron cargar las categorías del inventario', error);
+            if (!categoriaSelect || categoriaSelect.options.length <= 1) {
+                toggleCategoryWarning(true);
+            }
+        }
+    };
+
+    if (initialCategoryOptions.length) {
+        populateCategorySelect(initialCategoryOptions, { preserveSelection: false });
+        toggleCategoryWarning(false);
+    } else if (categoriaSelect && categoriaSelect.options.length > 1) {
+        toggleCategoryWarning(false);
+    }
+
+    refreshCategories();
+    window.addEventListener('obyra:org-changed', refreshCategories);
+    document.addEventListener('obyra:inventory-categories:refresh', refreshCategories);
+
+    const categoriaForm = document.getElementById('categoriaForm');
+    if (categoriaForm) {
+        categoriaForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            alert('Para crear categorías, usa el módulo de configuración del inventario');
+            const modalElement = document.getElementById('categoriaModal');
+            if (modalElement) {
+                const modalInstance = (window.bootstrap && window.bootstrap.Modal.getInstance)
+                    ? window.bootstrap.Modal.getInstance(modalElement)
+                    : null;
+                if (modalInstance) {
+                    modalInstance.hide();
+                } else if (window.bootstrap && window.bootstrap.Modal) {
+                    new window.bootstrap.Modal(modalElement).hide();
+                }
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

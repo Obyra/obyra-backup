@@ -30,7 +30,7 @@ from inventory_category_service import (
     ensure_categories_for_company,
     ensure_categories_for_company_id,
     get_active_categories,
-    get_active_category_options,
+    get_active_category_payload,
 )
 
 
@@ -325,17 +325,7 @@ def api_categorias():
     if not company_id:
         return jsonify({'error': 'Organización no seleccionada'}), 400
 
-    categorias = get_active_category_options(company_id)
-
-    payload = [
-        {
-            'id': categoria.id,
-            'nombre': categoria.nombre,
-            'full_path': categoria.full_path,
-            'parent_id': categoria.parent_id,
-        }
-        for categoria in categorias
-    ]
+    payload = get_active_category_payload(company_id)
 
     return jsonify({'categorias': payload})
 
