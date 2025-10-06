@@ -1,5 +1,13 @@
-from pathlib import Path
-from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    flash,
+    redirect,
+    url_for,
+    current_app,
+    jsonify,
+)
 from flask_login import login_required, current_user
 from datetime import date
 from collections import defaultdict
@@ -22,6 +30,7 @@ from inventory_category_service import (
     ensure_categories_for_company,
     ensure_categories_for_company_id,
     get_active_categories,
+    get_active_category_options,
 )
 
 
@@ -57,9 +66,7 @@ def _build_category_tree(categorias: List[InventoryCategory]) -> List[Dict[str, 
 
     return build()
 
-TEMPLATE_ROOT = Path(__file__).resolve().parent / 'templates'
-
-inventario_bp = Blueprint('inventario', __name__, template_folder=str(TEMPLATE_ROOT))
+inventario_bp = Blueprint('inventario', __name__, template_folder='templates')
 
 @inventario_bp.route('/')
 @login_required
@@ -309,6 +316,28 @@ def categorias():
         seed_stats=seed_stats,
         company=company,
     )
+
+
+@inventario_bp.get('/api/categorias')
+@login_required
+def api_categorias():
+    company_id = _resolve_company_id()
+    if not company_id:
+        return jsonify({'error': 'Organización no seleccionada'}), 400
+
+    categorias = get_active_category_options(company_id)
+
+    payload = [
+        {
+            'id': categoria.id,
+            'nombre': categoria.nombre,
+            'full_path': categoria.full_path,
+            'parent_id': categoria.parent_id,
+        }
+        for categoria in categorias
+    ]
+
+    return jsonify({'categorias': payload})
 
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required
