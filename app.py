@@ -1,10 +1,22 @@
 import os
+import sys
 import logging
 import importlib
 import click
 from decimal import Decimal, InvalidOperation
 from typing import Optional
-from flask import Flask, render_template, redirect, url_for, flash, send_from_directory, request, g, session
+from flask import (
+    Flask,
+    render_template,
+    redirect,
+    url_for,
+    flash,
+    send_from_directory,
+    request,
+    g,
+    session,
+    has_request_context,
+)
 from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -16,6 +28,39 @@ from services.memberships import (
     get_current_org_id,
 )
 from extensions import db, login_manager
+
+
+def _ensure_utf8_io() -> None:
+    """Force UTF-8 aware standard streams so CLI prints never fail."""
+
+    target_encoding = "utf-8"
+    os.environ.setdefault("PYTHONIOENCODING", target_encoding)
+
+    if not hasattr(sys, "stdout") or not hasattr(sys, "stderr"):
+        return
+
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            continue
+        try:
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding=target_encoding)
+            elif hasattr(stream, "buffer"):
+                import io
+
+                stream.flush()
+                wrapped = io.TextIOWrapper(
+                    stream.buffer,
+                    encoding=target_encoding,
+                    errors="replace",
+                )
+                setattr(sys, name, wrapped)
+        except Exception:
+            continue
+
+
+_ensure_utf8_io()
 
 # create the app
 app = Flask(__name__)
@@ -75,26 +120,61 @@ app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-def _resolve_login_endpoint(app) -> str:
-    """Return the first available login endpoint, falling back to the landing page."""
+
+
+def _resolve_login_endpoint() -> Optional[str]:
+    """Return the first available login endpoint, prioritising auth blueprints."""
 
     candidate_endpoints = (
-        'auth.login',
-        'supplier_auth.login',
-        'auth_login',
-        'index',
+        "auth.login",
+        "supplier_auth.login",
+        "auth_login",
+        "index",
     )
 
     for endpoint in candidate_endpoints:
         if endpoint in app.view_functions:
             return endpoint
 
-    return 'index'
+    return None
 
 
-login_manager.login_view = 'index'
+def _resolve_login_url() -> str:
+    """Return the URL corresponding to the active login endpoint."""
+
+    endpoint = _resolve_login_endpoint()
+    if not endpoint:
+        return "/"
+
+    try:
+        if has_request_context():
+            return url_for(endpoint)
+        with app.test_request_context():
+            return url_for(endpoint)
+    except Exception:
+        return "/"
+
+
+def _login_redirect():
+    """Redirect users to the most appropriate login page."""
+
+    return redirect(_resolve_login_url())
+
+
+def _refresh_login_view():
+    """Synchronise the login manager with the currently available login endpoint."""
+
+    login_manager.login_view = _resolve_login_endpoint()
+
+
+login_manager.login_view = None
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
+
+
+@app.context_processor
+def inject_login_url():
+    return {"login_url": _resolve_login_url()}
 
 db_cli = AppGroup('db')
 
@@ -406,7 +486,7 @@ def index():
 @app.route('/login', endpoint='auth_login')
 def legacy_login_redirect():
     """Mantener compatibilidad con rutas antiguas /login"""
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 
 @app.route('/dashboard')
@@ -416,7 +496,7 @@ def dashboard():
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 
 # Filtros personalizados
@@ -720,6 +800,8 @@ if core_failures:
 else:
     print("✅ Core blueprints registered successfully")
 
+_refresh_login_view()
+
 if app.config.get("ENABLE_REPORTS_SERVICE"):
     try:
         import matplotlib  # noqa: F401 - sanity check for optional dependency
@@ -772,6 +854,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Supplier portal blueprints not available: {e}")
 
+_refresh_login_view()
+
 # Try to register marketplace blueprints
 try:
     from marketplace.routes import bp as marketplace_bp
@@ -780,7 +864,7 @@ try:
 except ImportError as e:
     print(f"⚠️ Marketplace blueprint not available: {e}")
 
-login_manager.login_view = _resolve_login_endpoint(app)
+_refresh_login_view()
 
 
 # --- Public legal pages fallbacks ---------------------------------------
@@ -848,7 +932,7 @@ def unauthorized(error):
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     # For regular web requests, redirect to login
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 @app.errorhandler(404)
 def not_found(error):
