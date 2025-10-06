@@ -1,119 +1,87 @@
 {% extends "base.html" %}
 
-{% macro render_category_nodes(nodes, level=0) %}
-    <ul class="list-unstyled {% if level > 0 %}ms-3 ps-3 border-start border-2 border-primary{% endif %}">
-        {% for node in nodes %}
-            <li class="mb-3">
-                {% set items_count = node.categoria.items|length %}
-                <div class="d-flex justify-content-between align-items-start gap-3">
-                    <div>
-                        <div class="fw-semibold text-capitalize">{{ node.categoria.nombre }}</div>
-                        <div class="text-muted small">{{ node.categoria.full_path }}</div>
-                    </div>
-                    <span class="badge bg-light text-muted small">
-                        {{ items_count }} {{ 'ítem' if items_count == 1 else 'ítems' }}
-                    </span>
-                </div>
-                {% if node.children %}
-                    {{ render_category_nodes(node.children, level + 1) }}
-                {% endif %}
-            </li>
-        {% endfor %}
-    </ul>
+{% macro render_nodes(nodes, level=0) %}
+<ul class="list-group list-group-flush ms-{{ level * 3 }}">
+    {% for node in nodes %}
+    <li class="list-group-item">
+        <div class="d-flex justify-content-between align-items-start gap-3">
+            <div>
+                <div class="fw-semibold text-capitalize">{{ node.categoria.nombre }}</div>
+                <div class="text-muted small">{{ node.categoria.full_path }}</div>
+            </div>
+            <span class="badge bg-light text-muted">
+                {{ node.categoria.items|length }} {{ 'ítem' if node.categoria.items|length == 1 else 'ítems' }}
+            </span>
+        </div>
+        {% if node.children %}
+        {{ render_nodes(node.children, level + 1) }}
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
 {% endmacro %}
 
-{% block title %}Categorías de Inventario - OBYRA IA{% endblock %}
+{% block title %}Catálogo de categorías - Inventario{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-3 align-items-center g-2">
-        <div class="col d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
-            <div>
-                <h2 class="mb-0">
-                    <i class="fas fa-tags me-2 text-primary"></i>
-                    Catálogo de Categorías
-                </h2>
-                {% if company %}
-                    <p class="text-muted mb-0 small">
-                        Organización activa: <strong>{{ company.nombre }}</strong>
-                    </p>
-                {% endif %}
-            </div>
-            <div class="d-flex gap-2">
-                <a href="{{ url_for('inventario_new.items') }}" class="btn btn-outline-secondary">
-                    <i class="fas fa-arrow-left me-1"></i>Volver al inventario
-                </a>
-                <form method="post" action="{{ url_for('inventario.crear_categoria') }}">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-seedling me-1"></i>Sembrar catálogo
-                    </button>
-                </form>
-            </div>
+<div class="container py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2">
+        <div>
+            <h1 class="h3 mb-1">Catálogo de categorías</h1>
+            {% if company %}
+            <p class="text-muted mb-0 small">Organización activa: <strong>{{ company.nombre }}</strong></p>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('inventario_new.items') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver al inventario
+            </a>
+            <form method="post" action="{{ url_for('inventario.crear_categoria') }}">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-seedling me-1"></i>Sembrar catálogo
+                </button>
+            </form>
         </div>
     </div>
 
     {% if auto_seeded %}
-    <div class="alert alert-success shadow-sm">
-        <i class="fas fa-magic me-2"></i>
-        Se generó automáticamente la estructura inicial de categorías para esta organización.
+    <div class="alert alert-success">
+        <i class="fas fa-magic me-1"></i>Se generó automáticamente la estructura inicial de categorías para esta organización.
     </div>
     {% endif %}
 
-    <div class="row">
+    <div class="row g-4">
         <div class="col-lg-4">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white">
-                    <i class="fas fa-chart-pie me-2 text-primary"></i>
-                    Resumen del catálogo
-                </div>
+            <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <p class="text-muted small">
-                        Estas categorías organizan materiales, equipos y consumibles, habilitando reportes de consumo,
-                        desperdicio y reservas por obra.
-                    </p>
-                    <div class="d-flex flex-column gap-2">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted">Categorías activas</span>
-                            <span class="badge bg-primary-subtle text-primary fs-6 px-3 py-2">{{ categorias|length }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted">Creadas en la última siembra</span>
-                            <span class="badge bg-success-subtle text-success px-3 py-2">{{ seed_stats.created }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted">Existentes conservadas</span>
-                            <span class="badge bg-secondary-subtle text-secondary px-3 py-2">{{ seed_stats.existing }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted">Reactivadas</span>
-                            <span class="badge bg-warning-subtle text-warning px-3 py-2">{{ seed_stats.reactivated }}</span>
-                        </div>
-                    </div>
-                    <hr>
-                    <p class="small text-muted mb-0">
-                        ¿No ves las categorías que necesitas? Utilizá el botón “Sembrar catálogo” para regenerar la jerarquía
-                        predeterminada. El proceso es idempotente y respeta las categorías existentes.
-                    </p>
+                    <h2 class="h6 text-uppercase text-muted">Resumen</h2>
+                    <dl class="row small mb-0">
+                        <dt class="col-7">Categorías activas</dt>
+                        <dd class="col-5 text-end fw-semibold">{{ categorias|length }}</dd>
+                        <dt class="col-7">Creadas en la siembra</dt>
+                        <dd class="col-5 text-end">{{ seed_stats.created }}</dd>
+                        <dt class="col-7">Existentes conservadas</dt>
+                        <dd class="col-5 text-end">{{ seed_stats.existing }}</dd>
+                        <dt class="col-7">Reactivadas</dt>
+                        <dd class="col-5 text-end">{{ seed_stats.reactivated }}</dd>
+                    </dl>
                 </div>
             </div>
         </div>
         <div class="col-lg-8">
             <div class="card shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <div>
-                        <i class="fas fa-sitemap me-2 text-primary"></i>
-                        Estructura jerárquica
-                    </div>
+                    <span><i class="fas fa-sitemap me-1"></i>Estructura jerárquica</span>
                     <span class="badge bg-light text-muted">{{ categorias|length }} categorías</span>
                 </div>
                 <div class="card-body">
                     {% if category_tree %}
-                        {{ render_category_nodes(category_tree) }}
+                        {{ render_nodes(category_tree) }}
                     {% else %}
                         <div class="text-center text-muted py-5">
-                            <i class="fas fa-layer-group fa-3x mb-3"></i>
-                            <p class="mb-1">Aún no hay categorías registradas.</p>
-                            <p class="small">Sembrá el catálogo para cargar la jerarquía recomendada.</p>
+                            <i class="fas fa-layer-group fa-2x mb-3"></i>
+                            <p class="mb-1">Todavía no hay categorías cargadas.</p>
+                            <p class="small mb-0">Usá “Sembrar catálogo” para generar la jerarquía recomendada.</p>
                         </div>
                     {% endif %}
                 </div>
