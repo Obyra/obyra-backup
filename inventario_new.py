@@ -859,7 +859,7 @@ def api_categorias():
 
     payload = get_active_category_payload(company_id)
 
-    return jsonify({'categorias': payload})
+    return jsonify(payload)
 
 
 @inventario_new_bp.route('/items/nuevo', methods=['GET', 'POST'])

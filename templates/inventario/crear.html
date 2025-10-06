@@ -206,7 +206,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(`HTTP ${response.status}`);
             }
             const payload = await response.json();
-            const options = Array.isArray(payload?.categorias) ? payload.categorias : [];
+            const options = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.categorias)
+                    ? payload.categorias
+                    : [];
             if (options.length) {
                 populateCategorySelect(options);
                 toggleCategoryWarning(false);

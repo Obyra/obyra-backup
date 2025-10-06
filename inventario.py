@@ -327,7 +327,7 @@ def api_categorias():
 
     payload = get_active_category_payload(company_id)
 
-    return jsonify({'categorias': payload})
+    return jsonify(payload)
 
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required
