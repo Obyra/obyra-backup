@@ -823,7 +823,7 @@ def categorias():
     return render_category_catalog(context)
 
 
-@inventario_new_bp.post('/categorias/seed')
+@inventario_new_bp.route('/categorias/seed', methods=['POST'])
 @login_required
 @requires_role('administrador', 'compras')
 def seed_categorias_manual():
@@ -852,7 +852,7 @@ def seed_categorias_manual():
     return redirect(url_for('inventario_new.categorias'))
 
 
-@inventario_new_bp.get('/api/categorias')
+@inventario_new_bp.route('/api/categorias', methods=['GET'])
 @login_required
 def api_categorias():
     company_id = _resolve_company_id()

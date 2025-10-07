@@ -63,6 +63,29 @@ def _ensure_utf8_io() -> None:
 
 _ensure_utf8_io()
 
+_builtin_print = print
+
+
+def _safe_cli_print(*args, **kwargs):
+    """Print helper that strips unsupported characters on narrow consoles."""
+
+    target = kwargs.get("file", sys.stdout)
+    encoding = getattr(target, "encoding", None) or os.environ.get("PYTHONIOENCODING") or "utf-8"
+
+    safe_args = []
+    for arg in args:
+        text = str(arg)
+        try:
+            text.encode(encoding, errors="strict")
+        except Exception:
+            text = text.encode("ascii", "ignore").decode("ascii")
+        safe_args.append(text)
+
+    _builtin_print(*safe_args, **kwargs)
+
+
+print = _safe_cli_print  # type: ignore[assignment]
+
 # create the app
 app = Flask(__name__)
 app.secret_key = (

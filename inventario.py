@@ -320,7 +320,7 @@ def categorias():
     return render_category_catalog(context)
 
 
-@inventario_bp.get('/api/categorias')
+@inventario_bp.route('/api/categorias', methods=['GET'])
 @login_required
 def api_categorias():
     company_id = _resolve_company_id()
