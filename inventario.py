@@ -337,7 +337,7 @@ def api_categorias():
 
     if auto_seeded or seed_stats.get('created') or seed_stats.get('reactivated'):
         current_app.logger.info(
-            "Inventory catalogue auto-seeded for org %s (created=%s existing=%s reactivated=%s)",
+            "[inventario] categorías auto-sembradas para org=%s (creadas=%s existentes=%s reactivadas=%s)",
             company_id,
             seed_stats.get('created', 0),
             seed_stats.get('existing', 0),
@@ -345,6 +345,7 @@ def api_categorias():
         )
 
     payload = [serialize_category(categoria) for categoria in categorias]
+    payload.sort(key=lambda categoria: (categoria.get('full_path') or '').casefold())
 
     if not payload:
         current_app.logger.warning(

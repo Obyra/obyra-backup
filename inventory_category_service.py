@@ -125,16 +125,14 @@ def ensure_categories_for_company_id(
 def serialize_category(categoria: InventoryCategory) -> Dict[str, object]:
     """Serialize a category for dropdown/API consumption."""
 
+    full_path = categoria.full_path or categoria.nombre or ""
+
     return {
         "id": categoria.id,
-        "nombre": categoria.nombre,
         "name": categoria.nombre,
-        "full_path": categoria.full_path,
+        "full_path": full_path,
+        "is_active": bool(categoria.is_active),
         "parent_id": categoria.parent_id,
-        "sort_order": categoria.sort_order,
-        "is_active": categoria.is_active,
-        "org_id": categoria.company_id,
-        "company_id": categoria.company_id,
     }
 
 

@@ -195,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const opt = document.createElement('option');
             opt.value = option.id;
-            opt.textContent = option.full_path || option.nombre || '';
+            opt.textContent = option.full_path || option.name || '';
             if (option.parent_id) {
                 opt.dataset.parentId = option.parent_id;
             }
