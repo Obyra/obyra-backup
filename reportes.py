@@ -180,7 +180,8 @@ def dashboard():
     env_name = (current_app.config.get('ENV') or '').lower()
     is_dev_env = current_app.debug or env_name in {'development', 'dev'}
     reports_service_enabled = bool(current_app.config.get('ENABLE_REPORTS_SERVICE'))
-    should_warn_reports = (not reports_service_enabled) or (not CHARTS_ENABLED)
+    # Solo advertir cuando se intentó habilitar el servicio pero faltan dependencias opcionales.
+    should_warn_reports = reports_service_enabled and (not CHARTS_ENABLED)
     show_reports_banner = is_admin_user and is_dev_env and should_warn_reports
 
     return render_template('reportes/dashboard.html',
