@@ -11,6 +11,9 @@ from models import InventoryCategory, Organizacion
 from seed_inventory_categories import seed_inventory_categories_for_company
 
 
+GLOBAL_CATEGORY_ROLES = {"superadmin", "administrador_global"}
+
+
 def _sort_categories(categorias: List[InventoryCategory]) -> List[InventoryCategory]:
     """Return categories ordered by hierarchy-friendly path."""
 
@@ -33,16 +36,46 @@ def _sort_categories(categorias: List[InventoryCategory]) -> List[InventoryCateg
     )
 
 
-def get_active_categories(company_id: int) -> List[InventoryCategory]:
-    """Return ordered active categories for the given organization."""
+def user_can_manage_inventory_categories(user: object) -> bool:
+    """Return True when the user can manage the global inventory catalogue."""
 
-    sort_expr = [func.coalesce(InventoryCategory.sort_order, 0), InventoryCategory.nombre]
+    if not user:
+        return False
+
+    role = (getattr(user, "rol", "") or "").strip().lower()
+    if role in GLOBAL_CATEGORY_ROLES:
+        return True
+
+    global_role = (getattr(user, "role", "") or "").strip().lower()
+    if global_role in GLOBAL_CATEGORY_ROLES:
+        return True
+
+    checker = getattr(user, "es_admin_completo", None)
+    if callable(checker) and checker():
+        return True
+
+    return False
+
+
+def get_active_categories(company_id: int) -> List[InventoryCategory]:
+    """Return ordered active global categories (company id kept for compatibility)."""
+
+    return get_global_categories()
+
+
+def get_global_categories() -> List[InventoryCategory]:
+    """Return ordered active categories shared across all organizations."""
+
+    sort_expr = [
+        func.coalesce(InventoryCategory.sort_order, 0),
+        InventoryCategory.nombre,
+    ]
 
     categorias = (
         InventoryCategory.query
         .filter(
-            InventoryCategory.company_id == company_id,
             InventoryCategory.is_active.is_(True),
+            InventoryCategory.is_global.is_(True),
         )
         .order_by(*sort_expr)
         .all()
@@ -58,7 +91,7 @@ def get_active_category_options(company_id: int) -> List[InventoryCategory]:
     if categorias:
         return _sort_categories(categorias)
 
-    return get_active_categories(company_id)
+    return get_global_categories()
 
 
 def ensure_categories_for_company(
@@ -66,44 +99,7 @@ def ensure_categories_for_company(
 ) -> Tuple[List[InventoryCategory], Dict[str, int], bool]:
     """Ensure the organization has categories, auto-seeding if needed."""
 
-    stats: Dict[str, int] = {"created": 0, "existing": 0, "reactivated": 0}
-    auto_seeded = False
-
-    categorias = get_active_categories(company.id)
-    if categorias:
-        return categorias, stats, auto_seeded
-
-    stats = seed_inventory_categories_for_company(company)
-
-    pending_changes = bool(db.session.new) or bool(db.session.dirty)
-
-    # `seed_inventory_categories_for_company` ejecuta `db.session.flush()` para
-    # obtener los identificadores de las categorías recién creadas. Una vez que
-    # el flush ocurre, SQLAlchemy considera a esas filas como "persistentes",
-    # por lo que `db.session.new` queda vacío aunque todavía no se hayan
-    # confirmado en la base de datos. Esto provocaba que la siembra automática
-    # se revirtiera al final de la petición, dejando el catálogo vacío.
-    #
-    # Para evitarlo, confirmamos explícitamente el `commit` cuando la siembra
-    # reporta filas creadas o reactivadas, además de cuando detectamos cambios
-    # pendientes en la sesión.
-    should_commit = (
-        pending_changes
-        or bool(stats.get("created"))
-        or bool(stats.get("reactivated"))
-    )
-
-    if should_commit:
-        db.session.commit()
-
-    categorias = get_active_categories(company.id)
-    auto_seeded = bool(
-        stats.get("created")
-        or stats.get("reactivated")
-        or should_commit
-    )
-
-    return _sort_categories(categorias), stats, auto_seeded
+    return ensure_global_categories(fallback_company=company)
 
 
 def ensure_categories_for_company_id(
@@ -120,6 +116,48 @@ def ensure_categories_for_company_id(
 
     categorias, stats, auto_seeded = ensure_categories_for_company(company)
     return categorias, stats, auto_seeded, company
+
+
+def ensure_global_categories(
+    *,
+    fallback_company: Optional[Organizacion] = None,
+) -> Tuple[List[InventoryCategory], Dict[str, int], bool]:
+    """Ensure the global catalogue exists, optionally seeding it."""
+
+    stats: Dict[str, int] = {"created": 0, "existing": 0, "reactivated": 0}
+    auto_seeded = False
+
+    categorias = get_global_categories()
+    if categorias:
+        return categorias, stats, auto_seeded
+
+    company = fallback_company
+    if company is None:
+        company = Organizacion.query.order_by(Organizacion.id.asc()).first()
+
+    if not company:
+        return [], stats, auto_seeded
+
+    stats = seed_inventory_categories_for_company(company, mark_global=True)
+
+    pending_changes = bool(db.session.new) or bool(db.session.dirty)
+    should_commit = (
+        pending_changes
+        or bool(stats.get("created"))
+        or bool(stats.get("reactivated"))
+    )
+
+    if should_commit:
+        db.session.commit()
+
+    categorias = get_global_categories()
+    auto_seeded = bool(
+        stats.get("created")
+        or stats.get("reactivated")
+        or should_commit
+    )
+
+    return _sort_categories(categorias), stats, auto_seeded
 
 
 def serialize_category(categoria: InventoryCategory) -> Dict[str, object]:

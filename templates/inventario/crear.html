@@ -37,8 +37,12 @@
                                     </select>
                                     <div class="form-text text-warning" data-category-empty {% if categorias %}hidden{% endif %}>
                                         <i class="fas fa-exclamation-triangle me-1"></i>
-                                        No hay categorías disponibles.
-                                        <a href="{{ url_for('inventario.categorias') }}">Crear una categoría primero</a>.
+                                        {% if can_manage_categories|default(False) %}
+                                            No hay categorías disponibles.
+                                            <a href="{{ url_for('inventario.categorias') }}">Gestioná el catálogo global</a>.
+                                        {% else %}
+                                            No hay categorías disponibles. Tu superadministrador debe habilitar el catálogo.
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>

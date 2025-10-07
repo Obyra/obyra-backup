@@ -39,6 +39,7 @@ from inventory_category_service import (
     get_active_categories,
     serialize_category,
     render_category_catalog,
+    user_can_manage_inventory_categories,
 )
 
 WASTE_KEYWORDS = (
@@ -802,6 +803,10 @@ def categorias():
         flash('No pudimos determinar la organización actual.', 'warning')
         return redirect(url_for('reportes.dashboard'))
 
+    if not user_can_manage_inventory_categories(current_user):
+        flash('No tienes permisos para gestionar el catálogo global de categorías.', 'danger')
+        return redirect(url_for('inventario_new.items'))
+
     company = _resolve_company(company_id)
     if not company:
         flash('No pudimos cargar la organización seleccionada.', 'danger')
@@ -836,7 +841,11 @@ def seed_categorias_manual():
         flash('No encontramos la organización seleccionada.', 'danger')
         return redirect(url_for('inventario_new.categorias'))
 
-    stats = seed_inventory_categories_for_company(company)
+    if not user_can_manage_inventory_categories(current_user):
+        flash('No tienes permisos para inicializar el catálogo global.', 'danger')
+        return redirect(url_for('inventario_new.categorias'))
+
+    stats = seed_inventory_categories_for_company(company, mark_global=True)
     db.session.commit()
 
     created = stats.get('created', 0)
@@ -891,6 +900,7 @@ def nuevo_item():
 
     categorias, seed_stats, auto_seeded, company = ensure_categories_for_company_id(company_id)
     category_options = [serialize_category(categoria) for categoria in categorias]
+    can_manage_categories = user_can_manage_inventory_categories(current_user)
     if auto_seeded:
         created = seed_stats.get('created', 0)
         reactivated = seed_stats.get('reactivated', 0)
@@ -913,6 +923,7 @@ def nuevo_item():
                     'inventario_new/item_form.html',
                     categorias=categorias,
                     category_options=category_options,
+                    can_manage_categories=can_manage_categories,
                 )
         
         # Verificar SKU único
@@ -927,6 +938,7 @@ def nuevo_item():
                 'inventario_new/item_form.html',
                 categorias=categorias,
                 category_options=category_options,
+                can_manage_categories=can_manage_categories,
             )
         
         try:
@@ -963,6 +975,7 @@ def nuevo_item():
         categorias=categorias,
         category_options=category_options,
         item=None,
+        can_manage_categories=can_manage_categories,
     )
 
 @inventario_new_bp.route('/items/<int:id>')
