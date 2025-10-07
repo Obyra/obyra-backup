@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
+from flask import current_app, render_template, render_template_string
 from sqlalchemy import func
 
 from extensions import db
@@ -140,5 +141,109 @@ def serialize_category(categoria: InventoryCategory) -> Dict[str, object]:
 def get_active_category_payload(company_id: int) -> List[Dict[str, object]]:
     """Convenience helper returning serialized active categories."""
 
-    categorias = get_active_category_options(company_id)
+    categorias, _, _, _ = ensure_categories_for_company_id(company_id)
     return [serialize_category(categoria) for categoria in categorias]
+
+
+_FALLBACK_CATEGORY_TEMPLATE = """
+{% extends "base.html" %}
+
+{% block title %}Catálogo de categorías - Inventario{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1">Catálogo de categorías</h1>
+            {% if company %}
+            <p class="text-muted small mb-0">Organización activa: <strong>{{ company.nombre }}</strong></p>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Volver al inventario
+            </a>
+            {% if not categorias %}
+            <form method="post" action="{{ url_for('inventario.crear_categoria') }}">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-seedling me-1"></i>Sembrar catálogo
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if auto_seeded %}
+    <div class="alert alert-success">
+        <i class="fas fa-magic me-1"></i>Se generó automáticamente la estructura inicial de categorías para esta organización.
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted">Resumen</h2>
+                    <dl class="row small mb-0">
+                        <dt class="col-7">Categorías activas</dt>
+                        <dd class="col-5 text-end fw-semibold">{{ categorias|length }}</dd>
+                        <dt class="col-7">Creadas en la siembra</dt>
+                        <dd class="col-5 text-end">{{ seed_stats.created }}</dd>
+                        <dt class="col-7">Existentes conservadas</dt>
+                        <dd class="col-5 text-end">{{ seed_stats.existing }}</dd>
+                        <dt class="col-7">Reactivadas</dt>
+                        <dd class="col-5 text-end">{{ seed_stats.reactivated }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-sitemap me-1"></i>Estructura jerárquica</span>
+                    <span class="badge bg-light text-muted">{{ categorias|length }} categorías</span>
+                </div>
+                <div class="card-body">
+                    {% if categorias %}
+                    <ul class="list-group list-group-flush">
+                        {% for categoria in categorias %}
+                        <li class="list-group-item">
+                            <strong>{{ categoria.nombre }}</strong>
+                            {% if categoria.full_path and categoria.full_path != categoria.nombre %}
+                            <div class="text-muted small">{{ categoria.full_path }}</div>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-layer-group fa-2x mb-3"></i>
+                        <p class="mb-1">Todavía no hay categorías cargadas.</p>
+                        <p class="small mb-0">Usá “Sembrar catálogo” para generar la jerarquía recomendada.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+"""
+
+
+def render_category_catalog(context: Dict[str, object]) -> str:
+    """Render the category catalogue template with a robust fallback."""
+
+    template_name = "inventario/categorias.html"
+
+    try:
+        # Confirm template availability before rendering. If it is missing we
+        # fall back to an inline representation so the route never 500s.
+        current_app.jinja_env.get_or_select_template(template_name)
+        return render_template(template_name, **context)
+    except Exception as exc:
+        if current_app:
+            current_app.logger.warning(
+                "Falling back to inline inventory category template: %s", exc
+            )
+        return render_template_string(_FALLBACK_CATEGORY_TEMPLATE, **context)

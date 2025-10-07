@@ -12,6 +12,7 @@ from flask import (
     render_template,
     request,
     url_for,
+    current_app,
 )
 from flask_login import current_user, login_required
 
@@ -36,8 +37,8 @@ from inventory_category_service import (
     ensure_categories_for_company,
     ensure_categories_for_company_id,
     get_active_categories,
-    get_active_category_payload,
     serialize_category,
+    render_category_catalog,
 )
 
 WASTE_KEYWORDS = (
@@ -811,14 +812,15 @@ def categorias():
 
     category_tree = _build_category_tree(categorias)
 
-    return render_template(
-        'inventario/categorias.html',
-        categorias=categorias,
-        category_tree=category_tree,
-        auto_seeded=auto_seeded,
-        seed_stats=seed_stats,
-        company=company,
-    )
+    context = {
+        'categorias': categorias,
+        'category_tree': category_tree,
+        'auto_seeded': auto_seeded,
+        'seed_stats': seed_stats,
+        'company': company,
+    }
+
+    return render_category_catalog(context)
 
 
 @inventario_new_bp.post('/categorias/seed')
@@ -857,7 +859,23 @@ def api_categorias():
     if not company_id:
         return jsonify({'error': 'Organización no seleccionada'}), 400
 
-    payload = get_active_category_payload(company_id)
+    categorias, seed_stats, auto_seeded, _ = ensure_categories_for_company_id(company_id)
+
+    if auto_seeded or seed_stats.get('created') or seed_stats.get('reactivated'):
+        current_app.logger.info(
+            "Inventory catalogue auto-seeded for org %s (created=%s existing=%s reactivated=%s)",
+            company_id,
+            seed_stats.get('created', 0),
+            seed_stats.get('existing', 0),
+            seed_stats.get('reactivated', 0),
+        )
+
+    payload = [serialize_category(categoria) for categoria in categorias]
+
+    if not payload:
+        current_app.logger.warning(
+            "Inventory catalogue empty for org %s despite seeding attempts", company_id
+        )
 
     return jsonify(payload)
 
