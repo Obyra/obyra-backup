@@ -34,6 +34,7 @@ from inventory_category_service import (
     ensure_categories_for_company_id,
     serialize_category,
     render_category_catalog,
+    user_can_manage_inventory_categories,
 )
 
 
@@ -297,6 +298,10 @@ def categorias():
         flash('No tienes permisos para acceder al catálogo de categorías.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
+    if not user_can_manage_inventory_categories(current_user):
+        flash('No tienes permisos para gestionar el catálogo global de categorías.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
     company_id = _resolve_company_id()
     if not company_id:
         flash('No pudimos determinar la organización actual.', 'warning')
@@ -361,6 +366,10 @@ def crear_categoria():
         flash('No tienes permisos para actualizar el catálogo.', 'danger')
         return redirect(url_for('inventario.categorias'))
 
+    if not user_can_manage_inventory_categories(current_user):
+        flash('No tienes permisos para modificar el catálogo global.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
     company_id = _resolve_company_id()
     if not company_id:
         flash('No pudimos determinar la organización actual.', 'warning')
@@ -371,7 +380,7 @@ def crear_categoria():
         flash('No encontramos la organización seleccionada.', 'danger')
         return redirect(url_for('inventario.categorias'))
 
-    stats = seed_inventory_categories_for_company(company)
+    stats = seed_inventory_categories_for_company(company, mark_global=True)
     db.session.commit()
 
     created = stats.get('created', 0)

@@ -558,20 +558,30 @@ def _get_or_create_category(
     nombre: str,
     parent: Optional[InventoryCategory],
     sort_order: int,
+    mark_global: bool = False,
 ) -> Tuple[InventoryCategory, str]:
     """Obtiene o crea una categoría para la organización dada."""
 
-    existing = InventoryCategory.query.filter_by(
-        company_id=company_id,
-        nombre=nombre,
-        parent_id=parent.id if parent else None,
-    ).first()
+    filters = [
+        InventoryCategory.nombre == nombre,
+        InventoryCategory.parent_id == (parent.id if parent else None),
+    ]
+
+    if mark_global:
+        filters.append(InventoryCategory.is_global.is_(True))
+    else:
+        filters.append(InventoryCategory.company_id == company_id)
+
+    existing = InventoryCategory.query.filter(*filters).first()
 
     if existing:
         status = 'existing'
         if not getattr(existing, 'is_active', True):
             existing.is_active = True
             status = 'reactivated'
+
+        if mark_global and not getattr(existing, 'is_global', False):
+            existing.is_global = True
 
         if getattr(existing, 'sort_order', sort_order) != sort_order:
             existing.sort_order = sort_order
@@ -584,6 +594,7 @@ def _get_or_create_category(
         parent_id=parent.id if parent else None,
         sort_order=sort_order,
         is_active=True,
+        is_global=mark_global,
     )
     db.session.add(categoria)
     db.session.flush()
@@ -600,6 +611,7 @@ def _seed_category_branch(
     path: str = "",
     stats: Optional[Dict[str, int]] = None,
     verbose: bool = False,
+    mark_global: bool = False,
 ) -> int:
     if stats is None:
         stats = defaultdict(int)
@@ -609,6 +621,7 @@ def _seed_category_branch(
         nombre=data["nombre"],
         parent=parent,
         sort_order=position,
+        mark_global=mark_global,
     )
 
     stats[status] = stats.get(status, 0) + 1
@@ -630,6 +643,7 @@ def _seed_category_branch(
             path=current_path,
             stats=stats,
             verbose=verbose,
+            mark_global=mark_global,
         )
     return total_created
 
@@ -638,6 +652,7 @@ def seed_inventory_categories_for_company(
     company: Organizacion,
     *,
     verbose: bool = False,
+    mark_global: bool = False,
 ) -> Dict[str, int]:
     """Crea la estructura completa de categorías para la organización dada."""
 
@@ -649,6 +664,7 @@ def seed_inventory_categories_for_company(
             position=index,
             stats=stats,
             verbose=verbose,
+            mark_global=mark_global,
         )
 
     # Aseguramos que todas las claves existan aunque no se hayan utilizado

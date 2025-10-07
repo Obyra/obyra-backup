@@ -48,7 +48,12 @@
                             </select>
                             <div class="form-text text-warning" data-category-empty {% if categorias %}hidden{% endif %}>
                                 <i class="fas fa-info-circle me-1"></i>
-                                Necesitas crear categorías primero
+                                {% if can_manage_categories %}
+                                    No hay categorías disponibles.
+                                    <a href="{{ url_for('inventario.categorias') }}">Gestioná el catálogo global</a>.
+                                {% else %}
+                                    No hay categorías disponibles. Tu superadministrador debe habilitar el catálogo.
+                                {% endif %}
                             </div>
                         </div>
                         
@@ -118,42 +123,17 @@
                                     <i class="fas fa-times me-2"></i>
                                     Cancelar
                                 </a>
-                                {% if not categorias %}
-                                    <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#categoriaModal">
-                                        <i class="fas fa-plus me-2"></i>
-                                        Crear Categoría
-                                    </button>
+                                {% if can_manage_categories %}
+                                    <a href="{{ url_for('inventario.categorias') }}" class="btn btn-info">
+                                        <i class="fas fa-sitemap me-2"></i>
+                                        Gestionar categorías
+                                    </a>
                                 {% endif %}
                             </div>
                         </div>
                     </form>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal para crear categoría rápida -->
-<div class="modal fade" id="categoriaModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form id="categoriaForm">
-                <div class="modal-header">
-                    <h5 class="modal-title">Nueva Categoría</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label" for="modal_categoria_nombre">Nombre de la Categoría</label>
-                        <input type="text" id="modal_categoria_nombre" name="nombre" class="form-control" required
-                               placeholder="Ej: Materiales, Herramientas, EPP">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-info">Crear Categoría</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
@@ -251,24 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('obyra:org-changed', refreshCategories);
     document.addEventListener('obyra:inventory-categories:refresh', refreshCategories);
 
-    const categoriaForm = document.getElementById('categoriaForm');
-    if (categoriaForm) {
-        categoriaForm.addEventListener('submit', (event) => {
-            event.preventDefault();
-            alert('Para crear categorías, usa el módulo de configuración del inventario');
-            const modalElement = document.getElementById('categoriaModal');
-            if (modalElement) {
-                const modalInstance = (window.bootstrap && window.bootstrap.Modal.getInstance)
-                    ? window.bootstrap.Modal.getInstance(modalElement)
-                    : null;
-                if (modalInstance) {
-                    modalInstance.hide();
-                } else if (window.bootstrap && window.bootstrap.Modal) {
-                    new window.bootstrap.Modal(modalElement).hide();
-                }
-            }
-        });
-    }
 });
 </script>
 {% endblock %}
+
