@@ -78,7 +78,7 @@
                         
                         {% if item %}
                         <div class="col-md-6">
-                            <label class="form-label">Stock Actual</label>
+                            <p class="form-label fw-semibold mb-1">Stock Actual</p>
                             <div class="form-control-plaintext">
                                 <span class="badge bg-{% if item.total_stock > 0 %}primary{% else %}danger{% endif %} fs-6">
                                     {{ item.total_stock }} {{ item.unidad }}
@@ -144,8 +144,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Nombre de la Categoría</label>
-                        <input type="text" name="nombre" class="form-control" required
+                        <label class="form-label" for="modal_categoria_nombre">Nombre de la Categoría</label>
+                        <input type="text" id="modal_categoria_nombre" name="nombre" class="form-control" required
                                placeholder="Ej: Materiales, Herramientas, EPP">
                     </div>
                 </div>
