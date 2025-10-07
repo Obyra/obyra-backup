@@ -848,6 +848,7 @@ if app.config.get("ENABLE_REPORTS_SERVICE"):
         print("[OK] Reports service enabled")
     except Exception as exc:
         app.logger.warning("Reports service disabled: %s", exc)
+        app.config["ENABLE_REPORTS_SERVICE"] = False
 else:
     app.logger.info("Reports service disabled (set ENABLE_REPORTS=1 to enable)")
 
