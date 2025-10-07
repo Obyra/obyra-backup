@@ -11,6 +11,7 @@ from flask import (
 from flask_login import login_required, current_user
 from datetime import date
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from app import db
@@ -66,7 +67,9 @@ def _build_category_tree(categorias: List[InventoryCategory]) -> List[Dict[str, 
 
     return build()
 
-inventario_bp = Blueprint('inventario', __name__, template_folder='templates')
+TEMPLATE_ROOT = Path(__file__).resolve().parent / 'templates'
+
+inventario_bp = Blueprint('inventario', __name__, template_folder=str(TEMPLATE_ROOT))
 
 @inventario_bp.route('/')
 @login_required
