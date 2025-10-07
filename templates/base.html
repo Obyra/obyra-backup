@@ -51,7 +51,7 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('presupuestos') %}
+                    {% if current_user.puede_acceder_modulo('presupuestos') and has_endpoint('presupuestos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarPresupuestos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-calculator me-1"></i>Presupuestos
@@ -62,7 +62,7 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('equipos') %}
+                    {% if current_user.puede_acceder_modulo('equipos') and has_endpoint('equipos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarEquipos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-users me-1"></i>Equipos
@@ -80,27 +80,29 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('inventario') %}
+                    {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-boxes me-1"></i>Inventario
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">Ver Inventario</a></li>
-                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.crear') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.crear') }}">Nuevo Item</a></li>
+                            {% endif %}
+                            {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.uso_obra') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
                             {% endif %}
-                            {% if current_user.rol == 'administrador' %}
+                            {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
                             {% endif %}
                         </ul>
                     </li>
                     {% endif %}
-                    
+
                     <!-- Marketplaces -->
-                    {% if current_user.puede_acceder_modulo('marketplaces') %}
+                    {% if current_user.puede_acceder_modulo('marketplaces') and has_endpoint('marketplaces.index') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarMarketplaces" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-store me-1"></i>Marketplaces
@@ -125,7 +127,7 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('reportes') %}
+                    {% if current_user.puede_acceder_modulo('reportes') and has_endpoint('reportes.reporte_obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarReportes" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-chart-bar me-1"></i>Reportes
@@ -141,7 +143,7 @@
                     {% endif %}
                     
                     <!-- Documentos - Solo para Admin/PM -->
-                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
+                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] and has_endpoint('documentos.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-folder me-1"></i>Documentos
@@ -167,7 +169,7 @@
                     {% endif %}
                     
                     <!-- Seguridad -->
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('seguridad.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-shield-alt me-1"></i>Seguridad
