@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
@@ -52,11 +53,12 @@ WASTE_KEYWORDS = (
     'averia',
 )
 
+INVENTARIO_NEW_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+
 inventario_new_bp = Blueprint(
     'inventario_new',
     __name__,
-    url_prefix='/inventario',
-    template_folder='templates',
+    template_folder=INVENTARIO_NEW_TEMPLATE_DIR,
 )
 
 def requires_role(*roles):

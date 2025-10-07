@@ -1,3 +1,5 @@
+import os
+
 from flask import (
     Blueprint,
     render_template,
@@ -12,6 +14,7 @@ from flask_login import login_required, current_user
 from datetime import date
 from collections import defaultdict
 from typing import Dict, List, Optional
+from jinja2 import TemplateNotFound
 
 from app import db
 from models import (
@@ -66,7 +69,9 @@ def _build_category_tree(categorias: List[InventoryCategory]) -> List[Dict[str, 
 
     return build()
 
-inventario_bp = Blueprint('inventario', __name__, template_folder='templates')
+INVENTARIO_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+
+inventario_bp = Blueprint('inventario', __name__, template_folder=INVENTARIO_TEMPLATE_DIR)
 
 @inventario_bp.route('/')
 @login_required
@@ -314,10 +319,14 @@ def categorias():
         'company': company,
     }
 
-    return render_category_catalog(context)
+    try:
+        return render_template('inventario/categorias.html', **context)
+    except TemplateNotFound:
+        return render_category_catalog(context)
 
 
 @inventario_bp.route('/api/categorias', methods=['GET'])
+@inventario_bp.route('/api/categorias/', methods=['GET'])
 @login_required
 def api_categorias():
     company_id = _resolve_company_id()

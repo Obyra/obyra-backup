@@ -111,7 +111,7 @@ database_url = os.environ.get("DATABASE_URL")
 # 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
 if not database_url:
     database_url = "sqlite:///tmp/dev.db"
-    print("⚠️  DATABASE_URL no disponible, usando SQLite fallback")
+    print("[WARN] DATABASE_URL no disponible, usando SQLite fallback")
 else:
     # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
     if "neon.tech" in database_url and "sslmode=" not in database_url:
@@ -119,7 +119,7 @@ else:
             database_url += "&sslmode=require"
         else:
             database_url += "?sslmode=require"
-        print("🔒 SSL requerido agregado para Neon")
+        print("[INFO] SSL requerido agregado para Neon")
 
 # Garantizar que la ruta SQLite exista antes de conectar para evitar errores "unable to open database file"
 try:
@@ -241,7 +241,7 @@ def db_upgrade():
         ensure_org_memberships_table()
         ensure_work_certification_tables()
 
-    click.echo('✅ Database upgraded successfully.')
+    click.echo('[OK] Database upgraded successfully.')
 
 
 
@@ -265,7 +265,7 @@ def fx_update(provider: str):
         from services.exchange.providers import bna as bna_provider
 
         if provider_key != 'bna':
-            click.echo('⚠️ Por ahora solo se admite el proveedor "bna". Se usará Banco Nación.')
+            click.echo('[WARN] Por ahora solo se admite el proveedor "bna". Se usará Banco Nación.')
             provider_key = 'bna'
 
         fallback_env = app.config.get('EXCHANGE_FALLBACK_RATE')
@@ -280,7 +280,7 @@ def fx_update(provider: str):
         )
 
         click.echo(
-            "✅ Tipo de cambio actualizado: {valor} ({prov} {fecha:%d/%m/%Y})".format(
+            "[OK] Tipo de cambio actualizado: {valor} ({prov} {fecha:%d/%m/%Y})".format(
                 valor=snapshot.value,
                 prov=snapshot.provider.upper(),
                 fecha=snapshot.as_of_date,
@@ -311,7 +311,7 @@ def cac_set(value: float, valid_from, notes: Optional[str]):
         valid_date = valid_from.date() if valid_from else date.today().replace(day=1)
         registro = record_manual_index(valid_date.year, valid_date.month, Decimal(str(value)), notes)
         click.echo(
-            "✅ Índice CAC registrado: {valor} ({anio}-{mes:02d}, proveedor {prov})".format(
+            "[OK] Índice CAC registrado: {valor} ({anio}-{mes:02d}, proveedor {prov})".format(
                 valor=registro.value,
                 anio=registro.year,
                 mes=registro.month,
@@ -331,16 +331,16 @@ def cac_refresh_current():
         contexto = get_cac_context()
         if registro:
             click.echo(
-                "✅ CAC actualizado automáticamente: {valor} ({anio}-{mes:02d})".format(
+                "[OK] CAC actualizado automáticamente: {valor} ({anio}-{mes:02d})".format(
                     valor=registro.value,
                     anio=registro.year,
                     mes=registro.month,
                 )
             )
         else:
-            click.echo('⚠️ No se pudo obtener el índice CAC automáticamente. Se mantiene el valor vigente.')
+            click.echo('[WARN] No se pudo obtener el índice CAC automáticamente. Se mantiene el valor vigente.')
         click.echo(
-            "ℹ️ Contexto actual: valor={valor} multiplicador={mult}".format(
+            "[INFO] Contexto actual: valor={valor} multiplicador={mult}".format(
                 valor=contexto.value,
                 mult=contexto.multiplier,
             )
@@ -643,13 +643,13 @@ with app.app_context():
 
     # 🔥 Intento crear tablas con fallback automático a SQLite
     try:
-        print(f"📊 Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
+        print(f"[DB] Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
         db.create_all()
-        print("✅ Base de datos conectada exitosamente")
+        print("[OK] Base de datos conectada exitosamente")
     except Exception as e:
-        print(f"❌ Error conectando a base de datos principal: {str(e)}")
+        print(f"[ERROR] Error conectando a base de datos principal: {str(e)}")
         if "neon.tech" in app.config['SQLALCHEMY_DATABASE_URI']:
-            print("🔄 Fallback automático a SQLite...")
+            print("[INFO] Fallback automático a SQLite...")
             # Cambiar a SQLite y reiniciar SQLAlchemy
             app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tmp/dev.db"
             # Simplificar engine options para SQLite
@@ -662,9 +662,9 @@ with app.app_context():
             db.init_app(app)
             try:
                 db.create_all()
-                print("✅ SQLite fallback conectado exitosamente")
+                print("[OK] SQLite fallback conectado exitosamente")
             except Exception as sqlite_error:
-                print(f"❌ Error crítico con SQLite fallback: {str(sqlite_error)}")
+                print(f"[ERROR] Error crítico con SQLite fallback: {str(sqlite_error)}")
                 raise sqlite_error
         else:
             raise e
@@ -673,9 +673,9 @@ with app.app_context():
     try:
         from models import seed_default_role_permissions
         seed_default_role_permissions()
-        print("🔐 RBAC permissions seeded successfully")
+        print("[OK] RBAC permissions seeded successfully")
     except Exception as e:
-        print(f"⚠️ RBAC seeding skipped: {e}")
+        print(f"[WARN] RBAC seeding skipped: {e}")
     
     # Initialize marketplace tables (isolated mk_ tables)
     try:
@@ -722,11 +722,11 @@ with app.app_context():
             db.session.add(demo_variant)
             db.session.commit()
         
-        print("🏪 Marketplace tables created and seeded successfully")
+        print("[OK] Marketplace tables created and seeded successfully")
     except Exception as e:
-        print(f"⚠️ Marketplace initialization skipped: {e}")
+        print(f"[WARN] Marketplace initialization skipped: {e}")
     
-    print("📊 Database tables created successfully")
+    print("[OK] Database tables created successfully")
 
     # Ensure default admin credentials exist and are hashed correctly
     try:
@@ -752,7 +752,7 @@ with app.app_context():
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
-            print('👤 Usuario administrador creado: admin@obyra.com / admin123')
+            print('[ADMIN] Usuario administrador creado: admin@obyra.com / admin123')
         else:
             updated = False
 
@@ -778,10 +778,10 @@ with app.app_context():
 
             if updated:
                 db.session.commit()
-                print('🔐 Credenciales del administrador principal verificadas y aseguradas.')
+                print('[ADMIN] Credenciales del administrador principal verificadas y aseguradas.')
     except Exception as ensure_admin_exc:
         db.session.rollback()
-        print(f"⚠️ No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
+        print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
 
     # Ejecutar migraciones en tiempo de ejecución después de crear tablas y
     # sembrar datos esenciales para evitar consultas a tablas inexistentes.
@@ -789,7 +789,7 @@ with app.app_context():
         try:
             migration()
         except Exception as runtime_exc:
-            print(f"⚠️ Runtime migration failed: {migration.__name__}: {runtime_exc}")
+            print(f"[WARN] Runtime migration failed: {migration.__name__}: {runtime_exc}")
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
@@ -834,9 +834,9 @@ for module_name, attr_name, prefix in [
         core_failures.append(f"{module_name} ({exc})")
 
 if core_failures:
-    print("⚠️ Some core blueprints not available: " + "; ".join(core_failures))
+    print("[WARN] Some core blueprints not available: " + "; ".join(core_failures))
 else:
-    print("✅ Core blueprints registered successfully")
+    print("[OK] Core blueprints registered successfully")
 
 _refresh_login_view()
 
@@ -845,7 +845,7 @@ if app.config.get("ENABLE_REPORTS_SERVICE"):
         import matplotlib  # noqa: F401 - sanity check for optional dependency
         reports_service_bp = _import_blueprint('reports_service', 'reports_bp')
         app.register_blueprint(reports_service_bp)
-        print("✅ Reports service enabled")
+        print("[OK] Reports service enabled")
     except Exception as exc:
         app.logger.warning("Reports service disabled: %s", exc)
 else:
@@ -876,9 +876,9 @@ try:
     from inventario_new import inventario_new_bp
     app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
     app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
-    print("✅ Enhanced blueprints registered successfully")
+    print("[OK] Enhanced blueprints registered successfully")
 except ImportError as e:
-    print(f"⚠️ Enhanced blueprints not available: {e}")
+    print(f"[WARN] Enhanced blueprints not available: {e}")
 
 # Try to register supplier portal blueprints
 try:
@@ -888,9 +888,9 @@ try:
     app.register_blueprint(supplier_auth_bp)
     app.register_blueprint(supplier_portal_bp)
     app.register_blueprint(market_bp)
-    print("✅ Supplier portal blueprints registered successfully")
+    print("[OK] Supplier portal blueprints registered successfully")
 except ImportError as e:
-    print(f"⚠️ Supplier portal blueprints not available: {e}")
+    print(f"[WARN] Supplier portal blueprints not available: {e}")
 
 _refresh_login_view()
 
@@ -898,9 +898,9 @@ _refresh_login_view()
 try:
     from marketplace.routes import bp as marketplace_bp
     app.register_blueprint(marketplace_bp, url_prefix="/")
-    print("✅ Marketplace blueprint registered successfully")
+    print("[OK] Marketplace blueprint registered successfully")
 except ImportError as e:
-    print(f"⚠️ Marketplace blueprint not available: {e}")
+    print(f"[WARN] Marketplace blueprint not available: {e}")
 
 _refresh_login_view()
 
