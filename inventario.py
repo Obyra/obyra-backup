@@ -220,39 +220,45 @@ def uso_obra():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para registrar uso en obra.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
     items = ItemInventario.query.filter_by(activo=True).order_by(ItemInventario.nombre).all()
-    
+    context = {'obras': obras, 'items': items, 'today': date.today()}
+
     if request.method == 'POST':
         obra_id = request.form.get('obra_id')
         item_id = request.form.get('item_id')
         cantidad_usada = request.form.get('cantidad_usada')
         fecha_uso = request.form.get('fecha_uso')
         observaciones = request.form.get('observaciones')
-        
+
         if not all([obra_id, item_id, cantidad_usada]):
             flash('Obra, item y cantidad son obligatorios.', 'danger')
-            return render_template('inventario/uso_obra.html', obras=obras, items=items)
-        
+            return render_template('inventario/uso_obra.html', **context)
+
         try:
             cantidad_usada = float(cantidad_usada)
             item = ItemInventario.query.get(item_id)
-            
+
+            if item is None:
+                flash('El ítem seleccionado no existe.', 'danger')
+                return render_template('inventario/uso_obra.html', **context)
+
             if cantidad_usada <= 0:
                 flash('La cantidad debe ser mayor a cero.', 'danger')
-                return render_template('inventario/uso_obra.html', obras=obras, items=items)
-            
-            if cantidad_usada > item.stock_actual:
+                return render_template('inventario/uso_obra.html', **context)
+
+            stock_actual = item.stock_actual if item.stock_actual is not None else 0
+            if cantidad_usada > stock_actual:
                 flash('Stock insuficiente.', 'danger')
-                return render_template('inventario/uso_obra.html', obras=obras, items=items)
-            
+                return render_template('inventario/uso_obra.html', **context)
+
             # Convertir fecha
             fecha_uso_obj = date.today()
             if fecha_uso:
                 from datetime import datetime
                 fecha_uso_obj = datetime.strptime(fecha_uso, '%Y-%m-%d').date()
-            
+
             # Crear uso
             uso = UsoInventario(
                 obra_id=obra_id,
@@ -262,7 +268,7 @@ def uso_obra():
                 observaciones=observaciones,
                 usuario_id=current_user.id
             )
-            
+
             # Crear movimiento de salida
             movimiento = MovimientoInventario(
                 item_id=item_id,
@@ -272,24 +278,24 @@ def uso_obra():
                 observaciones=observaciones,
                 usuario_id=current_user.id
             )
-            
+
             # Actualizar stock
-            item.stock_actual -= cantidad_usada
-            
+            item.stock_actual = stock_actual - cantidad_usada
+
             db.session.add(uso)
             db.session.add(movimiento)
             db.session.commit()
-            
+
             flash('Uso en obra registrado exitosamente.', 'success')
             return redirect(url_for('inventario.lista'))
-            
+
         except ValueError:
             flash('La cantidad debe ser un número válido.', 'danger')
         except Exception as e:
             db.session.rollback()
             flash('Error al registrar el uso en obra.', 'danger')
-    
-    return render_template('inventario/uso_obra.html', obras=obras, items=items)
+
+    return render_template('inventario/uso_obra.html', **context)
 
 @inventario_bp.route('/categorias')
 @login_required

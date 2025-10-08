@@ -2,10 +2,10 @@ import os
 import sys
 import logging
 import importlib
+from pathlib import Path
 import click
 from decimal import Decimal, InvalidOperation
 from typing import Optional
-from sqlalchemy.engine.url import make_url
 from flask import (
     Flask,
     render_template,
@@ -22,6 +22,7 @@ from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
+from sqlalchemy.engine.url import make_url
 from services.memberships import (
     initialize_membership_session,
     load_membership_into_context,
@@ -124,16 +125,25 @@ else:
 # Garantizar que la ruta SQLite exista antes de conectar para evitar errores "unable to open database file"
 try:
     url_obj = make_url(database_url)
-    if url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
-        sqlite_path = url_obj.database
-        if not os.path.isabs(sqlite_path):
-            sqlite_path = os.path.join(app.root_path, sqlite_path)
-        sqlite_dir = os.path.dirname(sqlite_path)
-        if sqlite_dir and not os.path.exists(sqlite_dir):
-            os.makedirs(sqlite_dir, exist_ok=True)
 except Exception:
-    # Si no podemos parsear la URL, continuamos sin bloquear el arranque.
-    pass
+    url_obj = None
+
+if url_obj and url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
+    raw_path = Path(url_obj.database)
+
+    if not raw_path.is_absolute():
+        raw_path = Path(app.root_path) / raw_path
+
+    absolute_path = raw_path.expanduser().resolve()
+    absolute_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        database_url = url_obj.set(database=absolute_path.as_posix()).render_as_string(
+            hide_password=False
+        )
+    except Exception:
+        # Si no podemos normalizar la URL, mantenemos la ruta original.
+        pass
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
