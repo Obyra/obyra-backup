@@ -2825,14 +2825,14 @@ class WizardStageVariant(db.Model):
     )
 
     @property
-    def metadata(self):
+    def meta(self):
         try:
             return json.loads(self.metadata_raw or '{}')
         except (ValueError, TypeError):
             return {}
 
-    @metadata.setter
-    def metadata(self, value):
+    @meta.setter
+    def meta(self, value):
         self.metadata_raw = json.dumps(value or {})
 
     def __repr__(self):
@@ -2865,14 +2865,14 @@ class WizardStageCoefficient(db.Model):
     )
 
     @property
-    def metadata(self):
+    def meta(self):
         try:
             return json.loads(self.metadata_raw or '{}')
         except (ValueError, TypeError):
             return {}
 
-    @metadata.setter
-    def metadata(self, value):
+    @meta.setter
+    def meta(self, value):
         self.metadata_raw = json.dumps(value or {})
 
     def __repr__(self):

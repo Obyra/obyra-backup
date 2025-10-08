@@ -482,7 +482,7 @@ def get_stage_variant_payload() -> Dict[str, Dict[str, object]]:
             'descripcion': variant.descripcion,
             'description': variant.descripcion,
             'is_default': bool(variant.is_default),
-            'metadata': variant.metadata,
+            'metadata': variant.meta,
         }
         variants.setdefault(variant.stage_slug, []).append(payload)
 

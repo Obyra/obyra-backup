@@ -167,7 +167,7 @@ app.config["WIZARD_BUDGET_BREAKDOWN_ENABLED"] = _env_flag(
 )
 app.config["WIZARD_BUDGET_SHADOW_MODE"] = _env_flag(
     "WIZARD_BUDGET_SHADOW_MODE",
-    True,
+    False,
 )
 
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)

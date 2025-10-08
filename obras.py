@@ -548,7 +548,7 @@ def detalle(id):
                          certificaciones_resumen=cert_resumen,
                          certificaciones_recientes=cert_recientes,
                          wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
-                         wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', True))
+                         wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required

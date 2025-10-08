@@ -16,10 +16,10 @@ Este módulo extiende el wizard de tareas para estimar automáticamente el presu
 
    ```bash
    export WIZARD_BUDGET_BREAKDOWN_ENABLED=1
-   export WIZARD_BUDGET_SHADOW_MODE=0  # opcional, desactiva el modo sombra cuando el cálculo esté activo
+   export WIZARD_BUDGET_SHADOW_MODE=1  # opcional, activa el modo sombra para comparar con el flujo actual
    ```
 
-   Si `WIZARD_BUDGET_SHADOW_MODE` no se define, queda habilitado por defecto para registrar cálculos silenciosos cuando el flag principal está en `0`.
+   Si `WIZARD_BUDGET_SHADOW_MODE` no se define, permanece desactivado para evitar ruido de logs.
 
 3. Reinicia la aplicación. El paso 3 del wizard mostrará la columna de variantes y el paso 4 incluirá el cuadro de presupuesto con el desglose por etapa.
 
@@ -46,7 +46,7 @@ Este módulo extiende el wizard de tareas para estimar automáticamente el presu
 
 ## Shadow mode y logs
 
-* Con `WIZARD_BUDGET_BREAKDOWN_ENABLED=0` y `WIZARD_BUDGET_SHADOW_MODE=1` (valor por defecto), el backend calcula el presupuesto en segundo plano y registra el resultado en los logs (`🕶️ WIZARD BUDGET ...`). Esto permite comparar con el flujo actual sin mostrarlo al usuario.
+* Con `WIZARD_BUDGET_BREAKDOWN_ENABLED=0` y `WIZARD_BUDGET_SHADOW_MODE=1`, el backend calcula el presupuesto en segundo plano y registra el resultado en los logs (`🕶️ WIZARD BUDGET ...`). Esto permite comparar con el flujo actual sin mostrarlo al usuario.
 * Cuando el flag principal está en `1`, el cálculo se devuelve al frontend y se muestra en el paso 4 del wizard. El modo sombra puede mantenerse activo para dejar rastro adicional si se desea.
 
 ## Rollback rápido
