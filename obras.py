@@ -45,6 +45,7 @@ from services.certifications import (
     register_payment,
     resolve_budget_context,
 )
+from services import wizard_budgeting
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -545,7 +546,9 @@ def detalle(id):
                          can_manage=can_manage_obra(obra),
                          current_user_id=current_user.id,
                          certificaciones_resumen=cert_resumen,
-                         certificaciones_recientes=cert_recientes)
+                         certificaciones_recientes=cert_recientes,
+                         wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
+                         wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', True))
 
 @obras_bp.route('/<int:id>/editar', methods=['POST'])
 @login_required
@@ -3114,10 +3117,19 @@ def wizard_tareas_opciones():
             # Continuar con lista vacía si hay error
             usuarios = []
 
+        variant_payload = wizard_budgeting.get_stage_variant_payload()
+        feature_flags = wizard_budgeting.get_feature_flags()
+
+        currency = (current_app.config.get('DEFAULT_CURRENCY') if current_app else None) or 'ARS'
+
         response = jsonify({
-            'ok': True, 
-            'unidades': unidades, 
-            'usuarios': usuarios
+            'ok': True,
+            'unidades': unidades,
+            'usuarios': usuarios,
+            'feature_flags': feature_flags,
+            'variants': variant_payload.get('variants', {}),
+            'coefficients': variant_payload.get('coefficients', {}),
+            'currency': currency,
         })
         response.headers['Content-Type'] = 'application/json'
         return response, 200
@@ -3478,6 +3490,50 @@ def wizard_preview():
         return jsonify({"ok": False, "error": f"Error interno: {str(e)}"}), 500
 
 
+@obras_bp.route('/api/wizard-tareas/budget-preview', methods=['POST'])
+@login_required
+def wizard_budget_preview():
+    """Calcula el desglose de presupuesto para el paso 4 del wizard."""
+    try:
+        data = request.get_json() or {}
+        obra_id = data.get('obra_id')
+        tareas = data.get('tareas') or []
+
+        if not obra_id:
+            return jsonify({"ok": False, "error": "obra_id requerido"}), 400
+
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({"ok": False, "error": "Sin permisos"}), 403
+
+        feature_flags = wizard_budgeting.get_feature_flags()
+
+        try:
+            breakdown = wizard_budgeting.calculate_budget_breakdown(tareas)
+        except Exception as calc_error:
+            current_app.logger.exception("Error calculando presupuesto del wizard")
+            return jsonify({"ok": False, "error": str(calc_error)}), 500
+
+        if feature_flags.get('wizard_budget_shadow_mode') and not feature_flags.get('wizard_budget_v2'):
+            current_app.logger.info("🕶️ WIZARD BUDGET (shadow) obra=%s breakdown=%s", obra_id, breakdown)
+
+        response_payload = {
+            'ok': bool(feature_flags.get('wizard_budget_v2')),
+            'feature_disabled': not bool(feature_flags.get('wizard_budget_v2')),
+            'obra_id': obra_id,
+            'etapas': breakdown.get('stages', []),
+            'totals': breakdown.get('totals', {}),
+            'metadata': breakdown.get('metadata', {}),
+            'feature_flags': feature_flags,
+        }
+
+        return jsonify(response_payload)
+
+    except Exception as exc:
+        current_app.logger.exception("Error en wizard budget preview")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @obras_bp.route('/api/obras/<int:obra_id>/equipo', methods=['GET'])
 @login_required
 def get_obra_equipo(obra_id):
@@ -3555,6 +3611,20 @@ def wizard_create():
             for etapa in catalogo_etapas
             if etapa.get('nombre')
         }
+
+        budget_flags = wizard_budgeting.get_feature_flags()
+        budget_breakdown = None
+        try:
+            budget_breakdown = wizard_budgeting.calculate_budget_breakdown(tareas_in)
+        except Exception:
+            current_app.logger.exception("Error calculando presupuesto del wizard (create)")
+        else:
+            if budget_flags.get('wizard_budget_shadow_mode') and not budget_flags.get('wizard_budget_v2'):
+                current_app.logger.info(
+                    "🕶️ WIZARD BUDGET (shadow-create) obra=%s breakdown=%s",
+                    obra_id,
+                    budget_breakdown,
+                )
 
         # Cache existing etapas in obra to allow automatic creation/matching
         existing_etapas = (
@@ -3903,11 +3973,19 @@ def wizard_create():
             db.session.commit()
             current_app.logger.info(f"🎉 WIZARD CREATE: {len(creadas)} creadas, {len(duplicados)} duplicadas")
 
-            return jsonify({
+            response_payload = {
                 "ok": True,
                 "creadas": creadas,
-                "duplicados": duplicados
-            })
+                "duplicados": duplicados,
+                "feature_flags": budget_flags,
+            }
+            if budget_breakdown:
+                if budget_flags.get('wizard_budget_v2'):
+                    response_payload['presupuesto'] = budget_breakdown
+                else:
+                    response_payload['presupuesto_shadow'] = budget_breakdown
+
+            return jsonify(response_payload)
 
         except Exception as e:
             db.session.rollback()

@@ -808,7 +808,7 @@ class TareaAvance(db.Model):
 class TareaAvanceFoto(db.Model):
     """Fotos de evidencia de avances de tareas"""
     __tablename__ = "tarea_avance_fotos"
-    
+
     id = db.Column(db.Integer, primary_key=True)
     avance_id = db.Column(db.Integer, db.ForeignKey("tarea_avances.id", ondelete='CASCADE'), nullable=False)
     file_path = db.Column(db.String(255), nullable=False)  # Relative path like "avances/123/uuid.jpg"
@@ -2799,6 +2799,87 @@ def resumen_tarea(t):
     restante = max(plan - ejec, 0.0)
     atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
     return {"plan": plan, "ejec": ejec, "pct": pct, "restante": restante, "atrasada": atrasada}
+
+
+class WizardStageVariant(db.Model):
+    __tablename__ = 'wizard_stage_variants'
+
+    id = db.Column(db.Integer, primary_key=True)
+    stage_slug = db.Column(db.String(80), nullable=False, index=True)
+    variant_key = db.Column(db.String(80), nullable=False)
+    nombre = db.Column(db.String(120), nullable=False)
+    descripcion = db.Column(db.String(255))
+    is_default = db.Column(db.Boolean, default=False)
+    metadata_raw = db.Column('metadata', db.Text, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    coefficients = db.relationship(
+        'WizardStageCoefficient',
+        back_populates='variant',
+        cascade='all, delete-orphan',
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint('stage_slug', 'variant_key', name='uq_wizard_stage_variant'),
+    )
+
+    @property
+    def metadata(self):
+        try:
+            return json.loads(self.metadata_raw or '{}')
+        except (ValueError, TypeError):
+            return {}
+
+    @metadata.setter
+    def metadata(self, value):
+        self.metadata_raw = json.dumps(value or {})
+
+    def __repr__(self):
+        return f"<WizardStageVariant stage={self.stage_slug} variant={self.variant_key}>"
+
+
+class WizardStageCoefficient(db.Model):
+    __tablename__ = 'wizard_stage_coefficients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    stage_slug = db.Column(db.String(80), nullable=False, index=True)
+    variant_id = db.Column(db.Integer, db.ForeignKey('wizard_stage_variants.id'), nullable=True)
+    unit = db.Column(db.String(20), nullable=False, default='u')
+    quantity_metric = db.Column(db.String(50), nullable=False, default='cantidad')
+    materials_per_unit = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    labor_per_unit = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    equipment_per_unit = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    currency = db.Column(db.String(3), nullable=False, default='ARS')
+    source = db.Column(db.String(80))
+    notes = db.Column(db.String(255))
+    is_baseline = db.Column(db.Boolean, default=False)
+    metadata_raw = db.Column('metadata', db.Text, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    variant = db.relationship('WizardStageVariant', back_populates='coefficients')
+
+    __table_args__ = (
+        db.UniqueConstraint('stage_slug', 'variant_id', name='uq_wizard_stage_coeff_variant'),
+    )
+
+    @property
+    def metadata(self):
+        try:
+            return json.loads(self.metadata_raw or '{}')
+        except (ValueError, TypeError):
+            return {}
+
+    @metadata.setter
+    def metadata(self, value):
+        self.metadata_raw = json.dumps(value or {})
+
+    def __repr__(self):
+        return (
+            f"<WizardStageCoefficient stage={self.stage_slug} variant={self.variant_id} "
+            f"mat={self.materials_per_unit} labor={self.labor_per_unit}>"
+        )
 
 
 def seed_default_role_permissions():

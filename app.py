@@ -160,6 +160,16 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_size": 5,                # Tamaño del pool
 }
 
+# Feature flags (por defecto en OFF) para el nuevo presupuestador del wizard
+app.config["WIZARD_BUDGET_BREAKDOWN_ENABLED"] = _env_flag(
+    "WIZARD_BUDGET_BREAKDOWN_ENABLED",
+    False,
+)
+app.config["WIZARD_BUDGET_SHADOW_MODE"] = _env_flag(
+    "WIZARD_BUDGET_SHADOW_MODE",
+    True,
+)
+
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
 app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").strip().lower()
@@ -240,6 +250,7 @@ def db_upgrade():
             ensure_geocode_columns,
             ensure_org_memberships_table,
             ensure_work_certification_tables,
+            ensure_wizard_budget_tables,
         )
 
         ensure_avance_audit_columns()
@@ -250,6 +261,7 @@ def db_upgrade():
         ensure_geocode_columns()
         ensure_org_memberships_table()
         ensure_work_certification_tables()
+        ensure_wizard_budget_tables()
 
     click.echo('[OK] Database upgraded successfully.')
 

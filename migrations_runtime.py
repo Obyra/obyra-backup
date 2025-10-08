@@ -1036,3 +1036,119 @@ def ensure_work_certification_tables():
         if current_app:
             current_app.logger.exception('❌ Migration failed: work certification tables')
         raise
+
+
+def ensure_wizard_budget_tables():
+    """Create tables para variantes y coeficientes del presupuestador wizard."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250330_wizard_budget_tables.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            if backend == 'postgresql':
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_variants (
+                        id SERIAL PRIMARY KEY,
+                        stage_slug VARCHAR(80) NOT NULL,
+                        variant_key VARCHAR(80) NOT NULL,
+                        nombre VARCHAR(120) NOT NULL,
+                        descripcion VARCHAR(255),
+                        is_default BOOLEAN DEFAULT FALSE,
+                        metadata JSONB,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_wizard_stage_variant UNIQUE(stage_slug, variant_key)
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_coefficients (
+                        id SERIAL PRIMARY KEY,
+                        stage_slug VARCHAR(80) NOT NULL,
+                        variant_id INTEGER REFERENCES wizard_stage_variants(id) ON DELETE CASCADE,
+                        unit VARCHAR(20) NOT NULL DEFAULT 'u',
+                        quantity_metric VARCHAR(50) NOT NULL DEFAULT 'cantidad',
+                        materials_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        labor_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        equipment_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        currency VARCHAR(3) NOT NULL DEFAULT 'ARS',
+                        source VARCHAR(80),
+                        notes VARCHAR(255),
+                        is_baseline BOOLEAN DEFAULT FALSE,
+                        metadata JSONB,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_wizard_stage_coeff_variant UNIQUE(stage_slug, variant_id)
+                    )
+                    """
+                )
+            else:
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_variants (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        stage_slug TEXT NOT NULL,
+                        variant_key TEXT NOT NULL,
+                        nombre TEXT NOT NULL,
+                        descripcion TEXT,
+                        is_default INTEGER DEFAULT 0,
+                        metadata TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(stage_slug, variant_key)
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_coefficients (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        stage_slug TEXT NOT NULL,
+                        variant_id INTEGER REFERENCES wizard_stage_variants(id) ON DELETE CASCADE,
+                        unit TEXT NOT NULL DEFAULT 'u',
+                        quantity_metric TEXT NOT NULL DEFAULT 'cantidad',
+                        materials_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        labor_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        equipment_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        currency TEXT NOT NULL DEFAULT 'ARS',
+                        source TEXT,
+                        notes TEXT,
+                        is_baseline INTEGER DEFAULT 0,
+                        metadata TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(stage_slug, variant_id)
+                    )
+                    """
+                )
+
+        try:
+            from services.wizard_budgeting import seed_default_coefficients_if_needed
+
+            seed_default_coefficients_if_needed()
+        except Exception:
+            if current_app:
+                current_app.logger.exception('❌ Error seeding wizard baseline coefficients')
+            raise
+
+        with open(sentinel, 'w') as handle:
+            handle.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Wizard budget tables ensured and seeded')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: wizard budget tables')
+        raise
