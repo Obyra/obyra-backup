@@ -126,16 +126,16 @@ else:
 try:
     url_obj = make_url(database_url)
     if url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
-        sqlite_path = url_obj.database
-        if not os.path.isabs(sqlite_path):
-            sqlite_path = os.path.join(app.root_path, sqlite_path)
+        sqlite_path = Path(url_obj.database).expanduser()
 
-        sqlite_dir = os.path.dirname(sqlite_path)
-        if sqlite_dir and not os.path.exists(sqlite_dir):
-            os.makedirs(sqlite_dir, exist_ok=True)
+        if not sqlite_path.is_absolute():
+            sqlite_path = Path(app.root_path, sqlite_path)
 
-        absolute_sqlite_path = os.path.abspath(sqlite_path)
-        database_url = f"sqlite:///{Path(absolute_sqlite_path).as_posix()}"
+        sqlite_path = sqlite_path.resolve()
+        sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+
+        url_obj = url_obj.set(database=sqlite_path.as_posix())
+        database_url = str(url_obj)
 except Exception:
     # Si no podemos parsear la URL, continuamos sin bloquear el arranque.
     pass
