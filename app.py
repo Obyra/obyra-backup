@@ -105,50 +105,67 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database with fallback to SQLite
-database_url = os.environ.get("DATABASE_URL")
+# configure the database - PostgreSQL is required outside test environments
 
-# 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
+
+def _is_test_environment() -> bool:
+    """Return True when the app is running under tests."""
+
+    return (
+        _env_flag("TESTING")
+        or os.environ.get("FLASK_ENV", "").strip().lower() == "test"
+        or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    )
+
+
+is_test_environment = _is_test_environment()
+database_url = (os.environ.get("DATABASE_URL") or "").strip()
+
 if not database_url:
-    database_url = "sqlite:///tmp/dev.db"
-    print("[WARN] DATABASE_URL no disponible, usando SQLite fallback")
-else:
-    # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
-    if "neon.tech" in database_url and "sslmode=" not in database_url:
-        if "?" in database_url:
-            database_url += "&sslmode=require"
-        else:
-            database_url += "?sslmode=require"
-        print("[INFO] SSL requerido agregado para Neon")
+    if is_test_environment:
+        database_url = "sqlite:///:memory:"
+        logging.getLogger(__name__).warning(
+            "DATABASE_URL no definido. Usando base de datos en memoria para tests."
+        )
+    else:
+        message = (
+            "DATABASE_URL es obligatorio y debe apuntar a PostgreSQL. "
+            "Definí la variable de entorno con tu cadena de conexión."
+        )
+        logging.getLogger(__name__).critical(message)
+        raise RuntimeError(message)
 
-# Garantizar que la ruta SQLite exista antes de conectar para evitar errores "unable to open database file"
-try:
-    url_obj = make_url(database_url)
-    if url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
-        sqlite_path = url_obj.database
-        if not os.path.isabs(sqlite_path):
-            sqlite_path = os.path.join(app.root_path, sqlite_path)
-        sqlite_dir = os.path.dirname(sqlite_path)
-        if sqlite_dir and not os.path.exists(sqlite_dir):
-            os.makedirs(sqlite_dir, exist_ok=True)
-except Exception:
-    # Si no podemos parsear la URL, continuamos sin bloquear el arranque.
-    pass
+url_obj = make_url(database_url)
+
+if not is_test_environment and not url_obj.drivername.startswith("postgresql"):
+    message = (
+        f"DATABASE_URL debe usar PostgreSQL, se recibió '{url_obj.drivername}'."
+    )
+    logging.getLogger(__name__).critical(message)
+    raise RuntimeError(message)
+
+if (url_obj.host and "neon.tech" in url_obj.host) or ("neon.tech" in database_url):
+    if "sslmode=" not in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{separator}sslmode=require"
+        logging.getLogger(__name__).info("SSL requerido agregado para Neon")
+        url_obj = make_url(database_url)
+
+engine_options = {
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
+}
+
+if url_obj.drivername.startswith("postgresql"):
+    engine_options.update(
+        {
+            "pool_size": 20,
+            "max_overflow": 20,
+        }
+    )
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,           # Reconexión cada 5 min
-    "pool_pre_ping": True,         # Test conexión antes de usar
-    "connect_args": {
-        "connect_timeout": 10,      # Timeout corto para conexión
-        "keepalives_idle": 600,     # Keep alive idle time
-        "keepalives_interval": 30,  # Keep alive interval
-        "keepalives_count": 3,      # Keep alive retry count
-    } if database_url.startswith('postgresql') else {},
-    "pool_timeout": 30,            # Timeout para obtener conexión del pool
-    "max_overflow": 0,             # No overflow connections
-    "pool_size": 5,                # Tamaño del pool
-}
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
 
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)

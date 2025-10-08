@@ -4,14 +4,13 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from flask import current_app, render_template, render_template_string
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from extensions import db
 from models import InventoryCategory, Organizacion
 from seed_inventory_categories import seed_inventory_categories_for_company
 
-
-GLOBAL_CATEGORY_ROLES = {"superadmin", "administrador_global"}
+SUPERADMIN_ROLE_NAMES = {"superadmin", "super_admin"}
 
 
 def _sort_categories(categorias: List[InventoryCategory]) -> List[InventoryCategory]:
@@ -36,62 +35,87 @@ def _sort_categories(categorias: List[InventoryCategory]) -> List[InventoryCateg
     )
 
 
-def user_can_manage_inventory_categories(user: object) -> bool:
-    """Return True when the user can manage the global inventory catalogue."""
+def is_superadmin(user: object) -> bool:
+    """Return True when the given user has superadmin privileges."""
 
     if not user:
         return False
 
-    role = (getattr(user, "rol", "") or "").strip().lower()
-    if role in GLOBAL_CATEGORY_ROLES:
+    role_candidates = {
+        (getattr(user, "rol", "") or "").strip().lower(),
+        (getattr(user, "role", "") or "").strip().lower(),
+    }
+
+    roles_attr = getattr(user, "roles", None)
+    if isinstance(roles_attr, (list, tuple, set)):
+        for entry in roles_attr:
+            try:
+                role_candidates.add((str(entry) or "").strip().lower())
+            except Exception:  # pragma: no cover - defensive guard
+                continue
+
+    if any(role in SUPERADMIN_ROLE_NAMES for role in role_candidates):
         return True
 
-    global_role = (getattr(user, "role", "") or "").strip().lower()
-    if global_role in GLOBAL_CATEGORY_ROLES:
-        return True
-
-    checker = getattr(user, "es_admin_completo", None)
-    if callable(checker) and checker():
-        return True
+    explicit_flag = getattr(user, "is_superadmin", None)
+    if isinstance(explicit_flag, bool):
+        return explicit_flag
+    if callable(explicit_flag):
+        try:
+            return bool(explicit_flag())
+        except Exception:  # pragma: no cover - defensive guard
+            return False
 
     return False
+
+
+def user_can_manage_inventory_categories(user: object) -> bool:
+    """Return True when the user can manage the global inventory catalogue."""
+
+    return is_superadmin(user)
+
+
+def _query_active_categories(company_id: Optional[int]) -> List[InventoryCategory]:
+    """Return active categories visible for the given company."""
+
+    base_query = InventoryCategory.query.filter(InventoryCategory.is_active.is_(True))
+
+    if company_id:
+        base_query = base_query.filter(
+            or_(
+                InventoryCategory.company_id == company_id,
+                InventoryCategory.is_global.is_(True),
+            )
+        )
+    else:
+        base_query = base_query.filter(InventoryCategory.is_global.is_(True))
+
+    ordered = base_query.order_by(
+        func.coalesce(InventoryCategory.sort_order, 0),
+        InventoryCategory.nombre,
+        InventoryCategory.id,
+    )
+
+    return _sort_categories(ordered.all())
 
 
 def get_active_categories(company_id: int) -> List[InventoryCategory]:
     """Return ordered active global categories (company id kept for compatibility)."""
 
-    return get_global_categories()
+    return _query_active_categories(company_id)
 
 
 def get_global_categories() -> List[InventoryCategory]:
     """Return ordered active categories shared across all organizations."""
 
-    sort_expr = [
-        func.coalesce(InventoryCategory.sort_order, 0),
-        InventoryCategory.nombre,
-    ]
-
-    categorias = (
-        InventoryCategory.query
-        .filter(
-            InventoryCategory.is_active.is_(True),
-            InventoryCategory.is_global.is_(True),
-        )
-        .order_by(*sort_expr)
-        .all()
-    )
-
-    return _sort_categories(categorias)
+    return _query_active_categories(None)
 
 
 def get_active_category_options(company_id: int) -> List[InventoryCategory]:
     """Return active categories, auto-seeding when the catalogue is empty."""
 
     categorias, _, _, _ = ensure_categories_for_company_id(company_id)
-    if categorias:
-        return _sort_categories(categorias)
-
-    return get_global_categories()
+    return _sort_categories(categorias)
 
 
 def ensure_categories_for_company(
@@ -99,7 +123,27 @@ def ensure_categories_for_company(
 ) -> Tuple[List[InventoryCategory], Dict[str, int], bool]:
     """Ensure the organization has categories, auto-seeding if needed."""
 
-    return ensure_global_categories(fallback_company=company)
+    if not company:
+        return [], {"created": 0, "existing": 0, "reactivated": 0}, False
+
+    categorias = _query_active_categories(company.id)
+    if categorias:
+        return categorias, {"created": 0, "existing": len(categorias), "reactivated": 0}, False
+
+    global_categories, stats, auto_seeded = ensure_global_categories(
+        fallback_company=company
+    )
+    if global_categories:
+        return global_categories, stats, auto_seeded
+
+    stats = seed_inventory_categories_for_company(company, mark_global=False)
+    auto_seeded = bool(stats.get("created") or stats.get("reactivated"))
+
+    if auto_seeded:
+        db.session.commit()
+
+    categorias = _query_active_categories(company.id)
+    return categorias, stats, auto_seeded
 
 
 def ensure_categories_for_company_id(
@@ -129,6 +173,7 @@ def ensure_global_categories(
 
     categorias = get_global_categories()
     if categorias:
+        stats['existing'] = len(categorias)
         return categorias, stats, auto_seeded
 
     company = fallback_company
@@ -151,6 +196,7 @@ def ensure_global_categories(
         db.session.commit()
 
     categorias = get_global_categories()
+    stats['existing'] = len(categorias)
     auto_seeded = bool(
         stats.get("created")
         or stats.get("reactivated")
