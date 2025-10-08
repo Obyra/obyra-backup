@@ -4,6 +4,7 @@ import logging
 import importlib
 import click
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Optional
 from sqlalchemy.engine.url import make_url
 from flask import (
@@ -128,9 +129,13 @@ try:
         sqlite_path = url_obj.database
         if not os.path.isabs(sqlite_path):
             sqlite_path = os.path.join(app.root_path, sqlite_path)
+
         sqlite_dir = os.path.dirname(sqlite_path)
         if sqlite_dir and not os.path.exists(sqlite_dir):
             os.makedirs(sqlite_dir, exist_ok=True)
+
+        absolute_sqlite_path = os.path.abspath(sqlite_path)
+        database_url = f"sqlite:///{Path(absolute_sqlite_path).as_posix()}"
 except Exception:
     # Si no podemos parsear la URL, continuamos sin bloquear el arranque.
     pass
