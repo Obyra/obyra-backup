@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -16,6 +17,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 logger = logging.getLogger('alembic.env')
+
+os.environ.setdefault("ALEMBIC_RUNNING", "1")
 
 from app import app  # noqa: E402  pylint: disable=wrong-import-position
 
