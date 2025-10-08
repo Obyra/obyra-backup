@@ -115,7 +115,7 @@
                         
                         <div class="col-12">
                             <div class="d-flex gap-2">
-                                <button type="submit" class="btn btn-{% if item %}warning{% else %}success{% endif %}">
+                                <button type="submit" class="btn btn-{% if item %}warning{% else %}success{% endif %}" data-inventory-submit {{ '' if item or categorias else 'disabled' }}>
                                     <i class="fas fa-save me-2"></i>
                                     {% if item %}Actualizar Item{% else %}Crear Item{% endif %}
                                 </button>
@@ -142,8 +142,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     const categoriaSelect = document.getElementById('categoria_id');
     const categoryWarning = document.querySelector('[data-category-empty]');
+    const submitButton = document.querySelector('[data-inventory-submit]');
     const categoriesEndpoint = categoriaSelect ? categoriaSelect.dataset.categoriesEndpoint : null;
     const initialCategoryOptions = {{ category_options|default([], true)|tojson }};
+    const isEditing = {{ 'true' if item else 'false' }};
 
     const toggleCategoryWarning = (show) => {
         if (!categoryWarning) {
@@ -154,6 +156,17 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             categoryWarning.setAttribute('hidden', 'hidden');
         }
+    };
+
+    const toggleSubmitAvailability = (enabled) => {
+        if (!submitButton) {
+            return;
+        }
+        if (isEditing) {
+            submitButton.disabled = false;
+            return;
+        }
+        submitButton.disabled = !enabled;
     };
 
     const populateCategorySelect = (options, { preserveSelection = true } = {}) => {
@@ -209,13 +222,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (options.length) {
                 populateCategorySelect(options);
                 toggleCategoryWarning(false);
+                toggleSubmitAvailability(true);
             } else {
                 toggleCategoryWarning(true);
+                toggleSubmitAvailability(false);
             }
         } catch (error) {
             console.warn('No se pudieron cargar las categorías del inventario', error);
             if (!categoriaSelect || categoriaSelect.options.length <= 1) {
                 toggleCategoryWarning(true);
+                toggleSubmitAvailability(false);
             }
         }
     };
@@ -223,8 +239,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (initialCategoryOptions.length) {
         populateCategorySelect(initialCategoryOptions, { preserveSelection: false });
         toggleCategoryWarning(false);
+        toggleSubmitAvailability(true);
     } else if (categoriaSelect && categoriaSelect.options.length > 1) {
         toggleCategoryWarning(false);
+        toggleSubmitAvailability(true);
+    } else {
+        toggleSubmitAvailability(false);
     }
 
     refreshCategories();

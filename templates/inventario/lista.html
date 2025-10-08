@@ -17,7 +17,7 @@
                         <i class="fas fa-plus me-1"></i>Nuevo Item
                     </a>
                     {% endif %}
-                    {% if current_user.rol == 'administrador' %}
+                    {% if current_user.rol|default('')|lower == 'superadmin' or current_user.role|default('')|lower == 'superadmin' %}
                     <a href="{{ url_for('inventario.categorias') }}" class="btn btn-outline-secondary ms-1">
                         <i class="fas fa-tags me-1"></i>Categorías
                     </a>

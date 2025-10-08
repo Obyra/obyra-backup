@@ -20,537 +20,100 @@ from sqlalchemy import func
 
 DEFAULT_CATEGORY_TREE: List[Dict[str, object]] = [
     {
-        "nombre": "Materiales de Obra",
+        "nombre": "Materiales",
         "children": [
-            {
-                "nombre": "Cementos y aglomerantes",
-                "children": [
-                    {"nombre": "Cemento Portland"},
-                    {"nombre": "Cemento de alta resistencia"},
-                    {"nombre": "Cemento blanco"},
-                    {"nombre": "Cal aérea"},
-                    {"nombre": "Cal hidráulica"},
-                    {"nombre": "Yeso para construcción"},
-                    {"nombre": "Morteros premezclados"},
-                    {"nombre": "Adhesivos cementicios"},
-                ],
-            },
-            {
-                "nombre": "Áridos",
-                "children": [
-                    {"nombre": "Arena fina"},
-                    {"nombre": "Arena gruesa"},
-                    {"nombre": "Piedra partida"},
-                    {"nombre": "Ripio y estabilizado granular"},
-                    {"nombre": "Tosca y rellenos"},
-                    {"nombre": "Áridos livianos"},
-                ],
-            },
-            {
-                "nombre": "Mampostería",
-                "children": [
-                    {"nombre": "Ladrillos cerámicos comunes"},
-                    {"nombre": "Ladrillos huecos portantes"},
-                    {"nombre": "Bloques de hormigón"},
-                    {"nombre": "Bloques HCCA / retak"},
-                    {"nombre": "Paneles premoldeados"},
-                    {"nombre": "Placas EPS"},
-                ],
-            },
-            {
-                "nombre": "Acero y estructuras",
-                "children": [
-                    {"nombre": "Barras corrugadas"},
-                    {"nombre": "Mallas electrosoldadas"},
-                    {"nombre": "Perfiles laminados"},
-                    {"nombre": "Perfiles conformados"},
-                    {"nombre": "Accesorios y anclajes"},
-                ],
-            },
-            {
-                "nombre": "Impermeabilización y aislación",
-                "children": [
-                    {"nombre": "Membranas asfálticas"},
-                    {"nombre": "Membranas líquidas"},
-                    {"nombre": "Selladores poliuretánicos"},
-                    {"nombre": "Espumas de poliuretano"},
-                    {"nombre": "Barreras de vapor"},
-                    {"nombre": "Aislaciones termoacústicas"},
-                ],
-            },
-            {
-                "nombre": "Terminaciones y revestimientos",
-                "children": [
-                    {"nombre": "Revoques tradicionales"},
-                    {"nombre": "Revestimientos plásticos"},
-                    {"nombre": "Pinturas"},
-                    {"nombre": "Cerámicos y porcelanatos"},
-                    {"nombre": "Pastinas y fragües"},
-                    {"nombre": "Revestimientos vinílicos"},
-                ],
-            },
-            {
-                "nombre": "Maderas y derivados",
-                "children": [
-                    {"nombre": "Tablas y tirantes"},
-                    {"nombre": "Fenólicos"},
-                    {"nombre": "OSB"},
-                    {"nombre": "MDF"},
-                    {"nombre": "Decks y exteriores"},
-                    {"nombre": "Molduras y zócalos"},
-                ],
-            },
-            {
-                "nombre": "Plásticos y PVC",
-                "children": [
-                    {"nombre": "Caños de presión"},
-                    {"nombre": "Caños de desagüe"},
-                    {"nombre": "Accesorios hidráulicos"},
-                    {"nombre": "Planchas de polietileno"},
-                    {"nombre": "Geomembranas"},
-                ],
-            },
-            {
-                "nombre": "Vidrios y carpinterías",
-                "children": [
-                    {"nombre": "DVH y termopaneles"},
-                    {"nombre": "Marcos de aluminio"},
-                    {"nombre": "Marcos de PVC"},
-                    {"nombre": "Hojas y paños vidriados"},
-                    {"nombre": "Herrajes y cierres"},
-                    {"nombre": "Burletes y sellos"},
-                ],
-            },
+            {"nombre": "Cementos y aglomerantes"},
+            {"nombre": "Áridos"},
+            {"nombre": "Aceros y armaduras"},
+            {"nombre": "Aditivos y químicos para hormigón"},
+            {"nombre": "Maderas y tableros"},
+            {"nombre": "Plásticos y PVC"},
+            {"nombre": "Pinturas y revestimientos"},
+            {"nombre": "Impermeabilización y selladores"},
         ],
     },
     {
-        "nombre": "Instalaciones",
+        "nombre": "Sistemas de Encofrado",
         "children": [
-            {
-                "nombre": "Instalaciones eléctricas",
-                "children": [
-                    {"nombre": "Conductores de baja tensión"},
-                    {"nombre": "Bandejas y cañerías"},
-                    {"nombre": "Tableros y protecciones"},
-                    {"nombre": "Iluminación LED"},
-                    {"nombre": "Tomacorrientes y fichas"},
-                    {"nombre": "Sistemas de puesta a tierra"},
-                ],
-            },
-            {
-                "nombre": "Instalaciones sanitarias",
-                "children": [
-                    {"nombre": "Cañerías de agua fría/caliente"},
-                    {"nombre": "Cañerías de desagüe"},
-                    {"nombre": "Bombas y presurizadoras"},
-                    {"nombre": "Válvulas y llaves"},
-                    {"nombre": "Tanques y cisternas"},
-                ],
-            },
-            {
-                "nombre": "Instalaciones de gas",
-                "children": [
-                    {"nombre": "Cañerías de acero"},
-                    {"nombre": "Cañerías de cobre"},
-                    {"nombre": "Reguladores y medidores"},
-                    {"nombre": "Artefactos y quemadores"},
-                ],
-            },
-            {
-                "nombre": "Climatización",
-                "children": [
-                    {"nombre": "Equipos tipo split"},
-                    {"nombre": "Sistemas VRF"},
-                    {"nombre": "Conductos y difusores"},
-                    {"nombre": "Calefacción hidrónica"},
-                    {"nombre": "Ventiladores industriales"},
-                ],
-            },
-            {
-                "nombre": "Sistemas especiales",
-                "children": [
-                    {"nombre": "Domótica y BMS"},
-                    {"nombre": "Alarmas y control de acceso"},
-                    {"nombre": "CCTV"},
-                    {"nombre": "Redes de datos"},
-                    {"nombre": "Detección de incendio"},
-                    {"nombre": "Sonorización y megafonía"},
-                ],
-            },
+            {"nombre": "Vigas H20 (Peri/Hünnebeck compatibles)"},
+            {"nombre": "Puntales metálicos"},
+            {"nombre": "Barras/Tuercas DW (Dywidag)"},
+            {"nombre": "Paneles y chapas"},
+            {"nombre": "Accesorios de encofrado"},
+            {"nombre": "Tornapuntas y estabilizadores"},
         ],
     },
     {
-        "nombre": "Maquinarias y Equipos",
+        "nombre": "Herramientas",
         "children": [
-            {
-                "nombre": "Maquinaria pesada",
-                "children": [
-                    {"nombre": "Retroexcavadoras"},
-                    {"nombre": "Autoelevadores"},
-                    {"nombre": "Grúas y elevadores"},
-                    {"nombre": "Bombas de hormigón"},
-                    {"nombre": "Compresores industriales"},
-                ],
-            },
-            {
-                "nombre": "Herramientas eléctricas",
-                "children": [
-                    {"nombre": "Taladros y atornilladores"},
-                    {"nombre": "Amoladoras"},
-                    {"nombre": "Sierras eléctricas"},
-                    {"nombre": "Mezcladoras"},
-                    {"nombre": "Vibradores de hormigón"},
-                    {"nombre": "Martillos demoledores"},
-                ],
-            },
-            {
-                "nombre": "Herramientas manuales",
-                "children": [
-                    {"nombre": "Palas y picos"},
-                    {"nombre": "Mazas y martillos"},
-                    {"nombre": "Llaves y criques"},
-                    {"nombre": "Destornilladores"},
-                    {"nombre": "Niveles manuales"},
-                ],
-            },
-            {
-                "nombre": "Equipos de medición y control",
-                "children": [
-                    {"nombre": "Niveles láser"},
-                    {"nombre": "Estaciones totales"},
-                    {"nombre": "Medidores de humedad"},
-                    {"nombre": "Detectores de gas"},
-                    {"nombre": "Calibradores y micrómetros"},
-                ],
-            },
-            {
-                "nombre": "Vehículos y transporte interno",
-                "children": [
-                    {"nombre": "Camiones y utilitarios"},
-                    {"nombre": "Pick-ups"},
-                    {"nombre": "Carretillas"},
-                    {"nombre": "Zorras hidráulicas"},
-                    {"nombre": "Plataformas modulares"},
-                ],
-            },
+            {"nombre": "Manuales"},
+            {"nombre": "Eléctricas"},
+            {"nombre": "Medición y trazado"},
+            {"nombre": "Corte"},
+            {"nombre": "Fijación"},
+            {"nombre": "Neumáticas"},
         ],
     },
     {
-        "nombre": "Sistemas de Encofrado y Andamiaje",
+        "nombre": "Maquinarias",
         "children": [
-            {
-                "nombre": "Vigas H20",
-                "children": [
-                    {"nombre": "Vigas H20 estándar"},
-                    {"nombre": "Vigas H20 reforzadas"},
-                    {"nombre": "Vigas H20 accesorios"},
-                ],
-            },
-            {
-                "nombre": "Puntales metálicos",
-                "children": [
-                    {"nombre": "Puntales telescópicos"},
-                    {"nombre": "Puntales de alta carga"},
-                    {"nombre": "Puntales repuestos"},
-                ],
-            },
-            {
-                "nombre": "Barras DW y tuercas",
-                "children": [
-                    {"nombre": "Barras DW"},
-                    {"nombre": "Tuercas mariposa"},
-                    {"nombre": "Placas y arandelas"},
-                ],
-            },
-            {
-                "nombre": "Horquillas, trípodes y crucetas",
-                "children": [
-                    {"nombre": "Horquillas"},
-                    {"nombre": "Trípodes"},
-                    {"nombre": "Crucetas niveladoras"},
-                ],
-            },
-            {
-                "nombre": "Paneles fenólicos y metálicos",
-                "children": [
-                    {"nombre": "Paneles fenólicos"},
-                    {"nombre": "Paneles de aluminio"},
-                    {"nombre": "Paneles de acero"},
-                    {"nombre": "Revestimientos fenólicos"},
-                ],
-            },
-            {
-                "nombre": "Tensores, abrazaderas y pernos",
-                "children": [
-                    {"nombre": "Tensores"},
-                    {"nombre": "Abrazaderas"},
-                    {"nombre": "Pernos cónicos"},
-                ],
-            },
-            {
-                "nombre": "Andamios y accesorios",
-                "children": [
-                    {"nombre": "Andamios tubulares"},
-                    {"nombre": "Andamios multidireccionales"},
-                    {"nombre": "Plataformas colgantes"},
-                    {"nombre": "Ruedas y estabilizadores"},
-                ],
-            },
-            {
-                "nombre": "Sistemas trepantes y modulares",
-                "children": [
-                    {"nombre": "Sistemas trepantes"},
-                    {"nombre": "Encofrado deslizante"},
-                    {"nombre": "Encofrado modular"},
-                    {"nombre": "Accesorios trepantes"},
-                ],
-            },
-            {
-                "nombre": "Moldes para columnas y losas",
-                "children": [
-                    {"nombre": "Moldes para columnas circulares"},
-                    {"nombre": "Moldes para columnas rectangulares"},
-                    {"nombre": "Encofrado de losas"},
-                    {"nombre": "Accesorios de moldes"},
-                ],
-            },
+            {"nombre": "Andamios y plataformas"},
+            {"nombre": "Excavadoras"},
+            {"nombre": "Retroexcavadoras"},
+            {"nombre": "Autoelevadores"},
+            {"nombre": "Plumas y grúas"},
+            {"nombre": "Hormigoneras y bombeo"},
         ],
     },
     {
-        "nombre": "Seguridad e Higiene",
+        "nombre": "Seguridad",
         "children": [
-            {
-                "nombre": "Equipos de protección personal",
-                "children": [
-                    {"nombre": "Cascos"},
-                    {"nombre": "Chalecos"},
-                    {"nombre": "Guantes"},
-                    {"nombre": "Calzado"},
-                    {"nombre": "Arneses"},
-                ],
-            },
-            {
-                "nombre": "Señalización y barreras",
-                "children": [
-                    {"nombre": "Conos y vallas"},
-                    {"nombre": "Cintas perimetrales"},
-                    {"nombre": "Cartelería"},
-                ],
-            },
-            {
-                "nombre": "Extintores y contra incendio",
-                "children": [
-                    {"nombre": "Extintores"},
-                    {"nombre": "Gabinetes y mangueras"},
-                    {"nombre": "Detectores de humo"},
-                ],
-            },
-            {
-                "nombre": "Botiquines y primeros auxilios",
-                "children": [
-                    {"nombre": "Botiquines"},
-                    {"nombre": "Insumos de curación"},
-                    {"nombre": "Desfibriladores"},
-                ],
-            },
-            {
-                "nombre": "Equipos de rescate y evacuación",
-                "children": [
-                    {"nombre": "Camillas"},
-                    {"nombre": "Sistemas de descenso"},
-                    {"nombre": "Equipos de rescate vertical"},
-                ],
-            },
-            {
-                "nombre": "Kits de emergencia",
-                "children": [
-                    {"nombre": "Derrames"},
-                    {"nombre": "Derrames químicos"},
-                    {"nombre": "Control ambiental"},
-                ],
-            },
+            {"nombre": "Elementos de protección personal (EPP)"},
+            {"nombre": "Señalización"},
+            {"nombre": "Perímetro y cerramientos"},
+            {"nombre": "Trabajo en altura"},
+            {"nombre": "Control de acceso"},
         ],
     },
     {
-        "nombre": "Logística y Depósito",
+        "nombre": "Consumibles",
         "children": [
-            {
-                "nombre": "Pallets, cajas y contenedores",
-                "children": [
-                    {"nombre": "Pallets"},
-                    {"nombre": "Cajas plásticas"},
-                    {"nombre": "Contenedores metálicos"},
-                ],
-            },
-            {
-                "nombre": "Lonas y coberturas",
-                "children": [
-                    {"nombre": "Lonas pesadas"},
-                    {"nombre": "Cubiertas térmicas"},
-                    {"nombre": "Fundas impermeables"},
-                ],
-            },
-            {
-                "nombre": "Cintas y embalajes",
-                "children": [
-                    {"nombre": "Cintas de señalización"},
-                    {"nombre": "Stretch film"},
-                    {"nombre": "Fajas y zunchos"},
-                ],
-            },
-            {
-                "nombre": "Elementos de elevación y amarre",
-                "children": [
-                    {"nombre": "Eslingas"},
-                    {"nombre": "Grilletes"},
-                    {"nombre": "Tensores"},
-                ],
-            },
-            {
-                "nombre": "Control de accesos",
-                "children": [
-                    {"nombre": "Torniquetes"},
-                    {"nombre": "Molinetes"},
-                    {"nombre": "Credenciales"},
-                ],
-            },
-            {
-                "nombre": "Equipamiento de depósito",
-                "children": [
-                    {"nombre": "Estanterías y racks"},
-                    {"nombre": "Sistemas RFID"},
-                    {"nombre": "Equipos de etiquetado"},
-                ],
-            },
+            {"nombre": "Discos de corte y desbaste"},
+            {"nombre": "Brocas"},
+            {"nombre": "Tornillos"},
+            {"nombre": "Clavos y fijaciones"},
+            {"nombre": "Químicos y adhesivos"},
+            {"nombre": "Lubricantes y grasas"},
         ],
     },
     {
-        "nombre": "Administrativo y Oficina de Obra",
+        "nombre": "Logística y Depósitos",
         "children": [
-            {
-                "nombre": "Papelería y suministros",
-                "children": [
-                    {"nombre": "Papel e impresos"},
-                    {"nombre": "Artículos de escritura"},
-                    {"nombre": "Organización y archivo"},
-                ],
-            },
-            {
-                "nombre": "Electrónica y comunicaciones",
-                "children": [
-                    {"nombre": "Celulares"},
-                    {"nombre": "Tablets"},
-                    {"nombre": "Notebooks e impresoras"},
-                ],
-            },
-            {
-                "nombre": "Mobiliario y equipamiento",
-                "children": [
-                    {"nombre": "Puestos operativos"},
-                    {"nombre": "Sillas ergonómicas"},
-                    {"nombre": "Guardado y lockers"},
-                ],
-            },
-            {
-                "nombre": "Software y licencias",
-                "children": [
-                    {"nombre": "Gestión de obra"},
-                    {"nombre": "Diseño y BIM"},
-                    {"nombre": "Productividad y ofimática"},
-                ],
-            },
-            {
-                "nombre": "Uniformes y merchandising",
-                "children": [
-                    {"nombre": "Uniformes administrativos"},
-                    {"nombre": "Uniformes operativos"},
-                    {"nombre": "Merchandising corporativo"},
-                ],
-            },
+            {"nombre": "Transporte interno"},
+            {"nombre": "Equipamiento de depósito"},
+            {"nombre": "Embalajes y contenedores"},
+            {"nombre": "Sistemas de inventario"},
         ],
     },
     {
-        "nombre": "Consumibles e Insumos",
+        "nombre": "Oficina e IT",
         "children": [
-            {
-                "nombre": "Combustibles y lubricantes",
-                "children": [
-                    {"nombre": "Combustibles líquidos"},
-                    {"nombre": "Lubricantes"},
-                    {"nombre": "Grasas"},
-                ],
-            },
-            {
-                "nombre": "Insumos de limpieza",
-                "children": [
-                    {"nombre": "Detergentes"},
-                    {"nombre": "Desinfectantes"},
-                    {"nombre": "Elementos de limpieza"},
-                ],
-            },
-            {
-                "nombre": "Herramientas descartables",
-                "children": [
-                    {"nombre": "Cuchillas"},
-                    {"nombre": "Brochas y rodillos"},
-                    {"nombre": "Discos y lijas"},
-                ],
-            },
-            {
-                "nombre": "Baterías, lámparas y cables auxiliares",
-                "children": [
-                    {"nombre": "Baterías"},
-                    {"nombre": "Lámparas"},
-                    {"nombre": "Cables provisionales"},
-                ],
-            },
-            {
-                "nombre": "Gas envasado y fluidos",
-                "children": [
-                    {"nombre": "Gas envasado"},
-                    {"nombre": "Agua potable"},
-                    {"nombre": "Fluidos especiales"},
-                ],
-            },
-            {
-                "nombre": "Adhesivos y selladores puntuales",
-                "children": [
-                    {"nombre": "Adhesivos epoxi"},
-                    {"nombre": "Selladores químicos"},
-                    {"nombre": "Espumas temporales"},
-                ],
-            },
-            {
-                "nombre": "Repuestos varios",
-                "children": [
-                    {"nombre": "Cuchillas y insertos"},
-                    {"nombre": "Correas y transmisiones"},
-                    {"nombre": "Motores y bobinados"},
-                ],
-            },
+            {"nombre": "Computadoras y periféricos"},
+            {"nombre": "Redes y comunicación"},
+            {"nombre": "Impresión y planos"},
+            {"nombre": "Software y licencias"},
         ],
     },
     {
-        "nombre": "Categorías funcionales transversales",
+        "nombre": "Categorías transversales KPI",
         "children": [
-            {"nombre": "Obra base / núcleo"},
-            {"nombre": "Estructura"},
-            {"nombre": "Terminaciones"},
-            {"nombre": "Mantenimiento / post-venta"},
-            {"nombre": "Repuestos / reciclado"},
-            {
-                "nombre": "Desperdicio clasificado",
-                "children": [
-                    {"nombre": "Recuperable"},
-                    {"nombre": "No recuperable"},
-                    {"nombre": "Reutilizable"},
-                ],
-            },
-            {"nombre": "Reservas por proyecto / centro de costos"},
+            {"nombre": "Desperdicio"},
+            {"nombre": "Merma"},
+            {"nombre": "Reproceso"},
+            {"nombre": "Eficiencia operativa"},
         ],
     },
 ]
-
 
 def _get_or_create_category(
     *,
@@ -738,49 +301,70 @@ def main(argv: Optional[List[str]] = None) -> int:
     """Punto de entrada CLI."""
 
     parser = argparse.ArgumentParser(description='Seed de categorías de inventario')
-    parser.add_argument('--org', help='ID, slug, token o nombre de la organización destino')
-    parser.add_argument('--all', action='store_true', help='Sembrar todas las organizaciones')
+    parser.add_argument(
+        '--global',
+        dest='seed_global',
+        action='store_true',
+        help='Sembrar el catálogo global compartido',
+    )
+    parser.add_argument(
+        '--org',
+        dest='orgs',
+        action='append',
+        help='ID, slug, token o nombre de la organización destino (puede repetirse)',
+    )
     parser.add_argument('--quiet', action='store_true', help='Oculta el detalle por categoría')
 
     args = parser.parse_args(argv)
 
-    if args.org and args.all:
-        parser.error('Usa --org o --all, pero no ambos.')
-
     verbose = not args.quiet
+    org_identifiers = args.orgs or []
+    should_seed_global = args.seed_global or not org_identifiers
+    fallback_identifier = org_identifiers[0] if (args.seed_global and org_identifiers) else None
 
     from app import app
 
     with app.app_context():
-        if args.all or not args.org:
-            resultados = seed_inventory_categories_for_all(verbose=verbose)
-            if not resultados:
-                return 1
+        if should_seed_global:
+            fallback_org: Optional[Organizacion]
+            if fallback_identifier:
+                fallback_org = _resolve_organization(fallback_identifier)
+                if not fallback_org:
+                    print(f"❌ No se encontró la organización '{fallback_identifier}' para el catálogo global.")
+                    return 1
+            else:
+                fallback_org = Organizacion.query.order_by(Organizacion.id.asc()).first()
+                if not fallback_org:
+                    print('❌ No se encontraron organizaciones. Crea una antes de sembrar el catálogo global.')
+                    return 1
 
-            total_creadas = sum(stats.get('created', 0) for stats in resultados.values())
-            if not verbose:
-                for org_id, stats in resultados.items():
-                    organizacion = Organizacion.query.get(org_id)
-                    if organizacion:
-                        _print_seed_summary(organizacion.nombre, stats)
-            print(f"\n✅ Seed finalizado. Categorías nuevas: {total_creadas}")
-            return 0
+            stats = seed_inventory_categories_for_company(
+                fallback_org,
+                verbose=verbose,
+                mark_global=True,
+            )
+            db.session.commit()
 
-        organizacion = _resolve_organization(args.org)
-        if not organizacion:
-            print(f"❌ No se encontró la organización '{args.org}'.")
-            return 1
+            if verbose:
+                print('\n🌐 Catálogo global inicializado:')
+            _print_seed_summary(fallback_org.nombre if fallback_org else 'Global', stats)
 
-        stats = seed_inventory_categories_for_company(organizacion, verbose=verbose)
-        db.session.commit()
+        exit_code = 0
+        for identifier in org_identifiers:
+            organizacion = _resolve_organization(identifier)
+            if not organizacion:
+                print(f"❌ No se encontró la organización '{identifier}'.")
+                exit_code = 1
+                continue
 
-        if not verbose:
+            stats = seed_inventory_categories_for_company(organizacion, verbose=verbose)
+            db.session.commit()
+
+            if verbose:
+                print('\n📂 Resumen final:')
             _print_seed_summary(organizacion.nombre, stats)
-        else:
-            print("\n📂 Resumen final:")
-            _print_seed_summary(organizacion.nombre, stats)
 
-    return 0
+        return exit_code
 
 
 if __name__ == "__main__":
