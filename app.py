@@ -4,7 +4,7 @@ import logging
 import importlib
 import click
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Optional, Tuple
 from sqlalchemy.engine.url import make_url
 from flask import (
     Flask,
@@ -175,6 +175,18 @@ app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+
+
+def _is_alembic_running() -> bool:
+    """Return True when Alembic is orchestrating the process."""
+
+    return os.getenv("ALEMBIC_RUNNING") == "1"
+
+
+def _should_skip_create_all() -> bool:
+    """Return True when automatic table creation must be skipped."""
+
+    return _is_alembic_running() or os.getenv("FLASK_SKIP_CREATE_ALL") == "1"
 
 
 def _resolve_login_endpoint() -> Optional[str]:
@@ -630,188 +642,123 @@ def from_json_filter(json_str):
         return {}
 
 
-# Create tables and initial data
-with app.app_context():
-    # Import models after app context is available to avoid circular imports
-    from models import Usuario, Organizacion
-    
-    # Run startup migrations before creating tables
-    from migrations_runtime import (
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    )
-
-    runtime_migrations = [
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    ]
-
-    # 🔥 Intento crear tablas con fallback automático a SQLite
-    try:
-        print(f"[DB] Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
-        db.create_all()
-        print("[OK] Base de datos conectada exitosamente")
-    except Exception as e:
-        print(f"[ERROR] Error conectando a base de datos principal: {str(e)}")
-        if "neon.tech" in app.config['SQLALCHEMY_DATABASE_URI']:
-            print("[INFO] Fallback automático a SQLite...")
-            # Cambiar a SQLite y reiniciar SQLAlchemy
-            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tmp/dev.db"
-            # Simplificar engine options para SQLite
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-                "pool_recycle": 300,
-                "pool_pre_ping": True,
-            }
-            
-            # Reiniciar la conexión con la nueva configuración
-            db.init_app(app)
-            try:
-                db.create_all()
-                print("[OK] SQLite fallback conectado exitosamente")
-            except Exception as sqlite_error:
-                print(f"[ERROR] Error crítico con SQLite fallback: {str(sqlite_error)}")
-                raise sqlite_error
-        else:
-            raise e
-    
-    # Initialize RBAC permissions
-    try:
-        from models import seed_default_role_permissions
-        seed_default_role_permissions()
-        print("[OK] RBAC permissions seeded successfully")
-    except Exception as e:
-        print(f"[WARN] RBAC seeding skipped: {e}")
-    
-    # Initialize marketplace tables (isolated mk_ tables)
-    try:
-        from marketplace.models import MkProduct, MkProductVariant, MkCart, MkCartItem, MkOrder, MkOrderItem, MkPayment, MkPurchaseOrder, MkCommission
-        
-        # Create marketplace tables only
-        MkProduct.__table__.create(db.engine, checkfirst=True)
-        MkProductVariant.__table__.create(db.engine, checkfirst=True)
-        MkCart.__table__.create(db.engine, checkfirst=True)
-        MkCartItem.__table__.create(db.engine, checkfirst=True)
-        MkOrder.__table__.create(db.engine, checkfirst=True)
-        MkOrderItem.__table__.create(db.engine, checkfirst=True)
-        MkPayment.__table__.create(db.engine, checkfirst=True)
-        MkPurchaseOrder.__table__.create(db.engine, checkfirst=True)
-        MkCommission.__table__.create(db.engine, checkfirst=True)
-        
-        # Seed basic marketplace data
-        if not MkCommission.query.first():
-            commission_rates = [
-                MkCommission(category_id=1, exposure='standard', take_rate_pct=10.0),
-                MkCommission(category_id=1, exposure='premium', take_rate_pct=12.0),
-            ]
-            for commission in commission_rates:
-                db.session.add(commission)
-            
-            # Demo products
-            demo_product = MkProduct(
-                seller_company_id=1,
-                name="Cemento Portland 50kg",
-                category_id=1,
-                description_html="<p>Cemento Portland de alta calidad</p>",
-                is_masked_seller=True
-            )
-            db.session.add(demo_product)
-            db.session.flush()
-            
-            demo_variant = MkProductVariant(
-                product_id=demo_product.id,
-                sku="CEM-PORT-50KG",
-                price=8999.0,
-                currency="ARS",
-                stock_qty=100
-            )
-            db.session.add(demo_variant)
-            db.session.commit()
-        
-        print("[OK] Marketplace tables created and seeded successfully")
-    except Exception as e:
-        print(f"[WARN] Marketplace initialization skipped: {e}")
-    
-    print("[OK] Database tables created successfully")
-
-    # Ensure default admin credentials exist and are hashed correctly
-    try:
-        admin_email = 'admin@obyra.com'
-        admin = Usuario.query.filter_by(email=admin_email).first()
-
-        if not admin:
-            admin_org = Organizacion(nombre='OBYRA - Administración Central')
-            db.session.add(admin_org)
-            db.session.flush()
-
-            admin = Usuario(
-                nombre='Administrador',
-                apellido='OBYRA',
-                email=admin_email,
-                rol='administrador',
-                role='administrador',
-                auth_provider='manual',
-                activo=True,
-                organizacion_id=admin_org.id,
-                primary_org_id=admin_org.id,
-            )
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            print('[ADMIN] Usuario administrador creado: admin@obyra.com / admin123')
-        else:
-            updated = False
-
-            hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')
-            stored_hash = admin.password_hash or ''
-            if not stored_hash or not stored_hash.startswith(hashed_markers):
-                original_secret = stored_hash or 'admin123'
-                admin.set_password(original_secret)
-                updated = True
-
-            if admin.auth_provider != 'manual':
-                admin.auth_provider = 'manual'
-                updated = True
-
-            if not admin.organizacion:
-                admin_org = Organizacion(nombre='OBYRA - Administración Central')
-                db.session.add(admin_org)
-                db.session.flush()
-                admin.organizacion_id = admin_org.id
-                if not admin.primary_org_id:
-                    admin.primary_org_id = admin_org.id
-                updated = True
-
-            if updated:
-                db.session.commit()
-                print('[ADMIN] Credenciales del administrador principal verificadas y aseguradas.')
-    except Exception as ensure_admin_exc:
-        db.session.rollback()
-        print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
-
-    # Ejecutar migraciones en tiempo de ejecución después de crear tablas y
-    # sembrar datos esenciales para evitar consultas a tablas inexistentes.
-    for migration in runtime_migrations:
-        try:
-            migration()
-        except Exception as runtime_exc:
-            print(f"[WARN] Runtime migration failed: {migration.__name__}: {runtime_exc}")
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
     module = importlib.import_module(module_name)
     return getattr(module, attr_name)
+
+
+def _resolve_cli_organization(identifier: str):
+    """Resolve an organization by id, slug, token or name."""
+
+    identifier = (identifier or "").strip()
+    if not identifier:
+        return None
+
+    from models import Organizacion  # Local import to avoid circular deps
+    from sqlalchemy import func as sa_func
+
+    if identifier.isdigit():
+        return Organizacion.query.get(int(identifier))
+
+    if hasattr(Organizacion, "slug"):
+        org = Organizacion.query.filter_by(slug=identifier).first()
+        if org:
+            return org
+
+    org = Organizacion.query.filter_by(token_invitacion=identifier).first()
+    if org:
+        return org
+
+    lowered = identifier.lower()
+    return (
+        Organizacion.query
+        .filter(sa_func.lower(Organizacion.nombre) == lowered)
+        .first()
+    )
+
+
+def _format_seed_summary(stats: dict) -> str:
+    created = stats.get("created", 0)
+    existing = stats.get("existing", 0)
+    reactivated = stats.get("reactivated", 0)
+    return f"creadas={created}, existentes={existing}, reactivadas={reactivated}"
+
+
+@app.cli.command("seed:inventario")
+@click.option(
+    "--global",
+    "seed_global",
+    is_flag=True,
+    help="Inicializa el catálogo global compartido",
+)
+@click.option(
+    "--org",
+    "org_identifiers",
+    multiple=True,
+    help="ID, slug, token o nombre de la organización a sembrar",
+)
+@click.option("--quiet", is_flag=True, help="Oculta el detalle por categoría")
+def seed_inventario_cli(seed_global: bool, org_identifiers: Tuple[str, ...], quiet: bool) -> None:
+    """Seed de categorías de inventario utilizando el CLI de Flask."""
+
+    if not seed_global and not org_identifiers:
+        raise click.ClickException(
+            "Debes indicar al menos una organización con --org o usar --global."
+        )
+
+    from models import Organizacion
+    from seed_inventory_categories import seed_inventory_categories_for_company
+
+    verbose = not quiet
+    identifiers = list(org_identifiers)
+    fallback_identifier = identifiers[0] if (seed_global and identifiers) else None
+
+    try:
+        if seed_global:
+            fallback_org = (
+                _resolve_cli_organization(fallback_identifier)
+                if fallback_identifier
+                else Organizacion.query.order_by(Organizacion.id.asc()).first()
+            )
+
+            if not fallback_org:
+                raise click.ClickException(
+                    "No se encontró una organización para inicializar el catálogo global."
+                )
+
+            stats = seed_inventory_categories_for_company(
+                fallback_org,
+                verbose=verbose,
+                mark_global=True,
+            )
+            db.session.commit()
+            click.echo(
+                f"🌐 Catálogo global listo ({fallback_org.nombre}): {_format_seed_summary(stats)}"
+            )
+
+        for identifier in identifiers:
+            organizacion = _resolve_cli_organization(identifier)
+            if not organizacion:
+                raise click.ClickException(
+                    f"No se encontró la organización '{identifier}'."
+                )
+
+            stats = seed_inventory_categories_for_company(
+                organizacion,
+                verbose=verbose,
+            )
+            db.session.commit()
+            click.echo(
+                f"🏗️  {organizacion.nombre}: {_format_seed_summary(stats)}"
+            )
+    except click.ClickException:
+        db.session.rollback()
+        raise
+    except Exception as exc:  # pragma: no cover - defensive guard
+        db.session.rollback()
+        raise click.ClickException(str(exc)) from exc
 
 
 # Register blueprints after database initialization to avoid circular imports
