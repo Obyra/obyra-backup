@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 from flask import (
     Blueprint,
@@ -15,7 +16,6 @@ from flask import (
     current_app,
 )
 from flask_login import current_user, login_required
-from werkzeug.urls import url_parse, url_encode
 
 from app import db
 from models import (
@@ -70,7 +70,7 @@ def _coerce_internal_url(candidate: str | None, *, default: str) -> str:
     if not candidate:
         return default
 
-    parsed = url_parse(candidate)
+    parsed = urlparse(candidate)
     if parsed.netloc or parsed.scheme:
         return default
 
@@ -78,8 +78,8 @@ def _coerce_internal_url(candidate: str | None, *, default: str) -> str:
 
 
 def _with_query_params(url: str, **params) -> str:
-    parsed = url_parse(url)
-    query_args = parsed.decode_query()
+    parsed = urlparse(url)
+    query_args = dict(parse_qsl(parsed.query, keep_blank_values=True))
 
     for key, value in params.items():
         if value is None:
@@ -87,8 +87,8 @@ def _with_query_params(url: str, **params) -> str:
         else:
             query_args[key] = value
 
-    new_query = url_encode(query_args)
-    return parsed.replace(query=new_query).to_url()
+    new_query = urlencode(query_args, doseq=True)
+    return parsed._replace(query=new_query).geturl()
 
 
 def _user_can_manage_movements(user) -> bool:
