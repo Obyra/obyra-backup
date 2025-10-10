@@ -21,7 +21,7 @@
                             <i class="fas fa-table me-1"></i>
                             Cuadro de Stock
                         </a>
-                        <a href="{{ url_for('inventario_new.nuevo_item') }}" class="btn btn-light btn-sm">
+                        <a href="{{ url_for('inventario_new.nuevo_item', next=base_items_url) }}" class="btn btn-light btn-sm">
                             <i class="fas fa-plus me-1"></i>
                             Nuevo Item
                         </a>
@@ -67,9 +67,23 @@
                 
                 <!-- Lista de items -->
                 <div class="card-body">
+                    {% if warehouses|length == 0 %}
+                        <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4" data-no-warehouses-alert>
+                            <div>
+                                <strong>Configurá un depósito para comenzar.</strong>
+                                Necesitás al menos un depósito activo para registrar ingresos, egresos o transferencias de stock.
+                            </div>
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('inventario_new.warehouses', next=base_items_url) }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-warehouse me-1"></i>
+                                    Crear Depósito
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
                     {% if items %}
                         <div class="table-responsive">
-                            <table class="table table-hover">
+                            <table class="table table-hover" data-items-table data-highlight-id="{{ highlight_item_id or '' }}" data-base-items-url="{{ base_items_url }}" data-can-manage-movements="{{ 1 if can_manage_movements else 0 }}" data-has-warehouses="{{ 1 if warehouses|length > 0 else 0 }}">
                                 <thead class="table-light">
                                     <tr>
                                         <th>SKU</th>
@@ -83,7 +97,17 @@
                                 </thead>
                                 <tbody>
                                     {% for item in items %}
-                                        <tr {% if item.is_low_stock %}class="table-warning"{% endif %}>
+                                        {% set item_payload = {
+                                            'id': item.id,
+                                            'sku': item.sku,
+                                            'nombre': item.nombre,
+                                            'unidad': item.unidad,
+                                            'package_options': item.package_options,
+                                            'total_stock': float(item.total_stock),
+                                            'min_stock': float(item.min_stock),
+                                            'available_stock': float(item.available_stock),
+                                        } %}
+                                        <tr data-item-id="{{ item.id }}" data-item='{{ item_payload | tojson }}' {% if item.is_low_stock %}class="table-warning"{% endif %}>
                                             <td>
                                                 <code>{{ item.sku }}</code>
                                             </td>
@@ -92,6 +116,12 @@
                                                     <strong>{{ item.nombre }}</strong>
                                                     {% if item.descripcion %}
                                                         <br><small class="text-muted">{{ item.descripcion[:50] }}{% if item.descripcion|length > 50 %}...{% endif %}</small>
+                                                    {% endif %}
+                                                    {% if item.package_options %}
+                                                        <div class="text-muted small mt-1">
+                                                            <i class="fas fa-layer-group me-1"></i>
+                                                            Presentaciones: {{ item.package_summary }}
+                                                        </div>
                                                     {% endif %}
                                                 </div>
                                             </td>
@@ -118,15 +148,25 @@
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                <div class="btn-group btn-group-sm">
-                                                    <a href="{{ url_for('inventario_new.detalle_item', id=item.id) }}" 
-                                                       class="btn btn-outline-primary">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <a href="{{ url_for('inventario_new.detalle_item', id=item.id) }}" class="btn btn-outline-primary">
                                                         <i class="fas fa-eye"></i>
                                                     </a>
-                                                    <a href="{{ url_for('inventario_new.nuevo_item') }}?edit={{ item.id }}" 
-                                                       class="btn btn-outline-warning">
-                                                        <i class="fas fa-edit"></i>
-                                                    </a>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                                            Movimientos
+                                                        </button>
+                                                        <ul class="dropdown-menu">
+                                                            {% if can_manage_movements %}
+                                                                <li><button class="dropdown-item" type="button" data-movement-action="ingreso" data-item-trigger="{{ item.id }}">Agregar stock (Ingreso)</button></li>
+                                                                <li><button class="dropdown-item" type="button" data-movement-action="egreso" data-item-trigger="{{ item.id }}">Registrar egreso</button></li>
+                                                                <li><button class="dropdown-item" type="button" data-movement-action="transferencia" data-item-trigger="{{ item.id }}">Transferir entre depósitos</button></li>
+                                                                <li><button class="dropdown-item" type="button" data-movement-action="ajuste" data-item-trigger="{{ item.id }}">Ajustar stock</button></li>
+                                                            {% else %}
+                                                                <li><span class="dropdown-item-text text-muted">No tenés permisos para registrar movimientos.</span></li>
+                                                            {% endif %}
+                                                        </ul>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -152,41 +192,142 @@
     <!-- Links de acceso rápido -->
     <div class="row mt-4">
         <div class="col-md-3">
-            <a href="{{ url_for('inventario_new.warehouses') }}" class="card text-decoration-none">
-                <div class="card-body text-center">
+            <div class="card h-100 text-center">
+                <div class="card-body position-relative">
                     <i class="fas fa-warehouse fa-2x text-info mb-2"></i>
                     <h6>Depósitos</h6>
                     <small class="text-muted">Gestionar ubicaciones</small>
+                    <a href="{{ url_for('inventario_new.warehouses') }}" class="stretched-link" aria-label="Ir a Depósitos"></a>
                 </div>
-            </a>
+            </div>
         </div>
         <div class="col-md-3">
-            <a href="{{ url_for('inventario_new.movimientos') }}" class="card text-decoration-none">
-                <div class="card-body text-center">
+            <div class="card h-100 text-center">
+                <div class="card-body position-relative">
                     <i class="fas fa-exchange-alt fa-2x text-primary mb-2"></i>
                     <h6>Movimientos</h6>
                     <small class="text-muted">Ingresos y egresos</small>
+                    <a href="{{ url_for('inventario_new.movimientos') }}" class="stretched-link" aria-label="Ir a Movimientos"></a>
                 </div>
-            </a>
+            </div>
         </div>
         <div class="col-md-3">
-            <a href="{{ url_for('inventario_new.reservas') }}" class="card text-decoration-none">
-                <div class="card-body text-center">
+            <div class="card h-100 text-center">
+                <div class="card-body position-relative">
                     <i class="fas fa-bookmark fa-2x text-warning mb-2"></i>
                     <h6>Reservas</h6>
                     <small class="text-muted">Stock reservado</small>
+                    <a href="{{ url_for('inventario_new.reservas') }}" class="stretched-link" aria-label="Ir a Reservas"></a>
                 </div>
-            </a>
+            </div>
         </div>
         <div class="col-md-3">
-            <a href="{{ url_for('inventario_new.alertas') }}" class="card text-decoration-none">
-                <div class="card-body text-center">
+            <div class="card h-100 text-center">
+                <div class="card-body position-relative">
                     <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
                     <h6>Alertas</h6>
                     <small class="text-muted">Stock bajo</small>
+                    <a href="{{ url_for('inventario_new.alertas') }}" class="stretched-link" aria-label="Ir a Alertas"></a>
                 </div>
-            </a>
+            </div>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="inventoryMovementModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('inventario_new.movimientos') }}" data-movement-form>
+                <div class="modal-header">
+                    <h5 class="modal-title" data-movement-title>Registrar movimiento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    {% if not can_manage_movements %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-lock me-1"></i>
+                            No tenés permisos para crear movimientos. Contactá a un administrador.
+                        </div>
+                    {% endif %}
+                    {% if warehouses|length == 0 %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-warehouse me-1"></i>
+                            Primero creá un depósito para registrar movimientos.
+                        </div>
+                    {% endif %}
+                    <input type="hidden" name="item_id" data-field="item-id">
+                    <input type="hidden" name="tipo" data-field="movement-type">
+                    <input type="hidden" name="measurement_mode" value="base" data-field="measurement-mode">
+                    <input type="hidden" name="presentation_key" data-field="presentation-key">
+                    <input type="hidden" name="presentation_qty" data-field="presentation-qty">
+                    <input type="hidden" name="qty" data-field="qty">
+                    <input type="hidden" name="nuevo_stock" data-field="nuevo-stock">
+                    <input type="hidden" name="next" value="{{ base_items_url }}" data-field="next-url">
+
+                    <div class="mb-3">
+                        <div class="fw-semibold" data-field="item-name">Item</div>
+                        <div class="text-muted small" data-field="item-sku"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Medida</label>
+                        <select class="form-select" data-field="measurement-select"></select>
+                        <div class="form-text" data-field="measurement-hint"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" data-field="quantity-label">Cantidad</label>
+                        <input type="number" step="0.01" min="0" class="form-control" data-field="quantity-input">
+                        <div class="form-text text-muted" data-field="conversion-hint" hidden></div>
+                    </div>
+
+                    <div class="row g-3" data-warehouse-fields>
+                        <div class="col-md-6" data-field="origin-wrapper">
+                            <label class="form-label">Depósito origen</label>
+                            <select class="form-select" name="origen_warehouse_id" data-field="origin-select">
+                                <option value="">Seleccionar depósito...</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse.id }}">{{ warehouse.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6" data-field="destination-wrapper">
+                            <label class="form-label">Depósito destino</label>
+                            <select class="form-select" name="destino_warehouse_id" data-field="destination-select">
+                                <option value="">Seleccionar depósito...</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse.id }}">{{ warehouse.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label">Motivo</label>
+                        <textarea class="form-control" name="motivo" rows="3" data-field="motive-input" required></textarea>
+                        <div class="form-text">Describe brevemente el motivo del movimiento.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success" data-field="submit-button">Registrar movimiento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script id="inventory-items-context" type="application/json">
+{{ {
+    'warehouses': [{'id': w.id, 'nombre': w.nombre} for w in warehouses],
+    'base_items_url': base_items_url,
+    'can_manage_movements': can_manage_movements,
+    'has_warehouses': warehouses|length > 0,
+} | tojson }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/inventario_new_items.js') }}"></script>
 {% endblock %}

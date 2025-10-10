@@ -265,6 +265,41 @@ def ensure_presupuesto_validity_columns():
         raise
 
 
+def ensure_inventory_package_columns():
+    """Ensure inventory items support configurable package options."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250912_inventory_package_options.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('inventory_item')}
+            except Exception:
+                columns = set()
+
+            if 'package_options' not in columns:
+                conn.exec_driver_sql("ALTER TABLE inventory_item ADD COLUMN package_options TEXT")
+
+        with open(sentinel, 'w') as sentinel_file:
+            sentinel_file.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: inventory item package options column ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: inventory item package options column')
+        raise
+
+
 def ensure_exchange_currency_columns():
     """Ensure exchange rate tables and currency columns exist."""
 

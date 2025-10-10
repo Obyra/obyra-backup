@@ -247,6 +247,7 @@ def db_upgrade():
             ensure_item_presupuesto_stage_columns,
             ensure_presupuesto_validity_columns,
             ensure_exchange_currency_columns,
+            ensure_inventory_package_columns,
             ensure_geocode_columns,
             ensure_org_memberships_table,
             ensure_work_certification_tables,
@@ -258,6 +259,7 @@ def db_upgrade():
         ensure_item_presupuesto_stage_columns()
         ensure_presupuesto_validity_columns()
         ensure_exchange_currency_columns()
+        ensure_inventory_package_columns()
         ensure_geocode_columns()
         ensure_org_memberships_table()
         ensure_work_certification_tables()
@@ -647,6 +649,7 @@ with app.app_context():
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
+        ensure_inventory_package_columns,
         ensure_geocode_columns,
         ensure_org_memberships_table,
         ensure_work_certification_tables,
@@ -658,6 +661,7 @@ with app.app_context():
         ensure_item_presupuesto_stage_columns,
         ensure_presupuesto_validity_columns,
         ensure_exchange_currency_columns,
+        ensure_inventory_package_columns,
         ensure_geocode_columns,
         ensure_org_memberships_table,
         ensure_work_certification_tables,

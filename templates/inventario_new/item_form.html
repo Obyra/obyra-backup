@@ -21,10 +21,11 @@
                 </div>
                 <div class="card-body">
                     <form method="POST" class="row g-3">
+                        <input type="hidden" name="next" value="{{ next_url }}">
                         <div class="col-md-6">
                             <label for="sku" class="form-label">SKU *</label>
-                            <input type="text" class="form-control" id="sku" name="sku" 
-                                   value="{{ item.sku if item else request.form.get('sku', '') }}" 
+                            <input type="text" class="form-control" id="sku" name="sku"
+                                   value="{{ item.sku if item else request.form.get('sku', '') }}"
                                    {% if item %}readonly{% endif %} required>
                             <div class="form-text">Código único del producto (ej: CEM-001, HIE-10MM)</div>
                         </div>
@@ -73,10 +74,29 @@
                                 <option value="palet" {% if (item and item.unidad == 'palet') or request.form.get('unidad') == 'palet' %}selected{% endif %}>Palets</option>
                             </select>
                         </div>
-                        
+
+                        {% set presentation_rows = presentations if presentations %}
+                        {% if not presentation_rows and item %}
+                            {% set presentation_rows = item.package_options %}
+                        {% endif %}
+
+                        <div class="col-12">
+                            <label class="form-label">Presentaciones (opcional)</label>
+                            <div class="border rounded p-3" data-presentations-container data-presentations='{{ presentation_rows or [] | tojson }}' data-base-unit-label="{{ (item.unidad if item else request.form.get('unidad')) or '' }}">
+                                <p class="text-muted small mb-3">
+                                    Configurá presentaciones como bolsas o pallets. Cada presentación se convierte automáticamente a la unidad base seleccionada arriba.
+                                </p>
+                                <div data-presentation-rows class="d-flex flex-column gap-2"></div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-add-presentation>
+                                    <i class="fas fa-plus me-1"></i>
+                                    Agregar presentación
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="col-md-6">
                             <label for="min_stock" class="form-label">Stock Mínimo</label>
-                            <input type="number" step="0.01" min="0" class="form-control" id="min_stock" name="min_stock" 
+                            <input type="number" step="0.01" min="0" class="form-control" id="min_stock" name="min_stock"
                                    value="{{ item.min_stock if item else request.form.get('min_stock', '0') }}">
                             <div class="form-text">Cantidad mínima para generar alerta</div>
                         </div>
@@ -144,6 +164,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const categoryWarning = document.querySelector('[data-category-empty]');
     const categoriesEndpoint = categoriaSelect ? categoriaSelect.dataset.categoriesEndpoint : null;
     const initialCategoryOptions = {{ category_options|default([], true)|tojson }};
+    const unidadSelect = document.getElementById('unidad');
+    const presentationContainer = document.querySelector('[data-presentations-container]');
+    const presentationRowsHost = presentationContainer ? presentationContainer.querySelector('[data-presentation-rows]') : null;
+    const addPresentationButton = presentationContainer ? presentationContainer.querySelector('[data-add-presentation]') : null;
+    let presentationAutoSeeded = false;
 
     const toggleCategoryWarning = (show) => {
         if (!categoryWarning) {
@@ -225,6 +250,130 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleCategoryWarning(false);
     } else if (categoriaSelect && categoriaSelect.options.length > 1) {
         toggleCategoryWarning(false);
+    }
+
+    const parsePresentationData = () => {
+        if (!presentationContainer) {
+            return [];
+        }
+        try {
+            const raw = presentationContainer.dataset.presentations || '[]';
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            console.warn('No se pudieron parsear las presentaciones iniciales', error);
+            return [];
+        }
+    };
+
+    const currentBaseUnit = () => {
+        const base = unidadSelect ? (unidadSelect.value || '').trim() : '';
+        if (base) {
+            return base;
+        }
+        const fallback = presentationContainer && presentationContainer.dataset
+            ? (presentationContainer.dataset.baseUnitLabel || '')
+            : '';
+        return fallback.trim();
+    };
+
+    const updateBaseUnitBadges = () => {
+        if (!presentationRowsHost) {
+            return;
+        }
+        const unitLabel = currentBaseUnit() || 'unidad';
+        presentationRowsHost.querySelectorAll('[data-base-unit-text]').forEach((badge) => {
+            badge.textContent = unitLabel;
+        });
+    };
+
+    const escapeHtml = (value) => {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    };
+
+    const createPresentationRow = (data = {}) => {
+        if (!presentationRowsHost) {
+            return;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'presentation-row border rounded p-3';
+
+        const labelValue = escapeHtml(data.label || '');
+        const unitValue = escapeHtml(data.unit || (currentBaseUnit() === 'kg' ? 'bolsa' : 'unidad'));
+        const multiplierValue = escapeHtml(data.raw_multiplier ?? data.multiplier ?? '');
+
+        row.innerHTML = `
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Etiqueta</label>
+                    <input type="text" class="form-control" name="presentation_label[]" value="${labelValue}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Unidad</label>
+                    <input type="text" class="form-control" name="presentation_unit[]" value="${unitValue}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Cantidad en unidad base</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" min="0" class="form-control" name="presentation_multiplier[]" value="${multiplierValue}">
+                        <span class="input-group-text" data-base-unit-text></span>
+                    </div>
+                </div>
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-outline-danger" data-remove-presentation title="Eliminar">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        const removeButton = row.querySelector('[data-remove-presentation]');
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                row.remove();
+                updateBaseUnitBadges();
+            });
+        }
+
+        presentationRowsHost.appendChild(row);
+        updateBaseUnitBadges();
+    };
+
+    if (presentationRowsHost) {
+        const existing = parsePresentationData();
+        if (existing.length) {
+            existing.forEach((entry) => createPresentationRow(entry));
+        } else if (currentBaseUnit() === 'kg') {
+            createPresentationRow({ label: 'Bolsa 25 kg', unit: 'bolsa', multiplier: 25 });
+            createPresentationRow({ label: 'Bolsa 50 kg', unit: 'bolsa', multiplier: 50 });
+            presentationAutoSeeded = true;
+        }
+
+        if (addPresentationButton) {
+            addPresentationButton.addEventListener('click', () => {
+                createPresentationRow({});
+            });
+        }
+    }
+
+    const handleUnitChange = () => {
+        updateBaseUnitBadges();
+        if (!presentationRowsHost || presentationRowsHost.childElementCount) {
+            return;
+        }
+        if ((unidadSelect.value || '').toLowerCase() === 'kg' && !presentationAutoSeeded) {
+            createPresentationRow({ label: 'Bolsa 25 kg', unit: 'bolsa', multiplier: 25 });
+            createPresentationRow({ label: 'Bolsa 50 kg', unit: 'bolsa', multiplier: 50 });
+            presentationAutoSeeded = true;
+        }
+    };
+
+    if (unidadSelect) {
+        unidadSelect.addEventListener('change', handleUnitChange);
+        updateBaseUnitBadges();
     }
 
     refreshCategories();

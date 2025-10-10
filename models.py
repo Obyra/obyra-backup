@@ -1955,6 +1955,7 @@ class InventoryItem(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=False)
     unidad = db.Column(db.String(20), nullable=False)  # kg, m, u, m2, m3, etc.
+    package_options_raw = db.Column('package_options', db.Text)
     min_stock = db.Column(db.Numeric(12, 2), default=0)
     descripcion = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1974,7 +1975,7 @@ class InventoryItem(db.Model):
     def total_stock(self):
         """Stock total en todos los depósitos"""
         return sum(stock.cantidad for stock in self.stocks)
-    
+
     @property
     def reserved_stock(self):
         """Stock reservado activo"""
@@ -1989,6 +1990,85 @@ class InventoryItem(db.Model):
     def is_low_stock(self):
         """Verifica si el stock está bajo"""
         return self.total_stock <= self.min_stock
+
+    @property
+    def package_options(self):
+        """Opciones de presentación configuradas para el item."""
+        raw = self.package_options_raw
+        if not raw:
+            return []
+
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+
+        normalized = []
+        if isinstance(data, list):
+            for entry in data:
+                option = self._normalize_package_option(entry)
+                if option:
+                    normalized.append(option)
+        elif isinstance(data, dict):
+            option = self._normalize_package_option(data)
+            if option:
+                normalized.append(option)
+
+        return normalized
+
+    @package_options.setter
+    def package_options(self, value):
+        options = []
+        if isinstance(value, dict):
+            maybe_option = self._normalize_package_option(value)
+            if maybe_option:
+                options.append(maybe_option)
+        elif isinstance(value, list):
+            for entry in value:
+                maybe_option = self._normalize_package_option(entry)
+                if maybe_option:
+                    options.append(maybe_option)
+
+        if options:
+            self.package_options_raw = json.dumps(options)
+        else:
+            self.package_options_raw = None
+
+    @staticmethod
+    def _normalize_package_option(entry):
+        if not isinstance(entry, dict):
+            return None
+
+        label = (entry.get('label') or entry.get('nombre') or entry.get('name') or '').strip()
+        if not label:
+            return None
+
+        unit = (entry.get('unit') or entry.get('unidad') or entry.get('presentation_unit') or '').strip()
+        multiplier = entry.get('multiplier') or entry.get('factor') or entry.get('cantidad')
+
+        try:
+            multiplier_val = float(multiplier)
+        except (TypeError, ValueError):
+            return None
+
+        key = (entry.get('key') or entry.get('id') or label.lower())
+        key = ''.join(ch for ch in key if ch.isalnum() or ch in ('_', '-')).strip('_-')
+        if not key:
+            key = label.lower().replace(' ', '_')
+
+        return {
+            'key': key,
+            'label': label,
+            'unit': unit or 'unidad',
+            'multiplier': multiplier_val,
+        }
+
+    @property
+    def package_summary(self):
+        options = self.package_options
+        if not options:
+            return ''
+        return ', '.join(option['label'] for option in options)
 
 
 class Warehouse(db.Model):

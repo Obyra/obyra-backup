@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Movimientos de Inventario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Registrar movimiento</h5>
+                </div>
+                <div class="card-body">
+                    {% if not can_manage_movements %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-lock me-1"></i>
+                            No tenés permisos para crear movimientos. Contactá a un administrador.
+                        </div>
+                    {% endif %}
+                    {% if warehouses|length == 0 %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-warehouse me-1"></i>
+                            Creá al menos un depósito para registrar movimientos.
+                        </div>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('inventario_new.movimientos') }}">
+                        <div class="mb-3">
+                            <label class="form-label">Item</label>
+                            <select class="form-select" name="item_id" required {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}>
+                                <option value="">Seleccionar item...</option>
+                                {% for item in items %}
+                                    <option value="{{ item.id }}">{{ item.nombre }} ({{ item.sku }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" name="tipo" required {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}>
+                                <option value="ingreso">Ingreso</option>
+                                <option value="egreso">Egreso</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="ajuste">Ajuste</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Cantidad</label>
+                            <input type="number" step="0.01" min="0" name="qty" class="form-control" required {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}>
+                            <div class="form-text">La conversión por presentaciones está disponible desde la lista de items.</div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Depósito origen</label>
+                                <select class="form-select" name="origen_warehouse_id" {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}>
+                                    <option value="">Seleccionar depósito...</option>
+                                    {% for warehouse in warehouses %}
+                                        <option value="{{ warehouse.id }}">{{ warehouse.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Depósito destino</label>
+                                <select class="form-select" name="destino_warehouse_id" {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}>
+                                    <option value="">Seleccionar depósito...</option>
+                                    {% for warehouse in warehouses %}
+                                        <option value="{{ warehouse.id }}">{{ warehouse.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label">Motivo</label>
+                            <textarea class="form-control" name="motivo" rows="3" required {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}></textarea>
+                        </div>
+                        <div class="d-grid mt-3">
+                            <button type="submit" class="btn btn-success" {% if not can_manage_movements or warehouses|length == 0 %}disabled{% endif %}>
+                                Registrar movimiento
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Últimos movimientos</h5>
+                </div>
+                <div class="card-body">
+                    {% if movimientos %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Item</th>
+                                        <th>Tipo</th>
+                                        <th>Cantidad</th>
+                                        <th>Depósito</th>
+                                        <th>Fecha</th>
+                                        <th>Usuario</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for movimiento in movimientos %}
+                                        <tr>
+                                            <td>#{{ movimiento.id }}</td>
+                                            <td>{{ movimiento.item.nombre }}</td>
+                                            <td class="text-capitalize">{{ movimiento.tipo }}</td>
+                                            <td>{{ movimiento.qty }} {{ movimiento.item.unidad }}</td>
+                                            <td>{{ movimiento.warehouse_display }}</td>
+                                            <td>{{ movimiento.fecha.strftime('%d/%m/%Y %H:%M') }}</td>
+                                            <td>{{ movimiento.user.nombre_completo }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">Todavía no hay movimientos registrados.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

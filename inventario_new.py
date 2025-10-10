@@ -15,6 +15,7 @@ from flask import (
     current_app,
 )
 from flask_login import current_user, login_required
+from werkzeug.urls import url_parse, url_encode
 
 from app import db
 from models import (
@@ -61,6 +62,112 @@ inventario_new_bp = Blueprint(
     __name__,
     template_folder=INVENTARIO_NEW_TEMPLATE_DIR,
 )
+
+
+def _coerce_internal_url(candidate: str | None, *, default: str) -> str:
+    """Ensure the provided URL is relative to avoid open redirects."""
+
+    if not candidate:
+        return default
+
+    parsed = url_parse(candidate)
+    if parsed.netloc or parsed.scheme:
+        return default
+
+    return candidate
+
+
+def _with_query_params(url: str, **params) -> str:
+    parsed = url_parse(url)
+    query_args = parsed.decode_query()
+
+    for key, value in params.items():
+        if value is None:
+            query_args.pop(key, None)
+        else:
+            query_args[key] = value
+
+    new_query = url_encode(query_args)
+    return parsed.replace(query=new_query).to_url()
+
+
+def _user_can_manage_movements(user) -> bool:
+    if not user:
+        return False
+    role = getattr(user, 'rol', None) or ''
+    if role in {'administrador', 'compras'}:
+        return True
+    if hasattr(user, 'es_admin'):
+        try:
+            return bool(user.es_admin())
+        except Exception:
+            return False
+    return False
+
+
+def _extract_presentations_from_form(form) -> List[dict]:
+    labels = form.getlist('presentation_label[]')
+    units = form.getlist('presentation_unit[]')
+    multipliers = form.getlist('presentation_multiplier[]')
+
+    options: List[dict] = []
+    for idx, (label, unit, multiplier) in enumerate(zip(labels, units, multipliers)):
+        label_value = (label or '').strip()
+        unit_value = (unit or '').strip()
+        multiplier_value = (multiplier or '').strip()
+
+        if not label_value and not multiplier_value:
+            continue
+
+        try:
+            multiplier_float = float(multiplier_value)
+        except (TypeError, ValueError):
+            # Guardamos el valor original para que el usuario pueda corregirlo
+            options.append({
+                'label': label_value,
+                'unit': unit_value,
+                'multiplier': None,
+                'raw_multiplier': multiplier_value,
+                'index': idx,
+            })
+            continue
+
+        options.append({
+            'label': label_value,
+            'unit': unit_value,
+            'multiplier': multiplier_float,
+            'raw_multiplier': multiplier_value,
+            'index': idx,
+        })
+
+    return options
+
+
+def _convert_package_quantity(item: InventoryItem, package_key: str, qty_value):
+    package = next((opt for opt in item.package_options if opt.get('key') == package_key), None)
+    if not package:
+        raise ValueError('La presentación seleccionada no está disponible para este item.')
+
+    try:
+        qty_decimal = Decimal(str(qty_value))
+    except (TypeError, InvalidOperation):
+        raise ValueError('La cantidad de la presentación debe ser numérica.')
+
+    if qty_decimal <= 0:
+        raise ValueError('La cantidad debe ser mayor a cero.')
+
+    multiplier_decimal = Decimal(str(package.get('multiplier') or 0))
+    if multiplier_decimal <= 0:
+        raise ValueError('La presentación no tiene un factor válido.')
+
+    base_qty = qty_decimal * multiplier_decimal
+    package_info = {
+        'qty': qty_decimal,
+        'unit': package.get('unit') or 'unidad',
+        'label': package.get('label'),
+        'multiplier': multiplier_decimal,
+    }
+    return base_qty, package_info
 
 def requires_role(*roles):
     """Decorator para verificar roles"""
@@ -462,10 +569,12 @@ def items():
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    # Filtros
-    categoria_id = request.args.get('categoria')
-    buscar = request.args.get('buscar')
-    stock_bajo = request.args.get('stock_bajo')
+    query_args = request.args.to_dict(flat=True)
+    highlight_raw = query_args.pop('highlight', None)
+
+    categoria_id = query_args.get('categoria')
+    buscar = query_args.get('buscar')
+    stock_bajo = query_args.get('stock_bajo')
 
     company_id = _resolve_company_id()
     if not company_id:
@@ -487,11 +596,26 @@ def items():
         )
     
     items = query.order_by(InventoryItem.nombre).all()
-    
+
     # Filtrar por stock bajo si se solicita
     if stock_bajo:
         items = [item for item in items if item.is_low_stock]
-    
+
+    warehouses = (
+        Warehouse.query.filter_by(company_id=company_id, activo=True)
+        .order_by(Warehouse.nombre.asc())
+        .all()
+    )
+
+    base_filters = {k: v for k, v in query_args.items() if v}
+    base_items_url = url_for('inventario_new.items', **base_filters)
+    highlight_item_id = None
+    if highlight_raw:
+        try:
+            highlight_item_id = int(highlight_raw)
+        except (TypeError, ValueError):
+            highlight_item_id = None
+
     # Para JSON
     json_resp = get_json_response({
         'data': [
@@ -502,20 +626,25 @@ def items():
                 'categoria': item.categoria.nombre,
                 'total_stock': float(item.total_stock),
                 'min_stock': float(item.min_stock),
-                'is_low_stock': item.is_low_stock
+                'is_low_stock': item.is_low_stock,
+                'package_options': item.package_options,
             } for item in items
         ]
     })
     if json_resp:
         return json_resp
-    
+
     # Obtener categorías para filtros
     categorias = get_active_categories(company_id)
 
     return render_template('inventario_new/items.html',
                          items=items,
                          categorias=categorias,
-                         filtros={'categoria': categoria_id, 'buscar': buscar, 'stock_bajo': stock_bajo})
+                         filtros={'categoria': categoria_id, 'buscar': buscar, 'stock_bajo': stock_bajo},
+                         warehouses=warehouses,
+                         highlight_item_id=highlight_item_id,
+                         base_items_url=base_items_url,
+                         can_manage_movements=_user_can_manage_movements(current_user))
 
 
 @inventario_new_bp.route('/cuadro-stock')
@@ -898,6 +1027,10 @@ def nuevo_item():
         flash('No pudimos determinar la organización actual.', 'warning')
         return redirect(url_for('inventario_new.items'))
 
+    default_next = url_for('inventario_new.items')
+    next_param = request.args.get('next') or request.form.get('next')
+    return_to = _coerce_internal_url(next_param, default=default_next)
+
     categorias, seed_stats, auto_seeded, company = ensure_categories_for_company_id(company_id)
     category_options = [serialize_category(categoria) for categoria in categorias]
     can_manage_categories = user_can_manage_inventory_categories(current_user)
@@ -909,6 +1042,7 @@ def nuevo_item():
             'info',
         )
 
+    form_presentations: List[dict] = []
     if request.method == 'POST':
         # Validaciones
         required_fields = ['sku', 'nombre', 'categoria_id', 'unidad']
@@ -924,8 +1058,10 @@ def nuevo_item():
                     categorias=categorias,
                     category_options=category_options,
                     can_manage_categories=can_manage_categories,
+                    presentations=form_presentations,
+                    next_url=return_to,
                 )
-        
+
         # Verificar SKU único
         sku = request.form.get('sku')
         if InventoryItem.query.filter_by(sku=sku).first():
@@ -939,8 +1075,28 @@ def nuevo_item():
                 categorias=categorias,
                 category_options=category_options,
                 can_manage_categories=can_manage_categories,
+                presentations=form_presentations,
+                next_url=return_to,
             )
-        
+
+        form_presentations = _extract_presentations_from_form(request.form)
+        invalid_presentations = [opt for opt in form_presentations if opt.get('multiplier') is None and opt.get('label')]
+
+        if invalid_presentations:
+            error = 'Revisá las presentaciones: la cantidad debe ser numérica.'
+            json_resp = get_json_response(None, 400, error)
+            if json_resp:
+                return json_resp
+            flash(error, 'danger')
+            return render_template(
+                'inventario_new/item_form.html',
+                categorias=categorias,
+                category_options=category_options,
+                can_manage_categories=can_manage_categories,
+                presentations=form_presentations,
+                next_url=return_to,
+            )
+
         try:
             item = InventoryItem(
                 company_id=current_user.organizacion_id,
@@ -951,17 +1107,34 @@ def nuevo_item():
                 min_stock=float(request.form.get('min_stock', 0)),
                 descripcion=request.form.get('descripcion')
             )
-            
+
+            valid_presentations = [
+                {
+                    'label': opt['label'],
+                    'unit': opt.get('unit') or 'unidad',
+                    'multiplier': opt['multiplier'],
+                }
+                for opt in form_presentations
+                if opt.get('label') and opt.get('multiplier')
+            ]
+            if valid_presentations:
+                item.package_options = valid_presentations
+
             db.session.add(item)
             db.session.commit()
-            
-            json_resp = get_json_response({'id': item.id, 'mensaje': 'Item creado exitosamente'})
+
+            json_payload = {
+                'id': item.id,
+                'mensaje': 'Item creado exitosamente',
+                'next': _with_query_params(return_to, highlight=item.id),
+            }
+            json_resp = get_json_response(json_payload)
             if json_resp:
                 return json_resp
 
             flash('Item creado exitosamente.', 'success')
-            return redirect(url_for('inventario_new.detalle_item', id=item.id))
-            
+            return redirect(_with_query_params(return_to, highlight=item.id))
+
         except Exception as e:
             db.session.rollback()
             error = 'Error al crear el item.'
@@ -970,12 +1143,16 @@ def nuevo_item():
                 return json_resp
             flash(error, 'danger')
 
+            form_presentations = form_presentations or []
+
     return render_template(
         'inventario_new/item_form.html',
         categorias=categorias,
         category_options=category_options,
         item=None,
         can_manage_categories=can_manage_categories,
+        presentations=form_presentations,
+        next_url=return_to,
     )
 
 @inventario_new_bp.route('/items/<int:id>')
@@ -1043,14 +1220,17 @@ def warehouses():
 @requires_role('administrador', 'compras')
 def nuevo_warehouse():
     nombre = request.form.get('nombre')
-    
+    default_next = url_for('inventario_new.warehouses')
+    next_param = request.form.get('next') or request.args.get('next')
+    safe_next = _coerce_internal_url(next_param, default=default_next)
+
     if not nombre:
         error = 'El nombre del depósito es obligatorio.'
         json_resp = get_json_response(None, 400, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-        return redirect(url_for('inventario_new.warehouses'))
+        return redirect(safe_next)
     
     try:
         warehouse = Warehouse(
@@ -1067,7 +1247,7 @@ def nuevo_warehouse():
             return json_resp
             
         flash('Depósito creado exitosamente.', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
         error = 'Error al crear el depósito.'
@@ -1075,15 +1255,24 @@ def nuevo_warehouse():
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    
-    return redirect(url_for('inventario_new.warehouses'))
+
+    return redirect(safe_next)
 
 @inventario_new_bp.route('/movimientos', methods=['GET', 'POST'])
 @login_required
 def movimientos():
-    if request.method == 'POST' and current_user.rol in ['administrador', 'compras']:
+    if request.method == 'POST':
+        if not _user_can_manage_movements(current_user):
+            error = 'No tienes permisos para registrar movimientos.'
+            json_resp = get_json_response(None, 403, error)
+            if json_resp:
+                return json_resp
+            flash(error, 'danger')
+            next_param = request.form.get('next') or request.args.get('next')
+            safe_next = _coerce_internal_url(next_param, default=url_for('inventario_new.movimientos'))
+            return redirect(safe_next)
         return crear_movimiento()
-    
+
     # Listar movimientos
     movimientos = StockMovement.query.join(InventoryItem).filter(
         InventoryItem.company_id == current_user.organizacion_id
@@ -1104,96 +1293,152 @@ def movimientos():
     })
     if json_resp:
         return json_resp
-    
+
     # Obtener datos para el formulario
     items = InventoryItem.query.filter_by(company_id=current_user.organizacion_id, activo=True).all()
     warehouses = Warehouse.query.filter_by(company_id=current_user.organizacion_id, activo=True).all()
     projects = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).all()
-    
-    return render_template('inventario_new/movimientos.html', 
+
+    return render_template('inventario_new/movimientos.html',
                          movimientos=movimientos,
                          items=items,
                          warehouses=warehouses,
-                         projects=projects)
+                         projects=projects,
+                         can_manage_movements=_user_can_manage_movements(current_user))
 
 def crear_movimiento():
     """Crea un nuevo movimiento de stock"""
+    default_redirect = url_for('inventario_new.movimientos')
+    next_param = request.form.get('next') or request.args.get('next')
+    redirect_target = _coerce_internal_url(next_param, default=default_redirect)
+
     item_id = request.form.get('item_id')
     tipo = request.form.get('tipo')
-    qty = request.form.get('qty')
-    motivo = request.form.get('motivo')
-    
-    if not all([item_id, tipo, qty, motivo]):
+    motivo = (request.form.get('motivo') or '').strip()
+    measurement_mode = (request.form.get('measurement_mode') or 'base').lower()
+    qty_raw = request.form.get('qty')
+    presentation_key = request.form.get('presentation_key')
+    presentation_qty_raw = request.form.get('presentation_qty')
+    nuevo_stock_raw = request.form.get('nuevo_stock')
+
+    if not all([item_id, tipo, motivo]):
         error = 'Todos los campos son obligatorios.'
         json_resp = get_json_response(None, 400, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-        return redirect(url_for('inventario_new.movimientos'))
-    
+        return redirect(redirect_target)
+
     try:
-        qty = float(qty)
-        if qty <= 0:
-            raise ValueError("La cantidad debe ser mayor a cero")
-            
-        item = InventoryItem.query.get(item_id)
-        
-        # Validaciones específicas por tipo
-        if tipo == 'ingreso':
-            warehouse_id = request.form.get('destino_warehouse_id')
-            if not warehouse_id:
-                raise ValueError("Depósito destino es obligatorio para ingresos")
-            movimiento = crear_movimiento_ingreso(item, qty, warehouse_id, motivo)
-            
-        elif tipo == 'egreso':
-            warehouse_id = request.form.get('origen_warehouse_id')
-            if not warehouse_id:
-                raise ValueError("Depósito origen es obligatorio para egresos")
-            movimiento = crear_movimiento_egreso(item, qty, warehouse_id, motivo)
-            
-        elif tipo == 'transferencia':
-            origen_id = request.form.get('origen_warehouse_id')
-            destino_id = request.form.get('destino_warehouse_id')
-            if not all([origen_id, destino_id]):
-                raise ValueError("Depósitos origen y destino son obligatorios para transferencias")
-            if origen_id == destino_id:
-                raise ValueError("El depósito origen debe ser diferente al destino")
-            movimiento = crear_movimiento_transferencia(item, qty, origen_id, destino_id, motivo)
-            
-        elif tipo == 'ajuste':
-            warehouse_id = request.form.get('destino_warehouse_id')
-            nuevo_stock = request.form.get('nuevo_stock')
-            if not all([warehouse_id, nuevo_stock]):
-                raise ValueError("Depósito y nuevo stock son obligatorios para ajustes")
-            movimiento = crear_movimiento_ajuste(item, float(nuevo_stock), warehouse_id, motivo)
-        
+        item = InventoryItem.query.filter_by(id=item_id, company_id=current_user.organizacion_id).first()
+        if not item:
+            raise ValueError('El item seleccionado no existe o no pertenece a tu organización.')
+
+        base_qty: Decimal | None = None
+        nuevo_stock_base: Decimal | None = None
+        package_info = None
+
+        def _ensure_warehouse(warehouse_id_value, *, role: str) -> Warehouse:
+            if not warehouse_id_value:
+                raise ValueError(f'Depósito {role} es obligatorio para {tipo}s')
+            try:
+                warehouse_id_int = int(warehouse_id_value)
+            except (TypeError, ValueError):
+                raise ValueError('Depósito inválido.')
+            warehouse_obj = Warehouse.query.filter_by(
+                id=warehouse_id_int,
+                company_id=current_user.organizacion_id,
+                activo=True,
+            ).first()
+            if not warehouse_obj:
+                raise ValueError('Depósito no encontrado o inactivo.')
+            return warehouse_obj
+
+        if tipo == 'ajuste':
+            if measurement_mode == 'package' and presentation_key and presentation_qty_raw:
+                base_qty, package_info = _convert_package_quantity(item, presentation_key, presentation_qty_raw)
+                nuevo_stock_base = base_qty
+            else:
+                if not nuevo_stock_raw:
+                    raise ValueError('El nuevo stock es obligatorio para ajustes.')
+                try:
+                    nuevo_stock_base = Decimal(str(nuevo_stock_raw))
+                except (TypeError, InvalidOperation):
+                    raise ValueError('El nuevo stock debe ser un número válido.')
+                if nuevo_stock_base < 0:
+                    raise ValueError('El nuevo stock debe ser mayor o igual a cero.')
+            base_qty = None
         else:
-            raise ValueError("Tipo de movimiento no válido")
-        
+            if measurement_mode == 'package' and presentation_key and presentation_qty_raw:
+                base_qty, package_info = _convert_package_quantity(item, presentation_key, presentation_qty_raw)
+            else:
+                if not qty_raw:
+                    raise ValueError('La cantidad es obligatoria.')
+                try:
+                    base_qty = Decimal(str(qty_raw))
+                except (TypeError, InvalidOperation):
+                    raise ValueError('La cantidad debe ser un número válido.')
+                if base_qty <= 0:
+                    raise ValueError('La cantidad debe ser mayor a cero.')
+
+        if package_info:
+            qty_display = package_info['qty'].normalize()
+            multiplier_display = package_info['multiplier'].normalize()
+            unit_display = package_info.get('unit') or 'unidad'
+            label_display = package_info.get('label') or ''
+            conversion = f"{qty_display} {unit_display}"
+            if label_display:
+                conversion = f"{conversion} ({label_display})"
+            conversion = f"{conversion} → {qty_display * multiplier_display} {item.unidad}"
+            motivo = f"{motivo} · {conversion}".strip()
+
+        movimiento = None
+
+        if tipo == 'ingreso':
+            destino = _ensure_warehouse(request.form.get('destino_warehouse_id'), role='destino')
+            movimiento = crear_movimiento_ingreso(item, float(base_qty), destino.id, motivo)
+        elif tipo == 'egreso':
+            origen = _ensure_warehouse(request.form.get('origen_warehouse_id'), role='origen')
+            movimiento = crear_movimiento_egreso(item, float(base_qty), origen.id, motivo)
+        elif tipo == 'transferencia':
+            origen = _ensure_warehouse(request.form.get('origen_warehouse_id'), role='origen')
+            destino = _ensure_warehouse(request.form.get('destino_warehouse_id'), role='destino')
+            if origen.id == destino.id:
+                raise ValueError('El depósito origen debe ser diferente al destino.')
+            movimiento = crear_movimiento_transferencia(item, float(base_qty), origen.id, destino.id, motivo)
+        elif tipo == 'ajuste':
+            destino = _ensure_warehouse(request.form.get('destino_warehouse_id'), role='destino')
+            movimiento = crear_movimiento_ajuste(item, float(nuevo_stock_base), destino.id, motivo)
+        else:
+            raise ValueError('Tipo de movimiento no válido')
+
         db.session.add(movimiento)
         db.session.commit()
-        
-        json_resp = get_json_response({'mensaje': 'Movimiento registrado exitosamente'})
+
+        payload = {'mensaje': 'Movimiento registrado exitosamente'}
+        json_resp = get_json_response(payload)
         if json_resp:
             return json_resp
-            
+
         flash('Movimiento registrado exitosamente.', 'success')
-        
-    except ValueError as e:
-        error = str(e)
+
+    except ValueError as exc:
+        error = str(exc)
         json_resp = get_json_response(None, 400, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    except Exception as e:
+        return redirect(redirect_target)
+    except Exception:
         db.session.rollback()
         error = 'Error al registrar el movimiento.'
         json_resp = get_json_response(None, 500, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    
-    return redirect(url_for('inventario_new.movimientos'))
+        return redirect(redirect_target)
+
+    return redirect(redirect_target)
 
 def crear_movimiento_ingreso(item, qty, warehouse_id, motivo):
     """Crea un movimiento de ingreso"""
