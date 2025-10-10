@@ -102,18 +102,41 @@
                             <div class="form-text">Se registrará como ingreso "Carga inicial" en la unidad base.</div>
                         </div>
                         <div class="col-md-6">
-                            <label for="initial_stock_warehouse_id" class="form-label">Depósito para stock inicial</label>
-                            {% if warehouses %}
-                                <select class="form-select" id="initial_stock_warehouse_id" name="initial_stock_warehouse_id">
-                                    <option value="">Seleccionar depósito...</option>
-                                    {% for warehouse in warehouses %}
-                                        <option value="{{ warehouse.id }}" {% if request.form.get('initial_stock_warehouse_id') == warehouse.id|string %}selected{% endif %}>{{ warehouse.nombre }}</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">Si dejás el campo vacío y existe un solo depósito, se utilizará automáticamente.</div>
+                            <label for="initial_stock_location_id" class="form-label">Ubicación para stock inicial</label>
+                            {% set selected_initial_location = request.form.get('initial_stock_location_id') or default_location_id %}
+                            {% if location_groups %}
+                                <div class="d-flex flex-column gap-2">
+                                    <div class="input-group" data-location-search-wrapper>
+                                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                        <input type="search" class="form-control" placeholder="Buscar ubicación..." data-location-search="initial">
+                                    </div>
+                                    <select class="form-select" id="initial_stock_location_id" name="initial_stock_location_id"
+                                            data-location-select data-initial-value="{{ selected_initial_location }}">
+                                        <option value="">Seleccionar ubicación...</option>
+                                        {% for group in location_groups %}
+                                            <optgroup label="{{ group.label }}">
+                                                {% for option in group.options %}
+                                                    <option value="{{ option.id }}" {% if selected_initial_location == option.id|string %}selected{% endif %}>
+                                                        {{ option.nombre }}{% if option.direccion %} – {{ option.direccion }}{% endif %}
+                                                    </option>
+                                                {% endfor %}
+                                            </optgroup>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-text">Elegí dónde registrar el ingreso inicial.</div>
                             {% else %}
-                                <div class="form-control-plaintext text-muted">Creá un depósito para asignar stock inicial.</div>
+                                <div class="alert alert-info mb-2" role="alert">
+                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                    Necesitás crear una ubicación (depósito u obra) para asignar stock inicial.
+                                </div>
                             {% endif %}
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-outline-success btn-sm" data-open-location-modal data-select-target="#initial_stock_location_id">
+                                    <i class="fas fa-plus me-1"></i>
+                                    Crear ubicación
+                                </button>
+                            </div>
                         </div>
                         {% endif %}
 
@@ -180,6 +203,9 @@
         </div>
     </div>
 </div>
+
+{% include 'inventario_new/_location_modal.html' %}
+<script type="application/json" data-location-groups>{{ location_groups|default([], true)|tojson }}</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -399,11 +425,56 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBaseUnitBadges();
     }
 
+    const initialStockInput = document.getElementById('initial_stock');
+    const initialLocationSelect = document.getElementById('initial_stock_location_id');
+    const initialLocationSearch = document.querySelector('[data-location-search="initial"]');
+
+    const registerLocationSelect = () => {
+        if (window.inventoryLocations && initialLocationSelect) {
+            window.inventoryLocations.registerSelect(initialLocationSelect, initialLocationSearch);
+            return true;
+        }
+        return false;
+    };
+
+    if (!registerLocationSelect()) {
+        document.addEventListener('inventory-location:ready', registerLocationSelect, { once: true });
+    }
+
+    const toggleInitialLocationRequirement = () => {
+        if (!initialStockInput || !initialLocationSelect) {
+            return;
+        }
+        const value = parseFloat(initialStockInput.value || '0');
+        if (!Number.isNaN(value) && value > 0) {
+            initialLocationSelect.setAttribute('required', 'required');
+        } else {
+            initialLocationSelect.removeAttribute('required');
+        }
+    };
+
+    if (initialStockInput) {
+        initialStockInput.addEventListener('input', toggleInitialLocationRequirement);
+        toggleInitialLocationRequirement();
+    }
+
+    document.addEventListener('inventory-location:created', () => {
+        toggleInitialLocationRequirement();
+    });
+
     refreshCategories();
-    window.addEventListener('obyra:org-changed', refreshCategories);
+    window.addEventListener('obyra:org-changed', () => {
+        refreshCategories();
+        registerLocationSelect();
+    });
     document.addEventListener('obyra:inventory-categories:refresh', refreshCategories);
 
 });
 </script>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/inventory_locations.js') }}"></script>
 {% endblock %}
 

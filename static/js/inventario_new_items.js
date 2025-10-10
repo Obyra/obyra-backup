@@ -1,10 +1,10 @@
 (() => {
     const contextElement = document.getElementById('inventory-items-context');
     let context = {
-        warehouses: [],
+        location_groups: [],
         base_items_url: '',
         can_manage_movements: false,
-        has_warehouses: false,
+        has_locations: false,
     };
 
     if (contextElement) {
@@ -16,6 +16,18 @@
         } catch (error) {
             console.warn('[inventario] No se pudo parsear el contexto de items', error);
         }
+    }
+
+    const applyLocationGroups = () => {
+        if (!window.inventoryLocations) {
+            return false;
+        }
+        window.inventoryLocations.setGroups(context.location_groups || []);
+        return true;
+    };
+
+    if (!applyLocationGroups()) {
+        document.addEventListener('inventory-location:ready', applyLocationGroups, { once: true });
     }
 
     const table = document.querySelector('[data-items-table]');
@@ -61,6 +73,8 @@
     const destinationWrapper = modalElement.querySelector('[data-field="destination-wrapper"]');
     const originSelect = modalElement.querySelector('[data-field="origin-select"]');
     const destinationSelect = modalElement.querySelector('[data-field="destination-select"]');
+    const originSearch = modalElement.querySelector('[data-location-search="origin"]');
+    const destinationSearch = modalElement.querySelector('[data-location-search="destination"]');
     const submitButton = modalElement.querySelector('[data-field="submit-button"]');
     const motiveInput = modalElement.querySelector('[data-field="motive-input"]');
     const formTitle = modalElement.querySelector('[data-movement-title]');
@@ -68,6 +82,19 @@
     let currentItem = null;
     let currentAction = null;
     let packagesMap = {};
+
+    const registerLocationSelects = () => {
+        if (!window.inventoryLocations) {
+            return false;
+        }
+        window.inventoryLocations.registerSelect(originSelect, originSearch);
+        window.inventoryLocations.registerSelect(destinationSelect, destinationSearch);
+        return true;
+    };
+
+    if (!registerLocationSelects()) {
+        document.addEventListener('inventory-location:ready', registerLocationSelects, { once: true });
+    }
 
     const ACTION_CONFIG = {
         ingreso: {
@@ -255,6 +282,38 @@
         updateMeasurementUI();
     };
 
+    const applyMovementAvailability = () => {
+        const hasLocations = !!context.has_locations;
+        const canManage = !!context.can_manage_movements;
+
+        const allowSelection = hasLocations && canManage;
+
+        if (originSelect) {
+            originSelect.disabled = !allowSelection;
+        }
+        if (destinationSelect) {
+            destinationSelect.disabled = !allowSelection;
+        }
+        if (originSearch) {
+            originSearch.disabled = !allowSelection;
+        }
+        if (destinationSearch) {
+            destinationSearch.disabled = !allowSelection;
+        }
+        if (measurementSelect) {
+            measurementSelect.disabled = !allowSelection;
+        }
+        if (quantityInput) {
+            quantityInput.disabled = !allowSelection;
+        }
+        if (motiveInput) {
+            motiveInput.disabled = !canManage || !hasLocations;
+        }
+        if (submitButton) {
+            submitButton.disabled = !canManage || !hasLocations;
+        }
+    };
+
     const openMovementModal = (item, action) => {
         if (!item || !action) {
             return;
@@ -269,7 +328,7 @@
         }
         if (submitButton) {
             submitButton.textContent = config.submitText;
-            submitButton.disabled = !context.can_manage_movements || !context.has_warehouses;
+            submitButton.disabled = !context.can_manage_movements || !context.has_locations;
         }
         if (motiveInput) {
             motiveInput.placeholder = config.motivePlaceholder;
@@ -292,26 +351,7 @@
             modalElement.style.display = 'block';
         }
 
-        if (!context.has_warehouses) {
-            if (originSelect) {
-                originSelect.disabled = true;
-            }
-            if (destinationSelect) {
-                destinationSelect.disabled = true;
-            }
-            if (measurementSelect) {
-                measurementSelect.disabled = true;
-            }
-            if (quantityInput) {
-                quantityInput.disabled = true;
-            }
-            if (motiveInput) {
-                motiveInput.disabled = true;
-            }
-        }
-        if (!context.can_manage_movements && submitButton) {
-            submitButton.disabled = true;
-        }
+        applyMovementAvailability();
     };
 
     if (measurementSelect) {
@@ -322,7 +362,7 @@
 
     if (form) {
         form.addEventListener('submit', (event) => {
-            if (!context.can_manage_movements || !context.has_warehouses) {
+            if (!context.can_manage_movements || !context.has_locations) {
                 event.preventDefault();
                 return;
             }
@@ -350,6 +390,11 @@
             }
         });
     }
+
+    document.addEventListener('inventory-location:created', () => {
+        context.has_locations = true;
+        applyMovementAvailability();
+    });
 
     const movementButtons = document.querySelectorAll('[data-movement-action][data-item-trigger]');
     movementButtons.forEach((button) => {

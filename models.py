@@ -2073,20 +2073,30 @@ class InventoryItem(db.Model):
 
 class Warehouse(db.Model):
     __tablename__ = 'warehouse'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     direccion = db.Column(db.String(500))
+    tipo = db.Column(db.String(20), nullable=False, default='deposito')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
-    
+
     # Relaciones
     company = db.relationship('Organizacion', backref='warehouses')
     stocks = db.relationship('Stock', back_populates='warehouse', cascade='all, delete-orphan')
-    
+
     def __repr__(self):
         return f'<Warehouse {self.nombre}>'
+
+    @property
+    def tipo_normalizado(self) -> str:
+        value = (self.tipo or 'deposito').lower()
+        return 'obra' if value == 'obra' else 'deposito'
+
+    @property
+    def grupo_display(self) -> str:
+        return 'Obras' if self.tipo_normalizado == 'obra' else 'Depósitos'
 
 
 class Stock(db.Model):

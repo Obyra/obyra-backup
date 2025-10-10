@@ -1,5 +1,5 @@
 import os
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -54,6 +54,11 @@ WASTE_KEYWORDS = (
     'avería',
     'averia',
 )
+
+LOCATION_GROUP_LABELS = OrderedDict([
+    ('deposito', 'Depósitos'),
+    ('obra', 'Obras'),
+])
 
 INVENTARIO_NEW_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
 
@@ -141,6 +146,54 @@ def _extract_presentations_from_form(form) -> List[dict]:
         })
 
     return options
+
+
+def _normalize_location_type(tipo: Optional[str]) -> str:
+    value = (tipo or 'deposito').lower()
+    return 'obra' if value == 'obra' else 'deposito'
+
+
+def _serialize_location(location: Warehouse) -> dict:
+    tipo = _normalize_location_type(getattr(location, 'tipo', None))
+    direccion = (location.direccion or '').strip()
+    search_blob = f"{location.nombre} {direccion}".strip().lower()
+    return {
+        'id': location.id,
+        'nombre': location.nombre,
+        'direccion': direccion,
+        'tipo': tipo,
+        'search': search_blob,
+    }
+
+
+def _serialize_locations_for_ui(locations: List[Warehouse]) -> List[dict]:
+    groups: OrderedDict[str, dict] = OrderedDict(
+        (key, {'key': key, 'label': label, 'options': []})
+        for key, label in LOCATION_GROUP_LABELS.items()
+    )
+
+    extras: OrderedDict[str, dict] = OrderedDict()
+
+    for location in locations:
+        tipo = _normalize_location_type(getattr(location, 'tipo', None))
+        target = groups.get(tipo)
+        if target is None:
+            if tipo not in extras:
+                extras[tipo] = {
+                    'key': tipo,
+                    'label': getattr(location, 'grupo_display', tipo.title()),
+                    'options': [],
+                }
+            target = extras[tipo]
+
+        target['options'].append(_serialize_location(location))
+
+    ordered_groups = list(groups.values()) + list(extras.values())
+    return [group for group in ordered_groups if group['options']]
+
+
+def _build_location_lookup(locations: List[Warehouse]) -> dict[str, Warehouse]:
+    return {str(location.id): location for location in locations}
 
 
 def _convert_package_quantity(item: InventoryItem, package_key: str, qty_value):
@@ -613,11 +666,12 @@ def items():
     if stock_bajo:
         items = [item for item in items if item.is_low_stock]
 
-    warehouses = (
+    locations = (
         Warehouse.query.filter_by(company_id=company_id, activo=True)
         .order_by(Warehouse.nombre.asc())
         .all()
     )
+    location_groups = _serialize_locations_for_ui(locations)
 
     base_filters = {k: v for k, v in query_args.items() if v}
     base_items_url = url_for('inventario_new.items', **base_filters)
@@ -653,7 +707,8 @@ def items():
                          items=items,
                          categorias=categorias,
                          filtros={'categoria': categoria_id_raw, 'buscar': buscar, 'stock_bajo': stock_bajo},
-                         warehouses=warehouses,
+                         locations=locations,
+                         location_groups=location_groups,
                          highlight_item_id=highlight_item_id,
                          base_items_url=base_items_url,
                          can_manage_movements=_user_can_manage_movements(current_user))
@@ -1051,11 +1106,14 @@ def nuevo_item():
     categorias, seed_stats, auto_seeded, company = ensure_categories_for_company_id(company_id)
     category_options = [serialize_category(categoria) for categoria in categorias]
     can_manage_categories = user_can_manage_inventory_categories(current_user)
-    warehouses = (
+    locations = (
         Warehouse.query.filter_by(company_id=company_id, activo=True)
         .order_by(Warehouse.nombre.asc())
         .all()
     )
+    location_groups = _serialize_locations_for_ui(locations)
+    location_lookup = _build_location_lookup(locations)
+    default_location_id = str(locations[0].id) if len(locations) == 1 else ''
     if auto_seeded:
         created = seed_stats.get('created', 0)
         reactivated = seed_stats.get('reactivated', 0)
@@ -1074,7 +1132,9 @@ def nuevo_item():
             can_manage_categories=can_manage_categories,
             presentations=form_presentations,
             next_url=return_to,
-            warehouses=warehouses,
+            locations=locations,
+            location_groups=location_groups,
+            default_location_id=default_location_id,
             item=None,
         )
 
@@ -1149,27 +1209,24 @@ def nuevo_item():
             flash(error, 'danger')
             return _render_form()
 
-        selected_initial_warehouse: Optional[Warehouse] = None
+        selected_initial_location: Optional[Warehouse] = None
         if initial_stock_value > 0:
-            if not warehouses:
-                error = 'Necesitás un depósito para registrar stock inicial.'
+            if not locations:
+                error = 'Necesitás una ubicación para registrar stock inicial.'
                 json_resp = get_json_response(None, 400, error)
                 if json_resp:
                     return json_resp
                 flash(error, 'danger')
                 return _render_form()
 
-            selected_initial_id = request.form.get('initial_stock_warehouse_id')
+            selected_initial_id = request.form.get('initial_stock_location_id')
             if selected_initial_id:
-                selected_initial_warehouse = next(
-                    (warehouse for warehouse in warehouses if str(warehouse.id) == str(selected_initial_id)),
-                    None,
-                )
-            elif len(warehouses) == 1:
-                selected_initial_warehouse = warehouses[0]
+                selected_initial_location = location_lookup.get(str(selected_initial_id))
+            elif len(locations) == 1:
+                selected_initial_location = locations[0]
 
-            if not selected_initial_warehouse:
-                error = 'Seleccioná el depósito donde se cargará el stock inicial.'
+            if not selected_initial_location:
+                error = 'Seleccioná la ubicación donde se cargará el stock inicial.'
                 json_resp = get_json_response(None, 400, error)
                 if json_resp:
                     return json_resp
@@ -1213,11 +1270,11 @@ def nuevo_item():
             db.session.add(item)
             db.session.flush()
 
-            if initial_stock_value > 0 and selected_initial_warehouse:
+            if initial_stock_value > 0 and selected_initial_location:
                 movimiento = crear_movimiento_ingreso(
                     item,
                     float(initial_stock_value),
-                    selected_initial_warehouse.id,
+                    selected_initial_location.id,
                     'Carga inicial',
                 )
                 db.session.add(movimiento)
@@ -1312,38 +1369,50 @@ def warehouses():
 @login_required
 @requires_role('administrador', 'compras')
 def nuevo_warehouse():
-    nombre = request.form.get('nombre')
+    payload = request.get_json(silent=True) if request.is_json else None
+    nombre = (payload.get('nombre') if payload else request.form.get('nombre'))
+    nombre = (nombre or '').strip()
+    tipo = (payload.get('tipo') if payload else request.form.get('tipo')) or 'deposito'
+    tipo = _normalize_location_type(tipo)
+    direccion_raw = payload.get('direccion') if payload else request.form.get('direccion')
+    direccion = (direccion_raw or '').strip() or None
+
     default_next = url_for('inventario_new.warehouses')
     next_param = request.form.get('next') or request.args.get('next')
     safe_next = _coerce_internal_url(next_param, default=default_next)
 
     if not nombre:
-        error = 'El nombre del depósito es obligatorio.'
+        error = 'El nombre de la ubicación es obligatorio.'
         json_resp = get_json_response(None, 400, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
         return redirect(safe_next)
-    
+
     try:
         warehouse = Warehouse(
             company_id=current_user.organizacion_id,
             nombre=nombre,
-            direccion=request.form.get('direccion')
+            direccion=direccion,
+            tipo=tipo,
         )
-        
+
         db.session.add(warehouse)
         db.session.commit()
-        
-        json_resp = get_json_response({'id': warehouse.id, 'mensaje': 'Depósito creado exitosamente'})
+
+        location_payload = {
+            'location': _serialize_location(warehouse),
+            'mensaje': 'Ubicación creada exitosamente',
+        }
+        json_resp = get_json_response(location_payload)
         if json_resp:
             return json_resp
-            
-        flash('Depósito creado exitosamente.', 'success')
+
+        flash('Ubicación creada exitosamente.', 'success')
 
     except Exception as e:
         db.session.rollback()
-        error = 'Error al crear el depósito.'
+        error = 'Error al crear la ubicación.'
         json_resp = get_json_response(None, 500, error)
         if json_resp:
             return json_resp
@@ -1389,14 +1458,14 @@ def movimientos():
 
     # Obtener datos para el formulario
     items = InventoryItem.query.filter_by(company_id=current_user.organizacion_id, activo=True).all()
-    warehouses = Warehouse.query.filter_by(company_id=current_user.organizacion_id, activo=True).all()
-    projects = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).all()
+    locations = Warehouse.query.filter_by(company_id=current_user.organizacion_id, activo=True).order_by(Warehouse.nombre.asc()).all()
+    location_groups = _serialize_locations_for_ui(locations)
 
     return render_template('inventario_new/movimientos.html',
                          movimientos=movimientos,
                          items=items,
-                         warehouses=warehouses,
-                         projects=projects,
+                         locations=locations,
+                         location_groups=location_groups,
                          can_manage_movements=_user_can_manage_movements(current_user))
 
 def crear_movimiento():

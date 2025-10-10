@@ -300,6 +300,55 @@ def ensure_inventory_package_columns():
         raise
 
 
+def ensure_inventory_location_columns():
+    """Ensure warehouses have metadata to distinguish deposits and works."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250915_inventory_location_type.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('warehouse')}
+            except Exception:
+                columns = set()
+
+            statements = []
+            if 'tipo' not in columns:
+                if backend == 'postgresql':
+                    statements.append("ALTER TABLE warehouse ADD COLUMN tipo VARCHAR(20) DEFAULT 'deposito'")
+                else:
+                    statements.append("ALTER TABLE warehouse ADD COLUMN tipo TEXT DEFAULT 'deposito'")
+
+            for statement in statements:
+                conn.exec_driver_sql(statement)
+
+            if 'tipo' in columns or statements:
+                conn.exec_driver_sql(
+                    "UPDATE warehouse SET tipo = COALESCE(NULLIF(tipo, ''), 'deposito')"
+                )
+
+        with open(sentinel, 'w') as sentinel_file:
+            sentinel_file.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: warehouse location type column ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: warehouse location type column')
+        raise
+
+
 def ensure_exchange_currency_columns():
     """Ensure exchange rate tables and currency columns exist."""
 
