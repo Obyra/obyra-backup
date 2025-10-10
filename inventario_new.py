@@ -572,7 +572,11 @@ def items():
     query_args = request.args.to_dict(flat=True)
     highlight_raw = query_args.pop('highlight', None)
 
-    categoria_id = query_args.get('categoria')
+    categoria_id_raw = query_args.get('categoria')
+    try:
+        categoria_id = int(categoria_id_raw) if categoria_id_raw else None
+    except (TypeError, ValueError):
+        categoria_id = None
     buscar = query_args.get('buscar')
     stock_bajo = query_args.get('stock_bajo')
 
@@ -584,7 +588,15 @@ def items():
     query = InventoryItem.query.filter_by(company_id=company_id, activo=True)
     
     if categoria_id:
-        query = query.filter(InventoryItem.categoria_id == categoria_id)
+        query = (
+            query.join(InventoryCategory)
+            .filter(
+                db.or_(
+                    InventoryItem.categoria_id == categoria_id,
+                    InventoryCategory.parent_id == categoria_id,
+                )
+            )
+        )
     
     if buscar:
         query = query.filter(
@@ -640,7 +652,7 @@ def items():
     return render_template('inventario_new/items.html',
                          items=items,
                          categorias=categorias,
-                         filtros={'categoria': categoria_id, 'buscar': buscar, 'stock_bajo': stock_bajo},
+                         filtros={'categoria': categoria_id_raw, 'buscar': buscar, 'stock_bajo': stock_bajo},
                          warehouses=warehouses,
                          highlight_item_id=highlight_item_id,
                          base_items_url=base_items_url,
@@ -1008,7 +1020,12 @@ def api_categorias():
         )
 
     payload = [serialize_category(categoria) for categoria in categorias]
-    payload.sort(key=lambda categoria: (categoria.get('full_path') or '').casefold())
+    payload.sort(
+        key=lambda categoria: (
+            categoria.get('sort_order', 0),
+            (categoria.get('full_path') or '').casefold(),
+        )
+    )
 
     if not payload:
         current_app.logger.warning(
@@ -1034,6 +1051,11 @@ def nuevo_item():
     categorias, seed_stats, auto_seeded, company = ensure_categories_for_company_id(company_id)
     category_options = [serialize_category(categoria) for categoria in categorias]
     can_manage_categories = user_can_manage_inventory_categories(current_user)
+    warehouses = (
+        Warehouse.query.filter_by(company_id=company_id, activo=True)
+        .order_by(Warehouse.nombre.asc())
+        .all()
+    )
     if auto_seeded:
         created = seed_stats.get('created', 0)
         reactivated = seed_stats.get('reactivated', 0)
@@ -1043,8 +1065,20 @@ def nuevo_item():
         )
 
     form_presentations: List[dict] = []
+
+    def _render_form():
+        return render_template(
+            'inventario_new/item_form.html',
+            categorias=categorias,
+            category_options=category_options,
+            can_manage_categories=can_manage_categories,
+            presentations=form_presentations,
+            next_url=return_to,
+            warehouses=warehouses,
+            item=None,
+        )
+
     if request.method == 'POST':
-        # Validaciones
         required_fields = ['sku', 'nombre', 'categoria_id', 'unidad']
         for field in required_fields:
             if not request.form.get(field):
@@ -1053,16 +1087,8 @@ def nuevo_item():
                 if json_resp:
                     return json_resp
                 flash(error, 'danger')
-                return render_template(
-                    'inventario_new/item_form.html',
-                    categorias=categorias,
-                    category_options=category_options,
-                    can_manage_categories=can_manage_categories,
-                    presentations=form_presentations,
-                    next_url=return_to,
-                )
+                return _render_form()
 
-        # Verificar SKU único
         sku = request.form.get('sku')
         if InventoryItem.query.filter_by(sku=sku).first():
             error = 'Ya existe un item con ese SKU.'
@@ -1070,14 +1096,85 @@ def nuevo_item():
             if json_resp:
                 return json_resp
             flash(error, 'danger')
-            return render_template(
-                'inventario_new/item_form.html',
-                categorias=categorias,
-                category_options=category_options,
-                can_manage_categories=can_manage_categories,
-                presentations=form_presentations,
-                next_url=return_to,
-            )
+            return _render_form()
+
+        try:
+            categoria_id_value = int(request.form.get('categoria_id'))
+        except (TypeError, ValueError):
+            categoria_id_value = None
+
+        categoria = None
+        if categoria_id_value:
+            categoria = InventoryCategory.query.get(categoria_id_value)
+
+        if not categoria or categoria.parent_id is not None or not categoria.is_active:
+            error = 'Seleccioná una categoría válida.'
+            json_resp = get_json_response(None, 400, error)
+            if json_resp:
+                return json_resp
+            flash(error, 'danger')
+            return _render_form()
+
+        if not (categoria.is_global or categoria.company_id == company_id):
+            error = 'Seleccioná una categoría válida.'
+            json_resp = get_json_response(None, 400, error)
+            if json_resp:
+                return json_resp
+            flash(error, 'danger')
+            return _render_form()
+
+        min_stock_raw = request.form.get('min_stock', '0') or '0'
+        try:
+            min_stock_value = Decimal(str(min_stock_raw))
+            if min_stock_value < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            error = 'El stock mínimo debe ser un número mayor o igual a cero.'
+            json_resp = get_json_response(None, 400, error)
+            if json_resp:
+                return json_resp
+            flash(error, 'danger')
+            return _render_form()
+
+        initial_stock_raw = request.form.get('initial_stock', '0') or '0'
+        try:
+            initial_stock_value = Decimal(str(initial_stock_raw))
+            if initial_stock_value < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            error = 'El stock inicial debe ser un número mayor o igual a cero.'
+            json_resp = get_json_response(None, 400, error)
+            if json_resp:
+                return json_resp
+            flash(error, 'danger')
+            return _render_form()
+
+        selected_initial_warehouse: Optional[Warehouse] = None
+        if initial_stock_value > 0:
+            if not warehouses:
+                error = 'Necesitás un depósito para registrar stock inicial.'
+                json_resp = get_json_response(None, 400, error)
+                if json_resp:
+                    return json_resp
+                flash(error, 'danger')
+                return _render_form()
+
+            selected_initial_id = request.form.get('initial_stock_warehouse_id')
+            if selected_initial_id:
+                selected_initial_warehouse = next(
+                    (warehouse for warehouse in warehouses if str(warehouse.id) == str(selected_initial_id)),
+                    None,
+                )
+            elif len(warehouses) == 1:
+                selected_initial_warehouse = warehouses[0]
+
+            if not selected_initial_warehouse:
+                error = 'Seleccioná el depósito donde se cargará el stock inicial.'
+                json_resp = get_json_response(None, 400, error)
+                if json_resp:
+                    return json_resp
+                flash(error, 'danger')
+                return _render_form()
 
         form_presentations = _extract_presentations_from_form(request.form)
         invalid_presentations = [opt for opt in form_presentations if opt.get('multiplier') is None and opt.get('label')]
@@ -1088,23 +1185,16 @@ def nuevo_item():
             if json_resp:
                 return json_resp
             flash(error, 'danger')
-            return render_template(
-                'inventario_new/item_form.html',
-                categorias=categorias,
-                category_options=category_options,
-                can_manage_categories=can_manage_categories,
-                presentations=form_presentations,
-                next_url=return_to,
-            )
+            return _render_form()
 
         try:
             item = InventoryItem(
                 company_id=current_user.organizacion_id,
                 sku=sku,
                 nombre=request.form.get('nombre'),
-                categoria_id=request.form.get('categoria_id'),
+                categoria_id=categoria_id_value,
                 unidad=request.form.get('unidad'),
-                min_stock=float(request.form.get('min_stock', 0)),
+                min_stock=min_stock_value,
                 descripcion=request.form.get('descripcion')
             )
 
@@ -1121,21 +1211,32 @@ def nuevo_item():
                 item.package_options = valid_presentations
 
             db.session.add(item)
+            db.session.flush()
+
+            if initial_stock_value > 0 and selected_initial_warehouse:
+                movimiento = crear_movimiento_ingreso(
+                    item,
+                    float(initial_stock_value),
+                    selected_initial_warehouse.id,
+                    'Carga inicial',
+                )
+                db.session.add(movimiento)
+
             db.session.commit()
 
             json_payload = {
                 'id': item.id,
-                'mensaje': 'Item creado exitosamente',
+                'mensaje': 'Item creado',
                 'next': _with_query_params(return_to, highlight=item.id),
             }
             json_resp = get_json_response(json_payload)
             if json_resp:
                 return json_resp
 
-            flash('Item creado exitosamente.', 'success')
+            flash('Item creado', 'success')
             return redirect(_with_query_params(return_to, highlight=item.id))
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             error = 'Error al crear el item.'
             json_resp = get_json_response(None, 500, error)
@@ -1145,15 +1246,7 @@ def nuevo_item():
 
             form_presentations = form_presentations or []
 
-    return render_template(
-        'inventario_new/item_form.html',
-        categorias=categorias,
-        category_options=category_options,
-        item=None,
-        can_manage_categories=can_manage_categories,
-        presentations=form_presentations,
-        next_url=return_to,
-    )
+    return _render_form()
 
 @inventario_new_bp.route('/items/<int:id>')
 @login_required

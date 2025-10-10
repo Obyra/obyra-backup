@@ -28,7 +28,7 @@
                 targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 setTimeout(() => {
                     targetRow.classList.remove('table-success');
-                }, 2500);
+                }, 2000);
             }
         }
     }

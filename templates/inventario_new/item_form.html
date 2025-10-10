@@ -94,6 +94,29 @@
                             </div>
                         </div>
 
+                        {% if not item %}
+                        <div class="col-md-6">
+                            <label for="initial_stock" class="form-label">Stock inicial</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="initial_stock" name="initial_stock"
+                                   value="{{ request.form.get('initial_stock', '0') }}">
+                            <div class="form-text">Se registrará como ingreso "Carga inicial" en la unidad base.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="initial_stock_warehouse_id" class="form-label">Depósito para stock inicial</label>
+                            {% if warehouses %}
+                                <select class="form-select" id="initial_stock_warehouse_id" name="initial_stock_warehouse_id">
+                                    <option value="">Seleccionar depósito...</option>
+                                    {% for warehouse in warehouses %}
+                                        <option value="{{ warehouse.id }}" {% if request.form.get('initial_stock_warehouse_id') == warehouse.id|string %}selected{% endif %}>{{ warehouse.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Si dejás el campo vacío y existe un solo depósito, se utilizará automáticamente.</div>
+                            {% else %}
+                                <div class="form-control-plaintext text-muted">Creá un depósito para asignar stock inicial.</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                         <div class="col-md-6">
                             <label for="min_stock" class="form-label">Stock Mínimo</label>
                             <input type="number" step="0.01" min="0" class="form-control" id="min_stock" name="min_stock"

@@ -903,6 +903,26 @@ try:
     from inventario_new import inventario_new_bp
     app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
     app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
+
+    @app.route('/inventario/depositos')
+    @login_required
+    def inventory_depositos_redirect():
+        return redirect(url_for('inventario_new.warehouses'))
+
+    @app.route('/inventario/movimientos')
+    @login_required
+    def inventory_movimientos_redirect():
+        return redirect(url_for('inventario_new.movimientos'))
+
+    @app.route('/inventario/reservas')
+    @login_required
+    def inventory_reservas_redirect():
+        return redirect(url_for('inventario_new.reservas'))
+
+    @app.route('/inventario/alertas')
+    @login_required
+    def inventory_alertas_redirect():
+        return redirect(url_for('inventario_new.alertas'))
     print("[OK] Enhanced blueprints registered successfully")
 except ImportError as e:
     print(f"[WARN] Enhanced blueprints not available: {e}")
