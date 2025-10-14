@@ -14,7 +14,13 @@ from models import OrgMembership, Usuario, db
 def _membership_query(user_id: int) -> Iterable[OrgMembership]:
     return (
         OrgMembership.query
-        .filter_by(user_id=user_id, archived=False)
+        .filter(
+            OrgMembership.user_id == user_id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .order_by(OrgMembership.id.asc())
     )
 
@@ -71,11 +77,18 @@ def load_membership_into_context() -> None:
     membership: Optional[OrgMembership] = None
 
     if membership_id:
-        membership = OrgMembership.query.filter_by(
-            id=membership_id,
-            user_id=current_user.id,
-            archived=False,
-        ).first()
+        membership = (
+            OrgMembership.query
+            .filter(
+                OrgMembership.id == membership_id,
+                OrgMembership.user_id == current_user.id,
+                db.or_(
+                    OrgMembership.archived.is_(False),
+                    OrgMembership.archived.is_(None),
+                ),
+            )
+            .first()
+        )
 
         if not membership or membership.status != 'active':
             session.pop('current_membership_id', None)
@@ -155,11 +168,18 @@ def set_current_membership(membership_id: int) -> bool:
     if not current_user.is_authenticated:
         return False
 
-    membership = OrgMembership.query.filter_by(
-        id=membership_id,
-        user_id=current_user.id,
-        archived=False,
-    ).first()
+    membership = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.id == membership_id,
+            OrgMembership.user_id == current_user.id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
 
     if not membership or membership.status != 'active':
         return False
@@ -171,7 +191,18 @@ def set_current_membership(membership_id: int) -> bool:
 
 
 def activate_pending_memberships(usuario: Usuario) -> bool:
-    memberships = OrgMembership.query.filter_by(user_id=usuario.id, status='pending', archived=False).all()
+    memberships = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.user_id == usuario.id,
+            OrgMembership.status == 'pending',
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .all()
+    )
     changed = False
     for membership in memberships:
         membership.marcar_activa()

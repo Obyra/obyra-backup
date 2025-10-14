@@ -376,7 +376,13 @@ def login():
 def seleccionar_organizacion():
     memberships = (
         OrgMembership.query
-        .filter_by(user_id=current_user.id, archived=False)
+        .filter(
+            OrgMembership.user_id == current_user.id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .order_by(OrgMembership.accepted_at.desc().nullslast(), OrgMembership.invited_at.desc())
         .all()
     )
@@ -883,7 +889,13 @@ def usuarios_admin():
 
     query = (
         OrgMembership.query
-        .filter_by(org_id=membership.org_id, archived=False)
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .join(Usuario)
     )
 
@@ -1112,7 +1124,18 @@ def cambiar_rol():
         return jsonify({'success': False, 'message': 'Rol no válido'})
 
     membership = get_current_membership()
-    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=usuario_id_int, archived=False).first()
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == usuario_id_int,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
 
     if not objetivo:
         return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
@@ -1147,7 +1170,18 @@ def toggle_usuario():
         return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
 
     membership = get_current_membership()
-    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=usuario_id_int, archived=False).first()
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == usuario_id_int,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
     if not objetivo:
         return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
 

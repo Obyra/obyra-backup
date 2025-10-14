@@ -85,7 +85,13 @@ def lista():
 
     query = (
         OrgMembership.query
-        .filter_by(org_id=membership.org_id, archived=False)
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .join(Usuario, OrgMembership.user_id == Usuario.id)
     )
 
@@ -299,7 +305,14 @@ def detalle(id):
 
     miembro = (
         OrgMembership.query
-        .filter_by(org_id=membership.org_id, user_id=id, archived=False)
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .options(joinedload('usuario'))
         .first()
     )
@@ -335,7 +348,14 @@ def editar(id):
 
     miembro_objetivo = (
         OrgMembership.query
-        .filter_by(org_id=membership.org_id, user_id=id, archived=False)
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .options(
             joinedload('usuario'),
             joinedload('organizacion'),
@@ -452,7 +472,18 @@ def toggle_activo(id):
         flash('No tienes permisos para activar/desactivar usuarios.', 'danger')
         return redirect(url_for('equipos.lista'))
 
-    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=id, archived=False).first()
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
 
     if not objetivo:
         flash('El usuario no pertenece a tu organización.', 'danger')

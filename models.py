@@ -163,11 +163,18 @@ class Usuario(UserMixin, db.Model):
                     break
 
             if membership is None:
-                membership = OrgMembership.query.filter_by(
-                    org_id=org_id,
-                    user_id=self.id,
-                    archived=False,
-                ).first()
+                membership = (
+                    OrgMembership.query
+                    .filter(
+                        OrgMembership.org_id == org_id,
+                        OrgMembership.user_id == self.id,
+                        db.or_(
+                            OrgMembership.archived.is_(False),
+                            OrgMembership.archived.is_(None),
+                        ),
+                    )
+                    .first()
+                )
 
             if membership:
                 return membership.status == 'active' and (membership.role or '').lower() == objetivo

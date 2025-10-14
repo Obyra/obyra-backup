@@ -419,11 +419,18 @@ def utility_processor():
 
         from models import OrgMembership  # Importación perezosa para evitar ciclos
 
-        registro = OrgMembership.query.filter_by(
-            org_id=org_id,
-            user_id=current_user.id,
-            archived=False,
-        ).first()
+        registro = (
+            OrgMembership.query
+            .filter(
+                OrgMembership.org_id == org_id,
+                OrgMembership.user_id == current_user.id,
+                db.or_(
+                    OrgMembership.archived.is_(False),
+                    OrgMembership.archived.is_(None),
+                ),
+            )
+            .first()
+        )
         if not registro:
             return False
 
