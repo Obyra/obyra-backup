@@ -1202,7 +1202,13 @@ def toggle_usuario():
         db.session.commit()
 
         estado_texto = 'activado' if activar else 'desactivado'
-        return jsonify({'success': True, 'message': f'Usuario {estado_texto} exitosamente'})
+        return jsonify({
+            'success': True,
+            'message': f'Usuario {estado_texto} exitosamente',
+            'status': objetivo.status,
+            'usuario_activo': activar,
+            'usuario_id': usuario_id_int,
+        })
     except Exception:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
