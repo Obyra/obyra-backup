@@ -11,6 +11,8 @@ from services.memberships import get_current_membership
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
+from auth import generate_temporary_password, send_new_member_invitation
+
 
 ROLE_CATEGORY_OPTIONS = {
     categoria: list(roles) for categoria, roles in roles_defs.obtener_roles_por_categoria().items()
@@ -151,7 +153,7 @@ def usuarios_nuevo():
     nombre = request.form.get('nombre', email.split('@')[0])
     apellido = request.form.get('apellido', 'Usuario')
     telefono = request.form.get('telefono')
-    password = request.form.get('password', 'temp123456')  # Temporal
+    temp_password_input = (request.form.get('password') or '').strip()
 
     if not email or not role:
         flash('Email y Rol son obligatorios.', 'danger')
@@ -166,6 +168,8 @@ def usuarios_nuevo():
     if Usuario.query.filter_by(email=email).first():
         flash('Ya existe un usuario con ese email.', 'danger')
         return redirect(url_for('equipos.usuarios_nuevo'))
+
+    temp_password = temp_password_input or generate_temporary_password()
 
     try:
         # Crear usuario invitado
@@ -182,18 +186,27 @@ def usuarios_nuevo():
             primary_org_id=current_user.primary_org_id or current_user.organizacion_id,
         )
 
-        user.set_password(password)
+        user.set_password(temp_password)
 
         db.session.add(user)
         db.session.flush()  # Para obtener el ID
 
         active_membership = get_current_membership()
+        membership = None
+        target_org_id = None
         if active_membership:
-            user.ensure_membership(
-                active_membership.org_id,
+            target_org_id = active_membership.org_id
+        else:
+            target_org_id = current_user.primary_org_id or current_user.organizacion_id
+
+        if target_org_id:
+            membership = user.ensure_membership(
+                target_org_id,
                 role='admin' if role in ('administrador', 'admin') else 'operario',
                 status='active',
             )
+        else:
+            membership = None
 
         # Overrides de módulos (opcional)
         if customize:
@@ -204,9 +217,10 @@ def usuarios_nuevo():
                 upsert_user_module(user.id, module, view, edit)
 
         db.session.commit()
-        flash('Usuario creado exitosamente.', 'success')
+        send_new_member_invitation(user, membership, temp_password)
+        flash('Usuario creado exitosamente y se envió un email de bienvenida.', 'success')
         return redirect(url_for('auth.usuarios_admin'))
-        
+
     except Exception as e:
         db.session.rollback()
         flash('Error al crear el usuario. Por favor, intenta de nuevo.', 'danger')

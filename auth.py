@@ -277,14 +277,18 @@ def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccoun
     return account, portal
 
 
-def _generate_temporary_password(length: int = 12) -> str:
+def generate_temporary_password(length: int = 12) -> str:
     """Genera una contraseña aleatoria segura para nuevos integrantes."""
     length = max(length, 8)
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-def _send_new_member_invitation(usuario: Usuario, membership: OrgMembership, temp_password: Optional[str] = None) -> Optional[str]:
+def send_new_member_invitation(
+    usuario: Usuario,
+    membership: Optional[OrgMembership],
+    temp_password: Optional[str] = None,
+) -> Optional[str]:
     """Envía (o registra) el correo de bienvenida con enlace de activación."""
     try:
         token = _generate_reset_token(usuario, 'user')
@@ -1043,7 +1047,7 @@ def crear_integrante_desde_panel():
                 usuario_objetivo.primary_org_id = org_id
 
             if not usuario_objetivo.password_hash:
-                temp_password = _generate_temporary_password()
+                temp_password = generate_temporary_password()
                 usuario_objetivo.set_password(temp_password)
 
             usuario_objetivo.ensure_onboarding_status()
@@ -1051,7 +1055,7 @@ def crear_integrante_desde_panel():
             if PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first():
                 return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
 
-            temp_password = _generate_temporary_password()
+            temp_password = generate_temporary_password()
             usuario_objetivo = Usuario(
                 nombre=nombre,
                 apellido=apellido,
@@ -1092,7 +1096,7 @@ def crear_integrante_desde_panel():
         current_app.logger.exception('Error al crear/invitar integrante')
         return jsonify({'success': False, 'message': 'No se pudo crear el integrante. Intenta nuevamente.'}), 500
 
-    _send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
+    send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
     flash('Invitación enviada correctamente.', 'success')
 
     return jsonify({
