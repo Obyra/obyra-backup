@@ -72,7 +72,7 @@
     <div class="row">
         {% if presupuestos %}
             {% for presupuesto in presupuestos %}
-            <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="col-lg-6 col-xl-4 mb-4" data-presupuesto-wrapper="{{ presupuesto.id }}">
                 <div class="card h-100 shadow-sm" id="presupuesto-card-{{ presupuesto.id }}"
                      data-presupuesto-card="{{ presupuesto.id }}"
                      data-presupuesto-estado="{{ presupuesto.estado }}">
@@ -230,26 +230,25 @@
                 </div>
             </div>
             {% endfor %}
-        {% else %}
-            <div class="col-12">
-                <div class="text-center py-5">
-                    <i class="fas fa-calculator fa-3x text-muted mb-3"></i>
-                    <h4 class="text-muted">No hay presupuestos registrados</h4>
-                    <p class="text-muted">
-                        {% if current_user.rol in ['administrador', 'tecnico'] %}
-                            Comienza creando tu primer presupuesto.
-                        {% else %}
-                            No hay presupuestos disponibles para visualizar.
-                        {% endif %}
-                    </p>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <a href="{{ url_for('presupuestos.crear') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>Crear Primer Presupuesto
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
         {% endif %}
+        <div class="col-12 {% if presupuestos %}d-none{% endif %}" data-presupuestos-empty>
+            <div class="text-center py-5">
+                <i class="fas fa-calculator fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No hay presupuestos registrados</h4>
+                <p class="text-muted">
+                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                        Comienza creando tu primer presupuesto.
+                    {% else %}
+                        No hay presupuestos disponibles para visualizar.
+                    {% endif %}
+                </p>
+                {% if current_user.rol in ['administrador', 'tecnico'] %}
+                <a href="{{ url_for('presupuestos.crear') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Crear Primer Presupuesto
+                </a>
+                {% endif %}
+            </div>
+        </div>
     </div>
     </div>
 </div>
@@ -515,6 +514,7 @@ function actualizarTarjetaTrasConfirmacion(presupuestoId, payload) {
     if (!card) {
         return;
     }
+    const wrapper = card.closest('[data-presupuesto-wrapper]');
     const estadoAnterior = card.dataset.presupuestoEstado || '';
     const nuevoEstado = payload.presupuesto_estado || 'convertido';
     card.dataset.presupuestoEstado = nuevoEstado;
@@ -542,11 +542,33 @@ function actualizarTarjetaTrasConfirmacion(presupuestoId, payload) {
         }
     }
 
+    if (wrapper) {
+        wrapper.style.transition = 'opacity 0.25s ease';
+        wrapper.style.opacity = '0';
+        setTimeout(() => {
+            wrapper.remove();
+            mostrarEmptyStateSiCorresponde();
+        }, 250);
+        return;
+    }
+
     if (estadoAnterior === 'borrador' && nuevoEstado !== 'borrador') {
-        const estadoFiltro = new URLSearchParams(window.location.search).get('estado');
-        if (estadoFiltro && estadoFiltro.toLowerCase() === 'borrador') {
-            setTimeout(() => card.remove(), 1200);
-        }
+        setTimeout(() => {
+            card.remove();
+            mostrarEmptyStateSiCorresponde();
+        }, 200);
+    }
+}
+
+function mostrarEmptyStateSiCorresponde() {
+    const wrappers = document.querySelectorAll('[data-presupuesto-wrapper]');
+    const emptyState = document.querySelector('[data-presupuestos-empty]');
+    if (!emptyState) {
+        return;
+    }
+    if (wrappers.length === 0) {
+        emptyState.classList.remove('d-none');
+        emptyState.removeAttribute('aria-hidden');
     }
 }
 

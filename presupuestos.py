@@ -1979,6 +1979,9 @@ def confirmar_como_obra(id):
 
     nueva_obra = None
     try:
+        presupuesto.calcular_totales()
+        presupuesto.vigencia_bloqueada = True
+
         nombre_obra = None
         if isinstance(datos_proyecto, dict):
             nombre_obra = datos_proyecto.get('nombre')
