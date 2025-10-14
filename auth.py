@@ -901,7 +901,7 @@ def usuarios_admin():
                 OrgMembership.archived.is_(None),
             ),
         )
-        .join(Usuario)
+        .join(Usuario, OrgMembership.usuario)
     )
 
     # Aplicar filtros
