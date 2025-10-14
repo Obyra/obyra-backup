@@ -22,6 +22,7 @@ from services.memberships import (
     require_membership,
     set_current_membership,
     activate_pending_memberships,
+    ensure_active_membership_for_user,
 )
 
 
@@ -388,8 +389,12 @@ def seleccionar_organizacion():
     )
 
     if not memberships:
-        flash('Tu cuenta no tiene organizaciones asociadas. Solicita una invitación.', 'danger')
-        return redirect(url_for('auth.logout'))
+        fallback = ensure_active_membership_for_user(current_user)
+        if fallback:
+            memberships = [fallback]
+        else:
+            flash('Tu cuenta no tiene organizaciones asociadas. Solicita una invitación.', 'danger')
+            return redirect(url_for('auth.logout'))
 
     next_url = request.args.get('next') or request.form.get('next') or url_for('reportes.dashboard')
 
