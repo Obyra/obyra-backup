@@ -35,6 +35,7 @@
                         <option value="borrador" {{ 'selected' if estado == 'borrador' }}>Borrador</option>
                         <option value="enviado" {{ 'selected' if estado == 'enviado' }}>Enviado</option>
                         <option value="aprobado" {{ 'selected' if estado == 'aprobado' }}>Aprobado</option>
+                        <option value="confirmado" {{ 'selected' if estado == 'confirmado' }}>Confirmado</option>
                         <option value="rechazado" {{ 'selected' if estado == 'rechazado' }}>Rechazado</option>
                         <option value="perdido" {{ 'selected' if estado == 'perdido' }}>Perdido</option>
                         <option value="vencido" {{ 'selected' if estado == 'vencido' }}>Vencido</option>
@@ -483,12 +484,14 @@ if (confirmForm) {
                 confirmModal.hide();
             }
 
+            if (result.redirect_url) {
+                window.location.href = result.redirect_url;
+                return;
+            }
+
             actualizarTarjetaTrasConfirmacion(presupuestoId, result);
 
-            let mensajeExito = result.message || 'Obra creada correctamente.';
-            if (result.obra_url) {
-                mensajeExito += ` <a href="${result.obra_url}" class="alert-link ms-1">Ir a la obra</a>`;
-            }
+            const mensajeExito = result.message || 'Obra creada correctamente.';
             showAlert(mensajeExito, 'success');
         } catch (error) {
             console.error(error);
@@ -516,7 +519,7 @@ function actualizarTarjetaTrasConfirmacion(presupuestoId, payload) {
     }
     const wrapper = card.closest('[data-presupuesto-wrapper]');
     const estadoAnterior = card.dataset.presupuestoEstado || '';
-    const nuevoEstado = payload.presupuesto_estado || 'convertido';
+    const nuevoEstado = payload.presupuesto_estado || 'confirmado';
     card.dataset.presupuestoEstado = nuevoEstado;
 
     const badge = card.querySelector(`[data-presupuesto-estado-badge="${presupuestoId}"]`);
