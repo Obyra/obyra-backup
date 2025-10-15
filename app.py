@@ -150,13 +150,11 @@ if not app.config["MP_ACCESS_TOKEN"]:
     )
 
 mp_webhook_url = app.config.get("MP_WEBHOOK_PUBLIC_URL")
-app.logger.info(
-    f"MP webhook URL: {mp_webhook_url or 'NOT SET'}"
-)
-
-if not mp_webhook_url:
+if mp_webhook_url:
+    app.logger.info(f"MP webhook URL: {mp_webhook_url}")
+else:
     app.logger.warning(
-        "MP_WEBHOOK_PUBLIC_URL is not configured; expected something like https://<dominio>/api/payments/mp/webhook for Mercado Pago callbacks."
+        "MP_WEBHOOK_PUBLIC_URL is not configured; expected path: /api/payments/mp/webhook"
     )
 
 # initialize extensions
