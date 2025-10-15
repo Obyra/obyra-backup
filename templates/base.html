@@ -97,7 +97,7 @@
                             {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.uso_obra') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
                             {% endif %}
-                            {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
+                            {% if (current_user.rol|default('')|lower == 'superadmin' or current_user.role|default('')|lower == 'superadmin') and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
                             {% endif %}

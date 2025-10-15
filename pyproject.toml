@@ -27,4 +27,5 @@ dependencies = [
     "matplotlib>=3.10.5",
     "pillow>=11.3.0",
     "mercadopago>=2.3.0",
+    "alembic>=1.14.0",
 ]

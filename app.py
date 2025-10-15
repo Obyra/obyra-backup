@@ -2,10 +2,10 @@ import os
 import sys
 import logging
 import importlib
-from pathlib import Path
 import click
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Optional, Tuple
+from sqlalchemy.engine.url import make_url
 from flask import (
     Flask,
     render_template,
@@ -22,7 +22,6 @@ from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
-from sqlalchemy.engine.url import make_url
 from services.memberships import (
     initialize_membership_session,
     load_membership_into_context,
@@ -106,69 +105,67 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database with fallback to SQLite
-database_url = os.environ.get("DATABASE_URL")
+# configure the database - PostgreSQL is required outside test environments
 
-# 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
+
+def _is_test_environment() -> bool:
+    """Return True when the app is running under tests."""
+
+    return (
+        _env_flag("TESTING")
+        or os.environ.get("FLASK_ENV", "").strip().lower() == "test"
+        or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    )
+
+
+is_test_environment = _is_test_environment()
+database_url = (os.environ.get("DATABASE_URL") or "").strip()
+
 if not database_url:
-    database_url = "sqlite:///tmp/dev.db"
-    print("[WARN] DATABASE_URL no disponible, usando SQLite fallback")
-else:
-    # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
-    if "neon.tech" in database_url and "sslmode=" not in database_url:
-        if "?" in database_url:
-            database_url += "&sslmode=require"
-        else:
-            database_url += "?sslmode=require"
-        print("[INFO] SSL requerido agregado para Neon")
-
-# Garantizar que la ruta SQLite exista antes de conectar para evitar errores "unable to open database file"
-try:
-    url_obj = make_url(database_url)
-except Exception:
-    url_obj = None
-
-if url_obj and url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
-    raw_path = Path(url_obj.database)
-
-    if not raw_path.is_absolute():
-        raw_path = Path(app.root_path) / raw_path
-
-    absolute_path = raw_path.expanduser().resolve()
-    absolute_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        database_url = url_obj.set(database=absolute_path.as_posix()).render_as_string(
-            hide_password=False
+    if is_test_environment:
+        database_url = "sqlite:///:memory:"
+        logging.getLogger(__name__).warning(
+            "DATABASE_URL no definido. Usando base de datos en memoria para tests."
         )
-    except Exception:
-        # Si no podemos normalizar la URL, mantenemos la ruta original.
-        pass
+    else:
+        message = (
+            "DATABASE_URL es obligatorio y debe apuntar a PostgreSQL. "
+            "Definí la variable de entorno con tu cadena de conexión."
+        )
+        logging.getLogger(__name__).critical(message)
+        raise RuntimeError(message)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,           # Reconexión cada 5 min
-    "pool_pre_ping": True,         # Test conexión antes de usar
-    "connect_args": {
-        "connect_timeout": 10,      # Timeout corto para conexión
-        "keepalives_idle": 600,     # Keep alive idle time
-        "keepalives_interval": 30,  # Keep alive interval
-        "keepalives_count": 3,      # Keep alive retry count
-    } if database_url.startswith('postgresql') else {},
-    "pool_timeout": 30,            # Timeout para obtener conexión del pool
-    "max_overflow": 0,             # No overflow connections
-    "pool_size": 5,                # Tamaño del pool
+url_obj = make_url(database_url)
+
+if not is_test_environment and not url_obj.drivername.startswith("postgresql"):
+    message = (
+        f"DATABASE_URL debe usar PostgreSQL, se recibió '{url_obj.drivername}'."
+    )
+    logging.getLogger(__name__).critical(message)
+    raise RuntimeError(message)
+
+if (url_obj.host and "neon.tech" in url_obj.host) or ("neon.tech" in database_url):
+    if "sslmode=" not in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{separator}sslmode=require"
+        logging.getLogger(__name__).info("SSL requerido agregado para Neon")
+        url_obj = make_url(database_url)
+
+engine_options = {
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
 }
 
-# Feature flags (por defecto en OFF) para el nuevo presupuestador del wizard
-app.config["WIZARD_BUDGET_BREAKDOWN_ENABLED"] = _env_flag(
-    "WIZARD_BUDGET_BREAKDOWN_ENABLED",
-    False,
-)
-app.config["WIZARD_BUDGET_SHADOW_MODE"] = _env_flag(
-    "WIZARD_BUDGET_SHADOW_MODE",
-    False,
-)
+if url_obj.drivername.startswith("postgresql"):
+    engine_options.update(
+        {
+            "pool_size": 20,
+            "max_overflow": 20,
+        }
+    )
+
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
 
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
@@ -178,6 +175,18 @@ app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+
+
+def _is_alembic_running() -> bool:
+    """Return True when Alembic is orchestrating the process."""
+
+    return os.getenv("ALEMBIC_RUNNING") == "1"
+
+
+def _should_skip_create_all() -> bool:
+    """Return True when automatic table creation must be skipped."""
+
+    return _is_alembic_running() or os.getenv("FLASK_SKIP_CREATE_ALL") == "1"
 
 
 def _resolve_login_endpoint() -> Optional[str]:
@@ -247,12 +256,9 @@ def db_upgrade():
             ensure_item_presupuesto_stage_columns,
             ensure_presupuesto_validity_columns,
             ensure_exchange_currency_columns,
-            ensure_inventory_package_columns,
-            ensure_inventory_location_columns,
             ensure_geocode_columns,
             ensure_org_memberships_table,
             ensure_work_certification_tables,
-            ensure_wizard_budget_tables,
         )
 
         ensure_avance_audit_columns()
@@ -260,12 +266,9 @@ def db_upgrade():
         ensure_item_presupuesto_stage_columns()
         ensure_presupuesto_validity_columns()
         ensure_exchange_currency_columns()
-        ensure_inventory_package_columns()
-        ensure_inventory_location_columns()
         ensure_geocode_columns()
         ensure_org_memberships_table()
         ensure_work_certification_tables()
-        ensure_wizard_budget_tables()
 
     click.echo('[OK] Database upgraded successfully.')
 
@@ -419,18 +422,11 @@ def utility_processor():
 
         from models import OrgMembership  # Importación perezosa para evitar ciclos
 
-        registro = (
-            OrgMembership.query
-            .filter(
-                OrgMembership.org_id == org_id,
-                OrgMembership.user_id == current_user.id,
-                db.or_(
-                    OrgMembership.archived.is_(False),
-                    OrgMembership.archived.is_(None),
-                ),
-            )
-            .first()
-        )
+        registro = OrgMembership.query.filter_by(
+            org_id=org_id,
+            user_id=current_user.id,
+            archived=False,
+        ).first()
         if not registro:
             return False
 
@@ -646,192 +642,123 @@ def from_json_filter(json_str):
         return {}
 
 
-# Create tables and initial data
-with app.app_context():
-    # Import models after app context is available to avoid circular imports
-    from models import Usuario, Organizacion
-    
-    # Run startup migrations before creating tables
-    from migrations_runtime import (
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    )
-
-    runtime_migrations = [
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    ]
-
-    # 🔥 Intento crear tablas con fallback automático a SQLite
-    try:
-        print(f"[DB] Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
-        db.create_all()
-        print("[OK] Base de datos conectada exitosamente")
-    except Exception as e:
-        print(f"[ERROR] Error conectando a base de datos principal: {str(e)}")
-        if "neon.tech" in app.config['SQLALCHEMY_DATABASE_URI']:
-            print("[INFO] Fallback automático a SQLite...")
-            # Cambiar a SQLite y reiniciar SQLAlchemy
-            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tmp/dev.db"
-            # Simplificar engine options para SQLite
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-                "pool_recycle": 300,
-                "pool_pre_ping": True,
-            }
-            
-            # Reiniciar la conexión con la nueva configuración
-            db.init_app(app)
-            try:
-                db.create_all()
-                print("[OK] SQLite fallback conectado exitosamente")
-            except Exception as sqlite_error:
-                print(f"[ERROR] Error crítico con SQLite fallback: {str(sqlite_error)}")
-                raise sqlite_error
-        else:
-            raise e
-    
-    # Initialize RBAC permissions
-    try:
-        from models import seed_default_role_permissions
-        seed_default_role_permissions()
-        print("[OK] RBAC permissions seeded successfully")
-    except Exception as e:
-        print(f"[WARN] RBAC seeding skipped: {e}")
-    
-    # Initialize marketplace tables (isolated mk_ tables)
-    try:
-        from marketplace.models import MkProduct, MkProductVariant, MkCart, MkCartItem, MkOrder, MkOrderItem, MkPayment, MkPurchaseOrder, MkCommission
-        
-        # Create marketplace tables only
-        MkProduct.__table__.create(db.engine, checkfirst=True)
-        MkProductVariant.__table__.create(db.engine, checkfirst=True)
-        MkCart.__table__.create(db.engine, checkfirst=True)
-        MkCartItem.__table__.create(db.engine, checkfirst=True)
-        MkOrder.__table__.create(db.engine, checkfirst=True)
-        MkOrderItem.__table__.create(db.engine, checkfirst=True)
-        MkPayment.__table__.create(db.engine, checkfirst=True)
-        MkPurchaseOrder.__table__.create(db.engine, checkfirst=True)
-        MkCommission.__table__.create(db.engine, checkfirst=True)
-        
-        # Seed basic marketplace data
-        if not MkCommission.query.first():
-            commission_rates = [
-                MkCommission(category_id=1, exposure='standard', take_rate_pct=10.0),
-                MkCommission(category_id=1, exposure='premium', take_rate_pct=12.0),
-            ]
-            for commission in commission_rates:
-                db.session.add(commission)
-            
-            # Demo products
-            demo_product = MkProduct(
-                seller_company_id=1,
-                name="Cemento Portland 50kg",
-                category_id=1,
-                description_html="<p>Cemento Portland de alta calidad</p>",
-                is_masked_seller=True
-            )
-            db.session.add(demo_product)
-            db.session.flush()
-            
-            demo_variant = MkProductVariant(
-                product_id=demo_product.id,
-                sku="CEM-PORT-50KG",
-                price=8999.0,
-                currency="ARS",
-                stock_qty=100
-            )
-            db.session.add(demo_variant)
-            db.session.commit()
-        
-        print("[OK] Marketplace tables created and seeded successfully")
-    except Exception as e:
-        print(f"[WARN] Marketplace initialization skipped: {e}")
-    
-    print("[OK] Database tables created successfully")
-
-    # Ensure default admin credentials exist and are hashed correctly
-    try:
-        admin_email = 'admin@obyra.com'
-        admin = Usuario.query.filter_by(email=admin_email).first()
-
-        if not admin:
-            admin_org = Organizacion(nombre='OBYRA - Administración Central')
-            db.session.add(admin_org)
-            db.session.flush()
-
-            admin = Usuario(
-                nombre='Administrador',
-                apellido='OBYRA',
-                email=admin_email,
-                rol='administrador',
-                role='administrador',
-                auth_provider='manual',
-                activo=True,
-                organizacion_id=admin_org.id,
-                primary_org_id=admin_org.id,
-            )
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            print('[ADMIN] Usuario administrador creado: admin@obyra.com / admin123')
-        else:
-            updated = False
-
-            hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')
-            stored_hash = admin.password_hash or ''
-            if not stored_hash or not stored_hash.startswith(hashed_markers):
-                original_secret = stored_hash or 'admin123'
-                admin.set_password(original_secret)
-                updated = True
-
-            if admin.auth_provider != 'manual':
-                admin.auth_provider = 'manual'
-                updated = True
-
-            if not admin.organizacion:
-                admin_org = Organizacion(nombre='OBYRA - Administración Central')
-                db.session.add(admin_org)
-                db.session.flush()
-                admin.organizacion_id = admin_org.id
-                if not admin.primary_org_id:
-                    admin.primary_org_id = admin_org.id
-                updated = True
-
-            if updated:
-                db.session.commit()
-                print('[ADMIN] Credenciales del administrador principal verificadas y aseguradas.')
-    except Exception as ensure_admin_exc:
-        db.session.rollback()
-        print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
-
-    # Ejecutar migraciones en tiempo de ejecución después de crear tablas y
-    # sembrar datos esenciales para evitar consultas a tablas inexistentes.
-    for migration in runtime_migrations:
-        try:
-            migration()
-        except Exception as runtime_exc:
-            print(f"[WARN] Runtime migration failed: {migration.__name__}: {runtime_exc}")
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
     module = importlib.import_module(module_name)
     return getattr(module, attr_name)
+
+
+def _resolve_cli_organization(identifier: str):
+    """Resolve an organization by id, slug, token or name."""
+
+    identifier = (identifier or "").strip()
+    if not identifier:
+        return None
+
+    from models import Organizacion  # Local import to avoid circular deps
+    from sqlalchemy import func as sa_func
+
+    if identifier.isdigit():
+        return Organizacion.query.get(int(identifier))
+
+    if hasattr(Organizacion, "slug"):
+        org = Organizacion.query.filter_by(slug=identifier).first()
+        if org:
+            return org
+
+    org = Organizacion.query.filter_by(token_invitacion=identifier).first()
+    if org:
+        return org
+
+    lowered = identifier.lower()
+    return (
+        Organizacion.query
+        .filter(sa_func.lower(Organizacion.nombre) == lowered)
+        .first()
+    )
+
+
+def _format_seed_summary(stats: dict) -> str:
+    created = stats.get("created", 0)
+    existing = stats.get("existing", 0)
+    reactivated = stats.get("reactivated", 0)
+    return f"creadas={created}, existentes={existing}, reactivadas={reactivated}"
+
+
+@app.cli.command("seed:inventario")
+@click.option(
+    "--global",
+    "seed_global",
+    is_flag=True,
+    help="Inicializa el catálogo global compartido",
+)
+@click.option(
+    "--org",
+    "org_identifiers",
+    multiple=True,
+    help="ID, slug, token o nombre de la organización a sembrar",
+)
+@click.option("--quiet", is_flag=True, help="Oculta el detalle por categoría")
+def seed_inventario_cli(seed_global: bool, org_identifiers: Tuple[str, ...], quiet: bool) -> None:
+    """Seed de categorías de inventario utilizando el CLI de Flask."""
+
+    if not seed_global and not org_identifiers:
+        raise click.ClickException(
+            "Debes indicar al menos una organización con --org o usar --global."
+        )
+
+    from models import Organizacion
+    from seed_inventory_categories import seed_inventory_categories_for_company
+
+    verbose = not quiet
+    identifiers = list(org_identifiers)
+    fallback_identifier = identifiers[0] if (seed_global and identifiers) else None
+
+    try:
+        if seed_global:
+            fallback_org = (
+                _resolve_cli_organization(fallback_identifier)
+                if fallback_identifier
+                else Organizacion.query.order_by(Organizacion.id.asc()).first()
+            )
+
+            if not fallback_org:
+                raise click.ClickException(
+                    "No se encontró una organización para inicializar el catálogo global."
+                )
+
+            stats = seed_inventory_categories_for_company(
+                fallback_org,
+                verbose=verbose,
+                mark_global=True,
+            )
+            db.session.commit()
+            click.echo(
+                f"🌐 Catálogo global listo ({fallback_org.nombre}): {_format_seed_summary(stats)}"
+            )
+
+        for identifier in identifiers:
+            organizacion = _resolve_cli_organization(identifier)
+            if not organizacion:
+                raise click.ClickException(
+                    f"No se encontró la organización '{identifier}'."
+                )
+
+            stats = seed_inventory_categories_for_company(
+                organizacion,
+                verbose=verbose,
+            )
+            db.session.commit()
+            click.echo(
+                f"🏗️  {organizacion.nombre}: {_format_seed_summary(stats)}"
+            )
+    except click.ClickException:
+        db.session.rollback()
+        raise
+    except Exception as exc:  # pragma: no cover - defensive guard
+        db.session.rollback()
+        raise click.ClickException(str(exc)) from exc
 
 
 # Register blueprints after database initialization to avoid circular imports
@@ -914,26 +841,6 @@ try:
     from inventario_new import inventario_new_bp
     app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
     app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
-
-    @app.route('/inventario/depositos')
-    @login_required
-    def inventory_depositos_redirect():
-        return redirect(url_for('inventario_new.warehouses'))
-
-    @app.route('/inventario/movimientos')
-    @login_required
-    def inventory_movimientos_redirect():
-        return redirect(url_for('inventario_new.movimientos'))
-
-    @app.route('/inventario/reservas')
-    @login_required
-    def inventory_reservas_redirect():
-        return redirect(url_for('inventario_new.reservas'))
-
-    @app.route('/inventario/alertas')
-    @login_required
-    def inventory_alertas_redirect():
-        return redirect(url_for('inventario_new.alertas'))
     print("[OK] Enhanced blueprints registered successfully")
 except ImportError as e:
     print(f"[WARN] Enhanced blueprints not available: {e}")
