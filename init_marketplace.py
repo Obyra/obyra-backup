@@ -11,16 +11,23 @@ from sqlalchemy import inspect
 from app import app, db
 from models_marketplace import *
 
+
+def _create_dev_sqlite_schema_if_requested() -> bool:
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+        print("🏗️  Creating marketplace database tables (SQLite dev mode)...")
+        db.create_all()
+        return True
+    return False
+
+
 def init_marketplace_db():
     """Initialize marketplace database tables and seed data"""
-    
+
     try:
         with app.app_context():
-            uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-            if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
-                print("🏗️  Creating marketplace database tables (SQLite dev mode)...")
-                db.create_all()
-            else:
+            created_schema = _create_dev_sqlite_schema_if_requested()
+            if not created_schema:
                 inspector = inspect(db.engine)
                 required_tables = [
                     MarketCategory.__tablename__,

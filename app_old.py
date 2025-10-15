@@ -65,13 +65,19 @@ app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 
 # Crear todas las tablas de la base de datos
-with app.app_context():
-    # Importar todos los modelos antes de crear las tablas
-    import models
+
+
+def _create_dev_sqlite_schema_if_requested() -> None:
     uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
     if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
         db.create_all()
         print("📊 Tablas de base de datos creadas correctamente")
+
+
+with app.app_context():
+    # Importar todos los modelos antes de crear las tablas
+    import models
+    _create_dev_sqlite_schema_if_requested()
 
 @app.route('/')
 def index():
@@ -135,9 +141,7 @@ with app.app_context():
     from werkzeug.security import generate_password_hash
     
     # Crear tablas en orden correcto solo en modo SQLite
-    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
-        db.create_all()
+    _create_dev_sqlite_schema_if_requested()
     
     # Función para migrar datos existentes
     def migrar_organizaciones():

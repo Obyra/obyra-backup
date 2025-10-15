@@ -652,6 +652,16 @@ def from_json_filter(json_str):
 
 
 # Create tables and initial data
+
+
+def _create_dev_sqlite_schema_if_requested() -> None:
+    """Allow opt-in automatic table creation only for SQLite development."""
+
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+        db.create_all()
+
+
 with app.app_context():
     # Import models after app context is available to avoid circular imports
     from models import Usuario, Organizacion
@@ -691,9 +701,7 @@ with app.app_context():
                 "Runtime migration %s failed: %s", migration.__name__, exc
             )
 
-    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
-        db.create_all()
+    _create_dev_sqlite_schema_if_requested()
     
     # Initialize RBAC permissions
     try:
