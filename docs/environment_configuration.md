@@ -25,7 +25,7 @@ Este documento resume las variables de entorno y dependencias críticas identifi
 | Área | Variables | Uso y default | Valores sugeridos |
 | --- | --- | --- | --- |
 | **Autenticación Google** | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Registra proveedor OAuth solo si ambas están definidas. 【F:auth.py†L101-L133】【F:main_app.py†L13-L52】 | Emitir credenciales separadas para staging y producción. Configurar redirect URIs correspondientes a cada dominio. |
-| **Mercado Pago** | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_PUBLIC_URL` (esperadas en `current_app.config`) | El SDK se inicializa con `current_app.config['MP_ACCESS_TOKEN']`; sin token las operaciones fallan. 【F:marketplace_payments.py†L20-L109】 | Definir variables de entorno e incorporarlas a la configuración de Flask (`app.config`) durante bootstrap. Usar tokens diferentes por ambiente y registrar webhook público específico. |
+| **Mercado Pago** | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_PUBLIC_URL` (esperadas en `current_app.config`) | El SDK se inicializa con `current_app.config['MP_ACCESS_TOKEN']`; sin token las operaciones fallan. 【F:marketplace_payments.py†L1-L189】 | Definir variables de entorno e incorporarlas a la configuración de Flask (`app.config`) durante bootstrap. Usar tokens diferentes por ambiente y registrar webhook público específico. |
 | **Correo SMTP** | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL` | `marketplace/services/emailer.py` lee directamente de entorno; `services/email_service.py` espera la misma información en `app.config`. 【F:marketplace/services/emailer.py†L20-L75】【F:services/email_service.py†L23-L74】 | Centralizar carga en `app.config` desde variables de entorno y validar con pruebas de humo. Para staging usar cuenta sandbox; en producción requerir TLS y contraseñas de aplicación. |
 | **Mapas / Geocoding** | `MAPS_PROVIDER` (`nominatim` por defecto), `MAPS_API_KEY`, `MAPS_USER_AGENT`, `GEOCODE_CACHE_TTL` | Configuran proveedor y caché de geocodificación. 【F:app.py†L168-L177】【F:services/geocoding_service.py†L17-L40】 | Mantener `nominatim` para pruebas; en producción evaluar proveedor con SLA (Google Maps, Mapbox) y definir `MAPS_API_KEY` + `MAPS_USER_AGENT` acorde a políticas. |
 | **Cambio de divisas** | `FX_PROVIDER` (default `bna`), `EXCHANGE_FALLBACK_RATE` | Selecciona proveedor de tipo de cambio; permite fallback manual. 【F:presupuestos.py†L152-L164】 | Configurar proveedor estable en producción y definir un fallback actualizado diariamente. |
@@ -36,17 +36,23 @@ Este documento resume las variables de entorno y dependencias críticas identifi
 
 ## 4. Configuración mínima viable por entorno
 
+- **Desarrollo local**
+  1. Definir `MP_ACCESS_TOKEN` con un token de prueba/sandbox y `MP_WEBHOOK_PUBLIC_URL` apuntando a una URL pública provista por un túnel (por ejemplo `https://<subdominio>.ngrok.io/api/payments/mp/webhook`).
+  2. Iniciar el túnel con herramientas como `ngrok http 5000 --hostname=<subdominio>.ngrok.io` o `cloudflared tunnel --url http://localhost:5000` y confirmar que la URL exponga `/api/payments/mp/webhook`.
+  3. **No** utilizar `http://127.0.0.1` ni `http://localhost`, ya que Mercado Pago no puede realizar callbacks a direcciones locales.
+  4. Documentar las URLs generadas en cada sesión y actualizarlas en el panel de notificaciones de Mercado Pago.
+
 - **Staging**
   1. Definir `SECRET_KEY` y `DATABASE_URL` apuntando a base PostgreSQL de pruebas con SSL obligatorio.
   2. Configurar credenciales separadas para Google OAuth, Mercado Pago (modo sandbox), SMTP (sandbox) y OpenAI si se valida IA.
-  3. Establecer `BASE_URL`, `MAPS_PROVIDER`, `MAPS_API_KEY` y `STORAGE_DIR` para el dominio de staging.
+  3. Establecer `BASE_URL`, `MAPS_PROVIDER`, `MAPS_API_KEY` y `STORAGE_DIR` para el dominio de staging. Para Mercado Pago, usar dominios reales (por ejemplo `https://staging.tu-dominio.com/api/payments/mp/webhook`) y registrar la URL en el panel de notificaciones.
   4. Activar flags (`WIZARD_BUDGET_SHADOW_MODE`, `ENABLE_REPORTS`) solo mientras se monitorea su impacto.
   5. Documentar en un `.env.staging` o gestor de secretos la lista completa anterior y compartir acceso controlado.
 
 - **Producción**
   1. Gestionar `SECRET_KEY`, tokens OAuth, SMTP y Mercado Pago en gestor de secretos con rotación y registros de acceso.
   2. Utilizar `DATABASE_URL` apuntando a clúster administrado con backups automáticos y parámetros de pool ajustados al número de workers.
-  3. Definir `BASE_URL` y `STORAGE_DIR` en infraestructura persistente (S3 o volumen replicado) y revisar permisos de lectura/escritura.
+  3. Definir `BASE_URL` y `STORAGE_DIR` en infraestructura persistente (S3 o volumen replicado) y revisar permisos de lectura/escritura. Registrar `MP_WEBHOOK_PUBLIC_URL` con el dominio público definitivo (por ejemplo `https://app.tu-dominio.com/api/payments/mp/webhook`).
   4. Fijar `PLATFORM_COMMISSION_RATE`, `FX_PROVIDER` y `EXCHANGE_FALLBACK_RATE` según políticas comerciales y revisarlos antes de cada release.
   5. Mantener feature flags documentados; habilitar solo tras validar en staging y con estrategia de rollback.
 

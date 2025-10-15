@@ -178,6 +178,22 @@ app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON",
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
 app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").strip().lower()
 app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
+app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "").strip()
+app.config["MP_WEBHOOK_PUBLIC_URL"] = os.getenv("MP_WEBHOOK_PUBLIC_URL", "").strip()
+
+if not app.config["MP_ACCESS_TOKEN"]:
+    app.logger.warning(
+        "Mercado Pago access token (MP_ACCESS_TOKEN) is not configured; Mercado Pago operations will fail."
+    )
+
+if app.config["MP_WEBHOOK_PUBLIC_URL"]:
+    app.logger.info(
+        f"MP webhook URL: {app.config['MP_WEBHOOK_PUBLIC_URL']}"
+    )
+else:
+    app.logger.warning(
+        "MP_WEBHOOK_PUBLIC_URL is not configured; Mercado Pago webhooks will not be reachable from external services."
+    )
 
 # initialize extensions
 db.init_app(app)

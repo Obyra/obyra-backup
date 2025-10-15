@@ -4,12 +4,10 @@ Handles payment creation, webhooks, and purchase order generation
 """
 
 from flask import Blueprint, request, jsonify, current_app, render_template
-from app import db  
+from app import db
 from models_marketplace import *
 from datetime import datetime
 import json
-import logging
-import os
 
 payments_bp = Blueprint('payments', __name__)
 
@@ -18,15 +16,22 @@ def create_mp_preference():
     """Crear preferencia de pago en Mercado Pago"""
     try:
         import mercadopago
-        
+
         data = request.get_json()
         order_id = data.get('order_id')
-        
+
         order = MarketOrder.query.get_or_404(order_id)
-        
+
+        access_token = current_app.config.get('MP_ACCESS_TOKEN')
+        if not access_token:
+            current_app.logger.error(
+                'Mercado Pago access token missing; cannot create payment preference.'
+            )
+            return jsonify({"error": "Mercado Pago no está configurado"}), 503
+
         # Configurar SDK de MercadoPago
-        sdk = mercadopago.SDK(current_app.config['MP_ACCESS_TOKEN'])
-        
+        sdk = mercadopago.SDK(access_token)
+
         # Items para MP (agrupados, sin revelar sellers)
         items = []
         for item in order.items:
@@ -62,7 +67,7 @@ def create_mp_preference():
         }
         
         preference_response = sdk.preference().create(preference_data)
-        
+
         if preference_response["status"] == 201:
             return jsonify({
                 "preference_id": preference_response["response"]["id"],
@@ -70,11 +75,11 @@ def create_mp_preference():
                 "sandbox_init_point": preference_response["response"]["sandbox_init_point"]
             })
         else:
-            logging.error(f"Error creating MP preference: {preference_response}")
+            current_app.logger.error(f"Error creating MP preference: {preference_response}")
             return jsonify({"error": "Error al crear preferencia de pago"}), 500
-            
-    except Exception as e:
-        logging.error(f"Exception in create_mp_preference: {str(e)}")
+
+    except Exception:
+        current_app.logger.exception("Exception in create_mp_preference")
         return jsonify({"error": "Error interno del servidor"}), 500
 
 @payments_bp.route('/api/payments/mp/webhook', methods=['POST'])
@@ -82,27 +87,38 @@ def mp_webhook():
     """Webhook de Mercado Pago para confirmar pagos"""
     try:
         import mercadopago
-        
+
+        current_app.logger.info(
+            f"MP webhook URL: {current_app.config.get('MP_WEBHOOK_PUBLIC_URL')}"
+        )
+
         # Log del webhook recibido
         webhook_data = request.get_json() or {}
-        logging.info(f"MP Webhook received: {webhook_data}")
-        
+        current_app.logger.info(f"MP Webhook received: {webhook_data}")
+
         # Verificar que es una notificación de pago
         if webhook_data.get("type") != "payment":
             return jsonify({"status": "ignored"}), 200
-        
+
         payment_id = webhook_data.get("data", {}).get("id")
         if not payment_id:
             return jsonify({"error": "No payment ID"}), 400
-        
+
         # Configurar SDK
-        sdk = mercadopago.SDK(current_app.config['MP_ACCESS_TOKEN'])
-        
+        access_token = current_app.config.get('MP_ACCESS_TOKEN')
+        if not access_token:
+            current_app.logger.error(
+                'Mercado Pago access token missing; cannot process webhook.'
+            )
+            return jsonify({"error": "Mercado Pago no está configurado"}), 503
+
+        sdk = mercadopago.SDK(access_token)
+
         # Obtener información del pago
         payment_response = sdk.payment().get(payment_id)
-        
+
         if payment_response["status"] != 200:
-            logging.error(f"Error getting payment info: {payment_response}")
+            current_app.logger.error(f"Error getting payment info: {payment_response}")
             return jsonify({"error": "Error getting payment info"}), 500
         
         payment_data = payment_response["response"]
@@ -110,12 +126,12 @@ def mp_webhook():
         # Obtener la orden usando external_reference
         external_reference = payment_data.get("external_reference")
         if not external_reference:
-            logging.error("No external_reference in payment data")
+            current_app.logger.error("No external_reference in payment data")
             return jsonify({"error": "No external_reference"}), 400
-        
+
         order = MarketOrder.query.get(int(external_reference))
         if not order:
-            logging.error(f"Order not found: {external_reference}")
+            current_app.logger.error(f"Order not found: {external_reference}")
             return jsonify({"error": "Order not found"}), 404
         
         # Procesar según el estado del pago
@@ -149,12 +165,14 @@ def mp_webhook():
             try:
                 from services.po_service import generate_purchase_orders
                 generate_purchase_orders(order.id)
-                logging.info(f"Purchase orders generated for order {order.id}")
-            except Exception as e:
-                logging.error(f"Error generating purchase orders: {str(e)}")
-            
+                current_app.logger.info(f"Purchase orders generated for order {order.id}")
+            except Exception:
+                current_app.logger.exception(
+                    f"Error generating purchase orders for order {order.id}"
+                )
+
             return jsonify({"status": "payment_processed"}), 200
-            
+
         elif payment_status in ["rejected", "cancelled"]:
             # Pago rechazado/cancelado
             order.payment_status = 'failed'
@@ -169,9 +187,9 @@ def mp_webhook():
             )
             db.session.add(payment_record)
             db.session.commit()
-            
+
             return jsonify({"status": "payment_failed"}), 200
-            
+
         elif payment_status == "pending":
             # Pago pendiente
             order.payment_status = 'pending'
@@ -186,15 +204,15 @@ def mp_webhook():
             )
             db.session.add(payment_record)
             db.session.commit()
-            
+
             return jsonify({"status": "payment_pending"}), 200
-        
+
         else:
-            logging.warning(f"Unknown payment status: {payment_status}")
+            current_app.logger.warning(f"Unknown payment status: {payment_status}")
             return jsonify({"status": "unknown_status"}), 200
-    
-    except Exception as e:
-        logging.error(f"Exception in mp_webhook: {str(e)}")
+
+    except Exception:
+        current_app.logger.exception("Exception in mp_webhook")
         return jsonify({"error": "Internal server error"}), 500
 
 @payments_bp.route('/payment-success')
