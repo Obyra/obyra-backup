@@ -262,6 +262,13 @@ db_cli = AppGroup('db')
 def db_upgrade():
     """Apply pending lightweight database migrations."""
     with app.app_context():
+        from flask_migrate import upgrade as alembic_upgrade
+
+        logger = app.logger
+        logger.info("Running Alembic upgrade...")
+        alembic_upgrade()
+        logger.info("Running post-upgrade runtime ensures...")
+
         from migrations_runtime import (
             ensure_avance_audit_columns,
             ensure_presupuesto_state_columns,

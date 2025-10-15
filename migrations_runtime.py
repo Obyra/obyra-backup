@@ -1,8 +1,21 @@
-from app import db
 import os
 from datetime import date, timedelta, datetime
+
 from flask import current_app
 from sqlalchemy import inspect
+
+from app import db
+
+try:
+    from psycopg import errors as psycopg_errors  # type: ignore
+except ImportError:  # pragma: no cover - fallback when psycopg is unavailable
+    psycopg_errors = None
+
+
+def _pg_table_exists(conn, name: str) -> bool:
+    """Check table existence using PostgreSQL's ``to_regclass`` helper."""
+
+    return conn.exec_driver_sql("select to_regclass(%s)", (name,)).scalar() is not None
 
 def ensure_avance_audit_columns():
     """Add audit columns to tarea_avances table if they don't exist"""
@@ -166,7 +179,62 @@ def ensure_presupuesto_validity_columns():
     engine = db.engine
     backend = engine.url.get_backend_name()
 
-    # Previous sentinel (sin vigencia_bloqueada) that may exist en instalaciones viejas
+    if backend == 'postgresql':
+        try:
+            with engine.begin() as conn:
+                if not _pg_table_exists(conn, 'public.presupuestos'):
+                    if current_app:
+                        current_app.logger.warning(
+                            'Skipping presupuesto validity ensure: table public.presupuestos not found'
+                        )
+                    return
+
+                statements = (
+                    (
+                        "ALTER TABLE IF EXISTS presupuestos ADD COLUMN IF NOT EXISTS vigencia_dias INTEGER DEFAULT 30",
+                        'vigencia_dias',
+                    ),
+                    (
+                        "ALTER TABLE IF EXISTS presupuestos ADD COLUMN IF NOT EXISTS vigencia_desde DATE",
+                        'vigencia_desde',
+                    ),
+                    (
+                        "ALTER TABLE IF EXISTS presupuestos ADD COLUMN IF NOT EXISTS vigencia_hasta DATE",
+                        'vigencia_hasta',
+                    ),
+                )
+
+                for statement, column in statements:
+                    try:
+                        conn.exec_driver_sql(statement)
+                        if current_app:
+                            current_app.logger.info(
+                                "Ensured column presupuestos.%s via '%s'", column, statement
+                            )
+                    except Exception as exc:  # pragma: no cover - defensive fallback for PG variants
+                        if psycopg_errors and isinstance(exc, psycopg_errors.DuplicateColumn):
+                            if current_app:
+                                current_app.logger.info(
+                                    'Column presupuestos.%s already exists; continuing', column
+                                )
+                            continue
+                        raise
+
+            if current_app:
+                current_app.logger.info(
+                    '✅ Migration completed: presupuesto validity columns ensured (PostgreSQL)'
+                )
+
+        except Exception:
+            if current_app:
+                current_app.logger.exception(
+                    '❌ Migration failed: presupuesto validity columns (PostgreSQL)'
+                )
+            raise
+
+        return
+
+    # Legacy SQLite / non-PostgreSQL path keeps previous behaviour to maintain compatibility
     legacy_sentinel = 'instance/migrations/20250318_presupuesto_validity.done'
     sentinel = 'instance/migrations/20250319_presupuesto_validity_v2.done'
 
@@ -181,7 +249,6 @@ def ensure_presupuesto_validity_columns():
         required_columns = {'vigencia_dias', 'fecha_vigencia', 'vigencia_bloqueada'}
         missing_columns = required_columns - existing_columns
 
-        # Si el sentinel viejo existe pero faltan columnas nuevas, forzamos re-ejecución
         if missing_columns and os.path.exists(legacy_sentinel):
             os.remove(legacy_sentinel)
 
@@ -195,33 +262,21 @@ def ensure_presupuesto_validity_columns():
                 statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_dias INTEGER DEFAULT 30")
 
             if 'fecha_vigencia' not in existing_columns:
-                if backend == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
-                else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
+                statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
 
             if 'vigencia_bloqueada' not in existing_columns:
-                if backend == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT TRUE")
-                else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada INTEGER DEFAULT 1")
+                statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada INTEGER DEFAULT 1")
 
             for stmt in statements:
                 conn.exec_driver_sql(stmt)
 
-            # Recalcular vigencia para todos los presupuestos (nuevos o existentes)
             rows = conn.exec_driver_sql(
                 "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, 1) FROM presupuestos"
             ).fetchall()
 
-            if backend == 'postgresql':
-                update_sql = (
-                    "UPDATE presupuestos SET vigencia_dias = %s, fecha_vigencia = %s, vigencia_bloqueada = %s WHERE id = %s"
-                )
-            else:
-                update_sql = (
-                    "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ?, vigencia_bloqueada = ? WHERE id = ?"
-                )
+            update_sql = (
+                "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ?, vigencia_bloqueada = ? WHERE id = ?"
+            )
 
             for presupuesto_id, fecha_valor, vigencia_valor, bloqueada in rows:
                 dias = vigencia_valor if vigencia_valor and vigencia_valor > 0 else 30
@@ -241,13 +296,10 @@ def ensure_presupuesto_validity_columns():
                     fecha_base = fecha_valor
 
                 fecha_vigencia = fecha_base + timedelta(days=dias)
-                bloqueada_flag = bool(bloqueada)
-                if backend != 'postgresql':
-                    bloqueada_flag = 1 if bloqueada_flag else 0
+                bloqueada_flag = 1 if bool(bloqueada) else 0
 
                 conn.exec_driver_sql(update_sql, (dias, fecha_vigencia, bloqueada_flag, presupuesto_id))
 
-        # Guardamos sentinel actualizado y eliminamos el anterior si quedó
         if os.path.exists(legacy_sentinel):
             os.remove(legacy_sentinel)
 
