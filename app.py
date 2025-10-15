@@ -26,7 +26,6 @@ from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
-from sqlalchemy.engine.url import make_url
 from services.memberships import (
     initialize_membership_session,
     load_membership_into_context,
@@ -110,58 +109,22 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database with fallback to SQLite
-database_url = os.environ.get("DATABASE_URL")
-
-# 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
-if not database_url:
-    database_url = "sqlite:///tmp/dev.db"
-    print("[WARN] DATABASE_URL no disponible, usando SQLite fallback")
-else:
-    # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
-    if "neon.tech" in database_url and "sslmode=" not in database_url:
-        if "?" in database_url:
-            database_url += "&sslmode=require"
-        else:
-            database_url += "?sslmode=require"
-        print("[INFO] SSL requerido agregado para Neon")
-
-# Garantizar que la ruta SQLite exista antes de conectar para evitar errores "unable to open database file"
-try:
-    url_obj = make_url(database_url)
-except Exception:
-    url_obj = None
-
-if url_obj and url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
-    raw_path = Path(url_obj.database)
-
-    if not raw_path.is_absolute():
-        raw_path = Path(app.root_path) / raw_path
-
-    absolute_path = raw_path.expanduser().resolve()
-    absolute_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        database_url = url_obj.set(database=absolute_path.as_posix()).render_as_string(
-            hide_password=False
-        )
-    except Exception:
-        # Si no podemos normalizar la URL, mantenemos la ruta original.
-        pass
-
+# configure the database (PostgreSQL only)
+database_url = os.environ.get("DATABASE_URL", "").strip()
+assert database_url.startswith("postgresql"), "DATABASE_URL debe ser Postgres"
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,           # Reconexión cada 5 min
-    "pool_pre_ping": True,         # Test conexión antes de usar
+    "pool_size": 5,
+    "max_overflow": 0,
+    "pool_timeout": 30,
+    "pool_pre_ping": True,
     "connect_args": {
-        "connect_timeout": 10,      # Timeout corto para conexión
-        "keepalives_idle": 600,     # Keep alive idle time
-        "keepalives_interval": 30,  # Keep alive interval
-        "keepalives_count": 3,      # Keep alive retry count
-    } if database_url.startswith('postgresql') else {},
-    "pool_timeout": 30,            # Timeout para obtener conexión del pool
-    "max_overflow": 0,             # No overflow connections
-    "pool_size": 5,                # Tamaño del pool
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 600,
+        "keepalives_interval": 30,
+        "keepalives_count": 3,
+    },
 }
 
 # Feature flags (por defecto en OFF) para el nuevo presupuestador del wizard
