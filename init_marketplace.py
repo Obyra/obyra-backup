@@ -3,19 +3,41 @@ OBYRA Market - Database Initialization
 Creates tables and seeds initial data for the marketplace
 """
 
-from app import app, db
-from models_marketplace import *
 from datetime import datetime
 import os
+
+from sqlalchemy import inspect
+
+from app import app, db
+from models_marketplace import *
 
 def init_marketplace_db():
     """Initialize marketplace database tables and seed data"""
     
     try:
         with app.app_context():
-            # Create all marketplace tables
-            print("🏗️  Creating marketplace database tables...")
-            db.create_all()
+            uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+            if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+                print("🏗️  Creating marketplace database tables (SQLite dev mode)...")
+                db.create_all()
+            else:
+                inspector = inspect(db.engine)
+                required_tables = [
+                    MarketCategory.__tablename__,
+                    MarketBrand.__tablename__,
+                    MarketCommission.__tablename__,
+                    MarketCompany.__tablename__,
+                    MarketUser.__tablename__,
+                ]
+                missing_tables = [
+                    table for table in required_tables if not inspector.has_table(table)
+                ]
+                if missing_tables:
+                    print(
+                        "⚠️  Marketplace tables missing: "
+                        f"{', '.join(missing_tables)}. Run migrations before seeding."
+                    )
+                    return
             
             # Seed basic data
             seed_categories()

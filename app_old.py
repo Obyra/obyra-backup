@@ -68,8 +68,10 @@ app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 with app.app_context():
     # Importar todos los modelos antes de crear las tablas
     import models
-    db.create_all()
-    print("📊 Tablas de base de datos creadas correctamente")
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+        db.create_all()
+        print("📊 Tablas de base de datos creadas correctamente")
 
 @app.route('/')
 def index():
@@ -132,8 +134,10 @@ with app.app_context():
     from models import Usuario, Organizacion, Obra, ItemInventario
     from werkzeug.security import generate_password_hash
     
-    # Crear tablas en orden correcto
-    db.create_all()
+    # Crear tablas en orden correcto solo en modo SQLite
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+        db.create_all()
     
     # Función para migrar datos existentes
     def migrar_organizaciones():

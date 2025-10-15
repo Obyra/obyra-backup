@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import os
 import sys
 import logging
@@ -29,7 +33,7 @@ from services.memberships import (
     get_current_membership,
     get_current_org_id,
 )
-from extensions import db, login_manager
+from extensions import db, login_manager, migrate
 
 
 def _ensure_utf8_io() -> None:
@@ -178,6 +182,7 @@ app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+migrate.init_app(app, db)
 
 
 def _resolve_login_endpoint() -> Optional[str]:
@@ -650,7 +655,7 @@ def from_json_filter(json_str):
 with app.app_context():
     # Import models after app context is available to avoid circular imports
     from models import Usuario, Organizacion
-    
+
     # Run startup migrations before creating tables
     from migrations_runtime import (
         ensure_avance_audit_columns,
@@ -678,33 +683,17 @@ with app.app_context():
         ensure_work_certification_tables,
     ]
 
-    # 🔥 Intento crear tablas con fallback automático a SQLite
-    try:
-        print(f"[DB] Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
+    for migration in runtime_migrations:
+        try:
+            migration()
+        except Exception as exc:  # pragma: no cover - startup logging only
+            logging.getLogger(__name__).warning(
+                "Runtime migration %s failed: %s", migration.__name__, exc
+            )
+
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
         db.create_all()
-        print("[OK] Base de datos conectada exitosamente")
-    except Exception as e:
-        print(f"[ERROR] Error conectando a base de datos principal: {str(e)}")
-        if "neon.tech" in app.config['SQLALCHEMY_DATABASE_URI']:
-            print("[INFO] Fallback automático a SQLite...")
-            # Cambiar a SQLite y reiniciar SQLAlchemy
-            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tmp/dev.db"
-            # Simplificar engine options para SQLite
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-                "pool_recycle": 300,
-                "pool_pre_ping": True,
-            }
-            
-            # Reiniciar la conexión con la nueva configuración
-            db.init_app(app)
-            try:
-                db.create_all()
-                print("[OK] SQLite fallback conectado exitosamente")
-            except Exception as sqlite_error:
-                print(f"[ERROR] Error crítico con SQLite fallback: {str(sqlite_error)}")
-                raise sqlite_error
-        else:
-            raise e
     
     # Initialize RBAC permissions
     try:
