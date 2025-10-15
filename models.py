@@ -770,7 +770,9 @@ class TareaMiembro(db.Model):
     usuario = db.relationship('Usuario')
     
     # Constraint de unicidad
-    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='unique_tarea_user'),)
+    __table_args__ = (
+        db.UniqueConstraint('tarea_id', 'user_id', name='uq_tarea_miembros_tarea_user'),
+    )
     
     def __repr__(self):
         return f'<TareaMiembro tarea_id={self.tarea_id} user_id={self.user_id}>'
@@ -906,7 +908,11 @@ class TareaResponsables(db.Model):
     usuario = db.relationship('Usuario')
     
     # Constraint de unicidad
-    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='unique_tarea_user'),)
+    __table_args__ = (
+        db.UniqueConstraint(
+            'tarea_id', 'user_id', name='uq_tarea_responsables_tarea_user'
+        ),
+    )
     
     def __repr__(self):
         return f'<TareaResponsables tarea_id={self.tarea_id} user_id={self.user_id}>'
