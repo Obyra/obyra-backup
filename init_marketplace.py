@@ -12,39 +12,37 @@ from app import app, db
 from models_marketplace import *
 
 
-def _create_dev_sqlite_schema_if_requested() -> bool:
+def maybe_create_sqlite_schema():
     uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
     if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
-        print("🏗️  Creating marketplace database tables (SQLite dev mode)...")
-        db.create_all()
-        return True
-    return False
+        with app.app_context():
+            print("🏗️  Creating marketplace database tables (SQLite dev mode)...")
+            db.create_all()
 
 
 def init_marketplace_db():
     """Initialize marketplace database tables and seed data"""
 
     try:
+        maybe_create_sqlite_schema()
         with app.app_context():
-            created_schema = _create_dev_sqlite_schema_if_requested()
-            if not created_schema:
-                inspector = inspect(db.engine)
-                required_tables = [
-                    MarketCategory.__tablename__,
-                    MarketBrand.__tablename__,
-                    MarketCommission.__tablename__,
-                    MarketCompany.__tablename__,
-                    MarketUser.__tablename__,
-                ]
-                missing_tables = [
-                    table for table in required_tables if not inspector.has_table(table)
-                ]
-                if missing_tables:
-                    print(
-                        "⚠️  Marketplace tables missing: "
-                        f"{', '.join(missing_tables)}. Run migrations before seeding."
-                    )
-                    return
+            inspector = inspect(db.engine)
+            required_tables = [
+                MarketCategory.__tablename__,
+                MarketBrand.__tablename__,
+                MarketCommission.__tablename__,
+                MarketCompany.__tablename__,
+                MarketUser.__tablename__,
+            ]
+            missing_tables = [
+                table for table in required_tables if not inspector.has_table(table)
+            ]
+            if missing_tables:
+                print(
+                    "⚠️  Marketplace tables missing: "
+                    f"{', '.join(missing_tables)}. Run migrations before seeding."
+                )
+                return
             
             # Seed basic data
             seed_categories()
@@ -302,6 +300,7 @@ def seed_demo_products():
     print("📦 Demo products seeded")
 
 if __name__ == '__main__':
+    maybe_create_sqlite_schema()
     init_marketplace_db()
     # Uncomment to seed demo products
     # seed_demo_products()
