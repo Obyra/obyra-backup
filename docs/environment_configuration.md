@@ -7,7 +7,7 @@ Este documento resume las variables de entorno y dependencias críticas identifi
 | Variable | Uso y valor por defecto | Recomendación staging | Recomendación producción | Observaciones |
 | --- | --- | --- | --- | --- |
 | `SECRET_KEY` / `SESSION_SECRET` | Se usa como `app.secret_key`; si no está definida se cae en `"dev-secret-key-change-me"`. 【F:app.py†L68-L106】 | Generar clave aleatoria de ≥32 bytes, rotarla manualmente si se sospecha fuga. | Gestionar mediante gestor de secretos (AWS Secrets Manager, GCP Secret Manager) con rotación programada. | Consolidar en una sola variable (`SECRET_KEY`) y eliminar fallback inseguro.
-| `DATABASE_URL` | Configura SQLAlchemy; si falta, se usa `sqlite:///tmp/dev.db` y se crea la carpeta automáticamente. 【F:app.py†L108-L158】 | Cadena `postgresql+psycopg2://usuario:password@host:5432/obyra_stg` con SSL requerido si aplica. | Cadena `postgresql+psycopg2://usuario:password@host:5432/obyra_prod` gestionada por la plataforma (RDS, Cloud SQL). | Ajustar parámetros de pool (`pool_size`, `max_overflow`) tras dimensionar workers y plan de conexión.
+| `DATABASE_URL` | Configura SQLAlchemy; si falta, se usa `sqlite:///tmp/dev.db` y se crea la carpeta automáticamente. 【F:app.py†L108-L158】 | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_stg` con SSL requerido si aplica. | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_prod` gestionada por la plataforma (RDS, Cloud SQL). | Ajustar parámetros de pool (`pool_size`, `max_overflow`) tras dimensionar workers y plan de conexión.
 | `PYTHONIOENCODING` | Forzado a `utf-8` para evitar problemas de consola. 【F:app.py†L33-L84】 | Mantener valor por defecto. | Mantener valor por defecto. | No requiere cambios.
 
 ## 2. Flags de funcionalidad
