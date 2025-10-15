@@ -4,7 +4,7 @@ from datetime import date, timedelta, datetime
 from flask import current_app
 from sqlalchemy import inspect
 
-from app import db
+from extensions import db
 
 try:
     from psycopg import errors as psycopg_errors  # type: ignore

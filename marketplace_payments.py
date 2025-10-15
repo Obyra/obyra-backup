@@ -4,7 +4,7 @@ Handles payment creation, webhooks, and purchase order generation
 """
 
 from flask import Blueprint, request, jsonify, current_app, render_template
-from app import db
+from extensions import db
 from models_marketplace import *
 from datetime import datetime
 import json
