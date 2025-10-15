@@ -7,7 +7,7 @@ Este documento resume las variables de entorno y dependencias críticas identifi
 | Variable | Uso y valor por defecto | Recomendación staging | Recomendación producción | Observaciones |
 | --- | --- | --- | --- | --- |
 | `SECRET_KEY` / `SESSION_SECRET` | Se usa como `app.secret_key`; si no está definida se cae en `"dev-secret-key-change-me"`. 【F:app.py†L68-L106】 | Generar clave aleatoria de ≥32 bytes, rotarla manualmente si se sospecha fuga. | Gestionar mediante gestor de secretos (AWS Secrets Manager, GCP Secret Manager) con rotación programada. | Consolidar en una sola variable (`SECRET_KEY`) y eliminar fallback inseguro.
-| `DATABASE_URL` | Configura SQLAlchemy; si falta, se usa `sqlite:///tmp/dev.db` y se crea la carpeta automáticamente. 【F:app.py†L108-L158】 | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_stg` con SSL requerido si aplica. | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_prod` gestionada por la plataforma (RDS, Cloud SQL). | Ajustar parámetros de pool (`pool_size`, `max_overflow`) tras dimensionar workers y plan de conexión.
+| `DATABASE_URL` | Configura SQLAlchemy; el arranque hace `assert` para exigir prefijo `postgresql`. 【F:app.py†L120-L142】 | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_stg` con SSL requerido si aplica. | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_prod` gestionada por la plataforma (RDS, Cloud SQL). | Ajustar parámetros de pool (`pool_size`, `max_overflow`) tras dimensionar workers y plan de conexión.
 | `PYTHONIOENCODING` | Forzado a `utf-8` para evitar problemas de consola. 【F:app.py†L33-L84】 | Mantener valor por defecto. | Mantener valor por defecto. | No requiere cambios.
 
 ## 2. Flags de funcionalidad
@@ -25,7 +25,7 @@ Este documento resume las variables de entorno y dependencias críticas identifi
 | Área | Variables | Uso y default | Valores sugeridos |
 | --- | --- | --- | --- |
 | **Autenticación Google** | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Registra proveedor OAuth solo si ambas están definidas. 【F:auth.py†L101-L133】【F:main_app.py†L13-L52】 | Emitir credenciales separadas para staging y producción. Configurar redirect URIs correspondientes a cada dominio. |
-| **Mercado Pago** | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_PUBLIC_URL` (esperadas en `current_app.config`) | El SDK se inicializa con `current_app.config['MP_ACCESS_TOKEN']`; sin token las operaciones fallan. 【F:marketplace_payments.py†L1-L189】 | Definir variables de entorno e incorporarlas a la configuración de Flask (`app.config`) durante bootstrap. Usar tokens diferentes por ambiente y registrar webhook público específico. |
+| **Mercado Pago** | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_PUBLIC_URL` (esperadas en `current_app.config`) | El SDK se inicializa con `current_app.config['MP_ACCESS_TOKEN']`; sin token las operaciones fallan. Los webhooks exponen `/api/payments/mp/webhook` y retornan 503 si falta token. 【F:marketplace_payments.py†L1-L212】 | Definir variables de entorno e incorporarlas a la configuración de Flask (`app.config`) durante bootstrap. Usar tokens diferentes por ambiente y registrar webhook público específico. |
 | **Correo SMTP** | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL` | `marketplace/services/emailer.py` lee directamente de entorno; `services/email_service.py` espera la misma información en `app.config`. 【F:marketplace/services/emailer.py†L20-L75】【F:services/email_service.py†L23-L74】 | Centralizar carga en `app.config` desde variables de entorno y validar con pruebas de humo. Para staging usar cuenta sandbox; en producción requerir TLS y contraseñas de aplicación. |
 | **Mapas / Geocoding** | `MAPS_PROVIDER` (`nominatim` por defecto), `MAPS_API_KEY`, `MAPS_USER_AGENT`, `GEOCODE_CACHE_TTL` | Configuran proveedor y caché de geocodificación. 【F:app.py†L168-L177】【F:services/geocoding_service.py†L17-L40】 | Mantener `nominatim` para pruebas; en producción evaluar proveedor con SLA (Google Maps, Mapbox) y definir `MAPS_API_KEY` + `MAPS_USER_AGENT` acorde a políticas. |
 | **Cambio de divisas** | `FX_PROVIDER` (default `bna`), `EXCHANGE_FALLBACK_RATE` | Selecciona proveedor de tipo de cambio; permite fallback manual. 【F:presupuestos.py†L152-L164】 | Configurar proveedor estable en producción y definir un fallback actualizado diariamente. |
@@ -41,6 +41,17 @@ Este documento resume las variables de entorno y dependencias críticas identifi
   2. Iniciar el túnel con herramientas como `ngrok http 5000 --hostname=<subdominio>.ngrok.io` o `cloudflared tunnel --url http://localhost:5000` y confirmar que la URL exponga `/api/payments/mp/webhook`.
   3. **No** utilizar `http://127.0.0.1` ni `http://localhost`, ya que Mercado Pago no puede realizar callbacks a direcciones locales.
   4. Documentar las URLs generadas en cada sesión y actualizarlas en el panel de notificaciones de Mercado Pago.
+  5. Validar la integración con una llamada manual:
+
+     ```bash
+     curl -sS -X POST http://127.0.0.1:8080/api/payments/mp/webhook \
+       -H "Content-Type: application/json" \
+       -d '{"type":"payment","data":{"id":"test-id"}}'
+     ```
+
+     - Sin `MP_ACCESS_TOKEN`, la aplicación responde `503`.
+     - Para eventos que no sean de tipo `payment`, devuelve `200 {"status":"ignored"}`.
+     - El endpoint `GET /api/payments/mp/health` devuelve `{ "ok": true, "webhook": <bool> }` y sirve como verificación rápida.
 
 - **Staging**
   1. Definir `SECRET_KEY` y `DATABASE_URL` apuntando a base PostgreSQL de pruebas con SSL obligatorio.

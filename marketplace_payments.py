@@ -86,8 +86,6 @@ def create_mp_preference():
 def mp_webhook():
     """Webhook de Mercado Pago para confirmar pagos"""
     try:
-        import mercadopago
-
         current_app.logger.info(
             f"MP webhook URL: {current_app.config.get('MP_WEBHOOK_PUBLIC_URL')}"
         )
@@ -104,13 +102,14 @@ def mp_webhook():
         if not payment_id:
             return jsonify({"error": "No payment ID"}), 400
 
-        # Configurar SDK
         access_token = current_app.config.get('MP_ACCESS_TOKEN')
         if not access_token:
             current_app.logger.error(
                 'Mercado Pago access token missing; cannot process webhook.'
             )
             return jsonify({"error": "Mercado Pago no está configurado"}), 503
+
+        import mercadopago
 
         sdk = mercadopago.SDK(access_token)
 
@@ -214,6 +213,18 @@ def mp_webhook():
     except Exception:
         current_app.logger.exception("Exception in mp_webhook")
         return jsonify({"error": "Internal server error"}), 500
+
+
+@payments_bp.route('/api/payments/mp/health', methods=['GET'])
+def mp_webhook_health():
+    """Endpoint de salud para validar despliegues sin tocar Mercado Pago."""
+
+    return jsonify(
+        {
+            "ok": True,
+            "webhook": bool(current_app.config.get('MP_WEBHOOK_PUBLIC_URL')),
+        }
+    )
 
 @payments_bp.route('/payment-success')
 def payment_success():

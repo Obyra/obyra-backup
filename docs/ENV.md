@@ -5,7 +5,7 @@
 | Variable | Descripción y consideraciones | Uso en código |
 | --- | --- | --- |
 | `SESSION_SECRET` / `SECRET_KEY` | Clave para firmar cookies Flask. Definir valores distintos y rotar en cada entorno. | `app.py` inicializa `app.secret_key` priorizando `SESSION_SECRET` y `SECRET_KEY`. 【F:app.py†L96-L100】 |
-| `DATABASE_URL` | URL de conexión SQLAlchemy. Debe apuntar a PostgreSQL administrado en staging/prod; SQLite sólo para desarrollo. | Configurada al arrancar la app y normalizada cuando es SQLite. 【F:app.py†L114-L165】 |
+| `DATABASE_URL` | URL de conexión SQLAlchemy. Debe apuntar a PostgreSQL administrado en todos los entornos. | Validada al arrancar la app con un `assert` que exige prefijo `postgresql`. 【F:app.py†L120-L142】 |
 | `AUTO_CREATE_DB` | Permite crear esquema automáticamente cuando se usa SQLite local. Mantener desactivado en Postgres. | El helper `maybe_create_sqlite_schema` sólo actúa con SQLite y flag `"1"`. 【F:app.py†L1054-L1062】 |
 | `WIZARD_BUDGET_BREAKDOWN_ENABLED` | Activa el nuevo desglose del wizard de presupuestos. | Flag leída mediante `_env_flag`. 【F:app.py†L168-L175】 |
 | `WIZARD_BUDGET_SHADOW_MODE` | Ejecuta el wizard en modo sombra para pruebas. | `_env_flag` en configuración de Flask. 【F:app.py†L172-L175】 |
@@ -16,8 +16,8 @@
 | `MAPS_USER_AGENT` | User-Agent personalizado para consultas Nominatim. | Constante `DEFAULT_USER_AGENT`. 【F:services/geocoding_service.py†L18-L70】 |
 | `GEOCODE_CACHE_TTL` | TTL del caché de geocodificación (segundos). | Valor `CACHE_TTL_SECONDS`. 【F:services/geocoding_service.py†L18-L58】 |
 | `MP_ACCESS_TOKEN` | Token Mercado Pago. Requerido para preferencias y webhooks. | Cargado en `app.config` y validado en endpoints. 【F:app.py†L181-L196】【F:marketplace_payments.py†L25-L116】 |
-| `MP_WEBHOOK_PUBLIC_URL` | URL pública registrada en Mercado Pago. | Guardada en configuración y logueada en webhook. 【F:app.py†L181-L196】【F:marketplace_payments.py†L65-L96】 |
-| `BASE_URL` | URL base pública usada en enlaces y PDFs. | Consumida en generación de preferencias y PDFs. 【F:marketplace_payments.py†L58-L66】【F:marketplace/services/po_pdf.py†L200-L217】 |
+| `MP_WEBHOOK_PUBLIC_URL` | URL pública registrada en Mercado Pago que debe apuntar a `/api/payments/mp/webhook`. | Guardada en configuración, logueada al inicio y usada en webhooks. 【F:app.py†L181-L196】【F:marketplace_payments.py†L65-L190】 |
+| `BASE_URL` | URL base pública usada en enlaces y PDFs (debe coincidir con host y puerto expuestos). | Consumida en generación de preferencias y PDFs. 【F:marketplace_payments.py†L58-L66】【F:marketplace/services/po_pdf.py†L200-L217】 |
 | `STORAGE_DIR` | Directorio raíz persistente para archivos de marketplace. | Utilizado al generar PDFs. 【F:marketplace/services/po_pdf.py†L52-L60】 |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | Credenciales SMTP para notificaciones marketplace. | Leídas al enviar emails. 【F:marketplace/services/emailer.py†L28-L77】 |
 | `FROM_EMAIL` | Remitente de correos marketplace. | Default configurable en emailer. 【F:marketplace/services/emailer.py†L28-L35】 |
@@ -53,6 +53,18 @@
 3. Exportar `MP_WEBHOOK_PUBLIC_URL` con la URL pública del túnel (`https://<subdominio>.ngrok.app/api/payments/mp/webhook`).
 4. Configurar la misma URL en el panel de notificaciones de Mercado Pago (modo sandbox).
 5. Mantener el túnel abierto mientras se ejecutan pruebas de checkout.
+
+### Pruebas locales del webhook
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/payments/mp/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"type":"payment","data":{"id":"test-id"}}'
+```
+
+- Si falta `MP_ACCESS_TOKEN`, la respuesta será `503` con mensaje "Mercado Pago no está configurado".
+- Para notificaciones que no sean de tipo `payment`, el webhook responde `200 {"status": "ignored"}`.
+- Existe un healthcheck de apoyo en `GET /api/payments/mp/health` que devuelve `{ "ok": true, "webhook": <bool> }` para validar despliegues.
 
 ### Checklist previo a despliegues
 

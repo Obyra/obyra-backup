@@ -149,13 +149,14 @@ if not app.config["MP_ACCESS_TOKEN"]:
         "Mercado Pago access token (MP_ACCESS_TOKEN) is not configured; Mercado Pago operations will fail."
     )
 
-if app.config["MP_WEBHOOK_PUBLIC_URL"]:
-    app.logger.info(
-        f"MP webhook URL: {app.config['MP_WEBHOOK_PUBLIC_URL']}"
-    )
-else:
+mp_webhook_url = app.config.get("MP_WEBHOOK_PUBLIC_URL")
+app.logger.info(
+    f"MP webhook URL: {mp_webhook_url or 'NOT SET'}"
+)
+
+if not mp_webhook_url:
     app.logger.warning(
-        "MP_WEBHOOK_PUBLIC_URL is not configured; Mercado Pago webhooks will not be reachable from external services."
+        "MP_WEBHOOK_PUBLIC_URL is not configured; expected something like https://<dominio>/api/payments/mp/webhook for Mercado Pago callbacks."
     )
 
 # initialize extensions
