@@ -267,6 +267,7 @@ def db_upgrade():
         logger = app.logger
         logger.info("Running Alembic upgrade...")
         alembic_upgrade()
+        logger.info("Alembic upgrade → OK")
         logger.info("Running post-upgrade runtime ensures...")
 
         from migrations_runtime import (

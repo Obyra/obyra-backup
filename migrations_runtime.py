@@ -15,7 +15,10 @@ except ImportError:  # pragma: no cover - fallback when psycopg is unavailable
 def _pg_table_exists(conn, name: str) -> bool:
     """Check table existence using PostgreSQL's ``to_regclass`` helper."""
 
-    return conn.exec_driver_sql("select to_regclass(%s)", (name,)).scalar() is not None
+    result = conn.exec_driver_sql(
+        "SELECT to_regclass(%s) IS NOT NULL", (name,)
+    ).scalar()
+    return bool(result)
 
 def ensure_avance_audit_columns():
     """Add audit columns to tarea_avances table if they don't exist"""
@@ -185,7 +188,7 @@ def ensure_presupuesto_validity_columns():
                 if not _pg_table_exists(conn, 'public.presupuestos'):
                     if current_app:
                         current_app.logger.warning(
-                            'Skipping presupuesto validity ensure: table public.presupuestos not found'
+                            'ensure_presupuesto_validity_columns: public.presupuestos not found → skip'
                         )
                     return
 
@@ -204,7 +207,26 @@ def ensure_presupuesto_validity_columns():
                     ),
                 )
 
+                handled_errors = ()
+                if psycopg_errors:
+                    handled_errors = tuple(
+                        err
+                        for err in (
+                            getattr(psycopg_errors, 'DuplicateColumn', None),
+                            getattr(psycopg_errors, 'UndefinedTable', None),
+                        )
+                        if err is not None
+                    )
+
                 for statement, column in statements:
+                    if not _pg_table_exists(conn, 'public.presupuestos'):
+                        if current_app:
+                            current_app.logger.warning(
+                                'ensure_presupuesto_validity_columns: public.presupuestos disappeared before ensuring %s',
+                                column,
+                            )
+                        break
+
                     try:
                         conn.exec_driver_sql(statement)
                         if current_app:
@@ -212,10 +234,10 @@ def ensure_presupuesto_validity_columns():
                                 "Ensured column presupuestos.%s via '%s'", column, statement
                             )
                     except Exception as exc:  # pragma: no cover - defensive fallback for PG variants
-                        if psycopg_errors and isinstance(exc, psycopg_errors.DuplicateColumn):
+                        if handled_errors and isinstance(exc, handled_errors):
                             if current_app:
                                 current_app.logger.info(
-                                    'Column presupuestos.%s already exists; continuing', column
+                                    'presupuestos.%s ensure skipped (%s)', column, exc.__class__.__name__
                                 )
                             continue
                         raise
