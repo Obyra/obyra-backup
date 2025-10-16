@@ -1,82 +1,62 @@
 # Configuración de entornos para OBYRA
 
-Este documento resume las variables de entorno y dependencias críticas identificadas en el código actual. Su objetivo es servir como guía mínima para preparar entornos de **staging** y **producción** mientras se avanza con la migración a PostgreSQL.
+Este apunte resume las variables de entorno críticas, la configuración de proveedores externos y las recomendaciones mínimas para preparar entornos de staging y producción.
 
-## 1. Variables centrales de seguridad y base de datos
+## 1. Seguridad y base de datos
 
-| Variable | Uso y valor por defecto | Recomendación staging | Recomendación producción | Observaciones |
+| Variable | Uso y valor por defecto | Recomendación staging | Recomendación producción | Notas |
 | --- | --- | --- | --- | --- |
-| `SECRET_KEY` / `SESSION_SECRET` | Se usa como `app.secret_key`; si no está definida se cae en `"dev-secret-key-change-me"`. 【F:app.py†L68-L106】 | Generar clave aleatoria de ≥32 bytes, rotarla manualmente si se sospecha fuga. | Gestionar mediante gestor de secretos (AWS Secrets Manager, GCP Secret Manager) con rotación programada. | Consolidar en una sola variable (`SECRET_KEY`) y eliminar fallback inseguro.
-| `DATABASE_URL` | Configura SQLAlchemy; el arranque hace `assert` para exigir prefijo `postgresql`. 【F:app.py†L120-L142】 | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_stg` con SSL requerido si aplica. | Cadena `postgresql+psycopg://usuario:password@host:5432/obyra_prod` gestionada por la plataforma (RDS, Cloud SQL). | Ajustar parámetros de pool (`pool_size`, `max_overflow`) tras dimensionar workers y plan de conexión.
-| `PYTHONIOENCODING` | Forzado a `utf-8` para evitar problemas de consola. 【F:app.py†L33-L84】 | Mantener valor por defecto. | Mantener valor por defecto. | No requiere cambios.
+| `SECRET_KEY` / `SESSION_SECRET` | Inicializa `app.secret_key`. Si ninguna existe, se utiliza `dev-secret-key-change-me`. | Generar claves aleatorias de ≥32 bytes y guardarlas en un gestor de secretos. | Gestionar en un vault con rotación programada y auditoría. | Consolidar en `SECRET_KEY` y reservar `SESSION_SECRET` sólo para overrides.
+| `DATABASE_URL` | Configura SQLAlchemy. El arranque exige prefijo `postgresql` mediante `assert`. | `postgresql+psycopg://obyra:<password>@staging-db:5432/obyra_stg` con SSL obligatorio. | `postgresql+psycopg://obyra:<password>@prod-db:5432/obyra_prod` en clúster administrado con backups automáticos. | Ajustar `pool_size` y workers del WSGI según la capacidad de la base.
+| `PYTHONIOENCODING` | Se fuerza a `utf-8` si falta para evitar errores en CLI. | Mantener el valor. | Mantener el valor. | Sin acción adicional.
 
-## 2. Flags de funcionalidad
+## 2. Feature flags
 
-| Variable | Comportamiento actual | Recomendación |
+| Variable | Comportamiento | Uso recomendado |
 | --- | --- | --- |
-| `WIZARD_BUDGET_BREAKDOWN_ENABLED` | Activa desglose del nuevo presupuestador (por defecto `False`). 【F:app.py†L164-L172】 | Activar primero en staging para validación funcional; documentar toggles en tablero de cambios. |
-| `WIZARD_BUDGET_SHADOW_MODE` | Ejecuta lógica en modo sombra (default `False`). 【F:app.py†L164-L172】 | Usar en staging para medir impacto sin exponer a usuarios. |
-| `SHOW_IA_CALCULATOR_BUTTON` | Muestra botón del calculador IA (default `False`). 【F:app.py†L172-L176】 | Habilitar bajo feature flag controlado. |
-| `ENABLE_REPORTS` | Activa servicio de reportes con Matplotlib (default `False`). 【F:app.py†L172-L177】 | Encender solo cuando SMTP y almacenamiento estén listos; probar en staging. |
-| `ENABLE_GOOGLE_OAUTH_HELP` | Habilita mensaje de ayuda si faltan credenciales de Google. 【F:auth.py†L101-L133】 | Mantener `False` en producción; útil en entornos de desarrollo. |
+| `WIZARD_BUDGET_BREAKDOWN_ENABLED` | Activa el nuevo flujo de presupuestos. | Encender primero en staging; documentar responsables de activarlo en producción. |
+| `WIZARD_BUDGET_SHADOW_MODE` | Ejecuta lógica en sombra. | Útil en staging para validar sin afectar usuarios. |
+| `SHOW_IA_CALCULATOR_BUTTON` | Muestra el acceso a la calculadora IA. | Habilitar cuando haya tokens de OpenAI disponibles. |
+| `ENABLE_REPORTS` | Activa reportes basados en Matplotlib/WeasyPrint. | Solo cuando SMTP y almacenamiento estén configurados. |
+| `ENABLE_GOOGLE_OAUTH_HELP` | Muestra ayuda en consola si faltan credenciales. | Mantener apagado en producción. |
 
-## 3. Proveedores externos y servicios auxiliares
+## 3. Proveedores externos
 
-| Área | Variables | Uso y default | Valores sugeridos |
+| Área | Variables | Uso actual | Recomendaciones |
 | --- | --- | --- | --- |
-| **Autenticación Google** | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Registra proveedor OAuth solo si ambas están definidas. 【F:auth.py†L101-L133】【F:main_app.py†L13-L52】 | Emitir credenciales separadas para staging y producción. Configurar redirect URIs correspondientes a cada dominio. |
-| **Mercado Pago** | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_PUBLIC_URL` (esperadas en `current_app.config`) | El SDK se inicializa con `current_app.config['MP_ACCESS_TOKEN']`; sin token las operaciones fallan. Los webhooks exponen `/api/payments/mp/webhook` y retornan 503 si falta token. 【F:marketplace_payments.py†L1-L212】 | Definir variables de entorno e incorporarlas a la configuración de Flask (`app.config`) durante bootstrap. Usar tokens diferentes por ambiente y registrar webhook público específico. |
-| **Correo SMTP** | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL` | `marketplace/services/emailer.py` lee directamente de entorno; `services/email_service.py` espera la misma información en `app.config`. 【F:marketplace/services/emailer.py†L20-L75】【F:services/email_service.py†L23-L74】 | Centralizar carga en `app.config` desde variables de entorno y validar con pruebas de humo. Para staging usar cuenta sandbox; en producción requerir TLS y contraseñas de aplicación. |
-| **Mapas / Geocoding** | `MAPS_PROVIDER` (`nominatim` por defecto), `MAPS_API_KEY`, `MAPS_USER_AGENT`, `GEOCODE_CACHE_TTL` | Configuran proveedor y caché de geocodificación. 【F:app.py†L168-L177】【F:services/geocoding_service.py†L17-L40】 | Mantener `nominatim` para pruebas; en producción evaluar proveedor con SLA (Google Maps, Mapbox) y definir `MAPS_API_KEY` + `MAPS_USER_AGENT` acorde a políticas. |
-| **Cambio de divisas** | `FX_PROVIDER` (default `bna`), `EXCHANGE_FALLBACK_RATE` | Selecciona proveedor de tipo de cambio; permite fallback manual. 【F:presupuestos.py†L152-L164】 | Configurar proveedor estable en producción y definir un fallback actualizado diariamente. |
-| **IA / OpenAI** | `OPENAI_API_KEY` | Inicializa cliente OpenAI. 【F:calculadora_ia.py†L1-L32】 | Requerido solo si se habilita funcionalidad IA; usar claves separadas por entorno y política de rotación. |
-| **Comisiones** | `PLATFORM_COMMISSION_RATE` | Determina fee de la plataforma (default 0.02). 【F:commission_utils.py†L1-L96】【F:models.py†L2444-L2451】 | Validar valor con negocio antes de exponer a producción; documentar mecanismo de cambios. |
-| **Almacenamiento de PDFs** | `STORAGE_DIR` (default `./storage`) | Directorio para órdenes de compra y PDFs. 【F:marketplace/services/po_pdf.py†L1-L230】 | En producción apuntar a volumen persistente; en staging limpiar periódicamente. |
-| **Base URL pública** | `BASE_URL` (default `http://localhost:5000`) | Se usa al generar PDFs y enlaces. 【F:marketplace/services/po_pdf.py†L200-L230】 | Establecer dominio real de cada ambiente para evitar enlaces rotos. |
+| Google OAuth | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | `auth.py` y `main_app.py` registran el proveedor solo si ambas variables existen. | Generar credenciales separadas por entorno y registrar URIs de redirección (`/auth/google/callback`). |
+| Mercado Pago | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_PUBLIC_URL` | `app.py` carga ambos valores, loguea la URL y `marketplace_payments.py` valida la presencia del token antes de usar el SDK. | Mantener tokens independientes por entorno. Registrar el webhook oficial `/api/payments/mp/webhook`. Añadir monitoreo de respuestas 200. |
+| SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL` | Leídos directamente al enviar notificaciones. | Centralizar en gestor de secretos. En producción exigir TLS y contraseñas de aplicación. |
+| Mapas | `MAPS_PROVIDER`, `MAPS_API_KEY`, `MAPS_USER_AGENT`, `GEOCODE_CACHE_TTL` | Configuran proveedor y caché para geocodificación. | `nominatim` es válido para dev; en producción usar proveedor con SLA (ej. Google Maps) y definir key + UA personalizado. |
+| Mercado cambiario | `FX_PROVIDER`, `EXCHANGE_FALLBACK_RATE` | Determinan el origen de la cotización y un valor de respaldo. | Establecer fallback diario en staging/prod y monitorear disponibilidad del proveedor principal. |
+| IA (OpenAI) | `OPENAI_API_KEY` | Inicializa la calculadora IA. | Mantener claves aisladas por entorno y con límites de gasto. |
+| Marketplace | `PLATFORM_COMMISSION_RATE`, `BASE_URL`, `STORAGE_DIR` | Calcula comisiones, arma enlaces y ubica PDFs/activos. | Revisar valores con negocio y asegurar almacenamiento persistente (S3, discos replicados, etc.). |
 
-## 4. Configuración mínima viable por entorno
+## 4. Mercado Pago: pruebas rápidas
 
-- **Desarrollo local**
-  1. Definir `MP_ACCESS_TOKEN` con un token de prueba/sandbox y `MP_WEBHOOK_PUBLIC_URL` apuntando a una URL pública provista por un túnel (por ejemplo `https://<subdominio>.ngrok.io/api/payments/mp/webhook`).
-  2. Iniciar el túnel con herramientas como `ngrok http 5000 --hostname=<subdominio>.ngrok.io` o `cloudflared tunnel --url http://localhost:5000` y confirmar que la URL exponga `/api/payments/mp/webhook`.
-  3. **No** utilizar `http://127.0.0.1` ni `http://localhost`, ya que Mercado Pago no puede realizar callbacks a direcciones locales.
-  4. Documentar las URLs generadas en cada sesión y actualizarlas en el panel de notificaciones de Mercado Pago.
-  5. Validar la integración con una llamada manual:
+- Healthcheck: `GET /api/payments/mp/health` → `{ "ok": true, "webhook": <bool> }`.
+- Webhook oficial: `POST /api/payments/mp/webhook`.
+- Prueba local (sin exponer secretos):
 
-     ```bash
-     curl -sS -X POST http://127.0.0.1:8080/api/payments/mp/webhook \
-       -H "Content-Type: application/json" \
-       -d '{"type":"payment","data":{"id":"test-id"}}'
-     ```
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/payments/mp/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"type":"payment","data":{"id":"test-id"}}'
+```
 
-     - Sin `MP_ACCESS_TOKEN`, la aplicación responde `503`.
-     - Para eventos que no sean de tipo `payment`, devuelve `200 {"status":"ignored"}`.
-     - El endpoint `GET /api/payments/mp/health` devuelve `{ "ok": true, "webhook": <bool> }` y sirve como verificación rápida.
+| Situación | Resultado |
+| --- | --- |
+| Falta `MP_ACCESS_TOKEN` | Respuesta `503` y log "Mercado Pago access token missing". |
+| Evento distinto a `payment` | Respuesta `200 {"status": "ignored"}`. |
+| Token válido y evento `payment` | Ejecuta el flujo de actualización de órdenes (requiere sandbox configurado). |
 
-- **Staging**
-  1. Definir `SECRET_KEY` y `DATABASE_URL` apuntando a base PostgreSQL de pruebas con SSL obligatorio.
-  2. Configurar credenciales separadas para Google OAuth, Mercado Pago (modo sandbox), SMTP (sandbox) y OpenAI si se valida IA.
-  3. Establecer `BASE_URL`, `MAPS_PROVIDER`, `MAPS_API_KEY` y `STORAGE_DIR` para el dominio de staging. Para Mercado Pago, usar dominios reales (por ejemplo `https://staging.tu-dominio.com/api/payments/mp/webhook`) y registrar la URL en el panel de notificaciones.
-  4. Activar flags (`WIZARD_BUDGET_SHADOW_MODE`, `ENABLE_REPORTS`) solo mientras se monitorea su impacto.
-  5. Documentar en un `.env.staging` o gestor de secretos la lista completa anterior y compartir acceso controlado.
+Para desarrollo usar un túnel HTTPS (Ngrok, Cloudflare Tunnel) que exponga `http://127.0.0.1:8080`. Registrar la URL pública en el panel de notificaciones de Mercado Pago y actualizar `MP_WEBHOOK_PUBLIC_URL` con esa ruta.
 
-- **Producción**
-  1. Gestionar `SECRET_KEY`, tokens OAuth, SMTP y Mercado Pago en gestor de secretos con rotación y registros de acceso.
-  2. Utilizar `DATABASE_URL` apuntando a clúster administrado con backups automáticos y parámetros de pool ajustados al número de workers.
-  3. Definir `BASE_URL` y `STORAGE_DIR` en infraestructura persistente (S3 o volumen replicado) y revisar permisos de lectura/escritura. Registrar `MP_WEBHOOK_PUBLIC_URL` con el dominio público definitivo (por ejemplo `https://app.tu-dominio.com/api/payments/mp/webhook`).
-  4. Fijar `PLATFORM_COMMISSION_RATE`, `FX_PROVIDER` y `EXCHANGE_FALLBACK_RATE` según políticas comerciales y revisarlos antes de cada release.
-  5. Mantener feature flags documentados; habilitar solo tras validar en staging y con estrategia de rollback.
+## 5. Dependencias y auditoría
 
-## 5. Auditoría de dependencias
+- Dependencias críticas declaradas en `pyproject.toml`: `flask~=3.1.1`, `flask-sqlalchemy~=3.1.1`, `flask-migrate~=4.0.7`, `sqlalchemy~=2.0.41`, `psycopg[binary]>=3.2,<3.3`, `werkzeug~=3.1.3`, `requests~=2.32.3`, `mercadopago~=2.3.0`, `authlib~=1.6.5`.
+- Se eliminaron `email-validator` y `pyjwt` por no contar con importaciones activas.
+- `requirements.lock` lista herramientas de desarrollo (ruff, mypy, pytest, etc.). Regenerarlo cuando se cambie tooling.
+- Script de auditoría: `./scripts/audit_deps.sh <AAAAMMDD>` genera reportes en `docs/audits/`. Actualmente los archivos `20251016-*.txt` informan que `pip-audit`, `safety` y `deptry` no están instalados en este entorno. Ejecutar el script en un ambiente con Internet para obtener resultados reales y adjuntarlos en la carpeta.
+- Recomendación: agregar un job de CI que ejecute `pip check` + `./scripts/audit_deps.sh` y suba los artefactos como evidencia de cada release.
 
-- El proyecto declara dependencias exclusivamente en `pyproject.toml` con especificadores `>=`, lo que habilita actualizaciones mayores automáticas y puede introducir regresiones o vulnerabilidades no controladas. 【F:pyproject.toml†L1-L31】
-- No existe un `requirements.txt` separado; se recomienda generar un archivo de bloqueo (`uv lock`, `pip-tools`, `poetry.lock`) y revisar periódicamente con herramientas como `pip-audit` o Dependabot.
-- Dependencias de peso como `matplotlib`, `weasyprint`, `openai` y `mercadopago` se usan en partes específicas del código (`reports_service`, generación de PDFs, calculadora IA, marketplace). Validar si todas son necesarias en el despliegue inicial y mover las opcionales a extras para reducir superficie de ataque.
-- Revisar versiones mínimas exigidas: por ejemplo, `flask>=3.1.1` y `sqlalchemy>=2.0.41` requieren Python 3.10+; coordinar con el runtime seleccionado para evitar incompatibilidades.
-
-## 6. Próximos pasos sugeridos
-
-1. Incluir la carga de todas las variables anteriores en el proceso de inicialización de Flask (`create_app`) y validar su presencia con asserts o logs claros.
-2. Añadir ejemplos de `.env.example` con valores dummy pero formato correcto para facilitar onboarding.
-3. Automatizar un chequeo en CI que verifique la existencia de secretos críticos antes del despliegue (por ejemplo, script que falle si `SECRET_KEY` conserva el valor por defecto).
-4. Programar auditoría trimestral de dependencias y credenciales para asegurar cumplimiento de políticas de seguridad.

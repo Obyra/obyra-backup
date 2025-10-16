@@ -4,8 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
-    "authlib~=1.6.0",
-    "email-validator~=2.2.0",
+    "authlib~=1.6.5",
     "flask~=3.1.1",
     "flask-login~=0.6.3",
     "flask-migrate~=4.0.7",
@@ -18,7 +17,6 @@ dependencies = [
     "openpyxl~=3.1.5",
     "pillow~=11.3.0",
     "psycopg[binary]>=3.2,<3.3",
-    "pyjwt~=2.10.1",
     "pypdf2~=3.0.1",
     "reportlab~=4.4.2",
     "requests~=2.32.3",

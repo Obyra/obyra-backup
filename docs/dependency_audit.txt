@@ -1,0 +1,20 @@
+# Auditoría de dependencias (2025-10-16)
+
+## Resultado de herramientas
+
+Los comandos automatizados se ejecutaron con `./scripts/audit_deps.sh 20251016`. En este contenedor las utilidades `pip-audit`, `safety` y `deptry` no están instaladas, por lo que los reportes generados en `docs/audits/20251016-*.txt` indican `[missing] …`. Para obtener análisis reales es necesario instalar las herramientas (por ejemplo `pip install pip-audit safety deptry`) en un entorno con acceso a Internet y volver a ejecutar el script.
+
+## Observaciones manuales
+
+- `authlib` se actualizó a `1.6.5`, que incluye correcciones recientes. Revisar changelog antes de desplegar.
+- Se retiraron `email-validator` y `pyjwt` del `pyproject.toml` por no detectarse importaciones en el código. Si alguna funcionalidad legacy dependiera de ellas, deberá declararse explícitamente.
+- Paquetes opcionales pesados (`matplotlib`, `weasyprint`, `openai`) permanecen porque soportan funcionalidades controladas por flags. Cuando se definan perfiles de despliegue podría evaluarse moverlos a extras (`pip install obyra[reports]`, por ejemplo).
+- `psycopg[binary]>=3.2,<3.3` reemplaza a `psycopg2-binary` y mantiene compatibilidad con los parámetros de keepalive usados en `app.py`.
+
+## Próximos pasos sugeridos
+
+1. Ejecutar `pip check` tras instalar dependencias para validar la resolución de versiones.
+2. Añadir un workflow de CI que corra `./scripts/audit_deps.sh` y publique los archivos generados como artefactos.
+3. Revisar trimestralmente los advisories de dependencias críticas (Flask, SQLAlchemy, psycopg, Mercado Pago SDK).
+4. Documentar en los PRs cualquier cambio de versiones mayores, adjuntando resultados de `pip-audit`/`safety` actualizados.
+

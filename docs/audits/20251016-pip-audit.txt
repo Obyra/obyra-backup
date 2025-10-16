@@ -1,0 +1,2 @@
+==> Running pip-audit
+[missing] pip-audit no está instalado en el entorno
