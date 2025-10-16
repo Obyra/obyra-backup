@@ -64,9 +64,12 @@ app.register_blueprint(cotizacion_bp, url_prefix='/cotizacion')
 app.register_blueprint(documentos_bp, url_prefix='/documentos')
 app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 
+# Crear todas las tablas de la base de datos
 with app.app_context():
     # Importar todos los modelos antes de crear las tablas
     import models
+    db.create_all()
+    print("📊 Tablas de base de datos creadas correctamente")
 
 @app.route('/')
 def index():
@@ -128,6 +131,9 @@ with app.app_context():
     import models
     from models import Usuario, Organizacion, Obra, ItemInventario
     from werkzeug.security import generate_password_hash
+    
+    # Crear tablas en orden correcto
+    db.create_all()
     
     # Función para migrar datos existentes
     def migrar_organizaciones():
@@ -217,14 +223,5 @@ with app.app_context():
         db.session.commit()
         print("👤 Usuario administrador creado: admin@obyra.com / admin123")
 
-def maybe_create_sqlite_schema():
-    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
-        with app.app_context():
-            db.create_all()
-        print("📊 Tablas de base de datos creadas correctamente")
-
-
 if __name__ == '__main__':
-    maybe_create_sqlite_schema()
     app.run(host='0.0.0.0', port=5000, debug=True)
