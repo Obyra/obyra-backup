@@ -32,7 +32,8 @@ from services.memberships import (
     get_current_membership,
     get_current_org_id,
 )
-from extensions import db, login_manager, migrate
+from extensions import db, login_manager
+from flask_migrate import Migrate
 
 
 def _ensure_utf8_io() -> None:
@@ -160,7 +161,7 @@ else:
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-migrate.init_app(app, db)
+migrate = Migrate(app, db)
 
 
 def _resolve_login_endpoint() -> Optional[str]:
