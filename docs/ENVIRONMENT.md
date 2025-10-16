@@ -147,8 +147,8 @@ if ($pid8080) { Stop-Process -Id $pid8080 -Force }
 | `MAPS_PROVIDER` / `MAPS_USER_AGENT` | `nominatim` / `obyra-dev-bot` | Nominatim sin API key, respetar user agent. |
 | `ENABLE_REPORTS` | `1` | Activar reportes PDF; cambiar a `0` si faltan dependencias de WeasyPrint. |
 
-### Smoke test post-setup
+## 8. Cómo validar DEV parity
 
-1. `python -m flask db upgrade`
-2. `python -m flask run --port 8080`
-3. Abrir `http://127.0.0.1:8080/reportes/dashboard` y verificar respuesta HTTP 200.
+a. `python -m flask db upgrade`
+b. `python -m flask run --port 8080`
+c. Hacer `GET http://127.0.0.1:8080/reportes/dashboard` y confirmar respuesta HTTP 200.
