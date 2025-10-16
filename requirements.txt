@@ -1,4 +1,4 @@
-# Last audit attempt: 2025-10-16 (pip-audit/safety/deptry) — skipped locally due to ProxyError 403 when downloading tooling.
+# App dependencies (mirrors pyproject.toml)
 authlib~=1.6.5
 flask~=3.1.1
 flask-login~=0.6.3
@@ -19,3 +19,4 @@ sqlalchemy~=2.0.41
 werkzeug~=3.1.3
 weasyprint~=66.0
 xlsxwriter~=3.2.5
+python-dotenv~=1.0

@@ -15,7 +15,7 @@ def init_marketplace_db():
         with app.app_context():
             # Create all marketplace tables
             print("🏗️  Creating marketplace database tables...")
-            db.create_all()
+            # db.create_all()  # disabled: Alembic handles PG
             
             # Seed basic data
             seed_categories()

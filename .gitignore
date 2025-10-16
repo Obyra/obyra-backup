@@ -39,3 +39,13 @@ instance/media/
 *.jpg
 *.jpeg
 *.webp
+# Dev artifacts
+attached_assets/
+instance/media/
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Alembic helpers
+instance/migrations/*.done
