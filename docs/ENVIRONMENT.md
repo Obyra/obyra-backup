@@ -134,3 +134,21 @@ Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
 $pid8080 = (Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
 if ($pid8080) { Stop-Process -Id $pid8080 -Force }
 ```
+
+## 7. Valores por defecto seguros (DEV)
+
+| Variable | Valor sugerido | Comentario |
+|----------|----------------|------------|
+| `DATABASE_URL` | `postgresql+psycopg://obyra:obyra@localhost:5433/obyra_dev` | Contenedor local de PostgreSQL 16 expuesto en 5433. |
+| `SECRET_KEY` | `changeme-dev-secret` | Reemplazar por secreto fuerte generado con `secrets.token_urlsafe`. |
+| `BASE_URL` / `APP_BASE_URL` | `http://127.0.0.1:8080` | Mantener coherente con `FLASK_RUN_PORT`. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | `smtp.mailtrap.io` / `2525` / `<user>` / `<pass>` | Usar inbox de Mailtrap para pruebas locales. |
+| `FX_PROVIDER` | `bna` | Tasas oficiales del Banco Nación, sin claves adicionales. |
+| `MAPS_PROVIDER` / `MAPS_USER_AGENT` | `nominatim` / `obyra-dev-bot` | Nominatim sin API key, respetar user agent. |
+| `ENABLE_REPORTS` | `1` | Activar reportes PDF; cambiar a `0` si faltan dependencias de WeasyPrint. |
+
+### Smoke test post-setup
+
+1. `python -m flask db upgrade`
+2. `python -m flask run --port 8080`
+3. Abrir `http://127.0.0.1:8080/reportes/dashboard` y verificar respuesta HTTP 200.
