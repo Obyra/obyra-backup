@@ -18,3 +18,8 @@ Los comandos automatizados se ejecutaron con `./scripts/audit_deps.sh 20251016`.
 3. Revisar trimestralmente los advisories de dependencias críticas (Flask, SQLAlchemy, psycopg, Mercado Pago SDK).
 4. Documentar en los PRs cualquier cambio de versiones mayores, adjuntando resultados de `pip-audit`/`safety` actualizados.
 
+
+## Intento de auditoría (2025-10-16)
+
+- `pip install pip-audit safety deptry` falló en este entorno por restricciones de red (Proxy 403). Se requiere ejecutar las auditorías en un entorno con acceso a Internet.
+- Sin nuevos hallazgos automáticos; se mantienen las recomendaciones de limpieza actual vigentes.
