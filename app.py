@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import os
 import sys
 import logging
@@ -29,11 +33,11 @@ from services.memberships import (
     get_current_org_id,
 )
 from extensions import db, login_manager
+from flask_migrate import Migrate
 
 
 def _ensure_utf8_io() -> None:
     """Force UTF-8 aware standard streams so CLI prints never fail."""
-
     target_encoding = "utf-8"
     os.environ.setdefault("PYTHONIOENCODING", target_encoding)
 
@@ -49,7 +53,6 @@ def _ensure_utf8_io() -> None:
                 stream.reconfigure(encoding=target_encoding)
             elif hasattr(stream, "buffer"):
                 import io
-
                 stream.flush()
                 wrapped = io.TextIOWrapper(
                     stream.buffer,
@@ -68,7 +71,6 @@ _builtin_print = print
 
 def _safe_cli_print(*args, **kwargs):
     """Print helper that strips unsupported characters on narrow consoles."""
-
     target = kwargs.get("file", sys.stdout)
     encoding = getattr(target, "encoding", None) or os.environ.get("PYTHONIOENCODING") or "utf-8"
 
@@ -105,18 +107,13 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database - PostgreSQL is required outside test environments
-
-
+# --- DB config (PostgreSQL requerido; SQLite sólo en tests) -------------------
 def _is_test_environment() -> bool:
-    """Return True when the app is running under tests."""
-
     return (
         _env_flag("TESTING")
         or os.environ.get("FLASK_ENV", "").strip().lower() == "test"
         or os.environ.get("PYTEST_CURRENT_TEST") is not None
     )
-
 
 is_test_environment = _is_test_environment()
 database_url = (os.environ.get("DATABASE_URL") or "").strip()
@@ -125,44 +122,34 @@ if not database_url:
     if is_test_environment:
         database_url = "sqlite:///:memory:"
         logging.getLogger(__name__).warning(
-            "DATABASE_URL no definido. Usando base de datos en memoria para tests."
+            "DATABASE_URL no definido. Usando SQLite en memoria para tests."
         )
     else:
-        message = (
-            "DATABASE_URL es obligatorio y debe apuntar a PostgreSQL. "
-            "Definí la variable de entorno con tu cadena de conexión."
+        raise RuntimeError(
+            "DATABASE_URL es obligatorio y debe apuntar a PostgreSQL (psycopg3)."
         )
-        logging.getLogger(__name__).critical(message)
-        raise RuntimeError(message)
 
 url_obj = make_url(database_url)
 
 if not is_test_environment and not url_obj.drivername.startswith("postgresql"):
-    message = (
+    raise RuntimeError(
         f"DATABASE_URL debe usar PostgreSQL, se recibió '{url_obj.drivername}'."
     )
-    logging.getLogger(__name__).critical(message)
-    raise RuntimeError(message)
 
+# Forzar SSL si es Neon
 if (url_obj.host and "neon.tech" in url_obj.host) or ("neon.tech" in database_url):
     if "sslmode=" not in database_url:
-        separator = "&" if "?" in database_url else "?"
-        database_url = f"{database_url}{separator}sslmode=require"
-        logging.getLogger(__name__).info("SSL requerido agregado para Neon")
+        sep = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{sep}sslmode=require"
+        logging.getLogger(__name__).info("Se agregó sslmode=require para Neon")
         url_obj = make_url(database_url)
 
 engine_options = {
     "pool_pre_ping": True,
     "pool_recycle": 1800,
 }
-
 if url_obj.drivername.startswith("postgresql"):
-    engine_options.update(
-        {
-            "pool_size": 20,
-            "max_overflow": 20,
-        }
-    )
+    engine_options.update({"pool_size": 20, "max_overflow": 20})
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
@@ -171,48 +158,57 @@ app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON",
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
 app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").strip().lower()
 app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
+app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "").strip()
+app.config["MP_WEBHOOK_PUBLIC_URL"] = os.getenv("MP_WEBHOOK_PUBLIC_URL", "").strip()
+
+if not app.config["MP_ACCESS_TOKEN"]:
+    app.logger.warning(
+        "Mercado Pago access token (MP_ACCESS_TOKEN) is not configured; Mercado Pago operations will fail."
+    )
+
+mp_webhook_url = app.config.get("MP_WEBHOOK_PUBLIC_URL")
+if mp_webhook_url:
+    app.logger.info(f"MP webhook URL: {mp_webhook_url}")
+else:
+    app.logger.warning(
+        "MP_WEBHOOK_PUBLIC_URL is not configured; expected path: /api/payments/mp/webhook"
+    )
 
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+migrate = Migrate(app, db)
 
 
 def _is_alembic_running() -> bool:
     """Return True when Alembic is orchestrating the process."""
-
     return os.getenv("ALEMBIC_RUNNING") == "1"
 
 
 def _should_skip_create_all() -> bool:
     """Return True when automatic table creation must be skipped."""
-
     return _is_alembic_running() or os.getenv("FLASK_SKIP_CREATE_ALL") == "1"
 
 
 def _resolve_login_endpoint() -> Optional[str]:
     """Return the first available login endpoint, prioritising auth blueprints."""
-
     candidate_endpoints = (
         "auth.login",
         "supplier_auth.login",
         "auth_login",
         "index",
     )
-
     for endpoint in candidate_endpoints:
         if endpoint in app.view_functions:
             return endpoint
-
     return None
 
 
 def _resolve_login_url() -> str:
     """Return the URL corresponding to the active login endpoint."""
-
     endpoint = _resolve_login_endpoint()
     if not endpoint:
         return "/"
-
     try:
         if has_request_context():
             return url_for(endpoint)
@@ -224,13 +220,11 @@ def _resolve_login_url() -> str:
 
 def _login_redirect():
     """Redirect users to the most appropriate login page."""
-
     return redirect(_resolve_login_url())
 
 
 def _refresh_login_view():
     """Synchronise the login manager with the currently available login endpoint."""
-
     login_manager.login_view = _resolve_login_endpoint()
 
 
@@ -250,6 +244,14 @@ db_cli = AppGroup('db')
 def db_upgrade():
     """Apply pending lightweight database migrations."""
     with app.app_context():
+        from flask_migrate import upgrade as alembic_upgrade
+
+        logger = app.logger
+        logger.info("Running Alembic upgrade...")
+        alembic_upgrade()
+        logger.info("Alembic upgrade → OK")
+        logger.info("Running post-upgrade runtime ensures...")
+
         from migrations_runtime import (
             ensure_avance_audit_columns,
             ensure_presupuesto_state_columns,
@@ -273,7 +275,6 @@ def db_upgrade():
     click.echo('[OK] Database upgraded successfully.')
 
 
-
 app.cli.add_command(db_cli)
 
 
@@ -284,12 +285,10 @@ fx_cli = AppGroup('fx')
 @click.option('--provider', default='bna', help='Proveedor de tipo de cambio (ej. bna)')
 def fx_update(provider: str):
     """Actualiza el tipo de cambio almacenado."""
-
     provider_key = (provider or 'bna').lower()
 
     with app.app_context():
         from decimal import Decimal
-
         from services.exchange import base as exchange_base
         from services.exchange.providers import bna as bna_provider
 
@@ -329,12 +328,9 @@ cac_cli = AppGroup('cac')
 @click.option('--notes', default=None, help='Notas opcionales')
 def cac_set(value: float, valid_from, notes: Optional[str]):
     """Registra un nuevo valor para el índice CAC."""
-
     with app.app_context():
         from decimal import Decimal
-
         from datetime import date
-
         from services.cac.cac_service import record_manual_index
 
         valid_date = valid_from.date() if valid_from else date.today().replace(day=1)
@@ -352,7 +348,6 @@ def cac_set(value: float, valid_from, notes: Optional[str]):
 @cac_cli.command('refresh-current')
 def cac_refresh_current():
     """Descarga el índice CAC del mes actual utilizando el proveedor configurado."""
-
     with app.app_context():
         from services.cac.cac_service import get_cac_context, refresh_from_provider
 
@@ -381,7 +376,6 @@ app.cli.add_command(cac_cli)
 
 @login_manager.user_loader
 def load_user(user_id):
-    # Import here to avoid circular imports
     from models import Usuario
     return Usuario.query.get(int(user_id))
 
@@ -389,19 +383,16 @@ def load_user(user_id):
 def unauthorized():
     """Custom unauthorized handler that returns JSON for API routes"""
     from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
-    # For regular web requests, redirect to the main landing page preserving "next"
     return redirect(url_for('index', next=request.url))
 
-
-# Register blueprints - moved after database initialization to avoid circular imports
 
 # Funciones globales para templates
 @app.context_processor
 def utility_processor():
     from tareas_predefinidas import TAREAS_POR_ETAPA
+
     def obtener_tareas_para_etapa(nombre_etapa):
         return TAREAS_POR_ETAPA.get(nombre_etapa, [])
 
@@ -429,10 +420,8 @@ def utility_processor():
         ).first()
         if not registro:
             return False
-
         if registro.status != 'active':
             return False
-
         return (registro.role or '').lower() == (rol or '').lower()
 
     membership = get_current_membership()
@@ -451,6 +440,8 @@ def utility_processor():
         current_organization=current_org,
         current_org_id=get_current_org_id,
     )
+
+
 @app.before_request
 def sincronizar_membresia_actual():
     """Carga la membresía activa en cada request para usuarios autenticados."""
@@ -464,35 +455,28 @@ def sincronizar_membresia_actual():
 def verificar_periodo_prueba():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
     from flask import request
-    
-    # Rutas que no requieren verificación de plan
     rutas_excluidas = [
         'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
         'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
     ]
-    
-    if (current_user.is_authenticated and 
-        request.endpoint and
-        request.endpoint not in rutas_excluidas and 
-        not request.endpoint.startswith('static')):
-        
-        # ✨ EXCEPCIÓN ESPECIAL: Administradores tienen acceso completo sin restricciones
+    if (
+        current_user.is_authenticated
+        and request.endpoint
+        and request.endpoint not in rutas_excluidas
+        and not request.endpoint.startswith('static')
+    ):
         emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
         if current_user.email in emails_admin_completo:
-            return  # Acceso completo sin restricciones de plan
-        
-        # Verificar si el usuario está en periodo de prueba y ya expiró
-        if (current_user.plan_activo == 'prueba' and 
-            not current_user.esta_en_periodo_prueba()):
-            
-            flash(f'Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
+            return
+        if (current_user.plan_activo == 'prueba' and not current_user.esta_en_periodo_prueba()):
+            flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Landing principal con acceso a inicio de sesión y portal de proveedores."""
     if current_user.is_authenticated:
-        # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
@@ -507,7 +491,6 @@ def index():
     login_helper = None
     try:
         from auth import google, authenticate_manual_user  # type: ignore
-
         google_available = bool(google)
         login_helper = authenticate_manual_user
     except ImportError:
@@ -530,7 +513,6 @@ def index():
                 if getattr(usuario, "role", None) == "operario":
                     return redirect(url_for("obras.mis_tareas"))
                 return redirect(url_for('reportes.dashboard'))
-
             else:
                 message = ''
                 category = 'danger'
@@ -559,7 +541,6 @@ def legacy_login_redirect():
 @app.route('/dashboard')
 def dashboard():
     if current_user.is_authenticated:
-        # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
         if getattr(current_user, "role", None) == "operario":
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
@@ -580,7 +561,6 @@ def moneda_filter(valor, currency: str = 'ARS'):
         monto = Decimal(str(valor))
     except (InvalidOperation, ValueError, TypeError):
         monto = Decimal('0')
-
     symbol = 'US$' if (currency or 'ARS').upper() == 'USD' else '$'
     return f"{symbol}{monto:,.2f}"
 
@@ -627,7 +607,6 @@ def obtener_nombre_rol_filter(codigo_rol):
         from roles_construccion import obtener_nombre_rol
         return obtener_nombre_rol(codigo_rol)
     except:
-        # Fallback si hay algún error
         return codigo_rol.replace('_', ' ').title()
 
 @app.template_filter('from_json')
@@ -642,7 +621,7 @@ def from_json_filter(json_str):
         return {}
 
 
-
+# -------- Helpers para CLI/blueprints e inventory seeding ---------------------
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
     module = importlib.import_module(module_name)
@@ -651,7 +630,6 @@ def _import_blueprint(module_name, attr_name):
 
 def _resolve_cli_organization(identifier: str):
     """Resolve an organization by id, slug, token or name."""
-
     identifier = (identifier or "").strip()
     if not identifier:
         return None
@@ -702,7 +680,6 @@ def _format_seed_summary(stats: dict) -> str:
 @click.option("--quiet", is_flag=True, help="Oculta el detalle por categoría")
 def seed_inventario_cli(seed_global: bool, org_identifiers: Tuple[str, ...], quiet: bool) -> None:
     """Seed de categorías de inventario utilizando el CLI de Flask."""
-
     if not seed_global and not org_identifiers:
         raise click.ClickException(
             "Debes indicar al menos una organización con --org o usar --global."
@@ -871,12 +848,6 @@ _refresh_login_view()
 
 
 # --- Public legal pages fallbacks ---------------------------------------
-# Algunas implementaciones históricas definen estas rutas en módulos
-# separados (p.ej. main.py), pero cuando esos blueprints no están
-# disponibles la plantilla base sigue apuntando a los endpoints
-# ``terminos`` y ``privacidad``. Para evitar nuevos BuildError cuando
-# el proyecto se ejecuta en entornos mínimos (Replit, Visual Studio,
-# etc.), agregamos reglas lightweight sólo si aún no existen.
 if 'terminos' not in app.view_functions:
     app.add_url_rule(
         '/terminos',
@@ -913,7 +884,6 @@ if 'reportes.dashboard' not in app.view_functions:
 
 
 # === MEDIA SERVING ENDPOINT ===
-
 @app.route("/media/<path:relpath>")
 @login_required
 def serve_media(relpath):
@@ -931,10 +901,8 @@ def forbidden(error):
 @app.errorhandler(401)
 def unauthorized(error):
     from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request  
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         return jsonify({"ok": False, "error": "Authentication required"}), 401
-    # For regular web requests, redirect to login
     return _login_redirect()
 
 @app.errorhandler(404)
@@ -948,5 +916,14 @@ def not_found(error):
             dashboard_url = url_for('index')
     return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
+
+def maybe_create_sqlite_schema():
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+        with app.app_context():
+            db.create_all()
+
+
 if __name__ == '__main__':
+    maybe_create_sqlite_schema()
     app.run(host='0.0.0.0', port=5000, debug=True)
