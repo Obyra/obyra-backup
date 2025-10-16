@@ -26,4 +26,4 @@ dependencies = [
     "weasyprint~=66.0",
     "xlsxwriter~=3.2.5",
 ]
-]
+
