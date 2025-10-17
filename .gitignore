@@ -39,3 +39,7 @@ instance/media/
 *.jpg
 *.jpeg
 *.webp
+
+# Alembic helpers
+instance/migrations/*.done
+
