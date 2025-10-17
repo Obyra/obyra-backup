@@ -1,4 +1,4 @@
-from app import db
+﻿from app import db
 import os
 from datetime import date, timedelta, datetime
 from flask import current_app
@@ -204,14 +204,14 @@ def ensure_presupuesto_validity_columns():
                 if backend == 'postgresql':
                     statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT TRUE")
                 else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada INTEGER DEFAULT 1")
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT FALSE")
 
             for stmt in statements:
                 conn.exec_driver_sql(stmt)
 
             # Recalcular vigencia para todos los presupuestos (nuevos o existentes)
             rows = conn.exec_driver_sql(
-                "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, 1) FROM presupuestos"
+                "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, FALSE) FROM presupuestos"
             ).fetchall()
 
             if backend == 'postgresql':
@@ -1236,3 +1236,4 @@ def ensure_wizard_budget_tables():
         if current_app:
             current_app.logger.exception('❌ Migration failed: wizard budget tables')
         raise
+
