@@ -3,9 +3,16 @@ Dashboard PDF Report V2 Service - Professional reports with branding, KPIs, and 
 Reemplaza completamente la versión anterior del sistema de reportes.
 """
 
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response, current_app
 from flask_login import login_required, current_user
-import weasyprint
+try:
+    import weasyprint
+    WEASYPRINT_AVAILABLE = True
+    WEASYPRINT_IMPORT_ERROR = None
+except Exception as weasy_exc:  # pragma: no cover - platform dependent
+    weasyprint = None  # type: ignore
+    WEASYPRINT_AVAILABLE = False
+    WEASYPRINT_IMPORT_ERROR = weasy_exc
 from jinja2 import Template
 from io import BytesIO
 import base64
@@ -40,6 +47,18 @@ def generate_dashboard_report():
       "currency": "ARS"
     }
     """
+    if not WEASYPRINT_AVAILABLE:
+        details = str(WEASYPRINT_IMPORT_ERROR) if WEASYPRINT_IMPORT_ERROR else 'weasyprint dependency missing'
+        current_app.logger.warning(
+            "WeasyPrint not available; dashboard PDF cannot be generated (%s)",
+            details
+        )
+        return jsonify({
+            'error': 'pdf_engine_unavailable',
+            'details': details,
+            'help': 'Instala las dependencias de WeasyPrint (GTK / libgobject) para habilitar los reportes PDF.'
+        }), 503
+
     try:
         # Verificar permisos
         if current_user.rol not in ['administrador', 'gestor']:
@@ -142,6 +161,9 @@ def generate_pdf_v2_report(organizacion, start_date, end_date, range_text, inclu
     template = Template(template_content)
     html_content = template.render(**context)
     
+    if not WEASYPRINT_AVAILABLE:
+        raise RuntimeError('WeasyPrint no está disponible en este entorno')
+
     # Convertir HTML a PDF con WeasyPrint
     try:
         pdf_document = weasyprint.HTML(string=html_content).write_pdf()

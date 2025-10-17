@@ -1,0 +1,94 @@
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('formNuevoIntegrante');
+    if (!form) {
+        return;
+    }
+
+    const alertBox = document.getElementById('nuevoIntegranteAlert');
+    const modalEl = document.getElementById('modalNuevoIntegrante');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const defaultButtonContent = submitBtn ? submitBtn.innerHTML : '';
+
+    const resetAlert = () => {
+        if (!alertBox) {
+            return;
+        }
+        alertBox.className = 'alert d-none';
+        alertBox.textContent = '';
+    };
+
+    const showAlert = (message, category = 'danger') => {
+        if (!alertBox) {
+            return;
+        }
+        alertBox.className = `alert alert-${category}`;
+        alertBox.textContent = message;
+    };
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        resetAlert();
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Creando...';
+        }
+
+        const formData = new FormData(form);
+        const payload = {};
+        for (const [key, value] of formData.entries()) {
+            payload[key] = typeof value === 'string' ? value.trim() : value;
+        }
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                throw new Error('No se pudo interpretar la respuesta del servidor.');
+            }
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'No se pudo crear el integrante.');
+            }
+
+            if (modalEl) {
+                const instance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                instance.hide();
+            }
+
+            form.reset();
+            window.location.href = data.redirect_url || window.location.href;
+        } catch (error) {
+            console.error(error);
+            showAlert(error.message || 'No se pudo crear el integrante.', 'danger');
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = defaultButtonContent;
+            }
+        }
+    });
+
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            form.reset();
+            resetAlert();
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = defaultButtonContent;
+            }
+        });
+    }
+});
+</script>

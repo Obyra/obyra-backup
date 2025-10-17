@@ -1,10 +1,13 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app, g
 from flask_login import login_required, current_user
-from datetime import date, datetime
+import datetime as dt
+from datetime import date, timedelta
 from io import BytesIO
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import importlib.util
 import json
-from typing import Any
+import os
+from typing import Any, Optional
 
 REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
 if REPORTLAB_AVAILABLE:
@@ -36,8 +39,394 @@ else:  # pragma: no cover - executed only when optional deps missing
     xlsxwriter = None  # type: ignore[assignment]
 
 from app import db
-from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra
-from calculadora_ia import procesar_presupuesto_ia, COEFICIENTES_CONSTRUCCION
+from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra, TareaEtapa, Event
+from calculadora_ia import (
+    procesar_presupuesto_ia,
+    COEFICIENTES_CONSTRUCCION,
+    calcular_etapas_seleccionadas,
+    slugify_etapa,
+)
+from obras import seed_tareas_para_etapa
+from services.exchange import base as exchange_service
+from services.exchange.providers import bna as bna_provider
+from services.cac.cac_service import get_cac_context
+from services.geocoding_service import resolve as resolve_geocode, search as search_geocode
+from services.memberships import get_current_org_id
+
+
+def _clean_text(value: Any) -> Optional[str]:
+    """Normaliza cadenas eliminando espacios y devolviendo None para vacíos."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return str(value)
+
+
+def _parse_date(value: Any) -> Optional[date]:
+    """Intenta parsear una fecha en formatos comunes (ISO o DD/MM/YYYY)."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+    if not value:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return dt.datetime.strptime(str(value), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+DECIMAL_ZERO = Decimal("0")
+CURRENCY_QUANT = Decimal("0.01")
+QUANTITY_QUANT = Decimal("0.001")
+FX_RATE_QUANT = Decimal("0.0001")
+ALLOWED_CURRENCIES = {"ARS", "USD"}
+COORD_QUANT = Decimal("0.00000001")
+
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    """Convierte entradas típicas de formularios/JSON a booleanos reales."""
+
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "t", "on", "yes", "si", "sí"}:
+            return True
+        if normalized in {"0", "false", "f", "off", "no"}:
+            return False
+    return default
+
+
+def _registrar_evento_confirmacion(org_id: Optional[int], obra_id: Optional[int],
+                                   presupuesto_id: Optional[int], usuario_id: Optional[int],
+                                   trigger: str) -> None:
+    """Registra un evento de auditoría para la confirmación de presupuestos."""
+
+    if not org_id or not obra_id or not presupuesto_id:
+        return
+
+    try:
+        evento = Event(
+            company_id=org_id,
+            project_id=obra_id,
+            user_id=usuario_id,
+            type='status_change',
+            severity='media',
+            title='Presupuesto confirmado',
+            description=(
+                f'El presupuesto #{presupuesto_id} fue confirmado y se creó la obra #{obra_id}.'
+            ),
+            meta={
+                'source': trigger,
+                'presupuesto_id': presupuesto_id,
+                'obra_id': obra_id,
+            },
+            created_by=usuario_id,
+        )
+        db.session.add(evento)
+        db.session.commit()
+    except Exception:  # pragma: no cover - logging auxiliar
+        db.session.rollback()
+        current_app.logger.exception(
+            'No se pudo registrar el evento de confirmación del presupuesto %s',
+            presupuesto_id,
+        )
+
+
+def _resolve_currency_context(raw_currency: Any):
+    """Determina la moneda solicitada y obtiene el tipo de cambio si aplica."""
+
+    currency = str(raw_currency).upper() if raw_currency else 'ARS'
+    if currency not in ALLOWED_CURRENCIES:
+        currency = 'ARS'
+
+    snapshot = None
+    if currency != 'ARS':
+        provider = (os.environ.get('FX_PROVIDER') or 'bna').lower()
+        if provider != 'bna':
+            provider = 'bna'
+        fallback_env = os.environ.get('EXCHANGE_FALLBACK_RATE')
+        fallback = Decimal(str(fallback_env)) if fallback_env else None
+        try:
+            snapshot = exchange_service.ensure_rate(
+                provider,
+                base_currency='ARS',
+                quote_currency=currency,
+                fetcher=bna_provider.fetch_official_rate,
+                as_of=date.today(),
+                fallback_rate=fallback,
+            )
+        except Exception as exc:
+            current_app.logger.warning('No se pudo obtener el tipo de cambio: %s', exc)
+            if fallback is not None:
+                snapshot = exchange_service.ensure_rate(
+                    provider,
+                    base_currency='ARS',
+                    quote_currency=currency,
+                    fetcher=lambda *_args, **_kwargs: None,
+                    as_of=date.today(),
+                    fallback_rate=fallback,
+                )
+            else:
+                raise
+
+    return currency, snapshot
+
+
+def _to_decimal(value: Any, default: str = "0") -> Decimal:
+    """Convierte un valor arbitrario a Decimal utilizando '.' como separador."""
+
+    if isinstance(value, Decimal):
+        return value
+    if value is None:
+        return Decimal(default)
+    if isinstance(value, (int, float)):
+        normalized = str(value)
+    else:
+        text = str(value).strip()
+        if not text:
+            return Decimal(default)
+        normalized = text.replace(",", ".")
+    try:
+        return Decimal(normalized)
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal(default)
+
+
+def _quantize_currency(value: Decimal) -> Decimal:
+    return value.quantize(CURRENCY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _quantize_quantity(value: Decimal) -> Decimal:
+    return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _quantize_coord(value: Any) -> Optional[Decimal]:
+    if value is None:
+        return None
+    try:
+        coord = _to_decimal(value, '0')
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return coord.quantize(COORD_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _parse_vigencia_dias(raw_value: Any) -> Optional[int]:
+    if raw_value is None:
+        return None
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return None
+    if value < 1 or value > 180:
+        return None
+    return value
+
+
+def _sumar_totales(items) -> Decimal:
+    total = DECIMAL_ZERO
+    for item in items:
+        valor = getattr(item, 'total_currency', None)
+        if valor is None:
+            valor = getattr(item, 'total', 0)
+        total += _quantize_currency(_to_decimal(valor, '0'))
+    return _quantize_currency(total)
+
+
+def _congelar_presupuesto_para_confirmacion(presupuesto: Presupuesto) -> Decimal:
+    """Recalcula y congela importes, cantidades y tasas antes de confirmar."""
+
+    presupuesto.calcular_totales()
+
+    currency = (presupuesto.currency or 'ARS').upper()
+    if currency not in ALLOWED_CURRENCIES:
+        currency = 'ARS'
+    presupuesto.currency = currency
+
+    fx_value: Optional[Decimal] = None
+    if currency != 'ARS':
+        candidatos = (
+            presupuesto.tasa_usd_venta,
+            presupuesto.exchange_rate_value,
+            getattr(presupuesto.exchange_rate, 'value', None),
+        )
+        for candidato in candidatos:
+            if candidato is None:
+                continue
+            candidato_dec = _to_decimal(candidato, '0')
+            if candidato_dec > DECIMAL_ZERO:
+                fx_value = candidato_dec
+                break
+        if fx_value is not None and fx_value > DECIMAL_ZERO:
+            fx_value = fx_value.quantize(FX_RATE_QUANT, rounding=ROUND_HALF_UP)
+            presupuesto.tasa_usd_venta = fx_value
+            presupuesto.exchange_rate_value = fx_value
+        if not presupuesto.exchange_rate_provider and getattr(presupuesto.exchange_rate, 'provider', None):
+            presupuesto.exchange_rate_provider = presupuesto.exchange_rate.provider
+        if not presupuesto.exchange_rate_as_of and getattr(presupuesto.exchange_rate, 'as_of', None):
+            presupuesto.exchange_rate_as_of = presupuesto.exchange_rate.as_of
+        if not presupuesto.exchange_rate_fetched_at and getattr(presupuesto.exchange_rate, 'fetched_at', None):
+            presupuesto.exchange_rate_fetched_at = presupuesto.exchange_rate.fetched_at
+    else:
+        fx_value = None
+
+    if presupuesto.indice_cac_valor is not None:
+        presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(presupuesto.indice_cac_valor, '0'))
+
+    items = presupuesto.items.all() if hasattr(presupuesto.items, 'all') else list(presupuesto.items)
+    for item in items:
+        cantidad = _quantize_quantity(_to_decimal(item.cantidad, '0'))
+        item.cantidad = cantidad
+
+        item.currency = currency
+
+        unit_currency = item.price_unit_currency
+        if unit_currency is None:
+            unit_currency = item.precio_unitario
+        unit_currency_dec = _quantize_currency(_to_decimal(unit_currency, '0'))
+        item.price_unit_currency = unit_currency_dec
+
+        total_currency = _quantize_currency(cantidad * unit_currency_dec)
+        item.total_currency = total_currency
+
+        if currency != 'ARS' and fx_value is not None and fx_value > DECIMAL_ZERO:
+            unit_ars = _quantize_currency(unit_currency_dec * fx_value)
+            total_ars = _quantize_currency(total_currency * fx_value)
+        else:
+            raw_unit_ars = item.precio_unitario if item.precio_unitario is not None else item.price_unit_ars
+            if raw_unit_ars is None or _to_decimal(raw_unit_ars, '0') <= DECIMAL_ZERO:
+                raw_unit_ars = unit_currency_dec
+            unit_ars = _quantize_currency(_to_decimal(raw_unit_ars, '0'))
+            total_ars = _quantize_currency(cantidad * unit_ars)
+
+        item.precio_unitario = unit_ars
+        item.price_unit_ars = unit_ars
+        item.total = total_ars
+        item.total_ars = total_ars
+
+    presupuesto.calcular_totales()
+    return presupuesto.total_con_iva
+
+
+def _persistir_resultados_etapas(
+    presupuesto: Presupuesto,
+    etapas_resultado: list,
+    superficie: Optional[Decimal],
+    tipo_calculo: str,
+    currency: str,
+    fx_snapshot,
+    cac_context,
+):
+    """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
+
+    if not etapas_resultado:
+        return False, 'Sin etapas para aplicar'
+
+    presupuesto.currency = currency
+    try:
+        presupuesto.registrar_tipo_cambio(fx_snapshot)
+    except AttributeError:
+        pass
+
+    if cac_context:
+        presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(cac_context.value, '0'))
+        presupuesto.indice_cac_fecha = cac_context.period
+
+    obra = presupuesto.obra
+    slug_a_etapa = {}
+    orden_base = 0
+    if obra:
+        etapas_existentes = obra.etapas.order_by(EtapaObra.orden.asc()).all()
+        slug_a_etapa = {slugify_etapa(e.nombre): e for e in etapas_existentes}
+        orden_base = len(etapas_existentes)
+
+    hubo_cambios = False
+
+    for index, etapa_data in enumerate(etapas_resultado, start=1):
+        slug = slugify_etapa(etapa_data.get('slug') or etapa_data.get('nombre') or f'etapa-{index}')
+        etapa_modelo = slug_a_etapa.get(slug)
+
+        if obra and not etapa_modelo:
+            etapa_modelo = EtapaObra(
+                obra_id=obra.id,
+                nombre=etapa_data.get('nombre') or f'Etapa {index}',
+                descripcion=etapa_data.get('notas') or f'Etapa generada automáticamente ({tipo_calculo})',
+                orden=orden_base + index,
+                estado='pendiente',
+            )
+            db.session.add(etapa_modelo)
+            db.session.flush()
+            slug_a_etapa[slug] = etapa_modelo
+            hubo_cambios = True
+
+        query = ItemPresupuesto.query.filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id,
+            ItemPresupuesto.origen == 'ia',
+        )
+        if etapa_modelo:
+            query = query.filter(ItemPresupuesto.etapa_id == etapa_modelo.id)
+        else:
+            query = query.filter(ItemPresupuesto.etapa_id.is_(None))
+
+        eliminados = query.delete(synchronize_session=False)
+        if eliminados:
+            hubo_cambios = True
+
+        for item_data in etapa_data.get('items', []):
+            tipo_item = (item_data.get('tipo') or 'material').strip().lower()
+            if tipo_item not in {'material', 'mano_obra', 'equipo', 'herramienta'}:
+                tipo_item = 'material'
+
+            cantidad = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
+            precio_moneda = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
+            precio_ars = _quantize_currency(_to_decimal(item_data.get('precio_unit_ars'), '0'))
+
+            if precio_ars <= DECIMAL_ZERO and fx_snapshot and getattr(fx_snapshot, 'value', None):
+                precio_ars = _quantize_currency(precio_moneda * _to_decimal(fx_snapshot.value, '1'))
+
+            total_currency = _quantize_currency(cantidad * precio_moneda)
+            total_ars = _quantize_currency(cantidad * (precio_ars if precio_ars > DECIMAL_ZERO else precio_moneda))
+
+            nuevo_item = ItemPresupuesto(
+                presupuesto_id=presupuesto.id,
+                tipo=tipo_item,
+                descripcion=item_data.get('descripcion') or f'Ítem {tipo_item} etapa {etapa_data.get("nombre") or index}',
+                unidad=item_data.get('unidad') or 'unidades',
+                cantidad=cantidad,
+                precio_unitario=precio_ars,
+                total=total_ars,
+                origen='ia',
+                currency=currency,
+                price_unit_currency=precio_moneda,
+                total_currency=total_currency,
+                price_unit_ars=precio_ars,
+                total_ars=total_ars,
+            )
+
+            if etapa_modelo:
+                nuevo_item.etapa_id = etapa_modelo.id
+
+            db.session.add(nuevo_item)
+            hubo_cambios = True
+
+    if hubo_cambios:
+        presupuesto.calcular_totales()
+        db.session.add(presupuesto)
+
+    return hubo_cambios, None
+
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
@@ -49,17 +438,43 @@ def lista():
         return redirect(url_for('reportes.dashboard'))
     
     estado = request.args.get('estado', '')
+    vigencia = request.args.get('vigencia', '')
+    if estado == 'eliminado' and current_user.rol != 'administrador':
+        estado = ''
+    incluir_eliminados = estado == 'eliminado'
     buscar = request.args.get('buscar', '')
-    
-    # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir convertidos
+
+    # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir confirmados/convertidos
     query = Presupuesto.query.outerjoin(Obra).filter(
         Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.estado != 'convertido'  # Excluir presupuestos ya convertidos en obras
+        Presupuesto.estado.notin_(['confirmado', 'convertido'])
     )
-    
-    if estado:
+
+    if incluir_eliminados:
+        query = query.filter(Presupuesto.deleted_at.isnot(None))
+    else:
+        query = query.filter(Presupuesto.deleted_at.is_(None))
+
+    if estado and estado != 'eliminado':
         query = query.filter(Presupuesto.estado == estado)
+    elif not incluir_eliminados:
+        query = query.filter(Presupuesto.estado != 'eliminado')
     
+    if vigencia == 'vencidos':
+        query = query.filter(
+            Presupuesto.fecha_vigencia.isnot(None),
+            Presupuesto.fecha_vigencia < date.today(),
+            Presupuesto.estado.in_(['borrador', 'perdido', 'enviado', 'rechazado', 'vencido'])
+        )
+    elif vigencia == 'por_vencer':
+        limite = date.today() + timedelta(days=7)
+        query = query.filter(
+            Presupuesto.fecha_vigencia.isnot(None),
+            Presupuesto.fecha_vigencia >= date.today(),
+            Presupuesto.fecha_vigencia <= limite,
+            Presupuesto.estado.in_(['borrador', 'enviado'])
+        )
+
     if buscar:
         query = query.filter(
             db.or_(
@@ -69,13 +484,14 @@ def lista():
                 Obra.cliente.contains(buscar) if Obra.cliente else False
             )
         )
-    
+
     presupuestos = query.order_by(Presupuesto.fecha_creacion.desc()).all()
-    
-    return render_template('presupuestos/lista.html', 
-                         presupuestos=presupuestos, 
-                         estado=estado, 
-                         buscar=buscar)
+
+    return render_template('presupuestos/lista.html',
+                         presupuestos=presupuestos,
+                         estado=estado,
+                         buscar=buscar,
+                         vigencia=vigencia)
 
 
 @presupuestos_bp.route('/crear', methods=['GET', 'POST'])
@@ -98,43 +514,118 @@ def crear():
         moneda = request.form.get('moneda', 'ARS')
         cliente_nombre = request.form.get('cliente_nombre')
         plano_pdf = request.files.get('plano_pdf')
-        
+        ia_payload_raw = request.form.get('ia_etapas_payload')
+        ia_payload = None
+        if ia_payload_raw:
+            try:
+                ia_payload = json.loads(
+                    ia_payload_raw,
+                    parse_float=Decimal,
+                    parse_int=Decimal,
+                )
+            except (TypeError, ValueError, InvalidOperation):
+                current_app.logger.warning(
+                    'Payload IA de etapas inválido, se omitirá durante la creación del presupuesto.'
+                )
+                ia_payload = None
+
+        ubicacion_lat = request.form.get('ubicacion_lat')
+        ubicacion_lng = request.form.get('ubicacion_lng')
+        ubicacion_normalizada = request.form.get('ubicacion_normalizada') or None
+        ubicacion_place_id = request.form.get('ubicacion_place_id') or None
+        ubicacion_provider = request.form.get('ubicacion_provider') or None
+        ubicacion_geocode_status = request.form.get('ubicacion_geocode_status') or None
+
         # Validaciones
         if not all([nombre_obra, tipo_obra, ubicacion, tipo_construccion, superficie_m2]):
             flash('Completa todos los campos obligatorios.', 'danger')
             return render_template('presupuestos/crear.html')
         
-        try:
-            superficie_float = float(superficie_m2)
-            if superficie_float <= 0:
-                flash('La superficie debe ser mayor a 0.', 'danger')
-                return render_template('presupuestos/crear.html')
-        except ValueError:
-            flash('La superficie debe ser un número válido.', 'danger')
+        superficie_decimal = _quantize_quantity(_to_decimal(superficie_m2, '0'))
+        if superficie_decimal <= DECIMAL_ZERO:
+            flash('La superficie debe ser mayor a 0.', 'danger')
             return render_template('presupuestos/crear.html')
-        
+
+        try:
+            currency, fx_snapshot = _resolve_currency_context(moneda)
+        except Exception as exc:
+            current_app.logger.exception('Error obteniendo tipo de cambio para crear presupuesto')
+            flash('No pudimos obtener el tipo de cambio solicitado. Intenta nuevamente más tarde.', 'danger')
+            return render_template('presupuestos/crear.html')
+
+        geocode_payload = None
+        geocode_status = ubicacion_geocode_status or 'pending'
+        geocode_provider = ubicacion_provider or current_app.config.get('MAPS_PROVIDER') or 'nominatim'
+        geocode_place_id = ubicacion_place_id
+        direccion_normalizada = ubicacion_normalizada
+
+        lat_decimal = _quantize_coord(ubicacion_lat)
+        lng_decimal = _quantize_coord(ubicacion_lng)
+
+        if lat_decimal is not None and lng_decimal is not None:
+            geocode_payload = {
+                'lat': float(lat_decimal),
+                'lng': float(lng_decimal),
+                'provider': geocode_provider,
+                'place_id': geocode_place_id,
+                'normalized': direccion_normalizada or _clean_text(ubicacion),
+                'status': geocode_status or 'ok',
+                'raw': None,
+            }
+
+        if geocode_payload is None:
+            try:
+                resolved = resolve_geocode(ubicacion)
+            except Exception as exc:  # pragma: no cover - logging fallback
+                current_app.logger.warning('No se pudo geocodificar la dirección %s: %s', ubicacion, exc)
+                resolved = None
+
+            if resolved:
+                geocode_payload = resolved
+                direccion_normalizada = resolved.get('normalized') or direccion_normalizada
+                geocode_provider = resolved.get('provider') or geocode_provider
+                geocode_place_id = resolved.get('place_id') or geocode_place_id
+                geocode_status = resolved.get('status') or 'ok'
+                lat_decimal = _quantize_coord(resolved.get('lat'))
+                lng_decimal = _quantize_coord(resolved.get('lng'))
+            else:
+                geocode_status = 'fail'
+
         # Crear nueva obra basada en los datos del formulario
         nueva_obra = Obra()
         nueva_obra.nombre = nombre_obra
         nueva_obra.descripcion = f"Obra {tipo_obra.replace('_', ' ').title()} - {tipo_construccion.title()}"
         nueva_obra.direccion = ubicacion
+        nueva_obra.direccion_normalizada = direccion_normalizada
         nueva_obra.cliente = cliente_nombre or "Cliente Sin Especificar"
         nueva_obra.estado = 'planificacion'
         nueva_obra.organizacion_id = current_user.organizacion_id
+
+        if lat_decimal is not None and lng_decimal is not None:
+            nueva_obra.latitud = lat_decimal
+            nueva_obra.longitud = lng_decimal
+        if geocode_payload:
+            nueva_obra.geocode_place_id = geocode_place_id
+            nueva_obra.geocode_provider = geocode_provider
+            nueva_obra.geocode_status = geocode_status
+            raw_payload = geocode_payload.get('raw')
+            nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else nueva_obra.geocode_raw
+            nueva_obra.geocode_actualizado = dt.datetime.utcnow()
+        elif geocode_status:
+            nueva_obra.geocode_status = geocode_status
         
         # Procesar fechas
         if fecha_inicio:
-            from datetime import datetime
-            nueva_obra.fecha_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            nueva_obra.fecha_inicio = dt.datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
         if fecha_fin:
-            nueva_obra.fecha_fin_estimada = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+            nueva_obra.fecha_fin_estimada = dt.datetime.strptime(fecha_fin, '%Y-%m-%d').date()
         
         # Procesar presupuesto disponible
         if presupuesto_disponible:
             try:
-                presupuesto_float = float(presupuesto_disponible)
-                nueva_obra.presupuesto_total = presupuesto_float
-            except ValueError:
+                presupuesto_decimal = _quantize_currency(_to_decimal(presupuesto_disponible, '0'))
+                nueva_obra.presupuesto_total = presupuesto_decimal
+            except (InvalidOperation, ValueError, TypeError):
                 pass
         
         try:
@@ -163,56 +654,183 @@ def crear():
             nuevo_presupuesto = Presupuesto()
             nuevo_presupuesto.obra_id = nueva_obra.id
             nuevo_presupuesto.numero = numero
-            nuevo_presupuesto.iva_porcentaje = 21.0  # Fijo según lo solicitado
+            nuevo_presupuesto.iva_porcentaje = Decimal('21.00')  # Fijo según lo solicitado
             nuevo_presupuesto.organizacion_id = current_user.organizacion_id
-            
+            nuevo_presupuesto.currency = currency
+            vigencia_form = request.form.get('vigencia_dias', '').strip()
+            if vigencia_form:
+                vigencia_dias = _parse_vigencia_dias(vigencia_form)
+                if vigencia_dias is None:
+                    flash('La vigencia debe ser un número entre 1 y 180 días.', 'danger')
+                    return render_template('presupuestos/crear.html')
+            else:
+                vigencia_dias = 30
+
+            nuevo_presupuesto.vigencia_dias = vigencia_dias
+            nuevo_presupuesto.vigencia_bloqueada = True
+            nuevo_presupuesto.asegurar_vigencia()
+
             # Agregar observaciones con detalles del proyecto
             observaciones_proyecto = []
             observaciones_proyecto.append(f"Tipo de obra: {tipo_obra.replace('_', ' ').title()}")
             observaciones_proyecto.append(f"Tipo de construcción: {tipo_construccion.title()}")
-            observaciones_proyecto.append(f"Superficie: {superficie_float} m²")
+            observaciones_proyecto.append(f"Superficie: {superficie_decimal} m²")
             if presupuesto_disponible:
-                observaciones_proyecto.append(f"Presupuesto disponible: {moneda} {presupuesto_disponible}")
+                observaciones_proyecto.append(f"Presupuesto disponible: {currency} {presupuesto_disponible}")
             if plano_pdf and plano_pdf.filename:
                 observaciones_proyecto.append(f"Plano PDF: {plano_pdf.filename}")
-            
+
             nuevo_presupuesto.observaciones = " | ".join(observaciones_proyecto)
-            
+            nuevo_presupuesto.ubicacion_texto = ubicacion
+            nuevo_presupuesto.ubicacion_normalizada = direccion_normalizada
+            nuevo_presupuesto.geo_latitud = lat_decimal
+            nuevo_presupuesto.geo_longitud = lng_decimal
+            nuevo_presupuesto.geocode_place_id = geocode_place_id
+            nuevo_presupuesto.geocode_provider = geocode_provider
+            nuevo_presupuesto.geocode_status = geocode_status
+
             db.session.add(nuevo_presupuesto)
             db.session.flush()  # Para obtener el ID del presupuesto
-            
+
+            try:
+                nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
+            except AttributeError:
+                pass
+
+            if geocode_payload:
+                raw_payload = geocode_payload.get('raw')
+                nuevo_presupuesto.geocode_raw = json.dumps(raw_payload) if raw_payload else nuevo_presupuesto.geocode_raw
+                nuevo_presupuesto.geocode_actualizado = dt.datetime.utcnow()
+
+            datos_proyecto = {
+                'nombre': nombre_obra,
+                'tipo_obra': tipo_obra,
+                'tipo_construccion': tipo_construccion,
+                'superficie': float(superficie_decimal),
+                'ubicacion': ubicacion,
+                'ubicacion_normalizada': direccion_normalizada,
+                'latitud': float(lat_decimal) if lat_decimal is not None else None,
+                'longitud': float(lng_decimal) if lng_decimal is not None else None,
+                'geocode_provider': geocode_provider,
+                'geocode_status': geocode_status,
+                'geocode_place_id': geocode_place_id,
+            }
+            nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
+
+            cac_context = get_cac_context()
+            if cac_context:
+                nuevo_presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(cac_context.value, '0'))
+                nuevo_presupuesto.indice_cac_fecha = cac_context.period
+
             # Procesar etapas si se enviaron
             etapas_count = 0
             etapa_index = 0
+            etapas_creadas_por_slug = {}
+            etapas_serializadas = []
             while True:
                 etapa_nombre = request.form.get(f'etapas[{etapa_index}][nombre]')
                 if not etapa_nombre:
                     break
-                
+
                 etapa_descripcion = request.form.get(f'etapas[{etapa_index}][descripcion]', '')
                 etapa_orden = request.form.get(f'etapas[{etapa_index}][orden]', etapa_index + 1)
-                
+                etapa_slug = request.form.get(f'etapas[{etapa_index}][slug]')
+
                 try:
                     orden_int = int(etapa_orden)
                 except ValueError:
                     orden_int = etapa_index + 1
-                
+
+                slug_normalizado = slugify_etapa(etapa_slug or etapa_nombre)
+
                 # Crear etapa para la obra
                 nueva_etapa = EtapaObra(
                     obra_id=nueva_obra.id,
                     nombre=etapa_nombre,
                     descripcion=etapa_descripcion,
                     orden=orden_int,
-                    estado='pendiente',
-                    organizacion_id=current_user.organizacion_id
+                    estado='pendiente'
                 )
-                
+
                 db.session.add(nueva_etapa)
+                db.session.flush()
+                seed_tareas_para_etapa(
+                    nueva_etapa,
+                    auto_commit=False,
+                    slug=slug_normalizado,
+                )
+                if nueva_etapa.tareas.count() == 0:
+                    db.session.add(TareaEtapa(
+                        etapa_id=nueva_etapa.id,
+                        nombre=f'Tarea inicial de {etapa_nombre}',
+                        descripcion='Tarea generada automáticamente a partir del presupuesto.',
+                        estado='pendiente'
+                    ))
+
+                etapas_creadas_por_slug[slug_normalizado] = nueva_etapa
+                etapas_serializadas.append({
+                    'nombre': etapa_nombre,
+                    'descripcion': etapa_descripcion or '',
+                    'orden': orden_int,
+                    'slug': slug_normalizado
+                })
                 etapas_count += 1
                 etapa_index += 1
-            
+
+            # Crear items a partir del cálculo IA por etapas si llegó payload
+            if ia_payload and ia_payload.get('etapas'):
+                tipos_validos = {'material', 'mano_obra', 'equipo', 'herramienta'}
+                for etapa_resultado in ia_payload.get('etapas', []):
+                    slug_etapa = slugify_etapa(etapa_resultado.get('slug') or etapa_resultado.get('nombre'))
+                    etapa_modelo = etapas_creadas_por_slug.get(slug_etapa)
+
+                    for item_data in etapa_resultado.get('items', []):
+                        try:
+                            tipo_item = (item_data.get('tipo') or 'material').strip()
+                        except AttributeError:
+                            tipo_item = 'material'
+                        tipo_item = tipo_item if tipo_item in tipos_validos else 'material'
+
+                        cantidad_dec = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
+                        precio_moneda = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
+                        precio_ars = _quantize_currency(_to_decimal(item_data.get('precio_unit_ars'), '0'))
+                        if precio_ars <= DECIMAL_ZERO and fx_snapshot and getattr(fx_snapshot, 'value', None):
+                            precio_ars = _quantize_currency(precio_moneda * _to_decimal(fx_snapshot.value, '1'))
+
+                        total_currency = _quantize_currency(cantidad_dec * precio_moneda)
+                        total_ars = _quantize_currency(cantidad_dec * (precio_ars if precio_ars > DECIMAL_ZERO else precio_moneda))
+
+                        nuevo_item = ItemPresupuesto(
+                            presupuesto_id=nuevo_presupuesto.id,
+                            tipo=tipo_item,
+                            descripcion=item_data.get('descripcion', 'Item IA de etapa'),
+                            unidad=item_data.get('unidad', 'unidades'),
+                            cantidad=cantidad_dec,
+                            precio_unitario=precio_ars,
+                            total=total_ars,
+                            origen='ia',
+                            currency=currency,
+                            price_unit_currency=precio_moneda,
+                            total_currency=total_currency,
+                            price_unit_ars=precio_ars,
+                            total_ars=total_ars,
+                        )
+                        if etapa_modelo:
+                            nuevo_item.etapa_id = etapa_modelo.id
+
+                        db.session.add(nuevo_item)
+
+                nuevo_presupuesto.calcular_totales()
+            else:
+                nuevo_presupuesto.asegurar_vigencia()
+
+            if etapas_serializadas:
+                datos_proyecto['etapas'] = etapas_serializadas
+
+            nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
+
             db.session.commit()
-            
+
             mensaje_exito = f'Obra "{nombre_obra}" y presupuesto {numero} creados exitosamente.'
             if etapas_count > 0:
                 mensaje_exito += f' Se agregaron {etapas_count} etapas al proyecto.'
@@ -237,9 +855,37 @@ def calculadora_ia():
     obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
     tipos_construccion = list(COEFICIENTES_CONSTRUCCION.keys())
     
-    return render_template('presupuestos/calculadora_ia.html', 
-                         obras=obras, 
+    return render_template('presupuestos/calculadora_ia.html',
+                         obras=obras,
                          tipos_construccion=tipos_construccion)
+
+
+@presupuestos_bp.route('/geo/sugerencias')
+@login_required
+def sugerencias_geograficas():
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'ok': False, 'error': 'Sin permisos para geocodificar'}), 403
+
+    consulta = (request.args.get('q') or '').strip()
+    if not consulta:
+        return jsonify({'ok': True, 'resultados': []})
+
+    provider = request.args.get('provider')
+    resultados = search_geocode(consulta, provider=provider, limit=5)
+
+    serializados = []
+    for resultado in resultados:
+        serializados.append({
+            'display_name': resultado.get('display_name'),
+            'lat': resultado.get('lat'),
+            'lng': resultado.get('lng'),
+            'provider': resultado.get('provider'),
+            'place_id': resultado.get('place_id'),
+            'normalized': resultado.get('normalized'),
+            'status': resultado.get('status'),
+        })
+
+    return jsonify({'ok': True, 'resultados': serializados})
 
 @presupuestos_bp.route('/procesar-calculadora-ia', methods=['POST'])
 @login_required
@@ -293,6 +939,121 @@ def procesar_calculadora_ia():
     except Exception as e:
         return jsonify({'error': f'Error procesando calculadora: {str(e)}'}), 500
 
+
+@presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
+@login_required
+def calcular_etapas_ia():
+    """Calcula con IA determinística las etapas seleccionadas de un presupuesto."""
+    if not current_user.puede_acceder_modulo('presupuestos'):
+        return jsonify({'ok': False, 'error': 'Sin permisos para usar la IA de presupuestos'}), 403
+
+    data = request.get_json(silent=True) or {}
+    etapa_payload = data.get('etapa_ids') or []
+    superficie = data.get('superficie_m2')
+    tipo_calculo = data.get('tipo_calculo') or data.get('tipo_construccion') or 'Estándar'
+    contexto = data.get('parametros_contexto') or {}
+    presupuesto_id = data.get('presupuesto_id')
+    persistir = bool(data.get('persistir'))
+    moneda_raw = data.get('currency') or data.get('moneda')
+
+    try:
+        currency, fx_snapshot = _resolve_currency_context(moneda_raw)
+    except Exception as exc:
+        current_app.logger.exception('No se pudo resolver la moneda para la IA de presupuestos')
+        return jsonify({'ok': False, 'error': f'No se pudo obtener el tipo de cambio: {exc}'}), 500
+
+    if superficie is None:
+        return jsonify({'ok': False, 'error': 'Debes indicar la superficie en m² para calcular.'}), 400
+
+    superficie_decimal = _quantize_quantity(_to_decimal(superficie, '0'))
+    if superficie_decimal <= DECIMAL_ZERO:
+        return jsonify({'ok': False, 'error': 'La superficie debe ser mayor a 0.'}), 400
+
+    try:
+        resultado = calcular_etapas_seleccionadas(
+            etapas_payload=etapa_payload,
+            superficie_m2=str(superficie_decimal),
+            tipo_calculo=tipo_calculo,
+            contexto=contexto,
+            presupuesto_id=presupuesto_id,
+            currency=currency,
+            fx_snapshot=fx_snapshot,
+        )
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - logging de errores inesperados
+        current_app.logger.exception('Error calculando etapas IA')
+        return jsonify({'ok': False, 'error': 'No se pudo calcular las etapas seleccionadas.'}), 500
+
+    resultado['superficie_usada'] = float(superficie_decimal)
+    resultado['tipo_calculo'] = tipo_calculo
+    resultado['ok'] = True
+    resultado['presupuesto_id'] = presupuesto_id
+    resultado['parametros_contexto'] = contexto
+    resultado['moneda'] = currency
+
+    if presupuesto_id and persistir:
+        presupuesto = Presupuesto.query.filter_by(
+            id=presupuesto_id,
+            organizacion_id=current_user.organizacion_id,
+        ).first()
+
+        if not presupuesto:
+            return jsonify({'ok': False, 'error': 'No encontramos el presupuesto indicado para aplicar los resultados.'}), 404
+
+        total_antes = float(presupuesto.total_con_iva or 0)
+
+        try:
+            cac_context = get_cac_context()
+            cambios, _ = _persistir_resultados_etapas(
+                presupuesto,
+                resultado.get('etapas', []),
+                superficie_decimal,
+                tipo_calculo,
+                currency,
+                fx_snapshot,
+                cac_context,
+            )
+            if cambios:
+                db.session.commit()
+                total_despues = float(presupuesto.total_con_iva or 0)
+                resultado['guardado'] = True
+                resultado['total_actualizado'] = {
+                    'antes': total_antes,
+                    'despues': total_despues,
+                }
+                current_app.logger.info(
+                    '💾 Etapas IA aplicadas al presupuesto',
+                    extra={
+                        'usuario_id': current_user.id,
+                        'organizacion_id': current_user.organizacion_id,
+                        'presupuesto_id': presupuesto.id,
+                        'etapas': [e.get('slug') or e.get('nombre') for e in (resultado.get('etapas') or [])],
+                        'total_antes': total_antes,
+                        'total_despues': total_despues,
+                        'superficie': float(superficie_decimal),
+                        'tipo_calculo': tipo_calculo,
+                    },
+                )
+            else:
+                db.session.rollback()
+                resultado['guardado'] = False
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Error persistiendo resultados de etapas IA en presupuesto')
+            return jsonify({'ok': False, 'error': 'El cálculo se generó pero no pudimos guardarlo en el presupuesto.'}), 500
+
+    current_app.logger.info(
+        '🧠 IA etapas calculada',
+        extra={
+            'usuario_id': current_user.id,
+            'organizacion_id': current_user.organizacion_id,
+            'etapas_solicitadas': [e.get('slug') if isinstance(e, dict) else e for e in (etapa_payload or [])],
+            'presupuesto_id': presupuesto_id,
+        },
+    )
+    return jsonify(resultado)
+
 @presupuestos_bp.route('/crear-desde-ia', methods=['POST'])
 @login_required  
 def crear_desde_ia():
@@ -312,7 +1073,14 @@ def crear_desde_ia():
         
         if not presupuesto_ia:
             return jsonify({'error': 'Datos del presupuesto incompletos'}), 400
-        
+
+        currency_raw = datos_proyecto.get('currency') if isinstance(datos_proyecto, dict) else data.get('currency')
+        try:
+            currency, fx_snapshot = _resolve_currency_context(currency_raw)
+        except Exception as exc:
+            current_app.logger.exception('Error obteniendo tipo de cambio para crear presupuesto desde IA')
+            return jsonify({'error': 'No se pudo obtener el tipo de cambio solicitado.'}), 500
+
         # NO CREAR OBRA AUTOMÁTICAMENTE - Solo guardar datos del proyecto
         # Los presupuestos quedan como "borrador" hasta que se confirmen explícitamente
         
@@ -344,9 +1112,22 @@ def crear_desde_ia():
         nuevo_presupuesto.confirmado_como_obra = False
         nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto)  # Guardar datos para posterior conversión
         nuevo_presupuesto.organizacion_id = current_user.organizacion_id
-        
+        nuevo_presupuesto.currency = currency
+        vigencia_config = datos_proyecto.get('vigencia_dias') if isinstance(datos_proyecto, dict) else None
+        vigencia_dias = _parse_vigencia_dias(vigencia_config) if vigencia_config is not None else 30
+        if vigencia_dias is None:
+            vigencia_dias = 30
+        nuevo_presupuesto.vigencia_dias = vigencia_dias
+        nuevo_presupuesto.vigencia_bloqueada = True
+        nuevo_presupuesto.asegurar_vigencia()
+
         db.session.add(nuevo_presupuesto)
         db.session.flush()  # Para obtener el ID
+
+        try:
+            nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
+        except AttributeError:
+            pass
         
         # Agregar items de materiales
         materiales = presupuesto_ia.get('materiales', {})
@@ -431,14 +1212,19 @@ def crear_desde_ia():
                     'sellador': 'litros'
                 }
                 
+                cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0'))
                 item = ItemPresupuesto()
                 item.presupuesto_id = nuevo_presupuesto.id
                 item.tipo = 'material'
                 item.descripcion = descripciones.get(material, material.title())
                 item.unidad = unidades.get(material, 'unidades')
-                item.cantidad = cantidad
-                item.precio_unitario = 0.0  # Se puede actualizar manualmente después
-                item.total = 0.0
+                item.cantidad = cantidad_dec
+                item.precio_unitario = DECIMAL_ZERO
+                item.total = DECIMAL_ZERO
+                item.origen = 'ia'
+                item.currency = currency
+                item.price_unit_currency = DECIMAL_ZERO
+                item.total_currency = DECIMAL_ZERO
                 db.session.add(item)
         
         # Agregar equipos
@@ -479,17 +1265,21 @@ def crear_desde_ia():
                     item.descripcion = base_desc
                     
                 item.unidad = 'días' if equipo in ['hormigonera', 'andamios', 'nivel_laser'] else 'unidades'
-                item.cantidad = float(cantidad)
-                item.precio_unitario = 0.0
-                item.total = 0.0
+                item.cantidad = _quantize_quantity(_to_decimal(cantidad, '0'))
+                item.precio_unitario = DECIMAL_ZERO
+                item.total = DECIMAL_ZERO
+                item.origen = 'ia'
+                item.currency = currency
+                item.price_unit_currency = DECIMAL_ZERO
+                item.total_currency = DECIMAL_ZERO
                 db.session.add(item)
         
         # Agregar herramientas
         herramientas = presupuesto_ia.get('herramientas', {})
         for herramienta, cantidad in herramientas.items():
             try:
-                cantidad_float = float(cantidad) if cantidad else 0.0
-                if cantidad_float > 0:
+                cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0')) if cantidad else DECIMAL_ZERO
+                if cantidad_dec > DECIMAL_ZERO:
                     descripciones_herramientas = {
                         'palas': 'Palas',
                         'baldes': 'Baldes',
@@ -514,9 +1304,13 @@ def crear_desde_ia():
                     item.tipo = 'herramienta'
                     item.descripcion = descripciones_herramientas.get(herramienta, herramienta.replace('_', ' ').title())
                     item.unidad = 'unidades'
-                    item.cantidad = cantidad_float
-                    item.precio_unitario = 0.0
-                    item.total = 0.0
+                    item.cantidad = cantidad_dec
+                    item.precio_unitario = DECIMAL_ZERO
+                    item.total = DECIMAL_ZERO
+                    item.origen = 'ia'
+                    item.currency = currency
+                    item.price_unit_currency = DECIMAL_ZERO
+                    item.total_currency = DECIMAL_ZERO
                     db.session.add(item)
             except (ValueError, TypeError):
                 # Omitir herramientas con valores inválidos
@@ -633,7 +1427,7 @@ def exportar_excel_ia():
         
         equipos = presupuesto.get('equipos', {})
         for equipo, specs in equipos.items():
-            if specs.get('cantidad', 0) > 0:
+            if isinstance(specs, dict) and specs.get('cantidad', 0) > 0:
                 worksheet.write(row, 0, equipo.replace('_', ' ').title())
                 worksheet.write(row, 1, specs.get('cantidad', 0))
                 worksheet.write(row, 2, specs.get('dias_uso', 0))
@@ -645,7 +1439,7 @@ def exportar_excel_ia():
         # Crear respuesta
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        response.headers['Content-Disposition'] = f'attachment; filename=presupuesto_ia_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        response.headers['Content-Disposition'] = f'attachment; filename=presupuesto_ia_{dt.datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
         
         return response
         
@@ -659,7 +1453,11 @@ def detalle(id):
         flash('No tienes permisos para ver presupuestos.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
     items = presupuesto.items.all()
     
     # Agrupar items por tipo
@@ -667,13 +1465,35 @@ def detalle(id):
     mano_obra = [item for item in items if item.tipo == 'mano_obra']
     equipos = [item for item in items if item.tipo == 'equipo']
     herramientas = [item for item in items if item.tipo == 'herramienta']
-    
-    return render_template('presupuestos/detalle.html', 
+
+    ia_materiales = [item for item in materiales if item.origen == 'ia']
+    ia_mano_obra = [item for item in mano_obra if item.origen == 'ia']
+    ia_equipos = [item for item in equipos if item.origen == 'ia']
+    ia_herramientas = [item for item in herramientas if item.origen == 'ia']
+
+    totales_ia = {
+        'materiales': _sumar_totales(ia_materiales),
+        'mano_obra': _sumar_totales(ia_mano_obra),
+        'equipos': _sumar_totales(ia_equipos),
+        'herramientas': _sumar_totales(ia_herramientas),
+    }
+    totales_ia['general'] = _quantize_currency(
+        totales_ia['materiales'] + totales_ia['mano_obra'] + totales_ia['equipos'] + totales_ia['herramientas']
+    )
+
+    g.currency_context = presupuesto.currency
+
+    return render_template('presupuestos/detalle.html',
                          presupuesto=presupuesto,
                          materiales=materiales,
                          mano_obra=mano_obra,
                          equipos=equipos,
-                         herramientas=herramientas)
+                         herramientas=herramientas,
+                         ia_materiales=ia_materiales,
+                         ia_mano_obra=ia_mano_obra,
+                         ia_equipos=ia_equipos,
+                         ia_herramientas=ia_herramientas,
+                         totales_ia=totales_ia)
 
 @presupuestos_bp.route('/<int:id>/item', methods=['POST'])
 @login_required
@@ -682,7 +1502,11 @@ def agregar_item(id):
         flash('No tienes permisos para agregar items.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
     
     if presupuesto.estado != 'borrador':
         flash('Solo se pueden agregar items a presupuestos en borrador.', 'danger')
@@ -699,22 +1523,26 @@ def agregar_item(id):
         return redirect(url_for('presupuestos.detalle', id=id))
     
     try:
-        cantidad_float = float(cantidad) if cantidad else 0.0
-        precio_unitario_float = float(precio_unitario) if precio_unitario else 0.0
-        total = cantidad_float * precio_unitario_float
-    except ValueError:
+        cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0'))
+        precio_unitario_dec = _quantize_currency(_to_decimal(precio_unitario, '0'))
+        total_dec = _quantize_currency(cantidad_dec * precio_unitario_dec)
+    except (InvalidOperation, ValueError, TypeError):
         flash('Cantidad y precio deben ser números válidos.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
-    
+
     nuevo_item = ItemPresupuesto()
     nuevo_item.presupuesto_id = id
     nuevo_item.tipo = tipo
     nuevo_item.descripcion = descripcion
     nuevo_item.unidad = unidad
-    nuevo_item.cantidad = cantidad_float
-    nuevo_item.precio_unitario = precio_unitario_float
-    nuevo_item.total = total
-    
+    nuevo_item.cantidad = cantidad_dec
+    nuevo_item.precio_unitario = precio_unitario_dec
+    nuevo_item.total = total_dec
+    nuevo_item.origen = 'manual'
+    nuevo_item.currency = presupuesto.currency or 'ARS'
+    nuevo_item.price_unit_currency = precio_unitario_dec
+    nuevo_item.total_currency = total_dec
+
     try:
         db.session.add(nuevo_item)
         presupuesto.calcular_totales()
@@ -735,6 +1563,10 @@ def eliminar_item(id):
     
     item = ItemPresupuesto.query.get_or_404(id)
     presupuesto = item.presupuesto
+
+    if presupuesto.organizacion_id != current_user.organizacion_id or presupuesto.deleted_at is not None:
+        flash('No tienes permisos para eliminar este item.', 'danger')
+        return redirect(url_for('presupuestos.lista'))
     
     if presupuesto.estado != 'borrador':
         flash('Solo se pueden eliminar items de presupuestos en borrador.', 'danger')
@@ -758,7 +1590,15 @@ def cambiar_estado(id):
         flash('No tienes permisos para cambiar el estado.', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
     
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado in ['perdido', 'eliminado']:
+        flash('No puedes modificar el estado de un presupuesto archivado.', 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
     nuevo_estado = request.form.get('estado')
     
     if nuevo_estado not in ['borrador', 'enviado', 'aprobado', 'rechazado']:
@@ -790,7 +1630,11 @@ def generar_pdf(id):
         )
         return redirect(url_for('presupuestos.detalle', id=id))
 
-    presupuesto = Presupuesto.query.get_or_404(id)
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
     items = presupuesto.items.all()
 
     # Crear buffer para el PDF
@@ -933,34 +1777,100 @@ def editar_obra(id):
     """Editar información de la obra asociada al presupuesto"""
     if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
         return jsonify({'error': 'Sin permisos'}), 403
-    
-    presupuesto = Presupuesto.query.get_or_404(id)
-    obra = presupuesto.obra
-    
-    data = request.get_json()
-    
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado != 'borrador':
+        return jsonify({'error': 'Solo puedes editar presupuestos en borrador.'}), 400
+
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    if not payload:
+        return jsonify({'error': 'No se recibieron datos para actualizar la obra.'}), 400
+
+    obra: Optional[Obra] = None
+    new_obra_created = False
+
+    raw_obra_id = payload.get('obra_id') or presupuesto.obra_id
+    if raw_obra_id:
+        try:
+            obra_id = int(raw_obra_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Identificador de obra inválido.'}), 400
+
+        obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first()
+        if obra is None:
+            return jsonify({'error': 'Obra asociada no encontrada.'}), 404
+    else:
+        obra = presupuesto.obra
+
+    if obra and obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'error': 'No tienes permisos para modificar esta obra.'}), 403
+
+    if obra is None:
+        obra = Obra(
+            organizacion_id=current_user.organizacion_id,
+            estado='planificacion',
+            cliente='Cliente sin especificar'
+        )
+        presupuesto.obra = obra
+        db.session.add(obra)
+        new_obra_created = True
+
     try:
-        # Actualizar campos de la obra
-        if 'nombre' in data:
-            obra.nombre = data['nombre']
-        if 'cliente' in data:
-            obra.cliente = data['cliente']
-        if 'descripcion' in data:
-            obra.descripcion = data['descripcion']
-        if 'direccion' in data:
-            obra.direccion = data['direccion']
-        if 'fecha_inicio' in data and data['fecha_inicio']:
-            obra.fecha_inicio = datetime.strptime(data['fecha_inicio'], '%Y-%m-%d').date()
-        if 'fecha_fin_estimada' in data and data['fecha_fin_estimada']:
-            obra.fecha_fin_estimada = datetime.strptime(data['fecha_fin_estimada'], '%Y-%m-%d').date()
-        if 'presupuesto_total' in data and data['presupuesto_total']:
-            obra.presupuesto_total = float(data['presupuesto_total'])
-        
+        if 'nombre' in payload:
+            nombre = _clean_text(payload.get('nombre'))
+            if not nombre:
+                return jsonify({'error': 'El nombre de la obra no puede estar vacío.'}), 400
+            obra.nombre = nombre
+        elif new_obra_created:
+            return jsonify({'error': 'El nombre de la obra es obligatorio.'}), 400
+
+        if 'cliente' in payload:
+            cliente = _clean_text(payload.get('cliente')) or 'Cliente sin especificar'
+            obra.cliente = cliente
+        elif new_obra_created and not obra.cliente:
+            obra.cliente = 'Cliente sin especificar'
+
+        for campo in ('descripcion', 'direccion'):
+            if campo in payload:
+                setattr(obra, campo, _clean_text(payload.get(campo)))
+
+        if 'fecha_inicio' in payload:
+            parsed = _parse_date(payload.get('fecha_inicio'))
+            if payload.get('fecha_inicio') and parsed is None:
+                return jsonify({'error': 'Formato de fecha de inicio inválido.'}), 400
+            obra.fecha_inicio = parsed
+
+        if 'fecha_fin_estimada' in payload:
+            parsed = _parse_date(payload.get('fecha_fin_estimada'))
+            if payload.get('fecha_fin_estimada') and parsed is None:
+                return jsonify({'error': 'Formato de fecha de finalización inválido.'}), 400
+            obra.fecha_fin_estimada = parsed
+
+        if 'presupuesto_total' in payload:
+            bruto_presupuesto = payload.get('presupuesto_total')
+            if bruto_presupuesto in (None, ''):
+                obra.presupuesto_total = None
+            else:
+                try:
+                    obra.presupuesto_total = _quantize_currency(_to_decimal(bruto_presupuesto, '0'))
+                except (InvalidOperation, ValueError, TypeError):
+                    return jsonify({'error': 'El presupuesto total debe ser numérico.'}), 400
+
         db.session.commit()
-        return jsonify({'exito': True, 'mensaje': 'Obra actualizada correctamente'})
-        
+        return jsonify({
+            'exito': True,
+            'mensaje': 'Obra actualizada correctamente',
+            'obra_id': obra.id
+        })
+
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception('Error actualizando la obra asociada al presupuesto %s', id)
         return jsonify({'error': f'Error actualizando obra: {str(e)}'}), 500
 
 @presupuestos_bp.route('/item/<int:item_id>/editar', methods=['POST'])
@@ -972,6 +1882,12 @@ def editar_item(item_id):
     
     item = ItemPresupuesto.query.get_or_404(item_id)
     presupuesto = item.presupuesto
+
+    if presupuesto.organizacion_id != current_user.organizacion_id or presupuesto.deleted_at is not None:
+        return jsonify({'error': 'No tienes permisos para editar este item.'}), 403
+
+    if presupuesto.estado != 'borrador':
+        return jsonify({'error': 'Solo puedes editar items en presupuestos en borrador.'}), 400
     
     data = request.get_json()
     
@@ -982,12 +1898,15 @@ def editar_item(item_id):
         if 'unidad' in data:
             item.unidad = data['unidad']
         if 'cantidad' in data:
-            item.cantidad = float(data['cantidad'])
+            item.cantidad = _quantize_quantity(_to_decimal(data['cantidad'], '0'))
         if 'precio_unitario' in data:
-            item.precio_unitario = float(data['precio_unitario'])
-        
+            item.precio_unitario = _quantize_currency(_to_decimal(data['precio_unitario'], '0'))
+
+        cantidad_dec = _to_decimal(item.cantidad, '0')
+        precio_unitario_dec = _to_decimal(item.precio_unitario, '0')
+
         # Recalcular total
-        item.total = item.cantidad * item.precio_unitario
+        item.total = _quantize_currency(cantidad_dec * precio_unitario_dec)
         
         # Recalcular totales del presupuesto
         presupuesto.calcular_totales()
@@ -1012,108 +1931,451 @@ def editar_item(item_id):
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
 @login_required
 def confirmar_como_obra(id):
-    """Convierte un presupuesto borrador en una obra confirmada"""
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para confirmar obras.', 'danger')
+    """Convierte un presupuesto borrador en una obra confirmada."""
+
+    wants_json = request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    payload = request.get_json(silent=True) if request.is_json else None
+    payload = payload or request.form
+
+    crear_tareas = _to_bool(payload.get('crear_tareas'), True)
+    normalizar_slugs = _to_bool(payload.get('normalizar_slugs'), True)
+    notificar = _to_bool(payload.get('notificar'), True)
+    trigger_source = 'list_modal' if wants_json else 'detail_view'
+
+    puede_acceder = getattr(current_user, 'puede_acceder_modulo', lambda modulo: True)
+    role_checker = getattr(current_user, 'tiene_rol', None)
+    is_admin_membership = bool(callable(role_checker) and role_checker('admin'))
+    es_admin_compat = False
+    es_admin_method = getattr(current_user, 'es_admin', None)
+    if callable(es_admin_method):
+        try:
+            es_admin_compat = bool(es_admin_method())
+        except Exception:  # pragma: no cover - compatibilidad legacy
+            es_admin_compat = False
+    legacy_role = (getattr(current_user, 'rol', None) or '').lower()
+    legacy_is_admin = legacy_role in {'administrador', 'administrador_general', 'admin'}
+
+    if not puede_acceder('presupuestos') or not (is_admin_membership or es_admin_compat or legacy_is_admin):
+        mensaje = 'No tienes permisos para confirmar obras.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 403
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.lista'))
-    
-    presupuesto = Presupuesto.query.get_or_404(id)
-    
-    if presupuesto.organizacion_id != current_user.organizacion_id:
-        flash('No tienes permisos para acceder a este presupuesto.', 'danger')
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        mensaje = 'No se pudo determinar la organización activa.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.lista'))
-    
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == org_id
+    ).first_or_404()
+
+    if presupuesto.deleted_at is not None:
+        mensaje = 'No puedes confirmar un presupuesto eliminado.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'danger')
+        return redirect(url_for('presupuestos.lista'))
+
     if presupuesto.confirmado_como_obra:
-        flash('Este presupuesto ya fue confirmado como obra.', 'warning')
+        obra_url = url_for('obras.detalle', id=presupuesto.obra_id) if presupuesto.obra_id else None
+        mensaje = 'Este presupuesto ya fue confirmado como obra.'
+        if wants_json:
+            return jsonify({
+                'status': 'already_confirmed',
+                'message': mensaje,
+                'obra_id': presupuesto.obra_id,
+                'obra_url': obra_url,
+                'presupuesto_estado': presupuesto.estado
+            })
+        flash(mensaje, 'warning')
+        return redirect(obra_url or url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.estado != 'borrador':
+        mensaje = 'Solo los presupuestos en borrador pueden confirmarse como obra.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
         return redirect(url_for('presupuestos.detalle', id=id))
-    
-    try:
-        # Recuperar datos del proyecto
-        datos_proyecto = {}
-        if presupuesto.datos_proyecto:
+
+    datos_proyecto: dict[str, Any] = {}
+    if presupuesto.datos_proyecto:
+        try:
             datos_proyecto = json.loads(presupuesto.datos_proyecto)
-        
-        # Crear nueva obra desde los datos del presupuesto
-        nombre_obra = datos_proyecto.get('nombre', f'Obra desde Presupuesto {presupuesto.numero}')
-        
+        except json.JSONDecodeError:
+            datos_proyecto = {}
+
+    cliente = None
+    if presupuesto.obra:
+        cliente = presupuesto.obra.cliente
+    elif isinstance(datos_proyecto, dict):
+        cliente = datos_proyecto.get('cliente')
+    if not cliente:
+        mensaje = 'Completa los datos del cliente antes de confirmar el presupuesto.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    ubicacion_texto = presupuesto.ubicacion_texto
+    if not ubicacion_texto and isinstance(datos_proyecto, dict):
+        ubicacion_texto = datos_proyecto.get('ubicacion')
+    if not ubicacion_texto:
+        mensaje = 'Debes indicar una ubicación válida antes de confirmar el presupuesto.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.currency not in ALLOWED_CURRENCIES:
+        mensaje = 'La moneda seleccionada no es compatible con la conversión a obra.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.currency != 'ARS' and not presupuesto.tasa_usd_venta:
+        mensaje = 'No se encontró el tipo de cambio aplicado para este presupuesto. Vuelve a calcular antes de confirmar.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    if presupuesto.indice_cac_valor is None:
+        mensaje = 'Debes aplicar el índice CAC vigente antes de confirmar el presupuesto.'
+        if wants_json:
+            return jsonify({'error': mensaje}), 400
+        flash(mensaje, 'warning')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+    nueva_obra = None
+    try:
+        _congelar_presupuesto_para_confirmacion(presupuesto)
+        presupuesto.vigencia_bloqueada = True
+
+        nombre_obra = None
+        if isinstance(datos_proyecto, dict):
+            nombre_obra = datos_proyecto.get('nombre')
+        if not nombre_obra:
+            nombre_obra = f'Obra desde Presupuesto {presupuesto.numero}'
+
         nueva_obra = Obra()
         nueva_obra.nombre = nombre_obra
-        nueva_obra.cliente = datos_proyecto.get('cliente', 'Cliente desde presupuesto')
-        nueva_obra.descripcion = f"Superficie: {datos_proyecto.get('superficie', 0)}m² - {datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
-        nueva_obra.direccion = datos_proyecto.get('ubicacion', 'Por especificar')
+        nueva_obra.cliente = cliente
+        if isinstance(datos_proyecto, dict):
+            descripcion = (
+                f"Superficie: {datos_proyecto.get('superficie', 0)}m² - "
+                f"{datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - "
+                f"Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
+            )
+        else:
+            descripcion = f'Obra creada a partir del presupuesto {presupuesto.numero}'
+        nueva_obra.descripcion = descripcion
+        nueva_obra.direccion = presupuesto.ubicacion_texto or ubicacion_texto or 'Por especificar'
+        nueva_obra.direccion_normalizada = presupuesto.ubicacion_normalizada or (
+            datos_proyecto.get('ubicacion_normalizada') if isinstance(datos_proyecto, dict) else None
+        )
         nueva_obra.estado = 'planificacion'
-        nueva_obra.presupuesto_total = float(presupuesto.total_con_iva)
-        nueva_obra.organizacion_id = current_user.organizacion_id
-        
-        # Geocodificar si hay ubicación
-        if datos_proyecto.get('ubicacion'):
+        nueva_obra.presupuesto_total = _quantize_currency(_to_decimal(presupuesto.total_con_iva, '0'))
+        nueva_obra.organizacion_id = org_id
+
+        lat_decimal = presupuesto.geo_latitud
+        if lat_decimal is None and isinstance(datos_proyecto, dict):
+            lat_decimal = datos_proyecto.get('latitud')
+        lng_decimal = presupuesto.geo_longitud
+        if lng_decimal is None and isinstance(datos_proyecto, dict):
+            lng_decimal = datos_proyecto.get('longitud')
+
+        if lat_decimal is not None and lng_decimal is not None:
             try:
-                from geocoding import geocodificar_direccion
-                coords = geocodificar_direccion(datos_proyecto['ubicacion'])
-                if coords:
-                    nueva_obra.latitud = coords['lat']
-                    nueva_obra.longitud = coords['lng']
-            except:
-                pass  # Si falla geocodificación, continúa sin coordenadas
-        
+                nueva_obra.latitud = _quantize_coord(lat_decimal)
+                nueva_obra.longitud = _quantize_coord(lng_decimal)
+            except Exception:
+                nueva_obra.latitud = _quantize_coord(lat_decimal)
+                nueva_obra.longitud = _quantize_coord(lng_decimal)
+        else:
+            resolved = resolve_geocode(ubicacion_texto)
+            if resolved:
+                nueva_obra.latitud = _quantize_coord(resolved.get('lat'))
+                nueva_obra.longitud = _quantize_coord(resolved.get('lng'))
+                nueva_obra.geocode_place_id = resolved.get('place_id')
+                nueva_obra.geocode_provider = resolved.get('provider')
+                nueva_obra.geocode_status = resolved.get('status') or 'ok'
+                raw_payload = resolved.get('raw')
+                nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else None
+                nueva_obra.geocode_actualizado = dt.datetime.utcnow()
+
+        nueva_obra.geocode_place_id = presupuesto.geocode_place_id or nueva_obra.geocode_place_id
+        nueva_obra.geocode_provider = presupuesto.geocode_provider or nueva_obra.geocode_provider
+        nueva_obra.geocode_status = presupuesto.geocode_status or nueva_obra.geocode_status
+        nueva_obra.geocode_raw = presupuesto.geocode_raw or nueva_obra.geocode_raw
+        if presupuesto.geocode_actualizado:
+            nueva_obra.geocode_actualizado = presupuesto.geocode_actualizado
+
         db.session.add(nueva_obra)
-        db.session.flush()  # Para obtener el ID
-        
-        # Asociar presupuesto con la obra y marcarlo como convertido
+        db.session.flush()
+
         presupuesto.obra_id = nueva_obra.id
         presupuesto.confirmado_como_obra = True
-        presupuesto.estado = 'convertido'  # Cambiar estado para ocultarlo de la lista
-        
-        # Verificar si la obra ya tiene etapas para evitar duplicados
+        presupuesto.estado = 'confirmado'
+
         etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
-        
+
         if etapas_existentes == 0:
-            # Solo crear etapas si no existen
-            etapas_basicas = [
-                {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
-                {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
-                {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
-                {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
-                {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
-                {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
-                {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
-            ]
-        
-            from tareas_predefinidas import TAREAS_POR_ETAPA
-            
-            for etapa_data in etapas_basicas:
+            raw_etapas = []
+            if isinstance(datos_proyecto, dict):
+                raw_etapas = datos_proyecto.get('etapas') or []
+
+            etapas_config = []
+            for etapa in raw_etapas:
+                if not isinstance(etapa, dict):
+                    continue
+                nombre_etapa = (etapa.get('nombre') or '').strip()
+                if not nombre_etapa:
+                    continue
+                descripcion_etapa = (etapa.get('descripcion') or '').strip()
+                slug_original = etapa.get('slug') or nombre_etapa
+                slug_etapa = slugify_etapa(slug_original) if normalizar_slugs else slug_original.strip()
+                etapas_config.append({
+                    'nombre': nombre_etapa,
+                    'descripcion': descripcion_etapa,
+                    'orden': etapa.get('orden'),
+                    'slug': slug_etapa
+                })
+
+            if not etapas_config:
+                etapas_config = [
+                    {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
+                    {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
+                    {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
+                    {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
+                    {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
+                    {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
+                    {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
+                ]
+
+            slugs_creados = set()
+            for idx, etapa_data in enumerate(etapas_config, start=1):
+                nombre = (etapa_data.get('nombre') or '').strip() or f'Etapa {idx}'
+                descripcion = etapa_data.get('descripcion') or ''
+                try:
+                    orden = int(etapa_data.get('orden') or idx)
+                except (TypeError, ValueError):
+                    orden = idx
+                slug_fuente = etapa_data.get('slug') or nombre
+                slug = slugify_etapa(slug_fuente) if normalizar_slugs else slug_fuente.strip()
+                if slug in slugs_creados:
+                    continue
+                slugs_creados.add(slug)
+
                 nueva_etapa = EtapaObra(
                     obra_id=nueva_obra.id,
-                    nombre=etapa_data['nombre'],
-                    descripcion=etapa_data['descripcion'],
-                    orden=etapa_data['orden'],
+                    nombre=nombre,
+                    descripcion=descripcion,
+                    orden=orden,
                     estado='pendiente'
                 )
-                
+
                 db.session.add(nueva_etapa)
-                db.session.flush()  # Para obtener el ID de la etapa
-                
-                # Agregar tareas predefinidas si existen
-                tareas_etapa = TAREAS_POR_ETAPA.get(etapa_data['nombre'], [])
-                for idx, nombre_tarea in enumerate(tareas_etapa[:10]):  # Limitar a 10 tareas por etapa
-                    from models import TareaEtapa
-                    nueva_tarea = TareaEtapa(
+                db.session.flush()
+
+                creadas = 0
+                if crear_tareas:
+                    creadas = seed_tareas_para_etapa(
+                        nueva_etapa,
+                        auto_commit=False,
+                        slug=slug,
+                    ) or 0
+                if not crear_tareas o
+                    creadas == 0:
+                    db.session.add(TareaEtapa(
                         etapa_id=nueva_etapa.id,
-                        nombre=nombre_tarea,
-                        descripcion=f"Tarea predefinida para {etapa_data['nombre']}",
+                        nombre=f'Tarea inicial de {nombre}',
+                        descripcion='Tarea generada automáticamente al confirmar el presupuesto.',
                         estado='pendiente'
-                    )
-                    db.session.add(nueva_tarea)
-        
+                    ))
+
+                etapa_data['slug'] = slug
+
+            if isinstance(datos_proyecto, dict):
+                datos_proyecto['etapas'] = etapas_config
+                presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
+
         db.session.commit()
-        
-        flash(f'¡Presupuesto convertido exitosamente en obra "{nombre_obra}"!', 'success')
-        return redirect(url_for('obras.detalle', id=nueva_obra.id))
-        
-    except Exception as e:
+
+    except Exception as exc:
         db.session.rollback()
-        flash(f'Error al confirmar obra: {str(e)}', 'danger')
+        current_app.logger.exception('Error confirmando presupuesto %s: %s', id, exc)
+        mensaje = f'Error al confirmar obra: {str(exc)}'
+        if wants_json:
+            return jsonify({'error': mensaje}), 500
+        flash(mensaje, 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+    obra_creada_id = nueva_obra.id if nueva_obra else None
+    obra_nombre = nueva_obra.nombre if nueva_obra else ''
+    estado_respuesta = presupuesto.estado
+
+    mensaje_exito = f'¡Presupuesto {presupuesto.numero} confirmado! Obra "{obra_nombre}" creada correctamente.'
+    flash(mensaje_exito, 'success')
+
+    _registrar_evento_confirmacion(
+        org_id=org_id,
+        obra_id=obra_creada_id,
+        presupuesto_id=presupuesto.id,
+        usuario_id=getattr(current_user, 'id', None),
+        trigger=trigger_source,
+    )
+
+    if notificar:
+        current_app.logger.info(
+            'Confirmación de presupuesto %s solicitó notificación por email (pendiente de implementación).',
+            presupuesto.numero
+        )
+
+    obra_url = url_for('obras.detalle', id=obra_creada_id) if obra_creada_id else None
+
+    if wants_json:
+        return jsonify({
+            'status': 'ok',
+            'message': mensaje_exito,
+            'obra_id': obra_creada_id,
+            'obra_url': obra_url,
+            'redirect_url': obra_url,
+            'presupuesto_estado': estado_respuesta,
+            'trigger': trigger_source
+        })
+
+    return redirect(obra_url o
+                    url_for('presupuestos.detalle', id=id))
+
+@presupuestos_bp.route('/<int:id>/perder', methods=['POST'])
+@login_required
+def marcar_presupuesto_perdido(id: int):
+    """Marca un presupuesto como perdido y registra el motivo."""
+
+    if not current_user.puede_acceder_modulo('presupuestos') o
+       current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado != 'borrador':
+        return jsonify({'error': 'Solo los presupuestos en borrador pueden marcarse como perdidos.'}), 400
+
+    data = request.get_json(silent=True) or request.form
+    motivo_principal = _clean_text(data.get('motivo')) if data else None
+    detalle = _clean_text(data.get('detalle')) if data else None
+
+    if not motivo_principal and not detalle:
+        return jsonify({'error': 'Indica al menos un motivo para registrar el cambio.'}), 400
+
+    if motivo_principal and detalle:
+        motivo = f"{motivo_principal} - {detalle}"
+    else:
+        motivo = motivo_principal or detalle
+
+    presupuesto.estado = 'perdido'
+    presupuesto.perdido_motivo = motivo
+    presupuesto.perdido_fecha = dt.datetime.utcnow()
+    presupuesto.confirmado_como_obra = False
+
+    try:
+        db.session.commit()
+        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
+        current_app.logger.info(
+            'Presupuesto %s marcado como perdido por %s',
+            presupuesto.numero,
+            actor
+        )
+        return jsonify({'mensaje': 'Presupuesto archivado como perdido.'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error marcando presupuesto %s como perdido', id)
+        return jsonify({'error': 'No se pudo actualizar el presupuesto.'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/restaurar', methods=['POST'])
+@login_required
+def restaurar_presupuesto(id: int):
+    """Restaura un presupuesto perdido a estado borrador."""
+
+    if not current_user.puede_acceder_modulo('presupuestos') o
+       current_user.rol not in ['administrador', 'tecnico']:
+        return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado != 'perdido':
+        return jsonify({'error': 'Solo los presupuestos perdidos pueden restaurarse.'}), 400
+
+    presupuesto.estado = 'borrador'
+    presupuesto.perdido_fecha = None
+    presupuesto.perdido_motivo = None
+
+    try:
+        db.session.commit()
+        actor = getattr(current_user, 'email', None) o
+                str(getattr(current_user, 'id', 'desconocido'))
+        current_app.logger.info(
+            'Presupuesto %s restaurado a borrador por %s',
+            presupuesto.numero,
+            actor
+        )
+        return jsonify({'mensaje': 'Presupuesto restaurado a borrador.'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error restaurando presupuesto %s', id)
+        return jsonify({'error': 'No se pudo restaurar el presupuesto.'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_presupuesto(id: int):
+    """Realiza un soft-delete del presupuesto seleccionado."""
+
+    if not current_user.puede_acceder_modulo('presupuestos') or
+       current_user.rol != 'administrador':
+        return jsonify({'error': 'Solo los administradores pueden eliminar presupuestos.'}), 403
+
+    presupuesto = Presupuesto.query.filter(
+        Presupuesto.id == id,
+        Presupuesto.organizacion_id == current_user.organizacion_id,
+        Presupuesto.deleted_at.is_(None)
+    ).first_or_404()
+
+    if presupuesto.estado not in ['borrador', 'perdido']:
+        return jsonify({'error': 'Solo los presupuestos en borrador o perdidos pueden eliminarse.'}), 400
+
+    presupuesto.estado = 'eliminado'
+    presupuesto.deleted_at = dt.datetime.utcnow()
+
+    try:
+        db.session.commit()
+        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
+        current_app.logger.info(
+            'Presupuesto %s eliminado por %s',
+            presupuesto.numero,
+            actor
+        )
+        return jsonify({'mensaje': 'Presupuesto eliminado correctamente.'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error eliminando presupuesto %s', id)
+        return jsonify({'error': 'No se pudo eliminar el presupuesto.'}), 500
 
 
 @presupuestos_bp.route("/guardar", methods=["POST"])
@@ -1124,7 +2386,7 @@ def guardar_presupuesto():
         return jsonify({'error': 'Sin permisos'}), 403
     
     data = request.form or request.json
-    
+
     obra_id = data.get("obra_id")  # id si seleccionó obra existente
     crear_nueva = data.get("crear_nueva_obra") == "1"
     
@@ -1151,7 +2413,7 @@ def guardar_presupuesto():
             obra_id = obra.id
         else:
             obra = Obra.query.get(obra_id) if obra_id else None
-        
+
         # Generar número de presupuesto único
         ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
         if ultimo_numero and ultimo_numero.startswith('PRES-'):
@@ -1161,7 +2423,7 @@ def guardar_presupuesto():
                 siguiente_num = 1
         else:
             siguiente_num = 1
-        
+
         # Asegurar que el número sea único
         while True:
             numero = f"PRES-{siguiente_num:04d}"
@@ -1169,37 +2431,39 @@ def guardar_presupuesto():
             if not existe:
                 break
             siguiente_num += 1
-        
+
+        iva_valor = _to_decimal(data.get("iva_porcentaje") or '21')
+        try:
+            iva_valor = iva_valor.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        except InvalidOperation:
+            iva_valor = Decimal('21.00')
+
         # Crear presupuesto asociado
         p = Presupuesto(
             obra_id = obra_id,
             numero = numero,
             organizacion_id = current_user.organizacion_id,
             observaciones = data.get("observaciones"),
-            iva_porcentaje = 21.0,
+            iva_porcentaje = iva_valor,
             estado = 'borrador'
         )
-        
+
         # Agregar campos adicionales si están disponibles
-        if data.get("superficie"):
-            try:
-                superficie_float = float(data.get("superficie"))
-                p.observaciones = f"{p.observaciones or ''} | Superficie: {superficie_float} m²"
-            except ValueError:
-                pass
-        
+        superficie_val = data.get("superficie")
+        superficie_decimal = _to_decimal(superficie_val) if superficie_val else None
+        if superficie_decimal is not None and superficie_decimal != DECIMAL_ZERO:
+            p.observaciones = f"{p.observaciones or ''} | Superficie: {superficie_decimal} m²"
+
         if data.get("tipo_construccion"):
             p.observaciones = f"{p.observaciones or ''} | Tipo: {data.get('tipo_construccion')}"
-        
+
         if data.get("calculo_json"):
             p.datos_proyecto = data.get("calculo_json")
-        
+
         if data.get("total_estimado"):
-            try:
-                p.total_con_iva = float(data.get("total_estimado"))
-            except ValueError:
-                pass
-        
+            total_estimado = _quantize_currency(_to_decimal(data.get("total_estimado")))
+            p.total_con_iva = total_estimado
+
         db.session.add(p)
         db.session.commit()
         
@@ -1208,3 +2472,4 @@ def guardar_presupuesto():
     except Exception as e:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(e)}), 500
+

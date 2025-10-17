@@ -1,0 +1,2 @@
+==> Running safety check
+[missing] safety no está instalado en el entorno

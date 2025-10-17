@@ -1,218 +1,282 @@
 {% extends "base.html" %}
 
-{% block title %}Certificaciones - {{ obra.nombre }} - OBYRA IA{% endblock %}
+{% block title %}Certificaciones · {{ obra.nombre }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <!-- Header -->
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h2><i class="fas fa-certificate me-2"></i>Certificaciones de Avance</h2>
-                    <p class="text-muted mb-0">{{ obra.nombre }} - {{ obra.cliente }}</p>
+<div class="container-fluid mt-4" x-data>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-4 gap-3">
+        <div>
+            <h2 class="h3 mb-1"><i class="fas fa-certificate me-2"></i>Certificaciones de obra</h2>
+            <p class="text-muted mb-0">{{ obra.nombre }} · {{ obra.cliente }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver a la obra
+            </a>
+            {% if puede_aprobar %}
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalConfirmarCertificacion"
+                    data-porcentaje="{{ porcentajes[2] }}" data-tipo="sugerido" data-label="Certificación manual"
+                    data-moneda="{{ contexto.currency }}">
+                <i class="fas fa-plus me-1"></i>Nueva certificación
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">Certificado</p>
+                    <h4 class="mb-0">{{ resumen['certificado_ars']|moneda }}</h4>
+                    {% if resumen['certificado_usd'] %}
+                    <small class="text-muted">USD {{ resumen['certificado_usd']|float|round(2) }}</small>
+                    {% endif %}
                 </div>
-                <div>
-                    <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left me-1"></i>Volver a la Obra
-                    </a>
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal">
-                        <i class="fas fa-plus me-1"></i>Nueva Certificación
-                    </button>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">Pagado</p>
+                    <h4 class="mb-0">{{ resumen['pagado_ars']|moneda }}</h4>
+                    {% if resumen['pagado_usd'] %}
+                    <small class="text-muted">USD {{ resumen['pagado_usd']|float|round(2) }}</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">En borrador</p>
+                    <h4 class="mb-0">{{ resumen['borrador_ars']|moneda }}</h4>
+                    <small class="text-muted">{{ porcentajes[1] }}% pendiente</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">Contexto monetario</p>
+                    <h6 class="mb-0">Moneda base: {{ contexto.currency }}</h6>
+                    {% if contexto.tasa_usd %}
+                    <small class="text-muted d-block">TC Banco Nación: {{ contexto.tasa_usd }}</small>
+                    {% endif %}
+                    {% if contexto.indice_cac %}
+                    <small class="text-muted">Índice CAC: {{ contexto.indice_cac }}</small>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Resumen de progreso -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="text-primary">{{ obra.progreso }}%</h3>
-                    <p class="text-muted mb-0">Progreso Total</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="text-success">{{ certificaciones|selectattr('activa')|list|length }}</h3>
-                    <p class="text-muted mb-0">Certificaciones Activas</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="text-info">{{ obra.costo_real|moneda }}</h3>
-                    <p class="text-muted mb-0">Costo Certificado</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="{% if obra.porcentaje_presupuesto_ejecutado > 100 %}text-danger{% elif obra.porcentaje_presupuesto_ejecutado > 80 %}text-warning{% else %}text-success{% endif %}">
-                        {{ "%.1f"|format(obra.porcentaje_presupuesto_ejecutado) }}%
-                    </h3>
-                    <p class="text-muted mb-0">Presupuesto Ejecutado</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Historial de certificaciones -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Historial de Certificaciones</h5>
-                </div>
-                <div class="card-body">
-                    {% if certificaciones %}
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Porcentaje</th>
-                                    <th>Costo Certificado</th>
-                                    <th>Usuario</th>
-                                    <th>Notas</th>
-                                    <th>Estado</th>
-                                    {% if current_user.rol == 'administrador' %}
-                                    <th>Acciones</th>
+
+    <ul class="nav nav-tabs" id="certTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-pendientes" data-bs-toggle="tab" data-bs-target="#pane-pendientes" type="button" role="tab">A certificar</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-certificadas" data-bs-toggle="tab" data-bs-target="#pane-certificadas" type="button" role="tab">Certificadas</button>
+        </li>
+    </ul>
+    <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="certTabsContent">
+        <div class="tab-pane fade show active" id="pane-pendientes" role="tabpanel" aria-labelledby="tab-pendientes">
+            <div class="p-3">
+                {% if pendientes %}
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Tipo</th>
+                                <th scope="col">Período</th>
+                                <th scope="col">% Avance</th>
+                                <th scope="col">Monto (ARS)</th>
+                                <th scope="col">Monto (USD)</th>
+                                {% if puede_aprobar %}<th scope="col" class="text-end">Acciones</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in pendientes %}
+                            <tr class="{% if item.tipo == 'sugerido' %}table-primary-subtle{% endif %}">
+                                <td>
+                                    {% if item.tipo == 'sugerido' %}
+                                    <span class="badge bg-info text-dark">Sugerido</span>
+                                    <div class="text-muted small">Avance reportado en tareas</div>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Borrador</span>
                                     {% endif %}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for cert in certificaciones %}
-                                <tr class="{% if not cert.activa %}table-secondary text-muted{% endif %}">
-                                    <td>
-                                        <strong>{{ cert.fecha|fecha }}</strong>
-                                        <br>
-                                        <small class="text-muted">{{ cert.fecha_creacion.strftime('%H:%M') }}</small>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-primary fs-6">{{ cert.porcentaje_avance }}%</span>
-                                    </td>
-                                    <td>
-                                        {% if cert.costo_certificado > 0 %}
-                                        <span class="text-success fw-bold">{{ cert.costo_certificado|moneda }}</span>
-                                        {% else %}
-                                        <span class="text-muted">Sin costo</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            {% if cert.usuario.profile_picture %}
-                                            <img src="{{ cert.usuario.profile_picture }}" alt="Avatar" class="rounded-circle me-2" width="32" height="32">
-                                            {% else %}
-                                            <div class="bg-primary rounded-circle me-2 d-flex align-items-center justify-content-center text-white" style="width: 32px; height: 32px; font-size: 14px;">
-                                                {{ cert.usuario.nombre[0] }}{{ cert.usuario.apellido[0] if cert.usuario.apellido else '' }}
-                                            </div>
-                                            {% endif %}
-                                            <div>
-                                                <div class="fw-bold">{{ cert.usuario.nombre_completo }}</div>
-                                                <small class="text-muted">{{ cert.usuario.rol.title() }}</small>
-                                            </div>
+                                </td>
+                                <td>
+                                    {% if item.periodo %}
+                                        <div>
+                                            {% if item.periodo[0] %}{{ item.periodo[0].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
+                                            →
+                                            {% if item.periodo[1] %}{{ item.periodo[1].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
                                         </div>
-                                    </td>
-                                    <td>
-                                        {% if cert.notas %}
-                                        <span class="text-truncate" style="max-width: 200px;" title="{{ cert.notas }}">
-                                            {{ cert.notas[:50] }}{% if cert.notas|length > 50 %}...{% endif %}
-                                        </span>
-                                        {% else %}
-                                        <span class="text-muted">Sin notas</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if cert.activa %}
-                                        <span class="badge bg-success">Activa</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Desactivada</span>
-                                        {% endif %}
-                                    </td>
-                                    {% if current_user.rol == 'administrador' %}
-                                    <td>
-                                        {% if cert.activa %}
-                                        <button class="btn btn-sm btn-outline-danger" 
-                                                onclick="desactivarCertificacion({{ cert.id }}, '{{ cert.porcentaje_avance }}%')">
-                                            <i class="fas fa-ban me-1"></i>Desactivar
-                                        </button>
-                                        {% endif %}
-                                    </td>
+                                    {% else %}
+                                        <span class="text-muted">Sin período</span>
                                     {% endif %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="text-center py-5">
-                        <i class="fas fa-certificate fa-3x text-muted mb-3"></i>
-                        <h5 class="text-muted">No hay certificaciones registradas</h5>
-                        <p class="text-muted">Las certificaciones de avance aparecerán aquí una vez que se registren.</p>
-                        {% if current_user.rol in ['administrador', 'tecnico'] %}
-                        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal">
-                            <i class="fas fa-plus me-1"></i>Registrar Primera Certificación
-                        </button>
-                        {% endif %}
-                    </div>
-                    {% endif %}
+                                </td>
+                                <td><strong>{{ item.porcentaje }}%</strong></td>
+                                <td>{{ item.monto_ars|moneda }}</td>
+                                <td>
+                                    {% if item.monto_usd %}
+                                        USD {{ item.monto_usd|float|round(2) }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                {% if puede_aprobar %}
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-primary"
+                                            data-bs-toggle="modal" data-bs-target="#modalConfirmarCertificacion"
+                                            data-porcentaje="{{ item.porcentaje }}"
+                                            data-certificacion-id="{{ item.id or '' }}"
+                                            data-tipo="{{ item.tipo }}"
+                                            data-monto-ars="{{ item.monto_ars }}"
+                                            data-monto-usd="{{ item.monto_usd }}"
+                                            data-moneda="{{ contexto.currency }}">
+                                        <i class="fas fa-check me-1"></i>Certificar
+                                    </button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-layer-group fa-2x text-muted mb-2"></i>
+                    <p class="mb-0 text-muted">No hay certificaciones pendientes. El siguiente avance sugerido se calculará automáticamente cuando las tareas reporten progreso.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="tab-pane fade" id="pane-certificadas" role="tabpanel" aria-labelledby="tab-certificadas">
+            <div class="p-3">
+                {% if certificaciones_aprobadas %}
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Período</th>
+                                <th scope="col">% Avance</th>
+                                <th scope="col">Certificado (ARS)</th>
+                                <th scope="col">Certificado (USD)</th>
+                                <th scope="col">Pagado</th>
+                                <th scope="col">Saldo</th>
+                                <th scope="col">Estado</th>
+                                {% if puede_aprobar %}<th scope="col" class="text-end">Acciones</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in certificaciones_aprobadas %}
+                            <tr>
+                                <td>
+                                    {% if row.periodo %}
+                                        <div>
+                                            {% if row.periodo[0] %}{{ row.periodo[0].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
+                                            →
+                                            {% if row.periodo[1] %}{{ row.periodo[1].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">Sin período</span>
+                                    {% endif %}
+                                    <div class="text-muted small">{{ row.aprobada_en|fecha }}</div>
+                                </td>
+                                <td><strong>{{ row.porcentaje }}%</strong></td>
+                                <td>{{ row.monto_ars|moneda }}</td>
+                                <td>
+                                    {% if row.monto_usd %}
+                                        USD {{ row.monto_usd|float|round(2) }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div>{{ row.pagado_ars|moneda }}</div>
+                                    {% if row.pagado_usd %}<small class="text-muted">USD {{ row.pagado_usd|float|round(2) }}</small>{% endif %}
+                                </td>
+                                <td>{{ row.saldo_ars|moneda }}</td>
+                                <td>
+                                    <span class="badge bg-success">{{ row.estado|capitalize }}</span>
+                                </td>
+                                {% if puede_aprobar %}
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            data-bs-toggle="modal" data-bs-target="#modalRegistrarPago"
+                                            data-certificacion-id="{{ row.id }}"
+                                            data-saldo="{{ row.saldo_ars }}">
+                                        <i class="fas fa-coins me-1"></i>Registrar pago
+                                    </button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-file-invoice-dollar fa-2x text-muted mb-2"></i>
+                    <p class="mb-0 text-muted">Aún no se registraron certificaciones aprobadas.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal para Certificar Avance -->
-<div class="modal fade" id="certificarAvanceModal" tabindex="-1" aria-labelledby="certificarAvanceModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+{% if puede_aprobar %}
+<!-- Modal crear/confirmar certificación -->
+<div class="modal fade" id="modalConfirmarCertificacion" tabindex="-1" aria-labelledby="modalConfirmarCertificacionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="certificarAvanceModalLabel">
-                    <i class="fas fa-certificate me-2"></i>Nueva Certificación de Avance
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="{{ url_for('obras.certificar_avance', id=obra.id) }}" method="POST">
+            <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalConfirmarCertificacionLabel"><i class="fas fa-check-circle me-2"></i>Confirmar certificación</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
                 <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Progreso actual:</strong> {{ obra.progreso }}%<br>
-                        <strong>Presupuesto disponible:</strong> {{ obra.presupuesto_total|moneda }}<br>
-                        <strong>Costo actual:</strong> {{ obra.costo_real|moneda }}
+                    <div class="alert alert-info small" id="certResumenContexto">
+                        <div><strong>Moneda base:</strong> {{ contexto.currency }}</div>
+                        {% if contexto.tasa_usd %}<div><strong>Tipo de cambio:</strong> {{ contexto.tasa_usd }}</div>{% endif %}
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="porcentaje_avance" class="form-label">Porcentaje de Avance *</label>
-                        <input type="number" class="form-control" id="porcentaje_avance" name="porcentaje_avance" 
-                               min="0" max="100" step="0.1" required>
-                        <div class="form-text">Porcentaje de avance certificado para esta obra</div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Porcentaje a certificar</label>
+                            <input type="number" class="form-control" name="porcentaje" id="inputPorcentaje" min="0" max="100" step="0.1" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Monto estimado (ARS)</label>
+                            <input type="text" class="form-control" id="inputMontoArs" readonly>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Monto estimado (USD)</label>
+                            <input type="text" class="form-control" id="inputMontoUsd" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Periodo desde</label>
+                            <input type="date" class="form-control" name="periodo_desde">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Periodo hasta</label>
+                            <input type="date" class="form-control" name="periodo_hasta">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Notas</label>
+                            <textarea class="form-control" name="notas" rows="3" placeholder="Detalle adicional, cuadrillas, etc."></textarea>
+                        </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="costo_certificado" class="form-label">Costo Certificado (USD)</label>
-                        <input type="number" class="form-control" id="costo_certificado" name="costo_certificado" 
-                               min="0" step="0.01" placeholder="0.00">
-                        <div class="form-text">Costo asociado a este avance (opcional)</div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="notas" class="form-label">Notas</label>
-                        <textarea class="form-control" id="notas" name="notas" rows="3" 
-                                  placeholder="Descripción del avance, observaciones, etc."></textarea>
-                    </div>
+                    <input type="hidden" name="aprobar" value="true">
+                    <input type="hidden" name="certificacion_id" id="inputCertificacionId">
+                    <input type="hidden" name="fuente" value="tareas">
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-certificate me-1"></i>Certificar Avance
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Confirmar
                     </button>
                 </div>
             </form>
@@ -220,42 +284,91 @@
     </div>
 </div>
 
+<!-- Modal registrar pago -->
+<div class="modal fade" id="modalRegistrarPago" tabindex="-1" aria-labelledby="modalRegistrarPagoLabel" aria-hidden="true" data-action-template="{{ url_for('obras.registrar_pago_certificacion', cert_id=0) }}">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalRegistrarPagoLabel"><i class="fas fa-coins me-2"></i>Registrar pago</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Monto</label>
+                        <input type="number" class="form-control" name="monto" step="0.01" min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Moneda</label>
+                        <select class="form-select" name="moneda">
+                            <option value="ARS" selected>ARS</option>
+                            <option value="USD">USD</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Método de pago</label>
+                        <select class="form-select" name="metodo" required>
+                            <option value="transferencia">Transferencia</option>
+                            <option value="efectivo">Efectivo</option>
+                            <option value="mep">MEP</option>
+                            <option value="cheque">Cheque</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de cambio (si USD)</label>
+                        <input type="number" class="form-control" step="0.0001" name="tc_usd">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fecha de pago</label>
+                        <input type="date" class="form-control" name="fecha_pago">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas</label>
+                        <textarea class="form-control" name="notas" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Registrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
 <script>
-function desactivarCertificacion(certId, porcentaje) {
-    if (confirm(`¿Desactivar la certificación de ${porcentaje}? Esta acción restará el costo certificado del total.`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `/obras/certificacion/${certId}/desactivar`;
-        document.body.appendChild(form);
-        form.submit();
-    }
-}
+(function () {
+    const confirmModal = document.getElementById('modalConfirmarCertificacion');
+    if (confirmModal) {
+        confirmModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const porcentaje = button?.dataset.porcentaje || '';
+            const montoArs = button?.dataset.montoArs || '';
+            const montoUsd = button?.dataset.montoUsd || '';
+            const certId = button?.dataset.certificacionId || '';
 
-// Validación del modal de certificación
-document.addEventListener('DOMContentLoaded', function() {
-    const certificarForm = document.querySelector('#certificarAvanceModal form');
-    if (certificarForm) {
-        certificarForm.addEventListener('submit', function(e) {
-            const porcentaje = parseFloat(document.getElementById('porcentaje_avance').value);
-            const progresoActual = {{ obra.progreso }};
-            
-            if (porcentaje <= 0) {
-                e.preventDefault();
-                alert('El porcentaje debe ser mayor a 0');
-                return;
-            }
-            
-            if (porcentaje + progresoActual > 100) {
-                if (!confirm(`El total sería ${porcentaje + progresoActual}%, excediendo el 100%. ¿Continuar?`)) {
-                    e.preventDefault();
-                    return;
-                }
+            confirmModal.querySelector('#inputPorcentaje').value = porcentaje;
+            confirmModal.querySelector('#inputMontoArs').value = montoArs ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(montoArs) : '';
+            confirmModal.querySelector('#inputMontoUsd').value = montoUsd ? 'USD ' + parseFloat(montoUsd).toFixed(2) : '';
+            confirmModal.querySelector('#inputCertificacionId').value = certId;
+        });
+    }
+
+    const pagoModal = document.getElementById('modalRegistrarPago');
+    if (pagoModal) {
+        const actionTemplate = pagoModal.dataset.actionTemplate;
+        pagoModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const certId = button?.dataset.certificacionId;
+            const form = pagoModal.querySelector('form');
+            if (certId && actionTemplate) {
+                form.action = actionTemplate.replace('0', certId);
             }
         });
     }
-});
+})();
 </script>
 {% endblock %}

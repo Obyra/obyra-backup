@@ -1,7 +1,11 @@
-from datetime import datetime, date
+﻿from datetime import datetime, date, timedelta
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from flask import session
 from flask_login import UserMixin
 from extensions import db
-from sqlalchemy import func
+from sqlalchemy import func, inspect
+from sqlalchemy.orm import backref
+from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import json
 import os
@@ -9,7 +13,7 @@ import os
 
 class Organizacion(db.Model):
     __tablename__ = 'organizaciones'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(200), nullable=False)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
@@ -17,7 +21,26 @@ class Organizacion(db.Model):
     activa = db.Column(db.Boolean, default=True)
     
     # Relaciones
-    usuarios = db.relationship('Usuario', back_populates='organizacion', lazy='dynamic')
+    usuarios = db.relationship(
+        'Usuario',
+        back_populates='organizacion',
+        foreign_keys='Usuario.organizacion_id',
+        primaryjoin='Organizacion.id == Usuario.organizacion_id',
+        lazy='dynamic'
+    )
+    usuarios_primarios = db.relationship(
+        'Usuario',
+        back_populates='primary_organizacion',
+        foreign_keys='Usuario.primary_org_id',
+        primaryjoin='Organizacion.id == Usuario.primary_org_id',
+        lazy='dynamic'
+    )
+    memberships = db.relationship(
+        'OrgMembership',
+        back_populates='organizacion',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
     obras = db.relationship('Obra', back_populates='organizacion', lazy='dynamic')
     inventario = db.relationship('ItemInventario', back_populates='organizacion', lazy='dynamic')
     presupuestos = db.relationship('Presupuesto', lazy='dynamic')
@@ -26,7 +49,7 @@ class Organizacion(db.Model):
         return f'<Organizacion {self.nombre}>'
     
     def regenerar_token(self):
-        """Regenerar token de invitación"""
+        """Regenerar token de invitaciÃ³n"""
         self.token_invitacion = str(uuid.uuid4())
         db.session.commit()
     
@@ -46,14 +69,14 @@ class Organizacion(db.Model):
 
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuarios'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     apellido = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
-    rol = db.Column(db.String(50), nullable=False, default='ayudante')  # Expandido para roles específicos de construcción
+    rol = db.Column(db.String(50), nullable=False, default='ayudante')  # Expandido para roles especÃ­ficos de construcciÃ³n
     role = db.Column(db.String(20), nullable=False, default='operario')  # Nuevo sistema de roles: admin, pm, operario
     puede_pausar_obras = db.Column(db.Boolean, default=False)  # Permiso especial para pausar obras
     activo = db.Column(db.Boolean, default=True)
@@ -63,19 +86,174 @@ class Usuario(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    primary_org_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=True)
     plan_activo = db.Column(db.String(50), default='prueba')  # prueba, standard, premium
-    fecha_expiracion_plan = db.Column(db.DateTime)  # Para controlar la expiración del plan
+    fecha_expiracion_plan = db.Column(db.DateTime)  # Para controlar la expiraciÃ³n del plan
     
     # Relaciones
-    organizacion = db.relationship('Organizacion', back_populates='usuarios')
+    organizacion = db.relationship(
+        'Organizacion',
+        back_populates='usuarios',
+        foreign_keys=[organizacion_id]
+    )
+    primary_organizacion = db.relationship(
+        'Organizacion',
+        foreign_keys=[primary_org_id],
+        back_populates='usuarios_primarios',
+        lazy='joined'
+    )
+    memberships = db.relationship(
+        'OrgMembership',
+        foreign_keys='OrgMembership.user_id',
+        back_populates='usuario',
+        cascade='all, delete-orphan'
+    )
+    perfil = db.relationship(
+        'PerfilUsuario',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+    onboarding_status = db.relationship(
+        'OnboardingStatus',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+    billing_profile = db.relationship(
+        'BillingProfile',
+        back_populates='usuario',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
     obras_asignadas = db.relationship('AsignacionObra', back_populates='usuario', lazy='dynamic')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='usuario', lazy='dynamic')
-    
+
     def __repr__(self):
         return f'<Usuario {self.nombre} {self.apellido}>'
+
+    def active_memberships(self):
+        """Devuelve las membresÃ­as activas no archivadas del usuario."""
+        return [
+            membership
+            for membership in self.memberships
+            if not membership.archived and membership.status == 'active'
+        ]
+
+    def membership_for_org(self, org_id: int):
+        for membership in self.memberships:
+            if membership.org_id == org_id and not membership.archived:
+                return membership
+        return None
+
+    def tiene_rol(self, rol: str) -> bool:
+        """Determina si el usuario tiene el rol solicitado en la organizaciÃ³n activa."""
+        if not rol:
+            return False
+
+        objetivo = rol.strip().lower()
+        org_id = session.get('current_org_id')
+        membership = None
+
+        if org_id:
+            # Preferir membresÃ­a ya cargada en la sesiÃ³n para evitar consultas extras
+            for candidate in self.memberships:
+                if candidate.org_id == org_id and not candidate.archived:
+                    membership = candidate
+                    break
+
+            if membership is None:
+                membership = (
+                    OrgMembership.query
+                    .filter(
+                        OrgMembership.org_id == org_id,
+                        OrgMembership.user_id == self.id,
+                        db.or_(
+                            OrgMembership.archived.is_(False),
+                            OrgMembership.archived.is_(None),
+                        ),
+                    )
+                    .first()
+                )
+
+            if membership:
+                return membership.status == 'active' and (membership.role or '').lower() == objetivo
+
+        # Compatibilidad hacia atrÃ¡s: usar el rol global almacenado en el usuario
+        role_global = (getattr(self, 'role', None) or '').lower()
+        if role_global:
+            return role_global == objetivo
+
+        rol_legacy = (getattr(self, 'rol', None) or '').lower()
+        if rol_legacy in {'administrador', 'admin'} and objetivo == 'admin':
+            return True
+
+        return False
+
+    def ensure_membership(self, org_id: int, *, role: str | None = None, status: str = 'active'):
+        existing = self.membership_for_org(org_id)
+        if existing:
+            return existing
+
+        resolved_role = role or (self.role if getattr(self, 'role', None) else 'operario')
+        normalized_role = 'admin' if resolved_role in ('administrador', 'admin', 'administrador_general') else 'operario'
+
+        membership = OrgMembership(
+            org_id=org_id,
+            usuario=self,
+            role=normalized_role,
+            status=status,
+        )
+        db.session.add(membership)
+
+        if not self.primary_org_id:
+            self.primary_org_id = org_id
+        if not self.organizacion_id:
+            self.organizacion_id = org_id
+        return membership
+
+    def get_current_org_id(self):
+        """Obtiene la organizaciÃ³n actual desde la sesiÃ³n, falling back a la primaria."""
+        try:
+            from flask import session, g
+        except RuntimeError:  # pragma: no cover - fuera de contexto de aplicaciÃ³n
+            session = {}
+            g = type('obj', (), {})()
+
+        current_membership = getattr(g, 'current_membership', None)
+        if current_membership and not current_membership.archived:
+            return current_membership.org_id
+
+        org_id = session.get('current_org_id')
+        if org_id:
+            return org_id
+
+        if self.organizacion_id:
+            return self.organizacion_id
+
+        active = self.active_memberships()
+        if active:
+            return active[0].org_id
+
+        return None
+
+    # -----------------------------------------------------
+    # GestiÃ³n de contraseÃ±as
+    # -----------------------------------------------------
+    def set_password(self, password: str) -> None:
+        """Genera y almacena el hash seguro de la contraseÃ±a suministrada."""
+        if not password:
+            raise ValueError('La contraseÃ±a no puede estar vacÃ­a.')
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        """Compara una contraseÃ±a en texto plano con el hash almacenado."""
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
     
     def esta_en_periodo_prueba(self):
-        """Verifica si el usuario aún está en periodo de prueba"""
+        """Verifica si el usuario aÃºn estÃ¡ en periodo de prueba"""
         if self.plan_activo != 'prueba':
             return False
         
@@ -87,7 +265,7 @@ class Usuario(UserMixin, db.Model):
         return datetime.utcnow() <= fecha_limite
     
     def dias_restantes_prueba(self):
-        """Calcula los días restantes del periodo de prueba"""
+        """Calcula los dÃ­as restantes del periodo de prueba"""
         if self.plan_activo != 'prueba' or not self.fecha_creacion:
             return 0
         
@@ -101,8 +279,8 @@ class Usuario(UserMixin, db.Model):
         return f"{self.nombre} {self.apellido}"
     
     def puede_acceder_modulo(self, modulo):
-        """Verifica si el usuario puede acceder a un módulo usando RBAC"""
-        # Primero verificar si hay override específico de usuario
+        """Verifica si el usuario puede acceder a un mÃ³dulo usando RBAC"""
+        # Primero verificar si hay override especÃ­fico de usuario
         user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
         if user_override:
             return user_override.can_view
@@ -112,7 +290,7 @@ class Usuario(UserMixin, db.Model):
         if role_perm:
             return role_perm.can_view
         
-        # Fallback al sistema antiguo si no hay configuración RBAC
+        # Fallback al sistema antiguo si no hay configuraciÃ³n RBAC
         roles_direccion = [
             'director_general', 'director_operaciones', 'director_proyectos', 
             'jefe_obra', 'jefe_produccion', 'coordinador_proyectos'
@@ -162,51 +340,200 @@ class Usuario(UserMixin, db.Model):
             'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'operario': ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
         })
-        
+
         return modulo in permisos.get(self.rol, [])
-    
+
     def puede_editar_modulo(self, modulo):
-        """Verifica si el usuario puede editar en un módulo usando RBAC"""
-        # Primero verificar si hay override específico de usuario
+        """Verifica si el usuario puede editar en un mÃ³dulo usando RBAC"""
+        # Primero verificar si hay override especÃ­fico de usuario
         user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
         if user_override:
             return user_override.can_edit
-        
+
         # Si no hay override, usar permisos del rol
         role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
         if role_perm:
             return role_perm.can_edit
-        
-        # Fallback: admins y tecnicos pueden editar la mayoría
+
+        # Fallback: admins y tecnicos pueden editar la mayorÃ­a
         if self.rol in ['administrador', 'tecnico', 'jefe_obra']:
             return True
-        
+
         return False
-    
+
     def es_admin_completo(self):
         """Verifica si el usuario es administrador con acceso completo sin restricciones de plan"""
         emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
         return self.email in emails_admin_completo
-    
+
     def es_admin(self):
-        """Verifica si el usuario es administrador (rol administrador o admin completo)"""
-        return self.rol == 'administrador' or self.es_admin_completo()
-    
+        """Compatibilidad para plantillas antiguas que consultan current_user.es_admin()."""
+        try:
+            if self.tiene_rol('admin'):
+                return True
+        except Exception:
+            # En caso de que la sesiÃ³n aÃºn no estÃ© inicializada seguimos con los fallbacks legacy
+            pass
+
+        role_global = (getattr(self, 'role', None) or '').lower()
+        if role_global in {'admin', 'administrador', 'administrador_general'}:
+            return True
+
+        rol_legacy = (getattr(self, 'rol', None) or '').lower()
+        if rol_legacy in {'admin', 'administrador', 'administrador_general'}:
+            return True
+
+        return self.es_admin_completo()
+
     def tiene_acceso_sin_restricciones(self):
         """Verifica si el usuario tiene acceso completo al sistema"""
         # Administradores especiales tienen acceso completo
         if self.es_admin_completo():
             return True
-        
-        # Usuarios con planes activos (standard/premium) también tienen acceso
+
+        # Usuarios con planes activos (standard/premium) tambiÃ©n tienen acceso
         if self.plan_activo in ['standard', 'premium']:
             return True
-            
-        # Usuarios en periodo de prueba válido
+
+        # Usuarios en periodo de prueba vÃ¡lido
         if self.plan_activo == 'prueba' and self.esta_en_periodo_prueba():
             return True
-            
+
         return False
+
+    def ensure_onboarding_status(self):
+        """Garantiza que exista un registro de onboarding para el usuario."""
+        status = self.onboarding_status
+        if not status:
+            status = OnboardingStatus(usuario=self)
+            db.session.add(status)
+            db.session.flush()
+        return status
+
+    def ensure_billing_profile(self):
+        """Garantiza que exista un perfil de facturaciÃ³n asociado al usuario."""
+        profile = self.billing_profile
+        if not profile:
+            profile = BillingProfile(usuario=self)
+            db.session.add(profile)
+            db.session.flush()
+        return profile
+
+
+class OrgMembership(db.Model):
+    __tablename__ = 'org_memberships'
+
+    id = db.Column(db.Integer, primary_key=True)
+    org_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='operario')
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    archived = db.Column(db.Boolean, nullable=False, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    invited_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    invited_at = db.Column(db.DateTime, server_default=func.now())
+    accepted_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('org_id', 'user_id', name='uq_membership_org_user'),
+        db.Index('ix_membership_user', 'user_id'),
+        db.Index('ix_membership_org', 'org_id'),
+    )
+
+    organizacion = db.relationship(
+        'Organizacion',
+        back_populates='memberships',
+        foreign_keys=[org_id]
+    )
+    usuario = db.relationship(
+        'Usuario',
+        foreign_keys=[user_id],
+        back_populates='memberships'
+    )
+    invitador = db.relationship(
+        'Usuario',
+        foreign_keys=[invited_by],
+        backref=backref('memberships_invitadas', lazy='dynamic'),
+    )
+
+    def marcar_activa(self):
+        self.status = 'active'
+        self.archived = False
+        self.accepted_at = datetime.utcnow()
+
+    def marcar_archivada(self):
+        self.archived = True
+        self.archived_at = datetime.utcnow()
+
+
+class PerfilUsuario(db.Model):
+    __tablename__ = 'perfiles_usuario'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    cuit = db.Column(db.String(20), nullable=False, unique=True)
+    direccion = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='perfil')
+
+    def __repr__(self):
+        return f'<PerfilUsuario usuario_id={self.usuario_id} cuit={self.cuit}>'
+
+
+class OnboardingStatus(db.Model):
+    __tablename__ = 'onboarding_status'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    profile_completed = db.Column(db.Boolean, default=False)
+    billing_completed = db.Column(db.Boolean, default=False)
+    completed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='onboarding_status')
+
+    def mark_profile_completed(self):
+        self.profile_completed = True
+        self._update_completion_timestamp()
+
+    def mark_billing_completed(self):
+        self.billing_completed = True
+        self._update_completion_timestamp()
+
+    def _update_completion_timestamp(self):
+        if self.profile_completed and self.billing_completed:
+            self.completed_at = datetime.utcnow()
+
+
+class BillingProfile(db.Model):
+    __tablename__ = 'billing_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    razon_social = db.Column(db.String(255))
+    tax_id = db.Column(db.String(20))
+    billing_email = db.Column(db.String(120))
+    billing_phone = db.Column(db.String(50))
+    address_line1 = db.Column(db.String(255))
+    address_line2 = db.Column(db.String(255))
+    city = db.Column(db.String(120))
+    province = db.Column(db.String(120))
+    postal_code = db.Column(db.String(20))
+    country = db.Column(db.String(100), default='Argentina')
+    stripe_customer_id = db.Column(db.String(120))
+    mercadopago_customer_id = db.Column(db.String(120))
+    cardholder_name = db.Column(db.String(120))
+    card_last4 = db.Column(db.String(4))
+    card_brand = db.Column(db.String(50))
+    card_exp_month = db.Column(db.String(2))
+    card_exp_year = db.Column(db.String(4))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', back_populates='billing_profile')
 
 
 class Obra(db.Model):
@@ -216,8 +543,14 @@ class Obra(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text)
     direccion = db.Column(db.String(300))
-    latitud = db.Column(db.Numeric(10, 8))  # Para geolocalización en mapa
-    longitud = db.Column(db.Numeric(11, 8))  # Para geolocalización en mapa
+    direccion_normalizada = db.Column(db.String(300))
+    latitud = db.Column(db.Numeric(10, 8))  # Para geolocalizaciÃ³n en mapa
+    longitud = db.Column(db.Numeric(11, 8))  # Para geolocalizaciÃ³n en mapa
+    geocode_place_id = db.Column(db.String(120))
+    geocode_provider = db.Column(db.String(50))
+    geocode_status = db.Column(db.String(20), default='pending')
+    geocode_raw = db.Column(db.Text)
+    geocode_actualizado = db.Column(db.DateTime)
     cliente = db.Column(db.String(200), nullable=False)
     telefono_cliente = db.Column(db.String(20))
     email_cliente = db.Column(db.String(120))
@@ -231,12 +564,12 @@ class Obra(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     
-    # Datos de cliente adicionales (según especificaciones)
+    # Datos de cliente adicionales (segÃºn especificaciones)
     cliente_nombre = db.Column(db.String(120))
     cliente_email = db.Column(db.String(120))
     cliente_telefono = db.Column(db.String(50))
     
-    # Ubicación detallada
+    # UbicaciÃ³n detallada
     ciudad = db.Column(db.String(100))
     provincia = db.Column(db.String(100))
     pais = db.Column(db.String(100))
@@ -253,6 +586,8 @@ class Obra(db.Model):
     presupuestos = db.relationship('Presupuesto', back_populates='obra', lazy='dynamic')
     uso_inventario = db.relationship('UsoInventario', back_populates='obra', lazy='dynamic')
     certificaciones = db.relationship('CertificacionAvance', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
+    work_certifications = db.relationship('WorkCertification', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
+    work_payments = db.relationship('WorkPayment', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     
     def __repr__(self):
         return f'<Obra {self.nombre}>'
@@ -270,7 +605,7 @@ class Obra(db.Model):
         return None
     
     def calcular_progreso_automatico(self):
-        """Calcula el progreso automático basado en etapas, tareas y certificaciones"""
+        """Calcula el progreso automÃ¡tico basado en etapas, tareas y certificaciones"""
         from decimal import Decimal, ROUND_HALF_UP
         
         total_etapas = self.etapas.count()
@@ -363,7 +698,7 @@ class TareaEtapa(db.Model):
     objetivo = db.Column(db.Numeric, nullable=True)  # Physical target (e.g. 500 m2)
     rendimiento = db.Column(db.Numeric(8, 2), nullable=True)  # Optional: quantity per hour (e.g. 20 m2/h)
     
-    # EVM fields (nuevas columnas para planificación y seguimiento)
+    # EVM fields (nuevas columnas para planificaciÃ³n y seguimiento)
     fecha_inicio = db.Column(db.Date)              # Fecha de inicio planificada
     fecha_fin = db.Column(db.Date)                 # Fecha de fin planificada  
     presupuesto_mo = db.Column(db.Numeric)         # Presupuesto de mano de obra para EV/PV
@@ -383,7 +718,7 @@ class TareaEtapa(db.Model):
     
     @property 
     def metrics(self):
-        """Calcula métricas de la tarea"""
+        """Calcula mÃ©tricas de la tarea"""
         return resumen_tarea(self)
     
     @property
@@ -435,7 +770,7 @@ class TareaMiembro(db.Model):
     usuario = db.relationship('Usuario')
     
     # Constraint de unicidad
-    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='unique_tarea_user'),)
+    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='uq_tarea_miembros_tarea_user'),)
     
     def __repr__(self):
         return f'<TareaMiembro tarea_id={self.tarea_id} user_id={self.user_id}>'
@@ -460,7 +795,7 @@ class TareaAvance(db.Model):
     unidad_ingresada = db.Column(db.String(10), nullable=True)  # Original unit entered
     horas_trabajadas = db.Column(db.Numeric(8, 2), nullable=True)  # Hours worked on this progress
 
-    # Campos de aprobación 
+    # Campos de aprobaciÃ³n 
     status = db.Column(db.String(12), default="pendiente")  # pendiente/aprobado/rechazado
     confirmed_by = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
     confirmed_at = db.Column(db.DateTime)
@@ -480,7 +815,7 @@ class TareaAvance(db.Model):
 class TareaAvanceFoto(db.Model):
     """Fotos de evidencia de avances de tareas"""
     __tablename__ = "tarea_avance_fotos"
-    
+
     id = db.Column(db.Integer, primary_key=True)
     avance_id = db.Column(db.Integer, db.ForeignKey("tarea_avances.id", ondelete='CASCADE'), nullable=False)
     file_path = db.Column(db.String(255), nullable=False)  # Relative path like "avances/123/uuid.jpg"
@@ -558,7 +893,7 @@ class TareaAdjunto(db.Model):
 
 
 class TareaResponsables(db.Model):
-    """Modelo para asignaciones múltiples de usuarios a tareas"""
+    """Modelo para asignaciones mÃºltiples de usuarios a tareas"""
     __tablename__ = 'tarea_responsables'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -571,7 +906,7 @@ class TareaResponsables(db.Model):
     usuario = db.relationship('Usuario')
     
     # Constraint de unicidad
-    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='unique_tarea_user'),)
+    __table_args__ = (db.UniqueConstraint('tarea_id', 'user_id', name='uq_tarea_responsables_tarea_user'),)
     
     def __repr__(self):
         return f'<TareaResponsables tarea_id={self.tarea_id} user_id={self.user_id}>'
@@ -583,7 +918,7 @@ class AsignacionObra(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)  # Asignación por etapa específica
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)  # AsignaciÃ³n por etapa especÃ­fica
     rol_en_obra = db.Column(db.String(50), nullable=False)  # jefe_obra, supervisor, operario
     fecha_asignacion = db.Column(db.DateTime, default=datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
@@ -598,7 +933,7 @@ class AsignacionObra(db.Model):
 
 
 class ObraMiembro(db.Model):
-    """Miembros específicos por obra para permisos granulares"""
+    """Miembros especÃ­ficos por obra para permisos granulares"""
     __tablename__ = 'obra_miembros'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -619,17 +954,92 @@ class ObraMiembro(db.Model):
         return f'<ObraMiembro Obra:{self.obra_id} Usuario:{self.usuario_id}>'
 
 
+class ExchangeRate(db.Model):
+    __tablename__ = 'exchange_rates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(50), nullable=False)
+    base_currency = db.Column(db.String(3), nullable=False, default='ARS')
+    quote_currency = db.Column(db.String(3), nullable=False, default='USD')
+    value = db.Column('rate', db.Numeric(18, 6), nullable=False)
+    as_of_date = db.Column(db.Date, nullable=False, default=date.today)
+    fetched_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    source_url = db.Column(db.String(255))
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('provider', 'base_currency', 'quote_currency', 'as_of_date', name='uq_exchange_rate_daily'),
+    )
+
+    presupuestos = db.relationship('Presupuesto', back_populates='exchange_rate', lazy='dynamic')
+
+    def __repr__(self):
+        return (
+            f"<ExchangeRate {self.provider} {self.base_currency}/{self.quote_currency} "
+            f"{self.value} ({self.as_of_date})>"
+        )
+
+
+class CACIndex(db.Model):
+    __tablename__ = 'cac_indices'
+
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    value = db.Column(db.Numeric(12, 2), nullable=False)
+    provider = db.Column(db.String(50), nullable=False)
+    source_url = db.Column(db.String(255))
+    fetched_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('year', 'month', 'provider', name='uq_cac_index_period_provider'),
+    )
+
+    def __repr__(self):
+        return f"<CACIndex {self.year}-{self.month:02d} {self.value} ({self.provider})>"
+
+
+class PricingIndex(db.Model):
+    __tablename__ = 'pricing_indices'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)
+    value = db.Column(db.Numeric(18, 6), nullable=False)
+    valid_from = db.Column(db.Date, nullable=False, default=date.today)
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('name', 'valid_from', name='uq_pricing_indices_name_valid_from'),
+    )
+
+    def __repr__(self):
+        return f"<PricingIndex {self.name} {self.value} ({self.valid_from})>"
+
+
 class Presupuesto(db.Model):
     __tablename__ = 'presupuestos'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)  # Ahora puede ser NULL
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     numero = db.Column(db.String(50), unique=True, nullable=False)
     fecha = db.Column(db.Date, default=date.today)
-    estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado
-    confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtió en obra
+    estado = db.Column(db.String(20), default='borrador')  # borrador, enviado, aprobado, rechazado, perdido, eliminado
+    confirmado_como_obra = db.Column(db.Boolean, default=False)  # NUEVO: Si ya se convirtiÃ³ en obra
     datos_proyecto = db.Column(db.Text)  # NUEVO: Datos del proyecto en JSON
+    ubicacion_texto = db.Column(db.String(300))
+    ubicacion_normalizada = db.Column(db.String(300))
+    geo_latitud = db.Column(db.Numeric(10, 8))
+    geo_longitud = db.Column(db.Numeric(11, 8))
+    geocode_place_id = db.Column(db.String(120))
+    geocode_provider = db.Column(db.String(50))
+    geocode_status = db.Column(db.String(20))
+    geocode_raw = db.Column(db.Text)
+    geocode_actualizado = db.Column(db.DateTime)
     subtotal_materiales = db.Column(db.Numeric(15, 2), default=0)
     subtotal_mano_obra = db.Column(db.Numeric(15, 2), default=0)
     subtotal_equipos = db.Column(db.Numeric(15, 2), default=0)
@@ -638,26 +1048,147 @@ class Presupuesto(db.Model):
     total_con_iva = db.Column(db.Numeric(15, 2), default=0)
     observaciones = db.Column(db.Text)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    
+    perdido_motivo = db.Column(db.Text)
+    perdido_fecha = db.Column(db.DateTime)
+    deleted_at = db.Column(db.DateTime)
+    vigencia_dias = db.Column(db.Integer, default=30)
+    fecha_vigencia = db.Column(db.Date)
+    vigencia_bloqueada = db.Column(db.Boolean, nullable=False, default=True)
+    currency = db.Column(db.String(3), nullable=False, default='ARS')
+    exchange_rate_id = db.Column(db.Integer, db.ForeignKey('exchange_rates.id'))
+    exchange_rate_value = db.Column(db.Numeric(18, 6))
+    exchange_rate_provider = db.Column(db.String(50))
+    exchange_rate_fetched_at = db.Column(db.DateTime)
+    exchange_rate_as_of = db.Column(db.Date)
+    tasa_usd_venta = db.Column(db.Numeric(10, 4))
+    indice_cac_valor = db.Column(db.Numeric(12, 2))
+    indice_cac_fecha = db.Column(db.Date)
+
     # Relaciones
     obra = db.relationship('Obra', back_populates='presupuestos')
     organizacion = db.relationship('Organizacion', overlaps="presupuestos")
     items = db.relationship('ItemPresupuesto', back_populates='presupuesto', cascade='all, delete-orphan', lazy='dynamic')
+    exchange_rate = db.relationship('ExchangeRate', back_populates='presupuestos', lazy='joined')
     
     def __repr__(self):
         return f'<Presupuesto {self.numero}>'
     
     def calcular_totales(self):
-        self.subtotal_materiales = sum(item.total for item in self.items if item.tipo == 'material')
-        self.subtotal_mano_obra = sum(item.total for item in self.items if item.tipo == 'mano_obra')
-        self.subtotal_equipos = sum(item.total for item in self.items if item.tipo == 'equipo')
-        self.total_sin_iva = self.subtotal_materiales + self.subtotal_mano_obra + self.subtotal_equipos
-        self.total_con_iva = self.total_sin_iva * (1 + self.iva_porcentaje / 100)
+        items = self.items.all() if hasattr(self.items, 'all') else list(self.items)
+        cero = Decimal('0')
+
+        def _as_decimal(value):
+            if isinstance(value, Decimal):
+                return value
+            if value is None:
+                return Decimal('0')
+            try:
+                return Decimal(str(value))
+            except (InvalidOperation, ValueError, TypeError):
+                return Decimal('0')
+
+        def _item_total(item):
+            valor = getattr(item, 'total_currency', None)
+            if valor is not None:
+                return _as_decimal(valor)
+            return _as_decimal(getattr(item, 'total', None))
+
+        self.subtotal_materiales = sum((_item_total(item) for item in items if item.tipo == 'material'), cero)
+        self.subtotal_mano_obra = sum((_item_total(item) for item in items if item.tipo == 'mano_obra'), cero)
+        self.subtotal_equipos = sum((_item_total(item) for item in items if item.tipo == 'equipo'), cero)
+
+        self.subtotal_materiales = self.subtotal_materiales.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.subtotal_mano_obra = self.subtotal_mano_obra.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.subtotal_equipos = self.subtotal_equipos.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        self.total_sin_iva = (self.subtotal_materiales + self.subtotal_mano_obra + self.subtotal_equipos).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP
+        )
+
+        iva = Decimal(self.iva_porcentaje or 0)
+        factor_iva = Decimal('1') + (iva / Decimal('100'))
+        self.total_con_iva = (self.total_sin_iva * factor_iva).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        self.asegurar_vigencia()
+
+    def asegurar_vigencia(self, fecha_base=None):
+        dias = self.vigencia_dias if self.vigencia_dias and self.vigencia_dias > 0 else 30
+        if dias < 1:
+            dias = 1
+        elif dias > 180:
+            dias = 180
+        if self.vigencia_dias != dias:
+            self.vigencia_dias = dias
+        if fecha_base is None:
+            if self.fecha:
+                fecha_base = self.fecha
+            elif self.fecha_creacion:
+                fecha_base = self.fecha_creacion.date()
+            else:
+                fecha_base = date.today()
+        if not self.fecha_vigencia or fecha_base + timedelta(days=dias) != self.fecha_vigencia:
+            self.fecha_vigencia = fecha_base + timedelta(days=dias)
+        return self.fecha_vigencia
+
+    @property
+    def esta_vencido(self):
+        if not self.fecha_vigencia:
+            return False
+        return self.fecha_vigencia < date.today()
+
+    @property
+    def dias_restantes_vigencia(self):
+        if not self.fecha_vigencia:
+            return None
+        return (self.fecha_vigencia - date.today()).days
+
+    @property
+    def estado_vigencia(self):
+        dias = self.dias_restantes_vigencia
+        if dias is None:
+            return None
+        if dias < 0:
+            return 'vencido'
+        if dias <= 3:
+            return 'critico'
+        if dias <= 15:
+            return 'alerta'
+        return 'normal'
+
+    @property
+    def clase_vigencia_badge(self):
+        estado = self.estado_vigencia
+        mapping = {
+            'critico': 'bg-danger text-white',
+            'alerta': 'bg-warning text-dark',
+            'normal': 'bg-success text-white',
+            'vencido': 'bg-secondary text-white',
+        }
+        return mapping.get(estado, 'bg-secondary text-white')
+
+    def registrar_tipo_cambio(self, snapshot):
+        """Actualiza los metadatos de tipo de cambio segÃºn el snapshot recibido."""
+
+        if snapshot is None:
+            self.exchange_rate_id = None
+            self.exchange_rate_value = None
+            self.exchange_rate_provider = None
+            self.exchange_rate_fetched_at = None
+            return
+
+        self.exchange_rate_id = snapshot.id
+        self.exchange_rate_value = snapshot.value
+        self.exchange_rate_provider = snapshot.provider
+        self.exchange_rate_fetched_at = snapshot.fetched_at
+        self.exchange_rate_as_of = snapshot.as_of_date
+        if snapshot.quote_currency.upper() == 'USD' and snapshot.base_currency.upper() == 'ARS':
+            self.tasa_usd_venta = snapshot.value
+
 
 
 class ItemPresupuesto(db.Model):
     __tablename__ = 'items_presupuesto'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     presupuesto_id = db.Column(db.Integer, db.ForeignKey('presupuestos.id'), nullable=False)
     tipo = db.Column(db.String(20), nullable=False)  # material, mano_obra, equipo
@@ -666,12 +1197,95 @@ class ItemPresupuesto(db.Model):
     cantidad = db.Column(db.Numeric(10, 3), nullable=False)
     precio_unitario = db.Column(db.Numeric(10, 2), nullable=False)
     total = db.Column(db.Numeric(15, 2), nullable=False)
-    
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)
+    origen = db.Column(db.String(20), default='manual')  # manual, ia, importado
+    currency = db.Column(db.String(3), nullable=False, default='ARS')
+    price_unit_currency = db.Column(db.Numeric(15, 2))
+    total_currency = db.Column(db.Numeric(15, 2))
+    price_unit_ars = db.Column(db.Numeric(15, 2))
+    total_ars = db.Column(db.Numeric(15, 2))
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
-    
+    etapa = db.relationship('EtapaObra', lazy='joined')
+
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'
+
+
+class GeocodeCache(db.Model):
+    __tablename__ = 'geocode_cache'
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(50), nullable=False)
+    query_text = db.Column(db.String(400), nullable=False)
+    normalized_text = db.Column(db.String(400), nullable=False)
+    display_name = db.Column(db.String(400))
+    place_id = db.Column(db.String(120))
+    latitud = db.Column(db.Numeric(10, 8))
+    longitud = db.Column(db.Numeric(11, 8))
+    raw_response = db.Column(db.Text)
+    status = db.Column(db.String(20), default='ok')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('provider', 'normalized_text', name='uq_geocode_provider_norm'),
+        db.Index('ix_geocode_norm', 'normalized_text'),
+    )
+
+    def to_payload(self) -> dict:
+        def _to_float(value):
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        payload = {
+            'provider': self.provider,
+            'query': self.query_text,
+            'normalized': self.normalized_text,
+            'display_name': self.display_name,
+            'place_id': self.place_id,
+            'lat': _to_float(self.latitud),
+            'lng': _to_float(self.longitud),
+            'status': self.status or 'ok',
+        }
+
+        if self.raw_response:
+            try:
+                payload['raw'] = json.loads(self.raw_response)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                payload['raw'] = None
+        else:
+            payload['raw'] = None
+
+        payload['created_at'] = self.created_at
+        payload['updated_at'] = self.updated_at
+        return payload
+
+
+@db.event.listens_for(Presupuesto, 'before_insert')
+def _presupuesto_before_insert(mapper, connection, target):
+    if target.vigencia_bloqueada is None:
+        target.vigencia_bloqueada = True
+    target.asegurar_vigencia()
+
+
+@db.event.listens_for(Presupuesto, 'before_update')
+def _presupuesto_before_update(mapper, connection, target):
+    state = inspect(target)
+    if target.vigencia_bloqueada:
+        cambios_vigencia = (
+            state.attrs['vigencia_dias'].history.has_changes()
+            or state.attrs['fecha_vigencia'].history.has_changes()
+        )
+        if cambios_vigencia:
+            raise ValueError('La vigencia del presupuesto estÃ¡ bloqueada y no puede modificarse.')
+    else:
+        target.asegurar_vigencia()
 
 
 class CategoriaInventario(db.Model):
@@ -820,7 +1434,7 @@ class ConsultaAgente(db.Model):
         self.metadata_consulta = json.dumps(data_dict) if data_dict else None
 
 
-# Nuevos modelos para configuración inteligente de proyectos
+# Nuevos modelos para configuraciÃ³n inteligente de proyectos
 class PlantillaProyecto(db.Model):
     __tablename__ = 'plantillas_proyecto'
     
@@ -889,7 +1503,7 @@ class ItemMaterialPlantilla(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     plantilla_id = db.Column(db.Integer, db.ForeignKey('plantillas_proyecto.id'), nullable=False)
-    categoria = db.Column(db.String(100), nullable=False)  # estructura, albañilería, instalaciones, etc.
+    categoria = db.Column(db.String(100), nullable=False)  # estructura, albaÃ±ilerÃ­a, instalaciones, etc.
     material = db.Column(db.String(200), nullable=False)
     unidad = db.Column(db.String(20), nullable=False)
     cantidad_por_m2 = db.Column(db.Numeric(10, 4), nullable=False)
@@ -912,7 +1526,7 @@ class ConfiguracionInteligente(db.Model):
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     plantilla_id = db.Column(db.Integer, db.ForeignKey('plantillas_proyecto.id'), nullable=False)
     factor_complejidad_aplicado = db.Column(db.Numeric(3, 2), nullable=False)
-    ajustes_ubicacion = db.Column(db.JSON)  # JSON con ajustes específicos por ubicación
+    ajustes_ubicacion = db.Column(db.JSON)  # JSON con ajustes especÃ­ficos por ubicaciÃ³n
     recomendaciones_ia = db.Column(db.JSON)  # JSON con recomendaciones generadas
     fecha_configuracion = db.Column(db.DateTime, default=datetime.utcnow)
     configurado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
@@ -941,14 +1555,14 @@ class CertificacionAvance(db.Model):
     
     # Relaciones
     obra = db.relationship('Obra', back_populates='certificaciones')
-    usuario = db.relationship('Usuario')  # Usuario que creó la certificación
+    usuario = db.relationship('Usuario')  # Usuario que creÃ³ la certificaciÃ³n
     
     def __repr__(self):
         return f'<CertificacionAvance {self.porcentaje_avance}% - Obra {self.obra.nombre}>'
     
     @classmethod
     def validar_certificacion(cls, obra_id, nuevo_porcentaje):
-        """Valida que la nueva certificación no exceda el 100% del progreso total"""
+        """Valida que la nueva certificaciÃ³n no exceda el 100% del progreso total"""
         obra = Obra.query.get(obra_id)
         if not obra:
             return False, "Obra no encontrada"
@@ -963,9 +1577,137 @@ class CertificacionAvance(db.Model):
         nuevo_total = progreso_tareas + progreso_certificaciones + nuevo_porcentaje
         
         if nuevo_total > 100:
-            return False, f"El total de avance sería {nuevo_total}%, excede el 100% permitido"
-        
-        return True, "Certificación válida"
+            return False, f"El total de avance serÃ­a {nuevo_total}%, excede el 100% permitido"
+
+        return True, "CertificaciÃ³n vÃ¡lida"
+
+
+class WorkCertification(db.Model):
+    __tablename__ = 'work_certifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False, index=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
+    periodo_desde = db.Column(db.Date)
+    periodo_hasta = db.Column(db.Date)
+    porcentaje_avance = db.Column(db.Numeric(7, 3), default=0)
+    monto_certificado_ars = db.Column(db.Numeric(15, 2), default=0)
+    monto_certificado_usd = db.Column(db.Numeric(15, 2), default=0)
+    moneda_base = db.Column(db.String(3), default='ARS')
+    tc_usd = db.Column(db.Numeric(12, 4))
+    indice_cac = db.Column(db.Numeric(12, 4))
+    estado = db.Column(db.String(20), default='borrador')
+    notas = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    approved_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+
+    obra = db.relationship('Obra', back_populates='work_certifications')
+    organizacion = db.relationship('Organizacion')
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    approved_by = db.relationship('Usuario', foreign_keys=[approved_by_id])
+    items = db.relationship('WorkCertificationItem', back_populates='certificacion', cascade='all, delete-orphan', lazy='dynamic')
+    payments = db.relationship('WorkPayment', back_populates='certificacion', lazy='dynamic')
+
+    __table_args__ = (
+        db.Index('ix_work_certifications_obra_estado', 'obra_id', 'estado'),
+    )
+
+    def marcar_aprobada(self, usuario):
+        self.estado = 'aprobada'
+        self.approved_by = usuario
+        self.approved_at = datetime.utcnow()
+
+    @property
+    def porcentaje_pagado(self):
+        from decimal import Decimal
+
+        total_pagado = Decimal('0')
+        for payment in self.payments.filter_by(estado='confirmado'):
+            total_pagado += payment.monto_equivalente_ars
+        base = Decimal(str(self.monto_certificado_ars or 0))
+        if base <= 0:
+            return Decimal('0')
+        return (total_pagado / base).quantize(Decimal('0.01'))
+
+
+class WorkCertificationItem(db.Model):
+    __tablename__ = 'work_certification_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    certificacion_id = db.Column(db.Integer, db.ForeignKey('work_certifications.id'), nullable=False, index=True)
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'))
+    tarea_id = db.Column(db.Integer, db.ForeignKey('tareas_etapa.id'))
+    porcentaje_aplicado = db.Column(db.Numeric(7, 3), default=0)
+    monto_ars = db.Column(db.Numeric(15, 2), default=0)
+    monto_usd = db.Column(db.Numeric(15, 2), default=0)
+    fuente_avance = db.Column(db.String(20), default='manual')
+    resumen_avance = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    certificacion = db.relationship('WorkCertification', back_populates='items')
+    etapa = db.relationship('EtapaObra')
+    tarea = db.relationship('TareaEtapa')
+
+    def resumen_dict(self):
+        if not self.resumen_avance:
+            return {}
+        try:
+            return json.loads(self.resumen_avance)
+        except Exception:
+            return {}
+
+
+class WorkPayment(db.Model):
+    __tablename__ = 'work_payments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    certificacion_id = db.Column(db.Integer, db.ForeignKey('work_certifications.id'))
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False, index=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False, index=True)
+    operario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    metodo_pago = db.Column(db.String(30), nullable=False)
+    moneda = db.Column(db.String(3), default='ARS')
+    monto = db.Column(db.Numeric(15, 2), nullable=False)
+    tc_usd_pago = db.Column(db.Numeric(12, 4))
+    fecha_pago = db.Column(db.Date, default=date.today)
+    comprobante_url = db.Column(db.String(500))
+    notas = db.Column(db.Text)
+    estado = db.Column(db.String(20), default='pendiente')
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    certificacion = db.relationship('WorkCertification', back_populates='payments')
+    obra = db.relationship('Obra', back_populates='work_payments')
+    organizacion = db.relationship('Organizacion')
+    operario = db.relationship('Usuario', foreign_keys=[operario_id])
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        db.Index('ix_work_payments_certificacion', 'certificacion_id'),
+        db.Index('ix_work_payments_estado', 'estado'),
+    )
+
+    @property
+    def monto_equivalente_ars(self):
+        from decimal import Decimal
+
+        monto = Decimal(str(self.monto or 0))
+        if self.moneda == 'ARS' or not self.tc_usd_pago:
+            return monto
+        return monto * Decimal(str(self.tc_usd_pago))
+
+    @property
+    def monto_equivalente_usd(self):
+        from decimal import Decimal
+
+        monto = Decimal(str(self.monto or 0))
+        if self.moneda == 'USD' or not self.tc_usd_pago or Decimal(str(self.tc_usd_pago)) == 0:
+            return monto
+        return monto / Decimal(str(self.tc_usd_pago))
 
 
 class Proveedor(db.Model):
@@ -976,13 +1718,13 @@ class Proveedor(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text)
     categoria = db.Column(db.String(100), nullable=False)  # materiales, equipos, servicios, profesionales
-    especialidad = db.Column(db.String(200))  # subcategoría específica
+    especialidad = db.Column(db.String(200))  # subcategorÃ­a especÃ­fica
     ubicacion = db.Column(db.String(300))
     telefono = db.Column(db.String(20))
     email = db.Column(db.String(120))
     sitio_web = db.Column(db.String(200))
     precio_promedio = db.Column(db.Numeric(15, 2))  # Precio promedio por servicio/producto
-    calificacion = db.Column(db.Numeric(3, 2), default=5.0)  # Calificación de 1 a 5
+    calificacion = db.Column(db.Numeric(3, 2), default=5.0)  # CalificaciÃ³n de 1 a 5
     trabajos_completados = db.Column(db.Integer, default=0)
     verificado = db.Column(db.Boolean, default=False)  # Verificado por la plataforma
     activo = db.Column(db.Boolean, default=True)
@@ -997,7 +1739,7 @@ class Proveedor(db.Model):
     
     @property
     def calificacion_estrellas(self):
-        """Devuelve la calificación en formato de estrellas"""
+        """Devuelve la calificaciÃ³n en formato de estrellas"""
         return round(float(self.calificacion), 1)
 
 
@@ -1063,7 +1805,7 @@ class Equipment(db.Model):
     
     @property
     def current_assignment(self):
-        """Obtiene la asignación activa actual"""
+        """Obtiene la asignaciÃ³n activa actual"""
         return EquipmentAssignment.query.filter_by(
             equipment_id=self.id, 
             estado='asignado'
@@ -1071,7 +1813,7 @@ class Equipment(db.Model):
     
     @property
     def is_available(self):
-        """Verifica si el equipo está disponible para asignación"""
+        """Verifica si el equipo estÃ¡ disponible para asignaciÃ³n"""
         return self.estado == 'activo' and not self.current_assignment
 
 
@@ -1091,7 +1833,7 @@ class EquipmentAssignment(db.Model):
     project = db.relationship('Obra', backref='equipment_assignments')
     
     def __repr__(self):
-        return f'<EquipmentAssignment {self.equipment.nombre} → {self.project.nombre}>'
+        return f'<EquipmentAssignment {self.equipment.nombre} â†’ {self.project.nombre}>'
 
 
 class EquipmentUsage(db.Model):
@@ -1166,13 +1908,16 @@ class MaintenanceAttachment(db.Model):
 
 class InventoryCategory(db.Model):
     __tablename__ = 'inventory_category'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'))
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_global = db.Column(db.Boolean, nullable=False, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relaciones
     company = db.relationship('Organizacion', backref='inventory_categories')
     parent = db.relationship('InventoryCategory', remote_side=[id], backref='children')
@@ -1180,13 +1925,32 @@ class InventoryCategory(db.Model):
     
     def __repr__(self):
         return f'<InventoryCategory {self.nombre}>'
-    
+
     @property
     def full_path(self):
-        """Obtiene la ruta completa de la categoría"""
-        if self.parent:
-            return f"{self.parent.full_path} > {self.nombre}"
-        return self.nombre
+        """Obtiene la ruta completa de la categorÃ­a con separadores jerÃ¡rquicos."""
+
+        parts = []
+        current = self
+        visited = set()
+
+        while current is not None:
+            # Evitar ciclos en casos de datos inconsistentes
+            current_id = getattr(current, "id", None)
+            if current_id is not None:
+                if current_id in visited:
+                    break
+                visited.add(current_id)
+
+            parts.append(current.nombre)
+            current = current.parent
+
+        return " \u2192 ".join(reversed(parts))
+
+    @property
+    def org_id(self):
+        """Alias compatible con nomenclatura org_id"""
+        return self.company_id
 
 
 class InventoryItem(db.Model):
@@ -1198,6 +1962,7 @@ class InventoryItem(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=False)
     unidad = db.Column(db.String(20), nullable=False)  # kg, m, u, m2, m3, etc.
+    package_options_raw = db.Column('package_options', db.Text)
     min_stock = db.Column(db.Numeric(12, 2), default=0)
     descripcion = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1215,9 +1980,9 @@ class InventoryItem(db.Model):
     
     @property
     def total_stock(self):
-        """Stock total en todos los depósitos"""
+        """Stock total en todos los depÃ³sitos"""
         return sum(stock.cantidad for stock in self.stocks)
-    
+
     @property
     def reserved_stock(self):
         """Stock reservado activo"""
@@ -1230,26 +1995,115 @@ class InventoryItem(db.Model):
     
     @property
     def is_low_stock(self):
-        """Verifica si el stock está bajo"""
+        """Verifica si el stock estÃ¡ bajo"""
         return self.total_stock <= self.min_stock
+
+    @property
+    def package_options(self):
+        """Opciones de presentaciÃ³n configuradas para el item."""
+        raw = self.package_options_raw
+        if not raw:
+            return []
+
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+
+        normalized = []
+        if isinstance(data, list):
+            for entry in data:
+                option = self._normalize_package_option(entry)
+                if option:
+                    normalized.append(option)
+        elif isinstance(data, dict):
+            option = self._normalize_package_option(data)
+            if option:
+                normalized.append(option)
+
+        return normalized
+
+    @package_options.setter
+    def package_options(self, value):
+        options = []
+        if isinstance(value, dict):
+            maybe_option = self._normalize_package_option(value)
+            if maybe_option:
+                options.append(maybe_option)
+        elif isinstance(value, list):
+            for entry in value:
+                maybe_option = self._normalize_package_option(entry)
+                if maybe_option:
+                    options.append(maybe_option)
+
+        if options:
+            self.package_options_raw = json.dumps(options)
+        else:
+            self.package_options_raw = None
+
+    @staticmethod
+    def _normalize_package_option(entry):
+        if not isinstance(entry, dict):
+            return None
+
+        label = (entry.get('label') or entry.get('nombre') or entry.get('name') or '').strip()
+        if not label:
+            return None
+
+        unit = (entry.get('unit') or entry.get('unidad') or entry.get('presentation_unit') or '').strip()
+        multiplier = entry.get('multiplier') or entry.get('factor') or entry.get('cantidad')
+
+        try:
+            multiplier_val = float(multiplier)
+        except (TypeError, ValueError):
+            return None
+
+        key = (entry.get('key') or entry.get('id') or label.lower())
+        key = ''.join(ch for ch in key if ch.isalnum() or ch in ('_', '-')).strip('_-')
+        if not key:
+            key = label.lower().replace(' ', '_')
+
+        return {
+            'key': key,
+            'label': label,
+            'unit': unit or 'unidad',
+            'multiplier': multiplier_val,
+        }
+
+    @property
+    def package_summary(self):
+        options = self.package_options
+        if not options:
+            return ''
+        return ', '.join(option['label'] for option in options)
 
 
 class Warehouse(db.Model):
     __tablename__ = 'warehouse'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     direccion = db.Column(db.String(500))
+    tipo = db.Column(db.String(20), nullable=False, default='deposito')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
-    
+
     # Relaciones
     company = db.relationship('Organizacion', backref='warehouses')
     stocks = db.relationship('Stock', back_populates='warehouse', cascade='all, delete-orphan')
-    
+
     def __repr__(self):
         return f'<Warehouse {self.nombre}>'
+
+    @property
+    def tipo_normalizado(self) -> str:
+        value = (self.tipo or 'deposito').lower()
+        return 'obra' if value == 'obra' else 'deposito'
+
+    @property
+    def grupo_display(self) -> str:
+        return 'Obras' if self.tipo_normalizado == 'obra' else 'DepÃ³sitos'
 
 
 class Stock(db.Model):
@@ -1299,13 +2153,13 @@ class StockMovement(db.Model):
     
     @property
     def warehouse_display(self):
-        """Muestra el depósito relevante según el tipo de movimiento"""
+        """Muestra el depÃ³sito relevante segÃºn el tipo de movimiento"""
         if self.tipo == 'ingreso':
             return self.destino_warehouse.nombre if self.destino_warehouse else 'N/A'
         elif self.tipo == 'egreso':
             return self.origen_warehouse.nombre if self.origen_warehouse else 'N/A'
         elif self.tipo == 'transferencia':
-            return f"{self.origen_warehouse.nombre} → {self.destino_warehouse.nombre}"
+            return f"{self.origen_warehouse.nombre} â†’ {self.destino_warehouse.nombre}"
         else:  # ajuste
             return self.destino_warehouse.nombre if self.destino_warehouse else 'N/A'
 
@@ -1374,7 +2228,7 @@ class Supplier(db.Model):
 
 class SupplierUser(db.Model):
     __tablename__ = 'supplier_user'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
@@ -1392,16 +2246,18 @@ class SupplierUser(db.Model):
         return f'<SupplierUser {self.email}>'
     
     def check_password(self, password):
-        from werkzeug.security import check_password_hash
         return check_password_hash(self.password_hash, password)
-    
+
     def set_password(self, password):
-        from werkzeug.security import generate_password_hash
         self.password_hash = generate_password_hash(password)
-    
+
     @property
     def is_owner(self):
         return self.rol == 'owner'
+
+    # Compatibilidad con plantillas que consultan current_user.es_admin()
+    def es_admin(self):
+        return False
 
 
 class Category(db.Model):
@@ -1437,7 +2293,7 @@ class Product(db.Model):
     descripcion = db.Column(db.Text)
     estado = db.Column(db.Enum('borrador', 'publicado', 'pausado', name='product_estado'), default='borrador')
     rating_prom = db.Column(db.Numeric(2, 1), default=0)
-    published_at = db.Column(db.DateTime)  # Fecha de publicación
+    published_at = db.Column(db.DateTime)  # Fecha de publicaciÃ³n
     visitas = db.Column(db.Integer, default=0)  # Contador de visitas
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1466,7 +2322,7 @@ class Product(db.Model):
     
     @property
     def min_price(self):
-        """Precio mínimo de las variantes visibles"""
+        """Precio mÃ­nimo de las variantes visibles"""
         visible_variants = [v for v in self.variants if v.visible and v.precio > 0]
         return min(v.precio for v in visible_variants) if visible_variants else 0
     
@@ -1538,7 +2394,7 @@ class ProductQNA(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # Puede ser NULL para anónimos
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # Puede ser NULL para anÃ³nimos
     pregunta = db.Column(db.Text, nullable=False)
     respuesta = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1584,7 +2440,7 @@ class Order(db.Model):
     
     @property
     def commission_amount(self):
-        """Calcula la comisión (2% del total)"""
+        """Calcula la comisiÃ³n (2% del total)"""
         rate = float(os.environ.get('PLATFORM_COMMISSION_RATE', '0.02'))
         return round(float(self.total) * rate, 2)
     
@@ -1618,9 +2474,9 @@ class OrderCommission(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
     base = db.Column(db.Numeric(12, 2), nullable=False)  # Total del pedido
     rate = db.Column(db.Numeric(5, 4), default=0.02)  # 2%
-    monto = db.Column(db.Numeric(12, 2), nullable=False)  # Comisión sin IVA
-    iva = db.Column(db.Numeric(12, 2), default=0)  # IVA sobre la comisión
-    total = db.Column(db.Numeric(12, 2), nullable=False)  # Comisión + IVA
+    monto = db.Column(db.Numeric(12, 2), nullable=False)  # ComisiÃ³n sin IVA
+    iva = db.Column(db.Numeric(12, 2), default=0)  # IVA sobre la comisiÃ³n
+    total = db.Column(db.Numeric(12, 2), nullable=False)  # ComisiÃ³n + IVA
     status = db.Column(db.Enum('pendiente', 'facturado', 'cobrado', 'anulado', name='commission_status'), default='pendiente')
     invoice_number = db.Column(db.String(50))
     invoice_pdf_url = db.Column(db.String(500))
@@ -1634,7 +2490,7 @@ class OrderCommission(db.Model):
     
     @staticmethod
     def compute_commission(base, rate=0.02, iva_included=False):
-        """Calcula la comisión con o sin IVA"""
+        """Calcula la comisiÃ³n con o sin IVA"""
         monto = round(float(base) * rate, 2)
         if iva_included:
             # Aplicar gross-up para IVA (21%)
@@ -1658,7 +2514,7 @@ class Cart(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # Usuario logueado (opcional)
-    session_id = db.Column(db.String(64))  # Para usuarios anónimos
+    session_id = db.Column(db.String(64))  # Para usuarios anÃ³nimos
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -1678,7 +2534,7 @@ class Cart(db.Model):
         return sum(item.subtotal for item in self.items)
     
     def clear(self):
-        """Vacía el carrito"""
+        """VacÃ­a el carrito"""
         CartItem.query.filter_by(cart_id=self.id).delete()
         db.session.commit()
 
@@ -1740,7 +2596,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)  # Nullable para eventos globales
-    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuario que generó el evento
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuario que generÃ³ el evento
     
     # Tipo de evento
     type = db.Column(db.Enum(
@@ -1770,7 +2626,7 @@ class Event(db.Model):
     user = db.relationship('Usuario', foreign_keys=[user_id], backref='generated_events')
     creator = db.relationship('Usuario', foreign_keys=[created_by], backref='created_events')
     
-    # Índices
+    # Ãndices
     __table_args__ = (
         db.Index('idx_events_company_created', 'company_id', 'created_at'),
         db.Index('idx_events_project', 'project_id'),
@@ -1815,7 +2671,7 @@ class Event(db.Model):
         if diff.days > 7:
             return self.created_at.strftime('%d/%m/%Y')
         elif diff.days > 0:
-            return f'hace {diff.days} día{"s" if diff.days > 1 else ""}'
+            return f'hace {diff.days} dÃ­a{"s" if diff.days > 1 else ""}'
         elif diff.seconds > 3600:
             hours = diff.seconds // 3600
             return f'hace {hours} hora{"s" if hours > 1 else ""}'
@@ -1841,7 +2697,7 @@ class Event(db.Model):
     
     @property
     def type_icon(self):
-        """Retorna el ícono FontAwesome para el tipo de evento"""
+        """Retorna el Ã­cono FontAwesome para el tipo de evento"""
         type_icons = {
             'alert': 'fas fa-exclamation-triangle',
             'milestone': 'fas fa-flag-checkered',
@@ -1857,12 +2713,12 @@ class Event(db.Model):
     
     @property
     def time_ago(self):
-        """Retorna una representación amigable del tiempo transcurrido"""
+        """Retorna una representaciÃ³n amigable del tiempo transcurrido"""
         now = datetime.utcnow()
         diff = now - self.created_at
         
         if diff.days > 0:
-            return f"hace {diff.days} día{'s' if diff.days > 1 else ''}"
+            return f"hace {diff.days} dÃ­a{'s' if diff.days > 1 else ''}"
         elif diff.seconds > 3600:
             hours = diff.seconds // 3600
             return f"hace {hours} hora{'s' if hours > 1 else ''}"
@@ -1893,7 +2749,7 @@ class Event(db.Model):
     def create_status_change_event(cls, company_id, project_id, old_status, new_status, user_id=None):
         """Factory method para crear eventos de cambio de estado"""
         title = f"Cambio de estado de obra"
-        description = f"Estado cambió de '{old_status}' a '{new_status}'"
+        description = f"Estado cambiÃ³ de '{old_status}' a '{new_status}'"
         meta = {
             'old_status': old_status,
             'new_status': new_status
@@ -1941,7 +2797,7 @@ class Event(db.Model):
     def create_inventory_alert_event(cls, company_id, item_name, current_stock, min_stock, user_id=None):
         """Factory method para crear eventos de stock bajo"""
         title = f"Stock bajo: {item_name}"
-        description = f"Stock actual: {current_stock}, mínimo: {min_stock}"
+        description = f"Stock actual: {current_stock}, mÃ­nimo: {min_stock}"
         severity = 'alta' if current_stock <= min_stock * 0.5 else 'media'
         meta = {
             'item_name': item_name,
@@ -1967,7 +2823,7 @@ class Event(db.Model):
 # ===== MODELOS RBAC =====
 
 class RoleModule(db.Model):
-    """Permisos por defecto para cada rol en cada módulo"""
+    """Permisos por defecto para cada rol en cada mÃ³dulo"""
     __tablename__ = 'role_modules'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -1983,7 +2839,7 @@ class RoleModule(db.Model):
 
 
 class UserModule(db.Model):
-    """Overrides de permisos por usuario específico"""
+    """Overrides de permisos por usuario especÃ­fico"""
     __tablename__ = 'user_modules'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -2004,7 +2860,7 @@ class UserModule(db.Model):
 # ===== FUNCIONES HELPER PARA RBAC =====
 
 def get_allowed_modules(user):
-    """Obtiene los módulos permitidos para un usuario"""
+    """Obtiene los mÃ³dulos permitidos para un usuario"""
     role_map = {rm.module: {"view": rm.can_view, "edit": rm.can_edit}
                 for rm in RoleModule.query.filter_by(role=user.rol)}
     
@@ -2016,7 +2872,7 @@ def get_allowed_modules(user):
 
 
 def upsert_user_module(user_id, module, view, edit):
-    """Inserta o actualiza permisos de módulo para un usuario"""
+    """Inserta o actualiza permisos de mÃ³dulo para un usuario"""
     um = UserModule.query.filter_by(user_id=user_id, module=module).first()
     if not um:
         um = UserModule(user_id=user_id, module=module)
@@ -2029,7 +2885,7 @@ def upsert_user_module(user_id, module, view, edit):
 # ===== FUNCIONES HELPER PARA TAREAS =====
 
 def resumen_tarea(t):
-    """Helper para calcular métricas de una tarea (solo suma aprobados)"""
+    """Helper para calcular mÃ©tricas de una tarea (solo suma aprobados)"""
     plan = float(t.cantidad_planificada or 0)
     ejec = float(
         db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
@@ -2040,6 +2896,87 @@ def resumen_tarea(t):
     restante = max(plan - ejec, 0.0)
     atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
     return {"plan": plan, "ejec": ejec, "pct": pct, "restante": restante, "atrasada": atrasada}
+
+
+class WizardStageVariant(db.Model):
+    __tablename__ = 'wizard_stage_variants'
+
+    id = db.Column(db.Integer, primary_key=True)
+    stage_slug = db.Column(db.String(80), nullable=False, index=True)
+    variant_key = db.Column(db.String(80), nullable=False)
+    nombre = db.Column(db.String(120), nullable=False)
+    descripcion = db.Column(db.String(255))
+    is_default = db.Column(db.Boolean, default=False)
+    metadata_raw = db.Column('metadata', db.Text, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    coefficients = db.relationship(
+        'WizardStageCoefficient',
+        back_populates='variant',
+        cascade='all, delete-orphan',
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint('stage_slug', 'variant_key', name='uq_wizard_stage_variant'),
+    )
+
+    @property
+    def meta(self):
+        try:
+            return json.loads(self.metadata_raw or '{}')
+        except (ValueError, TypeError):
+            return {}
+
+    @meta.setter
+    def meta(self, value):
+        self.metadata_raw = json.dumps(value or {})
+
+    def __repr__(self):
+        return f"<WizardStageVariant stage={self.stage_slug} variant={self.variant_key}>"
+
+
+class WizardStageCoefficient(db.Model):
+    __tablename__ = 'wizard_stage_coefficients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    stage_slug = db.Column(db.String(80), nullable=False, index=True)
+    variant_id = db.Column(db.Integer, db.ForeignKey('wizard_stage_variants.id'), nullable=True)
+    unit = db.Column(db.String(20), nullable=False, default='u')
+    quantity_metric = db.Column(db.String(50), nullable=False, default='cantidad')
+    materials_per_unit = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    labor_per_unit = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    equipment_per_unit = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    currency = db.Column(db.String(3), nullable=False, default='ARS')
+    source = db.Column(db.String(80))
+    notes = db.Column(db.String(255))
+    is_baseline = db.Column(db.Boolean, default=False)
+    metadata_raw = db.Column('metadata', db.Text, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    variant = db.relationship('WizardStageVariant', back_populates='coefficients')
+
+    __table_args__ = (
+        db.UniqueConstraint('stage_slug', 'variant_id', name='uq_wizard_stage_coeff_variant'),
+    )
+
+    @property
+    def meta(self):
+        try:
+            return json.loads(self.metadata_raw or '{}')
+        except (ValueError, TypeError):
+            return {}
+
+    @meta.setter
+    def meta(self, value):
+        self.metadata_raw = json.dumps(value or {})
+
+    def __repr__(self):
+        return (
+            f"<WizardStageCoefficient stage={self.stage_slug} variant={self.variant_id} "
+            f"mat={self.materials_per_unit} labor={self.labor_per_unit}>"
+        )
 
 
 def seed_default_role_permissions():

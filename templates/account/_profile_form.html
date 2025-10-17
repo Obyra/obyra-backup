@@ -1,0 +1,44 @@
+<form method="post" novalidate class="needs-validation">
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label for="nombre" class="form-label">Nombre</label>
+            <input type="text" class="form-control" id="nombre" name="nombre" required
+                   value="{{ request.form.get('nombre', usuario.nombre) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="apellido" class="form-label">Apellido</label>
+            <input type="text" class="form-control" id="apellido" name="apellido" required
+                   value="{{ request.form.get('apellido', usuario.apellido) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" name="email" required
+                   value="{{ request.form.get('email', usuario.email) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="telefono" class="form-label">Teléfono</label>
+            <input type="tel" class="form-control" id="telefono" name="telefono"
+                   value="{{ request.form.get('telefono', usuario.telefono or '') }}">
+        </div>
+        <div class="col-md-6">
+            <label for="cuit" class="form-label">CUIL/CUIT</label>
+            <input type="text" class="form-control" id="cuit" name="cuit" required inputmode="numeric"
+                   placeholder="XX-XXXXXXXX-X"
+                   value="{{ request.form.get('cuit', perfil.cuit if perfil else '') }}">
+            <div class="form-text">Ingresá 11 dígitos sin espacios. Lo usamos para tu facturación.</div>
+        </div>
+        <div class="col-md-6">
+            <label for="direccion" class="form-label">Dirección principal</label>
+            <input type="text" class="form-control" id="direccion" name="direccion" required
+                   value="{{ request.form.get('direccion', perfil.direccion if perfil else '') }}">
+        </div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        {% if cancel_url %}
+        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancelar</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">
+            {{ submit_label or 'Guardar cambios' }}
+        </button>
+    </div>
+</form>

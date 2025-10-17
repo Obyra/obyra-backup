@@ -17,6 +17,11 @@ function initWizard() {
     return;
   }
 
+  const featureFlags = {
+    budgetV2: modal?.dataset?.budgetEnabled === 'true',
+    budgetShadow: modal?.dataset?.budgetShadow === 'true',
+  };
+
   const stepPanes = Array.from(modal.querySelectorAll('.tab-pane'));
   const btnPrev = modal.querySelector('#wizardBtnAnterior');
   const btnNext = modal.querySelector('#wizardBtnSiguiente');
@@ -42,6 +47,9 @@ function initWizard() {
     opciones: null,
     result: null,
     submitting: false,
+    featureFlags,
+    stageVariants: new Map(),
+    stageCoefficients: new Map(),
   };
 
   window.WZ_STATE = window.WZ_STATE || {};
@@ -460,7 +468,33 @@ function initWizard() {
         state.opciones = {
           unidades: data.unidades || ['h'],
           usuarios: data.usuarios || [],
+          currency: data.currency || 'ARS',
         };
+
+        if (data.feature_flags) {
+          state.featureFlags = {
+            ...state.featureFlags,
+            budgetV2: Boolean(data.feature_flags.wizard_budget_v2 ?? state.featureFlags?.budgetV2),
+            budgetShadow: Boolean(data.feature_flags.wizard_budget_shadow_mode ?? state.featureFlags?.budgetShadow),
+          };
+        }
+
+        if (data.variants) {
+          const entries = Object.entries(data.variants).map(([slug, variants]) => [
+            slug,
+            Array.isArray(variants) ? variants : [],
+          ]);
+          state.stageVariants = new Map(entries);
+        }
+
+        if (data.coefficients) {
+          const coeffEntries = Object.entries(data.coefficients).map(([slug, info]) => [
+            slug,
+            info || {},
+          ]);
+          state.stageCoefficients = new Map(coeffEntries);
+        }
+
         return state.opciones;
       })
       .catch((error) => {
@@ -468,6 +502,73 @@ function initWizard() {
         state.opciones = { unidades: ['h'], usuarios: [] };
         return state.opciones;
       });
+  }
+
+  function toggleVariantColumn(show) {
+    const elements = modal.querySelectorAll('[data-budget-col="variant"]');
+    elements.forEach((element) => {
+      if (show) {
+        element.classList.remove('d-none');
+        element.style.display = '';
+      } else {
+        if (!element.classList.contains('d-none')) {
+          element.classList.add('d-none');
+        }
+        element.style.display = 'none';
+      }
+    });
+  }
+
+  function buildVariantOptions(meta) {
+    if (!meta) {
+      return [];
+    }
+
+    const variantsMap = state.stageVariants instanceof Map ? state.stageVariants : new Map();
+    const slugKey = (meta.slug || '').trim();
+    const catalogId = normalizeCatalogId(meta.id);
+    const nombre = meta.nombre || '';
+
+    let options = [];
+
+    const attemptKeys = [slugKey, slugify(slugKey), slugify(nombre), catalogId && String(catalogId)].filter(Boolean);
+    for (const key of attemptKeys) {
+      if (variantsMap.has(key)) {
+        options = variantsMap.get(key) || [];
+        if (options.length) {
+          break;
+        }
+      }
+    }
+
+    if (!options.length && variantsMap.has('*')) {
+      options = variantsMap.get('*') || [];
+    }
+
+    if (!options.length) {
+      const coeff = slugKey && state.stageCoefficients instanceof Map ? state.stageCoefficients.get(slugKey) : null;
+      const defaultVariantKey = coeff?.default_variant_key || 'baseline';
+      const defaultName = coeff?.variant_name || 'Baseline';
+      const defaultDescription = coeff?.description || 'Valores estándar';
+      const isEstimated = Boolean(coeff?.estimated);
+      return [
+        {
+          key: defaultVariantKey,
+          name: defaultName,
+          description: defaultDescription,
+          is_default: true,
+          estimated: isEstimated,
+        },
+      ];
+    }
+
+    return options.map((variant) => ({
+      key: variant.key ?? variant.variant_key ?? variant.slug ?? 'baseline',
+      name: variant.name ?? variant.nombre ?? 'Baseline',
+      description: variant.description ?? variant.descripcion ?? '',
+      is_default: Boolean(variant.is_default ?? variant.default ?? variant.es_default),
+      estimated: Boolean(variant.estimated ?? false),
+    }));
   }
 
   function populatePaso3() {
@@ -482,6 +583,9 @@ function initWizard() {
     return ensureOpciones().then((opciones) => {
       const unidades = opciones.unidades || ['h'];
       const usuarios = opciones.usuarios || [];
+      const showVariants = Boolean(state.featureFlags?.budgetV2);
+
+      toggleVariantColumn(showVariants);
 
       const rows = state.selectedTasks.map((task, index) => {
         const meta = resolveEtapaMeta({
@@ -502,6 +606,36 @@ function initWizard() {
           <option value="${user.id}">${user.nombre}</option>
         `)].join('');
 
+        const variantOptionsList = showVariants ? buildVariantOptions(meta) : [];
+        const selectedVariantKey = (() => {
+          if (!showVariants) {
+            return '';
+          }
+          if (task.variant_key) {
+            return task.variant_key;
+          }
+          const defaultVariant = variantOptionsList.find((variant) => variant.is_default);
+          return defaultVariant?.key ?? (variantOptionsList[0]?.key ?? '');
+        })();
+
+        const variantOptionsHtml = variantOptionsList.map((variant) => {
+          const value = variant.key ?? '';
+          const estimatedLabel = variant.estimated ? ' (estimado)' : '';
+          const selectedAttr = value === selectedVariantKey ? 'selected' : '';
+          const descriptionAttr = variant.description ? ` title="${variant.description}"` : '';
+          return `<option value="${value}" ${selectedAttr}${descriptionAttr}>${variant.name}${estimatedLabel}</option>`;
+        }).join('');
+
+        const variantCell = showVariants
+          ? `
+            <td class="wizard-budget-col" data-budget-col="variant">
+              ${variantOptionsList.length
+                ? `<select class="form-select form-select-sm variant-select">${variantOptionsHtml}</select>`
+                : '<span class="text-muted small">Sin variantes</span>'}
+            </td>
+          `
+          : '';
+
         return `
           <tr data-index="${index}" data-etapa-slug="${slug}" data-etapa-id="${etapaId || ''}" data-etapa-nombre="${etapaNombre}">
             <td class="small text-muted">${etapaNombre || slug || 'Sin etapa'}</td>
@@ -513,6 +647,7 @@ function initWizard() {
             <td>
               <select class="form-select form-select-sm unidad">${unidadesOpts}</select>
             </td>
+            ${variantCell}
             <td>
               <select class="form-select form-select-sm asignado">${usuariosOpts}</select>
             </td>
@@ -552,7 +687,7 @@ function initWizard() {
     return true;
   }
 
-  function buildResumen() {
+  async function buildResumen() {
     if (!resumenContainer) {
       return;
     }
@@ -571,12 +706,53 @@ function initWizard() {
       </li>
     `).join('');
 
-    resumenContainer.innerHTML = `
+    const tasksSummaryHtml = `
       <div class="alert alert-info">
         <strong>${payload.tareas.length}</strong> tareas listas para crear.
       </div>
       <ul class="list-group">${items}</ul>
     `;
+
+    if (!state.featureFlags?.budgetV2) {
+      resumenContainer.innerHTML = tasksSummaryHtml;
+      return;
+    }
+
+    resumenContainer.innerHTML = `
+      ${tasksSummaryHtml}
+      <div class="card mt-3">
+        <div class="card-body text-center py-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Calculando presupuesto…</span>
+          </div>
+          <p class="text-muted mt-2 mb-0">Calculando desglose de presupuesto…</p>
+        </div>
+      </div>
+    `;
+
+    try {
+      const response = await fetchBudgetPreview(payload);
+      if (response?.ok === false && response?.feature_disabled) {
+        resumenContainer.innerHTML = `
+          ${tasksSummaryHtml}
+          <div class="alert alert-secondary mt-3">
+            El nuevo cálculo integral está deshabilitado. Activalo con el flag <code>WIZARD_BUDGET_BREAKDOWN_ENABLED</code> para mostrarlo.
+          </div>
+        `;
+        return;
+      }
+
+      resumenContainer.innerHTML = renderBudgetSummary(tasksSummaryHtml, response);
+    } catch (error) {
+      console.error('No se pudo calcular el presupuesto del wizard', error);
+      const errorMessage = error?.message ? `<br><small>${error.message}</small>` : '';
+      resumenContainer.innerHTML = `
+        ${tasksSummaryHtml}
+        <div class="alert alert-warning mt-3">
+          No se pudo calcular el presupuesto estimado.${errorMessage}
+        </div>
+      `;
+    }
   }
 
   function collectPaso3Payload() {
@@ -605,6 +781,11 @@ function initWizard() {
         return Number.isFinite(parsed) ? parsed : null;
       };
 
+      const variantKey = row.querySelector('.variant-select')?.value || task.variant_key || null;
+      if (task && 'variant_key' in task) {
+        task.variant_key = variantKey;
+      }
+
       return {
         nombre: row.querySelector('.tarea-nombre')?.textContent?.trim() || task.nombre || '',
         etapa_slug: etapaSlug,
@@ -616,12 +797,129 @@ function initWizard() {
         horas: parseNumber(row.querySelector('.horas-estimadas')?.value) || null,
         cantidad: parseNumber(row.querySelector('.cantidad')?.value) || null,
         unidad: row.querySelector('.unidad')?.value || task.unidad || 'h',
+        variant_key: variantKey,
         asignado_usuario_id: parseNumber(row.querySelector('.asignado')?.value),
         prioridad: row.querySelector('.prioridad')?.value || 'media',
       };
     }).filter((t) => t.nombre && (t.etapa_slug || t.catalogo_id != null));
 
     return { obra_id: obraId, tareas };
+  }
+
+  function fetchBudgetPreview(payload) {
+    return fetchJSON('/obras/api/wizard-tareas/budget-preview', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  function formatCurrency(value, currency) {
+    if (value == null || value === '') {
+      return '—';
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return String(value);
+    }
+    const code = (currency || state.opciones?.currency || 'ARS').toUpperCase();
+    try {
+      return new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: code,
+        maximumFractionDigits: 2,
+      }).format(numeric);
+    } catch (err) {
+      return `${code} ${numeric.toFixed(2)}`;
+    }
+  }
+
+  function formatQuantity(value) {
+    if (value == null || value === '') {
+      return '—';
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return String(value);
+    }
+    return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(numeric);
+  }
+
+  function renderBudgetSummary(tasksSummaryHtml, response) {
+    const etapas = Array.isArray(response?.etapas) ? response.etapas : [];
+    const totals = response?.totals || {};
+    const metadata = response?.metadata || {};
+    const currency = totals.currency || state.opciones?.currency || 'ARS';
+
+    const rowsHtml = etapas.map((stage) => {
+      const stageCurrency = stage.currency || currency;
+      const quantityText = `${formatQuantity(stage.quantity)} ${stage.unit || ''}`.trim();
+      const variantLabel = stage.variant_name ? `Variante: ${stage.variant_name}` : 'Variante estándar';
+      const estimatedBadge = stage.estimated ? '<span class="badge bg-warning-subtle text-warning-emphasis ms-2">Estimado</span>' : '';
+      return `
+        <tr>
+          <td>
+            <div class="fw-semibold">${stage.stage_name || stage.etapa_nombre || stage.stage_slug || 'Etapa'}</div>
+            <div class="small text-muted">${variantLabel}${estimatedBadge}</div>
+          </td>
+          <td>${quantityText || '—'}</td>
+          <td class="text-end">${formatCurrency(stage.materials, stageCurrency)}</td>
+          <td class="text-end">${formatCurrency(stage.labor, stageCurrency)}</td>
+          <td class="text-end">${formatCurrency(stage.equipment, stageCurrency)}</td>
+          <td class="text-end fw-semibold">${formatCurrency(stage.total, stageCurrency)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const totalsQuantity = totals.quantity ? `${formatQuantity(totals.quantity)} ${totals.unit || ''}`.trim() : '—';
+    const totalsHtml = `
+      <tr class="table-light fw-semibold">
+        <td>Total presupuesto</td>
+        <td>${totalsQuantity}</td>
+        <td class="text-end">${formatCurrency(totals.materials, currency)}</td>
+        <td class="text-end">${formatCurrency(totals.labor, currency)}</td>
+        <td class="text-end">${formatCurrency(totals.equipment, currency)}</td>
+        <td class="text-end">${formatCurrency(totals.total, currency)}</td>
+      </tr>
+    `;
+
+    const estimatedMessage = metadata.estimated_count
+      ? `<div class="alert alert-warning mt-3 mb-0 py-2 px-3"><i class="fas fa-exclamation-triangle me-1"></i>${metadata.estimated_count} etapa(s) usan coeficientes baseline estimados.</div>`
+      : '';
+
+    return `
+      ${tasksSummaryHtml}
+      <div class="card mt-3">
+        <div class="card-header">
+          <h6 class="mb-0">Presupuesto estimado por etapa</h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Etapa</th>
+                  <th>Cantidad</th>
+                  <th class="text-end">Materiales</th>
+                  <th class="text-end">Mano de obra</th>
+                  <th class="text-end">Equipos</th>
+                  <th class="text-end">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || '<tr><td colspan="6" class="text-center text-muted">Sin datos de coeficientes para las etapas seleccionadas.</td></tr>'}
+              </tbody>
+              <tfoot>
+                ${totalsHtml}
+              </tfoot>
+            </table>
+          </div>
+          ${estimatedMessage}
+        </div>
+      </div>
+    `;
   }
 
   function showResult(result) {
@@ -809,7 +1107,9 @@ function initWizard() {
       if (!validatePaso3()) {
         return;
       }
-      buildResumen();
+      buildResumen().catch((error) => {
+        console.error('Error generando resumen del wizard', error);
+      });
       setStep(4);
     }
   }

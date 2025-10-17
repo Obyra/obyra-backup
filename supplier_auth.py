@@ -164,6 +164,12 @@ def login():
     
     return render_template('supplier_auth/login.html')
 
+
+@supplier_auth_bp.route('/forgot')
+def forgot_password():
+    """Redirige al flujo compartido de recuperación de contraseña."""
+    return redirect(url_for('auth.forgot_password', portal='supplier'))
+
 @supplier_auth_bp.route('/logout', methods=['POST'])
 def logout():
     """Logout de proveedor"""

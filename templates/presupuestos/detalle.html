@@ -3,6 +3,9 @@
 {% block title %}{{ presupuesto.numero }} - OBYRA IA{% endblock %}
 
 {% block content %}
+{% set obra = presupuesto.obra %}
+{% set obra_nombre = obra.nombre if obra else 'Sin obra asociada' %}
+{% set obra_cliente = obra.cliente if obra and obra.cliente else 'Sin especificar' %}
 <div class="container-fluid mt-4">
     <!-- Header -->
     <div class="row">
@@ -10,28 +13,79 @@
             <div class="d-flex justify-content-between align-items-start mb-4">
                 <div>
                     <h2><i class="fas fa-calculator me-2"></i>{{ presupuesto.numero }}</h2>
-                    <p class="text-muted mb-0">Obra: {{ presupuesto.obra.nombre }}</p>
-                    <p class="text-muted mb-0">Cliente: {{ presupuesto.obra.cliente }}</p>
+                    <p class="text-muted mb-0">Obra: <span id="obra-nombre-resumen">{{ obra_nombre }}</span></p>
+                    <p class="text-muted mb-0">Cliente: <span id="obra-cliente-resumen">{{ obra_cliente }}</span></p>
                 </div>
                 <div class="text-end">
                     <span class="badge {{ presupuesto.estado|estado_badge }} fs-6 mb-2">
                         {{ presupuesto.estado.title() }}
                     </span>
-                    <br>
-                    <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary me-2">
-                        <i class="fas fa-arrow-left me-1"></i>Volver
-                    </a>
-                    {% if presupuesto.items.count() > 0 %}
-                    <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}" 
-                       class="btn btn-success" target="_blank">
-                        <i class="fas fa-file-pdf me-1"></i>PDF
-                    </a>
+
+                    {% if presupuesto.estado == 'perdido' %}
+                    <div class="alert alert-warning py-2 px-3 mt-2 text-start d-inline-block">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-archive me-2 mt-1"></i>
+                            <div>
+                                <strong>Marcado como perdido</strong>
+                                {% if presupuesto.perdido_motivo %}
+                                <div class="small mt-1">{{ presupuesto.perdido_motivo }}</div>
+                                {% endif %}
+                                {% if presupuesto.perdido_fecha %}
+                                <div class="small text-muted mt-1">{{ presupuesto.perdido_fecha.strftime('%d/%m/%Y %H:%M') }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                     {% endif %}
+
+                    <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
+                        <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Volver
+                        </a>
+                        {% if presupuesto.items.count() > 0 %}
+                        <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
+                           class="btn btn-success" target="_blank">
+                            <i class="fas fa-file-pdf me-1"></i>PDF
+                        </a>
+                        {% endif %}
+                        {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                        <button class="btn btn-outline-warning" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
+                            <i class="fas fa-archive me-1"></i>Marcar como perdido
+                        </button>
+                        {% endif %}
+                        {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'perdido' %}
+                        <button class="btn btn-outline-secondary" onclick="restaurarPresupuesto({{ presupuesto.id }})">
+                            <i class="fas fa-undo me-1"></i>Restaurar a borrador
+                        </button>
+                        {% endif %}
+                        {% if current_user.rol == 'administrador' and presupuesto.estado in ['borrador', 'perdido'] %}
+                        <button class="btn btn-outline-danger" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
+                            <i class="fas fa-trash me-1"></i>Eliminar
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
+                {% if presupuesto.fecha_vigencia %}
+                <div class="mt-3 text-end">
+                    {% set dias_restantes = presupuesto.dias_restantes_vigencia %}
+                    {% set badge_class = presupuesto.clase_vigencia_badge %}
+                    <span class="badge {{ badge_class }} fs-6" data-bs-toggle="tooltip"
+                          title="Quedan {{ dias_restantes if dias_restantes is not none else '—' }} días para el vencimiento">
+                        {% if presupuesto.esta_vencido %}
+                            <i class="fas fa-exclamation-triangle me-1"></i>Vencido el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                        {% else %}
+                            <i class="fas fa-hourglass-half me-1"></i>Vence el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                            {% if dias_restantes is not none %}
+                                <span class="ms-1">(faltan {{ dias_restantes }} días)</span>
+                            {% endif %}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
-    
+
     <!-- Información del presupuesto -->
     <div class="row mb-4">
         <div class="col-lg-8">
@@ -45,6 +99,11 @@
                         <div class="col-md-6">
                             <strong>Items:</strong> {{ presupuesto.items.count() }}<br>
                             <strong>Creado:</strong> {{ presupuesto.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}<br>
+                            {% if presupuesto.fecha_vigencia %}
+                            {% set dias_restantes = presupuesto.dias_restantes_vigencia %}
+                            <strong>Vigencia:</strong> {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
+                            ({{ presupuesto.vigencia_dias }} días{% if dias_restantes is not none %}, faltan {{ dias_restantes if dias_restantes >= 0 else 0 }} días{% endif %})<br>
+                            {% endif %}
                         </div>
                     </div>
                     
@@ -52,22 +111,24 @@
                     <hr>
                     <h6 class="text-primary mb-3">
                         <i class="fas fa-building me-2"></i>Información de la Obra
+                        {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                         <button class="btn btn-outline-primary btn-sm ms-2" onclick="toggleEditarObra()">
                             <i class="fas fa-edit"></i> Editar
                         </button>
+                        {% endif %}
                     </h6>
                     
                     <div id="info-obra-view">
                         <div class="row">
                             <div class="col-md-6">
-                                <strong>Nombre:</strong> <span id="obra-nombre">{{ presupuesto.obra.nombre }}</span><br>
-                                <strong>Cliente:</strong> <span id="obra-cliente">{{ presupuesto.obra.cliente }}</span><br>
-                                <strong>Descripción:</strong> <span id="obra-descripcion">{{ presupuesto.obra.descripcion or 'Sin descripción' }}</span><br>
+                                <strong>Nombre:</strong> <span id="obra-nombre">{{ obra_nombre }}</span><br>
+                                <strong>Cliente:</strong> <span id="obra-cliente">{{ obra_cliente }}</span><br>
+                                <strong>Descripción:</strong> <span id="obra-descripcion">{{ obra.descripcion if obra and obra.descripcion else 'Sin descripción' }}</span><br>
                             </div>
                             <div class="col-md-6">
-                                <strong>Dirección:</strong> <span id="obra-direccion">{{ presupuesto.obra.direccion or 'Sin especificar' }}</span><br>
-                                <strong>Fecha Inicio:</strong> <span id="obra-fecha-inicio">{{ presupuesto.obra.fecha_inicio.strftime('%d/%m/%Y') if presupuesto.obra.fecha_inicio else 'Sin definir' }}</span><br>
-                                <strong>Fecha Fin Est.:</strong> <span id="obra-fecha-fin">{{ presupuesto.obra.fecha_fin_estimada.strftime('%d/%m/%Y') if presupuesto.obra.fecha_fin_estimada else 'Sin definir' }}</span><br>
+                                <strong>Dirección:</strong> <span id="obra-direccion">{{ obra.direccion if obra and obra.direccion else 'Sin especificar' }}</span><br>
+                                <strong>Fecha Inicio:</strong> <span id="obra-fecha-inicio">{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra and obra.fecha_inicio else 'Sin definir' }}</span><br>
+                                <strong>Fecha Fin Est.:</strong> <span id="obra-fecha-fin">{{ obra.fecha_fin_estimada.strftime('%d/%m/%Y') if obra and obra.fecha_fin_estimada else 'Sin definir' }}</span><br>
                             </div>
                         </div>
                     </div>
@@ -77,31 +138,31 @@
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Nombre:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ presupuesto.obra.nombre }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ obra.nombre if obra else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Cliente:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ presupuesto.obra.cliente }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ obra.cliente if obra else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Descripción:</label>
-                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ presupuesto.obra.descripcion or '' }}</textarea>
+                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ obra.descripcion if obra and obra.descripcion else '' }}</textarea>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Dirección:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion" value="{{ presupuesto.obra.direccion or '' }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion" value="{{ obra.direccion if obra and obra.direccion else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Fecha Inicio:</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-inicio" 
-                                           value="{{ presupuesto.obra.fecha_inicio.strftime('%Y-%m-%d') if presupuesto.obra.fecha_inicio else '' }}">
+                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-inicio"
+                                           value="{{ obra.fecha_inicio.strftime('%Y-%m-%d') if obra and obra.fecha_inicio else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Fecha Fin Estimada:</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-fin" 
-                                           value="{{ presupuesto.obra.fecha_fin_estimada.strftime('%Y-%m-%d') if presupuesto.obra.fecha_fin_estimada else '' }}">
+                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-fin"
+                                           value="{{ obra.fecha_fin_estimada.strftime('%Y-%m-%d') if obra and obra.fecha_fin_estimada else '' }}">
                                 </div>
                             </div>
                         </div>
@@ -121,8 +182,223 @@
                     {% endif %}
                 </div>
             </div>
+            {% set total_items_ia = ia_materiales|length + ia_mano_obra|length + ia_equipos|length + ia_herramientas|length %}
+            {% if total_items_ia > 0 %}
+            <div class="card mt-4">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 text-primary"><i class="fas fa-robot me-2"></i>Ítems generados por IA</h6>
+                    <span class="badge bg-light text-dark">
+                        Total IA: {{ totales_ia.general|moneda(presupuesto.currency) }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    {% if ia_materiales %}
+                    <h6 class="text-secondary">Materiales</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_materiales %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal materiales IA</th>
+                                    <th class="text-end">{{ totales_ia.materiales|moneda(presupuesto.currency) }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if ia_mano_obra %}
+                    <h6 class="text-secondary">Mano de Obra</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_mano_obra %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal mano de obra IA</th>
+                                    <th class="text-end">{{ totales_ia.mano_obra|moneda(presupuesto.currency) }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if ia_equipos %}
+                    <h6 class="text-secondary">Equipos</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_equipos %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal equipos IA</th>
+                                    <th class="text-end">{{ totales_ia.equipos|moneda(presupuesto.currency) }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if ia_herramientas %}
+                    <h6 class="text-secondary">Herramientas</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ia_herramientas %}
+                                <tr>
+                                    <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.unidad }}</td>
+                                    <td class="text-end">{{ item.cantidad }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="4" class="text-end">Subtotal herramientas IA</th>
+                                    <th class="text-end">{{ totales_ia.herramientas|moneda(presupuesto.currency) }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
-        
+
+{% if presupuesto.currency != 'ARS' %}
+    {% if presupuesto.tasa_usd_venta or presupuesto.exchange_rate_value %}
+    <div class="alert alert-info">
+        <i class="fas fa-exchange-alt me-2"></i>
+        Tipo de cambio utilizado:
+        {{ (presupuesto.tasa_usd_venta or presupuesto.exchange_rate_value)|moneda('ARS') }}
+        {% if presupuesto.exchange_rate_provider %}
+            — {{ presupuesto.exchange_rate_provider|upper }}
+        {% endif %}
+        {% set fecha_tc = presupuesto.exchange_rate_as_of or (presupuesto.exchange_rate_fetched_at.date() if presupuesto.exchange_rate_fetched_at else None) %}
+        {% if fecha_tc %}
+            <span class="ms-2 text-muted">({{ fecha_tc.strftime('%d/%m/%Y') }})</span>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endif %}
+
+{% if presupuesto.indice_cac_valor %}
+<div class="alert alert-secondary">
+    <i class="fas fa-chart-line me-2"></i>
+    Índice CAC aplicado: {{ '{:,.2f}'.format(presupuesto.indice_cac_valor) }}
+    {% if presupuesto.indice_cac_fecha %}
+        <span class="ms-2 text-muted">({{ presupuesto.indice_cac_fecha.strftime('%B %Y')|title }})</span>
+    {% endif %}
+</div>
+{% endif %}
+
         <div class="col-lg-4">
             <div class="card">
                 <div class="card-body text-center">
@@ -130,15 +406,15 @@
                     
                     <div class="row text-center mb-3">
                         <div class="col-4">
-                            <strong class="text-info d-block">{{ presupuesto.subtotal_materiales|moneda }}</strong>
+                            <strong class="text-info d-block">{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Materiales</small>
                         </div>
                         <div class="col-4">
-                            <strong class="text-warning d-block">{{ presupuesto.subtotal_mano_obra|moneda }}</strong>
+                            <strong class="text-warning d-block">{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Mano de Obra</small>
                         </div>
                         <div class="col-4">
-                            <strong class="text-secondary d-block">{{ presupuesto.subtotal_equipos|moneda }}</strong>
+                            <strong class="text-secondary d-block">{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Equipos</small>
                         </div>
                     </div>
@@ -147,16 +423,24 @@
                     
                     <div class="row text-center">
                         <div class="col-6">
-                            <strong class="text-primary d-block">{{ presupuesto.total_sin_iva|moneda }}</strong>
+                            <strong class="text-primary d-block">{{ presupuesto.total_sin_iva|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Sin IVA</small>
+                            {% if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta %}
+                                <div class="small text-muted">≈ {{ (presupuesto.total_sin_iva * presupuesto.tasa_usd_venta)|moneda('ARS') }}</div>
+                            {% endif %}
                         </div>
                         <div class="col-6">
-                            <strong class="text-success d-block h5">{{ presupuesto.total_con_iva|moneda }}</strong>
+                            <strong class="text-success d-block h5">{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Total</small>
+                            {% if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta %}
+                                <div class="small text-muted">≈ {{ (presupuesto.total_con_iva * presupuesto.tasa_usd_venta)|moneda('ARS') }}</div>
+                            {% endif %}
                         </div>
-                    </div>
-                    
-                    {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado != 'aprobado' %}
+</div>
+
+{% include 'presupuestos/_perder_modal.html' %}
+
+{% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado not in ['aprobado', 'perdido', 'eliminado'] %}
                     <hr>
                     <div class="d-grid">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#cambiarEstadoModal">
@@ -200,28 +484,49 @@
                             </thead>
                             <tbody>
                                 {% for item in materiales %}
-                                <tr data-item-id="{{ item.id }}">
+                                <tr data-item-id="{{ item.id }}"
+                                    data-item-tipo="material"
+                                    data-item-descripcion="{{ item.descripcion }}"
+                                    data-item-unidad="{{ item.unidad }}"
+                                    data-item-cantidad="{{ item.cantidad or 0 }}"
+                                    data-item-precio="{{ item.price_unit_currency or item.precio_unitario or 0 }}"
+                                    data-item-currency="{{ item.currency or presupuesto.currency }}"
+                                    data-item-fx-rate="{{ item.fx_rate_value or '' }}"
+                                    data-item-precio-ars="{{ item.price_unit_ars or '' }}"
+                                    data-item-total-currency="{{ item.total_currency or item.total or 0 }}"
+                                    data-item-total-ars="{{ item.total_ars or '' }}"
+                                    data-item-editable="{{ 'true' if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else 'false' }}"
+                                    data-item-can-delete="{{ 'true' if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else 'false' }}"
+                                    data-item-delete-url="{{ url_for('presupuestos.eliminar_item', id=item.id) if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else '' }}"
+                                    data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda }}
-                                        {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                        <button class="btn btn-outline-primary btn-sm ms-2" 
-                                                onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
-                                    <td>
-                                        <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
-                                              style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                <i class="fas fa-trash"></i>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-outline-primary btn-sm" type="button" onclick="editarItem({{ item.id }})">
+                                                <i class="fas fa-edit"></i>
                                             </button>
-                                        </form>
+                                            <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}"
+                                                  style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                     {% endif %}
                                 </tr>
@@ -230,7 +535,7 @@
                             <tfoot>
                                 <tr class="table-info">
                                     <th colspan="4" class="text-end">Subtotal Materiales:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_materiales|moneda }}</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -270,8 +575,10 @@
                             <thead>
                                 <tr>
                                     <th>Descripción</th>
+                                    <th class="text-center">Personas</th>
+                                    <th class="text-center">Días</th>
+                                    <th class="text-end">Jornales</th>
                                     <th>Unidad</th>
-                                    <th class="text-end">Cantidad</th>
                                     <th class="text-end">P. Unitario</th>
                                     <th class="text-end">Total</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
@@ -281,28 +588,54 @@
                             </thead>
                             <tbody>
                                 {% for item in mano_obra %}
-                                <tr data-item-id="{{ item.id }}">
+                                <tr data-item-id="{{ item.id }}"
+                                    data-item-tipo="mano_obra"
+                                    data-item-descripcion="{{ item.descripcion }}"
+                                    data-item-unidad="{{ item.unidad }}"
+                                    data-item-cantidad="{{ item.cantidad or 0 }}"
+                                    data-item-precio="{{ item.price_unit_currency or item.precio_unitario or 0 }}"
+                                    data-item-currency="{{ item.currency or presupuesto.currency }}"
+                                    data-item-fx-rate="{{ item.fx_rate_value or '' }}"
+                                    data-item-precio-ars="{{ item.price_unit_ars or '' }}"
+                                    data-item-total-currency="{{ item.total_currency or item.total or 0 }}"
+                                    data-item-total-ars="{{ item.total_ars or '' }}"
+                                    data-item-personas="{{ item.personas or 1 }}"
+                                    data-item-dias="{{ (item.duracion_dias or ((item.jornales or item.cantidad) / (item.personas or 1)))|round(1) }}"
+                                    data-item-jornales="{{ item.jornales or item.cantidad }}"
+                                    data-item-editable="{{ 'true' if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else 'false' }}"
+                                    data-item-can-delete="{{ 'true' if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else 'false' }}"
+                                    data-item-delete-url="{{ url_for('presupuestos.eliminar_item', id=item.id) if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else '' }}"
+                                    data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.personas or 1 }}</td>
+                                    <td class="text-center">{{ (item.duracion_dias or ((item.jornales or item.cantidad) / (item.personas or 1)))|numero(1) }}</td>
+                                    <td class="text-end">{{ (item.jornales or item.cantidad)|numero(1) }}</td>
                                     <td>{{ item.unidad }}</td>
-                                    <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda }}
-                                        {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                        <button class="btn btn-outline-primary btn-sm ms-2" 
-                                                onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
-                                    <td>
-                                        <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
-                                              style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                <i class="fas fa-trash"></i>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-outline-primary btn-sm" type="button" onclick="editarItem({{ item.id }})">
+                                                <i class="fas fa-edit"></i>
                                             </button>
-                                        </form>
+                                            <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}"
+                                                  style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                     {% endif %}
                                 </tr>
@@ -310,8 +643,8 @@
                             </tbody>
                             <tfoot>
                                 <tr class="table-warning">
-                                    <th colspan="4" class="text-end">Subtotal Mano de Obra:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_mano_obra|moneda }}</th>
+                                    <th colspan="6" class="text-end">Subtotal Mano de Obra:</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -362,28 +695,49 @@
                             </thead>
                             <tbody>
                                 {% for item in equipos %}
-                                <tr data-item-id="{{ item.id }}">
+                                <tr data-item-id="{{ item.id }}"
+                                    data-item-tipo="equipo"
+                                    data-item-descripcion="{{ item.descripcion }}"
+                                    data-item-unidad="{{ item.unidad }}"
+                                    data-item-cantidad="{{ item.cantidad or 0 }}"
+                                    data-item-precio="{{ item.price_unit_currency or item.precio_unitario or 0 }}"
+                                    data-item-currency="{{ item.currency or presupuesto.currency }}"
+                                    data-item-fx-rate="{{ item.fx_rate_value or '' }}"
+                                    data-item-precio-ars="{{ item.price_unit_ars or '' }}"
+                                    data-item-total-currency="{{ item.total_currency or item.total or 0 }}"
+                                    data-item-total-ars="{{ item.total_ars or '' }}"
+                                    data-item-editable="{{ 'true' if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else 'false' }}"
+                                    data-item-can-delete="{{ 'true' if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else 'false' }}"
+                                    data-item-delete-url="{{ url_for('presupuestos.eliminar_item', id=item.id) if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' else '' }}"
+                                    data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
-                                    <td class="text-end">{{ item.precio_unitario|moneda }}</td>
+                                    <td class="text-end">
+                                        {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
+                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end fw-bold">
-                                        {{ item.total|moneda }}
-                                        {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                        <button class="btn btn-outline-primary btn-sm ms-2" 
-                                                onclick="editarItem({{ item.id }}, '{{ item.descripcion }}', '{{ item.unidad }}', {{ item.cantidad }}, {{ item.precio_unitario|replace('$','') }})">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
+                                        {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
+                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
+                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
-                                    <td>
-                                        <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}" 
-                                              style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                <i class="fas fa-trash"></i>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-outline-primary btn-sm" type="button" onclick="editarItem({{ item.id }})">
+                                                <i class="fas fa-edit"></i>
                                             </button>
-                                        </form>
+                                            <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}"
+                                                  style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                     {% endif %}
                                 </tr>
@@ -392,7 +746,7 @@
                             <tfoot>
                                 <tr class="table-secondary">
                                     <th colspan="4" class="text-end">Subtotal Equipos:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_equipos|moneda }}</th>
+                                    <th class="text-end">{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -525,6 +879,122 @@
 
 {% block scripts %}
 <script>
+const modalPerdidoEl = document.getElementById('modalMarcarPerdido');
+const modalPerdido = modalPerdidoEl ? new bootstrap.Modal(modalPerdidoEl) : null;
+let presupuestoSeleccionado = null;
+const botonConfirmarPerdido = document.getElementById('btnConfirmarPerdido');
+if (botonConfirmarPerdido) {
+    botonConfirmarPerdido.addEventListener('click', confirmarMarcarPerdido);
+}
+
+const initialObraId = {{ (obra.id if obra else None)|tojson }};
+let currentObraId = initialObraId;
+
+function abrirPerderModal(id, numero) {
+    if (!modalPerdido) return;
+    presupuestoSeleccionado = { id, numero };
+    const numeroSpan = document.getElementById('perderPresupuestoNumero');
+    if (numeroSpan) {
+        numeroSpan.textContent = numero;
+    }
+    const motivo = document.getElementById('motivoPerdido');
+    const detalle = document.getElementById('detallePerdido');
+    if (motivo) motivo.value = '';
+    if (detalle) detalle.value = '';
+    modalPerdido.show();
+}
+
+async function confirmarMarcarPerdido() {
+    if (!presupuestoSeleccionado) return;
+    const motivo = document.getElementById('motivoPerdido')?.value.trim() || '';
+    const detalle = document.getElementById('detallePerdido')?.value.trim() || '';
+
+    if (!motivo && !detalle) {
+        showAlert('Selecciona un motivo o agrega un detalle para registrar el motivo.', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${presupuestoSeleccionado.id}/perder`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ motivo, detalle })
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al marcar el presupuesto como perdido.', 'danger');
+            return;
+        }
+
+        modalPerdido?.hide();
+        showAlert(result.mensaje || 'Presupuesto marcado como perdido.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+async function restaurarPresupuesto(id) {
+    if (!confirm('¿Restaurar este presupuesto a borrador?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${id}/restaurar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al restaurar el presupuesto.', 'danger');
+            return;
+        }
+
+        showAlert(result.mensaje || 'Presupuesto restaurado a borrador.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+async function eliminarPresupuesto(id, numero) {
+    if (!confirm(`¿Eliminar el presupuesto ${numero}? Esta acción lo archivará y podrás verlo solo desde el filtro de eliminados.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${id}/eliminar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al eliminar el presupuesto.', 'danger');
+            return;
+        }
+
+        showAlert(result.mensaje || 'Presupuesto eliminado correctamente.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
 function abrirModalItem(tipo) {
     const tipos = {
         'material': 'Material',
@@ -558,14 +1028,24 @@ function cancelarEditarObra() {
 
 async function guardarObra() {
     const data = {
-        nombre: document.getElementById('edit-obra-nombre').value,
-        cliente: document.getElementById('edit-obra-cliente').value,
-        descripcion: document.getElementById('edit-obra-descripcion').value,
-        direccion: document.getElementById('edit-obra-direccion').value,
+        obra_id: currentObraId,
+        nombre: document.getElementById('edit-obra-nombre').value.trim(),
+        cliente: document.getElementById('edit-obra-cliente').value.trim(),
+        descripcion: document.getElementById('edit-obra-descripcion').value.trim(),
+        direccion: document.getElementById('edit-obra-direccion').value.trim(),
         fecha_inicio: document.getElementById('edit-obra-fecha-inicio').value,
         fecha_fin_estimada: document.getElementById('edit-obra-fecha-fin').value
     };
-    
+
+    if (!data.nombre) {
+        showAlert('El nombre de la obra es obligatorio.', 'warning');
+        return;
+    }
+
+    if (data.obra_id === null) {
+        delete data.obra_id;
+    }
+
     try {
         const response = await fetch(`/presupuestos/{{ presupuesto.id }}/editar-obra`, {
             method: 'POST',
@@ -574,16 +1054,35 @@ async function guardarObra() {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
+        if (!response.ok) {
+            showAlert(result.error || 'Error al actualizar la obra', 'danger');
+            return;
+        }
+
         if (result.exito) {
+            if (result.obra_id) {
+                currentObraId = result.obra_id;
+            }
+
             // Actualizar los valores mostrados
-            document.getElementById('obra-nombre').textContent = data.nombre;
-            document.getElementById('obra-cliente').textContent = data.cliente;
+            const nombre = data.nombre || 'Sin obra asociada';
+            const cliente = data.cliente || 'Sin especificar';
+            document.getElementById('obra-nombre').textContent = nombre;
+            document.getElementById('obra-cliente').textContent = cliente;
+            const resumenNombre = document.getElementById('obra-nombre-resumen');
+            if (resumenNombre) {
+                resumenNombre.textContent = nombre;
+            }
+            const resumenCliente = document.getElementById('obra-cliente-resumen');
+            if (resumenCliente) {
+                resumenCliente.textContent = cliente;
+            }
             document.getElementById('obra-descripcion').textContent = data.descripcion || 'Sin descripción';
             document.getElementById('obra-direccion').textContent = data.direccion || 'Sin especificar';
-            
+
             // Formatear fechas para mostrar
             if (data.fecha_inicio) {
                 const fechaInicio = new Date(data.fecha_inicio + 'T00:00:00');
@@ -603,7 +1102,7 @@ async function guardarObra() {
             cancelarEditarObra();
             
             // Mostrar mensaje de éxito
-            showAlert('Obra actualizada correctamente', 'success');
+            showAlert(result.mensaje || 'Obra actualizada correctamente', 'success');
         } else {
             showAlert(result.error || 'Error al actualizar la obra', 'danger');
         }
@@ -613,68 +1112,254 @@ async function guardarObra() {
     }
 }
 
+const resumenCurrency = {{ presupuesto.currency|tojson }};
+const currencyFormatters = {};
+
+function getCurrencyFormatter(currency) {
+    const key = currency || 'ARS';
+    if (!currencyFormatters[key]) {
+        try {
+            currencyFormatters[key] = new Intl.NumberFormat('es-AR', {
+                style: 'currency',
+                currency: key === 'USD' ? 'USD' : 'ARS',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        } catch (error) {
+            currencyFormatters[key] = new Intl.NumberFormat('es-AR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+    }
+    return currencyFormatters[key];
+}
+
+function formatCurrencyValue(value, currency) {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+    const numeric = Number(String(value).replace(',', '.'));
+    if (!Number.isFinite(numeric)) {
+        return '—';
+    }
+    const formatter = getCurrencyFormatter(currency);
+    return formatter.format(numeric);
+}
+
+function parseDecimalString(value, fallback = 0) {
+    if (value === null || value === undefined || value === '') {
+        return fallback;
+    }
+    const numeric = Number(String(value).replace(',', '.'));
+    return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function formatNumber(value, decimals = 2) {
+    const numeric = parseDecimalString(value, 0);
+    return numeric.toLocaleString('es-AR', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+}
+
+const htmlEscaper = document.createElement('div');
+function escapeHtml(value) {
+    htmlEscaper.textContent = value ?? '';
+    return htmlEscaper.innerHTML;
+}
+
+function getActionCellHtml(row, itemId) {
+    if (row.dataset.itemEditable !== 'true') {
+        return '';
+    }
+    const canDelete = row.dataset.itemCanDelete === 'true';
+    const deleteUrl = row.dataset.itemDeleteUrl || '';
+    const confirmMessage = row.dataset.itemDeleteConfirm || '¿Eliminar este item?';
+    const deleteButton = (canDelete && deleteUrl)
+        ? `<form method="POST" action="${deleteUrl}"
+                 style="display: inline;" onsubmit="return confirm(${JSON.stringify(confirmMessage)});">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </form>`
+        : '';
+
+    return `<td class="text-end">
+        <div class="d-flex gap-2 justify-content-end">
+            <button class="btn btn-outline-primary btn-sm" type="button" onclick="editarItem(${itemId})">
+                <i class="fas fa-edit"></i>
+            </button>
+            ${deleteButton}
+        </div>
+    </td>`;
+}
+
+function renderItemDisplay(row) {
+    const itemId = row.dataset.itemId;
+    const tipo = (row.dataset.itemTipo || '').toLowerCase();
+    const descripcion = escapeHtml(row.dataset.itemDescripcion || '');
+    const unidad = escapeHtml(row.dataset.itemUnidad || (tipo === 'mano_obra' ? 'jornal' : ''));
+    const currency = row.dataset.itemCurrency || resumenCurrency || 'ARS';
+    const cantidad = parseDecimalString(row.dataset.itemCantidad, 0);
+    const precio = parseDecimalString(row.dataset.itemPrecio, 0);
+    const total = parseDecimalString(row.dataset.itemTotalCurrency, cantidad * precio);
+    const precioArs = parseDecimalString(row.dataset.itemPrecioArs, NaN);
+    const totalArs = parseDecimalString(row.dataset.itemTotalArs, NaN);
+    const approxPrecioHtml = currency !== 'ARS' && Number.isFinite(precioArs)
+        ? `<div class="small text-muted">≈ ${formatCurrencyValue(precioArs, 'ARS')}</div>`
+        : '';
+    const approxTotalHtml = currency !== 'ARS' && Number.isFinite(totalArs)
+        ? `<div class="small text-muted">≈ ${formatCurrencyValue(totalArs, 'ARS')}</div>`
+        : '';
+
+    if (tipo === 'mano_obra') {
+        const personas = parseInt(row.dataset.itemPersonas || '1', 10) || 1;
+        const dias = parseDecimalString(row.dataset.itemDias, 1);
+        const jornales = parseDecimalString(row.dataset.itemJornales, personas * dias);
+        const cells = [
+            `<td>${descripcion}</td>`,
+            `<td class="text-center">${personas}</td>`,
+            `<td class="text-center">${formatNumber(dias, 1)}</td>`,
+            `<td class="text-end">${formatNumber(jornales, 1)}</td>`,
+            `<td>${unidad}</td>`,
+            `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`,
+            `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}${approxTotalHtml}</td>`
+        ];
+        const actionCell = getActionCellHtml(row, itemId);
+        row.innerHTML = cells.join('') + actionCell;
+        return;
+    }
+
+    const quantityCell = `<td class="text-end">${formatNumber(cantidad, 2)}</td>`;
+    const priceCell = `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`;
+    const totalCell = `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}${approxTotalHtml}</td>`;
+    const cells = [
+        `<td>${descripcion}</td>`,
+        `<td>${unidad}</td>`,
+        quantityCell,
+        priceCell,
+        totalCell
+    ];
+    const actionCell = getActionCellHtml(row, itemId);
+    row.innerHTML = cells.join('') + actionCell;
+}
+
 // Funciones para editar items del presupuesto
-function editarItem(itemId, descripcion, unidad, cantidad, precioUnitario) {
+function editarItem(itemId) {
     const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
     if (!row) return;
-    
-    // Limpiar el precio unitario de cualquier formato de moneda
-    const precioLimpio = String(precioUnitario).replace(/[$,]/g, '');
-    
-    // Reemplazar celdas con inputs editables
+
+    const tipo = (row.dataset.itemTipo || '').toLowerCase();
+    const descripcion = row.dataset.itemDescripcion || '';
+    const unidad = row.dataset.itemUnidad || (tipo === 'mano_obra' ? 'jornal' : '');
+    const cantidad = parseDecimalString(row.dataset.itemCantidad, 0);
+    const precioUnitario = parseDecimalString(row.dataset.itemPrecio, 0);
+    const personas = parseInt(row.dataset.itemPersonas || '1', 10) || 1;
+    const dias = parseDecimalString(row.dataset.itemDias, 1);
+    const jornales = parseDecimalString(row.dataset.itemJornales, personas * dias);
+
+    if (tipo === 'mano_obra') {
+        const totalEstimado = personas * dias * precioUnitario;
+        row.innerHTML = `
+            <td><input type="text" class="form-control form-control-sm" value="${escapeHtml(descripcion)}" id="edit-desc-${itemId}"></td>
+            <td><input type="number" min="1" step="1" class="form-control form-control-sm text-center" value="${personas}" id="edit-personas-${itemId}" onchange="actualizarEdicionJornales(${itemId})"></td>
+            <td><input type="number" min="0.5" step="0.1" class="form-control form-control-sm text-center" value="${dias.toFixed(1)}" id="edit-dias-${itemId}" onchange="actualizarEdicionJornales(${itemId})"></td>
+            <td class="text-end"><span id="edit-jornales-${itemId}">${(personas * dias).toFixed(1)}</span></td>
+            <td>${escapeHtml(unidad)}</td>
+            <td><input type="number" class="form-control form-control-sm text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionJornales(${itemId})"></td>
+            <td class="text-end"><span id="edit-total-${itemId}">${totalEstimado.toFixed(2)}</span></td>
+            <td class="text-end">
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-success btn-sm" onclick="guardarItem(${itemId})">
+                        <i class="fas fa-save"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        return;
+    }
+
+    const baseUnidades = ['unidad', 'm²', 'm³', 'kg', 'metros', 'litros', 'día', 'jornal'];
+    const opciones = [];
+    [unidad, ...baseUnidades].forEach((opt) => {
+        if (opt && !opciones.includes(opt)) {
+            opciones.push(opt);
+        }
+    });
+    const opcionesHtml = opciones.map((opt) => `<option value="${escapeHtml(opt)}" ${opt === unidad ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
+    const totalEstimado = cantidad * precioUnitario;
     row.innerHTML = `
-        <td><input type="text" class="form-control form-control-sm" value="${descripcion}" id="edit-desc-${itemId}"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${escapeHtml(descripcion)}" id="edit-desc-${itemId}"></td>
         <td>
             <select class="form-select form-select-sm" id="edit-unidad-${itemId}">
-                <option value="unidad" ${unidad === 'unidad' ? 'selected' : ''}>Unidad</option>
-                <option value="m²" ${unidad === 'm²' ? 'selected' : ''}>m²</option>
-                <option value="m³" ${unidad === 'm³' ? 'selected' : ''}>m³</option>
-                <option value="kg" ${unidad === 'kg' ? 'selected' : ''}>kg</option>
-                <option value="metros" ${unidad === 'metros' ? 'selected' : ''}>metros</option>
-                <option value="litros" ${unidad === 'litros' ? 'selected' : ''}>litros</option>
+                ${opcionesHtml}
             </select>
         </td>
-        <td><input type="number" class="form-control form-control-sm" value="${cantidad}" step="0.01" id="edit-cant-${itemId}"></td>
-        <td><input type="number" class="form-control form-control-sm" value="${precioLimpio}" step="0.01" id="edit-precio-${itemId}"></td>
-        <td>
-            <button class="btn btn-success btn-sm me-1" onclick="guardarItem(${itemId})">
-                <i class="fas fa-save"></i>
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId}, '${descripcion}', '${unidad}', ${cantidad}, ${precioLimpio})">
-                <i class="fas fa-times"></i>
-            </button>
+        <td><input type="number" class="form-control form-control-sm text-end" value="${cantidad.toFixed(2)}" step="0.01" id="edit-cant-${itemId}" oninput="actualizarEdicionTotalSimple(${itemId})"></td>
+        <td><input type="number" class="form-control form-control-sm text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionTotalSimple(${itemId})"></td>
+        <td class="text-end"><span id="edit-total-${itemId}">${totalEstimado.toFixed(2)}</span></td>
+        <td class="text-end">
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn btn-success btn-sm" onclick="guardarItem(${itemId})">
+                    <i class="fas fa-save"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
         </td>
     `;
 }
 
-function cancelarEditarItem(itemId, descripcion, unidad, cantidad, precioUnitario) {
+function cancelarEditarItem(itemId) {
     const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
     if (!row) return;
-    
-    const total = (cantidad * precioUnitario).toFixed(2);
-    
-    row.innerHTML = `
-        <td>${descripcion}</td>
-        <td>${unidad}</td>
-        <td>${parseFloat(cantidad).toFixed(2)}</td>
-        <td>$${parseFloat(precioUnitario).toFixed(2)}</td>
-        <td>
-            <strong>$${total}</strong>
-            <button class="btn btn-outline-primary btn-sm ms-2" onclick="editarItem(${itemId}, '${descripcion}', '${unidad}', ${cantidad}, ${precioUnitario})">
-                <i class="fas fa-edit"></i>
-            </button>
-        </td>
-    `;
+    renderItemDisplay(row);
 }
 
 async function guardarItem(itemId) {
+    const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (!row) return;
+
+    const tipo = (row.dataset.itemTipo || '').toLowerCase();
     const data = {
         descripcion: document.getElementById(`edit-desc-${itemId}`).value,
-        unidad: document.getElementById(`edit-unidad-${itemId}`).value,
-        cantidad: parseFloat(document.getElementById(`edit-cant-${itemId}`).value),
         precio_unitario: parseFloat(document.getElementById(`edit-precio-${itemId}`).value)
     };
-    
+
+    if (!Number.isFinite(data.precio_unitario)) {
+        data.precio_unitario = 0;
+    }
+
+    if (tipo === 'mano_obra') {
+        const personasInput = document.getElementById(`edit-personas-${itemId}`);
+        const diasInput = document.getElementById(`edit-dias-${itemId}`);
+        let personasVal = parseInt(personasInput.value, 10);
+        if (!Number.isFinite(personasVal) || personasVal < 1) {
+            personasVal = 1;
+        }
+        let diasVal = parseFloat(diasInput.value);
+        if (!Number.isFinite(diasVal) || diasVal <= 0) {
+            diasVal = 0.1;
+        }
+        const jornalesVal = personasVal * diasVal;
+        data.personas = personasVal;
+        data.dias = parseFloat(diasVal.toFixed(1));
+        data.jornales = parseFloat(jornalesVal.toFixed(1));
+        data.cantidad = data.jornales;
+    } else {
+        data.unidad = document.getElementById(`edit-unidad-${itemId}`).value;
+        let cantidadVal = parseFloat(document.getElementById(`edit-cant-${itemId}`).value);
+        if (!Number.isFinite(cantidadVal)) {
+            cantidadVal = 0;
+        }
+        data.cantidad = cantidadVal;
+    }
+
     try {
         const response = await fetch(`/presupuestos/item/${itemId}/editar`, {
             method: 'POST',
@@ -683,30 +1368,43 @@ async function guardarItem(itemId) {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
         if (result.exito) {
-            // Actualizar la fila con los nuevos valores
-            const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
-            const total = (data.cantidad * data.precio_unitario).toFixed(2);
-            
-            row.innerHTML = `
-                <td>${data.descripcion}</td>
-                <td>${data.unidad}</td>
-                <td>${data.cantidad.toFixed(2)}</td>
-                <td>$${data.precio_unitario.toFixed(2)}</td>
-                <td>
-                    <strong>$${total}</strong>
-                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="editarItem(${itemId}, '${data.descripcion}', '${data.unidad}', ${data.cantidad}, ${data.precio_unitario})">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </td>
-            `;
-            
-            // Actualizar totales en el resumen
+            row.dataset.itemDescripcion = data.descripcion || row.dataset.itemDescripcion || '';
+            if (tipo === 'mano_obra') {
+                row.dataset.itemUnidad = row.dataset.itemUnidad || 'jornal';
+                row.dataset.itemCantidad = data.cantidad;
+                row.dataset.itemPrecio = data.precio_unitario;
+                row.dataset.itemPersonas = data.personas;
+                row.dataset.itemDias = data.dias;
+                row.dataset.itemJornales = data.jornales;
+            } else {
+                row.dataset.itemUnidad = data.unidad;
+                row.dataset.itemCantidad = data.cantidad;
+                row.dataset.itemPrecio = data.precio_unitario;
+            }
+
+            if (typeof result.nuevo_total !== 'undefined') {
+                row.dataset.itemTotalCurrency = result.nuevo_total;
+            } else if (typeof data.cantidad !== 'undefined' && typeof data.precio_unitario !== 'undefined') {
+                row.dataset.itemTotalCurrency = data.cantidad * data.precio_unitario;
+            }
+
+            const fxRate = parseDecimalString(row.dataset.itemFxRate, NaN);
+            if (row.dataset.itemCurrency && row.dataset.itemCurrency !== 'ARS' && Number.isFinite(fxRate) && fxRate > 0) {
+                const precioVal = parseDecimalString(row.dataset.itemPrecio, 0);
+                const totalVal = parseDecimalString(row.dataset.itemTotalCurrency, precioVal);
+                row.dataset.itemPrecioArs = (precioVal * fxRate).toFixed(2);
+                row.dataset.itemTotalArs = (totalVal * fxRate).toFixed(2);
+            } else {
+                row.dataset.itemPrecioArs = '';
+                row.dataset.itemTotalArs = '';
+            }
+
+            renderItemDisplay(row);
             actualizarTotales(result);
-            
             showAlert('Item actualizado correctamente', 'success');
         } else {
             showAlert(result.error || 'Error al actualizar el item', 'danger');
@@ -717,22 +1415,60 @@ async function guardarItem(itemId) {
     }
 }
 
+function actualizarEdicionJornales(itemId) {
+    const personasInput = document.getElementById(`edit-personas-${itemId}`);
+    const diasInput = document.getElementById(`edit-dias-${itemId}`);
+    const jornalesSpan = document.getElementById(`edit-jornales-${itemId}`);
+    const precioInput = document.getElementById(`edit-precio-${itemId}`);
+    const totalSpan = document.getElementById(`edit-total-${itemId}`);
+    if (!personasInput || !diasInput || !jornalesSpan) {
+        return;
+    }
+    let personasVal = parseInt(personasInput.value, 10);
+    if (!Number.isFinite(personasVal) || personasVal < 1) {
+        personasVal = 1;
+    }
+    let diasVal = parseFloat(diasInput.value);
+    if (!Number.isFinite(diasVal) || diasVal <= 0) {
+        diasVal = 0.1;
+    }
+    personasInput.value = personasVal;
+    diasInput.value = diasVal.toFixed(1);
+    jornalesSpan.textContent = (personasVal * diasVal).toFixed(1);
+    if (precioInput && totalSpan) {
+        const precioVal = parseFloat(precioInput.value) || 0;
+        totalSpan.textContent = (personasVal * diasVal * precioVal).toFixed(2);
+    }
+}
+
+function actualizarEdicionTotalSimple(itemId) {
+    const cantidadInput = document.getElementById(`edit-cant-${itemId}`);
+    const precioInput = document.getElementById(`edit-precio-${itemId}`);
+    const totalSpan = document.getElementById(`edit-total-${itemId}`);
+    if (!cantidadInput || !precioInput || !totalSpan) {
+        return;
+    }
+    const cantidadVal = parseFloat(cantidadInput.value) || 0;
+    const precioVal = parseFloat(precioInput.value) || 0;
+    totalSpan.textContent = (cantidadVal * precioVal).toFixed(2);
+}
+
 function actualizarTotales(result) {
-    // Actualizar los totales en el resumen del presupuesto
-    const formatMoney = (amount) => `$${parseFloat(amount).toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
-    
-    // Buscar los elementos del resumen y actualizarlos
+    if (!result) {
+        return;
+    }
+    const currency = resumenCurrency || 'ARS';
     const materialesEl = document.querySelector('.text-info.d-block');
     const manoObraEl = document.querySelector('.text-warning.d-block');
     const equiposEl = document.querySelector('.text-secondary.d-block');
     const sinIvaEl = document.querySelector('.text-primary.d-block');
     const totalEl = document.querySelector('.text-success.d-block.h5');
-    
-    if (materialesEl) materialesEl.textContent = formatMoney(result.subtotal_materiales);
-    if (manoObraEl) manoObraEl.textContent = formatMoney(result.subtotal_mano_obra);
-    if (equiposEl) equiposEl.textContent = formatMoney(result.subtotal_equipos);
-    if (sinIvaEl) sinIvaEl.textContent = formatMoney(result.total_sin_iva);
-    if (totalEl) totalEl.textContent = formatMoney(result.total_con_iva);
+
+    if (materialesEl) materialesEl.textContent = formatCurrencyValue(result.subtotal_materiales, currency);
+    if (manoObraEl) manoObraEl.textContent = formatCurrencyValue(result.subtotal_mano_obra, currency);
+    if (equiposEl) equiposEl.textContent = formatCurrencyValue(result.subtotal_equipos, currency);
+    if (sinIvaEl) sinIvaEl.textContent = formatCurrencyValue(result.total_sin_iva, currency);
+    if (totalEl) totalEl.textContent = formatCurrencyValue(result.total_con_iva, currency);
 }
 
 function showAlert(message, type) {

@@ -85,6 +85,18 @@ CATEGORIAS_ROLES = {
     ]
 }
 
+# Export mantenido para plantillas y formularios que esperan la colección agrupada
+ROLES_DISPONIBLES = {categoria: list(roles) for categoria, roles in CATEGORIAS_ROLES.items()}
+
+# Roles del sistema asociados a la membresía de una organización
+ROLES_MEMBRESIA = ['admin', 'project_manager', 'operario']
+
+ROLES_MEMBRESIA_LABELS = {
+    'admin': 'Administrador',
+    'project_manager': 'Project Manager',
+    'operario': 'Operario',
+}
+
 def obtener_roles_por_categoria():
     """Retorna los roles organizados por categoría para uso en formularios"""
     return CATEGORIAS_ROLES
@@ -127,3 +139,8 @@ def obtener_nivel_jerarquico(rol):
         return 4
     else:
         return 5  # Roles del sistema
+
+
+def obtener_roles_membresia():
+    """Devuelve los roles permitidos para la membresía de organizaciones."""
+    return list(ROLES_MEMBRESIA)

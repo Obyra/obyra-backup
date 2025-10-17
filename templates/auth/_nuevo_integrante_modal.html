@@ -1,0 +1,81 @@
+<div class="modal fade" id="modalNuevoIntegrante" tabindex="-1" aria-labelledby="modalNuevoIntegranteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="formNuevoIntegrante" action="{{ url_for('auth.crear_integrante_desde_panel') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalNuevoIntegranteLabel">
+                        <i class="fas fa-user-plus me-2"></i>Agregar integrante a {{ current_organization.nombre if current_organization else 'tu organización' }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="nuevoIntegranteAlert" class="alert d-none" role="alert"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="integranteNombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="integranteNombre" name="nombre" required maxlength="100" placeholder="Nombre de pila">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="integranteApellido" class="form-label">Apellido <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="integranteApellido" name="apellido" required maxlength="100" placeholder="Apellido principal">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="integranteCuit" class="form-label">CUIL/CUIT <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="integranteCuit" name="cuit" data-validate="cuit" inputmode="numeric" placeholder="Ej: 20-12345678-3" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="integranteDireccion" class="form-label">Dirección</label>
+                            <input type="text" class="form-control" id="integranteDireccion" name="direccion" maxlength="255" placeholder="Opcional">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="integranteTelefono" class="form-label">Teléfono de contacto <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" id="integranteTelefono" name="telefono" required maxlength="30" placeholder="Ej: +54 9 11 5555-0000">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="integranteEmail" class="form-label">Correo electrónico <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="integranteEmail" name="email" required maxlength="120" placeholder="usuario@empresa.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="integranteRol" class="form-label">Rol <span class="text-danger">*</span></label>
+                            <select class="form-select" id="integranteRol" name="rol" required>
+                                <option value="administrador">Administrador</option>
+                                <option value="operario" selected>Operario</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 bg-light h-100">
+                                <h6 class="fw-semibold mb-2"><i class="fas fa-shield-alt me-2 text-primary"></i>Acceso y permisos</h6>
+                                <p class="mb-1 small text-muted">Generaremos una contraseña temporal y enviaremos un enlace para que el integrante active su cuenta.</p>
+                                <p class="mb-0 small text-muted">La cuenta quedará vinculada a {{ current_organization.nombre if current_organization else 'tu organización' }}.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <span class="me-1"><i class="fas fa-save"></i></span>Crear integrante
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalConfirmacion" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Acción</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmacionBody">
+                <!-- Contenido dinámico -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmar">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>

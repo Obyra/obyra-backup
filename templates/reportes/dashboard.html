@@ -13,7 +13,41 @@
             </div>
         </div>
     </div>
-    
+
+    {% if show_reports_banner %}
+    <div id="reports-disabled-banner"
+         class="alert alert-info d-flex align-items-center justify-content-between gap-3 d-none"
+         role="alert"
+         data-banner-key="reports-disabled-v1">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-info-circle"></i>
+            <span>
+                Los gráficos avanzados están deshabilitados en este entorno de desarrollo. Configurá
+                <code>ENABLE_REPORTS=1</code> e instalá las dependencias opcionales para volver a habilitarlos.
+            </span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-light" data-action="dismiss-banner">
+            No volver a mostrar
+        </button>
+    </div>
+    {% endif %}
+
+    {% if presupuestos_vencidos and presupuestos_vencidos > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-danger shadow-sm d-flex justify-content-between align-items-center">
+                <div>
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>{{ presupuestos_vencidos }} presupuestos vencidos</strong>
+                    <div class="small mt-1">Revisá y actualizá su vigencia para mantenerlos en estado pendiente.</div>
+                </div>
+                <a href="{{ url_for('presupuestos.lista', vigencia='vencidos') }}" class="btn btn-sm btn-light">
+                    Ver presupuestos vencidos
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- KPIs Principales - 4 Tarjetas Compactas -->
     <div class="row mb-4">
         <div class="col-lg-3 col-md-6 mb-3">
@@ -304,20 +338,40 @@
                 <div class="card-body">
                     {% if alertas %}
                         {% for alerta in alertas %}
-                        <div class="alert-item mb-3 p-3 rounded" 
+                        {% set meta = alerta.meta or {} %}
+                        {% set presupuesto_id = meta.get('presupuesto_id') %}
+                        {% set numero = meta.get('presupuesto_numero') %}
+                        {% set dias_restantes = meta.get('dias_restantes') %}
+                        <div class="alert-item mb-3 p-3 rounded position-relative"
                              data-event-id="{{ alerta.id }}"
-                             style="background: linear-gradient(135deg, 
-                             {% if alerta.severity == 'critica' %}#dc3545, #fd7e14{% elif alerta.severity == 'alta' %}#fd7e14, #ffc107{% else %}#17a2b8, #6f42c1{% endif %});">
+                             style="background: linear-gradient(135deg,
+                             {% if alerta.severity == 'critica' %}#dc3545, #c82333{% elif alerta.severity == 'alta' %}#fd7e14, #ffc107{% else %}#198754, #20c997{% endif %});">
                             <div class="d-flex align-items-start">
-                                <div class="flex-grow-1 text-white">
+                                <div class="flex-grow-1 text-white pe-4">
                                     <div class="fw-bold mb-1">{{ alerta.title }}</div>
-                                    <div class="small mb-1">{{ alerta.description }}</div>
+                                    <div class="small mb-1">
+                                        {% if numero %}<strong>{{ numero }}</strong>{% endif %}
+                                        {% if meta.get('cliente') %}
+                                            <span class="ms-1">{{ meta.get('cliente') }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="small mb-1">
+                                        {% if dias_restantes is not none %}
+                                            Faltan {{ dias_restantes }} día{% if dias_restantes != 1 %}s{% endif %}
+                                        {% else %}
+                                            {{ alerta.description }}
+                                        {% endif %}
+                                    </div>
                                     {% if alerta.project %}
                                     <div class="small opacity-75">{{ alerta.project.nombre }}</div>
                                     {% endif %}
                                 </div>
-                                <span class="badge bg-white text-dark">{{ alerta.severity }}</span>
+                                <span class="badge bg-white text-dark text-uppercase">{{ alerta.severity }}</span>
                             </div>
+                            {% if presupuesto_id %}
+                            <a class="stretched-link" href="{{ url_for('presupuestos.detalle', id=presupuesto_id) }}"
+                               aria-label="Ver presupuesto {{ numero }}"></a>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     {% else %}
@@ -530,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentFilter = 'all';
     let currentSeverity = null;
     let currentOffset = {{ eventos_recientes|length if eventos_recientes else 0 }};
-    
+
     // Elementos del DOM
     const activityFeed = document.getElementById('activity-feed');
     const loadMoreBtn = document.getElementById('load-more-events');
@@ -538,7 +592,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterDropdown = document.querySelectorAll('[data-filter]');
     const severityDropdown = document.querySelectorAll('[data-severity]');
     const alertItems = document.querySelectorAll('.alert-item');
-    
+    const reportsBanner = document.getElementById('reports-disabled-banner');
+
+    if (reportsBanner) {
+        const storageKey = reportsBanner.dataset.bannerKey || 'reports-disabled';
+        let bannerDismissed = false;
+        try {
+            bannerDismissed = window.localStorage && localStorage.getItem(storageKey) === '1';
+        } catch (err) {
+            bannerDismissed = false;
+        }
+
+        if (bannerDismissed) {
+            reportsBanner.remove();
+        } else {
+            reportsBanner.classList.remove('d-none');
+            const dismissButton = reportsBanner.querySelector('[data-action="dismiss-banner"]');
+            if (dismissButton) {
+                dismissButton.addEventListener('click', function() {
+                    try {
+                        if (window.localStorage) {
+                            localStorage.setItem(storageKey, '1');
+                        }
+                    } catch (err) {
+                        console.warn('No se pudo guardar la preferencia del banner de reportes:', err);
+                    }
+                    reportsBanner.classList.add('d-none');
+                });
+            }
+        }
+    }
+
     // Función para filtrar eventos visibles
     function filterEvents() {
         if (!activityFeed) return;

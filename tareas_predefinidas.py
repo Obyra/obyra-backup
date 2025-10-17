@@ -1,6 +1,21 @@
 # Tareas predefinidas por etapa de construcción
 # Basado en la imagen proporcionada por el usuario
 
+import re
+import unicodedata
+
+
+def _slugify_etapa(nombre: str) -> str:
+    """Normaliza un nombre de etapa a un slug ASCII en minúsculas."""
+
+    if not nombre:
+        return ""
+    normalized = unicodedata.normalize("NFKD", nombre)
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = re.sub(r"[^a-z0-9]+", "-", normalized.lower())
+    return normalized.strip("-")
+
+
 TAREAS_POR_ETAPA = {
     'Excavación': [
         {'nombre': 'Replanteo y marcado del terreno', 'descripcion': 'Marcar sobre el terreno las dimensiones y ubicación exacta de la construcción según planos', 'horas': 4},
@@ -201,10 +216,34 @@ TAREAS_POR_ETAPA = {
     ]
 }
 
-def obtener_tareas_por_etapa(nombre_etapa):
-    """Obtiene las tareas predefinidas para una etapa específica"""
-    return TAREAS_POR_ETAPA.get(nombre_etapa, [])
+def obtener_tareas_por_etapa(nombre_etapa=None, slug: str | None = None):
+    """Obtiene tareas predefinidas tolerando variaciones en el nombre."""
+
+    if nombre_etapa:
+        nombre_etapa = nombre_etapa.strip()
+        if nombre_etapa in TAREAS_POR_ETAPA:
+            return TAREAS_POR_ETAPA[nombre_etapa]
+
+        capitalizada = nombre_etapa.title()
+        if capitalizada in TAREAS_POR_ETAPA:
+            return TAREAS_POR_ETAPA[capitalizada]
+
+        slug = slug or _slugify_etapa(nombre_etapa)
+
+    if slug:
+        slug_normalizado = _slugify_etapa(slug)
+        for nombre, tareas in TAREAS_POR_ETAPA.items():
+            if _slugify_etapa(nombre) == slug_normalizado:
+                return tareas
+
+    return []
+
 
 def obtener_todas_las_etapas_con_tareas():
     """Retorna todas las etapas con sus tareas asociadas"""
     return TAREAS_POR_ETAPA
+
+
+def slugify_nombre_etapa(nombre: str) -> str:
+    return _slugify_etapa(nombre)
+

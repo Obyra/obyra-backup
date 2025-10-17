@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Bienvenido a OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="landing-hero py-5">
+    <div class="container">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-7">
+                <h1 class="display-4 fw-bold text-white mb-3">Gestiona tus obras con inteligencia</h1>
+                <p class="lead text-white-50 mb-4">
+                    Centraliza proyectos, coordina equipos y automatiza tareas desde una sola plataforma.
+                    Ingresa con tu cuenta de OBYRA IA o accede al portal dedicado para proveedores.
+                </p>
+                <div class="d-flex flex-wrap gap-3">
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-light btn-lg shadow-sm">
+                        <i class="fas fa-user-plus me-2"></i>Crear cuenta de usuario
+                    </a>
+                    <a href="{{ url_for('supplier_auth.login') }}" class="btn btn-outline-light btn-lg">
+                        <i class="fas fa-store me-2"></i>Portal de proveedores
+                    </a>
+                </div>
+            </div>
+            <div class="col-lg-5 col-xl-4">
+                <div class="card border-0 shadow-lg landing-card">
+                    <div class="card-body p-4">
+                        <h2 class="h4 fw-bold text-center mb-3">Iniciar sesión</h2>
+                        <p class="text-muted text-center mb-4">Accede a todas tus obras y reportes en segundos.</p>
+                        <form method="POST" action="{{ url_for('index') }}" class="needs-validation" novalidate>
+                            {% if next_value %}
+                            <input type="hidden" name="next" value="{{ next_value }}">
+                            {% endif %}
+                            <div class="mb-3">
+                                <label for="landing-email" class="form-label">Email</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                    <input type="email" class="form-control" id="landing-email" name="email"
+                                           placeholder="tu@email.com"
+                                           value="{{ form_data.email }}"
+                                           required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="landing-password" class="form-label">Contraseña</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                    <input type="password" class="form-control" id="landing-password" name="password"
+                                           placeholder="Tu contraseña" required>
+                                </div>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="landing-remember" name="remember"
+                                       {% if form_data.remember %}checked{% endif %}>
+                                <label class="form-check-label" for="landing-remember">
+                                    Recordar mi sesión
+                                </label>
+                            </div>
+                            <div class="d-grid gap-2 mb-3">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-sign-in-alt me-2"></i>Iniciar sesión
+                                </button>
+                            </div>
+                            <div class="text-center mb-3">
+                                <a href="{{ url_for('auth.forgot_password') }}" class="auth-link small">
+                                    ¿Olvidaste tu contraseña?
+                                </a>
+                            </div>
+                            <div class="text-center text-muted mb-3">o</div>
+                            <div class="d-grid gap-2">
+                                {% if google_available %}
+                                <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-danger btn-lg">
+                                    <i class="fab fa-google me-2"></i>Iniciar sesión con Google
+                                </a>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-secondary btn-lg" disabled>
+                                    <i class="fab fa-google me-2"></i>Google OAuth no configurado
+                                </button>
+                                {% endif %}
+                            </div>
+                        </form>
+                        <div class="mt-4 text-center small">
+                            ¿Aún no tienes una cuenta? <a href="{{ url_for('auth.register') }}" class="fw-semibold">Regístrate</a>
+                        </div>
+                        <div class="mt-3 text-center small">
+                            ¿Quieres vender tus servicios? <a href="{{ url_for('supplier_auth.registro') }}" class="fw-semibold">Registra tu empresa</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="landing-benefits py-5">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="benefit-card h-100">
+                    <i class="fas fa-chart-line fa-2x text-primary mb-3"></i>
+                    <h3 class="h5 fw-bold">Visibilidad total</h3>
+                    <p class="text-muted mb-0">Monitorea el avance de cada obra, controla presupuestos y detecta desvíos en tiempo real.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="benefit-card h-100">
+                    <i class="fas fa-users-cog fa-2x text-primary mb-3"></i>
+                    <h3 class="h5 fw-bold">Colaboración ágil</h3>
+                    <p class="text-muted mb-0">Coordina equipos, asigna tareas y comparte documentación con un flujo de trabajo integrado.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="benefit-card h-100">
+                    <i class="fas fa-robot fa-2x text-primary mb-3"></i>
+                    <h3 class="h5 fw-bold">Automatización inteligente</h3>
+                    <p class="text-muted mb-0">Aprovecha asistentes y reportes inteligentes para tomar decisiones basadas en datos confiables.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+.landing-hero {
+    background: radial-gradient(circle at top right, rgba(0, 123, 255, 0.85), rgba(13, 27, 42, 0.95));
+    color: #fff;
+}
+
+.landing-card {
+    border-radius: 1.25rem;
+}
+
+.landing-card .form-control {
+    border-radius: 0.75rem;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.landing-card .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}
+
+.landing-card .input-group-text {
+    border-radius: 0.75rem 0 0 0.75rem;
+    border: 2px solid #e9ecef;
+    border-right: none;
+    background: #f8f9fa;
+}
+
+.landing-benefits {
+    background: #f8fbff;
+}
+
+.benefit-card {
+    background: #fff;
+    border-radius: 1rem;
+    padding: 2rem;
+    box-shadow: 0 10px 30px rgba(13, 110, 253, 0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.benefit-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 18px 40px rgba(13, 110, 253, 0.12);
+}
+
+@media (max-width: 991px) {
+    .landing-hero {
+        text-align: center;
+    }
+
+    .landing-hero .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}

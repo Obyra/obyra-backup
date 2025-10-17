@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Facturación | OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="h4 mb-0">Facturación</h1>
+                        <small>Cargá los datos que usaremos para emitir tus comprobantes.</small>
+                    </div>
+                    <i class="fas fa-file-invoice-dollar fa-2x"></i>
+                </div>
+                <div class="card-body">
+                    {% set require_card = false %}
+                    {% include 'account/_billing_form.html' with context %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted">Resumen</h2>
+                    <p class="mb-1"><strong>Plan actual:</strong> {{ current_user.plan_activo|capitalize }}</p>
+                    {% if billing_profile and billing_profile.card_last4 %}
+                    <p class="mb-1"><strong>Tarjeta:</strong> {{ billing_profile.card_brand or 'Tarjeta' }} •••• {{ billing_profile.card_last4 }}</p>
+                    {% endif %}
+                    {% if billing_profile and billing_profile.updated_at %}
+                    <p class="mb-0 text-muted small">Actualizado por última vez el {{ billing_profile.updated_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted">¿Por qué pedimos estos datos?</h2>
+                    <p class="small mb-0">
+                        Usamos esta información para generar facturas válidas y preparar la integración con Stripe o Mercado Pago.
+                        Podés actualizarla en cualquier momento desde aquí.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
