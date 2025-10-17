@@ -6,7 +6,7 @@ __pycache__/
 .venv/
 venv/
 
-# Entorno / secretos
+# Environment / secrets
 .env
 .env.*
 !.env.example
@@ -21,14 +21,14 @@ build/
 
 # Replit
 .repldb
-# (dejamos .replit y replit.nix para reproducir el entorno)
+# (dejamos .replit y replit.nix si existen para reproducir el entorno)
 
-# Archivos pesados locales
+# Large local files
 uploads/
 *.sqlite*
 *.db
 
-# SO
+# OS
 .DS_Store
 Thumbs.db
 
@@ -39,3 +39,6 @@ instance/media/
 *.jpg
 *.jpeg
 *.webp
+
+# Alembic helpers
+instance/migrations/*.done
