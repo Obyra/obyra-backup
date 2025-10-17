@@ -1,15 +1,16 @@
 from dotenv import load_dotenv
-
 load_dotenv()
 
 import os
 import sys
 import logging
 import importlib
-from pathlib import Path
 import click
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Optional, Tuple
+
+from sqlalchemy.engine.url import make_url
+
 from flask import (
     Flask,
     render_template,
@@ -18,27 +19,28 @@ from flask import (
     flash,
     send_from_directory,
     request,
-    g,
-    session,
     has_request_context,
 )
 from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
+
 from services.memberships import (
     initialize_membership_session,
     load_membership_into_context,
     get_current_membership,
     get_current_org_id,
 )
+
 from extensions import db, login_manager
 from flask_migrate import Migrate
 
 
+# -------------------------- I/O y prints seguros ------------------------------
+
 def _ensure_utf8_io() -> None:
     """Force UTF-8 aware standard streams so CLI prints never fail."""
-
     target_encoding = "utf-8"
     os.environ.setdefault("PYTHONIOENCODING", target_encoding)
 
@@ -54,7 +56,6 @@ def _ensure_utf8_io() -> None:
                 stream.reconfigure(encoding=target_encoding)
             elif hasattr(stream, "buffer"):
                 import io
-
                 stream.flush()
                 wrapped = io.TextIOWrapper(
                     stream.buffer,
@@ -73,7 +74,6 @@ _builtin_print = print
 
 def _safe_cli_print(*args, **kwargs):
     """Print helper that strips unsupported characters on narrow consoles."""
-
     target = kwargs.get("file", sys.stdout)
     encoding = getattr(target, "encoding", None) or os.environ.get("PYTHONIOENCODING") or "utf-8"
 
@@ -91,7 +91,9 @@ def _safe_cli_print(*args, **kwargs):
 
 print = _safe_cli_print  # type: ignore[assignment]
 
-# create the app
+
+# ------------------------------ App & config ---------------------------------
+
 app = Flask(__name__)
 app.secret_key = (
     os.environ.get("SESSION_SECRET")
@@ -107,37 +109,59 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-# configure logging
+# logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database (PostgreSQL only)
-database_url = os.environ.get("DATABASE_URL", "").strip()
-assert database_url.startswith("postgresql"), "DATABASE_URL debe ser Postgres"
-app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 5,
-    "max_overflow": 0,
-    "pool_timeout": 30,
+
+# ------------------------- DB (PostgreSQL/SQLite tests) ----------------------
+
+def _is_test_environment() -> bool:
+    return (
+        _env_flag("TESTING")
+        or os.environ.get("FLASK_ENV", "").strip().lower() == "test"
+        or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    )
+
+is_test_environment = _is_test_environment()
+database_url = (os.environ.get("DATABASE_URL") or "").strip()
+
+if not database_url:
+    if is_test_environment:
+        database_url = "sqlite:///:memory:"
+        logging.getLogger(__name__).warning(
+            "DATABASE_URL no definido. Usando SQLite en memoria para tests."
+        )
+    else:
+        raise RuntimeError(
+            "DATABASE_URL es obligatorio y debe apuntar a PostgreSQL (psycopg3)."
+        )
+
+url_obj = make_url(database_url)
+
+if not is_test_environment and not url_obj.drivername.startswith("postgresql"):
+    raise RuntimeError(
+        f"DATABASE_URL debe usar PostgreSQL, se recibió '{url_obj.drivername}'."
+    )
+
+# Forzar SSL si es Neon
+if (url_obj.host and "neon.tech" in url_obj.host) or ("neon.tech" in database_url):
+    if "sslmode=" not in database_url:
+        sep = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{sep}sslmode=require"
+        logging.getLogger(__name__).info("Se agregó sslmode=require para Neon")
+        url_obj = make_url(database_url)
+
+engine_options = {
     "pool_pre_ping": True,
-    "connect_args": {
-        "connect_timeout": 10,
-        "keepalives": 1,
-        "keepalives_idle": 600,
-        "keepalives_interval": 30,
-        "keepalives_count": 3,
-    },
+    "pool_recycle": 1800,
 }
+if url_obj.drivername.startswith("postgresql"):
+    engine_options.update({"pool_size": 20, "max_overflow": 20})
 
-# Feature flags (por defecto en OFF) para el nuevo presupuestador del wizard
-app.config["WIZARD_BUDGET_BREAKDOWN_ENABLED"] = _env_flag(
-    "WIZARD_BUDGET_BREAKDOWN_ENABLED",
-    False,
-)
-app.config["WIZARD_BUDGET_SHADOW_MODE"] = _env_flag(
-    "WIZARD_BUDGET_SHADOW_MODE",
-    False,
-)
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
 
+# otras opciones de app
 app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON", False)
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
 app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").strip().lower()
@@ -158,36 +182,45 @@ else:
         "MP_WEBHOOK_PUBLIC_URL is not configured; expected path: /api/payments/mp/webhook"
     )
 
-# initialize extensions
+# init extensions
 db.init_app(app)
 login_manager.init_app(app)
 migrate = Migrate(app, db)
 
 
+# -------------------------- Alembic / runtime flags --------------------------
+
+def _is_alembic_running() -> bool:
+    """Return True when Alembic is orchestrating the process."""
+    return os.getenv("ALEMBIC_RUNNING") == "1"
+
+
+def _should_skip_create_all() -> bool:
+    """Return True when automatic table creation must be skipped."""
+    return _is_alembic_running() or os.getenv("FLASK_SKIP_CREATE_ALL") == "1"
+
+
+# ---------------------- Login endpoint resolution helpers --------------------
+
 def _resolve_login_endpoint() -> Optional[str]:
     """Return the first available login endpoint, prioritising auth blueprints."""
-
     candidate_endpoints = (
         "auth.login",
         "supplier_auth.login",
         "auth_login",
         "index",
     )
-
     for endpoint in candidate_endpoints:
         if endpoint in app.view_functions:
             return endpoint
-
     return None
 
 
 def _resolve_login_url() -> str:
     """Return the URL corresponding to the active login endpoint."""
-
     endpoint = _resolve_login_endpoint()
     if not endpoint:
         return "/"
-
     try:
         if has_request_context():
             return url_for(endpoint)
@@ -199,13 +232,11 @@ def _resolve_login_url() -> str:
 
 def _login_redirect():
     """Redirect users to the most appropriate login page."""
-
     return redirect(_resolve_login_url())
 
 
 def _refresh_login_view():
     """Synchronise the login manager with the currently available login endpoint."""
-
     login_manager.login_view = _resolve_login_endpoint()
 
 
@@ -218,8 +249,10 @@ login_manager.login_message_category = 'info'
 def inject_login_url():
     return {"login_url": _resolve_login_url()}
 
-db_cli = AppGroup('db')
 
+# ------------------------------- CLI: DB upgrade -----------------------------
+
+db_cli = AppGroup('db')
 
 @db_cli.command('upgrade')
 def db_upgrade():
@@ -239,12 +272,9 @@ def db_upgrade():
             ensure_item_presupuesto_stage_columns,
             ensure_presupuesto_validity_columns,
             ensure_exchange_currency_columns,
-            ensure_inventory_package_columns,
-            ensure_inventory_location_columns,
             ensure_geocode_columns,
             ensure_org_memberships_table,
             ensure_work_certification_tables,
-            ensure_wizard_budget_tables,
         )
 
         ensure_avance_audit_columns()
@@ -252,33 +282,26 @@ def db_upgrade():
         ensure_item_presupuesto_stage_columns()
         ensure_presupuesto_validity_columns()
         ensure_exchange_currency_columns()
-        ensure_inventory_package_columns()
-        ensure_inventory_location_columns()
         ensure_geocode_columns()
         ensure_org_memberships_table()
         ensure_work_certification_tables()
-        ensure_wizard_budget_tables()
 
     click.echo('[OK] Database upgraded successfully.')
-
-
 
 app.cli.add_command(db_cli)
 
 
-fx_cli = AppGroup('fx')
+# ----------------------------- CLI: FX & CAC --------------------------------
 
+fx_cli = AppGroup('fx')
 
 @fx_cli.command('update')
 @click.option('--provider', default='bna', help='Proveedor de tipo de cambio (ej. bna)')
 def fx_update(provider: str):
     """Actualiza el tipo de cambio almacenado."""
-
     provider_key = (provider or 'bna').lower()
 
     with app.app_context():
-        from decimal import Decimal
-
         from services.exchange import base as exchange_base
         from services.exchange.providers import bna as bna_provider
 
@@ -305,12 +328,10 @@ def fx_update(provider: str):
             )
         )
 
-
 app.cli.add_command(fx_cli)
 
 
 cac_cli = AppGroup('cac')
-
 
 @cac_cli.command('set')
 @click.option('--value', required=True, type=float, help='Valor numérico del índice CAC')
@@ -318,12 +339,8 @@ cac_cli = AppGroup('cac')
 @click.option('--notes', default=None, help='Notas opcionales')
 def cac_set(value: float, valid_from, notes: Optional[str]):
     """Registra un nuevo valor para el índice CAC."""
-
     with app.app_context():
-        from decimal import Decimal
-
         from datetime import date
-
         from services.cac.cac_service import record_manual_index
 
         valid_date = valid_from.date() if valid_from else date.today().replace(day=1)
@@ -337,11 +354,9 @@ def cac_set(value: float, valid_from, notes: Optional[str]):
             )
         )
 
-
 @cac_cli.command('refresh-current')
 def cac_refresh_current():
     """Descarga el índice CAC del mes actual utilizando el proveedor configurado."""
-
     with app.app_context():
         from services.cac.cac_service import get_cac_context, refresh_from_provider
 
@@ -364,449 +379,119 @@ def cac_refresh_current():
             )
         )
 
-
 app.cli.add_command(cac_cli)
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    # Import here to avoid circular imports
-    from models import Usuario
-    return Usuario.query.get(int(user_id))
-
-@login_manager.unauthorized_handler
-def unauthorized():
-    """Custom unauthorized handler that returns JSON for API routes"""
-    from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request
-    if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
-        return jsonify({"ok": False, "error": "Authentication required"}), 401
-    # For regular web requests, redirect to the main landing page preserving "next"
-    return redirect(url_for('index', next=request.url))
-
-
-# Register blueprints - moved after database initialization to avoid circular imports
-
-# Funciones globales para templates
-@app.context_processor
-def utility_processor():
-    from tareas_predefinidas import TAREAS_POR_ETAPA
-    def obtener_tareas_para_etapa(nombre_etapa):
-        return TAREAS_POR_ETAPA.get(nombre_etapa, [])
-
-    def has_endpoint(endpoint_name: str) -> bool:
-        return endpoint_name in app.view_functions
-
-    def tiene_rol_helper(rol: str) -> bool:
-        if not current_user.is_authenticated:
-            return False
-
-        membership = get_current_membership()
-        if membership and membership.status == 'active':
-            return (membership.role or '').lower() == (rol or '').lower()
-
-        org_id = session.get('current_org_id')
-        if not org_id:
-            return False
-
-        from models import OrgMembership  # Importación perezosa para evitar ciclos
-
-        registro = (
-            OrgMembership.query
-            .filter(
-                OrgMembership.org_id == org_id,
-                OrgMembership.user_id == current_user.id,
-                db.or_(
-                    OrgMembership.archived.is_(False),
-                    OrgMembership.archived.is_(None),
-                ),
-            )
-            .first()
-        )
-        if not registro:
-            return False
-
-        if registro.status != 'active':
-            return False
-
-        return (registro.role or '').lower() == (rol or '').lower()
-
-    membership = get_current_membership()
-    current_org = None
-    if membership:
-        current_org = membership.organizacion
-    elif hasattr(current_user, 'organizacion'):
-        current_org = current_user.organizacion
-
-    return dict(
-        obtener_tareas_para_etapa=obtener_tareas_para_etapa,
-        has_endpoint=has_endpoint,
-        tiene_rol=tiene_rol_helper,
-        mostrar_calculadora_ia_header=app.config.get("SHOW_IA_CALCULATOR_BUTTON", False),
-        current_membership=membership,
-        current_organization=current_org,
-        current_org_id=get_current_org_id,
-    )
-@app.before_request
-def sincronizar_membresia_actual():
-    """Carga la membresía activa en cada request para usuarios autenticados."""
-    try:
-        load_membership_into_context()
-    except Exception:
-        app.logger.exception('No se pudo sincronizar la membresía actual')
-
-
-@app.before_request
-def verificar_periodo_prueba():
-    """Middleware para verificar si el usuario necesita seleccionar un plan"""
-    from flask import request
-    
-    # Rutas que no requieren verificación de plan
-    rutas_excluidas = [
-        'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
-        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
-    ]
-    
-    if (current_user.is_authenticated and 
-        request.endpoint and
-        request.endpoint not in rutas_excluidas and 
-        not request.endpoint.startswith('static')):
-        
-        # ✨ EXCEPCIÓN ESPECIAL: Administradores tienen acceso completo sin restricciones
-        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        if current_user.email in emails_admin_completo:
-            return  # Acceso completo sin restricciones de plan
-        
-        # Verificar si el usuario está en periodo de prueba y ya expiró
-        if (current_user.plan_activo == 'prueba' and 
-            not current_user.esta_en_periodo_prueba()):
-            
-            flash(f'Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
-            return redirect(url_for('planes.mostrar_planes'))
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    """Landing principal con acceso a inicio de sesión y portal de proveedores."""
-    if current_user.is_authenticated:
-        # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
-        if getattr(current_user, "role", None) == "operario":
-            return redirect(url_for("obras.mis_tareas"))
-        return redirect(url_for('reportes.dashboard'))
-
-    next_page = request.values.get('next')
-    form_data = {
-        'email': request.form.get('email', ''),
-        'remember': bool(request.form.get('remember')),
-    }
-
-    google_available = False
-    login_helper = None
-    try:
-        from auth import google, authenticate_manual_user  # type: ignore
-
-        google_available = bool(google)
-        login_helper = authenticate_manual_user
-    except ImportError:
-        login_helper = None
-
-    if request.method == 'POST':
-        if login_helper is None:
-            flash('El módulo de autenticación no está disponible en este entorno.', 'danger')
-        else:
-            success, payload = login_helper(
-                form_data['email'],
-                request.form.get('password', ''),
-                remember=form_data['remember'],
-            )
-
-            if success:
-                usuario = payload
-                if next_page:
-                    return redirect(next_page)
-                if getattr(usuario, "role", None) == "operario":
-                    return redirect(url_for("obras.mis_tareas"))
-                return redirect(url_for('reportes.dashboard'))
-
-            else:
-                message = ''
-                category = 'danger'
-                if isinstance(payload, dict):
-                    message = payload.get('message', '')
-                    category = payload.get('category', category)
-                else:
-                    message = str(payload)
-                if message:
-                    flash(message, category)
-
-    return render_template(
-        'public/home.html',
-        google_available=google_available,
-        form_data=form_data,
-        next_value=next_page,
-    )
-
-
-@app.route('/login', endpoint='auth_login')
-def legacy_login_redirect():
-    """Mantener compatibilidad con rutas antiguas /login"""
-    return _login_redirect()
-
-
-@app.route('/dashboard')
-def dashboard():
-    if current_user.is_authenticated:
-        # Si es operario, NO ve dashboard → lo mandamos a Mis Tareas
-        if getattr(current_user, "role", None) == "operario":
-            return redirect(url_for("obras.mis_tareas"))
-        return redirect(url_for('reportes.dashboard'))
-    return _login_redirect()
-
-
-# Filtros personalizados
-@app.template_filter('fecha')
-def fecha_filter(fecha):
-    if fecha:
-        return fecha.strftime('%d/%m/%Y')
-    return ''
-
-
-@app.template_filter('moneda')
-def moneda_filter(valor, currency: str = 'ARS'):
-    try:
-        monto = Decimal(str(valor))
-    except (InvalidOperation, ValueError, TypeError):
-        monto = Decimal('0')
-
-    symbol = 'US$' if (currency or 'ARS').upper() == 'USD' else '$'
-    return f"{symbol}{monto:,.2f}"
-
-
-@app.template_filter('porcentaje')
-def porcentaje_filter(valor):
-    if valor is None:
-        return '0%'
-    return f'{valor:.1f}%'
-
-
-@app.template_filter('numero')
-def numero_filter(valor, decimales=0):
-    if valor is None:
-        return '0'
-    return f'{valor:,.{decimales}f}'
-
-
-@app.template_filter('estado_badge')
-def estado_badge_filter(estado):
-    badges = {
-        'activo': 'bg-success',
-        'inactivo': 'bg-secondary',
-        'borrador': 'bg-secondary',
-        'enviado': 'bg-warning',
-        'aprobado': 'bg-success',
-        'rechazado': 'bg-danger',
-        'perdido': 'bg-dark',
-        'vencido': 'bg-danger',
-        'eliminado': 'bg-dark',
-        'planificacion': 'bg-secondary',
-        'en_progreso': 'bg-primary',
-        'pausada': 'bg-warning',
-        'finalizada': 'bg-success',
-        'cancelada': 'bg-danger'
-    }
-    return badges.get(estado, 'bg-secondary')
-
-
-@app.template_filter('obtener_nombre_rol')
-def obtener_nombre_rol_filter(codigo_rol):
-    """Filtro para convertir códigos de rol a nombres legibles"""
-    try:
-        from roles_construccion import obtener_nombre_rol
-        return obtener_nombre_rol(codigo_rol)
-    except:
-        # Fallback si hay algún error
-        return codigo_rol.replace('_', ' ').title()
-
-@app.template_filter('from_json')
-def from_json_filter(json_str):
-    """Filtro para convertir string JSON a diccionario"""
-    if not json_str:
-        return {}
-    try:
-        import json
-        return json.loads(json_str)
-    except:
-        return {}
-
-
-with app.app_context():
-    # Import models after app context is available to avoid circular imports
-    from models import Usuario, Organizacion
-
-    # Run startup migrations before creating tables
-    from migrations_runtime import (
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    )
-
-    runtime_migrations = [
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    ]
-
-    for migration in runtime_migrations:
-        try:
-            migration()
-        except Exception as exc:  # pragma: no cover - startup logging only
-            logging.getLogger(__name__).warning(
-                "Runtime migration %s failed: %s", migration.__name__, exc
-            )
-
-    
-    # Initialize RBAC permissions
-    try:
-        from models import seed_default_role_permissions
-        seed_default_role_permissions()
-        print("[OK] RBAC permissions seeded successfully")
-    except Exception as e:
-        print(f"[WARN] RBAC seeding skipped: {e}")
-    
-    # Initialize marketplace tables (isolated mk_ tables)
-    try:
-        from marketplace.models import MkProduct, MkProductVariant, MkCart, MkCartItem, MkOrder, MkOrderItem, MkPayment, MkPurchaseOrder, MkCommission
-        
-        # Create marketplace tables only
-        MkProduct.__table__.create(db.engine, checkfirst=True)
-        MkProductVariant.__table__.create(db.engine, checkfirst=True)
-        MkCart.__table__.create(db.engine, checkfirst=True)
-        MkCartItem.__table__.create(db.engine, checkfirst=True)
-        MkOrder.__table__.create(db.engine, checkfirst=True)
-        MkOrderItem.__table__.create(db.engine, checkfirst=True)
-        MkPayment.__table__.create(db.engine, checkfirst=True)
-        MkPurchaseOrder.__table__.create(db.engine, checkfirst=True)
-        MkCommission.__table__.create(db.engine, checkfirst=True)
-        
-        # Seed basic marketplace data
-        if not MkCommission.query.first():
-            commission_rates = [
-                MkCommission(category_id=1, exposure='standard', take_rate_pct=10.0),
-                MkCommission(category_id=1, exposure='premium', take_rate_pct=12.0),
-            ]
-            for commission in commission_rates:
-                db.session.add(commission)
-            
-            # Demo products
-            demo_product = MkProduct(
-                seller_company_id=1,
-                name="Cemento Portland 50kg",
-                category_id=1,
-                description_html="<p>Cemento Portland de alta calidad</p>",
-                is_masked_seller=True
-            )
-            db.session.add(demo_product)
-            db.session.flush()
-            
-            demo_variant = MkProductVariant(
-                product_id=demo_product.id,
-                sku="CEM-PORT-50KG",
-                price=8999.0,
-                currency="ARS",
-                stock_qty=100
-            )
-            db.session.add(demo_variant)
-            db.session.commit()
-        
-        print("[OK] Marketplace tables created and seeded successfully")
-    except Exception as e:
-        print(f"[WARN] Marketplace initialization skipped: {e}")
-    
-    print("[OK] Database tables created successfully")
-
-    # Ensure default admin credentials exist and are hashed correctly
-    try:
-        admin_email = 'admin@obyra.com'
-        admin = Usuario.query.filter_by(email=admin_email).first()
-
-        if not admin:
-            admin_org = Organizacion(nombre='OBYRA - Administración Central')
-            db.session.add(admin_org)
-            db.session.flush()
-
-            admin = Usuario(
-                nombre='Administrador',
-                apellido='OBYRA',
-                email=admin_email,
-                rol='administrador',
-                role='administrador',
-                auth_provider='manual',
-                activo=True,
-                organizacion_id=admin_org.id,
-                primary_org_id=admin_org.id,
-            )
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            print('[ADMIN] Usuario administrador creado: admin@obyra.com / admin123')
-        else:
-            updated = False
-
-            hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')
-            stored_hash = admin.password_hash or ''
-            if not stored_hash or not stored_hash.startswith(hashed_markers):
-                original_secret = stored_hash or 'admin123'
-                admin.set_password(original_secret)
-                updated = True
-
-            if admin.auth_provider != 'manual':
-                admin.auth_provider = 'manual'
-                updated = True
-
-            if not admin.organizacion:
-                admin_org = Organizacion(nombre='OBYRA - Administración Central')
-                db.session.add(admin_org)
-                db.session.flush()
-                admin.organizacion_id = admin_org.id
-                if not admin.primary_org_id:
-                    admin.primary_org_id = admin_org.id
-                updated = True
-
-            if updated:
-                db.session.commit()
-                print('[ADMIN] Credenciales del administrador principal verificadas y aseguradas.')
-    except Exception as ensure_admin_exc:
-        db.session.rollback()
-        print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
-
-    # Ejecutar migraciones en tiempo de ejecución después de crear tablas y
-    # sembrar datos esenciales para evitar consultas a tablas inexistentes.
-    for migration in runtime_migrations:
-        try:
-            migration()
-        except Exception as runtime_exc:
-            print(f"[WARN] Runtime migration failed: {migration.__name__}: {runtime_exc}")
+# -------------------------- Helpers para CLI/blueprints ----------------------
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
     module = importlib.import_module(module_name)
     return getattr(module, attr_name)
 
+def _resolve_cli_organization(identifier: str):
+    """Resolve an organization by id, slug, token or name."""
+    identifier = (identifier or "").strip()
+    if not identifier:
+        return None
 
-# Register blueprints after database initialization to avoid circular imports
+    from models import Organizacion  # Local import to avoid circular deps
+    from sqlalchemy import func as sa_func
+
+    if identifier.isdigit():
+        return Organizacion.query.get(int(identifier))
+
+    if hasattr(Organizacion, "slug"):
+        org = Organizacion.query.filter_by(slug=identifier).first()
+        if org:
+            return org
+
+    org = Organizacion.query.filter_by(token_invitacion=identifier).first()
+    if org:
+        return org
+
+    lowered = identifier.lower()
+    return (
+        Organizacion.query
+        .filter(sa_func.lower(Organizacion.nombre) == lowered)
+        .first()
+    )
+
+def _format_seed_summary(stats: dict) -> str:
+    created = stats.get("created", 0)
+    existing = stats.get("existing", 0)
+    reactivated = stats.get("reactivated", 0)
+    return f"creadas={created}, existentes={existing}, reactivadas={reactivated}"
+
+
+# ------------------------------ CLI: seed inventario -------------------------
+
+@app.cli.command("seed:inventario")
+@click.option("--global", "seed_global", is_flag=True, help="Inicializa el catálogo global compartido")
+@click.option("--org", "org_identifiers", multiple=True, help="ID, slug, token o nombre de la organización a sembrar")
+@click.option("--quiet", is_flag=True, help="Oculta el detalle por categoría")
+def seed_inventario_cli(seed_global: bool, org_identifiers: Tuple[str, ...], quiet: bool) -> None:
+    """Seed de categorías de inventario utilizando el CLI de Flask."""
+    if not seed_global and not org_identifiers:
+        raise click.ClickException(
+            "Debes indicar al menos una organización con --org o usar --global."
+        )
+
+    from models import Organizacion
+    from seed_inventory_categories import seed_inventory_categories_for_company
+
+    verbose = not quiet
+    identifiers = list(org_identifiers)
+    fallback_identifier = identifiers[0] if (seed_global and identifiers) else None
+
+    try:
+        if seed_global:
+            fallback_org = (
+                _resolve_cli_organization(fallback_identifier)
+                if fallback_identifier
+                else Organizacion.query.order_by(Organizacion.id.asc()).first()
+            )
+
+            if not fallback_org:
+                raise click.ClickException(
+                    "No se encontró una organización para inicializar el catálogo global."
+                )
+
+            stats = seed_inventory_categories_for_company(
+                fallback_org,
+                verbose=verbose,
+                mark_global=True,
+            )
+            db.session.commit()
+            click.echo(
+                f"🌐 Catálogo global listo ({fallback_org.nombre}): {_format_seed_summary(stats)}"
+            )
+
+        for identifier in identifiers:
+            organizacion = _resolve_cli_organization(identifier)
+            if not organizacion:
+                raise click.ClickException(
+                    f"No se encontró la organización '{identifier}'."
+                )
+
+            stats = seed_inventory_categories_for_company(
+                organizacion,
+                verbose=verbose,
+            )
+            db.session.commit()
+            click.echo(
+                f"🏗️  {organizacion.nombre}: {_format_seed_summary(stats)}"
+            )
+    except click.ClickException:
+        db.session.rollback()
+        raise
+    except Exception as exc:  # pragma: no cover - defensive guard
+        db.session.rollback()
+        raise click.ClickException(str(exc)) from exc
+
+
+# ---------------------------- Registro de blueprints -------------------------
+
 auth_blueprint_registered = False
 core_failures = []
 
@@ -849,6 +534,7 @@ else:
 
 _refresh_login_view()
 
+# Reports (opcional)
 if app.config.get("ENABLE_REPORTS_SERVICE"):
     try:
         import matplotlib  # noqa: F401 - sanity check for optional dependency
@@ -861,11 +547,12 @@ if app.config.get("ENABLE_REPORTS_SERVICE"):
 else:
     app.logger.info("Reports service disabled (set ENABLE_REPORTS=1 to enable)")
 
+# Fallbacks de auth si falta el blueprint
 if not auth_blueprint_registered:
 
     @app.route('/auth/login', endpoint='auth.login')
     def fallback_auth_login():
-        """Fallback login that routes to the supplier portal when auth blueprint is missing."""
+        """Fallback login que redirige al portal de proveedores si existe."""
         try:
             return redirect(url_for('supplier_auth.login'))
         except BuildError:
@@ -880,37 +567,17 @@ if not auth_blueprint_registered:
         except BuildError:
             return "Registro de usuarios no disponible temporalmente.", 503
 
-# Try to register optional blueprints
+# Enhanced blueprints
 try:
     from equipos_new import equipos_new_bp
     from inventario_new import inventario_new_bp
     app.register_blueprint(equipos_new_bp, url_prefix='/equipos-new')
     app.register_blueprint(inventario_new_bp, url_prefix='/inventario-new')
-
-    @app.route('/inventario/depositos')
-    @login_required
-    def inventory_depositos_redirect():
-        return redirect(url_for('inventario_new.warehouses'))
-
-    @app.route('/inventario/movimientos')
-    @login_required
-    def inventory_movimientos_redirect():
-        return redirect(url_for('inventario_new.movimientos'))
-
-    @app.route('/inventario/reservas')
-    @login_required
-    def inventory_reservas_redirect():
-        return redirect(url_for('inventario_new.reservas'))
-
-    @app.route('/inventario/alertas')
-    @login_required
-    def inventory_alertas_redirect():
-        return redirect(url_for('inventario_new.alertas'))
     print("[OK] Enhanced blueprints registered successfully")
 except ImportError as e:
     print(f"[WARN] Enhanced blueprints not available: {e}")
 
-# Try to register supplier portal blueprints
+# Supplier portal / marketplace
 try:
     from supplier_auth import supplier_auth_bp
     from supplier_portal import supplier_portal_bp
@@ -924,7 +591,6 @@ except ImportError as e:
 
 _refresh_login_view()
 
-# Try to register marketplace blueprints
 try:
     from marketplace.routes import bp as marketplace_bp
     app.register_blueprint(marketplace_bp, url_prefix="/")
@@ -935,13 +601,8 @@ except ImportError as e:
 _refresh_login_view()
 
 
-# --- Public legal pages fallbacks ---------------------------------------
-# Algunas implementaciones históricas definen estas rutas en módulos
-# separados (p.ej. main.py), pero cuando esos blueprints no están
-# disponibles la plantilla base sigue apuntando a los endpoints
-# ``terminos`` y ``privacidad``. Para evitar nuevos BuildError cuando
-# el proyecto se ejecuta en entornos mínimos (Replit, Visual Studio,
-# etc.), agregamos reglas lightweight sólo si aún no existen.
+# ---------------------- Páginas legales fallback -----------------------------
+
 if 'terminos' not in app.view_functions:
     app.add_url_rule(
         '/terminos',
@@ -955,6 +616,187 @@ if 'privacidad' not in app.view_functions:
         endpoint='privacidad',
         view_func=lambda: render_template('legal/privacidad.html')
     )
+
+
+# --------------------------------- Rutas base --------------------------------
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    """Landing principal con acceso a inicio de sesión y portal de proveedores."""
+    if current_user.is_authenticated:
+        if getattr(current_user, "role", None) == "operario":
+            return redirect(url_for("obras.mis_tareas"))
+        return redirect(url_for('reportes.dashboard'))
+
+    next_page = request.values.get('next')
+    form_data = {
+        'email': request.form.get('email', ''),
+        'remember': bool(request.form.get('remember')),
+    }
+
+    google_available = False
+    login_helper = None
+    try:
+        from auth import google, authenticate_manual_user  # type: ignore
+        google_available = bool(google)
+        login_helper = authenticate_manual_user
+    except ImportError:
+        login_helper = None
+
+    if request.method == 'POST':
+        if login_helper is None:
+            flash('El módulo de autenticación no está disponible en este entorno.', 'danger')
+        else:
+            success, payload = login_helper(
+                form_data['email'],
+                request.form.get('password', ''),
+                remember=form_data['remember'],
+            )
+
+            if success:
+                usuario = payload
+                if next_page:
+                    return redirect(next_page)
+                if getattr(usuario, "role", None) == "operario":
+                    return redirect(url_for("obras.mis_tareas"))
+                return redirect(url_for('reportes.dashboard'))
+            else:
+                message = ''
+                category = 'danger'
+                if isinstance(payload, dict):
+                    message = payload.get('message', '')
+                    category = payload.get('category', category)
+                else:
+                    message = str(payload)
+                if message:
+                    flash(message, category)
+
+    return render_template(
+        'public/home.html',
+        google_available=google_available,
+        form_data=form_data,
+        next_value=next_page,
+    )
+
+
+@app.route('/login', endpoint='auth_login')
+def legacy_login_redirect():
+    """Mantener compatibilidad con rutas antiguas /login"""
+    return _login_redirect()
+
+
+@app.route('/dashboard')
+def dashboard():
+    if current_user.is_authenticated:
+        if getattr(current_user, "role", None) == "operario":
+            return redirect(url_for("obras.mis_tareas"))
+        return redirect(url_for('reportes.dashboard'))
+    return _login_redirect()
+
+
+# ---------------------------- Filtros de template ----------------------------
+
+@app.template_filter('fecha')
+def fecha_filter(fecha):
+    if fecha:
+        return fecha.strftime('%d/%m/%Y')
+    return ''
+
+@app.template_filter('moneda')
+def moneda_filter(valor, currency: str = 'ARS'):
+    try:
+        monto = Decimal(str(valor))
+    except (InvalidOperation, ValueError, TypeError):
+        monto = Decimal('0')
+    symbol = 'US$' if (currency or 'ARS').upper() == 'USD' else '$'
+    return f"{symbol}{monto:,.2f}"
+
+@app.template_filter('porcentaje')
+def porcentaje_filter(valor):
+    if valor is None:
+        return '0%'
+    return f'{valor:.1f}%'
+
+@app.template_filter('numero')
+def numero_filter(valor, decimales=0):
+    if valor is None:
+        return '0'
+    return f'{valor:,.{decimales}f}'
+
+@app.template_filter('estado_badge')
+def estado_badge_filter(estado):
+    badges = {
+        'activo': 'bg-success',
+        'inactivo': 'bg-secondary',
+        'borrador': 'bg-secondary',
+        'enviado': 'bg-warning',
+        'aprobado': 'bg-success',
+        'rechazado': 'bg-danger',
+        'perdido': 'bg-dark',
+        'vencido': 'bg-danger',
+        'eliminado': 'bg-dark',
+        'planificacion': 'bg-secondary',
+        'en_progreso': 'bg-primary',
+        'pausada': 'bg-warning',
+        'finalizada': 'bg-success',
+        'cancelada': 'bg-danger'
+    }
+    return badges.get(estado, 'bg-secondary')
+
+@app.template_filter('obtener_nombre_rol')
+def obtener_nombre_rol_filter(codigo_rol):
+    """Filtro para convertir códigos de rol a nombres legibles"""
+    try:
+        from roles_construccion import obtener_nombre_rol
+        return obtener_nombre_rol(codigo_rol)
+    except:
+        return codigo_rol.replace('_', ' ').title()
+
+@app.template_filter('from_json')
+def from_json_filter(json_str):
+    """Filtro para convertir string JSON a diccionario"""
+    if not json_str:
+        return {}
+    try:
+        import json
+        return json.loads(json_str)
+    except:
+        return {}
+
+
+# --------------------------- Membresía y planes ------------------------------
+
+@app.before_request
+def sincronizar_membresia_actual():
+    """Carga la membresía activa en cada request para usuarios autenticados."""
+    try:
+        load_membership_into_context()
+    except Exception:
+        app.logger.exception('No se pudo sincronizar la membresía actual')
+
+@app.before_request
+def verificar_periodo_prueba():
+    """Middleware para verificar si el usuario necesita seleccionar un plan"""
+    rutas_excluidas = [
+        'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
+        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
+    ]
+    if (
+        current_user.is_authenticated
+        and request.endpoint
+        and request.endpoint not in rutas_excluidas
+        and not request.endpoint.startswith('static')
+    ):
+        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
+        if current_user.email in emails_admin_completo:
+            return
+        if (getattr(current_user, "plan_activo", "prueba") == 'prueba'
+            and not getattr(current_user, "esta_en_periodo_prueba", lambda: True)()):
+            flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
+            return redirect(url_for('planes.mostrar_planes'))
+
+
+# -------------------------- Fallback dashboard reportes ----------------------
 
 if 'reportes.dashboard' not in app.view_functions:
 
@@ -977,7 +819,7 @@ if 'reportes.dashboard' not in app.view_functions:
         ), 200
 
 
-# === MEDIA SERVING ENDPOINT ===
+# --------------------------- Media autenticada -------------------------------
 
 @app.route("/media/<path:relpath>")
 @login_required
@@ -988,18 +830,17 @@ def serve_media(relpath):
     return send_from_directory(media_dir, relpath)
 
 
-# Error handlers to prevent unwanted redirects
+# ------------------------------ Error handlers -------------------------------
+
 @app.errorhandler(403)
 def forbidden(error):
     return render_template('errors/403.html'), 403
 
 @app.errorhandler(401)
 def unauthorized(error):
-    from flask import request, jsonify, redirect, url_for
-    # Check if this is an API request  
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
+        from flask import jsonify
         return jsonify({"ok": False, "error": "Authentication required"}), 401
-    # For regular web requests, redirect to login
     return _login_redirect()
 
 @app.errorhandler(404)
@@ -1014,12 +855,16 @@ def not_found(error):
     return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
 
+# --------------------------- Dev helper (SQLite) -----------------------------
+
 def maybe_create_sqlite_schema():
     uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
     if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
         with app.app_context():
             db.create_all()
 
+
+# ---------------------------------- Main -------------------------------------
 
 if __name__ == '__main__':
     maybe_create_sqlite_schema()
