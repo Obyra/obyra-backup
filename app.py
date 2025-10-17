@@ -8,6 +8,7 @@ import importlib
 import click
 from decimal import Decimal, InvalidOperation
 from typing import Optional, Tuple
+from pathlib import Path
 
 from sqlalchemy.engine.url import make_url
 
@@ -20,22 +21,15 @@ from flask import (
     send_from_directory,
     request,
     has_request_context,
+    jsonify,
 )
 from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
 
-from services.memberships import (
-    initialize_membership_session,
-    load_membership_into_context,
-    get_current_membership,
-    get_current_org_id,
-)
-
 from extensions import db, login_manager
 from flask_migrate import Migrate
-
 
 # -------------------------- I/O y prints seguros ------------------------------
 
@@ -112,7 +106,6 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # logging
 logging.basicConfig(level=logging.DEBUG)
 
-
 # ------------------------- DB (PostgreSQL/SQLite tests) ----------------------
 
 def _is_test_environment() -> bool:
@@ -125,6 +118,9 @@ def _is_test_environment() -> bool:
 is_test_environment = _is_test_environment()
 database_url = (os.environ.get("DATABASE_URL") or "").strip()
 
+base_dir = Path(__file__).resolve().parent
+default_sqlite_path = base_dir / "tmp" / "dev.db"
+
 if not database_url:
     if is_test_environment:
         database_url = "sqlite:///:memory:"
@@ -132,15 +128,17 @@ if not database_url:
             "DATABASE_URL no definido. Usando SQLite en memoria para tests."
         )
     else:
-        raise RuntimeError(
-            "DATABASE_URL es obligatorio y debe apuntar a PostgreSQL (psycopg3)."
-        )
+        # fallback local controlado (solo si se desea levantar rápido en dev)
+        default_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+        database_url = f"sqlite:///{default_sqlite_path.as_posix()}"
+        print("⚠️  DATABASE_URL no disponible, usando SQLite local (solo dev)")
 
 url_obj = make_url(database_url)
 
-if not is_test_environment and not url_obj.drivername.startswith("postgresql"):
+# En entornos no-test, preferimos PostgreSQL
+if not is_test_environment and not url_obj.drivername.startswith(("postgresql", "sqlite")):
     raise RuntimeError(
-        f"DATABASE_URL debe usar PostgreSQL, se recibió '{url_obj.drivername}'."
+        f"DATABASE_URL debe usar PostgreSQL; se recibió '{url_obj.drivername}'."
     )
 
 # Forzar SSL si es Neon
@@ -158,6 +156,15 @@ engine_options = {
 if url_obj.drivername.startswith("postgresql"):
     engine_options.update({"pool_size": 20, "max_overflow": 20})
 
+# Normalización de ruta SQLite
+if database_url.startswith("sqlite:///"):
+    sqlite_path = database_url.replace("sqlite:///", "", 1)
+    sqlite_path_obj = Path(sqlite_path)
+    if not sqlite_path_obj.is_absolute():
+        sqlite_path_obj = (base_dir / sqlite_path_obj).resolve()
+        database_url = f"sqlite:///{sqlite_path_obj.as_posix()}"
+    sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
+
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
 
@@ -168,6 +175,7 @@ app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").s
 app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
 app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "").strip()
 app.config["MP_WEBHOOK_PUBLIC_URL"] = os.getenv("MP_WEBHOOK_PUBLIC_URL", "").strip()
+app.config["EXCHANGE_FALLBACK_RATE"] = os.getenv("EXCHANGE_FALLBACK_RATE")
 
 if not app.config["MP_ACCESS_TOKEN"]:
     app.logger.warning(
@@ -187,18 +195,15 @@ db.init_app(app)
 login_manager.init_app(app)
 migrate = Migrate(app, db)
 
-
 # -------------------------- Alembic / runtime flags --------------------------
 
 def _is_alembic_running() -> bool:
     """Return True when Alembic is orchestrating the process."""
     return os.getenv("ALEMBIC_RUNNING") == "1"
 
-
 def _should_skip_create_all() -> bool:
     """Return True when automatic table creation must be skipped."""
     return _is_alembic_running() or os.getenv("FLASK_SKIP_CREATE_ALL") == "1"
-
 
 # ---------------------- Login endpoint resolution helpers --------------------
 
@@ -215,7 +220,6 @@ def _resolve_login_endpoint() -> Optional[str]:
             return endpoint
     return None
 
-
 def _resolve_login_url() -> str:
     """Return the URL corresponding to the active login endpoint."""
     endpoint = _resolve_login_endpoint()
@@ -229,26 +233,36 @@ def _resolve_login_url() -> str:
     except Exception:
         return "/"
 
-
 def _login_redirect():
     """Redirect users to the most appropriate login page."""
     return redirect(_resolve_login_url())
-
 
 def _refresh_login_view():
     """Synchronise the login manager with the currently available login endpoint."""
     login_manager.login_view = _resolve_login_endpoint()
 
-
 login_manager.login_view = None
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
-
 
 @app.context_processor
 def inject_login_url():
     return {"login_url": _resolve_login_url()}
 
+@login_manager.user_loader
+def load_user(user_id):
+    from models import Usuario
+    try:
+        return Usuario.query.get(int(user_id))
+    except Exception:
+        return None
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    """Custom unauthorized handler that returns JSON for API routes"""
+    if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    return _login_redirect()
 
 # ------------------------------- CLI: DB upgrade -----------------------------
 
@@ -290,7 +304,6 @@ def db_upgrade():
 
 app.cli.add_command(db_cli)
 
-
 # ----------------------------- CLI: FX & CAC --------------------------------
 
 fx_cli = AppGroup('fx')
@@ -329,7 +342,6 @@ def fx_update(provider: str):
         )
 
 app.cli.add_command(fx_cli)
-
 
 cac_cli = AppGroup('cac')
 
@@ -381,7 +393,6 @@ def cac_refresh_current():
 
 app.cli.add_command(cac_cli)
 
-
 # -------------------------- Helpers para CLI/blueprints ----------------------
 
 def _import_blueprint(module_name, attr_name):
@@ -422,7 +433,6 @@ def _format_seed_summary(stats: dict) -> str:
     existing = stats.get("existing", 0)
     reactivated = stats.get("reactivated", 0)
     return f"creadas={created}, existentes={existing}, reactivadas={reactivated}"
-
 
 # ------------------------------ CLI: seed inventario -------------------------
 
@@ -485,10 +495,9 @@ def seed_inventario_cli(seed_global: bool, org_identifiers: Tuple[str, ...], qui
     except click.ClickException:
         db.session.rollback()
         raise
-    except Exception as exc:  # pragma: no cover - defensive guard
+    except Exception as exc:  # defensive guard
         db.session.rollback()
         raise click.ClickException(str(exc)) from exc
-
 
 # ---------------------------- Registro de blueprints -------------------------
 
@@ -537,7 +546,7 @@ _refresh_login_view()
 # Reports (opcional)
 if app.config.get("ENABLE_REPORTS_SERVICE"):
     try:
-        import matplotlib  # noqa: F401 - sanity check for optional dependency
+        import matplotlib  # noqa: F401
         reports_service_bp = _import_blueprint('reports_service', 'reports_bp')
         app.register_blueprint(reports_service_bp)
         print("[OK] Reports service enabled")
@@ -600,7 +609,6 @@ except ImportError as e:
 
 _refresh_login_view()
 
-
 # ---------------------- Páginas legales fallback -----------------------------
 
 if 'terminos' not in app.view_functions:
@@ -616,7 +624,6 @@ if 'privacidad' not in app.view_functions:
         endpoint='privacidad',
         view_func=lambda: render_template('legal/privacidad.html')
     )
-
 
 # --------------------------------- Rutas base --------------------------------
 
@@ -678,12 +685,10 @@ def index():
         next_value=next_page,
     )
 
-
 @app.route('/login', endpoint='auth_login')
 def legacy_login_redirect():
-    """Mantener compatibilidad con rutas antiguas /login"""
+    """Compatibilidad con rutas antiguas /login"""
     return _login_redirect()
-
 
 @app.route('/dashboard')
 def dashboard():
@@ -692,7 +697,6 @@ def dashboard():
             return redirect(url_for("obras.mis_tareas"))
         return redirect(url_for('reportes.dashboard'))
     return _login_redirect()
-
 
 # ---------------------------- Filtros de template ----------------------------
 
@@ -758,13 +762,19 @@ def from_json_filter(json_str):
     if not json_str:
         return {}
     try:
-        import json
         return json.loads(json_str)
     except:
         return {}
 
-
 # --------------------------- Membresía y planes ------------------------------
+
+def load_membership_into_context():
+    """NO-OP si el servicio no está disponible (import lazy)."""
+    try:
+        from services.memberships import load_membership_into_context as _impl
+        return _impl()
+    except Exception:
+        return None
 
 @app.before_request
 def sincronizar_membresia_actual():
@@ -779,7 +789,8 @@ def verificar_periodo_prueba():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
     rutas_excluidas = [
         'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
-        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
+        'auth.login', 'auth.register', 'auth.logout',
+        'supplier_auth.login', 'static', 'index'
     ]
     if (
         current_user.is_authenticated
@@ -787,14 +798,14 @@ def verificar_periodo_prueba():
         and request.endpoint not in rutas_excluidas
         and not request.endpoint.startswith('static')
     ):
+        # excepción admins
         emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        if current_user.email in emails_admin_completo:
+        if getattr(current_user, "email", None) in emails_admin_completo:
             return
         if (getattr(current_user, "plan_activo", "prueba") == 'prueba'
             and not getattr(current_user, "esta_en_periodo_prueba", lambda: True)()):
             flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
-
 
 # -------------------------- Fallback dashboard reportes ----------------------
 
@@ -818,6 +829,7 @@ if 'reportes.dashboard' not in app.view_functions:
             fallback_url=fallback_url,
         ), 200
 
+_refresh_login_view()
 
 # --------------------------- Media autenticada -------------------------------
 
@@ -825,10 +837,8 @@ if 'reportes.dashboard' not in app.view_functions:
 @login_required
 def serve_media(relpath):
     """Serve authenticated media files from /media/ directory"""
-    from pathlib import Path
     media_dir = Path(app.instance_path) / "media"
     return send_from_directory(media_dir, relpath)
-
 
 # ------------------------------ Error handlers -------------------------------
 
@@ -837,9 +847,8 @@ def forbidden(error):
     return render_template('errors/403.html'), 403
 
 @app.errorhandler(401)
-def unauthorized(error):
+def unauthorized_error(error):
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
-        from flask import jsonify
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     return _login_redirect()
 
@@ -854,7 +863,6 @@ def not_found(error):
             dashboard_url = url_for('index')
     return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
-
 # --------------------------- Dev helper (SQLite) -----------------------------
 
 def maybe_create_sqlite_schema():
@@ -862,7 +870,6 @@ def maybe_create_sqlite_schema():
     if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
         with app.app_context():
             db.create_all()
-
 
 # ---------------------------------- Main -------------------------------------
 

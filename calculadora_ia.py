@@ -6,22 +6,29 @@ Sistema inteligente para analizar planos y calcular materiales automáticamente
 import os
 import base64
 import json
-import math
+import logging
 from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Any, Dict, Optional
 from unicodedata import normalize
-try:  # La librería openai es opcional en entornos locales/lightweight
+
+# --- OpenAI (opcional) ---
+try:
     from openai import OpenAI
-except ModuleNotFoundError:  # pragma: no cover - se ejecuta sólo sin dependencia
+except ModuleNotFoundError:  # se ejecuta sólo sin dependencia instalada
     OpenAI = None  # type: ignore[assignment]
     client = None  # type: ignore[assignment]
     OPENAI_AVAILABLE = False
 else:
-    # Inicializar cliente OpenAI sólo cuando la librería esté instalada
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    OPENAI_AVAILABLE = True
+    _openai_api_key = os.environ.get("OPENAI_API_KEY")
+    if _openai_api_key:
+        client = OpenAI(api_key=_openai_api_key)
+        OPENAI_AVAILABLE = True
+    else:
+        client = None
+        OPENAI_AVAILABLE = False
+        logging.warning("OPENAI_API_KEY no configurada; la calculadora IA funcionará en modo estimación.")
 
 from services.cac.cac_service import CACContext, get_cac_context
 from services.exchange.base import ExchangeRateSnapshot
@@ -38,32 +45,28 @@ COEFICIENTES_CONSTRUCCION = {
         "hierro_8": 2.5,           # kg por m²
         "hierro_10": 1.8,          # kg por m²
         "hierro_12": 1.2,          # kg por m²
-        
-        # Nuevos materiales de construcción
+        # Nuevos materiales
         "ceramicos": 1.05,         # m² por m² (con desperdicio)
         "porcelanato": 0,          # No incluido en económica
         "azulejos": 0.5,           # m² por m² (solo baños)
-        "cables_electricos": 8,     # metros por m²
+        "cables_electricos": 8,    # metros por m²
         "caños_agua": 4,           # metros por m²
         "caños_cloacas": 2,        # metros por m²
         "chapas": 0.15,            # m² por m² (techos)
         "tejas": 0.12,             # m² por m² (alt. a chapas)
-        "aislacion_termica": 0.8,   # m² por m²
+        "aislacion_termica": 0.8,  # m² por m²
         "yeso": 0.5,               # kg por m² (terminaciones)
-        "madera_estructural": 0.05, # m³ por m²
+        "madera_estructural": 0.05,# m³ por m²
         "vidrios": 0.08,           # m² por m² (ventanas)
         "aberturas_metal": 0.06,   # m² por m² (puertas/ventanas)
-        
         # Impermeabilización y terminaciones
         "membrana": 0.8,           # m² por m²
         "pintura": 0.1,            # litros por m²
-        "pintura_exterior": 0.08,   # litros por m²
+        "pintura_exterior": 0.08,  # litros por m²
         "sellador": 0.02,          # litros por m²
-        
         "factor_precio": 1.0       # factor multiplicador base
     },
     "Estándar": {
-        # Materiales estructurales
         "ladrillos": 60,
         "cemento": 0.3,
         "cal": 4,
@@ -72,11 +75,9 @@ COEFICIENTES_CONSTRUCCION = {
         "hierro_8": 3.5,
         "hierro_10": 2.2,
         "hierro_12": 1.5,
-        
-        # Materiales mejorados
         "ceramicos": 1.1,
-        "porcelanato": 0.3,        # Incluido parcialmente
-        "azulejos": 0.8,           # Más baños
+        "porcelanato": 0.3,
+        "azulejos": 0.8,
         "cables_electricos": 12,
         "caños_agua": 6,
         "caños_cloacas": 3,
@@ -87,17 +88,13 @@ COEFICIENTES_CONSTRUCCION = {
         "madera_estructural": 0.08,
         "vidrios": 0.12,
         "aberturas_metal": 0.1,
-        
-        # Terminaciones estándar
         "membrana": 1.1,
         "pintura": 0.13,
         "pintura_exterior": 0.1,
         "sellador": 0.03,
-        
         "factor_precio": 1.3
     },
     "Premium": {
-        # Materiales estructurales premium
         "ladrillos": 65,
         "cemento": 0.35,
         "cal": 5,
@@ -106,28 +103,23 @@ COEFICIENTES_CONSTRUCCION = {
         "hierro_8": 4,
         "hierro_10": 2.8,
         "hierro_12": 2,
-        
-        # Materiales premium
-        "ceramicos": 0.5,          # Menos cerámicos
-        "porcelanato": 1.2,        # Más porcelanato
-        "azulejos": 1.2,           # Todos los baños
-        "cables_electricos": 15,   # Más puntos eléctricos
-        "caños_agua": 8,           # Mejores instalaciones
+        "ceramicos": 0.5,
+        "porcelanato": 1.2,
+        "azulejos": 1.2,
+        "cables_electricos": 15,
+        "caños_agua": 8,
         "caños_cloacas": 4,
-        "chapas": 0.1,             # Menos chapas
-        "tejas": 0.25,             # Más tejas premium
-        "aislacion_termica": 1.8,   # Mejor aislación
-        "yeso": 1.2,               # Mejores terminaciones
+        "chapas": 0.1,
+        "tejas": 0.25,
+        "aislacion_termica": 1.8,
+        "yeso": 1.2,
         "madera_estructural": 0.12,
-        "vidrios": 0.18,           # DVH, templados
-        "aberturas_metal": 0.15,   # Mejores aberturas
-        
-        # Terminaciones premium
+        "vidrios": 0.18,
+        "aberturas_metal": 0.15,
         "membrana": 1.5,
         "pintura": 0.18,
         "pintura_exterior": 0.15,
         "sellador": 0.05,
-        
         "factor_precio": 1.8
     }
 }
@@ -159,7 +151,6 @@ def _quantize_quantity(value: Decimal) -> Decimal:
 
 def _get_cac_context_cached() -> CACContext:
     """Obtiene y cachea el contexto CAC vigente."""
-
     now = datetime.utcnow()
     cache_context = _CAC_CONTEXT_CACHE.get('context')
     cache_timestamp = _CAC_CONTEXT_CACHE.get('timestamp')
@@ -184,16 +175,14 @@ def _convert_currency(amount: Decimal, currency: str, fx_rate: Optional[Decimal]
 # Sistema exhaustivo de cálculo por etapas de construcción con maquinaria completa
 ETAPAS_CONSTRUCCION = {
     "Económica": {
-        # Etapa 1: Cimentación y estructura (trabajo manual intensivo)
         "cimentacion_estructura": {
             "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "arena", "piedra"],
             "maquinaria": {
-                # NIVEL ECONÓMICO: TODO MANUAL, SIN MAQUINARIA PESADA
-                "hormigonera_trompo_manual": {"cantidad": 1, "dias": 25},  # Trompo manual 160L
+                "hormigonera_trompo_manual": {"cantidad": 1, "dias": 25},
                 "carretilla_manual": {"cantidad": 4, "dias": 30},
-                "cortadora_hierro_manual": {"cantidad": 1, "dias": 20},  # Cortadora manual de mesa
-                "dobladora_hierro_manual": {"cantidad": 1, "dias": 20},  # Dobladora manual
-                "andamios_tubulares": {"cantidad": 15, "dias": 35}  # Andamios básicos
+                "cortadora_hierro_manual": {"cantidad": 1, "dias": 20},
+                "dobladora_hierro_manual": {"cantidad": 1, "dias": 20},
+                "andamios_tubulares": {"cantidad": 15, "dias": 35}
             },
             "herramientas": {
                 "palas_punta": {"cantidad": 6, "dias": 25},
@@ -207,12 +196,10 @@ ETAPAS_CONSTRUCCION = {
                 "sierra_manual_hierro": {"cantidad": 2, "dias": 20}
             }
         },
-        # Etapa 2: Albañilería (métodos tradicionales)
         "albanileria": {
             "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
             "maquinaria": {
-                # NIVEL ECONÓMICO: HERRAMIENTAS BÁSICAS MANUALES
-                "mezcladora_manual_80L": {"cantidad": 1, "dias": 35},  # Mezcladora manual
+                "mezcladora_manual_80L": {"cantidad": 1, "dias": 35},
                 "escalera_tijera": {"cantidad": 2, "dias": 30},
                 "carretilla_albanil": {"cantidad": 3, "dias": 35}
             },
@@ -229,11 +216,9 @@ ETAPAS_CONSTRUCCION = {
                 "esponja_goma": {"cantidad": 10, "dias": 30}
             }
         },
-        # Etapa 3: Terminaciones
         "terminaciones": {
             "materiales_etapa": ["pintura", "yeso", "ceramicos", "azulejos"],
             "maquinaria": {
-                # NIVEL ECONÓMICO: SIN MÁQUINAS, TODO MANUAL
                 "escalera_extensible": {"cantidad": 1, "dias": 25},
                 "caballete_trabajo": {"cantidad": 4, "dias": 25}
             },
@@ -254,16 +239,14 @@ ETAPAS_CONSTRUCCION = {
         }
     },
     "Estándar": {
-        # Etapa 1: Cimentación con maquinaria eléctrica básica
         "cimentacion_estructura": {
             "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "hierro_12", "arena", "piedra"],
             "maquinaria": {
-                # NIVEL ESTÁNDAR: MAQUINARIA ELÉCTRICA BÁSICA
-                "minicargadora": {"cantidad": 1, "dias": 15},  # Minicargadora para excavación
-                "hormigonera_electrica_300L": {"cantidad": 1, "dias": 25},  # Hormigonera eléctrica
-                "cortadora_hierro_electrica": {"cantidad": 1, "dias": 20},  # Cortadora eléctrica
-                "dobladora_hierro_electrica": {"cantidad": 1, "dias": 20},  # Dobladora eléctrica
-                "atadora_hierro_electrica": {"cantidad": 1, "dias": 15},  # Atadora eléctrica de hierro
+                "minicargadora": {"cantidad": 1, "dias": 15},
+                "hormigonera_electrica_300L": {"cantidad": 1, "dias": 25},
+                "cortadora_hierro_electrica": {"cantidad": 1, "dias": 20},
+                "dobladora_hierro_electrica": {"cantidad": 1, "dias": 20},
+                "atadora_hierro_electrica": {"cantidad": 1, "dias": 15},
                 "andamios_modulares": {"cantidad": 20, "dias": 35},
                 "vibrador_hormigon_electrico": {"cantidad": 2, "dias": 20}
             },
@@ -277,15 +260,13 @@ ETAPAS_CONSTRUCCION = {
                 "compresor_aire": {"cantidad": 1, "dias": 25}
             }
         },
-        # Etapa 2: Albañilería con herramientas eléctricas
         "albanileria": {
             "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
             "maquinaria": {
-                # NIVEL ESTÁNDAR: MÁQUINAS ELÉCTRICAS INTERMEDIAS
-                "mezcladora_electrica_200L": {"cantidad": 1, "dias": 30},  # Mezcladora eléctrica
-                "cortadora_ladrillo_electrica": {"cantidad": 1, "dias": 25},  # Cortadora eléctrica
-                "elevador_materiales_electrico": {"cantidad": 1, "dias": 30},  # Elevador eléctrico
-                "bomba_mortero_electrica": {"cantidad": 1, "dias": 20},  # Bomba de mortero
+                "mezcladora_electrica_200L": {"cantidad": 1, "dias": 30},
+                "cortadora_ladrillo_electrica": {"cantidad": 1, "dias": 25},
+                "elevador_materiales_electrico": {"cantidad": 1, "dias": 30},
+                "bomba_mortero_electrica": {"cantidad": 1, "dias": 20},
                 "andamios_electricos": {"cantidad": 25, "dias": 35}
             },
             "herramientas": {
@@ -298,16 +279,14 @@ ETAPAS_CONSTRUCCION = {
                 "aspiradora_industrial": {"cantidad": 1, "dias": 25}
             }
         },
-        # Etapa 3: Terminaciones con equipos semiautomáticos
         "terminaciones": {
             "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "ceramicos", "azulejos"],
             "maquinaria": {
-                # NIVEL ESTÁNDAR: EQUIPOS ELÉCTRICOS DE TERMINACIÓN
-                "compresora_pintura": {"cantidad": 1, "dias": 20},  # Compresora para pintura
-                "lijadora_pared_electrica": {"cantidad": 1, "dias": 15},  # Lijadora de pared
-                "cortadora_ceramicos_electrica": {"cantidad": 1, "dias": 15},  # Cortadora eléctrica
-                "proyectora_yeso": {"cantidad": 1, "dias": 12},  # Proyectora de yeso
-                "pulidora_pisos": {"cantidad": 1, "dias": 10}  # Pulidora eléctrica
+                "compresora_pintura": {"cantidad": 1, "dias": 20},
+                "lijadora_pared_electrica": {"cantidad": 1, "dias": 15},
+                "cortadora_ceramicos_electrica": {"cantidad": 1, "dias": 15},
+                "proyectora_yeso": {"cantidad": 1, "dias": 12},
+                "pulidora_pisos": {"cantidad": 1, "dias": 10}
             },
             "herramientas": {
                 "pistola_pintura_electrica": {"cantidad": 2, "dias": 20},
@@ -321,73 +300,67 @@ ETAPAS_CONSTRUCCION = {
         }
     },
     "Premium": {
-        # Etapa 1: Cimentación con maquinaria de alta tecnología y velocidad
         "cimentacion_estructura": {
             "materiales_etapa": ["cemento", "hierro_8", "hierro_10", "hierro_12", "arena", "piedra"],
             "maquinaria": {
-                # NIVEL PREMIUM: MAQUINARIA DE ALTA VELOCIDAD Y AUTOMATIZACIÓN
-                "excavadora_hidraulica_CAT": {"cantidad": 1, "dias": 8},  # Excavadora de alta gama
-                "bomba_hormigon_autopropulsada": {"cantidad": 1, "dias": 10},  # Bomba autopropulsada
-                "grua_torre_computarizada": {"cantidad": 1, "dias": 40},  # Grúa con control computarizado
-                "planta_hormigon_automatica": {"cantidad": 1, "dias": 12},  # Planta automática móvil
-                "montacargas_telescopico": {"cantidad": 2, "dias": 35},  # Montacargas telescópicos
-                "compactadora_vibratoria": {"cantidad": 1, "dias": 8},  # Compactadora de alta frecuencia
-                "cortadora_hierro_CNC": {"cantidad": 1, "dias": 15},  # Cortadora CNC automática
-                "dobladora_hierro_automatica": {"cantidad": 1, "dias": 15},  # Dobladora automática
-                "atadora_hierro_robotica": {"cantidad": 1, "dias": 12}  # Atadora robótica
+                "excavadora_hidraulica_CAT": {"cantidad": 1, "dias": 8},
+                "bomba_hormigon_autopropulsada": {"cantidad": 1, "dias": 10},
+                "grua_torre_computarizada": {"cantidad": 1, "dias": 40},
+                "planta_hormigon_automatica": {"cantidad": 1, "dias": 12},
+                "montacargas_telescopico": {"cantidad": 2, "dias": 35},
+                "compactadora_vibratoria": {"cantidad": 1, "dias": 8},
+                "cortadora_hierro_CNC": {"cantidad": 1, "dias": 15},
+                "dobladora_hierro_automatica": {"cantidad": 1, "dias": 15},
+                "atadora_hierro_robotica": {"cantidad": 1, "dias": 12}
             },
             "herramientas": {
-                "estacion_total_GPS": {"cantidad": 1, "dias": 20},  # Topografía GPS de precisión
+                "estacion_total_GPS": {"cantidad": 1, "dias": 20},
                 "vibrador_alta_frecuencia": {"cantidad": 3, "dias": 15},
                 "martillo_hidraulico": {"cantidad": 1, "dias": 10},
                 "nivel_laser_3D": {"cantidad": 2, "dias": 20},
-                "drone_supervision": {"cantidad": 1, "dias": 40},  # Drone para monitoreo
+                "drone_supervision": {"cantidad": 1, "dias": 40},
                 "soldadora_robotica": {"cantidad": 1, "dias": 15}
             }
         },
-        # Etapa 2: Albañilería automatizada con robots
         "albanileria": {
             "materiales_etapa": ["ladrillos", "cal", "arena", "cemento"],
             "maquinaria": {
-                # NIVEL PREMIUM: ROBOTS Y AUTOMATIZACIÓN COMPLETA
-                "robot_albanil_SAM": {"cantidad": 1, "dias": 20},  # Robot albañil automático
-                "montacargas_materiales": {"cantidad": 2, "dias": 30},  # Montacargas de materiales
-                "mezcladora_robotizada_500L": {"cantidad": 1, "dias": 25},  # Mezcladora robótica
-                "bomba_mortero_automatica": {"cantidad": 1, "dias": 15},  # Bomba automática
-                "cortadora_laser_materiales": {"cantidad": 1, "dias": 12},  # Cortadora láser
-                "elevador_tijera_autopropulsado": {"cantidad": 2, "dias": 30},  # Elevadores autopropulsados
-                "sistema_transporte_automatico": {"cantidad": 1, "dias": 25}  # Sistema de transporte
+                "robot_albanil_SAM": {"cantidad": 1, "dias": 20},
+                "montacargas_materiales": {"cantidad": 2, "dias": 30},
+                "mezcladora_robotizada_500L": {"cantidad": 1, "dias": 25},
+                "bomba_mortero_automatica": {"cantidad": 1, "dias": 15},
+                "cortadora_laser_materiales": {"cantidad": 1, "dias": 12},
+                "elevador_tijera_autopropulsado": {"cantidad": 2, "dias": 30},
+                "sistema_transporte_automatico": {"cantidad": 1, "dias": 25}
             },
             "herramientas": {
                 "andamios_autoelevables": {"cantidad": 4, "dias": 30},
-                "sistema_control_calidad": {"cantidad": 1, "dias": 35},  # Sistema de control de calidad
+                "sistema_control_calidad": {"cantidad": 1, "dias": 35},
                 "martillo_neumatico_profesional": {"cantidad": 2, "dias": 20},
                 "nivel_laser_rotativo_premium": {"cantidad": 2, "dias": 35},
                 "aspiradora_industrial_robotica": {"cantidad": 1, "dias": 25},
                 "soldadora_automatica_MIG": {"cantidad": 1, "dias": 15}
             }
         },
-        # Etapa 3: Terminaciones robotizadas y de alta velocidad
         "terminaciones": {
             "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "porcelanato", "azulejos"],
             "maquinaria": {
-                # NIVEL PREMIUM: TERMINACIONES ROBOTIZADAS Y VELOCES
-                "robot_pintura_automatico": {"cantidad": 1, "dias": 10},  # Robot de pintura
-                "sistema_proyeccion_yeso_robotico": {"cantidad": 1, "dias": 8},  # Proyección robótica
-                "cortadora_porcelanato_CNC": {"cantidad": 1, "dias": 10},  # Cortadora CNC porcelanato
-                "pulidora_pisos_robotica": {"cantidad": 1, "dias": 8},  # Pulidora robótica
-                "montacargas_terminaciones": {"cantidad": 1, "dias": 20},  # Montacargas especializado
-                "lijadora_pared_automatica": {"cantidad": 1, "dias": 6},  # Lijadora automática
-                "sistema_ventilacion_controlado": {"cantidad": 1, "dias": 20}  # Sistema de ventilación
+                "robot_pintura_automatico": {"cantidad": 1, "dias": 10},
+                "sistema_proyeccion_yeso_robotico": {"cantidad": 1, "dias": 8},
+                "cortadora_porcelanato_CNC": {"cantidad": 1, "dias": 10},
+                "pulidora_pisos_robotica": {"cantidad": 1, "dias": 8},
+                "montacargas_terminaciones": {"cantidad": 1, "dias": 20},
+                "lijadora_pared_automatica": {"cantidad": 1, "dias": 6},
+                "sistema_ventilacion_controlado": {"cantidad": 1, "dias": 20}
             },
             "herramientas": {
-                "pistola_pintura_electrostatica": {"cantidad": 2, "dias": 12},  # Pintura electrostática
-                "medidor_laser_3D": {"cantidad": 2, "dias": 15},  # Medición 3D
-                "sistema_control_humedad": {"cantidad": 1, "dias": 15},  # Control de humedad
-                "aspiradora_HEPA_profesional": {"cantidad": 1, "dias": 15},  # Aspiradora HEPA
-                "cepillo_pulidora_diamante": {"cantidad": 2, "dias": 10},  # Pulidora de diamante
-                "nivel_laser_autonivelante": {"cantidad": 3, "dias": 20},  # Nivel autonivelante
-                "compresor_silencioso_premium": {"cantidad": 1, "dias": 15}  # Compresor premium
+                "pistola_pintura_electrostatica": {"cantidad": 2, "dias": 12},
+                "medidor_laser_3D": {"cantidad": 2, "dias": 15},
+                "sistema_control_humedad": {"cantidad": 1, "dias": 15},
+                "aspiradora_HEPA_profesional": {"cantidad": 1, "dias": 15},
+                "cepillo_pulidora_diamante": {"cantidad": 2, "dias": 10},
+                "nivel_laser_autonivelante": {"cantidad": 3, "dias": 20},
+                "compresor_silencioso_premium": {"cantidad": 1, "dias": 15}
             }
         }
     }
@@ -395,80 +368,77 @@ ETAPAS_CONSTRUCCION = {
 
 def analizar_plano_con_ia(archivo_pdf_base64, metros_cuadrados_manual=None):
     """
-    Analiza un plano arquitectónico usando IA de OpenAI
-    Para PDFs, se usa análisis de texto, para superficie manual se sugiere el tipo
+    Analiza un plano arquitectónico usando IA de OpenAI.
+    Si no hay OpenAI disponible, devuelve una estimación razonable y lo indica.
     """
-    try:
-        if not client:  # OpenAI no disponible → devolver un resultado estimado
-            superficie_fallback = (
-                float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0
-            )
-            return {
-                "superficie_total_m2": superficie_fallback,
-                "tipo_construccion_sugerido": "Estándar",
-                "observaciones": (
-                    "OpenAI no está instalado o configurado. Se devolvió una estimación "
-                    "basada en los datos proporcionados."
-                ),
-                "confianza_analisis": 0.2 if not metros_cuadrados_manual else 0.6,
-                "superficie_origen": "manual" if metros_cuadrados_manual else "estimado",
-                "openai_disponible": False,
-            }
+    # Fallback sin IA
+    if client is None:
+        superficie_fallback = float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0
+        return {
+            "superficie_total_m2": superficie_fallback,
+            "tipo_construccion_sugerido": "Estándar",
+            "observaciones": (
+                "OpenAI no está configurado. Se devolvió una estimación "
+                "basada en los datos proporcionados."
+            ),
+            "confianza_analisis": 0.2 if not metros_cuadrados_manual else 0.6,
+            "superficie_origen": "manual" if metros_cuadrados_manual else "estimado",
+            "openai_disponible": False,
+        }
 
-        # Si hay superficie manual, hacer análisis inteligente sin imagen
+    try:
+        # Si hay superficie manual, hacer análisis ligero
         if metros_cuadrados_manual:
             superficie_float = float(metros_cuadrados_manual)
-            
-            # el modelo gpt-4o es el más reciente lanzado en mayo 2024
-            # no cambiar a menos que el usuario lo solicite específicamente
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {
                         "role": "system",
-                        "content": """Eres un arquitecto y calculista experto en construcción argentina. 
+                        "content": """Eres un arquitecto y calculista experto en construcción argentina.
                         Basándote en la superficie proporcionada, sugiere el tipo de construcción más apropiado.
-                        Responde en formato JSON con las siguientes claves:
-                        - superficie_total_m2: número (superficie proporcionada)
-                        - tipo_construccion_sugerido: string ("Económica", "Estándar" o "Premium")
-                        - observaciones: string (recomendaciones técnicas)
-                        - confianza_analisis: número del 0 al 1"""
+                        Responde en formato JSON con las claves:
+                        - superficie_total_m2 (número)
+                        - tipo_construccion_sugerido ("Económica", "Estándar" o "Premium")
+                        - observaciones (string)
+                        - confianza_analisis (0..1)"""
                     },
                     {
                         "role": "user",
-                        "content": f"Para una construcción de {superficie_float}m², sugiere el tipo de construcción más apropiado y proporciona recomendaciones técnicas para Argentina."
+                        "content": f"Para una construcción de {superficie_float}m², sugiere el tipo de construcción y recomendaciones para Argentina."
                     }
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=500
             )
-            
             content = response.choices[0].message.content
             if content:
                 resultado = json.loads(content)
                 resultado['superficie_total_m2'] = superficie_float
                 resultado['superficie_origen'] = 'manual'
+                resultado['openai_disponible'] = True
                 return resultado
-        
-        # Si no hay superficie manual, usar análisis básico
-        print("Análisis de PDF directo no disponible - usando superficie manual si está disponible")
+
+        # Sin superficie manual, devolución guiada
         return {
             "superficie_total_m2": float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0,
             "tipo_construccion_sugerido": "Estándar",
-            "observaciones": "Análisis basado en superficie proporcionada. PDF cargado correctamente pero requiere superficie manual.",
+            "observaciones": "Análisis basado en la superficie proporcionada. Carga del PDF OK pero requiere superficie manual.",
             "confianza_analisis": 0.8 if metros_cuadrados_manual else 0.3,
-            "superficie_origen": "manual" if metros_cuadrados_manual else "estimado"
+            "superficie_origen": "manual" if metros_cuadrados_manual else "estimado",
+            "openai_disponible": True
         }
-        
+
     except Exception as e:
-        print(f"Error en análisis IA: {e}")
+        logging.exception("Error en análisis IA")
         # Fallback con datos manuales si falla la IA
         return {
             "superficie_total_m2": float(metros_cuadrados_manual) if metros_cuadrados_manual else 100.0,
             "tipo_construccion_sugerido": "Estándar",
             "observaciones": f"Error en análisis: {str(e)}. Usando superficie manual proporcionada.",
             "confianza_analisis": 0.5,
-            "superficie_origen": "manual_fallback"
+            "superficie_origen": "manual_fallback",
+            "openai_disponible": True
         }
 
 def calcular_materiales(superficie_m2, tipo_construccion):
@@ -477,15 +447,13 @@ def calcular_materiales(superficie_m2, tipo_construccion):
     """
     if tipo_construccion not in COEFICIENTES_CONSTRUCCION:
         raise ValueError(f"Tipo de construcción '{tipo_construccion}' no válido")
-        
+
     coef = COEFICIENTES_CONSTRUCCION[tipo_construccion]
-    
     materiales = {}
     for material, coef_por_m2 in coef.items():
         if material != "factor_precio":
             cantidad = superficie_m2 * coef_por_m2
             materiales[material] = round(cantidad, 2)
-    
     return materiales
 
 def calcular_por_etapas(superficie_m2, tipo_construccion):
@@ -494,106 +462,76 @@ def calcular_por_etapas(superficie_m2, tipo_construccion):
     """
     if tipo_construccion not in ETAPAS_CONSTRUCCION:
         raise ValueError(f"Tipo de construcción '{tipo_construccion}' no válido")
-    
+
     etapas_config = ETAPAS_CONSTRUCCION[tipo_construccion]
-    
-    # FACTOR DE ESCALA MÁS REALISTA: Solo aumentar levemente para obras grandes
+
+    # Escala de días realista según superficie
     if superficie_m2 <= 100:
-        factor_cantidad = 1.0
         factor_dias = 1.0
     elif superficie_m2 <= 200:
-        factor_cantidad = 1.0  # No aumentar cantidad
-        factor_dias = 1.2      # Solo aumentar días 20%
+        factor_dias = 1.2
     elif superficie_m2 <= 500:
-        factor_cantidad = 1.0  # No aumentar cantidad para maquinaria
-        factor_dias = 1.5      # Aumentar días 50%
+        factor_dias = 1.5
     else:
-        factor_cantidad = 1.0  # Cantidad máxima fija
-        factor_dias = 2.0      # Doblar días para obras muy grandes
-    
+        factor_dias = 2.0
+
     resultado_etapas = {}
     maquinaria_total = {}
     herramientas_total = {}
-    
+
     for etapa_nombre, etapa_data in etapas_config.items():
-        # Calcular materiales para esta etapa
+        # Materiales por etapa
         materiales_etapa = {}
         coef = COEFICIENTES_CONSTRUCCION[tipo_construccion]
-        
         for material in etapa_data["materiales_etapa"]:
             if material in coef:
                 cantidad = superficie_m2 * coef[material]
                 if cantidad > 0:
                     materiales_etapa[material] = round(cantidad, 2)
-        
-        # Calcular maquinaria para esta etapa CON CANTIDADES REALISTAS
+
+        # Maquinaria por etapa (cantidad fija, días escalan)
         maquinaria_etapa = {}
         for maquina, specs in etapa_data["maquinaria"].items():
             if specs["cantidad"] > 0:
-                # Las cantidades se mantienen fijas, solo los días aumentan
                 cantidad_final = specs["cantidad"]
                 dias_final = int(specs["dias"] * factor_dias)
-                
-                maquinaria_etapa[maquina] = {
-                    "cantidad": cantidad_final,
-                    "dias": dias_final
-                }
-                
-                # Sumar al total general
+                maquinaria_etapa[maquina] = {"cantidad": cantidad_final, "dias": dias_final}
                 if maquina not in maquinaria_total:
                     maquinaria_total[maquina] = {"cantidad": 0, "dias_total": 0}
                 maquinaria_total[maquina]["cantidad"] = max(maquinaria_total[maquina]["cantidad"], cantidad_final)
                 maquinaria_total[maquina]["dias_total"] += dias_final
-        
-        # Calcular herramientas para esta etapa
+
+        # Herramientas por etapa (pequeñas escalan un poco en cantidad)
         herramientas_etapa = {}
         for herramienta, specs in etapa_data["herramientas"].items():
             if specs["cantidad"] > 0:
-                # Para herramientas pequeñas, sí puede aumentar levemente la cantidad
                 cantidad_herramienta = specs["cantidad"]
                 if superficie_m2 > 300:
-                    cantidad_herramienta = int(specs["cantidad"] * 1.2)  # 20% más para obras grandes
-                
+                    cantidad_herramienta = int(specs["cantidad"] * 1.2)  # 20% más
                 dias_herramienta = int(specs["dias"] * factor_dias)
-                
-                herramientas_etapa[herramienta] = {
-                    "cantidad": cantidad_herramienta,
-                    "dias": dias_herramienta
-                }
-                
-                # Sumar al total general
+                herramientas_etapa[herramienta] = {"cantidad": cantidad_herramienta, "dias": dias_herramienta}
                 if herramienta not in herramientas_total:
                     herramientas_total[herramienta] = {"cantidad": 0, "dias_total": 0}
                 herramientas_total[herramienta]["cantidad"] = max(herramientas_total[herramienta]["cantidad"], cantidad_herramienta)
                 herramientas_total[herramienta]["dias_total"] += dias_herramienta
-        
-        # Guardar resultado de la etapa
+
         resultado_etapas[etapa_nombre] = {
             "materiales": materiales_etapa,
             "maquinaria": maquinaria_etapa,
             "herramientas": herramientas_etapa
         }
-    
+
     return resultado_etapas, maquinaria_total, herramientas_total
 
 def calcular_equipos_herramientas(superficie_m2, tipo_construccion):
-    """
-    Calcula equipos y herramientas necesarios (función compatible con código existente)
-    """
+    """Compatibilidad con código existente: devuelve equipos y herramientas totales."""
     _, maquinaria_total, herramientas_total = calcular_por_etapas(superficie_m2, tipo_construccion)
-    
-    # Convertir formato para compatibilidad
-    equipos_calculados = {}
-    for maquina, data in maquinaria_total.items():
-        equipos_calculados[maquina] = {
-            "cantidad": data["cantidad"],
-            "dias_uso": data["dias_total"]
-        }
-    
-    herramientas_calculadas = {}
-    for herramienta, data in herramientas_total.items():
-        herramientas_calculadas[herramienta] = data["cantidad"]
 
+    equipos_calculados = {
+        maquina: {"cantidad": data["cantidad"], "dias_uso": data["dias_total"]}
+        for maquina, data in maquinaria_total.items()
+    }
+    herramientas_calculadas = {herr: data["cantidad"] for herr, data in herramientas_total.items()}
     return equipos_calculados, herramientas_calculadas
 
 
@@ -1117,39 +1055,24 @@ def generar_presupuesto_completo(superficie_m2, tipo_construccion, analisis_ia=N
     Genera un presupuesto completo con materiales, equipos y herramientas
     """
     try:
-        # Calcular componentes
         materiales = calcular_materiales(superficie_m2, tipo_construccion)
         equipos, herramientas = calcular_equipos_herramientas(superficie_m2, tipo_construccion)
-        
-        # Generar resumen con IA
+
         resumen_ia = None
         if analisis_ia and client:
             try:
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {
-                            "role": "system",
-                            "content": "Eres un experto en construcción. Genera recomendaciones técnicas breves y profesionales."
-                        },
-                        {
-                            "role": "user",
-                            "content": f"""
-                            Basado en este proyecto de construcción:
-                            - Superficie: {superficie_m2}m²
-                            - Tipo: {tipo_construccion}
-                            - Materiales calculados: {json.dumps(materiales, indent=2)}
-                            
-                            Proporciona 3 recomendaciones técnicas breves para optimizar este presupuesto.
-                            """
-                        }
+                        {"role": "system", "content": "Eres un experto en construcción. Genera recomendaciones técnicas breves y profesionales."},
+                        {"role": "user", "content": f"Proyecto: {superficie_m2} m², tipo {tipo_construccion}. Materiales: {json.dumps(materiales, indent=2)}. Dame 3 recomendaciones breves para optimizar el presupuesto."}
                     ],
                     max_tokens=300
                 )
                 resumen_ia = response.choices[0].message.content
-            except:
+            except Exception:
                 resumen_ia = "Recomendaciones IA no disponibles en este momento."
-        
+
         presupuesto = {
             "metadata": {
                 "superficie_m2": superficie_m2,
@@ -1163,20 +1086,16 @@ def generar_presupuesto_completo(superficie_m2, tipo_construccion, analisis_ia=N
             "analisis_ia": analisis_ia,
             "recomendaciones_ia": resumen_ia
         }
-        
         return presupuesto
-        
+
     except Exception as e:
         raise Exception(f"Error generando presupuesto: {str(e)}")
 
 def convertir_pdf_a_base64(archivo_pdf):
-    """
-    Convierte un archivo PDF a base64 para análisis IA
-    """
+    """Convierte un archivo PDF a base64 para análisis IA"""
     try:
         contenido = archivo_pdf.read()
-        base64_encoded = base64.b64encode(contenido).decode('utf-8')
-        return base64_encoded
+        return base64.b64encode(contenido).decode('utf-8')
     except Exception as e:
         raise Exception(f"Error procesando PDF: {str(e)}")
 
@@ -1186,7 +1105,6 @@ def procesar_presupuesto_ia(archivo_pdf=None, metros_cuadrados_manual=None, tipo
     Función principal que procesa un presupuesto completo con IA
     """
     try:
-        # Análisis del plano si se proporciona
         analisis_ia = None
         if archivo_pdf:
             pdf_base64 = convertir_pdf_a_base64(archivo_pdf)
@@ -1203,28 +1121,17 @@ def procesar_presupuesto_ia(archivo_pdf=None, metros_cuadrados_manual=None, tipo
                 "confianza_analisis": 1.0,
                 "superficie_origen": "manual"
             }
-        
-        # Usar tipo forzado si se especifica
+
         tipo_final = tipo_construccion_forzado if tipo_construccion_forzado else tipo_sugerido
-        
-        # Generar presupuesto con sistema de etapas
+
         etapas_resultado, maquinaria_total, herramientas_total = calcular_por_etapas(superficie_final, tipo_final)
         materiales_totales = calcular_materiales(superficie_final, tipo_final)
-        
-        # Formatear para compatibilidad
-        equipos_totales = {}
-        for maquina, data in maquinaria_total.items():
-            equipos_totales[maquina] = {
-                "cantidad": data["cantidad"],
-                "dias": data["dias_total"]
-            }
-        
-        herramientas_totales = {}
-        for herramienta, data in herramientas_total.items():
-            herramientas_totales[herramienta] = data["cantidad"]
-        
+
+        equipos_totales = {m: {"cantidad": d["cantidad"], "dias": d["dias_total"]} for m, d in maquinaria_total.items()}
+        herramientas_totales = {h: d["cantidad"] for h, d in herramientas_total.items()}
+
         coef = COEFICIENTES_CONSTRUCCION[tipo_final]
-        
+
         presupuesto = {
             "metadata": {
                 "superficie_m2": superficie_final,
@@ -1242,20 +1149,20 @@ def procesar_presupuesto_ia(archivo_pdf=None, metros_cuadrados_manual=None, tipo
                 "total_dias_maquinaria": sum(data["dias_total"] for data in maquinaria_total.values()),
                 "nivel_tecnologia": {
                     "Económica": "Manual/Básico",
-                    "Estándar": "Intermedio/Eléctrico", 
+                    "Estándar": "Intermedio/Eléctrico",
                     "Premium": "Avanzado/Robotizado"
                 }[tipo_final]
             },
             "analisis_ia": analisis_ia
         }
-        
+
         return {
             "exito": True,
             "presupuesto": presupuesto,
             "superficie_calculada": superficie_final,
             "tipo_usado": tipo_final
         }
-        
+
     except Exception as e:
         return {
             "exito": False,

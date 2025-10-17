@@ -17,7 +17,15 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from app import db
+# Imports de app (compatibilidad con ambas ramas)
+try:
+    from app import db, _login_redirect  # presente en main
+except Exception:
+    from app import db  # presente en pr20-local
+    def _login_redirect():
+        # Fallback seguro si no existe en tu app
+        return redirect(url_for("auth.login"))
+
 from models import (
     InventoryCategory,
     InventoryItem,
@@ -70,28 +78,23 @@ inventario_new_bp = Blueprint(
 
 
 def _coerce_internal_url(candidate: str | None, *, default: str) -> str:
-    """Ensure the provided URL is relative to avoid open redirects."""
-
+    """Asegura que la URL sea interna (evita open redirects)."""
     if not candidate:
         return default
-
     parsed = urlparse(candidate)
     if parsed.netloc or parsed.scheme:
         return default
-
     return candidate
 
 
 def _with_query_params(url: str, **params) -> str:
     parsed = urlparse(url)
     query_args = dict(parse_qsl(parsed.query, keep_blank_values=True))
-
     for key, value in params.items():
         if value is None:
             query_args.pop(key, None)
         else:
             query_args[key] = value
-
     new_query = urlencode(query_args, doseq=True)
     return parsed._replace(query=new_query).geturl()
 
@@ -127,7 +130,6 @@ def _extract_presentations_from_form(form) -> List[dict]:
         try:
             multiplier_float = float(multiplier_value)
         except (TypeError, ValueError):
-            # Guardamos el valor original para que el usuario pueda corregirlo
             options.append({
                 'label': label_value,
                 'unit': unit_value,
@@ -171,7 +173,6 @@ def _serialize_locations_for_ui(locations: List[Warehouse]) -> List[dict]:
         (key, {'key': key, 'label': label, 'options': []})
         for key, label in LOCATION_GROUP_LABELS.items()
     )
-
     extras: OrderedDict[str, dict] = OrderedDict()
 
     for location in locations:
@@ -185,7 +186,6 @@ def _serialize_locations_for_ui(locations: List[Warehouse]) -> List[dict]:
                     'options': [],
                 }
             target = extras[tipo]
-
         target['options'].append(_serialize_location(location))
 
     ordered_groups = list(groups.values()) + list(extras.values())
@@ -222,13 +222,14 @@ def _convert_package_quantity(item: InventoryItem, package_key: str, qty_value):
     }
     return base_qty, package_info
 
+
 def requires_role(*roles):
-    """Decorator para verificar roles"""
+    """Decorator para verificar roles."""
     def decorator(f):
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
-                return redirect(url_for('auth.login'))
-            if current_user.rol not in roles and not current_user.es_admin():
+                return _login_redirect()
+            if current_user.rol not in roles and not getattr(current_user, 'es_admin', lambda: False)():
                 flash('No tienes permisos para esta acción.', 'danger')
                 return redirect(url_for('inventario_new.items'))
             return f(*args, **kwargs)
@@ -236,8 +237,9 @@ def requires_role(*roles):
         return decorated_function
     return decorator
 
+
 def get_json_response(data, status=200, error=None):
-    """Genera respuesta JSON estándar"""
+    """Genera respuesta JSON estándar si el cliente lo pide."""
     if request.accept_mimetypes['application/json'] >= request.accept_mimetypes['text/html'] or request.args.get('format') == 'json':
         if error:
             return jsonify({'error': error}), status
@@ -249,7 +251,6 @@ def _build_category_tree(
     categorias: List[InventoryCategory],
 ) -> List[Dict[str, object]]:
     """Arma un árbol jerárquico para renderizado."""
-
     children_map: Dict[Optional[int], List[InventoryCategory]] = defaultdict(list)
     for categoria in categorias:
         children_map[categoria.parent_id].append(categoria)
@@ -271,10 +272,8 @@ def _build_category_tree(
 
 def _resolve_company(company_id: int) -> Optional[Organizacion]:
     """Obtiene la organización asociada al id."""
-
     if getattr(current_user, 'organizacion', None) and current_user.organizacion.id == company_id:
         return current_user.organizacion
-
     return Organizacion.query.get(company_id)
 
 
@@ -384,7 +383,6 @@ def _build_stock_summary(
 
 def _extract_adjustment_delta(movement: StockMovement) -> Decimal:
     """Recupera la diferencia real de un ajuste para identificar pérdidas."""
-
     if movement.tipo != 'ajuste' or not movement.motivo:
         return Decimal('0')
 
@@ -405,7 +403,6 @@ def _extract_adjustment_delta(movement: StockMovement) -> Decimal:
 
 def _movement_is_waste(movement: StockMovement) -> bool:
     """Clasifica un movimiento para detectar desperdicios."""
-
     if movement.tipo == 'ajuste':
         return _extract_adjustment_delta(movement) < 0
 
@@ -422,7 +419,6 @@ def _movement_is_waste(movement: StockMovement) -> bool:
 
 def _build_cost_map(company_id: int, items: list[InventoryItem]) -> dict[str, float]:
     """Obtiene valores de costo promedio basados en códigos históricos."""
-
     skus = {item.sku for item in items if item.sku}
     if not skus:
         return {}
@@ -454,7 +450,6 @@ def _build_cost_map(company_id: int, items: list[InventoryItem]) -> dict[str, fl
 
 def _collect_reservation_metrics(item_ids: set[int]):
     """Agrupa métricas clave de reservas activas y consumidas."""
-
     if not item_ids:
         return defaultdict(
             lambda: {
@@ -507,7 +502,6 @@ def _collect_reservation_metrics(item_ids: set[int]):
 
 def _collect_movement_metrics(company_id: int, item_ids: set[int]):
     """Calcula consumo, desperdicio y responsables por item."""
-
     if not item_ids:
         return (
             defaultdict(
@@ -614,6 +608,7 @@ def _collect_movement_metrics(company_id: int, item_ids: set[int]):
 
     return item_metrics, project_metrics, operator_metrics
 
+
 @inventario_new_bp.route('/')
 @inventario_new_bp.route('/items')
 @login_required
@@ -639,7 +634,7 @@ def items():
         return redirect(url_for('reportes.dashboard'))
 
     query = InventoryItem.query.filter_by(company_id=company_id, activo=True)
-    
+
     if categoria_id:
         query = (
             query.join(InventoryCategory)
@@ -650,7 +645,7 @@ def items():
                 )
             )
         )
-    
+
     if buscar:
         query = query.filter(
             db.or_(
@@ -659,12 +654,12 @@ def items():
                 InventoryItem.descripcion.contains(buscar)
             )
         )
-    
-    items = query.order_by(InventoryItem.nombre).all()
+
+    items_list = query.order_by(InventoryItem.nombre).all()
 
     # Filtrar por stock bajo si se solicita
     if stock_bajo:
-        items = [item for item in items if item.is_low_stock]
+        items_list = [item for item in items_list if item.is_low_stock]
 
     locations = (
         Warehouse.query.filter_by(company_id=company_id, activo=True)
@@ -694,7 +689,7 @@ def items():
                 'min_stock': float(item.min_stock),
                 'is_low_stock': item.is_low_stock,
                 'package_options': item.package_options,
-            } for item in items
+            } for item in items_list
         ]
     })
     if json_resp:
@@ -703,15 +698,17 @@ def items():
     # Obtener categorías para filtros
     categorias = get_active_categories(company_id)
 
-    return render_template('inventario_new/items.html',
-                         items=items,
-                         categorias=categorias,
-                         filtros={'categoria': categoria_id_raw, 'buscar': buscar, 'stock_bajo': stock_bajo},
-                         locations=locations,
-                         location_groups=location_groups,
-                         highlight_item_id=highlight_item_id,
-                         base_items_url=base_items_url,
-                         can_manage_movements=_user_can_manage_movements(current_user))
+    return render_template(
+        'inventario_new/items.html',
+        items=items_list,
+        categorias=categorias,
+        filtros={'categoria': categoria_id_raw, 'buscar': buscar, 'stock_bajo': stock_bajo},
+        locations=locations,
+        location_groups=location_groups,
+        highlight_item_id=highlight_item_id,
+        base_items_url=base_items_url,
+        can_manage_movements=_user_can_manage_movements(current_user)
+    )
 
 
 @inventario_new_bp.route('/cuadro-stock')
@@ -1305,20 +1302,21 @@ def nuevo_item():
 
     return _render_form()
 
+
 @inventario_new_bp.route('/items/<int:id>')
 @login_required
 def detalle_item(id):
     item = InventoryItem.query.filter_by(id=id, company_id=current_user.organizacion_id).first_or_404()
-    
+
     # Obtener stocks por depósito
     stocks = Stock.query.filter_by(item_id=id).join(Warehouse).all()
-    
+
     # Obtener movimientos recientes
     movimientos = StockMovement.query.filter_by(item_id=id).order_by(StockMovement.fecha.desc()).limit(20).all()
-    
+
     # Obtener reservas activas
     reservas = StockReservation.query.filter_by(item_id=id, estado='activa').all()
-    
+
     json_resp = get_json_response({
         'item': {
             'id': item.id,
@@ -1338,18 +1336,21 @@ def detalle_item(id):
     })
     if json_resp:
         return json_resp
-    
-    return render_template('inventario_new/item_detalle.html', 
-                         item=item, 
-                         stocks=stocks,
-                         movimientos=movimientos,
-                         reservas=reservas)
+
+    return render_template(
+        'inventario_new/item_detalle.html',
+        item=item,
+        stocks=stocks,
+        movimientos=movimientos,
+        reservas=reservas
+    )
+
 
 @inventario_new_bp.route('/warehouses')
 @login_required
 def warehouses():
     warehouses = Warehouse.query.filter_by(company_id=current_user.organizacion_id, activo=True).all()
-    
+
     json_resp = get_json_response({
         'data': [
             {
@@ -1362,8 +1363,9 @@ def warehouses():
     })
     if json_resp:
         return json_resp
-    
+
     return render_template('inventario_new/warehouses.html', warehouses=warehouses)
+
 
 @inventario_new_bp.route('/warehouses/nuevo', methods=['POST'])
 @login_required
@@ -1420,6 +1422,7 @@ def nuevo_warehouse():
 
     return redirect(safe_next)
 
+
 @inventario_new_bp.route('/movimientos', methods=['GET', 'POST'])
 @login_required
 def movimientos():
@@ -1436,10 +1439,10 @@ def movimientos():
         return crear_movimiento()
 
     # Listar movimientos
-    movimientos = StockMovement.query.join(InventoryItem).filter(
+    movimientos_list = StockMovement.query.join(InventoryItem).filter(
         InventoryItem.company_id == current_user.organizacion_id
     ).order_by(StockMovement.fecha.desc()).limit(50).all()
-    
+
     json_resp = get_json_response({
         'data': [
             {
@@ -1450,7 +1453,7 @@ def movimientos():
                 'warehouse': mov.warehouse_display,
                 'fecha': mov.fecha.isoformat(),
                 'usuario': mov.user.nombre_completo
-            } for mov in movimientos
+            } for mov in movimientos_list
         ]
     })
     if json_resp:
@@ -1461,15 +1464,18 @@ def movimientos():
     locations = Warehouse.query.filter_by(company_id=current_user.organizacion_id, activo=True).order_by(Warehouse.nombre.asc()).all()
     location_groups = _serialize_locations_for_ui(locations)
 
-    return render_template('inventario_new/movimientos.html',
-                         movimientos=movimientos,
-                         items=items,
-                         locations=locations,
-                         location_groups=location_groups,
-                         can_manage_movements=_user_can_manage_movements(current_user))
+    return render_template(
+        'inventario_new/movimientos.html',
+        movimientos=movimientos_list,
+        items=items,
+        locations=locations,
+        location_groups=location_groups,
+        can_manage_movements=_user_can_manage_movements(current_user)
+    )
+
 
 def crear_movimiento():
-    """Crea un nuevo movimiento de stock"""
+    """Crea un nuevo movimiento de stock."""
     default_redirect = url_for('inventario_new.movimientos')
     next_param = request.form.get('next') or request.args.get('next')
     redirect_target = _coerce_internal_url(next_param, default=default_redirect)
@@ -1602,16 +1608,16 @@ def crear_movimiento():
 
     return redirect(redirect_target)
 
+
 def crear_movimiento_ingreso(item, qty, warehouse_id, motivo):
-    """Crea un movimiento de ingreso"""
-    # Actualizar o crear stock
+    """Crea un movimiento de ingreso."""
     stock = Stock.query.filter_by(item_id=item.id, warehouse_id=warehouse_id).first()
     if not stock:
         stock = Stock(item_id=item.id, warehouse_id=warehouse_id, cantidad=0)
         db.session.add(stock)
-    
+
     stock.cantidad += qty
-    
+
     return StockMovement(
         item_id=item.id,
         tipo='ingreso',
@@ -1621,14 +1627,15 @@ def crear_movimiento_ingreso(item, qty, warehouse_id, motivo):
         user_id=current_user.id
     )
 
+
 def crear_movimiento_egreso(item, qty, warehouse_id, motivo):
-    """Crea un movimiento de egreso"""
+    """Crea un movimiento de egreso."""
     stock = Stock.query.filter_by(item_id=item.id, warehouse_id=warehouse_id).first()
     if not stock or stock.cantidad < qty:
         raise ValueError("Stock insuficiente en el depósito")
-    
+
     stock.cantidad -= qty
-    
+
     return StockMovement(
         item_id=item.id,
         tipo='egreso',
@@ -1638,24 +1645,22 @@ def crear_movimiento_egreso(item, qty, warehouse_id, motivo):
         user_id=current_user.id
     )
 
+
 def crear_movimiento_transferencia(item, qty, origen_id, destino_id, motivo):
-    """Crea un movimiento de transferencia"""
-    # Verificar stock origen
+    """Crea un movimiento de transferencia."""
     stock_origen = Stock.query.filter_by(item_id=item.id, warehouse_id=origen_id).first()
     if not stock_origen or stock_origen.cantidad < qty:
         raise ValueError("Stock insuficiente en el depósito origen")
-    
-    # Actualizar stock origen
+
     stock_origen.cantidad -= qty
-    
-    # Actualizar o crear stock destino
+
     stock_destino = Stock.query.filter_by(item_id=item.id, warehouse_id=destino_id).first()
     if not stock_destino:
         stock_destino = Stock(item_id=item.id, warehouse_id=destino_id, cantidad=0)
         db.session.add(stock_destino)
-    
+
     stock_destino.cantidad += qty
-    
+
     return StockMovement(
         item_id=item.id,
         tipo='transferencia',
@@ -1666,17 +1671,18 @@ def crear_movimiento_transferencia(item, qty, origen_id, destino_id, motivo):
         user_id=current_user.id
     )
 
+
 def crear_movimiento_ajuste(item, nuevo_stock, warehouse_id, motivo):
-    """Crea un movimiento de ajuste"""
+    """Crea un movimiento de ajuste."""
     stock = Stock.query.filter_by(item_id=item.id, warehouse_id=warehouse_id).first()
     if not stock:
         stock = Stock(item_id=item.id, warehouse_id=warehouse_id, cantidad=0)
         db.session.add(stock)
-    
+
     stock_anterior = stock.cantidad
     stock.cantidad = nuevo_stock
     qty_ajuste = nuevo_stock - stock_anterior
-    
+
     return StockMovement(
         item_id=item.id,
         tipo='ajuste',
@@ -1686,17 +1692,18 @@ def crear_movimiento_ajuste(item, nuevo_stock, warehouse_id, motivo):
         user_id=current_user.id
     )
 
+
 @inventario_new_bp.route('/alertas')
 @login_required
 def alertas():
-    """Muestra items con stock bajo"""
+    """Muestra items con stock bajo."""
     items_stock_bajo = InventoryItem.query.filter_by(
-        company_id=current_user.organizacion_id, 
+        company_id=current_user.organizacion_id,
         activo=True
     ).all()
-    
+
     items_stock_bajo = [item for item in items_stock_bajo if item.is_low_stock]
-    
+
     json_resp = get_json_response({
         'data': [
             {
@@ -1711,21 +1718,22 @@ def alertas():
     })
     if json_resp:
         return json_resp
-    
+
     return render_template('inventario_new/alertas.html', items=items_stock_bajo)
+
 
 @inventario_new_bp.route('/reservas', methods=['GET', 'POST'])
 @login_required
 def reservas():
     if request.method == 'POST':
         return crear_reserva()
-    
+
     # Listar reservas activas
-    reservas = StockReservation.query.join(InventoryItem).filter(
+    reservas_list = StockReservation.query.join(InventoryItem).filter(
         InventoryItem.company_id == current_user.organizacion_id,
         StockReservation.estado == 'activa'
     ).all()
-    
+
     json_resp = get_json_response({
         'data': [
             {
@@ -1734,27 +1742,30 @@ def reservas():
                 'proyecto': res.project.nombre,
                 'cantidad': float(res.qty),
                 'fecha': res.created_at.isoformat()
-            } for res in reservas
+            } for res in reservas_list
         ]
     })
     if json_resp:
         return json_resp
-    
+
     # Obtener datos para el formulario
     items = InventoryItem.query.filter_by(company_id=current_user.organizacion_id, activo=True).all()
     projects = Obra.query.filter_by(organizacion_id=current_user.organizacion_id).all()
-    
-    return render_template('inventario_new/reservas.html', 
-                         reservas=reservas,
-                         items=items,
-                         projects=projects)
+
+    return render_template(
+        'inventario_new/reservas.html',
+        reservas=reservas_list,
+        items=items,
+        projects=projects
+    )
+
 
 def crear_reserva():
-    """Crea una nueva reserva de stock"""
+    """Crea una nueva reserva de stock."""
     item_id = request.form.get('item_id')
     project_id = request.form.get('project_id')
     qty = request.form.get('qty')
-    
+
     if not all([item_id, project_id, qty]):
         error = 'Todos los campos son obligatorios.'
         json_resp = get_json_response(None, 400, error)
@@ -1762,86 +1773,87 @@ def crear_reserva():
             return json_resp
         flash(error, 'danger')
         return redirect(url_for('inventario_new.reservas'))
-    
+
     try:
         qty = float(qty)
         item = InventoryItem.query.get(item_id)
-        
+
         if qty > item.available_stock:
             raise ValueError("No hay suficiente stock disponible para reservar")
-        
+
         reserva = StockReservation(
             item_id=item_id,
             project_id=project_id,
             qty=qty,
             created_by=current_user.id
         )
-        
+
         db.session.add(reserva)
         db.session.commit()
-        
+
         json_resp = get_json_response({'mensaje': 'Reserva creada exitosamente'})
         if json_resp:
             return json_resp
-            
+
         flash('Reserva creada exitosamente.', 'success')
-        
+
     except ValueError as e:
         error = str(e)
         json_resp = get_json_response(None, 400, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         error = 'Error al crear la reserva.'
         json_resp = get_json_response(None, 500, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    
+
     return redirect(url_for('inventario_new.reservas'))
+
 
 @inventario_new_bp.route('/reservas/<int:id>/liberar', methods=['POST'])
 @login_required
 @requires_role('administrador', 'compras')
 def liberar_reserva(id):
     reserva = StockReservation.query.get_or_404(id)
-    
+
     try:
         reserva.estado = 'liberada'
         db.session.commit()
-        
+
         json_resp = get_json_response({'mensaje': 'Reserva liberada exitosamente'})
         if json_resp:
             return json_resp
-            
+
         flash('Reserva liberada exitosamente.', 'success')
-        
-    except Exception as e:
+
+    except Exception:
         db.session.rollback()
         error = 'Error al liberar la reserva.'
         json_resp = get_json_response(None, 500, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    
+
     return redirect(url_for('inventario_new.reservas'))
+
 
 @inventario_new_bp.route('/reservas/<int:id>/consumir', methods=['POST'])
 @login_required
 @requires_role('administrador', 'compras')
 def consumir_reserva(id):
     reserva = StockReservation.query.get_or_404(id)
-    
+
     try:
-        # Crear movimiento de egreso
         # Buscar el depósito con más stock del item
         stock_disponible = Stock.query.filter_by(item_id=reserva.item_id).order_by(Stock.cantidad.desc()).first()
-        
+
         if not stock_disponible or stock_disponible.cantidad < reserva.qty:
             raise ValueError("No hay suficiente stock disponible para consumir la reserva")
-        
+
         # Crear movimiento de egreso
         movimiento = StockMovement(
             item_id=reserva.item_id,
@@ -1852,34 +1864,34 @@ def consumir_reserva(id):
             motivo=f"Consumo de reserva para {reserva.project.nombre}",
             user_id=current_user.id
         )
-        
+
         # Actualizar stock
         stock_disponible.cantidad -= reserva.qty
-        
+
         # Marcar reserva como consumida
         reserva.estado = 'consumida'
-        
+
         db.session.add(movimiento)
         db.session.commit()
-        
+
         json_resp = get_json_response({'mensaje': 'Reserva consumida exitosamente'})
         if json_resp:
             return json_resp
-            
+
         flash('Reserva consumida exitosamente.', 'success')
-        
+
     except ValueError as e:
         error = str(e)
         json_resp = get_json_response(None, 400, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         error = 'Error al consumir la reserva.'
         json_resp = get_json_response(None, 500, error)
         if json_resp:
             return json_resp
         flash(error, 'danger')
-    
+
     return redirect(url_for('inventario_new.reservas'))

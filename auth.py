@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
 from extensions import db
+from app import _login_redirect
 from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser, OrgMembership
 from sqlalchemy import func
 from datetime import datetime
@@ -25,6 +26,7 @@ from services.memberships import (
     ensure_active_membership_for_user,
 )
 
+# ---------------------------------------------------------------------------
 
 def normalizar_cuit(valor: Optional[str]) -> str:
     """Elimina caracteres no numéricos y limita a 11 dígitos."""
@@ -52,6 +54,8 @@ def validar_cuit(valor: Optional[str]) -> bool:
     except ValueError:
         return False
 
+# ---------------------------------------------------------------------------
+
 auth_bp = Blueprint('auth', __name__)
 
 # Configuración OAuth con Google
@@ -62,6 +66,7 @@ PASSWORD_RESET_SALT = 'obyra-password-reset'
 
 ResettableAccount = Union[Usuario, SupplierUser]
 
+# ---------------------------------------------------------------------------
 
 def _normalize_portal(portal: Optional[str]) -> str:
     if not portal:
@@ -97,23 +102,20 @@ ADMIN_EMAILS = [
     'admin@obyra.ia'
 ]
 
-# Solo configurar Google OAuth si las variables están disponibles
 def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
-
+# Registrar Google OAuth solo si hay credenciales
 if os.environ.get('GOOGLE_OAUTH_CLIENT_ID') and os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'):
     google = oauth.register(
         name='google',
         client_id=os.environ.get('GOOGLE_OAUTH_CLIENT_ID'),
         client_secret=os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'),
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_kwargs={
-            'scope': 'openid email profile'
-        }
+        client_kwargs={'scope': 'openid email profile'}
     )
 else:
     if _env_flag('ENABLE_GOOGLE_OAUTH_HELP', False):
@@ -121,15 +123,14 @@ else:
 🔗 Para habilitar Google OAuth en OBYRA IA:
 1. Ve a https://console.cloud.google.com/apis/credentials
 2. Crea un OAuth 2.0 Client ID
-3. Agrega estas URLs autorizadas:
-   - https://tu-dominio.replit.app/login/google/callback
-4. Configura las variables de entorno:
+3. Agrega estas URLs autorizadas (ajústalas a tu dominio):
+   - https://TU-DOMINIO/login/google/callback
+4. Configura las variables:
    - GOOGLE_OAUTH_CLIENT_ID
    - GOOGLE_OAUTH_CLIENT_SECRET
-
-Para más información: https://docs.replit.com/additional-resources/google-auth-in-flask
         """)
 
+# ---------------------------------------------------------------------------
 
 AuthResult = Tuple[bool, Union[Usuario, Dict[str, str]]]
 
@@ -140,18 +141,12 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
     password = password or ''
 
     if not normalized_email or not password:
-        return False, {
-            'message': 'Por favor, completa todos los campos.',
-            'category': 'danger',
-        }
+        return False, {'message': 'Por favor, completa todos los campos.', 'category': 'danger'}
 
     usuario = Usuario.query.filter(func.lower(Usuario.email) == normalized_email.lower()).first()
 
     if not usuario or not usuario.activo:
-        return False, {
-            'message': 'Email o contraseña incorrectos, o cuenta inactiva.',
-            'category': 'danger',
-        }
+        return False, {'message': 'Email o contraseña incorrectos, o cuenta inactiva.', 'category': 'danger'}
 
     if usuario.auth_provider == 'google':
         return False, {
@@ -160,16 +155,10 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
         }
 
     if usuario.auth_provider != 'manual' or not usuario.password_hash:
-        return False, {
-            'message': 'Credenciales incorrectas.',
-            'category': 'danger',
-        }
+        return False, {'message': 'Credenciales incorrectas.', 'category': 'danger'}
 
     if not usuario.check_password(password):
-        return False, {
-            'message': 'Credenciales incorrectas.',
-            'category': 'danger',
-        }
+        return False, {'message': 'Credenciales incorrectas.', 'category': 'danger'}
 
     login_user(usuario, remember=remember)
     return True, usuario
@@ -177,12 +166,7 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
 
 def _resolve_dashboard_url() -> str:
     """Obtiene la URL más adecuada para enviar al usuario autenticado."""
-    for endpoint in (
-        'reportes.dashboard',
-        'obras.lista',
-        'supplier_portal.dashboard',
-        'index',
-    ):
+    for endpoint in ('reportes.dashboard', 'obras.lista', 'supplier_portal.dashboard', 'index'):
         try:
             return url_for(endpoint)
         except BuildError:
@@ -221,6 +205,7 @@ def _post_login_destination(usuario: Usuario, next_page: Optional[str] = None) -
 
     return _resolve_dashboard_url()
 
+# -------------------- Reset password helpers --------------------
 
 def _get_reset_serializer() -> URLSafeTimedSerializer:
     secret_key = current_app.config.get('SECRET_KEY')
@@ -237,7 +222,7 @@ def _generate_reset_token(account: ResettableAccount, portal: str) -> str:
         'account_type': _portal_label_for_account(account),
         'portal': _normalize_portal(portal),
     }
-    # Include legacy key for backwards compatibility with older tokens
+    # compat legacy
     payload['user_id'] = payload['account_id']
     return serializer.dumps(payload, salt=PASSWORD_RESET_SALT)
 
@@ -276,6 +261,7 @@ def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccoun
 
     return account, portal
 
+# -------------------- Utilidades de invitación --------------------
 
 def generate_temporary_password(length: int = 12) -> str:
     """Genera una contraseña aleatoria segura para nuevos integrantes."""
@@ -293,7 +279,7 @@ def send_new_member_invitation(
     try:
         token = _generate_reset_token(usuario, 'user')
         reset_url = url_for('auth.reset_password', token=token, _external=True)
-    except Exception as exc:  # pragma: no cover - prefer resiliencia en producción
+    except Exception:
         current_app.logger.exception('No se pudo generar el enlace de activación para %s', usuario.email)
         reset_url = None
 
@@ -307,11 +293,7 @@ def send_new_member_invitation(
 
     email_sent = False
     try:
-        email_sent = send_email(
-            usuario.email,
-            'Tu acceso a OBYRA IA',
-            html_content,
-        )
+        email_sent = send_email(usuario.email, 'Tu acceso a OBYRA IA', html_content)
     except Exception:
         current_app.logger.exception('Fallo al enviar el email de bienvenida a %s', usuario.email)
         email_sent = False
@@ -320,20 +302,18 @@ def send_new_member_invitation(
         if temp_password:
             current_app.logger.info(
                 'Credenciales temporales generadas para %s | contraseña: %s | enlace: %s',
-                usuario.email,
-                temp_password,
-                reset_url or 'N/D',
+                usuario.email, temp_password, reset_url or 'N/D',
             )
         else:
             current_app.logger.info(
-                'Invitación registrada para %s | enlace: %s',
-                usuario.email,
-                reset_url or 'N/D',
+                'Invitación registrada para %s | enlace: %s', usuario.email, reset_url or 'N/D',
             )
     else:
         current_app.logger.info('Email de bienvenida enviado a %s', usuario.email)
 
     return reset_url
+
+# ------------------------------- Rutas Auth ----------------------------------
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -383,10 +363,7 @@ def seleccionar_organizacion():
         OrgMembership.query
         .filter(
             OrgMembership.user_id == current_user.id,
-            db.or_(
-                OrgMembership.archived.is_(False),
-                OrgMembership.archived.is_(None),
-            ),
+            db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None)),
         )
         .order_by(OrgMembership.accepted_at.desc().nullslast(), OrgMembership.invited_at.desc())
         .all()
@@ -419,6 +396,7 @@ def seleccionar_organizacion():
 
     return render_template('auth/seleccionar_organizacion.html', memberships=memberships, next_url=next_url)
 
+# ------------------------- Reset de contraseña -------------------------------
 
 @auth_bp.route('/forgot', methods=['GET', 'POST'])
 def forgot_password():
@@ -508,6 +486,8 @@ def reset_password(token: str):
 
     return render_form()
 
+# ------------------------------ Sesión ---------------------------------------
+
 @auth_bp.route('/logout')
 @login_required
 def logout():
@@ -517,6 +497,8 @@ def logout():
     session.pop('membership_selection_confirmed', None)
     flash('Sesión cerrada exitosamente.', 'info')
     return redirect(url_for('index'))
+
+# ------------------------------ Registro -------------------------------------
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -539,7 +521,6 @@ def register():
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
 
-        # Validar formato de email
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
             flash('Por favor, ingresa un email válido.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
@@ -576,7 +557,6 @@ def register():
 
             rol_usuario = 'administrador'
             role_front = 'admin'
-            # Crear nuevo usuario
             nuevo_usuario = Usuario(
                 nombre=nombre,
                 apellido=apellido,
@@ -589,7 +569,6 @@ def register():
                 organizacion_id=nueva_organizacion.id,
                 primary_org_id=nueva_organizacion.id,
             )
-
             nuevo_usuario.set_password(password)
 
             db.session.add(nuevo_usuario)
@@ -613,23 +592,19 @@ def register():
 
             db.session.commit()
 
-            # Auto-login después del registro
             login_user(nuevo_usuario)
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
             destino = _post_login_destination(nuevo_usuario)
             return redirect(destino)
             
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             flash('Error al crear la cuenta. Por favor, intenta de nuevo.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
     
     return render_template('auth/register.html', google_available=bool(google))
 
-
-# ================================
-# RUTAS DE GOOGLE OAUTH
-# ================================
+# ================================ GOOGLE OAUTH ================================
 
 @auth_bp.route('/login/google')
 def google_login():
@@ -639,9 +614,8 @@ def google_login():
     
     if not google:
         flash('Google OAuth no está configurado. Contacta al administrador.', 'warning')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
-    # URL de callback para Google
     redirect_uri = url_for('auth.google_callback', _external=True)
     return google.authorize_redirect(redirect_uri)
 
@@ -651,15 +625,14 @@ def google_callback():
     """Callback de Google OAuth"""
     if not google:
         flash('Google OAuth no está configurado.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     try:
         token = google.authorize_access_token()
         user_info = token.get('userinfo')
-        
         if not user_info:
             flash('Error al obtener información de Google.', 'danger')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
         email = user_info.get('email')
         nombre = user_info.get('given_name', '')
@@ -669,18 +642,14 @@ def google_callback():
         
         if not email:
             flash('No se pudo obtener el email de Google.', 'danger')
-            return redirect(url_for('auth.login'))
+            return _login_redirect()
         
-        # Buscar usuario existente por email
         usuario = Usuario.query.filter_by(email=email.lower()).first()
         
         if usuario:
-            # Usuario existente - actualizar con datos de Google si es necesario
             if usuario.auth_provider == 'manual':
-                # Convertir cuenta manual a Google
                 usuario.auth_provider = 'google'
                 usuario.google_id = google_id
-                # Actualizar información del perfil con datos de Google
                 if nombre:
                     usuario.nombre = nombre
                 if apellido:
@@ -688,7 +657,6 @@ def google_callback():
                 if profile_picture:
                     usuario.profile_picture = profile_picture
             elif usuario.auth_provider == 'google':
-                # Actualizar datos de Google siempre para mantener información actualizada
                 usuario.google_id = google_id
                 if nombre:
                     usuario.nombre = nombre
@@ -698,32 +666,25 @@ def google_callback():
                     usuario.profile_picture = profile_picture
             
             if usuario.activo:
-                # Guardar cambios en la base de datos
                 db.session.commit()
                 login_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
-                destino = _post_login_destination(usuario)
-                return redirect(destino)
+                return redirect(_post_login_destination(usuario))
             else:
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
         else:
-            # Verificar si el email ya existe en otra organización
             usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
             if usuario_existente:
                 flash('⚠️ Este correo ya está registrado. Debés ser invitado por un administrador de tu organización para acceder.', 'warning')
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
             
-            # Crear nuevo usuario con Google
             try:
-                # Verificar si hay una invitación pendiente en la sesión
                 token_invitacion = session.get('token_invitacion')
                 organizacion_id = session.get('organizacion_invitacion')
-                
                 role_front = 'operario'
 
                 if token_invitacion and organizacion_id:
-                    # Usuario viene por invitación - se une a organización existente
                     organizacion = Organizacion.query.get(organizacion_id)
                     if organizacion and organizacion.token_invitacion == token_invitacion:
                         nuevo_usuario = Usuario(
@@ -733,24 +694,20 @@ def google_callback():
                             auth_provider='google',
                             google_id=google_id,
                             profile_picture=profile_picture,
-                            rol='operario',  # Invitados son operarios por defecto
+                            rol='operario',
                             role=role_front,
                             activo=True,
                             password_hash=None,
                             organizacion_id=organizacion_id,
                             primary_org_id=organizacion_id,
                         )
-                        
-                        # Limpiar sesión
                         session.pop('token_invitacion', None)
                         session.pop('organizacion_invitacion', None)
-                        
                         mensaje = f'¡Bienvenido/a a {organizacion.nombre}, {nombre}!'
                     else:
                         flash('Token de invitación inválido.', 'danger')
-                        return redirect(url_for('auth.login'))
+                        return _login_redirect()
                 else:
-                    # Usuario nuevo - crear organización propia
                     rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'administrador'
                     role_front = 'admin'
                     
@@ -759,7 +716,7 @@ def google_callback():
                         fecha_creacion=datetime.utcnow()
                     )
                     db.session.add(nueva_organizacion)
-                    db.session.flush()  # Para obtener el ID
+                    db.session.flush()
                     
                     nuevo_usuario = Usuario(
                         nombre=nombre or 'Usuario',
@@ -775,7 +732,6 @@ def google_callback():
                         organizacion_id=nueva_organizacion.id,
                         primary_org_id=nueva_organizacion.id,
                     )
-
                     mensaje = f'¡Bienvenido/a a OBYRA IA, {nombre}! Tu organización ha sido creada.'
 
                 db.session.add(nuevo_usuario)
@@ -794,22 +750,18 @@ def google_callback():
 
                 login_user(nuevo_usuario)
                 flash(mensaje, 'success')
-                destino = _post_login_destination(nuevo_usuario)
-                return redirect(destino)
+                return redirect(_post_login_destination(nuevo_usuario))
                 
-            except Exception as e:
+            except Exception:
                 db.session.rollback()
                 flash('Error al crear la cuenta con Google. Intenta de nuevo.', 'danger')
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
                 
-    except Exception as e:
+    except Exception:
         flash('Error en la autenticación con Google. Intenta de nuevo.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
 
-
-# ================================
-# RUTAS ADMINISTRATIVAS
-# ================================
+# ================================ ADMIN =====================================
 
 @auth_bp.route('/admin/register', methods=['GET', 'POST'])
 @login_required
@@ -827,21 +779,18 @@ def admin_register():
         rol = request.form.get('rol')
         password = request.form.get('password')
         
-        # Validaciones
         if not all([nombre, apellido, email, rol, password]):
             flash('Por favor, completa todos los campos obligatorios.', 'danger')
             from roles_construccion import obtener_roles_por_categoria
             return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
         
-        # Importar roles válidos
-        from roles_construccion import ROLES_CONSTRUCCION
+        from roles_construccion import ROLES_CONSTRUCCION, obtener_roles_por_categoria
         if rol not in ROLES_CONSTRUCCION.keys():
             flash('Rol no válido.', 'danger')
             return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
         
         if Usuario.query.filter_by(email=email).first():
             flash('Ya existe un usuario con ese email.', 'danger')
-            from roles_construccion import obtener_roles_por_categoria
             return render_template('auth/admin_register.html', roles_por_categoria=obtener_roles_por_categoria())
         
         try:
@@ -857,9 +806,7 @@ def admin_register():
                 organizacion_id=current_user.organizacion_id,
                 primary_org_id=current_user.primary_org_id or current_user.organizacion_id,
             )
-
             nuevo_usuario.set_password(password)
-
             db.session.add(nuevo_usuario)
             db.session.flush()
 
@@ -875,7 +822,7 @@ def admin_register():
             flash(f'Usuario {nombre} {apellido} registrado exitosamente.', 'success')
             return redirect(url_for('auth.usuarios_admin'))
             
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             flash('Error al registrar el usuario. Intenta nuevamente.', 'danger')
     
@@ -891,7 +838,6 @@ def usuarios_admin():
         flash('No tienes permisos para acceder a la gestión de usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    # Filtros
     rol_filtro = request.args.get('rol', '')
     auth_provider_filtro = request.args.get('auth_provider', '')
     buscar = request.args.get('buscar', '')
@@ -900,15 +846,11 @@ def usuarios_admin():
         OrgMembership.query
         .filter(
             OrgMembership.org_id == membership.org_id,
-            db.or_(
-                OrgMembership.archived.is_(False),
-                OrgMembership.archived.is_(None),
-            ),
+            db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None)),
         )
         .join(Usuario, OrgMembership.usuario)
     )
 
-    # Aplicar filtros
     if rol_filtro:
         query = query.filter(OrgMembership.role == rol_filtro)
 
@@ -941,7 +883,6 @@ def usuarios_admin():
                          auth_provider_filtro=auth_provider_filtro,
                          buscar=buscar)
 
-
 @auth_bp.route('/usuarios/integrantes', methods=['POST'])
 @login_required
 @require_membership('admin')
@@ -972,10 +913,8 @@ def crear_integrante_desde_panel():
         'admin': ('administrador', 'admin'),
         'operario': ('operario', 'operario'),
     }
-
     if rol_solicitado not in rol_map:
         return jsonify({'success': False, 'message': 'El rol seleccionado no es válido.'}), 400
-
     rol_interno, role_front = rol_map[rol_solicitado]
 
     telefono_sanitizado = re.sub(r'[^0-9+\s-]', '', telefono)
@@ -988,7 +927,6 @@ def crear_integrante_desde_panel():
 
     organizacion = membership.organizacion
     org_id = organizacion.id if organizacion else current_user.organizacion_id
-
     if not org_id:
         return jsonify({'success': False, 'message': 'La organización actual no es válida.'}), 400
 
@@ -1099,10 +1037,7 @@ def crear_integrante_desde_panel():
     send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
     flash('Invitación enviada correctamente.', 'success')
 
-    return jsonify({
-        'success': True,
-        'redirect_url': url_for('auth.usuarios_admin'),
-    })
+    return jsonify({'success': True, 'redirect_url': url_for('auth.usuarios_admin')})
 
 @auth_bp.route('/usuarios/cambiar_rol', methods=['POST'])
 @login_required
@@ -1123,12 +1058,7 @@ def cambiar_rol():
     if usuario_id_int == current_user.id:
         return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol'})
 
-    rol_map = {
-        'administrador': 'admin',
-        'admin': 'admin',
-        'operario': 'operario',
-    }
-
+    rol_map = {'administrador': 'admin', 'admin': 'admin', 'operario': 'operario'}
     if nuevo_rol not in rol_map:
         return jsonify({'success': False, 'message': 'Rol no válido'})
 
@@ -1138,10 +1068,7 @@ def cambiar_rol():
         .filter(
             OrgMembership.org_id == membership.org_id,
             OrgMembership.user_id == usuario_id_int,
-            db.or_(
-                OrgMembership.archived.is_(False),
-                OrgMembership.archived.is_(None),
-            ),
+            db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None)),
         )
         .first()
     )
@@ -1184,10 +1111,7 @@ def toggle_usuario():
         .filter(
             OrgMembership.org_id == membership.org_id,
             OrgMembership.user_id == usuario_id_int,
-            db.or_(
-                OrgMembership.archived.is_(False),
-                OrgMembership.archived.is_(None),
-            ),
+            db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None)),
         )
         .first()
     )
@@ -1213,31 +1137,25 @@ def toggle_usuario():
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
 
-# ================================
-# SISTEMA DE INVITACIONES
-# ================================
+# ================================ INVITACIONES ================================
 
 @auth_bp.route('/unirse')
 def unirse_organizacion():
     """Procesar invitación a organización"""
     token = request.args.get('token')
-    
     if not token:
         flash('Token de invitación inválido.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
-    # Buscar organización por token
     organizacion = Organizacion.query.filter_by(token_invitacion=token).first()
     if not organizacion:
         flash('Token de invitación inválido o expirado.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
-    # Guardar token en sesión para usar después del login
     session['token_invitacion'] = token
     session['organizacion_invitacion'] = organizacion.id
-    
     flash(f'Te han invitado a unirte a "{organizacion.nombre}". Inicia sesión para continuar.', 'info')
-    return redirect(url_for('auth.login'))
+    return _login_redirect()
 
 @auth_bp.route('/invitar', methods=['GET', 'POST'])
 @login_required
@@ -1255,13 +1173,11 @@ def invitar_usuario():
             flash('Por favor, ingresa un email válido.', 'danger')
             return render_template('auth/invitar.html')
         
-        # Verificar si el email ya existe
         usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
         if usuario_existente:
             flash('Este email ya está registrado en el sistema.', 'danger')
             return render_template('auth/invitar.html')
         
-        # Crear usuario pendiente (inactivo hasta que acepte la invitación)
         try:
             nuevo_usuario = Usuario(
                 nombre='Usuario',
@@ -1269,21 +1185,17 @@ def invitar_usuario():
                 email=email.lower(),
                 auth_provider='manual',
                 rol=rol,
-                activo=False,  # Inactivo hasta que acepte
+                activo=False,
                 organizacion_id=current_user.organizacion_id,
-                password_hash=None  # Se establecerá cuando acepte la invitación
+                password_hash=None
             )
-            
             db.session.add(nuevo_usuario)
             db.session.commit()
             
-            # Generar link de invitación
             link_invitacion = url_for('auth.unirse_organizacion', token=current_user.organizacion.token_invitacion, _external=True)
-            
             flash(f'Invitación enviada a {email}. Comparte este link: {link_invitacion}', 'success')
             return redirect(url_for('auth.usuarios_admin'))
-            
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             flash('Error al enviar la invitación. Intenta de nuevo.', 'danger')
     
@@ -1297,12 +1209,12 @@ def aceptar_invitacion():
     
     if not token or not organizacion_id:
         flash('Sesión de invitación inválida.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     organizacion = Organizacion.query.get(organizacion_id)
     if not organizacion:
         flash('Organización no encontrada.', 'danger')
-        return redirect(url_for('auth.login'))
+        return _login_redirect()
     
     if request.method == 'POST':
         nombre = request.form.get('nombre')
@@ -1314,22 +1226,16 @@ def aceptar_invitacion():
             flash('Por favor, completa todos los campos.', 'danger')
             return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
         
-        # Verificar si el usuario ya existe y está pendiente
         usuario = Usuario.query.filter_by(email=email.lower(), organizacion_id=organizacion_id).first()
         
         if usuario and not usuario.activo:
-            # Activar usuario existente
             usuario.nombre = nombre
             usuario.apellido = apellido
             usuario.set_password(password)
             usuario.activo = True
-            
             db.session.commit()
-            
-            # Limpiar sesión
             session.pop('token_invitacion', None)
             session.pop('organizacion_invitacion', None)
-            
             login_user(usuario)
             flash(f'¡Bienvenido/a a {organizacion.nombre}!', 'success')
             return redirect(url_for('reportes.dashboard'))
@@ -1337,6 +1243,9 @@ def aceptar_invitacion():
             flash('Error al procesar la invitación.', 'danger')
     
     return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
+
+# -------------------- entrega de links de reset (DEV/Prod) -------------------
+
 def _deliver_reset_link(account: ResettableAccount, reset_url: str, portal: str) -> None:
     """Envía o registra el enlace de reseteo usando el canal configurado."""
     delivery_mode = current_app.config.get('PASSWORD_RESET_DELIVERY', 'email')
@@ -1350,9 +1259,4 @@ def _deliver_reset_link(account: ResettableAccount, reset_url: str, portal: str)
     if delivery_mode == 'email':
         current_app.logger.info('Enlace de restablecimiento generado para %s (%s): %s', email, portal, reset_url)
     else:
-        current_app.logger.info(
-            'Password reset link for %s via %s pending integration: %s',
-            email,
-            delivery_mode,
-            reset_url,
-        )
+        current_app.logger.info('Password reset link for %s via %s pending integration: %s', email, delivery_mode, reset_url)

@@ -1427,7 +1427,7 @@ def exportar_excel_ia():
         
         equipos = presupuesto.get('equipos', {})
         for equipo, specs in equipos.items():
-            if specs.get('cantidad', 0) > 0:
+            if isinstance(specs, dict) and specs.get('cantidad', 0) > 0:
                 worksheet.write(row, 0, equipo.replace('_', ' ').title())
                 worksheet.write(row, 1, specs.get('cantidad', 0))
                 worksheet.write(row, 2, specs.get('dias_uso', 0))
@@ -2191,7 +2191,8 @@ def confirmar_como_obra(id):
                         auto_commit=False,
                         slug=slug,
                     ) or 0
-                if not crear_tareas or creadas == 0:
+                if not crear_tareas o
+                    creadas == 0:
                     db.session.add(TareaEtapa(
                         etapa_id=nueva_etapa.id,
                         nombre=f'Tarea inicial de {nombre}',
@@ -2250,13 +2251,16 @@ def confirmar_como_obra(id):
             'trigger': trigger_source
         })
 
-    return redirect(obra_url or url_for('presupuestos.detalle', id=id))
+    return redirect(obra_url o
+                    url_for('presupuestos.detalle', id=id))
+
 @presupuestos_bp.route('/<int:id>/perder', methods=['POST'])
 @login_required
 def marcar_presupuesto_perdido(id: int):
     """Marca un presupuesto como perdido y registra el motivo."""
 
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+    if not current_user.puede_acceder_modulo('presupuestos') o
+       current_user.rol not in ['administrador', 'tecnico']:
         return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
 
     presupuesto = Presupuesto.query.filter(
@@ -2305,7 +2309,8 @@ def marcar_presupuesto_perdido(id: int):
 def restaurar_presupuesto(id: int):
     """Restaura un presupuesto perdido a estado borrador."""
 
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
+    if not current_user.puede_acceder_modulo('presupuestos') o
+       current_user.rol not in ['administrador', 'tecnico']:
         return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
 
     presupuesto = Presupuesto.query.filter(
@@ -2323,7 +2328,8 @@ def restaurar_presupuesto(id: int):
 
     try:
         db.session.commit()
-        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
+        actor = getattr(current_user, 'email', None) o
+                str(getattr(current_user, 'id', 'desconocido'))
         current_app.logger.info(
             'Presupuesto %s restaurado a borrador por %s',
             presupuesto.numero,
@@ -2341,7 +2347,8 @@ def restaurar_presupuesto(id: int):
 def eliminar_presupuesto(id: int):
     """Realiza un soft-delete del presupuesto seleccionado."""
 
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol != 'administrador':
+    if not current_user.puede_acceder_modulo('presupuestos') or
+       current_user.rol != 'administrador':
         return jsonify({'error': 'Solo los administradores pueden eliminar presupuestos.'}), 403
 
     presupuesto = Presupuesto.query.filter(
@@ -2465,3 +2472,4 @@ def guardar_presupuesto():
     except Exception as e:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(e)}), 500
+
