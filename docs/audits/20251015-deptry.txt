@@ -1,0 +1,2 @@
+==> Running deptry .
+[missing] deptry no está instalado en el entorno

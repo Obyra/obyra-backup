@@ -9,6 +9,7 @@ venv/
 # Entorno / secretos
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 
@@ -30,9 +31,6 @@ uploads/
 # SO
 .DS_Store
 Thumbs.db
-<<<<<<< HEAD
-attached_assets/
-=======
 
 # Dev artifacts
 attached_assets/
@@ -41,4 +39,3 @@ instance/media/
 *.jpg
 *.jpeg
 *.webp
->>>>>>> codex/analizar-el-wizard-de-obra
