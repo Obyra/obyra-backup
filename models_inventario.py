@@ -12,6 +12,7 @@ class InventoryCategory(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'))
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_global = db.Column(db.Boolean, nullable=False, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relaciones

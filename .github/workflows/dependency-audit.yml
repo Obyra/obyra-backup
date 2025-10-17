@@ -1,0 +1,109 @@
+name: dependency-audit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install tooling
+        id: install
+        continue-on-error: true
+        run: |
+          set +e
+          python -m pip install -U pip
+          pip install -r requirements.txt pip-audit safety deptry
+          status=$?
+          echo "exit_code=$status" > pip-install.status
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit $status
+      - name: Handle installation failure
+        if: ${{ steps.install.outcome == 'failure' }}
+        run: |
+          echo "::warning::Dependency installation failed (see logs above). Skipping audit tools."
+          printf 'pip-audit skipped due to install failure\n' > pip-audit.txt
+          printf 'safety skipped due to install failure\n' > safety.txt
+          printf 'deptry skipped due to install failure\n' > deptry.txt
+          touch pip-audit.json pip-audit.stderr
+      - name: Run pip-audit
+        if: ${{ steps.install.outcome == 'success' }}
+        id: pip_audit
+        run: |
+          set +e
+          pip-audit -r requirements.txt --progress-spinner=off --format=json \
+            > pip-audit.json 2> pip-audit.stderr
+          status=$?
+          if [ -s pip-audit.json ]; then
+            if jq -e 'length > 0' pip-audit.json >/dev/null 2>&1; then
+              jq -r '.[] | "::notice file=requirements.txt::" + (.vuln.id // "UNKNOWN") + " in " + (.vuln.package.name // "unknown") + " (" + (.vuln.package.version // "?") + ")"' \
+                pip-audit.json 2>/dev/null || true
+              jq -r '.[] | (.vuln.id // "UNKNOWN") + " | " + (.vuln.package.name // "unknown") + " " + (.vuln.package.version // "?") + " | fixed in: " + ((.fix_versions | join(", ")) // "n/a")' \
+                pip-audit.json > pip-audit.txt
+            else
+              echo "No vulnerabilities found" > pip-audit.txt
+            fi
+          else
+            echo "No JSON results from pip-audit" > pip-audit.txt
+          fi
+          if [ $status -ne 0 ]; then
+            echo "::warning::pip-audit exited with status $status. $(tr '\n' ' ' < pip-audit.stderr)"
+          fi
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Run safety
+        if: ${{ steps.install.outcome == 'success' }}
+        id: safety
+        run: |
+          set +e
+          safety check -r requirements.txt --full-report > safety.txt 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo "::warning::safety exited with status $status. $(tr '\n' ' ' < safety.txt)"
+          fi
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Run deptry
+        if: ${{ steps.install.outcome == 'success' }}
+        id: deptry
+        run: |
+          set +e
+          deptry . > deptry.txt 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo "::warning::deptry exited with status $status. $(tr '\n' ' ' < deptry.txt)"
+          fi
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Summarize audit results
+        if: always()
+        run: |
+          echo "## Dependency audit summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.install.outcome }}" = "failure" ]; then
+            echo "- Dependency installation failed; tools skipped." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- pip-audit exit code: ${{ steps.pip_audit.outputs.exit_code }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- safety exit code: ${{ steps.safety.outputs.exit_code }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- deptry exit code: ${{ steps.deptry.outputs.exit_code }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if grep -qi 'proxy' pip-audit.stderr 2>/dev/null || grep -qi 'proxy' safety.txt 2>/dev/null || grep -qi 'proxy' deptry.txt 2>/dev/null; then
+            echo "- Detected proxy/network issue during audit run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-results
+          path: |
+            pip-audit.json
+            pip-audit.txt
+            pip-audit.stderr
+            safety.txt
+            deptry.txt
+            pip-install.status

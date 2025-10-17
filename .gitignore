@@ -6,9 +6,10 @@ __pycache__/
 .venv/
 venv/
 
-# Entorno / secretos
+# Environment / secrets
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 
@@ -20,19 +21,16 @@ build/
 
 # Replit
 .repldb
-# (dejamos .replit y replit.nix para reproducir el entorno)
+# (dejamos .replit y replit.nix si existen para reproducir el entorno)
 
-# Archivos pesados locales
+# Large local files
 uploads/
 *.sqlite*
 *.db
 
-# SO
+# OS
 .DS_Store
 Thumbs.db
-<<<<<<< HEAD
-attached_assets/
-=======
 
 # Dev artifacts
 attached_assets/
@@ -41,4 +39,6 @@ instance/media/
 *.jpg
 *.jpeg
 *.webp
->>>>>>> codex/analizar-el-wizard-de-obra
+
+# Alembic helpers
+instance/migrations/*.done

@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}OBYRA IA - Gestión de Construcción{% endblock %}</title>
     
+    {% if csrf_token is defined %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% endif %}
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
@@ -93,7 +97,7 @@
                             {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.uso_obra') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
                             {% endif %}
-                            {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
+                            {% if (current_user.rol|default('')|lower == 'superadmin' or current_user.role|default('')|lower == 'superadmin') and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
                             {% endif %}

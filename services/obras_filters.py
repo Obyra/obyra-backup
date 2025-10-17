@@ -7,7 +7,7 @@ from sqlalchemy import and_, exists, or_
 
 from models import Obra, Presupuesto
 
-CONFIRMED_PRESUPUESTO_STATES = ("aprobado", "convertido")
+CONFIRMED_PRESUPUESTO_STATES = ("aprobado", "convertido", "confirmado")
 
 
 def obras_visibles_clause(model: type[Obra]):

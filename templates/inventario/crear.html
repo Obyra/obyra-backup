@@ -132,7 +132,7 @@
                             <a href="{{ url_for('inventario.lista') }}" class="btn btn-secondary me-md-2">
                                 Cancelar
                             </a>
-                            <button type="submit" class="btn btn-primary" {{ 'disabled' if not categorias }}>
+                            <button type="submit" class="btn btn-primary" data-inventory-submit {{ 'disabled' if not categorias }}>
                                 <i class="fas fa-save me-1"></i>Crear Item
                             </button>
                         </div>
@@ -151,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const nombreInput = document.getElementById('nombre');
     const categoriaSelect = document.getElementById('categoria_id');
     const categoryWarning = document.querySelector('[data-category-empty]');
+    const submitButton = document.querySelector('[data-inventory-submit]');
     const categoriesEndpoint = categoriaSelect ? categoriaSelect.dataset.categoriesEndpoint : null;
     const initialCategoryOptions = {{ category_options|default([], true)|tojson }};
 
@@ -163,6 +164,13 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             categoryWarning.setAttribute('hidden', 'hidden');
         }
+    };
+
+    const toggleSubmitAvailability = (enabled) => {
+        if (!submitButton) {
+            return;
+        }
+        submitButton.disabled = !enabled;
     };
 
     const populateCategorySelect = (options, { preserveSelection = true } = {}) => {
@@ -218,13 +226,16 @@ document.addEventListener('DOMContentLoaded', function() {
             if (options.length) {
                 populateCategorySelect(options);
                 toggleCategoryWarning(false);
+                toggleSubmitAvailability(true);
             } else {
                 toggleCategoryWarning(true);
+                toggleSubmitAvailability(false);
             }
         } catch (error) {
             console.warn('No se pudieron cargar las categorías del inventario', error);
             if (!categoriaSelect || categoriaSelect.options.length <= 1) {
                 toggleCategoryWarning(true);
+                toggleSubmitAvailability(false);
             }
         }
     };
@@ -232,8 +243,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (initialCategoryOptions.length) {
         populateCategorySelect(initialCategoryOptions, { preserveSelection: false });
         toggleCategoryWarning(false);
+        toggleSubmitAvailability(true);
     } else if (categoriaSelect && categoriaSelect.options.length > 1) {
         toggleCategoryWarning(false);
+        toggleSubmitAvailability(true);
+    } else {
+        toggleSubmitAvailability(false);
     }
 
     refreshCategories();

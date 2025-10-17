@@ -12,6 +12,16 @@ flask db upgrade
 
 This command applies the lightweight migrations (incluyendo las columnas de estado y vigencia de presupuestos) contra tu base local antes de lanzar la app.
 
+> **Importante:** exportá `ALEMBIC_RUNNING=1` y `FLASK_SKIP_CREATE_ALL=1` cuando ejecutes migraciones o scripts que importan `app.py` sin levantar la aplicación. Esto evita que SQLAlchemy intente crear tablas fuera del flujo de Alembic.
+
+Para inicializar el catálogo global de inventario podés usar el nuevo comando CLI:
+
+```
+flask seed:inventario --global
+```
+
+También acepta múltiples `--org <identificador>` para sembrar organizaciones puntuales.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

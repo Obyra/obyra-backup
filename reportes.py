@@ -84,7 +84,7 @@ def dashboard():
 
     cambios_estado = 0
     for presupuesto in presupuestos_expirados:
-        if presupuesto.estado not in ['vencido', 'convertido', 'eliminado']:
+        if presupuesto.estado not in ['vencido', 'convertido', 'confirmado', 'eliminado']:
             presupuesto.estado = 'vencido'
             cambios_estado += 1
 

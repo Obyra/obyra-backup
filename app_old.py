@@ -68,7 +68,7 @@ app.register_blueprint(seguridad_bp, url_prefix='/seguridad')
 with app.app_context():
     # Importar todos los modelos antes de crear las tablas
     import models
-    db.create_all()
+    # db.create_all()  # disabled: Alembic handles PG
     print("📊 Tablas de base de datos creadas correctamente")
 
 @app.route('/')
@@ -133,7 +133,7 @@ with app.app_context():
     from werkzeug.security import generate_password_hash
     
     # Crear tablas en orden correcto
-    db.create_all()
+    # db.create_all()  # disabled: Alembic handles PG
     
     # Función para migrar datos existentes
     def migrar_organizaciones():

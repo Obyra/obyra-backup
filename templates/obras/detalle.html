@@ -846,7 +846,9 @@
 </div>
 
 <!-- Modal Wizard Tareas - Issue #2 Frontend -->
-<div class="modal fade" id="wizardTareasModal" tabindex="-1" data-bs-backdrop="static" data-obra-id="{{ obra.id }}">
+<div class="modal fade" id="wizardTareasModal" tabindex="-1" data-bs-backdrop="static" data-obra-id="{{ obra.id }}"
+     data-budget-enabled="{{ 'true' if wizard_budget_flag else 'false' }}"
+     data-budget-shadow="{{ 'true' if wizard_budget_shadow else 'false' }}">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
@@ -964,6 +966,7 @@
                                     <th>Horas Est.</th>
                                     <th>Cantidad</th>
                                     <th>Unidad</th>
+                                    <th class="wizard-budget-col d-none" data-budget-col="variant">Variante</th>
                                     <th>Asignado a</th>
                                     <th>Prioridad</th>
                                 </tr>

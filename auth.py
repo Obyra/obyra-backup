@@ -22,6 +22,7 @@ from services.memberships import (
     require_membership,
     set_current_membership,
     activate_pending_memberships,
+    ensure_active_membership_for_user,
 )
 
 
@@ -276,14 +277,18 @@ def _load_reset_token(token: str, max_age: int = 3600) -> Tuple[ResettableAccoun
     return account, portal
 
 
-def _generate_temporary_password(length: int = 12) -> str:
+def generate_temporary_password(length: int = 12) -> str:
     """Genera una contraseña aleatoria segura para nuevos integrantes."""
     length = max(length, 8)
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-def _send_new_member_invitation(usuario: Usuario, membership: OrgMembership, temp_password: Optional[str] = None) -> Optional[str]:
+def send_new_member_invitation(
+    usuario: Usuario,
+    membership: Optional[OrgMembership],
+    temp_password: Optional[str] = None,
+) -> Optional[str]:
     """Envía (o registra) el correo de bienvenida con enlace de activación."""
     try:
         token = _generate_reset_token(usuario, 'user')
@@ -376,14 +381,24 @@ def login():
 def seleccionar_organizacion():
     memberships = (
         OrgMembership.query
-        .filter_by(user_id=current_user.id, archived=False)
+        .filter(
+            OrgMembership.user_id == current_user.id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .order_by(OrgMembership.accepted_at.desc().nullslast(), OrgMembership.invited_at.desc())
         .all()
     )
 
     if not memberships:
-        flash('Tu cuenta no tiene organizaciones asociadas. Solicita una invitación.', 'danger')
-        return redirect(url_for('auth.logout'))
+        fallback = ensure_active_membership_for_user(current_user)
+        if fallback:
+            memberships = [fallback]
+        else:
+            flash('Tu cuenta no tiene organizaciones asociadas. Solicita una invitación.', 'danger')
+            return redirect(url_for('auth.logout'))
 
     next_url = request.args.get('next') or request.form.get('next') or url_for('reportes.dashboard')
 
@@ -883,8 +898,14 @@ def usuarios_admin():
 
     query = (
         OrgMembership.query
-        .filter_by(org_id=membership.org_id, archived=False)
-        .join(Usuario)
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .join(Usuario, OrgMembership.usuario)
     )
 
     # Aplicar filtros
@@ -1026,7 +1047,7 @@ def crear_integrante_desde_panel():
                 usuario_objetivo.primary_org_id = org_id
 
             if not usuario_objetivo.password_hash:
-                temp_password = _generate_temporary_password()
+                temp_password = generate_temporary_password()
                 usuario_objetivo.set_password(temp_password)
 
             usuario_objetivo.ensure_onboarding_status()
@@ -1034,7 +1055,7 @@ def crear_integrante_desde_panel():
             if PerfilUsuario.query.filter_by(cuit=cuit_normalizado).first():
                 return jsonify({'success': False, 'message': 'El CUIT/CUIL ya está asociado a otro usuario.'}), 409
 
-            temp_password = _generate_temporary_password()
+            temp_password = generate_temporary_password()
             usuario_objetivo = Usuario(
                 nombre=nombre,
                 apellido=apellido,
@@ -1075,7 +1096,7 @@ def crear_integrante_desde_panel():
         current_app.logger.exception('Error al crear/invitar integrante')
         return jsonify({'success': False, 'message': 'No se pudo crear el integrante. Intenta nuevamente.'}), 500
 
-    _send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
+    send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
     flash('Invitación enviada correctamente.', 'success')
 
     return jsonify({
@@ -1112,7 +1133,18 @@ def cambiar_rol():
         return jsonify({'success': False, 'message': 'Rol no válido'})
 
     membership = get_current_membership()
-    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=usuario_id_int, archived=False).first()
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == usuario_id_int,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
 
     if not objetivo:
         return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
@@ -1147,7 +1179,18 @@ def toggle_usuario():
         return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
 
     membership = get_current_membership()
-    objetivo = OrgMembership.query.filter_by(org_id=membership.org_id, user_id=usuario_id_int, archived=False).first()
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == usuario_id_int,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
     if not objetivo:
         return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
 
@@ -1159,7 +1202,13 @@ def toggle_usuario():
         db.session.commit()
 
         estado_texto = 'activado' if activar else 'desactivado'
-        return jsonify({'success': True, 'message': f'Usuario {estado_texto} exitosamente'})
+        return jsonify({
+            'success': True,
+            'message': f'Usuario {estado_texto} exitosamente',
+            'status': objetivo.status,
+            'usuario_activo': activar,
+            'usuario_id': usuario_id_int,
+        })
     except Exception:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
