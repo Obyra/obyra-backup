@@ -1,82 +1,129 @@
-# OBYRA · Mapeo funcional y backlog de racionalización
+OBYRA · Informe de arquitectura actual y backlog de racionalización
 
-## 1. Resumen ejecutivo
-- La aplicación principal (`app.py`) registra 18 blueprints núcleo más un conjunto de módulos opcionales ligados al portal de proveedores y al marketplace.
-- Existen implementaciones duplicadas/legacy (`app_old.py`, `marketplace_new.py`, `marketplace.py`) que conviven con la versión actual sin estar registradas o siendo referenciadas sólo por scripts auxiliares.
-- Los modelos siguen centralizados en `models.py`, mientras que archivos como `models_inventario.py` o `models_equipos.py` permanecen desconectados del flujo actual.
-- El ecosistema de servicios (carpeta `services/`) cubre casos de uso de membresías, reportes, pricing y CAC, pero varios módulos no se integran con los blueprints activos.
+Última revisión: 2025-10-17
 
-## 2. Blueprints registrados desde `app.py`
-| Blueprint (`endpoint`) | Módulo | Prefijo | Estado | Observaciones |
-| --- | --- | --- | --- | --- |
-| `auth` | `auth.py` | `/auth` | Activo | Depende de `auth.oauth.init_app`; se provee fallback si falla la importación. |
-| `obras_bp` | `obras.py` | `/obras` | Activo | Módulo monolítico con vistas y lógica mezclada. |
-| `presupuestos_bp` | `presupuestos.py` | `/presupuestos` | Activo | Blueprint extenso; depende de modelos en `models.py`. |
-| `equipos_bp` | `equipos.py` | `/equipos` | Activo | Interfaz clásica para gestión de equipos. |
-| `inventario_bp` | `inventario.py` | `/inventario` | Activo | Complementado por la variante "new" (ver opcionales). |
-| `marketplaces_bp` | `marketplaces.py` | `/marketplaces` | Activo | Catálogo público legacy. |
-| `reportes_bp` | `reportes.py` | `/reportes` | Activo | Dashboard de reportes HTML. |
-| `asistente_bp` | `asistente_ia.py` | `/asistente` | Activo | Enrutador mínimo al asistente IA. |
-| `cotizacion_bp` | `cotizacion_inteligente.py` | `/cotizacion` | Activo | Cotizaciones inteligentes. |
-| `documentos_bp` | `control_documentos.py` | `/documentos` | Activo | Gestión documental. |
-| `seguridad_bp` | `seguridad_cumplimiento.py` | `/seguridad` | Activo | Contiene formularios de cumplimiento. |
-| `agent_bp` | `agent_local.py` | *(sin prefijo)* | Activo | Endpoint auxiliar para agentes locales. |
-| `planes_bp` | `planes.py` | *(sin prefijo)* | Activo | Suscripciones/planes. |
-| `events_bp` | `events_service.py` | *(sin prefijo)* | Activo | API para eventos del marketplace; usa `current_app`. |
-| `account_bp` | `account.py` | *(sin prefijo)* | Activo | Gestión de cuenta/usuario final. |
-| `onboarding_bp` | `onboarding.py` | `/onboarding` | Activo | Flujo de onboarding. |
-| `reports_service_bp` | `reports_service.py` | *(sin prefijo)* | Opcional | Sólo se registra si `ENABLE_REPORTS=1` y `matplotlib` está disponible. |
-| `equipos_new_bp` | `equipos_new.py` | `/equipos-new` | Opcional | Redirecciones desde `/inventario/*` apuntan aquí cuando se carga. |
-| `inventario_new_bp` | `inventario_new.py` | `/inventario-new` | Opcional | Nueva UI de inventario; se registran redirects desde rutas legacy. |
-| `supplier_auth_bp` | `supplier_auth.py` | *(sin prefijo)* | Opcional | Portal de proveedores; depende de módulos `supplier_portal` y `market`. |
-| `supplier_portal_bp` | `supplier_portal.py` | *(sin prefijo)* | Opcional | Portal de proveedores. |
-| `market_bp` | `market.py` | `/market` | Opcional | Portal público orientado a proveedores. |
-| `marketplace_bp` | `marketplace/routes.py` | `/` | Opcional | API REST/JSON del marketplace "nuevo"; convive con plantillas legacy. |
+1. Resumen ejecutivo
 
-### Blueprints legacy/no registrados
-| Blueprint | Módulo | Estado | Riesgo |
-| --- | --- | --- | --- |
-| `marketplace_new_bp` | `marketplace_new.py` | No registrado | Implementa marketplace completo (UI + pagos) pero no se importa desde `app.py`. Plantillas bajo `templates/marketplace_new/`. |
-| `marketplace_bp` (legacy UI) | `marketplace.py` | No registrado | Versión legacy del marketplace público. |
-| Vistas antiguas | `app_old.py`, `main.py`, `main_app.py` | No registrados | Aún poseen `db.create_all()` y rutas duplicadas; generan deuda técnica. |
+La app principal (app.py) registra 17 blueprints core y 7 opcionales; varios dependen de feature flags o módulos que pueden faltar en instalaciones mínimas.
 
-## 3. Servicios y utilitarios
-- **`services/memberships.py`**: inicialización de sesión de membresía, hooks `g`. Usado directamente en `app.py`.
-- **`services/alerts.py`, `services/email_service.py`, `services/geocoding_service.py`**: funciones auxiliares llamadas desde blueprints.
-- **`services/wizard_budgeting.py`**: lógica del nuevo presupuestador (en pruebas, activado por `WIZARD_BUDGET_*`).
-- **`services/po_service.py`**: depende de `models_marketplace`; da soporte a órdenes del marketplace.
-- **Paquetes `services/cac` y `services/pricing`**: lógica aislada sin integración evidente en `app.py`; requieren evaluación para confirmar uso real.
+Persiste código legacy (app_old.py, main.py, main_app.py, marketplace_new.py, marketplace.py) y algunos modelos duplicados o servicios sin referencias directas.
 
-## 4. Modelos y capas de datos
-- **`models.py`**: define la mayoría de entidades (usuarios, organizaciones, presupuestos, marketplace básico). Presenta constraints duplicados y relaciones densas.
-- **`models_marketplace.py`**: esquema extendido del marketplace (products, orders, payments). Referenciado por `marketplace_payments.py`, `marketplace_new.py`, `services/po_service.py` e `init_marketplace.py`.
-- **`models_inventario.py`, `models_equipos.py`**: no aparecen importados desde `app.py` ni blueprints activos; candidatos a limpieza si se confirma desuso.
-- **`obras.py`, `presupuestos.py`, `inventario.py`**: mezclan modelos inline con vistas (ej. `class Presupuesto(db.Model)` declarada en `presupuestos.py`). Conviene moverlos a módulos dedicados.
+Los datos están repartidos entre models.py (núcleo), models_marketplace.py (marketplace) y definiciones inline dentro de algunos blueprints.
 
-## 5. Rutas y dependencias destacadas
-- **Autenticación**: `auth_bp` (si disponible) gestiona OAuth; `supplier_auth` provee login alternativo. `login_manager` resuelve rutas dinámicamente.
-- **Reportes**: `reportes_bp` renderiza dashboards; `reports_service_bp` expone endpoints JSON/descargas condicionados por flag.
-- **Marketplace**: coexistencia de `marketplace/routes.py` (API) y `marketplace_new.py` (UI + SDK Mercado Pago) sin registro oficial. `marketplace_payments.py` provee callbacks para pagos.
-- **Inventario**: versiones "legacy" (`inventario_bp`) y "new" (`inventario_new_bp`) convivientes con redirects.
-- **Asistente IA**: rutas simples que delegan a `asistente_ia`/`asistente_ia_backup`.
+Recomendación: consolidar el marketplace “nuevo”, retirar módulos obsoletos y asignar ownership a servicios críticos (membresías, CAC, Mercado Pago).
 
-## 6. Backlog recomendado (deuda técnica)
-1. **Depurar marketplace duplicado**
-   - Confirmar qué blueprint debe permanecer (`marketplace/routes.py` vs `marketplace_new.py`) y eliminar el resto.
-   - Consolidar uso de `models_marketplace` y retirar `marketplace.py` legacy.
-2. **Retirar aplicaciones legacy**
-   - `app_old.py`, `main.py`, `main_app.py`, `marketplace_new.py` (si se desactiva) y scripts `*_new.py` sin references.
-3. **Modularizar modelos**
-   - Migrar definiciones inline (p.ej. en `presupuestos.py`) a paquetes `models/` especializados.
-   - Eliminar `models_inventario.py` y `models_equipos.py` si se confirma falta de uso.
-4. **Refactor de servicios**
-   - Revisar `services/cac`, `services/pricing`, `events_service` para validar endpoints activos.
-   - Documentar dependencias externas (Mercado Pago, Google OAuth) en un README técnico.
-5. **Diagramar rutas**
-   - Generar un diagrama (Mermaid/Draw.io) a partir de la tabla anterior para comunicar la arquitectura.
-   - Incorporar la definición al pipeline de documentación (`docs/`).
+2. Inventario de blueprints
+2.1. Blueprints activos registrados siempre
+Blueprint (endpoint)	Módulo	Prefijo	Dependencias clave	Observaciones
+auth	auth.py	/auth	services.email_service, services.memberships	Inicializa OAuth si existe auth.oauth; si falta, app.py define rutas fallback.
+obras_bp	obras.py	/obras	services.geocoding_service, services.memberships, services.obras_filters, services.certifications, services.wizard_budgeting	Vistas + lógica mezcladas (monolítico).
+presupuestos_bp	presupuestos.py	/presupuestos	services.exchange, services.cac.cac_service, services.geocoding_service, services.memberships	Contiene modelos inline (p.ej. Presupuesto).
+equipos_bp	equipos.py	/equipos	services.memberships	UI clásica de equipos.
+inventario_bp	inventario.py	/inventario	services.memberships	Convive con la versión “new”.
+marketplaces_bp	marketplaces.py	/marketplaces	models_marketplace	Catálogo público legacy.
+reportes_bp	reportes.py	/reportes	services.alerts, services.memberships, services.obras_filters	Dashboards HTML.
+asistente_bp	asistente_ia.py	/asistente	OpenAI (opcional)	Router simple.
+cotizacion_bp	cotizacion_inteligente.py	/cotizacion	CAC y Exchange	Calculadora con IA.
+documentos_bp	control_documentos.py	/documentos	services.memberships	Gestión documental.
+seguridad_bp	seguridad_cumplimiento.py	/seguridad	Formularios propios	Cumplimiento y seguridad.
+agent_bp	agent_local.py	(sin prefijo)	Scripts agentes	API auxiliar.
+planes_bp	planes.py	(sin prefijo)	Modelos en models.py	Gestión de planes.
+events_bp	events_service.py	(sin prefijo)	current_app logging	API de eventos (marketplace).
+account_bp	account.py	(sin prefijo)	flask_login, services.memberships	Perfil de usuario.
+onboarding_bp	onboarding.py	/onboarding	services.memberships	Flujo de onboarding.
+2.2. Blueprints condicionales / feature-flagged
+Blueprint	Módulo	Prefijo	Condición
+reports_service_bp	reports_service.py	(sin prefijo)	ENABLE_REPORTS=1 y matplotlib disponible
+equipos_new_bp	equipos_new.py	/equipos-new	Import exitoso
+inventario_new_bp	inventario_new.py	/inventario-new	Import exitoso
+supplier_auth_bp	supplier_auth.py	(sin prefijo)	Import exitoso
+supplier_portal_bp	supplier_portal.py	(sin prefijo)	Import exitoso
+market_bp	market.py	/market	Import exitoso
+marketplace_bp	marketplace/routes.py	/	Import exitoso
+2.3. Blueprints legacy / no registrados
+Módulo	Situación	Riesgos
+marketplace_new.py	No se importa desde app.py; UI + pagos MP duplicados	Drift con marketplace/routes.py
+marketplace.py	UI pública legacy	Plantillas obsoletas, rutas no protegidas
+app_old.py, main.py, main_app.py	Apps históricas con db.create_all()	Esquemas inconsistentes si se ejecutan
+2.4. Mapa de rutas y dependencias (Mermaid)
+%%{init: {'theme': 'neutral', 'flowchart': {'curve': 'basis'}} }%%
+graph TD
+    app[app.py] --> auth[auth]
+    app --> obras[obras]
+    app --> presupuestos[presupuestos]
+    app --> equipos[equipos]
+    app --> inventario[inventario]
+    app --> reportes[reportes]
+    app --> asistente[asistente_ia]
+    app --> cotizacion[cotizacion_inteligente]
+    app --> documentos[control_documentos]
+    app --> seguridad[seguridad_cumplimiento]
+    app --> eventos[events_service]
+    app --> account[account]
+    app --> onboarding[onboarding]
+    app --> planes[planes]
+    app --> agent[agent_local]
+    app --> marketplaces_bp[marketplaces]
+    app -.-> reports_service[reports_service]
+    app -.-> inventario_new[inventario_new]
+    app -.-> equipos_new[equipos_new]
+    app -.-> supplier_auth[supplier_auth]
+    app -.-> supplier_portal[supplier_portal]
+    app -.-> market[market]
+    app -.-> marketplace_api[marketplace/routes]
+    marketplace_api --> marketplace_models[models_marketplace]
+    market -.-> marketplace_models
+    reports_service --> matplotlib((matplotlib))
+    presupuestos --> services_exchange[services.exchange]
+    presupuestos --> services_cac[services.cac]
+    obras --> services_cert[services.certifications]
+    obras --> services_wizard[services.wizard_budgeting]
+    marketplace_api --> mp_payments[marketplace_payments]
+    mp_payments --> mercadopago((Mercado Pago))
 
-## 7. Próximos pasos sugeridos
-- Establecer un proceso de baja controlada de módulos legacy (issue tracker con impacto y métricas).
-- Configurar pruebas de smoke automáticas por blueprint (mínimo `GET /<prefix>`).
-- Mantener inventario actualizado en cada release (este documento sirve como base viva).
+3. Servicios y utilitarios
+Servicio / módulo	Uso actual	Dependencias	Estado
+services/memberships.py	Contexto de membresía (hooks g) desde app.py	flask.g, models	Crítico
+services/email_service.py	Envíos desde auth y marketplace	SMTP env vars	Activo
+services/alerts.py	Alertas en reportes_bp	models.py	Activo, refactor deseable
+services/geocoding_service.py	Geocodificación en obras, presupuestos	requests, MAPS_*	Activo (caché central recomendado)
+services/exchange/*	FX para presupuestos, runtime migrations	Proveedor BNA	Activo
+services/cac/*	Índice CAC (cotizaciones, CLI)	exchange	Activo
+services/wizard_budgeting.py	Nuevo presupuestador	models.py	Flag WIZARD_BUDGET_*
+services/po_service.py	Órdenes marketplace	models_marketplace	Opcional
+services/pricing/*	Sin import directo actual	CAC	Revisar (posible deuda)
+services/certifications.py	Certificaciones en obras	models.py	Activo
+4. Modelos
+Archivo	Contenido principal	Uso	Estado
+models.py	Usuarios, organizaciones, presupuestos, tareas, etc.	Referencia mayoritaria	Core (modularizar)
+models_marketplace.py	Productos, órdenes, pagos, sellers	marketplace/routes.py, marketplace_payments.py, services/po_service.py	Activo
+models_inventario.py	Inventario alternativo	No importado desde app.py	Legacy
+models_equipos.py	Equipos alternativo	Sin referencias	Legacy
+Definiciones inline	Dentro de presupuestos.py, obras.py	Mezclan vista/ORM	Refactor urgente
+5. Dependencias y acoplamientos
+
+Registro condicional de blueprints en app.py via try/except: puede ocultar errores reales de importación.
+
+Feature flags (ENABLE_REPORTS, WIZARD_BUDGET_*, SHOW_IA_CALCULATOR_BUTTON) alteran rutas/servicios; documentar su estado por entorno en docs/ENV.md.
+
+Mercado Pago: marketplace_payments.py depende de MP_ACCESS_TOKEN y MP_WEBHOOK_PUBLIC_URL; se recomienda registrar su blueprint desde app.py detrás de flag.
+
+CAC/Exchange: usados en runtime migrations y rutas; requieren control de errores ante proveedores externos.
+
+6. Backlog priorizado (racionalización)
+Prioridad	Ámbito	Acción	Impacto	Notas
+Alta	Marketplace	Elegir versión canónica (marketplace/routes.py + pagos) y eliminar duplicados (marketplace_new.py, marketplace.py).	Menos divergencias de pagos/UI.	Alinear con negocio.
+Alta	Bootstrap	Retirar app_old.py, main.py, main_app.py del deploy; mover scripts útiles a CLI documentada.	Evita esquemas inconsistentes.	Guardar en rama histórica.
+Media	Modelos	Extraer modelos inline de blueprints a models/ dedicados.	Mantenibilidad.	Ideal con migraciones Alembic.
+Media	Servicios	Auditar services/pricing y services/po_service para confirmar uso/ownership.	Limpieza de dependencias muertas.	Agregar tests mínimos.
+Baja	Documentación	Mantener diagrama Mermaid y publicarlo en docs/.	Visibilidad continua.	Automatizable.
+Baja	Feature flags	Plan de retiro para WIZARD_BUDGET_SHADOW_MODE y ENABLE_REPORTS.	Reduce complejidad.	Depende del roadmap.
+7. Próximos pasos sugeridos
+
+Validar este backlog con stakeholders (producto/marketplace) y abrir issues individuales.
+
+Añadir smoke tests (mínimo GET por blueprint) en CI para detectar caídas.
+
+Mantener este inventario vivo: actualizar la tabla cuando se agreguen/eliminen módulos.
+
+Completar docs/ENV.md con los estados de flags por entorno y la configuración final del marketplace una vez consolidado.

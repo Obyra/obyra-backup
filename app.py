@@ -19,8 +19,6 @@ from flask import (
     flash,
     send_from_directory,
     request,
-    g,
-    session,
     has_request_context,
 )
 from flask.cli import AppGroup
@@ -554,7 +552,7 @@ if not auth_blueprint_registered:
 
     @app.route('/auth/login', endpoint='auth.login')
     def fallback_auth_login():
-        """Fallback login that routes to the supplier portal when auth blueprint is missing."""
+        """Fallback login que redirige al portal de proveedores si existe."""
         try:
             return redirect(url_for('supplier_auth.login'))
         except BuildError:
@@ -792,7 +790,8 @@ def verificar_periodo_prueba():
         emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
         if current_user.email in emails_admin_completo:
             return
-        if (current_user.plan_activo == 'prueba' and not current_user.esta_en_periodo_prueba()):
+        if (getattr(current_user, "plan_activo", "prueba") == 'prueba'
+            and not getattr(current_user, "esta_en_periodo_prueba", lambda: True)()):
             flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
 
@@ -870,4 +869,3 @@ def maybe_create_sqlite_schema():
 if __name__ == '__main__':
     maybe_create_sqlite_schema()
     app.run(host='0.0.0.0', port=5000, debug=True)
-
