@@ -1,0 +1,189 @@
+# Obyra – Architecture Field Report
+
+_Generated: 2025-10-20T17:44:42.398335Z_
+
+## Blueprints
+
+- **auth** (active) — `auth.py`
+  - evidence: app.py: register_blueprint(...); app.py: import
+  - last commit: `c893c7d 2025-10-14 19:03:14 -0300 obyra.servicios`
+- **equipos** (active) — `equipos.py`
+  - evidence: app.py: register_blueprint(...)
+  - last commit: `6a6a0df 2025-10-14 13:09:15 -0300 obyra.servicios`
+- **equipos_new** (active) — `equipos_new.py`
+  - evidence: app.py: register_blueprint(...); app.py: import
+  - last commit: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **inventario** (active) — `inventario.py`
+  - evidence: app.py: register_blueprint(...)
+  - last commit: `601292f 2025-10-08 10:59:36 -0300 obyra.servicios`
+- **inventario_new** (active) — `inventario_new.py`
+  - evidence: app.py: register_blueprint(...); app.py: import
+  - last commit: `750170d 2025-10-10 15:09:41 -0300 obyra.servicios`
+- **market** (active) — `market.py`
+  - evidence: app.py: register_blueprint(...); app.py: import
+  - last commit: `abdfc3f 2025-08-27 09:57:51 +0000 obyraservicios`
+- **marketplace** (active) — `marketplace.py`
+  - evidence: app.py: register_blueprint(...)
+  - last commit: `ad8ec5a 2025-08-27 10:29:03 +0000 obyraservicios`
+- **marketplace** (active) — `marketplace/routes.py`
+  - evidence: app.py: register_blueprint(...)
+  - last commit: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **reports** (active) — `reports_service.py`
+  - evidence: app.py: register_blueprint(...)
+  - last commit: `04eaafd 2025-10-03 14:04:42 -0300 obyra.servicios`
+- **supplier_auth** (active) — `supplier_auth.py`
+  - evidence: app.py: register_blueprint(...); app.py: import
+  - last commit: `a66b732 2025-10-02 12:12:38 -0300 obyra.servicios`
+- **supplier_portal** (active) — `supplier_portal.py`
+  - evidence: app.py: register_blueprint(...); app.py: import
+  - last commit: `abdfc3f 2025-08-27 09:57:51 +0000 obyraservicios`
+- **asistente** (legacy) — `asistente_ia_backup.py`
+  - last commit: `ec816a5 2025-07-31 15:32:19 +0000 obyraservicios`
+- **account** (unknown) — `account.py`
+  - last commit: `ac748e3 2025-10-01 20:36:45 -0300 obyra.servicios`
+- **agent_local** (unknown) — `agent_local.py`
+  - last commit: `f473baf 2025-10-02 12:34:48 -0300 obyra.servicios`
+- **asistente** (unknown) — `asistente_ia.py`
+  - last commit: `ec816a5 2025-07-31 15:32:19 +0000 obyraservicios`
+- **cart** (unknown) — `cart.py`
+  - last commit: `ad8ec5a 2025-08-27 10:29:03 +0000 obyraservicios`
+- **cotizacion** (unknown) — `cotizacion_inteligente.py`
+  - last commit: `14c9a53 2025-09-03 18:12:16 +0000 obyraservicios`
+- **documentos** (unknown) — `control_documentos.py`
+  - last commit: `2504533 2025-09-09 02:17:26 +0000 obyraservicios`
+- **events** (unknown) — `events_service.py`
+  - last commit: `ee02747 2025-08-29 19:18:07 +0000 obyraservicios`
+- **marketplace_new** (unknown) — `marketplace_new.py`
+  - last commit: `9c22507 2025-09-02 15:41:43 +0000 obyraservicios`
+- **marketplaces** (unknown) — `marketplaces.py`
+  - last commit: `283f935 2025-08-15 11:56:18 +0000 obyraservicios`
+- **obras** (unknown) — `obras.py`
+  - last commit: `e1c9f6d 2025-10-08 18:21:24 -0300 obyra.servicios`
+- **onboarding** (unknown) — `onboarding.py`
+  - last commit: `ac748e3 2025-10-01 20:36:45 -0300 obyra.servicios`
+- **orders** (unknown) — `orders.py`
+  - last commit: `ad8ec5a 2025-08-27 10:29:03 +0000 obyraservicios`
+- **payments** (unknown) — `marketplace_payments.py`
+  - last commit: `9dc7346 2025-10-17 15:12:16 -0300 obyra.servicios`
+- **planes** (unknown) — `planes.py`
+  - last commit: `a6017a0 2025-07-31 14:02:24 +0000 obyraservicios`
+- **presupuestos** (unknown) — `presupuestos.py`
+  - last commit: `bcdd124 2025-10-14 20:16:58 -0300 obyra.servicios`
+- **reportes** (unknown) — `reportes.py`
+  - last commit: `bcdd124 2025-10-14 20:16:58 -0300 obyra.servicios`
+- **seguridad** (unknown) — `seguridad_cumplimiento.py`
+  - last commit: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+
+## Services
+
+- `marketplace/services/commissions.py` (active) — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- `marketplace/services/emailer.py` (active) — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- `marketplace/services/masking.py` (active) — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- `marketplace/services/po_pdf.py` (active) — last: `ca20560 2025-10-01 18:55:57 -0300 obyra.servicios`
+- `services/alerts.py` (active) — last: `c8586ce 2025-10-03 10:47:40 -0300 obyra.servicios`
+- `services/cac/__init__.py` (active) — last: `38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios`
+- `services/cac/cac_service.py` (active) — last: `38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios`
+- `services/cac/cifras_pdf_provider.py` (active) — last: `38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios`
+- `services/certifications.py` (active) — last: `d7cafce 2025-10-04 11:27:41 -0300 obyra.servicios`
+- `services/email_service.py` (active) — last: `9c22507 2025-09-02 15:41:43 +0000 obyraservicios`
+- `services/exchange/__init__.py` (active) — last: `c0d228f 2025-10-03 12:09:58 -0300 obyra.servicios`
+- `services/exchange/base.py` (active) — last: `38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios`
+- `services/exchange/providers/__init__.py` (active) — last: `c0d228f 2025-10-03 12:09:58 -0300 obyra.servicios`
+- `services/exchange/providers/bna.py` (active) — last: `38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios`
+- `services/geocoding_service.py` (active) — last: `f865c99 2025-10-03 17:46:07 -0300 obyra.servicios`
+- `services/memberships.py` (active) — last: `e5b880e 2025-10-14 12:19:37 -0300 obyra.servicios`
+- `services/obras_filters.py` (active) — last: `bcdd124 2025-10-14 20:16:58 -0300 obyra.servicios`
+- `services/po_service.py` (active) — last: `ca20560 2025-10-01 18:55:57 -0300 obyra.servicios`
+- `services/pricing/__init__.py` (active) — last: `c0d228f 2025-10-03 12:09:58 -0300 obyra.servicios`
+- `services/pricing/cac.py` (active) — last: `38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios`
+- `services/wizard_budgeting.py` (active) — last: `e1c9f6d 2025-10-08 18:21:24 -0300 obyra.servicios`
+
+## Models
+
+- **DocumentoObra** — `control_documentos.py` — last: `2504533 2025-09-09 02:17:26 +0000 obyraservicios`
+- **PermisoDocumento** — `control_documentos.py` — last: `2504533 2025-09-09 02:17:26 +0000 obyraservicios`
+- **TipoDocumento** — `control_documentos.py` — last: `2504533 2025-09-09 02:17:26 +0000 obyraservicios`
+- **VersionDocumento** — `control_documentos.py` — last: `2504533 2025-09-09 02:17:26 +0000 obyraservicios`
+- **MkCart** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkCartItem** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkCommission** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkOrder** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkOrderItem** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkPayment** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkProduct** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkProductVariant** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **MkPurchaseOrder** — `marketplace/models.py` — last: `1c352de 2025-09-02 16:24:34 +0000 obyraservicios`
+- **Equipment** — `models_equipos.py` — last: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **EquipmentAssignment** — `models_equipos.py` — last: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **EquipmentUsage** — `models_equipos.py` — last: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **MaintenanceAttachment** — `models_equipos.py` — last: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **MaintenanceTask** — `models_equipos.py` — last: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **InventoryCategory** — `models_inventario.py` — last: `1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios`
+- **InventoryItem** — `models_inventario.py` — last: `1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios`
+- **Stock** — `models_inventario.py` — last: `1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios`
+- **StockMovement** — `models_inventario.py` — last: `1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios`
+- **StockReservation** — `models_inventario.py` — last: `1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios`
+- **Warehouse** — `models_inventario.py` — last: `1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios`
+- **MarketAttribute** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketBrand** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketCart** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketCartItem** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketCategory** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketCommission** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketCompany** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketEvent** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketFee** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketInventory** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketInventoryLocation** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketOrder** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketOrderItem** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketOrderStatusHistory** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketPayment** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketPayout** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketPayoutItem** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketProduct** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketProductFile** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketProductImage** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketProductVariant** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketPublication** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketPurchaseOrder** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketQuestion** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketRating** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketShipment** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketShipmentItem** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketUser** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **MarketVariantAttribute** — `models_marketplace.py` — last: `e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios`
+- **AuditoriaSeguridad** — `seguridad_cumplimiento.py` — last: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+- **CertificacionPersonal** — `seguridad_cumplimiento.py` — last: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+- **ChecklistSeguridad** — `seguridad_cumplimiento.py` — last: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+- **IncidenteSeguridad** — `seguridad_cumplimiento.py` — last: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+- **ItemChecklist** — `seguridad_cumplimiento.py` — last: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+- **ProtocoloSeguridad** — `seguridad_cumplimiento.py` — last: `2083fbf 2025-07-14 14:32:27 +0000 obyraservicios`
+
+## Diagrams
+
+- `reports/routes_diagram.svg`
+- `reports/dependencies_graph.svg`
+
+## Backlog (Deprecation/Refactor Candidates)
+
+- **asistente** [blueprint] — `asistente_ia_backup.py`
+  - reason: Nombre sugiere legacy/old/backup y/o no hay evidencia de registro activo en app.py
+  - impact: medio | priority: media | effort: M | risk: bajo-medio
+  - steps: Verificar si existe reemplazo (_new) o rutas equivalentes; Correr un grep de referencias en templates/ y tests/; Si no hay uso, marcar para eliminar; si hay uso parcial, migrar rutas
+  - last commit: `ec816a5 2025-07-31 15:32:19 +0000 obyraservicios`
+- **equipos vs equipos_new** [conflict] — `equipos.py, equipos_new.py`
+  - reason: Coexisten *_new y versión previa; unificar o deprecar una de las dos
+  - impact: medio-alto | priority: alta | effort: M | risk: medio
+  - steps: Comparar rutas y templates usados; Mover endpoints faltantes a la versión definitiva; Retirar imports/rutas de la versión a deprecar y borrar
+  - last commit: `2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios`
+- **inventario vs inventario_new** [conflict] — `inventario.py, inventario_new.py`
+  - reason: Coexisten *_new y versión previa; unificar o deprecar una de las dos
+  - impact: medio-alto | priority: alta | effort: M | risk: medio
+  - steps: Comparar rutas y templates usados; Mover endpoints faltantes a la versión definitiva; Retirar imports/rutas de la versión a deprecar y borrar
+  - last commit: `750170d 2025-10-10 15:09:41 -0300 obyra.servicios`
+- **marketplace vs marketplace_new** [conflict] — `marketplace.py, marketplace_new.py`
+  - reason: Coexisten *_new y versión previa; unificar o deprecar una de las dos
+  - impact: medio-alto | priority: alta | effort: M | risk: medio
+  - steps: Comparar rutas y templates usados; Mover endpoints faltantes a la versión definitiva; Retirar imports/rutas de la versión a deprecar y borrar
+  - last commit: `9c22507 2025-09-02 15:41:43 +0000 obyraservicios`

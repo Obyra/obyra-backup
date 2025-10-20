@@ -1,0 +1,118 @@
+DocumentoObra                  | control_documentos.py
+    last_commit: 2504533 2025-09-09 02:17:26 +0000 obyraservicios
+PermisoDocumento               | control_documentos.py
+    last_commit: 2504533 2025-09-09 02:17:26 +0000 obyraservicios
+TipoDocumento                  | control_documentos.py
+    last_commit: 2504533 2025-09-09 02:17:26 +0000 obyraservicios
+VersionDocumento               | control_documentos.py
+    last_commit: 2504533 2025-09-09 02:17:26 +0000 obyraservicios
+MkCart                         | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkCartItem                     | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkCommission                   | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkOrder                        | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkOrderItem                    | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkPayment                      | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkProduct                      | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkProductVariant               | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+MkPurchaseOrder                | marketplace/models.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+Equipment                      | models_equipos.py
+    last_commit: 2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios
+EquipmentAssignment            | models_equipos.py
+    last_commit: 2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios
+EquipmentUsage                 | models_equipos.py
+    last_commit: 2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios
+MaintenanceAttachment          | models_equipos.py
+    last_commit: 2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios
+MaintenanceTask                | models_equipos.py
+    last_commit: 2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios
+InventoryCategory              | models_inventario.py
+    last_commit: 1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios
+InventoryItem                  | models_inventario.py
+    last_commit: 1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios
+Stock                          | models_inventario.py
+    last_commit: 1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios
+StockMovement                  | models_inventario.py
+    last_commit: 1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios
+StockReservation               | models_inventario.py
+    last_commit: 1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios
+Warehouse                      | models_inventario.py
+    last_commit: 1aedeb0 2025-10-07 21:33:20 -0300 obyra.servicios
+MarketAttribute                | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketBrand                    | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketCart                     | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketCartItem                 | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketCategory                 | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketCommission               | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketCompany                  | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketEvent                    | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketFee                      | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketInventory                | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketInventoryLocation        | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketOrder                    | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketOrderItem                | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketOrderStatusHistory       | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketPayment                  | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketPayout                   | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketPayoutItem               | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketProduct                  | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketProductFile              | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketProductImage             | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketProductVariant           | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketPublication              | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketPurchaseOrder            | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketQuestion                 | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketRating                   | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketShipment                 | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketShipmentItem             | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketUser                     | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+MarketVariantAttribute         | models_marketplace.py
+    last_commit: e22bbd1 2025-09-02 15:23:58 +0000 obyraservicios
+AuditoriaSeguridad             | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios
+CertificacionPersonal          | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios
+ChecklistSeguridad             | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios
+IncidenteSeguridad             | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios
+ItemChecklist                  | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios
+ProtocoloSeguridad             | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios

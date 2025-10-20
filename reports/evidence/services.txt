@@ -1,0 +1,42 @@
+ACTIVE  | commissions               | marketplace/services/commissions.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+ACTIVE  | emailer                   | marketplace/services/emailer.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+ACTIVE  | masking                   | marketplace/services/masking.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+ACTIVE  | po_pdf                    | marketplace/services/po_pdf.py
+    last_commit: ca20560 2025-10-01 18:55:57 -0300 obyra.servicios
+ACTIVE  | alerts                    | services/alerts.py
+    last_commit: c8586ce 2025-10-03 10:47:40 -0300 obyra.servicios
+ACTIVE  | __init__                  | services/cac/__init__.py
+    last_commit: 38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios
+ACTIVE  | cac_service               | services/cac/cac_service.py
+    last_commit: 38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios
+ACTIVE  | cifras_pdf_provider       | services/cac/cifras_pdf_provider.py
+    last_commit: 38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios
+ACTIVE  | certifications            | services/certifications.py
+    last_commit: d7cafce 2025-10-04 11:27:41 -0300 obyra.servicios
+ACTIVE  | email_service             | services/email_service.py
+    last_commit: 9c22507 2025-09-02 15:41:43 +0000 obyraservicios
+ACTIVE  | __init__                  | services/exchange/__init__.py
+    last_commit: c0d228f 2025-10-03 12:09:58 -0300 obyra.servicios
+ACTIVE  | base                      | services/exchange/base.py
+    last_commit: 38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios
+ACTIVE  | __init__                  | services/exchange/providers/__init__.py
+    last_commit: c0d228f 2025-10-03 12:09:58 -0300 obyra.servicios
+ACTIVE  | bna                       | services/exchange/providers/bna.py
+    last_commit: 38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios
+ACTIVE  | geocoding_service         | services/geocoding_service.py
+    last_commit: f865c99 2025-10-03 17:46:07 -0300 obyra.servicios
+ACTIVE  | memberships               | services/memberships.py
+    last_commit: e5b880e 2025-10-14 12:19:37 -0300 obyra.servicios
+ACTIVE  | obras_filters             | services/obras_filters.py
+    last_commit: bcdd124 2025-10-14 20:16:58 -0300 obyra.servicios
+ACTIVE  | po_service                | services/po_service.py
+    last_commit: ca20560 2025-10-01 18:55:57 -0300 obyra.servicios
+ACTIVE  | __init__                  | services/pricing/__init__.py
+    last_commit: c0d228f 2025-10-03 12:09:58 -0300 obyra.servicios
+ACTIVE  | cac                       | services/pricing/cac.py
+    last_commit: 38ed74b 2025-10-03 12:10:05 -0300 obyra.servicios
+ACTIVE  | wizard_budgeting          | services/wizard_budgeting.py
+    last_commit: e1c9f6d 2025-10-08 18:21:24 -0300 obyra.servicios

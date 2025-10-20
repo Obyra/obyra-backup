@@ -1,0 +1,283 @@
+ACTIVE  | auth                   | -               | auth.py
+    last_commit: c893c7d 2025-10-14 19:03:14 -0300 obyra.servicios
+    evidence: app.py: register_blueprint(...)
+    evidence: app.py: import
+    route: @auth_bp('/login')
+    route: @auth_bp('/organizaciones/seleccionar')
+    route: @auth_bp('/forgot')
+    route: @auth_bp('/reset/<token>')
+    route: @auth_bp('/logout')
+    route: @auth_bp('/register')
+    route: @auth_bp('/login/google')
+    route: @auth_bp('/login/google/callback')
+    route: @auth_bp('/admin/register')
+    route: @auth_bp('/usuarios')
+    ...
+ACTIVE  | equipos                | -               | equipos.py
+    last_commit: 6a6a0df 2025-10-14 13:09:15 -0300 obyra.servicios
+    evidence: app.py: register_blueprint(...)
+    route: @equipos_bp('/')
+    route: @equipos_bp('/usuarios/nuevo')
+    route: @equipos_bp('/crear')
+    route: @equipos_bp('/<int:id>')
+    route: @equipos_bp('/<int:id>/editar')
+    route: @equipos_bp('/<int:id>/toggle')
+    route: @equipos_bp('/rendimiento')
+    route: @equipos_bp('/usuarios')
+    route: @equipos_bp('/usuarios')
+    route: @equipos_bp('/usuarios/<int:uid>/rol')
+ACTIVE  | equipos_new            | -               | equipos_new.py
+    last_commit: 2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios
+    evidence: app.py: register_blueprint(...)
+    evidence: app.py: import
+    route: @equipos_new_bp('/')
+    route: @equipos_new_bp('/nuevo')
+    route: @equipos_new_bp('/<int:id>')
+    route: @equipos_new_bp('/<int:id>/asignar')
+    route: @equipos_new_bp('/<int:id>/liberar')
+    route: @equipos_new_bp('/<int:id>/uso')
+    route: @equipos_new_bp('/uso/<int:uso_id>/aprobar')
+    route: @equipos_new_bp('/uso/<int:uso_id>/rechazar')
+    route: @equipos_new_bp('/<int:id>/mantenimiento/nuevo')
+ACTIVE  | inventario             | -               | inventario.py
+    last_commit: 601292f 2025-10-08 10:59:36 -0300 obyra.servicios
+    evidence: app.py: register_blueprint(...)
+    route: @inventario_bp('/')
+    route: @inventario_bp('/crear')
+    route: @inventario_bp('/<int:id>')
+    route: @inventario_bp('/<int:id>/movimiento')
+    route: @inventario_bp('/uso-obra')
+    route: @inventario_bp('/categorias')
+    route: @inventario_bp('/api/categorias')
+    route: @inventario_bp('/api/categorias/')
+    route: @inventario_bp('/categoria')
+ACTIVE  | inventario_new         | -               | inventario_new.py
+    last_commit: 750170d 2025-10-10 15:09:41 -0300 obyra.servicios
+    evidence: app.py: register_blueprint(...)
+    evidence: app.py: import
+    route: @inventario_new_bp('/')
+    route: @inventario_new_bp('/items')
+    route: @inventario_new_bp('/cuadro-stock')
+    route: @inventario_new_bp('/categorias')
+    route: @inventario_new_bp('/categorias/seed')
+    route: @inventario_new_bp('/api/categorias')
+    route: @inventario_new_bp('/items/nuevo')
+    route: @inventario_new_bp('/items/<int:id>')
+    route: @inventario_new_bp('/warehouses')
+    route: @inventario_new_bp('/warehouses/nuevo')
+    ...
+ACTIVE  | market                 | -               | market.py
+    last_commit: abdfc3f 2025-08-27 09:57:51 +0000 obyraservicios
+    evidence: app.py: register_blueprint(...)
+    evidence: app.py: import
+    route: @market_bp('/')
+    route: @market_bp('/producto/<int:id>')
+    route: @market_bp('/producto/<int:id>/pregunta')
+    route: @market_bp('/carrito')
+    route: @market_bp('/carrito/agregar')
+    route: @market_bp('/carrito/actualizar')
+    route: @market_bp('/checkout')
+    route: @market_bp('/mis-ordenes')
+    route: @market_bp('/orden/<int:id>')
+    route: @market_bp('/orden/<int:id>/checkout')
+ACTIVE  | marketplace            | -               | marketplace.py
+    last_commit: ad8ec5a 2025-08-27 10:29:03 +0000 obyraservicios
+    evidence: app.py: register_blueprint(...)
+    route: @marketplace_bp('/productos')
+    route: @marketplace_bp('/p/<slug>')
+    route: @marketplace_bp('/categoria/<int:categoria_id>')
+    route: @marketplace_bp('/proveedor/<int:supplier_id>')
+ACTIVE  | marketplace            | -               | marketplace/routes.py
+    last_commit: 1c352de 2025-09-02 16:24:34 +0000 obyraservicios
+    evidence: app.py: register_blueprint(...)
+    route: @bp('/market/health')
+    route: @bp('/api/market/search')
+    route: @bp('/api/market/products/<int:product_id>')
+    route: @bp('/api/market/cart/items')
+    route: @bp('/api/market/cart')
+    route: @bp('/api/market/checkout')
+    route: @bp('/api/market/payments/mp/webhook')
+    route: @bp('/api/market/orders/<int:order_id>')
+ACTIVE  | reports                | -               | reports_service.py
+    last_commit: 04eaafd 2025-10-03 14:04:42 -0300 obyra.servicios
+    evidence: app.py: register_blueprint(...)
+    route: @reports_bp('/api/reports/dashboard')
+ACTIVE  | supplier_auth          | -               | supplier_auth.py
+    last_commit: a66b732 2025-10-02 12:12:38 -0300 obyra.servicios
+    evidence: app.py: register_blueprint(...)
+    evidence: app.py: import
+    route: @supplier_auth_bp('/registro')
+    route: @supplier_auth_bp('/login')
+    route: @supplier_auth_bp('/forgot')
+    route: @supplier_auth_bp('/logout')
+ACTIVE  | supplier_portal        | -               | supplier_portal.py
+    last_commit: abdfc3f 2025-08-27 09:57:51 +0000 obyraservicios
+    evidence: app.py: register_blueprint(...)
+    evidence: app.py: import
+    route: @supplier_portal_bp('/')
+    route: @supplier_portal_bp('/perfil')
+    route: @supplier_portal_bp('/productos')
+    route: @supplier_portal_bp('/productos/nuevo')
+    route: @supplier_portal_bp('/productos/<int:id>/editar')
+    route: @supplier_portal_bp('/productos/<int:id>/variantes/nueva')
+    route: @supplier_portal_bp('/variantes/<int:var_id>/editar')
+    route: @supplier_portal_bp('/variantes/<int:var_id>/pausar')
+    route: @supplier_portal_bp('/variantes/<int:var_id>/eliminar')
+    route: @supplier_portal_bp('/productos/<int:id>/publicar')
+    ...
+LEGACY  | asistente              | -               | asistente_ia_backup.py
+    last_commit: ec816a5 2025-07-31 15:32:19 +0000 obyraservicios
+    route: @asistente_bp('/')
+    route: @asistente_bp('/dashboard')
+    route: @asistente_bp('/control')
+    route: @asistente_bp('/configurar_proyecto')
+    route: @asistente_bp('/analisis_rendimiento')
+    route: @asistente_bp('/predicciones')
+    route: @asistente_bp('/optimizacion_recursos')
+    route: @asistente_bp('/chat_ia')
+UNKNOWN | account                | -               | account.py
+    last_commit: ac748e3 2025-10-01 20:36:45 -0300 obyra.servicios
+    route: @account_bp('/perfil')
+    route: @account_bp('/facturacion')
+UNKNOWN | agent_local            | -               | agent_local.py
+    last_commit: f473baf 2025-10-02 12:34:48 -0300 obyra.servicios
+    route: @agent_bp('/diagnostico-agent')
+    route: @agent_bp('/api/agente-consulta')
+    route: @agent_bp('/super-admin/auditoria')
+    route: @agent_bp('/super-admin/consulta/<int:consulta_id>')
+UNKNOWN | asistente              | -               | asistente_ia.py
+    last_commit: ec816a5 2025-07-31 15:32:19 +0000 obyraservicios
+    route: @asistente_bp('/')
+    route: @asistente_bp('/dashboard')
+    route: @asistente_bp('/control')
+UNKNOWN | cart                   | -               | cart.py
+    last_commit: ad8ec5a 2025-08-27 10:29:03 +0000 obyraservicios
+    route: @cart_bp('/')
+    route: @cart_bp('/add')
+    route: @cart_bp('/update')
+    route: @cart_bp('/remove/<int:item_id>')
+    route: @cart_bp('/clear')
+    route: @cart_bp('/checkout')
+    route: @cart_bp('/checkout/confirm')
+    route: @cart_bp('/count')
+UNKNOWN | cotizacion             | -               | cotizacion_inteligente.py
+    last_commit: 14c9a53 2025-09-03 18:12:16 +0000 obyraservicios
+    route: @cotizacion_bp('/')
+    route: @cotizacion_bp('/calculadora_inteligente')
+    route: @cotizacion_bp('/calculadora')
+    route: @cotizacion_bp('/calcular_materiales')
+    route: @cotizacion_bp('/paso-revision')
+    route: @cotizacion_bp('/generar-pdf')
+    route: @cotizacion_bp('/optimizar_presupuesto')
+    route: @cotizacion_bp('/analisis_competencia')
+    route: @cotizacion_bp('/plantillas_cotizacion')
+    route: @cotizacion_bp('/crear_desde_plantilla/<int:plantilla_id>')
+    ...
+UNKNOWN | documentos             | -               | control_documentos.py
+    last_commit: 2504533 2025-09-09 02:17:26 +0000 obyraservicios
+    route: @documentos_bp('/')
+    route: @documentos_bp('/biblioteca')
+    route: @documentos_bp('/subir_documento')
+    route: @documentos_bp('/subir_documento')
+    route: @documentos_bp('/documento/<int:documento_id>')
+    route: @documentos_bp('/descargar/<int:documento_id>')
+    route: @documentos_bp('/aprobar_documento/<int:documento_id>')
+    route: @documentos_bp('/nueva_version/<int:documento_id>')
+    route: @documentos_bp('/control_versiones')
+    route: @documentos_bp('/configuracion_tipos')
+    ...
+UNKNOWN | events                 | -               | events_service.py
+    last_commit: ee02747 2025-08-29 19:18:07 +0000 obyraservicios
+    route: @events_bp('/api/events')
+    route: @events_bp('/api/events/custom')
+UNKNOWN | marketplace_new        | -               | marketplace_new.py
+    last_commit: 9c22507 2025-09-02 15:41:43 +0000 obyraservicios
+    route: @marketplace_new_bp('/')
+    route: @marketplace_new_bp('/search')
+    route: @marketplace_new_bp('/product/<int:product_id>')
+    route: @marketplace_new_bp('/cart')
+    route: @marketplace_new_bp('/api/cart/add')
+    route: @marketplace_new_bp('/api/cart/remove/<int:item_id>')
+    route: @marketplace_new_bp('/checkout')
+    route: @marketplace_new_bp('/api/orders/create')
+    route: @marketplace_new_bp('/orders/<int:order_id>')
+    route: @marketplace_new_bp('/orders')
+    ...
+UNKNOWN | marketplaces           | -               | marketplaces.py
+    last_commit: 283f935 2025-08-15 11:56:18 +0000 obyraservicios
+    route: @marketplaces_bp('/')
+    route: @marketplaces_bp('/buscar')
+    route: @marketplaces_bp('/api/buscar')
+    route: @marketplaces_bp('/proveedor/<int:proveedor_id>')
+    route: @marketplaces_bp('/solicitar_cotizacion/<int:proveedor_id>')
+    route: @marketplaces_bp('/mis_cotizaciones')
+    route: @marketplaces_bp('/admin/proveedores')
+    route: @marketplaces_bp('/admin/proveedores/crear')
+UNKNOWN | obras                  | -               | obras.py
+    last_commit: e1c9f6d 2025-10-08 18:21:24 -0300 obyra.servicios
+    route: @obras_bp('/obras')
+    route: @obras_bp('/')
+    route: @obras_bp('/crear')
+    route: @obras_bp('/<int:id>')
+    route: @obras_bp('/<int:id>/editar')
+    route: @obras_bp('/<int:id>/agregar_etapas')
+    route: @obras_bp('/<int:obra_id>/asignar_usuario')
+    route: @obras_bp('/<int:id>/etapa')
+    route: @obras_bp('/tareas/crear')
+    route: @obras_bp('/asignar-usuarios')
+    ...
+UNKNOWN | onboarding             | -               | onboarding.py
+    last_commit: ac748e3 2025-10-01 20:36:45 -0300 obyra.servicios
+    route: @onboarding_bp('/profile')
+    route: @onboarding_bp('/billing')
+UNKNOWN | orders                 | -               | orders.py
+    last_commit: ad8ec5a 2025-08-27 10:29:03 +0000 obyraservicios
+    route: @orders_bp('/')
+    route: @orders_bp('/<int:order_id>')
+    route: @orders_bp('/<int:order_id>/pay')
+    route: @orders_bp('/<int:order_id>/cancel')
+UNKNOWN | payments               | -               | marketplace_payments.py
+    last_commit: 9dc7346 2025-10-17 15:12:16 -0300 obyra.servicios
+    route: @payments_bp('/api/payments/mp/create-preference')
+    route: @payments_bp('/api/payments/mp/webhook')
+    route: @payments_bp('/api/payments/mp/health')
+    route: @payments_bp('/payment-success')
+    route: @payments_bp('/payment-failure')
+    route: @payments_bp('/payment-pending')
+UNKNOWN | planes                 | -               | planes.py
+    last_commit: a6017a0 2025-07-31 14:02:24 +0000 obyraservicios
+    route: @planes_bp('/')
+    route: @planes_bp('/standard')
+    route: @planes_bp('/premium')
+UNKNOWN | presupuestos           | -               | presupuestos.py
+    last_commit: bcdd124 2025-10-14 20:16:58 -0300 obyra.servicios
+    route: @presupuestos_bp('/')
+    route: @presupuestos_bp('/crear')
+    route: @presupuestos_bp('/calculadora-ia')
+    route: @presupuestos_bp('/geo/sugerencias')
+    route: @presupuestos_bp('/procesar-calculadora-ia')
+    route: @presupuestos_bp('/ia/calcular/etapas')
+    route: @presupuestos_bp('/crear-desde-ia')
+    route: @presupuestos_bp('/exportar-excel-ia')
+    route: @presupuestos_bp('/<int:id>')
+    route: @presupuestos_bp('/<int:id>/item')
+    ...
+UNKNOWN | reportes               | -               | reportes.py
+    last_commit: bcdd124 2025-10-14 20:16:58 -0300 obyra.servicios
+    route: @reportes_bp('/dashboard')
+    route: @reportes_bp('/obras')
+    route: @reportes_bp('/costos')
+    route: @reportes_bp('/inventario')
+UNKNOWN | seguridad              | -               | seguridad_cumplimiento.py
+    last_commit: 2083fbf 2025-07-14 14:32:27 +0000 obyraservicios
+    route: @seguridad_bp('/')
+    route: @seguridad_bp('/protocolos')
+    route: @seguridad_bp('/crear_protocolo')
+    route: @seguridad_bp('/crear_protocolo')
+    route: @seguridad_bp('/checklists')
+    route: @seguridad_bp('/nuevo_checklist')
+    route: @seguridad_bp('/ejecutar_checklist/<int:checklist_id>')
+    route: @seguridad_bp('/procesar_checklist/<int:checklist_id>')
+    route: @seguridad_bp('/incidentes')
+    route: @seguridad_bp('/reportar_incidente')
+    ...

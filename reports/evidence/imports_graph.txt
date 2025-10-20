@@ -1,0 +1,84 @@
+.git/refs/remotes/origin/codex/sync-branch-and-resolve-conflicts-in-app.py: 
+account.py: auth, datetime, extensions, flask, flask_login, models, re, sqlalchemy, typing
+agent_local.py: datetime, flask, flask_login, importlib, io, json, models, openpyxl, reportlab, sqlalchemy, time
+app.py: auth, click, datetime, decimal, dotenv, equipos_new, extensions, flask, flask_login, flask_migrate, importlib, inventario_new, io, json, logging, market, marketplace, matplotlib, migrations_runtime, models, os, pathlib, roles_construccion, seed_inventory_categories, services, sqlalchemy, supplier_auth, supplier_portal, sys, typing, werkzeug
+app_old.py: asistente_ia, auth, control_documentos, cotizacion_inteligente, equipos, flask, flask_login, flask_sqlalchemy, inventario, logging, models, obras, os, presupuestos, reportes, seguridad_cumplimiento, sqlalchemy, werkzeug
+asistente_ia.py: flask, flask_login
+asistente_ia_backup.py: flask, flask_login, re
+auth.py: authlib, datetime, extensions, flask, flask_login, itsdangerous, models, os, re, roles_construccion, secrets, services, sqlalchemy, string, typing, uuid, werkzeug
+calculadora_ia.py: base64, copy, datetime, decimal, json, math, openai, os, services, typing, unicodedata
+cart.py: app, collections, commission_utils, decimal, flask, flask_login, models, sqlalchemy, uuid
+commission_utils.py: decimal, os
+configurar_admin.py: app, models
+control_documentos.py: app, datetime, flask, flask_login, json, models, os, utils, werkzeug
+cotizacion_inteligente.py: app, datetime, flask, flask_login, json, math, models, os, utils
+crear_backup_final.py: datetime, fnmatch, os, zipfile
+crear_backup_limpio.py: datetime, fnmatch, os, zipfile
+crear_zip.py: os, zipfile
+equipos.py: app, auth, datetime, flask, flask_login, models, re, roles_construccion, services, sqlalchemy, typing
+equipos_new.py: app, datetime, flask, flask_login, models, os, werkzeug
+etapas_predefinidas.py: app, models, sqlalchemy
+events_service.py: datetime, flask, flask_login, logging, models, sqlalchemy
+evm_utils.py: app, datetime, decimal, models, sqlalchemy
+extensions.py: flask_login, flask_migrate, flask_sqlalchemy, sqlalchemy
+geocoding.py: __future__, app, flask, models, services, typing
+init_marketplace.py: app, datetime, models_marketplace, os
+inventario.py: app, collections, datetime, flask, flask_login, inventario_new, inventory_category_service, jinja2, models, os, seed_inventory_categories, services, typing
+inventario_new.py: app, collections, datetime, decimal, flask, flask_login, inventory_category_service, models, os, seed_inventory_categories, services, sqlalchemy, typing, urllib
+inventory_category_service.py: __future__, extensions, flask, models, seed_inventory_categories, sqlalchemy, typing
+main.py: app, flask
+main_app.py: app, authlib, datetime, flask, flask_login, models, os
+market.py: app, flask, flask_login, json, models, sqlalchemy
+marketplace.py: app, decimal, flask, flask_login, models, re, sqlalchemy
+marketplace/__init__.py: 
+marketplace/migration.py: app, marketplace, os, sys
+marketplace/models.py: app, datetime, json, sqlalchemy
+marketplace/routes.py: app, datetime, flask, json, logging, marketplace
+marketplace/services/commissions.py: marketplace
+marketplace/services/emailer.py: datetime, email, os, smtplib
+marketplace/services/masking.py: 
+marketplace/services/po_pdf.py: datetime, importlib, os, reportlab
+marketplace_new.py: app, flask, flask_login, json, models_marketplace, os, sqlalchemy
+marketplace_payments.py: datetime, extensions, flask, json, mercadopago, models_marketplace, services
+marketplaces.py: app, datetime, decimal, flask, flask_login, models
+models_equipos.py: app, datetime, sqlalchemy
+models_inventario.py: app, datetime, sqlalchemy
+models_marketplace.py: app, datetime, flask_login, json, sqlalchemy, uuid
+obras.py: PIL, app, collections, datetime, decimal, etapas_predefinidas, evm_utils, flask, flask_login, geocoding, json, models, os, pathlib, re, requests, roles_construccion, services, sqlalchemy, tareas_predefinidas, unicodedata, utils, uuid, werkzeug
+onboarding.py: account, flask, flask_login, werkzeug
+orders.py: app, datetime, flask, flask_login, models
+planes.py: app, datetime, flask, flask_login, models
+presupuestos.py: app, calculadora_ia, datetime, decimal, flask, flask_login, importlib, io, json, models, obras, os, reportlab, services, typing, xlsxwriter
+reportes.py: app, datetime, flask, flask_login, matplotlib, models, services, sqlalchemy
+reports_service.py: base64, datetime, flask, flask_login, io, jinja2, logging, matplotlib, models, sqlalchemy, weasyprint
+roles_construccion.py: 
+seed_equipos_inventario.py: app, datetime, models, random, seed_inventory_categories
+seed_inventory_categories.py: __future__, app, argparse, collections, extensions, models, sqlalchemy, sys, typing
+seed_proveedores.py: app, datetime, decimal, models
+seed_suppliers.py: app, datetime, decimal, marketplace, models, os, random, sqlalchemy, werkzeug
+seguridad_cumplimiento.py: app, datetime, flask, flask_login, json, models, utils
+services/alerts.py: __future__, app, datetime, flask, models, sqlalchemy, typing
+services/cac/__init__.py: cac_service
+services/cac/cac_service.py: __future__, dataclasses, datetime, decimal, extensions, flask, models, sqlalchemy, typing
+services/cac/cifras_pdf_provider.py: __future__, dataclasses, datetime, decimal, flask, io, pdfminer, re, requests, services, typing
+services/certifications.py: __future__, dataclasses, datetime, decimal, extensions, flask, json, models, sqlalchemy, typing
+services/email_service.py: email, flask, logging, os, smtplib
+services/exchange/__init__.py: 
+services/exchange/base.py: __future__, dataclasses, datetime, decimal, extensions, flask, models, typing
+services/exchange/providers/__init__.py: 
+services/exchange/providers/bna.py: __future__, datetime, decimal, flask, re, requests, services, typing, zoneinfo
+services/geocoding_service.py: __future__, dataclasses, datetime, extensions, flask, json, models, os, requests, time, typing
+services/memberships.py: __future__, datetime, flask, flask_login, functools, models, sqlalchemy, typing
+services/obras_filters.py: __future__, models, sqlalchemy, typing
+services/po_service.py: app, datetime, flask, importlib, json, logging, models_marketplace, os, reportlab, services
+services/pricing/__init__.py: 
+services/pricing/cac.py: __future__, datetime, decimal, services, typing
+services/wizard_budgeting.py: __future__, dataclasses, decimal, etapas_predefinidas, flask, models, sqlalchemy, typing
+supplier_auth.py: app, datetime, flask, models, re, werkzeug
+supplier_portal.py: app, datetime, flask, json, models, os, sqlalchemy, supplier_auth, werkzeug
+tareas_detalladas.py: 
+tareas_predefinidas.py: re, unicodedata
+tools/dump_routes.py: app, argparse, graphviz, inspect, json, os, pathlib, re, subprocess
+tools/scan_architecture.py: ast, collections, datetime, json, os, re, subprocess, sys, typing
+utils.py: datetime, flask, os, re, shutil, uuid, werkzeug
+utils/permissions.py: 

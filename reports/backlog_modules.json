@@ -1,0 +1,66 @@
+[
+  {
+    "module": "asistente",
+    "file": "asistente_ia_backup.py",
+    "type": "blueprint",
+    "reason": "Nombre sugiere legacy/old/backup y/o no hay evidencia de registro activo en app.py",
+    "impact": "medio",
+    "priority": "media",
+    "effort": "M",
+    "risk": "bajo-medio",
+    "suggested_steps": [
+      "Verificar si existe reemplazo (_new) o rutas equivalentes",
+      "Correr un grep de referencias en templates/ y tests/",
+      "Si no hay uso, marcar para eliminar; si hay uso parcial, migrar rutas"
+    ],
+    "last_commit": "ec816a5 2025-07-31 15:32:19 +0000 obyraservicios"
+  },
+  {
+    "module": "equipos vs equipos_new",
+    "file": "equipos.py, equipos_new.py",
+    "type": "conflict",
+    "reason": "Coexisten *_new y versión previa; unificar o deprecar una de las dos",
+    "impact": "medio-alto",
+    "priority": "alta",
+    "effort": "M",
+    "risk": "medio",
+    "suggested_steps": [
+      "Comparar rutas y templates usados",
+      "Mover endpoints faltantes a la versión definitiva",
+      "Retirar imports/rutas de la versión a deprecar y borrar"
+    ],
+    "last_commit": "2bc34d1 2025-08-27 09:46:19 +0000 obyraservicios"
+  },
+  {
+    "module": "inventario vs inventario_new",
+    "file": "inventario.py, inventario_new.py",
+    "type": "conflict",
+    "reason": "Coexisten *_new y versión previa; unificar o deprecar una de las dos",
+    "impact": "medio-alto",
+    "priority": "alta",
+    "effort": "M",
+    "risk": "medio",
+    "suggested_steps": [
+      "Comparar rutas y templates usados",
+      "Mover endpoints faltantes a la versión definitiva",
+      "Retirar imports/rutas de la versión a deprecar y borrar"
+    ],
+    "last_commit": "750170d 2025-10-10 15:09:41 -0300 obyra.servicios"
+  },
+  {
+    "module": "marketplace vs marketplace_new",
+    "file": "marketplace.py, marketplace_new.py",
+    "type": "conflict",
+    "reason": "Coexisten *_new y versión previa; unificar o deprecar una de las dos",
+    "impact": "medio-alto",
+    "priority": "alta",
+    "effort": "M",
+    "risk": "medio",
+    "suggested_steps": [
+      "Comparar rutas y templates usados",
+      "Mover endpoints faltantes a la versión definitiva",
+      "Retirar imports/rutas de la versión a deprecar y borrar"
+    ],
+    "last_commit": "9c22507 2025-09-02 15:41:43 +0000 obyraservicios"
+  }
+]
