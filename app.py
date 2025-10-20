@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import os
 import sys
 import logging
@@ -22,7 +26,6 @@ from flask.cli import AppGroup
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
-from sqlalchemy.engine.url import make_url
 from services.memberships import (
     initialize_membership_session,
     load_membership_into_context,
@@ -30,6 +33,7 @@ from services.memberships import (
     get_current_org_id,
 )
 from extensions import db, login_manager
+from flask_migrate import Migrate
 
 
 def _ensure_utf8_io() -> None:
@@ -106,58 +110,22 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# configure the database with fallback to SQLite
-database_url = os.environ.get("DATABASE_URL")
-
-# 🔥 FALLBACK: Si no hay DATABASE_URL o falla conexión, usar SQLite local
-if not database_url:
-    database_url = "sqlite:///tmp/dev.db"
-    print("[WARN] DATABASE_URL no disponible, usando SQLite fallback")
-else:
-    # Verificar si DATABASE_URL contiene host de Neon y aplicar SSL
-    if "neon.tech" in database_url and "sslmode=" not in database_url:
-        if "?" in database_url:
-            database_url += "&sslmode=require"
-        else:
-            database_url += "?sslmode=require"
-        print("[INFO] SSL requerido agregado para Neon")
-
-# Garantizar que la ruta SQLite exista antes de conectar para evitar errores "unable to open database file"
-try:
-    url_obj = make_url(database_url)
-except Exception:
-    url_obj = None
-
-if url_obj and url_obj.drivername == "sqlite" and url_obj.database and url_obj.database != ":memory:":
-    raw_path = Path(url_obj.database)
-
-    if not raw_path.is_absolute():
-        raw_path = Path(app.root_path) / raw_path
-
-    absolute_path = raw_path.expanduser().resolve()
-    absolute_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        database_url = url_obj.set(database=absolute_path.as_posix()).render_as_string(
-            hide_password=False
-        )
-    except Exception:
-        # Si no podemos normalizar la URL, mantenemos la ruta original.
-        pass
-
+# configure the database (PostgreSQL only)
+database_url = os.environ.get("DATABASE_URL", "").strip()
+assert database_url.startswith("postgresql"), "DATABASE_URL debe ser Postgres"
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,           # Reconexión cada 5 min
-    "pool_pre_ping": True,         # Test conexión antes de usar
+    "pool_size": 5,
+    "max_overflow": 0,
+    "pool_timeout": 30,
+    "pool_pre_ping": True,
     "connect_args": {
-        "connect_timeout": 10,      # Timeout corto para conexión
-        "keepalives_idle": 600,     # Keep alive idle time
-        "keepalives_interval": 30,  # Keep alive interval
-        "keepalives_count": 3,      # Keep alive retry count
-    } if database_url.startswith('postgresql') else {},
-    "pool_timeout": 30,            # Timeout para obtener conexión del pool
-    "max_overflow": 0,             # No overflow connections
-    "pool_size": 5,                # Tamaño del pool
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 600,
+        "keepalives_interval": 30,
+        "keepalives_count": 3,
+    },
 }
 
 # Feature flags (por defecto en OFF) para el nuevo presupuestador del wizard
@@ -174,10 +142,26 @@ app.config["SHOW_IA_CALCULATOR_BUTTON"] = _env_flag("SHOW_IA_CALCULATOR_BUTTON",
 app.config["ENABLE_REPORTS_SERVICE"] = _env_flag("ENABLE_REPORTS", False)
 app.config["MAPS_PROVIDER"] = (os.environ.get("MAPS_PROVIDER") or "nominatim").strip().lower()
 app.config["MAPS_API_KEY"] = os.environ.get("MAPS_API_KEY")
+app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "").strip()
+app.config["MP_WEBHOOK_PUBLIC_URL"] = os.getenv("MP_WEBHOOK_PUBLIC_URL", "").strip()
+
+if not app.config["MP_ACCESS_TOKEN"]:
+    app.logger.warning(
+        "Mercado Pago access token (MP_ACCESS_TOKEN) is not configured; Mercado Pago operations will fail."
+    )
+
+mp_webhook_url = app.config.get("MP_WEBHOOK_PUBLIC_URL")
+if mp_webhook_url:
+    app.logger.info(f"MP webhook URL: {mp_webhook_url}")
+else:
+    app.logger.warning(
+        "MP_WEBHOOK_PUBLIC_URL is not configured; expected path: /api/payments/mp/webhook"
+    )
 
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+migrate = Migrate(app, db)
 
 
 def _resolve_login_endpoint() -> Optional[str]:
@@ -241,6 +225,14 @@ db_cli = AppGroup('db')
 def db_upgrade():
     """Apply pending lightweight database migrations."""
     with app.app_context():
+        from flask_migrate import upgrade as alembic_upgrade
+
+        logger = app.logger
+        logger.info("Running Alembic upgrade...")
+        alembic_upgrade()
+        logger.info("Alembic upgrade → OK")
+        logger.info("Running post-upgrade runtime ensures...")
+
         from migrations_runtime import (
             ensure_avance_audit_columns,
             ensure_presupuesto_state_columns,
@@ -646,11 +638,10 @@ def from_json_filter(json_str):
         return {}
 
 
-# Create tables and initial data
 with app.app_context():
     # Import models after app context is available to avoid circular imports
     from models import Usuario, Organizacion
-    
+
     # Run startup migrations before creating tables
     from migrations_runtime import (
         ensure_avance_audit_columns,
@@ -678,33 +669,14 @@ with app.app_context():
         ensure_work_certification_tables,
     ]
 
-    # 🔥 Intento crear tablas con fallback automático a SQLite
-    try:
-        print(f"[DB] Intentando conectar a: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
-        db.create_all()
-        print("[OK] Base de datos conectada exitosamente")
-    except Exception as e:
-        print(f"[ERROR] Error conectando a base de datos principal: {str(e)}")
-        if "neon.tech" in app.config['SQLALCHEMY_DATABASE_URI']:
-            print("[INFO] Fallback automático a SQLite...")
-            # Cambiar a SQLite y reiniciar SQLAlchemy
-            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tmp/dev.db"
-            # Simplificar engine options para SQLite
-            app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-                "pool_recycle": 300,
-                "pool_pre_ping": True,
-            }
-            
-            # Reiniciar la conexión con la nueva configuración
-            db.init_app(app)
-            try:
-                db.create_all()
-                print("[OK] SQLite fallback conectado exitosamente")
-            except Exception as sqlite_error:
-                print(f"[ERROR] Error crítico con SQLite fallback: {str(sqlite_error)}")
-                raise sqlite_error
-        else:
-            raise e
+    for migration in runtime_migrations:
+        try:
+            migration()
+        except Exception as exc:  # pragma: no cover - startup logging only
+            logging.getLogger(__name__).warning(
+                "Runtime migration %s failed: %s", migration.__name__, exc
+            )
+
     
     # Initialize RBAC permissions
     try:
@@ -1041,5 +1013,14 @@ def not_found(error):
             dashboard_url = url_for('index')
     return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
+
+def maybe_create_sqlite_schema():
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
+        with app.app_context():
+            db.create_all()
+
+
 if __name__ == '__main__':
+    maybe_create_sqlite_schema()
     app.run(host='0.0.0.0', port=5000, debug=True)

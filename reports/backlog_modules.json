@@ -1,0 +1,91 @@
+[
+  {
+    "module": "marketplace_new.py",
+    "status": "legacy",
+    "reason": "Standalone marketplace blueprint never imported nor registered in app bootstrap.",
+    "impact": "Duplicate UI and checkout flows risk diverging from active marketplace routes.",
+    "priority": "high",
+    "effort": "M",
+    "risk": "Low runtime risk (dead code) but medium coordination to confirm no external references.",
+    "next_steps": [
+      "Confirm with product/QA that no environment mounts the legacy blueprint.",
+      "Archive or delete module after creating documentation snapshot.",
+      "Consolidate tests to cover marketplace/routes.py only."
+    ],
+    "evidence": [
+      "reports/evidence/marketplace_new_usage.txt",
+      "reports/evidence/git_last_commit.txt"
+    ]
+  },
+  {
+    "module": "marketplace_payments.py",
+    "status": "legacy",
+    "reason": "Webhook blueprint not registered; Mercado Pago integration moved to marketplace/routes.py.",
+    "impact": "Confusing entry point for payment notifications; potential misconfiguration of webhook URL.",
+    "priority": "medium",
+    "effort": "S",
+    "risk": "Low (unused) but ensure no cron/script imports it directly.",
+    "next_steps": [
+      "Search deployments for direct imports of marketplace_payments.",
+      "If unused, delete and update documentation to reference marketplace/routes.py endpoints.",
+      "If needed, rewire blueprint under payments namespace."
+    ],
+    "evidence": [
+      "reports/evidence/marketplace_payments_usage.txt",
+      "reports/evidence/app_blueprint_registration.txt"
+    ]
+  },
+  {
+    "module": "marketplace.py",
+    "status": "legacy",
+    "reason": "Older marketplace blueprint duplicates supplier routes and is not registered in app.py.",
+    "impact": "Developers may patch wrong file; increases bug surface when adjusting supplier flows.",
+    "priority": "medium",
+    "effort": "M",
+    "risk": "Medium – confirm no imports from background jobs.",
+    "next_steps": [
+      "Verify git history for last active usage and check staging configs.",
+      "Remove or merge logic into market.py/marketplace.routes.",
+      "Add regression tests around active blueprint before deletion."
+    ],
+    "evidence": [
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/git_last_commit.txt"
+    ]
+  },
+  {
+    "module": "app_old.py",
+    "status": "legacy",
+    "reason": "Historic entry point no longer referenced by tooling; retains deprecated `db.create_all` flow.",
+    "impact": "Confuses newcomers and risks accidental use with outdated configuration.",
+    "priority": "low",
+    "effort": "S",
+    "risk": "Low – ensure no cron/supervisor job points to it.",
+    "next_steps": [
+      "Confirm deployment scripts reference app.py only.",
+      "Remove app_old.py and related docs after approval.",
+      "Add guardrail in README linking to current bootstrap."
+    ],
+    "evidence": [
+      "reports/evidence/app_old_usage.txt"
+    ]
+  },
+  {
+    "module": "services.alerts / certifications / po_service",
+    "status": "needs-review",
+    "reason": "Service modules lack inbound imports from blueprints per static analysis.",
+    "impact": "May represent dead background features or scheduled jobs; dead code complicates dependency audits.",
+    "priority": "low",
+    "effort": "L",
+    "risk": "Unknown – validate with ops before removal.",
+    "next_steps": [
+      "Confirm whether Celery/background workers import these modules.",
+      "If unused, remove dependencies from requirements and delete modules.",
+      "Otherwise, document owning blueprint or job with tests."
+    ],
+    "evidence": [
+      "reports/evidence/blueprint_service_imports.txt",
+      "reports/evidence/services_listing.txt"
+    ]
+  }
+]
