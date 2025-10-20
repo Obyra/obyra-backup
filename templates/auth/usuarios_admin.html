@@ -139,6 +139,7 @@
             </h5>
         </div>
         <div class="card-body p-0">
+            <div id="usuariosAccionAlert" class="alert d-none m-3" role="alert"></div>
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="table-dark">
@@ -155,7 +156,8 @@
                     <tbody>
                         {% for miembro in miembros %}
                         {% set usuario = miembro.usuario %}
-                        <tr>
+                        {% set es_activo = miembro.status == 'active' and usuario.activo %}
+                        <tr data-usuario-id="{{ usuario.id }}">
                             <td>
                                 <div class="d-flex align-items-center">
                                     {% if usuario.profile_picture %}
@@ -195,13 +197,14 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if miembro.status == 'active' and usuario.activo %}
-                                    <span class="badge bg-success">Activo</span>
-                                {% elif miembro.status == 'pending' %}
-                                    <span class="badge bg-warning text-dark">Pendiente</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Inactivo</span>
-                                {% endif %}
+                                {% set estado_clase = 'badge bg-success usuario-status-badge' if es_activo else (
+                                    'badge bg-warning text-dark usuario-status-badge' if miembro.status == 'pending'
+                                    else 'badge bg-secondary usuario-status-badge'
+                                ) %}
+                                {% set estado_texto = 'Activo' if es_activo else (
+                                    'Pendiente' if miembro.status == 'pending' else 'Inactivo'
+                                ) %}
+                                <span class="{{ estado_clase }}">{{ estado_texto }}</span>
                             </td>
                             <td>{{ usuario.fecha_creacion.strftime('%d/%m/%Y') }}</td>
                             <td>
@@ -231,11 +234,16 @@
                                     </div>
                                     
                                     <!-- Botón para activar/desactivar usuario -->
-                                    <button class="btn btn-sm btn-outline-{{ 'warning' if miembro.status == 'active' and usuario.activo else 'success' }}"
-                                            onclick="toggleUsuario({{ usuario.id }}, {{ 'false' if miembro.status == 'active' and usuario.activo else 'true' }})"
+                                    {% set boton_clases = 'btn btn-sm toggle-usuario-btn ' + ('btn-outline-warning' if es_activo else 'btn-outline-success') %}
+                                    {% set boton_icono = 'user-slash' if es_activo else 'user-check' %}
+                                    {% set boton_texto = 'Desactivar' if es_activo else 'Activar' %}
+                                    {% set siguiente_estado = 'false' if es_activo else 'true' %}
+                                    <button type="button"
+                                            class="{{ boton_clases }}"
+                                            data-usuario-id="{{ usuario.id }}"
+                                            data-next-estado="{{ siguiente_estado }}"
                                             {{ 'disabled' if usuario.id == current_user.id else '' }}>
-                                        <i class="fas fa-{{ 'user-slash' if miembro.status == 'active' and usuario.activo else 'user-check' }} me-1"></i>
-                                        {{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }}
+                                        <i class="fas fa-{{ boton_icono }} me-1"></i>{{ boton_texto }}
                                     </button>
                                 </div>
                             </td>
@@ -266,98 +274,202 @@
 {{ super() }}
 {% include 'auth/_nuevo_integrante_modal_script.html' %}
 <script>
+const cambiarRolEndpoint = {{ url_for('auth.cambiar_rol')|tojson }};
+const toggleUsuarioEndpoint = {{ url_for('auth.toggle_usuario')|tojson }};
+const csrfTokenValue = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || {{ (csrf_token() if csrf_token is defined else '')|tojson }};
+
 let accionPendiente = null;
+let mensajeTimeoutId = null;
+
+const modalConfirmacionEl = document.getElementById('modalConfirmacion');
+const modalConfirmacionBody = document.getElementById('modalConfirmacionBody');
+const modalConfirmacion = modalConfirmacionEl ? bootstrap.Modal.getOrCreateInstance(modalConfirmacionEl) : null;
+const btnConfirmar = document.getElementById('btnConfirmar');
+const btnConfirmarDefault = btnConfirmar ? btnConfirmar.innerHTML : '';
+const usuariosAccionAlert = document.getElementById('usuariosAccionAlert');
+
+function mostrarMensajeAccion(tipo, mensaje) {
+    if (!usuariosAccionAlert) {
+        alert(mensaje);
+        return;
+    }
+
+    usuariosAccionAlert.className = `alert alert-${tipo} m-3`;
+    usuariosAccionAlert.textContent = mensaje;
+    usuariosAccionAlert.classList.remove('d-none');
+
+    if (mensajeTimeoutId) {
+        clearTimeout(mensajeTimeoutId);
+    }
+
+    mensajeTimeoutId = setTimeout(() => {
+        usuariosAccionAlert.classList.add('d-none');
+    }, 4000);
+}
+
+function resumenEstadoUsuario(status, activo) {
+    if (status === 'pending') {
+        return { etiqueta: 'Pendiente', clases: 'badge bg-warning text-dark usuario-status-badge' };
+    }
+
+    if (status === 'active' && activo) {
+        return { etiqueta: 'Activo', clases: 'badge bg-success usuario-status-badge' };
+    }
+
+    return { etiqueta: 'Inactivo', clases: 'badge bg-secondary usuario-status-badge' };
+}
+
+function actualizarFilaUsuario(button, data) {
+    if (!button) {
+        return;
+    }
+
+    const fila = button.closest('tr');
+    if (!fila) {
+        return;
+    }
+
+    const estado = resumenEstadoUsuario(data.status, data.usuario_activo);
+    const badge = fila.querySelector('.usuario-status-badge');
+    if (badge) {
+        badge.className = estado.clases;
+        badge.textContent = estado.etiqueta;
+    }
+
+    const esActivo = data.status === 'active' && data.usuario_activo;
+    button.dataset.nextEstado = esActivo ? 'false' : 'true';
+    button.classList.remove('btn-outline-warning', 'btn-outline-success');
+    button.classList.add(esActivo ? 'btn-outline-warning' : 'btn-outline-success');
+    button.innerHTML = `<i class="fas ${esActivo ? 'fa-user-slash' : 'fa-user-check'} me-1"></i>${esActivo ? 'Desactivar' : 'Activar'}`;
+}
 
 function cambiarRol(usuarioId, nuevoRol) {
     accionPendiente = {
         tipo: 'cambiar_rol',
         usuario_id: usuarioId,
-        nuevo_rol: nuevoRol
+        nuevo_rol: nuevoRol,
     };
-    
-    document.getElementById('modalConfirmacionBody').innerHTML = `
-        <p>¿Estás seguro de que quieres cambiar el rol de este usuario a <strong>${nuevoRol.replace('_', ' ')}</strong>?</p>
-        <div class="alert alert-warning">
-            <i class="fas fa-exclamation-triangle me-1"></i>
-            Esta acción cambiará los permisos del usuario en el sistema.
-        </div>
-    `;
-    
-    new bootstrap.Modal(document.getElementById('modalConfirmacion')).show();
+
+    if (modalConfirmacionBody) {
+        modalConfirmacionBody.innerHTML = `
+            <p>¿Estás seguro de que quieres cambiar el rol de este usuario a <strong>${nuevoRol.replace('_', ' ')}</strong>?</p>
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                Esta acción cambiará los permisos del usuario en el sistema.
+            </div>
+        `;
+    }
+
+    modalConfirmacion?.show();
 }
 
-function toggleUsuario(usuarioId, nuevoEstado) {
+function toggleUsuario(button, usuarioId, nuevoEstado) {
+    const deseaActivar = String(nuevoEstado) === 'true';
+
     accionPendiente = {
         tipo: 'toggle_usuario',
         usuario_id: usuarioId,
-        nuevo_estado: nuevoEstado
+        nuevo_estado: deseaActivar ? 'true' : 'false',
+        boton: button,
     };
-    
-    const accion = nuevoEstado === 'true' ? 'activar' : 'desactivar';
-    
-    document.getElementById('modalConfirmacionBody').innerHTML = `
-        <p>¿Estás seguro de que quieres <strong>${accion}</strong> este usuario?</p>
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle me-1"></i>
-            ${nuevoEstado === 'true' ? 'El usuario podrá acceder al sistema.' : 'El usuario no podrá acceder al sistema.'}
-        </div>
-    `;
-    
-    new bootstrap.Modal(document.getElementById('modalConfirmacion')).show();
+
+    if (modalConfirmacionBody) {
+        modalConfirmacionBody.innerHTML = `
+            <p>¿Estás seguro de que quieres <strong>${deseaActivar ? 'activar' : 'desactivar'}</strong> este usuario?</p>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-1"></i>
+                ${deseaActivar ? 'El usuario podrá acceder al sistema.' : 'El usuario no podrá acceder al sistema.'}
+            </div>
+        `;
+    }
+
+    modalConfirmacion?.show();
 }
 
-document.getElementById('btnConfirmar').addEventListener('click', function() {
-    if (!accionPendiente) return;
-    
-    const formData = new FormData();
-    formData.append('usuario_id', accionPendiente.usuario_id);
-    
-    let url;
-    if (accionPendiente.tipo === 'cambiar_rol') {
-        url = '/usuarios/cambiar_rol';
-        formData.append('nuevo_rol', accionPendiente.nuevo_rol);
-    } else if (accionPendiente.tipo === 'toggle_usuario') {
-        url = '/usuarios/toggle_usuario';
-        formData.append('nuevo_estado', accionPendiente.nuevo_estado);
-    }
-    
-    fetch(url, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            bootstrap.Modal.getInstance(document.getElementById('modalConfirmacion')).hide();
-            location.reload();
-        } else {
-            alert('Error: ' + data.message);
+document.querySelectorAll('.toggle-usuario-btn').forEach((button) => {
+    button.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (button.disabled) {
+            return;
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error al procesar la solicitud');
+        toggleUsuario(button, button.dataset.usuarioId, button.dataset.nextEstado);
     });
 });
 
-// Función para mostrar notificaciones
-function showNotification(message, type = 'info') {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    const container = document.querySelector('.container-fluid');
-    container.insertBefore(alertDiv, container.firstChild);
-    
-    // Auto-dismiss después de 5 segundos
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.parentNode.removeChild(alertDiv);
+if (btnConfirmar) {
+    btnConfirmar.addEventListener('click', async () => {
+        if (!accionPendiente) {
+            return;
         }
-    }, 5000);
+
+        const pendingAction = accionPendiente;
+        const formData = new FormData();
+        formData.append('usuario_id', pendingAction.usuario_id);
+
+        if (csrfTokenValue) {
+            formData.append('csrf_token', csrfTokenValue);
+        }
+
+        let endpoint = '';
+        if (pendingAction.tipo === 'cambiar_rol') {
+            endpoint = cambiarRolEndpoint;
+            formData.append('nuevo_rol', pendingAction.nuevo_rol);
+        } else if (pendingAction.tipo === 'toggle_usuario') {
+            endpoint = toggleUsuarioEndpoint;
+            formData.append('nuevo_estado', pendingAction.nuevo_estado);
+        }
+
+        if (!endpoint) {
+            return;
+        }
+
+        const headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        if (csrfTokenValue) {
+            headers['X-CSRFToken'] = csrfTokenValue;
+        }
+
+        btnConfirmar.disabled = true;
+        btnConfirmar.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Procesando';
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                body: formData,
+                headers,
+                credentials: 'same-origin',
+            });
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                throw new Error('No se pudo interpretar la respuesta del servidor.');
+            }
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'No se pudo completar la acción.');
+            }
+
+            modalConfirmacion?.hide();
+
+            if (pendingAction.tipo === 'toggle_usuario') {
+                actualizarFilaUsuario(pendingAction.boton, data);
+                mostrarMensajeAccion('success', data.message || 'Estado actualizado correctamente.');
+            } else {
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error(error);
+            mostrarMensajeAccion('danger', error.message || 'Error al procesar la solicitud.');
+        } finally {
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = btnConfirmarDefault;
+            }
+
+            accionPendiente = null;
+        }
+    });
 }
 </script>
 {% endblock %}

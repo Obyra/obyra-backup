@@ -86,6 +86,7 @@ def _parse_date(value: Any) -> Optional[date]:
 DECIMAL_ZERO = Decimal("0")
 CURRENCY_QUANT = Decimal("0.01")
 QUANTITY_QUANT = Decimal("0.001")
+FX_RATE_QUANT = Decimal("0.0001")
 ALLOWED_CURRENCIES = {"ARS", "USD"}
 COORD_QUANT = Decimal("0.00000001")
 
@@ -244,6 +245,81 @@ def _sumar_totales(items) -> Decimal:
     return _quantize_currency(total)
 
 
+def _congelar_presupuesto_para_confirmacion(presupuesto: Presupuesto) -> Decimal:
+    """Recalcula y congela importes, cantidades y tasas antes de confirmar."""
+
+    presupuesto.calcular_totales()
+
+    currency = (presupuesto.currency or 'ARS').upper()
+    if currency not in ALLOWED_CURRENCIES:
+        currency = 'ARS'
+    presupuesto.currency = currency
+
+    fx_value: Optional[Decimal] = None
+    if currency != 'ARS':
+        candidatos = (
+            presupuesto.tasa_usd_venta,
+            presupuesto.exchange_rate_value,
+            getattr(presupuesto.exchange_rate, 'value', None),
+        )
+        for candidato in candidatos:
+            if candidato is None:
+                continue
+            candidato_dec = _to_decimal(candidato, '0')
+            if candidato_dec > DECIMAL_ZERO:
+                fx_value = candidato_dec
+                break
+        if fx_value is not None and fx_value > DECIMAL_ZERO:
+            fx_value = fx_value.quantize(FX_RATE_QUANT, rounding=ROUND_HALF_UP)
+            presupuesto.tasa_usd_venta = fx_value
+            presupuesto.exchange_rate_value = fx_value
+        if not presupuesto.exchange_rate_provider and getattr(presupuesto.exchange_rate, 'provider', None):
+            presupuesto.exchange_rate_provider = presupuesto.exchange_rate.provider
+        if not presupuesto.exchange_rate_as_of and getattr(presupuesto.exchange_rate, 'as_of', None):
+            presupuesto.exchange_rate_as_of = presupuesto.exchange_rate.as_of
+        if not presupuesto.exchange_rate_fetched_at and getattr(presupuesto.exchange_rate, 'fetched_at', None):
+            presupuesto.exchange_rate_fetched_at = presupuesto.exchange_rate.fetched_at
+    else:
+        fx_value = None
+
+    if presupuesto.indice_cac_valor is not None:
+        presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(presupuesto.indice_cac_valor, '0'))
+
+    items = presupuesto.items.all() if hasattr(presupuesto.items, 'all') else list(presupuesto.items)
+    for item in items:
+        cantidad = _quantize_quantity(_to_decimal(item.cantidad, '0'))
+        item.cantidad = cantidad
+
+        item.currency = currency
+
+        unit_currency = item.price_unit_currency
+        if unit_currency is None:
+            unit_currency = item.precio_unitario
+        unit_currency_dec = _quantize_currency(_to_decimal(unit_currency, '0'))
+        item.price_unit_currency = unit_currency_dec
+
+        total_currency = _quantize_currency(cantidad * unit_currency_dec)
+        item.total_currency = total_currency
+
+        if currency != 'ARS' and fx_value is not None and fx_value > DECIMAL_ZERO:
+            unit_ars = _quantize_currency(unit_currency_dec * fx_value)
+            total_ars = _quantize_currency(total_currency * fx_value)
+        else:
+            raw_unit_ars = item.precio_unitario if item.precio_unitario is not None else item.price_unit_ars
+            if raw_unit_ars is None or _to_decimal(raw_unit_ars, '0') <= DECIMAL_ZERO:
+                raw_unit_ars = unit_currency_dec
+            unit_ars = _quantize_currency(_to_decimal(raw_unit_ars, '0'))
+            total_ars = _quantize_currency(cantidad * unit_ars)
+
+        item.precio_unitario = unit_ars
+        item.price_unit_ars = unit_ars
+        item.total = total_ars
+        item.total_ars = total_ars
+
+    presupuesto.calcular_totales()
+    return presupuesto.total_con_iva
+
+
 def _persistir_resultados_etapas(
     presupuesto: Presupuesto,
     etapas_resultado: list,
@@ -368,10 +444,10 @@ def lista():
     incluir_eliminados = estado == 'eliminado'
     buscar = request.args.get('buscar', '')
 
-    # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir convertidos
+    # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir confirmados/convertidos
     query = Presupuesto.query.outerjoin(Obra).filter(
         Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.estado != 'convertido'  # Excluir presupuestos ya convertidos en obras
+        Presupuesto.estado.notin_(['confirmado', 'convertido'])
     )
 
     if incluir_eliminados:
@@ -1979,6 +2055,9 @@ def confirmar_como_obra(id):
 
     nueva_obra = None
     try:
+        _congelar_presupuesto_para_confirmacion(presupuesto)
+        presupuesto.vigencia_bloqueada = True
+
         nombre_obra = None
         if isinstance(datos_proyecto, dict):
             nombre_obra = datos_proyecto.get('nombre')
@@ -2043,7 +2122,7 @@ def confirmar_como_obra(id):
 
         presupuesto.obra_id = nueva_obra.id
         presupuesto.confirmado_como_obra = True
-        presupuesto.estado = 'convertido'
+        presupuesto.estado = 'confirmado'
 
         etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
 
@@ -2141,6 +2220,9 @@ def confirmar_como_obra(id):
     obra_nombre = nueva_obra.nombre if nueva_obra else ''
     estado_respuesta = presupuesto.estado
 
+    mensaje_exito = f'¡Presupuesto {presupuesto.numero} confirmado! Obra "{obra_nombre}" creada correctamente.'
+    flash(mensaje_exito, 'success')
+
     _registrar_evento_confirmacion(
         org_id=org_id,
         obra_id=obra_creada_id,
@@ -2155,18 +2237,20 @@ def confirmar_como_obra(id):
             presupuesto.numero
         )
 
+    obra_url = url_for('obras.detalle', id=obra_creada_id) if obra_creada_id else None
+
     if wants_json:
         return jsonify({
             'status': 'ok',
-            'message': 'Obra creada correctamente.',
+            'message': mensaje_exito,
             'obra_id': obra_creada_id,
-            'obra_url': url_for('obras.detalle', id=obra_creada_id) if obra_creada_id else None,
+            'obra_url': obra_url,
+            'redirect_url': obra_url,
             'presupuesto_estado': estado_respuesta,
             'trigger': trigger_source
         })
 
-    flash(f'¡Presupuesto convertido exitosamente en obra "{obra_nombre}"!', 'success')
-    return redirect(url_for('obras.detalle', id=obra_creada_id))
+    return redirect(obra_url or url_for('presupuestos.detalle', id=id))
 @presupuestos_bp.route('/<int:id>/perder', methods=['POST'])
 @login_required
 def marcar_presupuesto_perdido(id: int):

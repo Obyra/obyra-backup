@@ -15,22 +15,16 @@ GLOBAL_CATEGORY_ROLES = {"superadmin", "administrador_global"}
 
 
 def _sort_categories(categorias: List[InventoryCategory]) -> List[InventoryCategory]:
-    """Return categories ordered by hierarchy-friendly path."""
+    """Return categories ordered by their defined sort order and name."""
 
     if not categorias:
         return []
 
-    # `full_path` already walks the parent chain, so we can rely on it for
-    # deterministic ordering inside dropdowns and reports. As a safety net we
-    # fall back to the primary key to avoid unstable ordering when names repeat.
-    def _path_key(categoria: InventoryCategory) -> str:
-        path = categoria.full_path or categoria.nombre or ""
-        return path.casefold()
-
     return sorted(
         categorias,
         key=lambda categoria: (
-            _path_key(categoria),
+            getattr(categoria, "sort_order", 0) or 0,
+            (categoria.nombre or "").casefold(),
             categoria.id or 0,
         ),
     )
@@ -60,7 +54,15 @@ def user_can_manage_inventory_categories(user: object) -> bool:
 def get_active_categories(company_id: int) -> List[InventoryCategory]:
     """Return ordered active global categories (company id kept for compatibility)."""
 
-    return get_global_categories()
+    categorias, _, _, _ = ensure_categories_for_company_id(company_id)
+    if not categorias:
+        return []
+
+    return _sort_categories([
+        categoria
+        for categoria in categorias
+        if categoria.is_active and categoria.parent_id is None
+    ])
 
 
 def get_global_categories() -> List[InventoryCategory]:
@@ -76,6 +78,7 @@ def get_global_categories() -> List[InventoryCategory]:
         .filter(
             InventoryCategory.is_active.is_(True),
             InventoryCategory.is_global.is_(True),
+            InventoryCategory.parent_id.is_(None),
         )
         .order_by(*sort_expr)
         .all()
@@ -89,7 +92,11 @@ def get_active_category_options(company_id: int) -> List[InventoryCategory]:
 
     categorias, _, _, _ = ensure_categories_for_company_id(company_id)
     if categorias:
-        return _sort_categories(categorias)
+        return _sort_categories([
+            categoria
+            for categoria in categorias
+            if categoria.is_active and categoria.parent_id is None
+        ])
 
     return get_global_categories()
 
@@ -171,6 +178,7 @@ def serialize_category(categoria: InventoryCategory) -> Dict[str, object]:
         "full_path": full_path,
         "is_active": bool(categoria.is_active),
         "parent_id": categoria.parent_id,
+        "sort_order": getattr(categoria, "sort_order", 0) or 0,
     }
 
 

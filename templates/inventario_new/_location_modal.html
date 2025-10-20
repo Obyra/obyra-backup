@@ -1,0 +1,35 @@
+<div class="modal fade" id="inventoryLocationModal" tabindex="-1" aria-hidden="true" data-location-modal data-location-endpoint="{{ url_for('inventario_new.nuevo_warehouse') }}">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" data-location-form>
+                <div class="modal-header">
+                    <h5 class="modal-title">Crear ubicación</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger d-none" data-location-error role="alert"></div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de ubicación</label>
+                        <select class="form-select" name="tipo" data-location-type required>
+                            <option value="deposito">Depósito</option>
+                            <option value="obra">Obra</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" class="form-control" name="nombre" data-location-name required>
+                        <div class="form-text">Ejemplo: Depósito Central, Obra Av. Siempre Viva.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Dirección (opcional)</label>
+                        <input type="text" class="form-control" name="direccion" data-location-address>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success" data-location-submit>Crear ubicación</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

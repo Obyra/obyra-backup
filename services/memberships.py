@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import wraps
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple
 
 from flask import current_app, g, redirect, request, session, url_for, flash
 from flask_login import current_user
@@ -14,9 +15,114 @@ from models import OrgMembership, Usuario, db
 def _membership_query(user_id: int) -> Iterable[OrgMembership]:
     return (
         OrgMembership.query
-        .filter_by(user_id=user_id, archived=False)
+        .filter(
+            OrgMembership.user_id == user_id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
         .order_by(OrgMembership.id.asc())
     )
+
+
+def _legacy_membership_candidates(usuario: Usuario) -> list[int]:
+    candidates: list[int] = []
+
+    for attr in ("organizacion_id", "primary_org_id"):
+        value = getattr(usuario, attr, None)
+        if value and value not in candidates:
+            candidates.append(value)
+
+    try:
+        org = getattr(usuario, "organizacion", None)
+        org_id = getattr(org, "id", None)
+        if org_id and org_id not in candidates:
+            candidates.append(org_id)
+    except Exception:
+        pass
+
+    return candidates
+
+
+def _ensure_membership_from_legacy(usuario: Usuario) -> Tuple[Optional[OrgMembership], bool]:
+    """Garantiza que exista una membresía activa usando campos heredados."""
+
+    if not usuario:
+        return None, False
+
+    candidates = _legacy_membership_candidates(usuario)
+    changed = False
+
+    for org_id in candidates:
+        membership = (
+            OrgMembership.query
+            .filter(
+                OrgMembership.org_id == org_id,
+                OrgMembership.user_id == usuario.id,
+            )
+            .order_by(OrgMembership.id.asc())
+            .first()
+        )
+
+        if membership:
+            if membership.archived:
+                membership.archived = False
+                changed = True
+            if membership.status != 'active':
+                membership.status = 'active'
+                changed = True
+            if not membership.accepted_at:
+                membership.accepted_at = datetime.utcnow()
+                changed = True
+
+            if changed:
+                db.session.add(membership)
+                db.session.flush()
+
+            return membership, changed
+
+    if candidates:
+        org_id = candidates[0]
+        raw_role = getattr(usuario, 'role', None) or getattr(usuario, 'rol', None) or 'operario'
+        normalized_role = 'admin' if str(raw_role).lower() in {'administrador', 'admin', 'admin_empresa', 'superadmin'} else 'operario'
+
+        membership = OrgMembership(
+            org_id=org_id,
+            user_id=usuario.id,
+            role=normalized_role,
+            status='active',
+            archived=False,
+            accepted_at=datetime.utcnow(),
+        )
+        db.session.add(membership)
+
+        if not getattr(usuario, 'primary_org_id', None):
+            usuario.primary_org_id = org_id
+            changed = True
+        if not getattr(usuario, 'organizacion_id', None):
+            usuario.organizacion_id = org_id
+            changed = True
+
+        db.session.flush()
+        return membership, True
+
+    return None, False
+
+
+def ensure_active_membership_for_user(usuario: Usuario) -> Optional[OrgMembership]:
+    """Public helper to reactivate or crear membresías según datos legados."""
+
+    membership, changed = _ensure_membership_from_legacy(usuario)
+
+    if changed:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            if current_app:
+                current_app.logger.exception('No se pudo sincronizar membresía legacy para %s', getattr(usuario, 'email', ''))
+    return membership
 
 
 def initialize_membership_session(usuario: Usuario) -> Optional[str]:
@@ -26,10 +132,10 @@ def initialize_membership_session(usuario: Usuario) -> Optional[str]:
 
     memberships = list(_membership_query(usuario.id))
 
-    if not memberships and usuario.organizacion_id:
-        membership = usuario.ensure_membership(usuario.organizacion_id, role=usuario.role, status='active')
-        db.session.commit()
-        memberships = [membership]
+    if not memberships:
+        fallback = ensure_active_membership_for_user(usuario)
+        if fallback:
+            memberships = list(_membership_query(usuario.id))
 
     active_memberships = [m for m in memberships if m.status == 'active']
 
@@ -71,11 +177,18 @@ def load_membership_into_context() -> None:
     membership: Optional[OrgMembership] = None
 
     if membership_id:
-        membership = OrgMembership.query.filter_by(
-            id=membership_id,
-            user_id=current_user.id,
-            archived=False,
-        ).first()
+        membership = (
+            OrgMembership.query
+            .filter(
+                OrgMembership.id == membership_id,
+                OrgMembership.user_id == current_user.id,
+                db.or_(
+                    OrgMembership.archived.is_(False),
+                    OrgMembership.archived.is_(None),
+                ),
+            )
+            .first()
+        )
 
         if not membership or membership.status != 'active':
             session.pop('current_membership_id', None)
@@ -89,6 +202,12 @@ def load_membership_into_context() -> None:
             membership = active[0]
             session['current_membership_id'] = membership.id
             session['current_org_id'] = membership.org_id
+        else:
+            fallback = ensure_active_membership_for_user(current_user)
+            if fallback:
+                membership = fallback
+                session['current_membership_id'] = membership.id
+                session['current_org_id'] = membership.org_id
 
     if membership is None:
         return
@@ -155,11 +274,33 @@ def set_current_membership(membership_id: int) -> bool:
     if not current_user.is_authenticated:
         return False
 
-    membership = OrgMembership.query.filter_by(
-        id=membership_id,
-        user_id=current_user.id,
-        archived=False,
-    ).first()
+    membership = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.id == membership_id,
+            OrgMembership.user_id == current_user.id,
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .first()
+    )
+
+    if not membership or membership.status != 'active':
+        ensure_active_membership_for_user(current_user)
+        membership = (
+            OrgMembership.query
+            .filter(
+                OrgMembership.id == membership_id,
+                OrgMembership.user_id == current_user.id,
+                db.or_(
+                    OrgMembership.archived.is_(False),
+                    OrgMembership.archived.is_(None),
+                ),
+            )
+            .first()
+        )
 
     if not membership or membership.status != 'active':
         return False
@@ -171,7 +312,18 @@ def set_current_membership(membership_id: int) -> bool:
 
 
 def activate_pending_memberships(usuario: Usuario) -> bool:
-    memberships = OrgMembership.query.filter_by(user_id=usuario.id, status='pending', archived=False).all()
+    memberships = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.user_id == usuario.id,
+            OrgMembership.status == 'pending',
+            db.or_(
+                OrgMembership.archived.is_(False),
+                OrgMembership.archived.is_(None),
+            ),
+        )
+        .all()
+    )
     changed = False
     for membership in memberships:
         membership.marcar_activa()

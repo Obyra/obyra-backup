@@ -1,4 +1,4 @@
-from app import db
+﻿from app import db
 import os
 from datetime import date, timedelta, datetime
 from flask import current_app
@@ -204,14 +204,14 @@ def ensure_presupuesto_validity_columns():
                 if backend == 'postgresql':
                     statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT TRUE")
                 else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada INTEGER DEFAULT 1")
+                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT FALSE")
 
             for stmt in statements:
                 conn.exec_driver_sql(stmt)
 
             # Recalcular vigencia para todos los presupuestos (nuevos o existentes)
             rows = conn.exec_driver_sql(
-                "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, 1) FROM presupuestos"
+                "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, FALSE) FROM presupuestos"
             ).fetchall()
 
             if backend == 'postgresql':
@@ -262,6 +262,90 @@ def ensure_presupuesto_validity_columns():
             os.remove(sentinel)
         if current_app:
             current_app.logger.exception('❌ Migration failed: presupuesto validity columns')
+        raise
+
+
+def ensure_inventory_package_columns():
+    """Ensure inventory items support configurable package options."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250912_inventory_package_options.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('inventory_item')}
+            except Exception:
+                columns = set()
+
+            if 'package_options' not in columns:
+                conn.exec_driver_sql("ALTER TABLE inventory_item ADD COLUMN package_options TEXT")
+
+        with open(sentinel, 'w') as sentinel_file:
+            sentinel_file.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: inventory item package options column ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: inventory item package options column')
+        raise
+
+
+def ensure_inventory_location_columns():
+    """Ensure warehouses have metadata to distinguish deposits and works."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250915_inventory_location_type.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            try:
+                columns = {col['name'] for col in inspector.get_columns('warehouse')}
+            except Exception:
+                columns = set()
+
+            statements = []
+            if 'tipo' not in columns:
+                if backend == 'postgresql':
+                    statements.append("ALTER TABLE warehouse ADD COLUMN tipo VARCHAR(20) DEFAULT 'deposito'")
+                else:
+                    statements.append("ALTER TABLE warehouse ADD COLUMN tipo TEXT DEFAULT 'deposito'")
+
+            for statement in statements:
+                conn.exec_driver_sql(statement)
+
+            if 'tipo' in columns or statements:
+                conn.exec_driver_sql(
+                    "UPDATE warehouse SET tipo = COALESCE(NULLIF(tipo, ''), 'deposito')"
+                )
+
+        with open(sentinel, 'w') as sentinel_file:
+            sentinel_file.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Migration completed: warehouse location type column ready')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: warehouse location type column')
         raise
 
 
@@ -1036,3 +1120,120 @@ def ensure_work_certification_tables():
         if current_app:
             current_app.logger.exception('❌ Migration failed: work certification tables')
         raise
+
+
+def ensure_wizard_budget_tables():
+    """Create tables para variantes y coeficientes del presupuestador wizard."""
+
+    os.makedirs('instance/migrations', exist_ok=True)
+    sentinel = 'instance/migrations/20250330_wizard_budget_tables.done'
+
+    if os.path.exists(sentinel):
+        return
+
+    engine = db.engine
+    backend = engine.url.get_backend_name()
+
+    try:
+        with engine.begin() as conn:
+            if backend == 'postgresql':
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_variants (
+                        id SERIAL PRIMARY KEY,
+                        stage_slug VARCHAR(80) NOT NULL,
+                        variant_key VARCHAR(80) NOT NULL,
+                        nombre VARCHAR(120) NOT NULL,
+                        descripcion VARCHAR(255),
+                        is_default BOOLEAN DEFAULT FALSE,
+                        metadata JSONB,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_wizard_stage_variant UNIQUE(stage_slug, variant_key)
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_coefficients (
+                        id SERIAL PRIMARY KEY,
+                        stage_slug VARCHAR(80) NOT NULL,
+                        variant_id INTEGER REFERENCES wizard_stage_variants(id) ON DELETE CASCADE,
+                        unit VARCHAR(20) NOT NULL DEFAULT 'u',
+                        quantity_metric VARCHAR(50) NOT NULL DEFAULT 'cantidad',
+                        materials_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        labor_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        equipment_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        currency VARCHAR(3) NOT NULL DEFAULT 'ARS',
+                        source VARCHAR(80),
+                        notes VARCHAR(255),
+                        is_baseline BOOLEAN DEFAULT FALSE,
+                        metadata JSONB,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_wizard_stage_coeff_variant UNIQUE(stage_slug, variant_id)
+                    )
+                    """
+                )
+            else:
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_variants (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        stage_slug TEXT NOT NULL,
+                        variant_key TEXT NOT NULL,
+                        nombre TEXT NOT NULL,
+                        descripcion TEXT,
+                        is_default INTEGER DEFAULT 0,
+                        metadata TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(stage_slug, variant_key)
+                    )
+                    """
+                )
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS wizard_stage_coefficients (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        stage_slug TEXT NOT NULL,
+                        variant_id INTEGER REFERENCES wizard_stage_variants(id) ON DELETE CASCADE,
+                        unit TEXT NOT NULL DEFAULT 'u',
+                        quantity_metric TEXT NOT NULL DEFAULT 'cantidad',
+                        materials_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        labor_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        equipment_per_unit NUMERIC(18,4) NOT NULL DEFAULT 0,
+                        currency TEXT NOT NULL DEFAULT 'ARS',
+                        source TEXT,
+                        notes TEXT,
+                        is_baseline INTEGER DEFAULT 0,
+                        metadata TEXT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(stage_slug, variant_id)
+                    )
+                    """
+                )
+
+        try:
+            from services.wizard_budgeting import seed_default_coefficients_if_needed
+
+            seed_default_coefficients_if_needed()
+        except Exception:
+            if current_app:
+                current_app.logger.exception('❌ Error seeding wizard baseline coefficients')
+            raise
+
+        with open(sentinel, 'w') as handle:
+            handle.write('ok')
+
+        if current_app:
+            current_app.logger.info('✅ Wizard budget tables ensured and seeded')
+
+    except Exception:
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+        if current_app:
+            current_app.logger.exception('❌ Migration failed: wizard budget tables')
+        raise
+
