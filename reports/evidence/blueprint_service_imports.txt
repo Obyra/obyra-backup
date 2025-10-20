@@ -1,0 +1,7 @@
+auth.py: services.email_service.send_email; services.memberships.activate_pending_memberships; services.memberships.ensure_active_membership_for_user; services.memberships.get_current_membership; services.memberships.get_current_org_id; services.memberships.initialize_membership_session; services.memberships.require_membership; services.memberships.set_current_membership
+equipos.py: services.memberships.get_current_membership
+inventario.py: services.memberships.get_current_org_id
+inventario_new.py: services.memberships.get_current_org_id
+obras.py: services.certifications.approved_entries; services.certifications.build_pending_entries; services.certifications.certification_totals; services.certifications.create_certification; services.certifications.pending_percentage; services.certifications.register_payment; services.certifications.resolve_budget_context; services.geocoding_service.resolve; services.memberships.get_current_membership; services.memberships.get_current_org_id; services.obras_filters.obra_tiene_presupuesto_confirmado; services.obras_filters.obras_visibles_clause; services.wizard_budgeting
+presupuestos.py: services.cac.cac_service.get_cac_context; services.exchange.base; services.exchange.providers.bna; services.geocoding_service.resolve; services.geocoding_service.search; services.memberships.get_current_org_id
+reportes.py: services.alerts.log_activity_vigencia; services.alerts.upsert_alert_vigencia; services.memberships.get_current_org_id; services.obras_filters.obras_visibles_clause

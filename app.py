@@ -713,7 +713,7 @@ def moneda_filter(valor, currency: str = 'ARS'):
 
 @app.template_filter('porcentaje')
 def porcentaje_filter(valor):
-    if valor is None:
+    if valor es None:
         return '0%'
     return f'{valor:.1f}%'
 
@@ -762,97 +762,6 @@ def from_json_filter(json_str):
         return json.loads(json_str)
     except:
         return {}
-
-
-# --------------------------- Membresía y planes ------------------------------
-
-@app.before_request
-def sincronizar_membresia_actual():
-    """Carga la membresía activa en cada request para usuarios autenticados."""
-    try:
-        load_membership_into_context()
-    except Exception:
-        app.logger.exception('No se pudo sincronizar la membresía actual')
-
-@app.before_request
-def verificar_periodo_prueba():
-    """Middleware para verificar si el usuario necesita seleccionar un plan"""
-    rutas_excluidas = [
-        'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
-        'auth.login', 'auth.register', 'auth.logout', 'static', 'index'
-    ]
-    if (
-        current_user.is_authenticated
-        and request.endpoint
-        and request.endpoint not in rutas_excluidas
-        and not request.endpoint.startswith('static')
-    ):
-        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        if current_user.email in emails_admin_completo:
-            return
-        if (getattr(current_user, "plan_activo", "prueba") == 'prueba'
-            and not getattr(current_user, "esta_en_periodo_prueba", lambda: True)()):
-            flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
-            return redirect(url_for('planes.mostrar_planes'))
-
-
-# -------------------------- Fallback dashboard reportes ----------------------
-
-if 'reportes.dashboard' not in app.view_functions:
-
-    @app.route('/reportes/dashboard', endpoint='reportes.dashboard')
-    @login_required
-    def fallback_reportes_dashboard():
-        """Proporciona un dashboard básico cuando el módulo de reportes falta."""
-        flash('El dashboard avanzado no está disponible en este entorno reducido.', 'warning')
-        fallback_url = None
-        for endpoint in ('obras.lista', 'supplier_portal.dashboard', 'index'):
-            try:
-                fallback_url = url_for(endpoint)
-                break
-            except BuildError:
-                continue
-
-        return render_template(
-            'errors/dashboard_unavailable.html',
-            fallback_url=fallback_url,
-        ), 200
-
-
-# --------------------------- Media autenticada -------------------------------
-
-@app.route("/media/<path:relpath>")
-@login_required
-def serve_media(relpath):
-    """Serve authenticated media files from /media/ directory"""
-    from pathlib import Path
-    media_dir = Path(app.instance_path) / "media"
-    return send_from_directory(media_dir, relpath)
-
-
-# ------------------------------ Error handlers -------------------------------
-
-@app.errorhandler(403)
-def forbidden(error):
-    return render_template('errors/403.html'), 403
-
-@app.errorhandler(401)
-def unauthorized(error):
-    if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
-        from flask import jsonify
-        return jsonify({"ok": False, "error": "Authentication required"}), 401
-    return _login_redirect()
-
-@app.errorhandler(404)
-def not_found(error):
-    try:
-        dashboard_url = url_for('reportes.dashboard')
-    except BuildError:
-        try:
-            dashboard_url = url_for('supplier_portal.dashboard')
-        except BuildError:
-            dashboard_url = url_for('index')
-    return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
 
 # --------------------------- Dev helper (SQLite) -----------------------------

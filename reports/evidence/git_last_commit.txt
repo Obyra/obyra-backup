@@ -1,0 +1,22 @@
+app.py: 30f064b 2025-10-20 docs: refresh architecture mapping and backlog
+app_old.py: ca20560 2025-10-01 Add fallback login redirect
+marketplace.py: ca20560 2025-10-01 Add fallback login redirect
+marketplace_new.py: ca20560 2025-10-01 Add fallback login redirect
+marketplace/routes.py: ca20560 2025-10-01 Add fallback login redirect
+marketplace_payments.py: 30f064b 2025-10-20 docs: refresh architecture mapping and backlog
+market.py: ca20560 2025-10-01 Add fallback login redirect
+marketplaces.py: ca20560 2025-10-01 Add fallback login redirect
+reports_service.py: 04eaafd 2025-10-03 Restore add-member modal in equipos and guard reports PDF fallback
+services/wizard_budgeting.py: e1c9f6d 2025-10-08 Fix wizard budgeting metadata property collision
+services/email_service.py: ca20560 2025-10-01 Add fallback login redirect
+services/certifications.py: d7cafce 2025-10-04 Restrict budget confirmation to admin roles
+services/alerts.py: c8586ce 2025-10-03 Route vigencia alerts into dashboard feeds
+services/po_service.py: ca20560 2025-10-01 Add fallback login redirect
+services/cac/cac_service.py: 38ed74b 2025-10-03 Implement BNA FX snapshots and CAC index integration
+services/geocoding_service.py: f865c99 2025-10-03 Fix ItemPresupuesto relationships
+services/pricing/cac.py: 38ed74b 2025-10-03 Implement BNA FX snapshots and CAC index integration
+services/memberships.py: e5b880e 2025-10-14 Restore legacy org membership fallback
+models.py: f693963 2025-10-14 Fix membership lookup for equipos routes
+models_marketplace.py: ca20560 2025-10-01 Add fallback login redirect
+models_inventario.py: 5f28a19 2025-10-06 fix: normalize inventory category paths
+models_equipos.py: ca20560 2025-10-01 Add fallback login redirect
