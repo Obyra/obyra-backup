@@ -1,52 +1,15 @@
 [
   {
-    "module": "marketplace_new.py",
-    "status": "legacy",
-    "reason": "Standalone marketplace blueprint never imported nor registered in app bootstrap.",
-    "impact": "Duplicate UI and checkout flows risk diverging from active marketplace routes.",
+    "module": "inventario_new.py",
+    "status": "active",
+    "reason": "Blueprint registrado como `/inventario-new` y destino de los redirects heredados desde `/inventario/*`.",
+    "impact": "Concentra los flujos canónicos de inventario; debe estabilizarse antes de retirar vistas antiguas.",
     "priority": "high",
     "effort": "M",
-    "risk": "Low runtime risk (dead code) but medium coordination to confirm no external references.",
+    "risk": "Medium – requiere coordinar migración de URLs y plantillas compartidas.",
     "next_steps": [
-      "Confirm with product/QA that no environment mounts the legacy blueprint.",
-      "Archive or delete module after creating documentation snapshot.",
-      "Consolidate tests to cover marketplace/routes.py only."
-    ],
-    "evidence": [
-      "reports/evidence/marketplace_new_usage.txt",
-      "reports/evidence/git_last_commit.txt"
-    ]
-  },
-  {
-    "module": "marketplace_payments.py",
-    "status": "legacy",
-    "reason": "Webhook blueprint not registered; Mercado Pago integration moved to marketplace/routes.py.",
-    "impact": "Confusing entry point for payment notifications; potential misconfiguration of webhook URL.",
-    "priority": "medium",
-    "effort": "S",
-    "risk": "Low (unused) but ensure no cron/script imports it directly.",
-    "next_steps": [
-      "Search deployments for direct imports of marketplace_payments.",
-      "If unused, delete and update documentation to reference marketplace/routes.py endpoints.",
-      "If needed, rewire blueprint under payments namespace."
-    ],
-    "evidence": [
-      "reports/evidence/marketplace_payments_usage.txt",
-      "reports/evidence/app_blueprint_registration.txt"
-    ]
-  },
-  {
-    "module": "marketplace.py",
-    "status": "legacy",
-    "reason": "Older marketplace blueprint duplicates supplier routes and is not registered in app.py.",
-    "impact": "Developers may patch wrong file; increases bug surface when adjusting supplier flows.",
-    "priority": "medium",
-    "effort": "M",
-    "risk": "Medium – confirm no imports from background jobs.",
-    "next_steps": [
-      "Verify git history for last active usage and check staging configs.",
-      "Remove or merge logic into market.py/marketplace.routes.",
-      "Add regression tests around active blueprint before deletion."
+      "Completar QA funcional sobre rutas `/inventario-new`.",
+      "Publicar guía de migración para equipos que consumen enlaces `/inventario/*`."
     ],
     "evidence": [
       "reports/evidence/app_blueprint_registration.txt",
@@ -54,34 +17,155 @@
     ]
   },
   {
-    "module": "app_old.py",
+    "module": "inventario.py",
     "status": "legacy",
-    "reason": "Historic entry point no longer referenced by tooling; retains deprecated `db.create_all` flow.",
-    "impact": "Confuses newcomers and risks accidental use with outdated configuration.",
-    "priority": "low",
-    "effort": "S",
-    "risk": "Low – ensure no cron/supervisor job points to it.",
+    "reason": "Blueprint histórico aún registrado en `/inventario` para compatibilidad, pero sus vistas redirigen al módulo nuevo.",
+    "impact": "Duplica lógica y plantillas; bloquea la limpieza de modelos y seeds antiguos.",
+    "priority": "high",
+    "effort": "M",
+    "risk": "Medium – debe retirarse gradualmente para no romper accesos directos ni seeds.",
     "next_steps": [
-      "Confirm deployment scripts reference app.py only.",
-      "Remove app_old.py and related docs after approval.",
-      "Add guardrail in README linking to current bootstrap."
+      "Reemplazar enlaces de la UI por rutas `/inventario-new`.",
+      "Despublicar plantillas obsoletas y cubrir redirecciones con pruebas.",
+      "Eliminar registro del blueprint una vez completada la migración."
     ],
     "evidence": [
-      "reports/evidence/app_old_usage.txt"
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/blueprint_service_imports.txt"
+    ]
+  },
+  {
+    "module": "equipos_new.py",
+    "status": "active",
+    "reason": "Blueprint registrado como `/equipos-new`; reemplaza funcionalidades core del módulo legacy.",
+    "impact": "Es la interfaz recomendada para gestionar equipos y mantenimiento.",
+    "priority": "medium",
+    "effort": "M",
+    "risk": "Medium – consolidar subida de adjuntos y permisos antes de apagar legacy.",
+    "next_steps": [
+      "Verificar cobertura de pruebas sobre nuevos endpoints de mantenimiento.",
+      "Actualizar documentación interna para apuntar a `/equipos-new`."
+    ],
+    "evidence": [
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/git_last_commit.txt"
+    ]
+  },
+  {
+    "module": "equipos.py",
+    "status": "legacy",
+    "reason": "Registrado en `/equipos` pero comparte modelos con la versión nueva y conserva vistas antiguas.",
+    "impact": "Mantenerlo activo duplica formularios y genera dudas sobre permisos actuales.",
+    "priority": "medium",
+    "effort": "M",
+    "risk": "Medium – retirar requiere validar roles y seeds de usuarios.",
+    "next_steps": [
+      "Derivar accesos del menú principal a `/equipos-new`.",
+      "Auditar plantillas legacy y eliminar dependencias de roles desfasados.",
+      "Programar apagado progresivo tras validación con soporte."
+    ],
+    "evidence": [
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/blueprint_service_imports.txt"
+    ]
+  },
+  {
+    "module": "marketplace/routes.py",
+    "status": "active",
+    "reason": "Único blueprint de marketplace registrado en la app principal.",
+    "impact": "Altísima exposición pública; requiere hardening antes de tocar dependencias.",
+    "priority": "high",
+    "effort": "M",
+    "risk": "High – cambios afectan onboarding de proveedores y shoppers.",
+    "next_steps": [
+      "Documentar contratos de API externos y health-checks.",
+      "Asegurar monitoreo y alertas antes de nuevas refactorizaciones."
+    ],
+    "evidence": [
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/git_last_commit.txt"
+    ]
+  },
+  {
+    "module": "marketplace_new.py",
+    "status": "legacy",
+    "reason": "Blueprint alternativo sin registro en el bootstrap; solo contiene rutas internas.",
+    "impact": "Riesgo de confusión y mantenimiento duplicado de plantillas marketplace_new/*.",
+    "priority": "medium",
+    "effort": "S",
+    "risk": "Low – código muerto salvo referencias manuales en documentación.",
+    "next_steps": [
+      "Mover plantillas a carpeta `legacy/` o eliminarlas tras respaldo.",
+      "Comunicar a QA que el flujo oficial es `marketplace/routes.py`."
+    ],
+    "evidence": [
+      "reports/evidence/marketplace_new_usage.txt",
+      "reports/evidence/app_blueprint_registration.txt"
+    ]
+  },
+  {
+    "module": "marketplace.py",
+    "status": "legacy",
+    "reason": "Implementación previa del marketplace, no registrada y con historial antiguo.",
+    "impact": "Puede recibir parches por error cuando se buscan rutas de marketplace.",
+    "priority": "medium",
+    "effort": "M",
+    "risk": "Medium – validar que scripts externos no la importen antes de borrar.",
+    "next_steps": [
+      "Buscar imports en repos satélite y jobs.",
+      "Eliminar módulo tras consolidar documentación en `marketplace/routes.py`."
+    ],
+    "evidence": [
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/git_last_commit.txt"
+    ]
+  },
+  {
+    "module": "marketplace_payments.py",
+    "status": "legacy",
+    "reason": "Blueprint no registrado; las rutas apuntan a templates `marketplace_new`.",
+    "impact": "Puede exponer URLs antiguas si algún worker lo importa manualmente.",
+    "priority": "medium",
+    "effort": "S",
+    "risk": "Low – sin dependencias directas desde la app principal.",
+    "next_steps": [
+      "Confirmar con DevOps si existe webhook configurado para estas rutas.",
+      "Si no existe, remover módulo y actualizar documentación de pagos."
+    ],
+    "evidence": [
+      "reports/evidence/marketplace_payments_usage.txt",
+      "reports/evidence/app_blueprint_registration.txt"
+    ]
+  },
+  {
+    "module": "asistente_ia_backup.py",
+    "status": "legacy",
+    "reason": "Blueprint duplicado (`asistente`) sin registro en el arranque actual.",
+    "impact": "Provoca dudas al mantener rutas del asistente y plantillas duplicadas.",
+    "priority": "low",
+    "effort": "S",
+    "risk": "Low – no hay imports activos detectados.",
+    "next_steps": [
+      "Eliminar blueprint duplicado tras mover templates a un respaldo.",
+      "Actualizar documentación del asistente para apuntar solo a `asistente_ia.py`."
+    ],
+    "evidence": [
+      "reports/evidence/app_blueprint_registration.txt",
+      "reports/evidence/blueprints_raw.txt"
     ]
   },
   {
     "module": "services.alerts / certifications / po_service",
     "status": "needs-review",
-    "reason": "Service modules lack inbound imports from blueprints per static analysis.",
-    "impact": "May represent dead background features or scheduled jobs; dead code complicates dependency audits.",
+    "reason": "Servicios sin importaciones directas desde blueprints en el corte analizado.",
+    "impact": "Podrían ser jobs en background; sin confirmación generan deuda técnica.",
     "priority": "low",
     "effort": "L",
-    "risk": "Unknown – validate with ops before removal.",
+    "risk": "Unknown – validar con operaciones antes de eliminarlos.",
     "next_steps": [
-      "Confirm whether Celery/background workers import these modules.",
-      "If unused, remove dependencies from requirements and delete modules.",
-      "Otherwise, document owning blueprint or job with tests."
+      "Consultar cron jobs y workers para confirmar uso.",
+      "Retirar dependencias y código si se confirma obsolescencia.",
+      "Documentar responsables si continúan activos."
     ],
     "evidence": [
       "reports/evidence/blueprint_service_imports.txt",
