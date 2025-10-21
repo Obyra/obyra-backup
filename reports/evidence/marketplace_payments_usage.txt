@@ -1,0 +1,9 @@
+reports/evidence/blueprints_raw.txt:18:marketplace_payments.py: payments_bp (name=payments, url_prefix=None)
+docs/architecture_report.md:43:| `payments_bp` | `marketplace_payments.py` | *(sin prefijo)* | Registro manual (no se hace en `app.py`) | Expuesto en scripts de marketplace; manejar via `app.register_blueprint` según entorno. |
+marketplace_payments.py:12:payments_bp = Blueprint('payments', __name__)
+marketplace_payments.py:14:@payments_bp.route('/api/payments/mp/create-preference', methods=['POST'])
+marketplace_payments.py:85:@payments_bp.route('/api/payments/mp/webhook', methods=['POST'])
+marketplace_payments.py:218:@payments_bp.route('/api/payments/mp/health', methods=['GET'])
+marketplace_payments.py:229:@payments_bp.route('/payment-success')
+marketplace_payments.py:245:@payments_bp.route('/payment-failure')
+marketplace_payments.py:250:@payments_bp.route('/payment-pending')

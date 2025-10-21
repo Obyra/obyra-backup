@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Bienvenido a OBYRA IA</title>
+    <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f7fb; color: #1f2933; margin: 0; padding: 0; }
+        .wrapper { max-width: 620px; margin: 0 auto; padding: 32px 16px; }
+        .card { background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); }
+        h1 { font-size: 22px; margin-top: 0; color: #1d4ed8; }
+        p { line-height: 1.6; margin: 12px 0; }
+        .cta { display: inline-block; margin: 24px 0; padding: 12px 24px; background-color: #2563eb; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; }
+        .credentials { background: #eef2ff; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .credentials strong { display: block; font-size: 18px; color: #1d4ed8; }
+        .footer { margin-top: 24px; font-size: 13px; color: #64748b; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="card">
+            <h1>¡Hola {{ usuario.nombre }}!</h1>
+            <p>
+                Te dieron de alta en la organización <strong>{{ membership.organizacion.nombre if membership else 'tu organización' }}</strong> dentro de OBYRA IA.
+            </p>
+
+            {% if temp_password %}
+            <p>Para empezar a trabajar solo necesitás iniciar sesión con las credenciales temporales que generamos para vos.</p>
+            <div class="credentials">
+                <p style="margin-top: 0;">Estas son tus credenciales iniciales:</p>
+                <strong>Correo:</strong>
+                <div>{{ usuario.email }}</div>
+                <strong>Contraseña temporal:</strong>
+                <div style="font-size: 18px; font-weight: 600; letter-spacing: 0.08em;">{{ temp_password }}</div>
+            </div>
+            {% else %}
+            <p>
+                Podés ingresar con tu correo <strong>{{ usuario.email }}</strong>. Te compartimos un enlace para que definas una nueva contraseña si lo necesitás.
+            </p>
+            {% endif %}
+
+            {% if reset_url %}
+            <p>
+                Por seguridad, te pedimos que cambies la contraseña en tu primer ingreso. Podés hacerlo desde el siguiente enlace:
+            </p>
+            <p style="text-align: center;">
+                <a class="cta" href="{{ reset_url }}" target="_blank" rel="noopener">Crear mi contraseña</a>
+            </p>
+            <p style="font-size: 13px; color: #6b7280;">
+                El enlace para definir tu contraseña expira en 1 hora. Si caduca, podés usar la opción “¿Olvidaste tu contraseña?” desde la pantalla de acceso.
+            </p>
+            {% else %}
+            <p>
+                No pudimos generar automáticamente el enlace para cambiar tu contraseña. Iniciá sesión con la contraseña temporal y luego usá la opción “¿Olvidaste tu contraseña?” para establecer una nueva.
+            </p>
+            {% endif %}
+
+            <p>
+                Una vez dentro vas a encontrar tu panel con las tareas, certificaciones y materiales asignados según tu rol.
+            </p>
+
+            <p>
+                ¡Te damos la bienvenida a bordo!<br>
+                <strong>Equipo OBYRA IA</strong>
+            </p>
+        </div>
+        <div class="footer">
+            Si tenés alguna duda, escribinos a soporte@obyra.com.
+        </div>
+    </div>
+</body>
+</html>

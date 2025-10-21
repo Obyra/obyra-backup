@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}OBYRA IA - Gestión de Construcción{% endblock %}</title>
     
+    {% if csrf_token is defined %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% endif %}
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
@@ -51,7 +55,7 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('presupuestos') %}
+                    {% if current_user.puede_acceder_modulo('presupuestos') and has_endpoint('presupuestos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarPresupuestos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-calculator me-1"></i>Presupuestos
@@ -62,7 +66,7 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('equipos') %}
+                    {% if current_user.puede_acceder_modulo('equipos') and has_endpoint('equipos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarEquipos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-users me-1"></i>Equipos
@@ -80,27 +84,29 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('inventario') %}
+                    {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-boxes me-1"></i>Inventario
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">Ver Inventario</a></li>
-                            {% if current_user.rol in ['administrador', 'tecnico'] %}
+                            {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.crear') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.crear') }}">Nuevo Item</a></li>
+                            {% endif %}
+                            {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.uso_obra') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
                             {% endif %}
-                            {% if current_user.rol == 'administrador' %}
+                            {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
                             {% endif %}
                         </ul>
                     </li>
                     {% endif %}
-                    
+
                     <!-- Marketplaces -->
-                    {% if current_user.puede_acceder_modulo('marketplaces') %}
+                    {% if current_user.puede_acceder_modulo('marketplaces') and has_endpoint('marketplaces.index') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarMarketplaces" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-store me-1"></i>Marketplaces
@@ -125,7 +131,7 @@
                     </li>
                     {% endif %}
                     
-                    {% if current_user.puede_acceder_modulo('reportes') %}
+                    {% if current_user.puede_acceder_modulo('reportes') and has_endpoint('reportes.reporte_obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarReportes" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-chart-bar me-1"></i>Reportes
@@ -141,7 +147,7 @@
                     {% endif %}
                     
                     <!-- Documentos - Solo para Admin/PM -->
-                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
+                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] and has_endpoint('documentos.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-folder me-1"></i>Documentos
@@ -167,7 +173,7 @@
                     {% endif %}
                     
                     <!-- Seguridad -->
-                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                    {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('seguridad.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-shield-alt me-1"></i>Seguridad
@@ -221,11 +227,26 @@
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             {% if current_user.email in ['brenda@gmail.com', 'admin@obyra.com'] %}
-                            <li><a class="dropdown-item" href="{{ url_for('agent_local.auditoria_consultas') }}">
-                                <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
+                                {% set auditoria_endpoint = None %}
+                                {% if has_endpoint('agent_local.auditoria_consultas') %}
+                                    {% set auditoria_endpoint = 'agent_local.auditoria_consultas' %}
+                                {% elif has_endpoint('seguridad.auditorias') %}
+                                    {% set auditoria_endpoint = 'seguridad.auditorias' %}
+                                {% endif %}
+                                {% if auditoria_endpoint %}
+                                <li><a class="dropdown-item" href="{{ url_for(auditoria_endpoint) }}">
+                                    <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                {% endif %}
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('account.perfil') }}">
+                                <i class="fas fa-id-badge me-2"></i>Perfil
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('account.facturacion') }}">
+                                <i class="fas fa-file-invoice-dollar me-2"></i>Facturación
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
-                            {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
                             </a></li>

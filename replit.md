@@ -3,6 +3,15 @@
 ## Overview
 OBYRA IA is a comprehensive web platform for construction companies, architects, and firms in Argentina and Latin America. It automates project management, team coordination, budgeting, and construction documentation, aiming to manage the complete construction workflow. The platform provides a modular architecture built with Flask and SQLAlchemy. Its business vision is to streamline construction operations, enhance efficiency, and provide robust tools for project oversight and financial management in the construction sector.
 
+## Database migrations
+After pulling the latest changes, run:
+
+```
+flask db upgrade
+```
+
+This command applies the lightweight migrations (incluyendo las columnas de estado y vigencia de presupuestos) contra tu base local antes de lanzar la app.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

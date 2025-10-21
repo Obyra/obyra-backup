@@ -1,0 +1,48 @@
+marketplace_new.py:marketplace_new_bp = Blueprint('marketplace_new', __name__)
+marketplace_new.py:@marketplace_new_bp.route('/')
+marketplace_new.py:    return render_template('marketplace_new/home.html', 
+marketplace_new.py:@marketplace_new_bp.route('/search')
+marketplace_new.py:    return render_template('marketplace_new/search.html',
+marketplace_new.py:@marketplace_new_bp.route('/product/<int:product_id>')
+marketplace_new.py:    return render_template('marketplace_new/product_detail.html',
+marketplace_new.py:@marketplace_new_bp.route('/cart')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:    return render_template('marketplace_new/cart.html',
+marketplace_new.py:@marketplace_new_bp.route('/api/cart/add', methods=['POST'])
+marketplace_new.py:@marketplace_new_bp.route('/api/cart/remove/<int:item_id>', methods=['DELETE'])
+marketplace_new.py:@marketplace_new_bp.route('/checkout')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:        return redirect(url_for('marketplace_new.cart'))
+marketplace_new.py:            return redirect(url_for('marketplace_new.cart'))
+marketplace_new.py:    return render_template('marketplace_new/checkout.html', cart=user_cart)
+marketplace_new.py:@marketplace_new_bp.route('/api/orders/create', methods=['POST'])
+marketplace_new.py:        'redirect_url': url_for('marketplace_new.order_detail', order_id=order.id)
+marketplace_new.py:@marketplace_new_bp.route('/orders/<int:order_id>')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:    return render_template('marketplace_new/order_detail.html', order=order)
+marketplace_new.py:@marketplace_new_bp.route('/orders')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:    return render_template('marketplace_new/orders.html', orders=user_orders)
+marketplace_new.py:@marketplace_new_bp.route('/api/products/<int:product_id>/questions', methods=['POST'])
+marketplace_new.py:@marketplace_new_bp.route('/seller')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:    return render_template('marketplace_new/seller/dashboard.html',
+marketplace_new.py:@marketplace_new_bp.route('/seller/products')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:    return render_template('marketplace_new/seller/products.html', products=products)
+marketplace_new.py:@marketplace_new_bp.route('/seller/orders')
+marketplace_new.py:        return redirect(url_for('marketplace_new.home'))
+marketplace_new.py:    return render_template('marketplace_new/seller/orders.html', order_items=order_items)
+marketplace_new.py:@marketplace_new_bp.route('/admin')
+marketplace_new.py:    return render_template('marketplace_new/admin/dashboard.html',
+marketplace_new.py:@marketplace_new_bp.route('/admin/categories')
+marketplace_new.py:    return render_template('marketplace_new/admin/categories.html', categories=categories)
+marketplace_new.py:@marketplace_new_bp.route('/admin/commissions')
+marketplace_new.py:    return render_template('marketplace_new/admin/commissions.html',
+marketplace_payments.py:                "success": f"{current_app.config['BASE_URL']}/marketplace_new/payment-success",
+marketplace_payments.py:                "failure": f"{current_app.config['BASE_URL']}/marketplace_new/payment-failure",
+marketplace_payments.py:                "pending": f"{current_app.config['BASE_URL']}/marketplace_new/payment-pending"
+marketplace_payments.py:    return render_template('marketplace_new/payment_success.html', 
+marketplace_payments.py:    return render_template('marketplace_new/payment_failure.html')
+marketplace_payments.py:    return render_template('marketplace_new/payment_pending.html')

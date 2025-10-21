@@ -1,0 +1,105 @@
+<form method="post" novalidate class="needs-validation">
+    {% if billing_profile and billing_profile.card_last4 %}
+    <div class="alert alert-secondary d-flex align-items-center" role="status">
+        <i class="fas fa-credit-card me-2"></i>
+        <div>
+            Tarjeta guardada: {{ billing_profile.card_brand or 'Tarjeta' }} •••• {{ billing_profile.card_last4 }}
+            {% if billing_profile.card_exp_month and billing_profile.card_exp_year %}
+                (vencimiento {{ billing_profile.card_exp_month }}/{{ billing_profile.card_exp_year }})
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label for="razon_social" class="form-label">Razón social</label>
+            <input type="text" class="form-control" id="razon_social" name="razon_social"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('razon_social', billing_profile.razon_social if billing_profile else usuario.nombre_completo) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="tax_id" class="form-label">CUIT para facturación</label>
+            <input type="text" class="form-control" id="tax_id" name="tax_id" inputmode="numeric"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('tax_id', billing_profile.tax_id if billing_profile else (perfil.cuit if perfil else '')) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="billing_email" class="form-label">Email de facturación</label>
+            <input type="email" class="form-control" id="billing_email" name="billing_email"
+                   value="{{ request.form.get('billing_email', billing_profile.billing_email if billing_profile and billing_profile.billing_email else usuario.email) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="billing_phone" class="form-label">Teléfono de contacto</label>
+            <input type="tel" class="form-control" id="billing_phone" name="billing_phone"
+                   value="{{ request.form.get('billing_phone', billing_profile.billing_phone if billing_profile else usuario.telefono or '') }}">
+        </div>
+        <div class="col-md-6">
+            <label for="address_line1" class="form-label">Dirección de facturación</label>
+            <input type="text" class="form-control" id="address_line1" name="address_line1"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('address_line1', billing_profile.address_line1 if billing_profile else (perfil.direccion if perfil else '')) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="address_line2" class="form-label">Departamento / Piso (opcional)</label>
+            <input type="text" class="form-control" id="address_line2" name="address_line2"
+                   value="{{ request.form.get('address_line2', billing_profile.address_line2 if billing_profile else '') }}">
+        </div>
+        <div class="col-md-4">
+            <label for="city" class="form-label">Ciudad</label>
+            <input type="text" class="form-control" id="city" name="city"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('city', billing_profile.city if billing_profile else '') }}">
+        </div>
+        <div class="col-md-4">
+            <label for="province" class="form-label">Provincia</label>
+            <input type="text" class="form-control" id="province" name="province"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('province', billing_profile.province if billing_profile else '') }}">
+        </div>
+        <div class="col-md-4">
+            <label for="postal_code" class="form-label">Código postal</label>
+            <input type="text" class="form-control" id="postal_code" name="postal_code"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('postal_code', billing_profile.postal_code if billing_profile else '') }}">
+        </div>
+        <div class="col-md-6">
+            <label for="country" class="form-label">País</label>
+            <input type="text" class="form-control" id="country" name="country"
+                   value="{{ request.form.get('country', billing_profile.country if billing_profile and billing_profile.country else 'Argentina') }}">
+        </div>
+        <div class="col-md-6">
+            <label for="cardholder_name" class="form-label">Titular de la tarjeta</label>
+            <input type="text" class="form-control" id="cardholder_name" name="cardholder_name"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('cardholder_name', billing_profile.cardholder_name if billing_profile else usuario.nombre_completo) }}">
+        </div>
+        <div class="col-md-6">
+            <label for="card_number" class="form-label">Número de tarjeta</label>
+            <input type="text" class="form-control" id="card_number" name="card_number" inputmode="numeric"
+                   {% if require_card or not (billing_profile and billing_profile.card_last4) %}required{% endif %}
+                   placeholder="4242 4242 4242 4242"
+                   value="{{ request.form.get('card_number', '') }}">
+            <div class="form-text">Guardamos únicamente los últimos 4 dígitos para identificar tu tarjeta.</div>
+        </div>
+        <div class="col-md-3">
+            <label for="exp_month" class="form-label">Mes vencimiento</label>
+            <input type="text" class="form-control" id="exp_month" name="exp_month" maxlength="2" inputmode="numeric"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('exp_month', billing_profile.card_exp_month if billing_profile else '') }}">
+        </div>
+        <div class="col-md-3">
+            <label for="exp_year" class="form-label">Año vencimiento</label>
+            <input type="text" class="form-control" id="exp_year" name="exp_year" maxlength="4" inputmode="numeric"
+                   {% if require_card %}required{% endif %}
+                   value="{{ request.form.get('exp_year', billing_profile.card_exp_year if billing_profile else '') }}">
+        </div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        {% if cancel_url %}
+        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancelar</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">
+            {{ submit_label or 'Guardar datos de facturación' }}
+        </button>
+    </div>
+</form>

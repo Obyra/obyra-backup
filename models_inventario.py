@@ -5,13 +5,15 @@ from sqlalchemy import Index, UniqueConstraint
 
 class InventoryCategory(db.Model):
     __tablename__ = 'inventory_category'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'))
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relaciones
     company = db.relationship('Organizacion', backref='inventory_categories')
     parent = db.relationship('InventoryCategory', remote_side=[id], backref='children')
@@ -19,13 +21,31 @@ class InventoryCategory(db.Model):
     
     def __repr__(self):
         return f'<InventoryCategory {self.nombre}>'
-    
+
     @property
     def full_path(self):
-        """Obtiene la ruta completa de la categoría"""
-        if self.parent:
-            return f"{self.parent.full_path} > {self.nombre}"
-        return self.nombre
+        """Obtiene la ruta completa de la categoría con separadores jerárquicos."""
+
+        parts = []
+        current = self
+        visited = set()
+
+        while current is not None:
+            current_id = getattr(current, "id", None)
+            if current_id is not None:
+                if current_id in visited:
+                    break
+                visited.add(current_id)
+
+            parts.append(current.nombre)
+            current = current.parent
+
+        return " \u2192 ".join(reversed(parts))
+
+    @property
+    def org_id(self):
+        """Alias compatible con nomenclatura org_id"""
+        return self.company_id
 
 
 class InventoryItem(db.Model):

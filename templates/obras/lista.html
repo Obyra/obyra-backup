@@ -49,11 +49,23 @@
                         <option value="cancelada" {{ 'selected' if estado == 'cancelada' }}>Cancelada</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label for="buscar" class="form-label">Buscar</label>
-                    <input type="text" class="form-control" id="buscar" name="buscar" 
+                    <input type="text" class="form-control" id="buscar" name="buscar"
                            value="{{ buscar }}" placeholder="Nombre, cliente o dirección...">
                 </div>
+{% if puede_ver_borradores %}
+                <div class="col-md-2 d-flex align-items-end">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="mostrar_borradores" name="mostrar_borradores" value="1"
+                               {% if mostrar_borradores %}checked{% endif %}>
+                        <label class="form-check-label" for="mostrar_borradores">
+                            Mostrar borradores
+                        </label>
+                    </div>
+                </div>
+{% endif %}
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-outline-primary me-2">
                         <i class="fas fa-search me-1"></i>Filtrar
@@ -89,6 +101,11 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-list me-2"></i>📋 Lista de Obras
+                        {% if mostrar_borradores %}
+                            <span class="badge bg-warning text-dark ms-2" title="Incluye obras en borrador o sin presupuesto confirmado">
+                                Mostrando borradores
+                            </span>
+                        {% endif %}
                     </h5>
                 </div>
                 <div class="card-body">
@@ -146,9 +163,15 @@
                                                 <i class="fas fa-eye me-1"></i>Detalles
                                             </a>
                                             {% if obra.latitud and obra.longitud %}
-                                            <button class="btn btn-sm btn-outline-info" onclick="centrarEnObra({{ obra.latitud }}, {{ obra.longitud }})">
+                                            <button class="btn btn-sm btn-outline-info d-flex align-items-center" onclick="centrarEnObra({{ obra.id }})" title="Ver en mapa">
                                                 <i class="fas fa-map-marker-alt"></i>
+                                                <span class="d-none d-md-inline ms-1">Ver en mapa</span>
                                             </button>
+                                            {% elif obra.direccion %}
+                                            <a class="btn btn-sm btn-outline-info d-flex align-items-center" href="https://www.openstreetmap.org/search?query={{ obra.direccion|urlencode }}" target="_blank" rel="noopener" title="Abrir en mapa externo">
+                                                <i class="fas fa-map-marker-alt"></i>
+                                                <span class="d-none d-md-inline ms-1">Abrir mapa</span>
+                                            </a>
                                             {% endif %}
                                             {% if current_user.rol == 'administrador' %}
                                             <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarObra({{ obra.id }}, '{{ obra.nombre }}')">
@@ -255,6 +278,7 @@
 <script>
 let mapa;
 let marcadores = [];
+const marcadoresPorId = {};
 
 // Fix para iconos de marcadores
 delete L.Icon.Default.prototype._getIconUrl;
@@ -315,7 +339,7 @@ function inicializarMapa() {
         {% if obra.latitud and obra.longitud %}
         console.log('📍 Agregando marcador para: {{ obra.nombre }}');
         
-        const marcador{{ loop.index }} = L.marker([{{ obra.latitud }}, {{ obra.longitud }}])
+        const marcador{{ loop.index }} = L.marker([{{ obra.latitud|float }}, {{ obra.longitud|float }}])
             .addTo(mapa)
             .bindPopup(`
                 <div class="popup-obra" style="padding: 16px; min-width: 280px; border-radius: 12px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
@@ -374,8 +398,9 @@ function inicializarMapa() {
                     </div>
                 </div>
             `);
-        
+
         marcadores.push(marcador{{ loop.index }});
+        marcadoresPorId[{{ obra.id }}] = marcador{{ loop.index }};
         console.log('✅ Marcador agregado para: {{ obra.nombre }}');
         {% endif %}
         {% endfor %}
@@ -393,11 +418,19 @@ function inicializarMapa() {
     }
 }
 
-function centrarEnObra(lat, lng) {
-    if (mapa) {
-        mapa.setView([lat, lng], 16);
-        console.log('🎯 Centrado en obra:', lat, lng);
+function centrarEnObra(obraId) {
+    if (!mapa) {
+        return;
     }
+    const marcador = marcadoresPorId[obraId];
+    if (!marcador) {
+        console.warn('No se encontró marcador para la obra', obraId);
+        return;
+    }
+    const posicion = marcador.getLatLng();
+    mapa.setView(posicion, 16);
+    marcador.openPopup();
+    console.log('🎯 Centrado en obra:', obraId, posicion);
 }
 
 // Función para ver detalles de la obra
