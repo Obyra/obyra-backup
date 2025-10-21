@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
-from app import db
+from app import db, _login_redirect
 from models import (
     Equipment, EquipmentAssignment, EquipmentUsage, MaintenanceTask, 
     MaintenanceAttachment, Obra, Usuario
@@ -24,7 +24,7 @@ def requires_role(*roles):
     def decorator(f):
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
-                return redirect(url_for('auth.login'))
+                return _login_redirect()
             if current_user.rol not in roles and not current_user.es_admin():
                 flash('No tienes permisos para esta acción.', 'danger')
                 return redirect(url_for('equipos_new.lista'))

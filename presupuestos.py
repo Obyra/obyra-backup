@@ -1,2180 +1,654 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, make_response, jsonify, current_app, g
+from flask import (Blueprint, render_template, request, flash, redirect,
+                   url_for, jsonify, current_app, abort)
 from flask_login import login_required, current_user
-import datetime as dt
-from datetime import date, timedelta
-from io import BytesIO
+from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-import importlib.util
 import json
-import os
-from typing import Any, Optional
-
-REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
-if REPORTLAB_AVAILABLE:
-    from reportlab.lib.pagesizes import letter, A4
-    from reportlab.lib import colors
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-else:  # pragma: no cover - executed only when optional deps missing
-    letter = A4 = None  # type: ignore[assignment]
-    colors = None  # type: ignore[assignment]
-    inch = 72  # type: ignore[assignment]
-
-    def _missing_reportlab(*args: Any, **kwargs: Any):
-        raise RuntimeError(
-            "La librería reportlab no está instalada. Ejecuta 'pip install reportlab' para habilitar la generación de PDFs."
-        )
-
-    SimpleDocTemplate = Table = TableStyle = Paragraph = Spacer = _missing_reportlab  # type: ignore[assignment]
-    getSampleStyleSheet = ParagraphStyle = _missing_reportlab  # type: ignore[assignment]
-    TA_CENTER = TA_RIGHT = None  # type: ignore[assignment]
-
-
-XLSXWRITER_AVAILABLE = importlib.util.find_spec("xlsxwriter") is not None
-if XLSXWRITER_AVAILABLE:
-    import xlsxwriter
-else:  # pragma: no cover - executed only when optional deps missing
-    xlsxwriter = None  # type: ignore[assignment]
-
+import requests
+import logging
 from app import db
-from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra, TareaEtapa, Event
-from calculadora_ia import (
-    procesar_presupuesto_ia,
-    COEFICIENTES_CONSTRUCCION,
-    calcular_etapas_seleccionadas,
-    slugify_etapa,
+from sqlalchemy import text, func
+from sqlalchemy.exc import ProgrammingError
+from models import (
+    Obra,
+    EtapaObra,
+    TareaEtapa,
+    AsignacionObra,
+    Usuario,
+    CertificacionAvance,
+    TareaResponsables,
+    ObraMiembro,
+    TareaMiembro,
+    TareaAvance,
+    TareaAdjunto,
+    TareaAvanceFoto,
+    WorkCertification,
+    WorkPayment,
 )
-from obras import seed_tareas_para_etapa
-from services.exchange import base as exchange_service
-from services.exchange.providers import bna as bna_provider
-from services.cac.cac_service import get_cac_context
-from services.geocoding_service import resolve as resolve_geocode, search as search_geocode
-from services.memberships import get_current_org_id
+from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
+from tareas_predefinidas import (
+    TAREAS_POR_ETAPA,
+    obtener_tareas_por_etapa,
+    slugify_nombre_etapa,
+)
+from geocoding import normalizar_direccion_argentina
+from services.geocoding_service import resolve as resolve_geocode
+from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
+from services.memberships import get_current_org_id, get_current_membership
+from services.obras_filters import (obras_visibles_clause,
+                                    obra_tiene_presupuesto_confirmado)
+from services.certifications import (
+    approved_entries,
+    build_pending_entries,
+    certification_totals,
+    create_certification,
+    pending_percentage,
+    register_payment,
+    resolve_budget_context,
+)
+from services import wizard_budgeting
+
+obras_bp = Blueprint('obras', __name__)
+
+_COORD_PRECISION = Decimal('0.00000001')
 
 
-def _clean_text(value: Any) -> Optional[str]:
-    """Normaliza cadenas eliminando espacios y devolviendo None para vacíos."""
-
+def _to_coord_decimal(value):
+    """Normaliza coordenadas geográficas a Decimal con 8 decimales."""
     if value is None:
         return None
-    if isinstance(value, str):
-        value = value.strip()
-        return value or None
-    return str(value)
-
-
-def _parse_date(value: Any) -> Optional[date]:
-    """Intenta parsear una fecha en formatos comunes (ISO o DD/MM/YYYY)."""
-
-    if value is None:
+    try:
+        return Decimal(str(value)).quantize(_COORD_PRECISION)
+    except (InvalidOperation, ValueError, TypeError):
         return None
-    if isinstance(value, str):
-        value = value.strip()
+
+
+def _parse_date(value):
     if not value:
         return None
-
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
         try:
-            return dt.datetime.strptime(str(value), fmt).date()
-        except (ValueError, TypeError):
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
             continue
     return None
 
 
-DECIMAL_ZERO = Decimal("0")
-CURRENCY_QUANT = Decimal("0.01")
-QUANTITY_QUANT = Decimal("0.001")
-FX_RATE_QUANT = Decimal("0.0001")
-ALLOWED_CURRENCIES = {"ARS", "USD"}
-COORD_QUANT = Decimal("0.00000001")
+# ==== Helpers de roles/permiso (compat role/rol) ====
+
+def _get_roles_usuario(user):
+    """Devuelve set normalizado de roles posibles del usuario, considerando .role y .rol."""
+    vals = set()
+    for attr in ('role', 'rol'):
+        v = getattr(user, attr, None)
+        if v:
+            vals.add(str(v).lower())
+    return vals
+
+def is_admin():
+    """Verifica si el usuario actual es admin (admin/administrador)."""
+    roles = _get_roles_usuario(current_user)
+    return any(r in roles for r in ('admin', 'administrador'))
+
+def is_pm_global():
+    """Admin, PM global o técnico (compatibilidad)."""
+    roles = _get_roles_usuario(current_user)
+    return any(r in roles for r in ('admin', 'administrador', 'pm', 'project_manager', 'tecnico'))
+
+def can_manage_obra(obra):
+    """Verifica si el usuario puede gestionar la obra (crear/editar/etapas y tareas)."""
+    if is_admin() or is_pm_global():
+        return True
+    # PM específico de esta obra
+    miembro = ObraMiembro.query.filter_by(
+        obra_id=obra.id,
+        usuario_id=current_user.id,
+        rol_en_obra='pm'
+    ).first()
+    return miembro is not None
+
+def can_log_avance(tarea):
+    """Verifica si el usuario puede registrar avances en una tarea."""
+    if is_admin():
+        return True
+    roles = _get_roles_usuario(current_user)
+    if 'pm' in roles or 'project_manager' in roles or 'tecnico' in roles:
+        return True
+    if tarea.responsable_id == current_user.id:
+        return True
+    miembro = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
+    return miembro is not None
+
+def es_miembro_obra(obra_id, user_id):
+    """Verificar si el usuario es miembro de la obra (cualquier rol)."""
+    if is_pm_global():
+        return True
+
+    miembro = db.session.query(ObraMiembro.id)\
+        .filter_by(obra_id=obra_id, usuario_id=user_id).first()
+    if miembro:
+        return True
+
+    tiene_tareas = (db.session.query(TareaMiembro.id)
+                   .join(TareaEtapa, TareaMiembro.tarea_id == TareaEtapa.id)
+                   .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
+                   .filter(EtapaObra.obra_id == obra_id,
+                           TareaMiembro.user_id == user_id)
+                   .first())
+    return tiene_tareas is not None
 
 
-def _to_bool(value: Any, default: bool = False) -> bool:
-    """Convierte entradas típicas de formularios/JSON a booleanos reales."""
+# ==== Error handlers JSON-aware ====
 
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "t", "on", "yes", "si", "sí"}:
-            return True
-        if normalized in {"0", "false", "f", "off", "no"}:
-            return False
-    return default
+@obras_bp.errorhandler(404)
+def handle_404(error):
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'Recurso no encontrado'}), 404
+    raise error
+
+@obras_bp.errorhandler(500)
+def handle_500(error):
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Internal server error"}), 500
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'Error interno del servidor'}), 500
+    raise error
+
+@obras_bp.errorhandler(401)
+def handle_401(error):
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 401
+    raise error
+
+@obras_bp.errorhandler(403)
+def handle_403(error):
+    if request.path.startswith("/obras/api/"):
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
+    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+    raise error
 
 
-def _registrar_evento_confirmacion(org_id: Optional[int], obra_id: Optional[int],
-                                   presupuesto_id: Optional[int], usuario_id: Optional[int],
-                                   trigger: str) -> None:
-    """Registra un evento de auditoría para la confirmación de presupuestos."""
+# ==== Métricas y utilidades ====
 
-    if not org_id or not obra_id or not presupuesto_id:
-        return
+def resumen_tarea(t):
+    """Calcular métricas de una tarea a prueba de nulos"""
+    plan = float(t.cantidad_planificada or 0)
 
+    ejec = float(
+        db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+        .filter(TareaAvance.tarea_id == t.id, TareaAvance.status == 'aprobado')
+        .scalar() or 0
+    )
+
+    pct = (ejec/plan*100.0) if plan > 0 else 0.0
+    restante = max(plan - ejec, 0.0)
+
+    atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
+
+    return {
+        'plan': plan,
+        'ejec': ejec,
+        'pct': pct,
+        'restante': restante,
+        'atrasada': atrasada
+    }
+
+def D(x):
+    """Helper para conversión segura a Decimal"""
+    if x is None:
+        return Decimal('0')
+    return x if isinstance(x, Decimal) else Decimal(str(x))
+
+
+def seed_tareas_para_etapa(nueva_etapa, auto_commit=True, slug=None):
+    """Función idempotente para crear tareas predefinidas en una etapa"""
     try:
-        evento = Event(
-            company_id=org_id,
-            project_id=obra_id,
-            user_id=usuario_id,
-            type='status_change',
-            severity='media',
-            title='Presupuesto confirmado',
-            description=(
-                f'El presupuesto #{presupuesto_id} fue confirmado y se creó la obra #{obra_id}.'
-            ),
-            meta={
-                'source': trigger,
-                'presupuesto_id': presupuesto_id,
-                'obra_id': obra_id,
-            },
-            created_by=usuario_id,
-        )
-        db.session.add(evento)
-        db.session.commit()
-    except Exception:  # pragma: no cover - logging auxiliar
-        db.session.rollback()
-        current_app.logger.exception(
-            'No se pudo registrar el evento de confirmación del presupuesto %s',
-            presupuesto_id,
-        )
+        slug_normalizado = slugify_nombre_etapa(slug or nueva_etapa.nombre)
+        tareas = obtener_tareas_por_etapa(nueva_etapa.nombre, slug_normalizado)
+        tareas_creadas = 0
 
-
-def _resolve_currency_context(raw_currency: Any):
-    """Determina la moneda solicitada y obtiene el tipo de cambio si aplica."""
-
-    currency = str(raw_currency).upper() if raw_currency else 'ARS'
-    if currency not in ALLOWED_CURRENCIES:
-        currency = 'ARS'
-
-    snapshot = None
-    if currency != 'ARS':
-        provider = (os.environ.get('FX_PROVIDER') or 'bna').lower()
-        if provider != 'bna':
-            provider = 'bna'
-        fallback_env = os.environ.get('EXCHANGE_FALLBACK_RATE')
-        fallback = Decimal(str(fallback_env)) if fallback_env else None
-        try:
-            snapshot = exchange_service.ensure_rate(
-                provider,
-                base_currency='ARS',
-                quote_currency=currency,
-                fetcher=bna_provider.fetch_official_rate,
-                as_of=date.today(),
-                fallback_rate=fallback,
-            )
-        except Exception as exc:
-            current_app.logger.warning('No se pudo obtener el tipo de cambio: %s', exc)
-            if fallback is not None:
-                snapshot = exchange_service.ensure_rate(
-                    provider,
-                    base_currency='ARS',
-                    quote_currency=currency,
-                    fetcher=lambda *_args, **_kwargs: None,
-                    as_of=date.today(),
-                    fallback_rate=fallback,
-                )
+        for t in tareas:
+            if isinstance(t, str):
+                nombre_tarea = t
+                descripcion_tarea = ""
+                horas_tarea = 0
+                unidad = "un"
+            elif isinstance(t, dict):
+                nombre_tarea = t.get("nombre", "")
+                descripcion_tarea = t.get("descripcion", "")
+                horas_tarea = t.get("horas", 0)
+                unidad = t.get("unidad", "un")
             else:
-                raise
-
-    return currency, snapshot
-
-
-def _to_decimal(value: Any, default: str = "0") -> Decimal:
-    """Convierte un valor arbitrario a Decimal utilizando '.' como separador."""
-
-    if isinstance(value, Decimal):
-        return value
-    if value is None:
-        return Decimal(default)
-    if isinstance(value, (int, float)):
-        normalized = str(value)
-    else:
-        text = str(value).strip()
-        if not text:
-            return Decimal(default)
-        normalized = text.replace(",", ".")
-    try:
-        return Decimal(normalized)
-    except (InvalidOperation, ValueError, TypeError):
-        return Decimal(default)
-
-
-def _quantize_currency(value: Decimal) -> Decimal:
-    return value.quantize(CURRENCY_QUANT, rounding=ROUND_HALF_UP)
-
-
-def _quantize_quantity(value: Decimal) -> Decimal:
-    return value.quantize(QUANTITY_QUANT, rounding=ROUND_HALF_UP)
-
-
-def _quantize_coord(value: Any) -> Optional[Decimal]:
-    if value is None:
-        return None
-    try:
-        coord = _to_decimal(value, '0')
-    except (InvalidOperation, ValueError, TypeError):
-        return None
-    return coord.quantize(COORD_QUANT, rounding=ROUND_HALF_UP)
-
-
-def _parse_vigencia_dias(raw_value: Any) -> Optional[int]:
-    if raw_value is None:
-        return None
-    try:
-        value = int(str(raw_value).strip())
-    except (TypeError, ValueError):
-        return None
-    if value < 1 or value > 180:
-        return None
-    return value
-
-
-def _sumar_totales(items) -> Decimal:
-    total = DECIMAL_ZERO
-    for item in items:
-        valor = getattr(item, 'total_currency', None)
-        if valor is None:
-            valor = getattr(item, 'total', 0)
-        total += _quantize_currency(_to_decimal(valor, '0'))
-    return _quantize_currency(total)
-
-
-def _congelar_presupuesto_para_confirmacion(presupuesto: Presupuesto) -> Decimal:
-    """Recalcula y congela importes, cantidades y tasas antes de confirmar."""
-
-    presupuesto.calcular_totales()
-
-    currency = (presupuesto.currency or 'ARS').upper()
-    if currency not in ALLOWED_CURRENCIES:
-        currency = 'ARS'
-    presupuesto.currency = currency
-
-    fx_value: Optional[Decimal] = None
-    if currency != 'ARS':
-        candidatos = (
-            presupuesto.tasa_usd_venta,
-            presupuesto.exchange_rate_value,
-            getattr(presupuesto.exchange_rate, 'value', None),
-        )
-        for candidato in candidatos:
-            if candidato is None:
+                current_app.logger.warning(f"Formato de tarea no reconocido: {t}")
                 continue
-            candidato_dec = _to_decimal(candidato, '0')
-            if candidato_dec > DECIMAL_ZERO:
-                fx_value = candidato_dec
-                break
-        if fx_value is not None and fx_value > DECIMAL_ZERO:
-            fx_value = fx_value.quantize(FX_RATE_QUANT, rounding=ROUND_HALF_UP)
-            presupuesto.tasa_usd_venta = fx_value
-            presupuesto.exchange_rate_value = fx_value
-        if not presupuesto.exchange_rate_provider and getattr(presupuesto.exchange_rate, 'provider', None):
-            presupuesto.exchange_rate_provider = presupuesto.exchange_rate.provider
-        if not presupuesto.exchange_rate_as_of and getattr(presupuesto.exchange_rate, 'as_of', None):
-            presupuesto.exchange_rate_as_of = presupuesto.exchange_rate.as_of
-        if not presupuesto.exchange_rate_fetched_at and getattr(presupuesto.exchange_rate, 'fetched_at', None):
-            presupuesto.exchange_rate_fetched_at = presupuesto.exchange_rate.fetched_at
-    else:
-        fx_value = None
 
-    if presupuesto.indice_cac_valor is not None:
-        presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(presupuesto.indice_cac_valor, '0'))
+            if not nombre_tarea:
+                continue
 
-    items = presupuesto.items.all() if hasattr(presupuesto.items, 'all') else list(presupuesto.items)
-    for item in items:
-        cantidad = _quantize_quantity(_to_decimal(item.cantidad, '0'))
-        item.cantidad = cantidad
+            ya = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id, nombre=nombre_tarea).first()
+            if ya:
+                continue
 
-        item.currency = currency
-
-        unit_currency = item.price_unit_currency
-        if unit_currency is None:
-            unit_currency = item.precio_unitario
-        unit_currency_dec = _quantize_currency(_to_decimal(unit_currency, '0'))
-        item.price_unit_currency = unit_currency_dec
-
-        total_currency = _quantize_currency(cantidad * unit_currency_dec)
-        item.total_currency = total_currency
-
-        if currency != 'ARS' and fx_value is not None and fx_value > DECIMAL_ZERO:
-            unit_ars = _quantize_currency(unit_currency_dec * fx_value)
-            total_ars = _quantize_currency(total_currency * fx_value)
-        else:
-            raw_unit_ars = item.precio_unitario if item.precio_unitario is not None else item.price_unit_ars
-            if raw_unit_ars is None or _to_decimal(raw_unit_ars, '0') <= DECIMAL_ZERO:
-                raw_unit_ars = unit_currency_dec
-            unit_ars = _quantize_currency(_to_decimal(raw_unit_ars, '0'))
-            total_ars = _quantize_currency(cantidad * unit_ars)
-
-        item.precio_unitario = unit_ars
-        item.price_unit_ars = unit_ars
-        item.total = total_ars
-        item.total_ars = total_ars
-
-    presupuesto.calcular_totales()
-    return presupuesto.total_con_iva
-
-
-def _persistir_resultados_etapas(
-    presupuesto: Presupuesto,
-    etapas_resultado: list,
-    superficie: Optional[Decimal],
-    tipo_calculo: str,
-    currency: str,
-    fx_snapshot,
-    cac_context,
-):
-    """Aplica los resultados IA al presupuesto, reemplazando items previos de cada etapa."""
-
-    if not etapas_resultado:
-        return False, 'Sin etapas para aplicar'
-
-    presupuesto.currency = currency
-    try:
-        presupuesto.registrar_tipo_cambio(fx_snapshot)
-    except AttributeError:
-        pass
-
-    if cac_context:
-        presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(cac_context.value, '0'))
-        presupuesto.indice_cac_fecha = cac_context.period
-
-    obra = presupuesto.obra
-    slug_a_etapa = {}
-    orden_base = 0
-    if obra:
-        etapas_existentes = obra.etapas.order_by(EtapaObra.orden.asc()).all()
-        slug_a_etapa = {slugify_etapa(e.nombre): e for e in etapas_existentes}
-        orden_base = len(etapas_existentes)
-
-    hubo_cambios = False
-
-    for index, etapa_data in enumerate(etapas_resultado, start=1):
-        slug = slugify_etapa(etapa_data.get('slug') or etapa_data.get('nombre') or f'etapa-{index}')
-        etapa_modelo = slug_a_etapa.get(slug)
-
-        if obra and not etapa_modelo:
-            etapa_modelo = EtapaObra(
-                obra_id=obra.id,
-                nombre=etapa_data.get('nombre') or f'Etapa {index}',
-                descripcion=etapa_data.get('notas') or f'Etapa generada automáticamente ({tipo_calculo})',
-                orden=orden_base + index,
-                estado='pendiente',
+            nueva_tarea = TareaEtapa(
+                etapa_id=nueva_etapa.id,
+                nombre=nombre_tarea,
+                descripcion=descripcion_tarea,
+                horas_estimadas=horas_tarea,
+                unidad=unidad,
+                estado="pendiente"
             )
-            db.session.add(etapa_modelo)
-            db.session.flush()
-            slug_a_etapa[slug] = etapa_modelo
-            hubo_cambios = True
+            db.session.add(nueva_tarea)
+            tareas_creadas += 1
 
-        query = ItemPresupuesto.query.filter(
-            ItemPresupuesto.presupuesto_id == presupuesto.id,
-            ItemPresupuesto.origen == 'ia',
-        )
-        if etapa_modelo:
-            query = query.filter(ItemPresupuesto.etapa_id == etapa_modelo.id)
-        else:
-            query = query.filter(ItemPresupuesto.etapa_id.is_(None))
+        if auto_commit:
+            db.session.commit()
+        return tareas_creadas
 
-        eliminados = query.delete(synchronize_session=False)
-        if eliminados:
-            hubo_cambios = True
-
-        for item_data in etapa_data.get('items', []):
-            tipo_item = (item_data.get('tipo') or 'material').strip().lower()
-            if tipo_item not in {'material', 'mano_obra', 'equipo', 'herramienta'}:
-                tipo_item = 'material'
-
-            cantidad = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
-            precio_moneda = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
-            precio_ars = _quantize_currency(_to_decimal(item_data.get('precio_unit_ars'), '0'))
-
-            if precio_ars <= DECIMAL_ZERO and fx_snapshot and getattr(fx_snapshot, 'value', None):
-                precio_ars = _quantize_currency(precio_moneda * _to_decimal(fx_snapshot.value, '1'))
-
-            total_currency = _quantize_currency(cantidad * precio_moneda)
-            total_ars = _quantize_currency(cantidad * (precio_ars if precio_ars > DECIMAL_ZERO else precio_moneda))
-
-            nuevo_item = ItemPresupuesto(
-                presupuesto_id=presupuesto.id,
-                tipo=tipo_item,
-                descripcion=item_data.get('descripcion') or f'Ítem {tipo_item} etapa {etapa_data.get("nombre") or index}',
-                unidad=item_data.get('unidad') or 'unidades',
-                cantidad=cantidad,
-                precio_unitario=precio_ars,
-                total=total_ars,
-                origen='ia',
-                currency=currency,
-                price_unit_currency=precio_moneda,
-                total_currency=total_currency,
-                price_unit_ars=precio_ars,
-                total_ars=total_ars,
-            )
-
-            if etapa_modelo:
-                nuevo_item.etapa_id = etapa_modelo.id
-
-            db.session.add(nuevo_item)
-            hubo_cambios = True
-
-    if hubo_cambios:
-        presupuesto.calcular_totales()
-        db.session.add(presupuesto)
-
-    return hubo_cambios, None
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"ERROR en seed_tareas_para_etapa: {str(e)}")
+        return 0
 
 
-presupuestos_bp = Blueprint('presupuestos', __name__)
+# ==== Rutas principales ====
 
-@presupuestos_bp.route('/')
+@obras_bp.route("/obras")
+@login_required
+def obras_root():
+    return redirect(url_for("obras.lista"))
+
+@obras_bp.route('/')
 @login_required
 def lista():
-    if not current_user.puede_acceder_modulo('presupuestos'):
+    # Operarios pueden acceder para ver sus obras asignadas
+    roles = _get_roles_usuario(current_user)
+    if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras') and 'operario' not in roles:
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
-    estado = request.args.get('estado', '')
-    vigencia = request.args.get('vigencia', '')
-    if estado == 'eliminado' and current_user.rol != 'administrador':
-        estado = ''
-    incluir_eliminados = estado == 'eliminado'
-    buscar = request.args.get('buscar', '')
 
-    # Modificar query para incluir presupuestos sin obra (LEFT JOIN) y excluir confirmados/convertidos
-    query = Presupuesto.query.outerjoin(Obra).filter(
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.estado.notin_(['confirmado', 'convertido'])
+    estado = request.args.get('estado', '')
+    buscar = (request.args.get('buscar', '') or '').strip()
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+
+    chequear_admin = getattr(current_user, 'tiene_rol', None)
+    puede_ver_borradores = bool(callable(chequear_admin) and current_user.tiene_rol('admin'))
+    if not puede_ver_borradores:
+        puede_ver_borradores = any(r in _get_roles_usuario(current_user) for r in ['administrador', 'admin'])
+
+    mostrar_borradores = puede_ver_borradores and request.args.get('mostrar_borradores') == '1'
+
+    obras = []
+    if org_id:
+        query = Obra.query.filter(Obra.organizacion_id == org_id)
+
+        if not mostrar_borradores:
+            query = query.filter(obras_visibles_clause(Obra))
+
+        if estado:
+            query = query.filter(Obra.estado == estado)
+
+        if buscar:
+            query = query.filter(
+                db.or_(
+                    Obra.nombre.contains(buscar),
+                    Obra.cliente.contains(buscar),
+                    Obra.direccion.contains(buscar)
+                )
+            )
+
+        obras = query.order_by(Obra.fecha_creacion.desc()).all()
+
+        geocoded = False
+        for obra in obras:
+            if (obra.latitud is not None and obra.longitud is not None) or not obra.direccion:
+                continue
+
+            status = (obra.geocode_status or '').lower()
+            if status == 'fail':
+                continue
+
+            try:
+                resolved = resolve_geocode(obra.direccion)
+            except Exception as exc:
+                current_app.logger.warning(
+                    'No se pudo geocodificar la obra %s (%s): %s',
+                    obra.id,
+                    obra.direccion,
+                    exc,
+                )
+                obra.geocode_status = 'fail'
+                geocoded = True
+                continue
+
+            if not resolved:
+                obra.geocode_status = 'fail'
+                geocoded = True
+                continue
+
+            lat_decimal = _to_coord_decimal(resolved.get('lat'))
+            lng_decimal = _to_coord_decimal(resolved.get('lng'))
+            if lat_decimal is not None and lng_decimal is not None:
+                obra.latitud = lat_decimal
+                obra.longitud = lng_decimal
+
+            obra.direccion_normalizada = resolved.get('normalized') or obra.direccion_normalizada
+            obra.geocode_place_id = resolved.get('place_id') or obra.geocode_place_id
+            obra.geocode_provider = resolved.get('provider') or obra.geocode_provider
+            obra.geocode_status = resolved.get('status') or 'ok'
+            raw_payload = resolved.get('raw')
+            if raw_payload:
+                try:
+                    obra.geocode_raw = json.dumps(raw_payload)
+                except (TypeError, ValueError):
+                    current_app.logger.debug('No se pudo serializar geocode_raw para la obra %s', obra.id)
+            obra.geocode_actualizado = datetime.utcnow()
+            geocoded = True
+
+        if geocoded:
+            try:
+                db.session.commit()
+            except Exception as exc:
+                current_app.logger.warning('No se pudieron guardar las coordenadas de obras: %s', exc)
+                db.session.rollback()
+    else:
+        flash('Selecciona una organización para ver tus obras.', 'warning')
+
+    return render_template(
+        'obras/lista.html',
+        obras=obras,
+        estado=estado,
+        buscar=buscar,
+        mostrar_borradores=mostrar_borradores,
+        puede_ver_borradores=puede_ver_borradores,
     )
 
-    if incluir_eliminados:
-        query = query.filter(Presupuesto.deleted_at.isnot(None))
-    else:
-        query = query.filter(Presupuesto.deleted_at.is_(None))
-
-    if estado and estado != 'eliminado':
-        query = query.filter(Presupuesto.estado == estado)
-    elif not incluir_eliminados:
-        query = query.filter(Presupuesto.estado != 'eliminado')
-    
-    if vigencia == 'vencidos':
-        query = query.filter(
-            Presupuesto.fecha_vigencia.isnot(None),
-            Presupuesto.fecha_vigencia < date.today(),
-            Presupuesto.estado.in_(['borrador', 'perdido', 'enviado', 'rechazado', 'vencido'])
-        )
-    elif vigencia == 'por_vencer':
-        limite = date.today() + timedelta(days=7)
-        query = query.filter(
-            Presupuesto.fecha_vigencia.isnot(None),
-            Presupuesto.fecha_vigencia >= date.today(),
-            Presupuesto.fecha_vigencia <= limite,
-            Presupuesto.estado.in_(['borrador', 'enviado'])
-        )
-
-    if buscar:
-        query = query.filter(
-            db.or_(
-                Presupuesto.numero.contains(buscar),
-                Presupuesto.observaciones.contains(buscar),
-                Obra.nombre.contains(buscar) if Obra.nombre else False,
-                Obra.cliente.contains(buscar) if Obra.cliente else False
-            )
-        )
-
-    presupuestos = query.order_by(Presupuesto.fecha_creacion.desc()).all()
-
-    return render_template('presupuestos/lista.html',
-                         presupuestos=presupuestos,
-                         estado=estado,
-                         buscar=buscar,
-                         vigencia=vigencia)
-
-
-@presupuestos_bp.route('/crear', methods=['GET', 'POST'])
+@obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
 def crear():
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        flash('No tienes permisos para crear presupuestos.', 'danger')
-        return redirect(url_for('presupuestos.lista'))
-    
+    if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras'):
+        flash('No tienes permisos para crear obras.', 'danger')
+        return redirect(url_for('obras.lista'))
+
     if request.method == 'POST':
-        # Obtener datos del nuevo formulario
-        nombre_obra = request.form.get('nombre_obra')
-        tipo_obra = request.form.get('tipo_obra')
-        ubicacion = request.form.get('ubicacion')
-        tipo_construccion = request.form.get('tipo_construccion')
-        superficie_m2 = request.form.get('superficie_m2')
+        nombre = request.form.get('nombre')
+        descripcion = request.form.get('descripcion')  # FIX: antes no existía la variable
+        direccion = request.form.get('direccion')
+        cliente = request.form.get('cliente')
+        telefono_cliente = request.form.get('telefono_cliente')
+        email_cliente = request.form.get('email_cliente')
         fecha_inicio = request.form.get('fecha_inicio')
-        fecha_fin = request.form.get('fecha_fin')
-        presupuesto_disponible = request.form.get('presupuesto_disponible')
-        moneda = request.form.get('moneda', 'ARS')
-        cliente_nombre = request.form.get('cliente_nombre')
-        plano_pdf = request.files.get('plano_pdf')
-        ia_payload_raw = request.form.get('ia_etapas_payload')
-        ia_payload = None
-        if ia_payload_raw:
+        fecha_fin_estimada = request.form.get('fecha_fin_estimada')
+        presupuesto_total = request.form.get('presupuesto_total')
+
+        if not all([nombre, cliente]):
+            flash('Por favor, completa todos los campos obligatorios.', 'danger')
+            return render_template('obras/crear.html')
+
+        fecha_inicio_obj = None
+        fecha_fin_estimada_obj = None
+
+        if fecha_inicio:
             try:
-                ia_payload = json.loads(
-                    ia_payload_raw,
-                    parse_float=Decimal,
-                    parse_int=Decimal,
-                )
-            except (TypeError, ValueError, InvalidOperation):
-                current_app.logger.warning(
-                    'Payload IA de etapas inválido, se omitirá durante la creación del presupuesto.'
-                )
-                ia_payload = None
+                fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Formato de fecha de inicio inválido.', 'danger')
+                return render_template('obras/crear.html')
 
-        ubicacion_lat = request.form.get('ubicacion_lat')
-        ubicacion_lng = request.form.get('ubicacion_lng')
-        ubicacion_normalizada = request.form.get('ubicacion_normalizada') or None
-        ubicacion_place_id = request.form.get('ubicacion_place_id') or None
-        ubicacion_provider = request.form.get('ubicacion_provider') or None
-        ubicacion_geocode_status = request.form.get('ubicacion_geocode_status') or None
+        if fecha_fin_estimada:
+            try:
+                fecha_fin_estimada_obj = datetime.strptime(fecha_fin_estimada, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Formato de fecha de fin estimada inválido.', 'danger')
+                return render_template('obras/crear.html')
 
-        # Validaciones
-        if not all([nombre_obra, tipo_obra, ubicacion, tipo_construccion, superficie_m2]):
-            flash('Completa todos los campos obligatorios.', 'danger')
-            return render_template('presupuestos/crear.html')
-        
-        superficie_decimal = _quantize_quantity(_to_decimal(superficie_m2, '0'))
-        if superficie_decimal <= DECIMAL_ZERO:
-            flash('La superficie debe ser mayor a 0.', 'danger')
-            return render_template('presupuestos/crear.html')
-
-        try:
-            currency, fx_snapshot = _resolve_currency_context(moneda)
-        except Exception as exc:
-            current_app.logger.exception('Error obteniendo tipo de cambio para crear presupuesto')
-            flash('No pudimos obtener el tipo de cambio solicitado. Intenta nuevamente más tarde.', 'danger')
-            return render_template('presupuestos/crear.html')
+        if fecha_inicio_obj and fecha_fin_estimada_obj and fecha_fin_estimada_obj <= fecha_inicio_obj:
+            flash('La fecha de fin debe ser posterior a la fecha de inicio.', 'danger')
+            return render_template('obras/crear.html')
 
         geocode_payload = None
-        geocode_status = ubicacion_geocode_status or 'pending'
-        geocode_provider = ubicacion_provider or current_app.config.get('MAPS_PROVIDER') or 'nominatim'
-        geocode_place_id = ubicacion_place_id
-        direccion_normalizada = ubicacion_normalizada
+        latitud, longitud = None, None
+        direccion_normalizada = None
+        if direccion:
+            direccion_normalizada = normalizar_direccion_argentina(direccion)
+            geocode_payload = resolve_geocode(direccion_normalizada)
+            if geocode_payload:
+                latitud = _to_coord_decimal(geocode_payload.get('lat'))
+                longitud = _to_coord_decimal(geocode_payload.get('lng'))
 
-        lat_decimal = _quantize_coord(ubicacion_lat)
-        lng_decimal = _quantize_coord(ubicacion_lng)
+        nueva_obra = Obra(
+            nombre=nombre,
+            descripcion=descripcion,
+            direccion=direccion,
+            direccion_normalizada=direccion_normalizada,
+            latitud=latitud,
+            longitud=longitud,
+            cliente=cliente,
+            telefono_cliente=telefono_cliente,
+            email_cliente=email_cliente,
+            fecha_inicio=fecha_inicio_obj,
+            fecha_fin_estimada=fecha_fin_estimada_obj,
+            presupuesto_total=float(presupuesto_total) if presupuesto_total else 0,
+            estado='planificacion',
+            organizacion_id=current_user.organizacion_id
+        )
 
-        if lat_decimal is not None and lng_decimal is not None:
-            geocode_payload = {
-                'lat': float(lat_decimal),
-                'lng': float(lng_decimal),
-                'provider': geocode_provider,
-                'place_id': geocode_place_id,
-                'normalized': direccion_normalizada or _clean_text(ubicacion),
-                'status': geocode_status or 'ok',
-                'raw': None,
-            }
-
-        if geocode_payload is None:
-            try:
-                resolved = resolve_geocode(ubicacion)
-            except Exception as exc:  # pragma: no cover - logging fallback
-                current_app.logger.warning('No se pudo geocodificar la dirección %s: %s', ubicacion, exc)
-                resolved = None
-
-            if resolved:
-                geocode_payload = resolved
-                direccion_normalizada = resolved.get('normalized') or direccion_normalizada
-                geocode_provider = resolved.get('provider') or geocode_provider
-                geocode_place_id = resolved.get('place_id') or geocode_place_id
-                geocode_status = resolved.get('status') or 'ok'
-                lat_decimal = _quantize_coord(resolved.get('lat'))
-                lng_decimal = _quantize_coord(resolved.get('lng'))
-            else:
-                geocode_status = 'fail'
-
-        # Crear nueva obra basada en los datos del formulario
-        nueva_obra = Obra()
-        nueva_obra.nombre = nombre_obra
-        nueva_obra.descripcion = f"Obra {tipo_obra.replace('_', ' ').title()} - {tipo_construccion.title()}"
-        nueva_obra.direccion = ubicacion
-        nueva_obra.direccion_normalizada = direccion_normalizada
-        nueva_obra.cliente = cliente_nombre or "Cliente Sin Especificar"
-        nueva_obra.estado = 'planificacion'
-        nueva_obra.organizacion_id = current_user.organizacion_id
-
-        if lat_decimal is not None and lng_decimal is not None:
-            nueva_obra.latitud = lat_decimal
-            nueva_obra.longitud = lng_decimal
         if geocode_payload:
-            nueva_obra.geocode_place_id = geocode_place_id
-            nueva_obra.geocode_provider = geocode_provider
-            nueva_obra.geocode_status = geocode_status
-            raw_payload = geocode_payload.get('raw')
-            nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else nueva_obra.geocode_raw
-            nueva_obra.geocode_actualizado = dt.datetime.utcnow()
-        elif geocode_status:
-            nueva_obra.geocode_status = geocode_status
-        
-        # Procesar fechas
-        if fecha_inicio:
-            nueva_obra.fecha_inicio = dt.datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
-        if fecha_fin:
-            nueva_obra.fecha_fin_estimada = dt.datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-        
-        # Procesar presupuesto disponible
-        if presupuesto_disponible:
-            try:
-                presupuesto_decimal = _quantize_currency(_to_decimal(presupuesto_disponible, '0'))
-                nueva_obra.presupuesto_total = presupuesto_decimal
-            except (InvalidOperation, ValueError, TypeError):
-                pass
-        
+            nueva_obra.geocode_place_id = geocode_payload.get('place_id')
+            nueva_obra.geocode_provider = geocode_payload.get('provider')
+            nueva_obra.geocode_status = geocode_payload.get('status') or 'ok'
+            nueva_obra.geocode_raw = json.dumps(geocode_payload.get('raw')) if geocode_payload.get('raw') else None
+            nueva_obra.geocode_actualizado = datetime.utcnow()
+
         try:
             db.session.add(nueva_obra)
-            db.session.flush()  # Para obtener el ID de la obra
-            
-            # Generar número de presupuesto único
-            ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
-            if ultimo_numero and ultimo_numero.startswith('PRES-'):
-                try:
-                    siguiente_num = int(ultimo_numero.split('-')[1]) + 1
-                except:
-                    siguiente_num = 1
-            else:
-                siguiente_num = 1
-            
-            # Asegurar que el número sea único
-            while True:
-                numero = f"PRES-{siguiente_num:04d}"
-                existe = Presupuesto.query.filter_by(numero=numero).first()
-                if not existe:
-                    break
-                siguiente_num += 1
-            
-            # Crear presupuesto asociado
-            nuevo_presupuesto = Presupuesto()
-            nuevo_presupuesto.obra_id = nueva_obra.id
-            nuevo_presupuesto.numero = numero
-            nuevo_presupuesto.iva_porcentaje = Decimal('21.00')  # Fijo según lo solicitado
-            nuevo_presupuesto.organizacion_id = current_user.organizacion_id
-            nuevo_presupuesto.currency = currency
-            vigencia_form = request.form.get('vigencia_dias', '').strip()
-            if vigencia_form:
-                vigencia_dias = _parse_vigencia_dias(vigencia_form)
-                if vigencia_dias is None:
-                    flash('La vigencia debe ser un número entre 1 y 180 días.', 'danger')
-                    return render_template('presupuestos/crear.html')
-            else:
-                vigencia_dias = 30
-
-            nuevo_presupuesto.vigencia_dias = vigencia_dias
-            nuevo_presupuesto.vigencia_bloqueada = True
-            nuevo_presupuesto.asegurar_vigencia()
-
-            # Agregar observaciones con detalles del proyecto
-            observaciones_proyecto = []
-            observaciones_proyecto.append(f"Tipo de obra: {tipo_obra.replace('_', ' ').title()}")
-            observaciones_proyecto.append(f"Tipo de construcción: {tipo_construccion.title()}")
-            observaciones_proyecto.append(f"Superficie: {superficie_decimal} m²")
-            if presupuesto_disponible:
-                observaciones_proyecto.append(f"Presupuesto disponible: {currency} {presupuesto_disponible}")
-            if plano_pdf and plano_pdf.filename:
-                observaciones_proyecto.append(f"Plano PDF: {plano_pdf.filename}")
-
-            nuevo_presupuesto.observaciones = " | ".join(observaciones_proyecto)
-            nuevo_presupuesto.ubicacion_texto = ubicacion
-            nuevo_presupuesto.ubicacion_normalizada = direccion_normalizada
-            nuevo_presupuesto.geo_latitud = lat_decimal
-            nuevo_presupuesto.geo_longitud = lng_decimal
-            nuevo_presupuesto.geocode_place_id = geocode_place_id
-            nuevo_presupuesto.geocode_provider = geocode_provider
-            nuevo_presupuesto.geocode_status = geocode_status
-
-            db.session.add(nuevo_presupuesto)
-            db.session.flush()  # Para obtener el ID del presupuesto
-
-            try:
-                nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
-            except AttributeError:
-                pass
-
-            if geocode_payload:
-                raw_payload = geocode_payload.get('raw')
-                nuevo_presupuesto.geocode_raw = json.dumps(raw_payload) if raw_payload else nuevo_presupuesto.geocode_raw
-                nuevo_presupuesto.geocode_actualizado = dt.datetime.utcnow()
-
-            datos_proyecto = {
-                'nombre': nombre_obra,
-                'tipo_obra': tipo_obra,
-                'tipo_construccion': tipo_construccion,
-                'superficie': float(superficie_decimal),
-                'ubicacion': ubicacion,
-                'ubicacion_normalizada': direccion_normalizada,
-                'latitud': float(lat_decimal) if lat_decimal is not None else None,
-                'longitud': float(lng_decimal) if lng_decimal is not None else None,
-                'geocode_provider': geocode_provider,
-                'geocode_status': geocode_status,
-                'geocode_place_id': geocode_place_id,
-            }
-            nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
-
-            cac_context = get_cac_context()
-            if cac_context:
-                nuevo_presupuesto.indice_cac_valor = _quantize_currency(_to_decimal(cac_context.value, '0'))
-                nuevo_presupuesto.indice_cac_fecha = cac_context.period
-
-            # Procesar etapas si se enviaron
-            etapas_count = 0
-            etapa_index = 0
-            etapas_creadas_por_slug = {}
-            etapas_serializadas = []
-            while True:
-                etapa_nombre = request.form.get(f'etapas[{etapa_index}][nombre]')
-                if not etapa_nombre:
-                    break
-
-                etapa_descripcion = request.form.get(f'etapas[{etapa_index}][descripcion]', '')
-                etapa_orden = request.form.get(f'etapas[{etapa_index}][orden]', etapa_index + 1)
-                etapa_slug = request.form.get(f'etapas[{etapa_index}][slug]')
-
-                try:
-                    orden_int = int(etapa_orden)
-                except ValueError:
-                    orden_int = etapa_index + 1
-
-                slug_normalizado = slugify_etapa(etapa_slug or etapa_nombre)
-
-                # Crear etapa para la obra
-                nueva_etapa = EtapaObra(
-                    obra_id=nueva_obra.id,
-                    nombre=etapa_nombre,
-                    descripcion=etapa_descripcion,
-                    orden=orden_int,
-                    estado='pendiente'
-                )
-
-                db.session.add(nueva_etapa)
-                db.session.flush()
-                seed_tareas_para_etapa(
-                    nueva_etapa,
-                    auto_commit=False,
-                    slug=slug_normalizado,
-                )
-                if nueva_etapa.tareas.count() == 0:
-                    db.session.add(TareaEtapa(
-                        etapa_id=nueva_etapa.id,
-                        nombre=f'Tarea inicial de {etapa_nombre}',
-                        descripcion='Tarea generada automáticamente a partir del presupuesto.',
-                        estado='pendiente'
-                    ))
-
-                etapas_creadas_por_slug[slug_normalizado] = nueva_etapa
-                etapas_serializadas.append({
-                    'nombre': etapa_nombre,
-                    'descripcion': etapa_descripcion or '',
-                    'orden': orden_int,
-                    'slug': slug_normalizado
-                })
-                etapas_count += 1
-                etapa_index += 1
-
-            # Crear items a partir del cálculo IA por etapas si llegó payload
-            if ia_payload and ia_payload.get('etapas'):
-                tipos_validos = {'material', 'mano_obra', 'equipo', 'herramienta'}
-                for etapa_resultado in ia_payload.get('etapas', []):
-                    slug_etapa = slugify_etapa(etapa_resultado.get('slug') or etapa_resultado.get('nombre'))
-                    etapa_modelo = etapas_creadas_por_slug.get(slug_etapa)
-
-                    for item_data in etapa_resultado.get('items', []):
-                        try:
-                            tipo_item = (item_data.get('tipo') or 'material').strip()
-                        except AttributeError:
-                            tipo_item = 'material'
-                        tipo_item = tipo_item if tipo_item in tipos_validos else 'material'
-
-                        cantidad_dec = _quantize_quantity(_to_decimal(item_data.get('cantidad'), '0'))
-                        precio_moneda = _quantize_currency(_to_decimal(item_data.get('precio_unit'), '0'))
-                        precio_ars = _quantize_currency(_to_decimal(item_data.get('precio_unit_ars'), '0'))
-                        if precio_ars <= DECIMAL_ZERO and fx_snapshot and getattr(fx_snapshot, 'value', None):
-                            precio_ars = _quantize_currency(precio_moneda * _to_decimal(fx_snapshot.value, '1'))
-
-                        total_currency = _quantize_currency(cantidad_dec * precio_moneda)
-                        total_ars = _quantize_currency(cantidad_dec * (precio_ars if precio_ars > DECIMAL_ZERO else precio_moneda))
-
-                        nuevo_item = ItemPresupuesto(
-                            presupuesto_id=nuevo_presupuesto.id,
-                            tipo=tipo_item,
-                            descripcion=item_data.get('descripcion', 'Item IA de etapa'),
-                            unidad=item_data.get('unidad', 'unidades'),
-                            cantidad=cantidad_dec,
-                            precio_unitario=precio_ars,
-                            total=total_ars,
-                            origen='ia',
-                            currency=currency,
-                            price_unit_currency=precio_moneda,
-                            total_currency=total_currency,
-                            price_unit_ars=precio_ars,
-                            total_ars=total_ars,
-                        )
-                        if etapa_modelo:
-                            nuevo_item.etapa_id = etapa_modelo.id
-
-                        db.session.add(nuevo_item)
-
-                nuevo_presupuesto.calcular_totales()
-            else:
-                nuevo_presupuesto.asegurar_vigencia()
-
-            if etapas_serializadas:
-                datos_proyecto['etapas'] = etapas_serializadas
-
-            nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
-
             db.session.commit()
-
-            mensaje_exito = f'Obra "{nombre_obra}" y presupuesto {numero} creados exitosamente.'
-            if etapas_count > 0:
-                mensaje_exito += f' Se agregaron {etapas_count} etapas al proyecto.'
-            
-            flash(mensaje_exito, 'success')
-            return redirect(url_for('presupuestos.detalle', id=nuevo_presupuesto.id))
-            
+            flash(f'Obra "{nombre}" creada exitosamente.', 'success')
+            return redirect(url_for('obras.detalle', id=nueva_obra.id))
         except Exception as e:
             db.session.rollback()
-            flash(f'Error al crear la obra y presupuesto: {str(e)}', 'danger')
-    
-    return render_template('presupuestos/crear.html')
+            flash(f'Error al crear la obra: {str(e)}', 'danger')
+            current_app.logger.exception("Error creating obra")
+    return render_template('obras/crear.html')
 
-@presupuestos_bp.route('/calculadora-ia')
-@login_required
-def calculadora_ia():
-    """Nueva calculadora IA de presupuestos basada en planos"""
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        flash('No tienes permisos para acceder a la calculadora IA.', 'danger')
-        return redirect(url_for('reportes.dashboard'))
-    
-    obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
-    tipos_construccion = list(COEFICIENTES_CONSTRUCCION.keys())
-    
-    return render_template('presupuestos/calculadora_ia.html',
-                         obras=obras,
-                         tipos_construccion=tipos_construccion)
-
-
-@presupuestos_bp.route('/geo/sugerencias')
-@login_required
-def sugerencias_geograficas():
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        return jsonify({'ok': False, 'error': 'Sin permisos para geocodificar'}), 403
-
-    consulta = (request.args.get('q') or '').strip()
-    if not consulta:
-        return jsonify({'ok': True, 'resultados': []})
-
-    provider = request.args.get('provider')
-    resultados = search_geocode(consulta, provider=provider, limit=5)
-
-    serializados = []
-    for resultado in resultados:
-        serializados.append({
-            'display_name': resultado.get('display_name'),
-            'lat': resultado.get('lat'),
-            'lng': resultado.get('lng'),
-            'provider': resultado.get('provider'),
-            'place_id': resultado.get('place_id'),
-            'normalized': resultado.get('normalized'),
-            'status': resultado.get('status'),
-        })
-
-    return jsonify({'ok': True, 'resultados': serializados})
-
-@presupuestos_bp.route('/procesar-calculadora-ia', methods=['POST'])
-@login_required
-def procesar_calculadora_ia():
-    """Procesa el análisis IA del plano y calcula materiales - Estilo Togal.AI"""
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        return jsonify({'error': 'Sin permisos'}), 403
-    
-    try:
-        # Obtener datos del formulario
-        metros_cuadrados = request.form.get('metros_cuadrados')
-        tipo_construccion = request.form.get('tipo_construccion', '').strip()
-        archivo_pdf = request.files.get('archivo_pdf')
-        
-        # Validación: debe tener superficie
-        if not metros_cuadrados:
-            return jsonify({'error': 'Ingresa los metros cuadrados del proyecto'}), 400
-        
-        try:
-            superficie_m2 = float(metros_cuadrados)
-            if superficie_m2 <= 0:
-                return jsonify({'error': 'Los metros cuadrados deben ser mayor a 0'}), 400
-        except ValueError:
-            return jsonify({'error': 'Metros cuadrados inválidos'}), 400
-        
-        # Si no hay tipo, usar IA para sugerir o usar Estándar
-        if not tipo_construccion:
-            # IA sugiere tipo basado en superficie
-            if superficie_m2 < 80:
-                tipo_final = "Económica"
-            elif superficie_m2 > 300:
-                tipo_final = "Premium"
-            else:
-                tipo_final = "Estándar"
-        else:
-            tipo_final = tipo_construccion
-        
-        # Validar tipo
-        if tipo_final not in COEFICIENTES_CONSTRUCCION:
-            tipo_final = "Estándar"
-        
-        # USAR FUNCIÓN COMPLETA CON ETAPAS
-        resultado = procesar_presupuesto_ia(
-            archivo_pdf=archivo_pdf,
-            metros_cuadrados_manual=metros_cuadrados,
-            tipo_construccion_forzado=tipo_final
-        )
-        
-        return jsonify(resultado)
-        
-    except Exception as e:
-        return jsonify({'error': f'Error procesando calculadora: {str(e)}'}), 500
-
-
-@presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
-@login_required
-def calcular_etapas_ia():
-    """Calcula con IA determinística las etapas seleccionadas de un presupuesto."""
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        return jsonify({'ok': False, 'error': 'Sin permisos para usar la IA de presupuestos'}), 403
-
-    data = request.get_json(silent=True) or {}
-    etapa_payload = data.get('etapa_ids') or []
-    superficie = data.get('superficie_m2')
-    tipo_calculo = data.get('tipo_calculo') or data.get('tipo_construccion') or 'Estándar'
-    contexto = data.get('parametros_contexto') or {}
-    presupuesto_id = data.get('presupuesto_id')
-    persistir = bool(data.get('persistir'))
-    moneda_raw = data.get('currency') or data.get('moneda')
-
-    try:
-        currency, fx_snapshot = _resolve_currency_context(moneda_raw)
-    except Exception as exc:
-        current_app.logger.exception('No se pudo resolver la moneda para la IA de presupuestos')
-        return jsonify({'ok': False, 'error': f'No se pudo obtener el tipo de cambio: {exc}'}), 500
-
-    if superficie is None:
-        return jsonify({'ok': False, 'error': 'Debes indicar la superficie en m² para calcular.'}), 400
-
-    superficie_decimal = _quantize_quantity(_to_decimal(superficie, '0'))
-    if superficie_decimal <= DECIMAL_ZERO:
-        return jsonify({'ok': False, 'error': 'La superficie debe ser mayor a 0.'}), 400
-
-    try:
-        resultado = calcular_etapas_seleccionadas(
-            etapas_payload=etapa_payload,
-            superficie_m2=str(superficie_decimal),
-            tipo_calculo=tipo_calculo,
-            contexto=contexto,
-            presupuesto_id=presupuesto_id,
-            currency=currency,
-            fx_snapshot=fx_snapshot,
-        )
-    except ValueError as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
-    except Exception as exc:  # pragma: no cover - logging de errores inesperados
-        current_app.logger.exception('Error calculando etapas IA')
-        return jsonify({'ok': False, 'error': 'No se pudo calcular las etapas seleccionadas.'}), 500
-
-    resultado['superficie_usada'] = float(superficie_decimal)
-    resultado['tipo_calculo'] = tipo_calculo
-    resultado['ok'] = True
-    resultado['presupuesto_id'] = presupuesto_id
-    resultado['parametros_contexto'] = contexto
-    resultado['moneda'] = currency
-
-    if presupuesto_id and persistir:
-        presupuesto = Presupuesto.query.filter_by(
-            id=presupuesto_id,
-            organizacion_id=current_user.organizacion_id,
-        ).first()
-
-        if not presupuesto:
-            return jsonify({'ok': False, 'error': 'No encontramos el presupuesto indicado para aplicar los resultados.'}), 404
-
-        total_antes = float(presupuesto.total_con_iva or 0)
-
-        try:
-            cac_context = get_cac_context()
-            cambios, _ = _persistir_resultados_etapas(
-                presupuesto,
-                resultado.get('etapas', []),
-                superficie_decimal,
-                tipo_calculo,
-                currency,
-                fx_snapshot,
-                cac_context,
-            )
-            if cambios:
-                db.session.commit()
-                total_despues = float(presupuesto.total_con_iva or 0)
-                resultado['guardado'] = True
-                resultado['total_actualizado'] = {
-                    'antes': total_antes,
-                    'despues': total_despues,
-                }
-                current_app.logger.info(
-                    '💾 Etapas IA aplicadas al presupuesto',
-                    extra={
-                        'usuario_id': current_user.id,
-                        'organizacion_id': current_user.organizacion_id,
-                        'presupuesto_id': presupuesto.id,
-                        'etapas': [e.get('slug') or e.get('nombre') for e in (resultado.get('etapas') or [])],
-                        'total_antes': total_antes,
-                        'total_despues': total_despues,
-                        'superficie': float(superficie_decimal),
-                        'tipo_calculo': tipo_calculo,
-                    },
-                )
-            else:
-                db.session.rollback()
-                resultado['guardado'] = False
-        except Exception:
-            db.session.rollback()
-            current_app.logger.exception('Error persistiendo resultados de etapas IA en presupuesto')
-            return jsonify({'ok': False, 'error': 'El cálculo se generó pero no pudimos guardarlo en el presupuesto.'}), 500
-
-    current_app.logger.info(
-        '🧠 IA etapas calculada',
-        extra={
-            'usuario_id': current_user.id,
-            'organizacion_id': current_user.organizacion_id,
-            'etapas_solicitadas': [e.get('slug') if isinstance(e, dict) else e for e in (etapa_payload or [])],
-            'presupuesto_id': presupuesto_id,
-        },
-    )
-    return jsonify(resultado)
-
-@presupuestos_bp.route('/crear-desde-ia', methods=['POST'])
-@login_required  
-def crear_desde_ia():
-    """Crea un presupuesto a partir de los resultados de la calculadora IA"""
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'No tienes permisos para crear presupuestos'}), 403
-    
-    try:
-        # Obtener datos del JSON enviado
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No se recibieron datos'}), 400
-        
-        presupuesto_ia = data.get('presupuesto')
-        observaciones = data.get('observaciones', '')
-        datos_proyecto = data.get('datos_proyecto', {})
-        
-        if not presupuesto_ia:
-            return jsonify({'error': 'Datos del presupuesto incompletos'}), 400
-
-        currency_raw = datos_proyecto.get('currency') if isinstance(datos_proyecto, dict) else data.get('currency')
-        try:
-            currency, fx_snapshot = _resolve_currency_context(currency_raw)
-        except Exception as exc:
-            current_app.logger.exception('Error obteniendo tipo de cambio para crear presupuesto desde IA')
-            return jsonify({'error': 'No se pudo obtener el tipo de cambio solicitado.'}), 500
-
-        # NO CREAR OBRA AUTOMÁTICAMENTE - Solo guardar datos del proyecto
-        # Los presupuestos quedan como "borrador" hasta que se confirmen explícitamente
-        
-        # Generar número de presupuesto único
-        ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
-        if ultimo_numero and ultimo_numero.startswith('PRES-'):
-            try:
-                siguiente_num = int(ultimo_numero.split('-')[1]) + 1
-            except:
-                siguiente_num = 1
-        else:
-            siguiente_num = 1
-        
-        # Asegurar que el número sea único
-        while True:
-            numero = f"PRES-{siguiente_num:04d}"
-            existe = Presupuesto.query.filter_by(numero=numero).first()
-            if not existe:
-                break
-            siguiente_num += 1
-        
-        # Crear presupuesto base (SIN obra_id)
-        nuevo_presupuesto = Presupuesto()
-        nuevo_presupuesto.obra_id = None  # Sin obra asociada hasta confirmar
-        nuevo_presupuesto.numero = numero
-        nuevo_presupuesto.observaciones = f"Calculado con IA - {observaciones}"
-        nuevo_presupuesto.iva_porcentaje = 21.0
-        nuevo_presupuesto.estado = 'borrador'  # Borrador hasta que se confirme
-        nuevo_presupuesto.confirmado_como_obra = False
-        nuevo_presupuesto.datos_proyecto = json.dumps(datos_proyecto)  # Guardar datos para posterior conversión
-        nuevo_presupuesto.organizacion_id = current_user.organizacion_id
-        nuevo_presupuesto.currency = currency
-        vigencia_config = datos_proyecto.get('vigencia_dias') if isinstance(datos_proyecto, dict) else None
-        vigencia_dias = _parse_vigencia_dias(vigencia_config) if vigencia_config is not None else 30
-        if vigencia_dias is None:
-            vigencia_dias = 30
-        nuevo_presupuesto.vigencia_dias = vigencia_dias
-        nuevo_presupuesto.vigencia_bloqueada = True
-        nuevo_presupuesto.asegurar_vigencia()
-
-        db.session.add(nuevo_presupuesto)
-        db.session.flush()  # Para obtener el ID
-
-        try:
-            nuevo_presupuesto.registrar_tipo_cambio(fx_snapshot)
-        except AttributeError:
-            pass
-        
-        # Agregar items de materiales
-        materiales = presupuesto_ia.get('materiales', {})
-        for material, cantidad in materiales.items():
-            if cantidad > 0:
-                # Mapear nombres técnicos a descripciones legibles expandidas
-                descripciones = {
-                    # Materiales estructurales
-                    'ladrillos': 'Ladrillos comunes',
-                    'cemento': 'Bolsas de cemento',
-                    'cal': 'Cal hidratada',
-                    'arena': 'Arena gruesa',
-                    'piedra': 'Piedra partida',
-                    'hierro_8': 'Hierro 8mm',
-                    'hierro_10': 'Hierro 10mm', 
-                    'hierro_12': 'Hierro 12mm',
-                    
-                    # Revestimientos y pisos
-                    'ceramicos': 'Cerámicos esmaltados',
-                    'porcelanato': 'Porcelanato rectificado',
-                    'azulejos': 'Azulejos para baños',
-                    
-                    # Instalaciones
-                    'cables_electricos': 'Cables eléctricos',
-                    'caños_agua': 'Caños para agua',
-                    'caños_cloacas': 'Caños cloacales',
-                    
-                    # Techado
-                    'chapas': 'Chapas acanaladas',
-                    'tejas': 'Tejas cerámicas',
-                    'aislacion_termica': 'Aislación térmica',
-                    
-                    # Terminaciones
-                    'yeso': 'Yeso para terminaciones',
-                    'madera_estructural': 'Madera estructural',
-                    'vidrios': 'Vidrios templados',
-                    'aberturas_metal': 'Aberturas metálicas',
-                    
-                    # Impermeabilización
-                    'membrana': 'Membrana asfáltica',
-                    'pintura': 'Pintura látex interior',
-                    'pintura_exterior': 'Pintura exterior',
-                    'sellador': 'Sellador acrílico'
-                }
-                
-                unidades = {
-                    # Estructurales
-                    'ladrillos': 'unidades',
-                    'cemento': 'bolsas',
-                    'cal': 'kg',
-                    'arena': 'm³',
-                    'piedra': 'm³',
-                    'hierro_8': 'kg',
-                    'hierro_10': 'kg',
-                    'hierro_12': 'kg',
-                    
-                    # Revestimientos
-                    'ceramicos': 'm²',
-                    'porcelanato': 'm²',
-                    'azulejos': 'm²',
-                    
-                    # Instalaciones
-                    'cables_electricos': 'metros',
-                    'caños_agua': 'metros',
-                    'caños_cloacas': 'metros',
-                    
-                    # Techado
-                    'chapas': 'm²',
-                    'tejas': 'm²',
-                    'aislacion_termica': 'm²',
-                    
-                    # Terminaciones
-                    'yeso': 'kg',
-                    'madera_estructural': 'm³',
-                    'vidrios': 'm²',
-                    'aberturas_metal': 'm²',
-                    
-                    # Impermeabilización
-                    'membrana': 'm²',
-                    'pintura': 'litros',
-                    'pintura_exterior': 'litros',
-                    'sellador': 'litros'
-                }
-                
-                cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0'))
-                item = ItemPresupuesto()
-                item.presupuesto_id = nuevo_presupuesto.id
-                item.tipo = 'material'
-                item.descripcion = descripciones.get(material, material.title())
-                item.unidad = unidades.get(material, 'unidades')
-                item.cantidad = cantidad_dec
-                item.precio_unitario = DECIMAL_ZERO
-                item.total = DECIMAL_ZERO
-                item.origen = 'ia'
-                item.currency = currency
-                item.price_unit_currency = DECIMAL_ZERO
-                item.total_currency = DECIMAL_ZERO
-                db.session.add(item)
-        
-        # Agregar equipos
-        equipos = presupuesto_ia.get('equipos', {})
-        for equipo, specs in equipos.items():
-            # Manejar tanto diccionarios como valores simples
-            if isinstance(specs, dict):
-                cantidad = specs.get('cantidad', 0)
-                dias_uso = specs.get('dias_uso', 0)
-            else:
-                # Fallback si no es un diccionario
-                cantidad = 1
-                dias_uso = 0
-                
-            if cantidad > 0:
-                descripciones_equipos = {
-                    'hormigonera': 'Alquiler Hormigonera',
-                    'andamios': 'Alquiler Andamios',  
-                    'carretilla': 'Carretilla',
-                    'nivel_laser': 'Alquiler Nivel Láser',
-                    'martillo_demoledor': 'Alquiler Martillo Demoledor',
-                    'soldadora': 'Alquiler Soldadora',
-                    'compresora': 'Alquiler Compresora',
-                    'generador': 'Alquiler Generador',
-                    'elevador': 'Alquiler Elevador',
-                    'mezcladora': 'Alquiler Mezcladora'
-                }
-                
-                item = ItemPresupuesto()
-                item.presupuesto_id = nuevo_presupuesto.id
-                item.tipo = 'equipo'
-                
-                # Descripción con días de uso si aplica
-                base_desc = descripciones_equipos.get(equipo, equipo.replace('_', ' ').title())
-                if dias_uso > 0:
-                    item.descripcion = f"{base_desc} - {dias_uso} días"
-                else:
-                    item.descripcion = base_desc
-                    
-                item.unidad = 'días' if equipo in ['hormigonera', 'andamios', 'nivel_laser'] else 'unidades'
-                item.cantidad = _quantize_quantity(_to_decimal(cantidad, '0'))
-                item.precio_unitario = DECIMAL_ZERO
-                item.total = DECIMAL_ZERO
-                item.origen = 'ia'
-                item.currency = currency
-                item.price_unit_currency = DECIMAL_ZERO
-                item.total_currency = DECIMAL_ZERO
-                db.session.add(item)
-        
-        # Agregar herramientas
-        herramientas = presupuesto_ia.get('herramientas', {})
-        for herramienta, cantidad in herramientas.items():
-            try:
-                cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0')) if cantidad else DECIMAL_ZERO
-                if cantidad_dec > DECIMAL_ZERO:
-                    descripciones_herramientas = {
-                        'palas': 'Palas',
-                        'baldes': 'Baldes',
-                        'fratacho': 'Fratacho',
-                        'regla': 'Regla de albañil',
-                        'llanas': 'Llanas',
-                        'martillos': 'Martillos',
-                        'serruchos': 'Serruchos',
-                        'taladros': 'Taladros',
-                        'nivel_burbuja': 'Nivel de burbuja',
-                        'flexometros': 'Flexómetros',
-                        'amoladoras': 'Amoladoras',
-                        'pistola_calor': 'Pistola de calor',
-                        'alicates': 'Alicates',
-                        'destornilladores': 'Destornilladores',
-                        'sierra_circular': 'Sierra circular',
-                        'router': 'Router'
-                    }
-                    
-                    item = ItemPresupuesto()
-                    item.presupuesto_id = nuevo_presupuesto.id
-                    item.tipo = 'herramienta'
-                    item.descripcion = descripciones_herramientas.get(herramienta, herramienta.replace('_', ' ').title())
-                    item.unidad = 'unidades'
-                    item.cantidad = cantidad_dec
-                    item.precio_unitario = DECIMAL_ZERO
-                    item.total = DECIMAL_ZERO
-                    item.origen = 'ia'
-                    item.currency = currency
-                    item.price_unit_currency = DECIMAL_ZERO
-                    item.total_currency = DECIMAL_ZERO
-                    db.session.add(item)
-            except (ValueError, TypeError):
-                # Omitir herramientas con valores inválidos
-                continue
-        
-        db.session.commit()
-        
-        return jsonify({
-            'exito': True,
-            'presupuesto_id': nuevo_presupuesto.id,
-            'numero': numero,
-            'mensaje': 'Presupuesto creado como borrador. Podrás convertirlo en obra desde la lista de presupuestos.',
-            'redirect_url': url_for('presupuestos.detalle', id=nuevo_presupuesto.id)
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Error creando presupuesto: {str(e)}'}), 500
-
-@presupuestos_bp.route('/exportar-excel-ia', methods=['POST'])
-@login_required
-def exportar_excel_ia():
-    """Exporta los resultados de la calculadora IA a Excel"""
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        return jsonify({'error': 'Sin permisos'}), 403
-
-    if not XLSXWRITER_AVAILABLE:
-        return (
-            jsonify({
-                'error': "La exportación a Excel requiere la librería xlsxwriter. Instálala con 'pip install xlsxwriter'."
-            }),
-            500,
-        )
-
-    try:
-        data = request.get_json()
-        if not data or not data.get('presupuesto'):
-            return jsonify({'error': 'No se recibieron datos'}), 400
-        
-        presupuesto = data['presupuesto']
-        
-        # Crear archivo Excel en memoria
-        output = BytesIO()
-        workbook = xlsxwriter.Workbook(output)
-        
-        # Formatos
-        header_format = workbook.add_format({
-            'bold': True,
-            'font_size': 14,
-            'bg_color': '#2E5BBA',
-            'color': 'white',
-            'align': 'center'
-        })
-        
-        subheader_format = workbook.add_format({
-            'bold': True,
-            'font_size': 12,
-            'bg_color': '#F0F0F0'
-        })
-        
-        number_format = workbook.add_format({'num_format': '#,##0.00'})
-        
-        # Hoja principal
-        worksheet = workbook.add_worksheet('Presupuesto IA')
-        
-        # Encabezado
-        worksheet.merge_range('A1:E1', 'PRESUPUESTO CALCULADO CON IA', header_format)
-        
-        row = 3
-        
-        # Información del proyecto
-        metadata = presupuesto.get('metadata', {})
-        worksheet.write(row, 0, 'Superficie:', subheader_format)
-        worksheet.write(row, 1, f"{metadata.get('superficie_m2', 0)} m²")
-        row += 1
-        
-        worksheet.write(row, 0, 'Tipo de Construcción:', subheader_format)
-        worksheet.write(row, 1, metadata.get('tipo_construccion', 'N/A'))
-        row += 2
-        
-        # Materiales
-        worksheet.write(row, 0, 'MATERIALES', subheader_format)
-        row += 1
-        
-        worksheet.write(row, 0, 'Material', subheader_format)
-        worksheet.write(row, 1, 'Cantidad', subheader_format)
-        worksheet.write(row, 2, 'Unidad', subheader_format)
-        row += 1
-        
-        materiales = presupuesto.get('materiales', {})
-        unidades_map = {
-            'ladrillos': 'unidades', 'cemento': 'bolsas', 'cal': 'kg',
-            'arena': 'm³', 'piedra': 'm³', 'hierro_8': 'kg',
-            'hierro_10': 'kg', 'hierro_12': 'kg', 'membrana': 'm²',
-            'pintura': 'litros'
-        }
-        
-        for material, cantidad in materiales.items():
-            worksheet.write(row, 0, material.replace('_', ' ').title())
-            worksheet.write(row, 1, cantidad, number_format)
-            worksheet.write(row, 2, unidades_map.get(material, 'unidades'))
-            row += 1
-        
-        row += 1
-        
-        # Equipos
-        worksheet.write(row, 0, 'EQUIPOS Y MAQUINARIAS', subheader_format)
-        row += 1
-        
-        worksheet.write(row, 0, 'Equipo', subheader_format)
-        worksheet.write(row, 1, 'Cantidad', subheader_format)
-        worksheet.write(row, 2, 'Días de Uso', subheader_format)
-        row += 1
-        
-        equipos = presupuesto.get('equipos', {})
-        for equipo, specs in equipos.items():
-            if specs.get('cantidad', 0) > 0:
-                worksheet.write(row, 0, equipo.replace('_', ' ').title())
-                worksheet.write(row, 1, specs.get('cantidad', 0))
-                worksheet.write(row, 2, specs.get('dias_uso', 0))
-                row += 1
-        
-        workbook.close()
-        output.seek(0)
-        
-        # Crear respuesta
-        response = make_response(output.getvalue())
-        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        response.headers['Content-Disposition'] = f'attachment; filename=presupuesto_ia_{dt.datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
-        
-        return response
-        
-    except Exception as e:
-        return jsonify({'error': f'Error exportando Excel: {str(e)}'}), 500
-
-@presupuestos_bp.route('/<int:id>')
+@obras_bp.route('/<int:id>')
 @login_required
 def detalle(id):
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        flash('No tienes permisos para ver presupuestos.', 'danger')
-        return redirect(url_for('reportes.dashboard'))
-    
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-    items = presupuesto.items.all()
-    
-    # Agrupar items por tipo
-    materiales = [item for item in items if item.tipo == 'material']
-    mano_obra = [item for item in items if item.tipo == 'mano_obra']
-    equipos = [item for item in items if item.tipo == 'equipo']
-    herramientas = [item for item in items if item.tipo == 'herramienta']
-
-    ia_materiales = [item for item in materiales if item.origen == 'ia']
-    ia_mano_obra = [item for item in mano_obra if item.origen == 'ia']
-    ia_equipos = [item for item in equipos if item.origen == 'ia']
-    ia_herramientas = [item for item in herramientas if item.origen == 'ia']
-
-    totales_ia = {
-        'materiales': _sumar_totales(ia_materiales),
-        'mano_obra': _sumar_totales(ia_mano_obra),
-        'equipos': _sumar_totales(ia_equipos),
-        'herramientas': _sumar_totales(ia_herramientas),
-    }
-    totales_ia['general'] = _quantize_currency(
-        totales_ia['materiales'] + totales_ia['mano_obra'] + totales_ia['equipos'] + totales_ia['herramientas']
-    )
-
-    g.currency_context = presupuesto.currency
-
-    return render_template('presupuestos/detalle.html',
-                         presupuesto=presupuesto,
-                         materiales=materiales,
-                         mano_obra=mano_obra,
-                         equipos=equipos,
-                         herramientas=herramientas,
-                         ia_materiales=ia_materiales,
-                         ia_mano_obra=ia_mano_obra,
-                         ia_equipos=ia_equipos,
-                         ia_herramientas=ia_herramientas,
-                         totales_ia=totales_ia)
-
-@presupuestos_bp.route('/<int:id>/item', methods=['POST'])
-@login_required
-def agregar_item(id):
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para agregar items.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-    
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-    
-    if presupuesto.estado != 'borrador':
-        flash('Solo se pueden agregar items a presupuestos en borrador.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-    
-    tipo = request.form.get('tipo')
-    descripcion = request.form.get('descripcion')
-    unidad = request.form.get('unidad')
-    cantidad = request.form.get('cantidad')
-    precio_unitario = request.form.get('precio_unitario')
-    
-    if not all([tipo, descripcion, unidad, cantidad, precio_unitario]):
-        flash('Completa todos los campos.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-    
-    try:
-        cantidad_dec = _quantize_quantity(_to_decimal(cantidad, '0'))
-        precio_unitario_dec = _quantize_currency(_to_decimal(precio_unitario, '0'))
-        total_dec = _quantize_currency(cantidad_dec * precio_unitario_dec)
-    except (InvalidOperation, ValueError, TypeError):
-        flash('Cantidad y precio deben ser números válidos.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-
-    nuevo_item = ItemPresupuesto()
-    nuevo_item.presupuesto_id = id
-    nuevo_item.tipo = tipo
-    nuevo_item.descripcion = descripcion
-    nuevo_item.unidad = unidad
-    nuevo_item.cantidad = cantidad_dec
-    nuevo_item.precio_unitario = precio_unitario_dec
-    nuevo_item.total = total_dec
-    nuevo_item.origen = 'manual'
-    nuevo_item.currency = presupuesto.currency or 'ARS'
-    nuevo_item.price_unit_currency = precio_unitario_dec
-    nuevo_item.total_currency = total_dec
-
-    try:
-        db.session.add(nuevo_item)
-        presupuesto.calcular_totales()
-        db.session.commit()
-        flash('Item agregado exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al agregar el item.', 'danger')
-    
-    return redirect(url_for('presupuestos.detalle', id=id))
-
-@presupuestos_bp.route('/item/<int:id>/eliminar', methods=['POST'])
-@login_required
-def eliminar_item(id):
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para eliminar items.', 'danger')
-        return redirect(url_for('reportes.dashboard'))
-    
-    item = ItemPresupuesto.query.get_or_404(id)
-    presupuesto = item.presupuesto
-
-    if presupuesto.organizacion_id != current_user.organizacion_id or presupuesto.deleted_at is not None:
-        flash('No tienes permisos para eliminar este item.', 'danger')
-        return redirect(url_for('presupuestos.lista'))
-    
-    if presupuesto.estado != 'borrador':
-        flash('Solo se pueden eliminar items de presupuestos en borrador.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=presupuesto.id))
-    
-    try:
-        db.session.delete(item)
-        presupuesto.calcular_totales()
-        db.session.commit()
-        flash('Item eliminado exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al eliminar el item.', 'danger')
-    
-    return redirect(url_for('presupuestos.detalle', id=presupuesto.id))
-
-@presupuestos_bp.route('/<int:id>/estado', methods=['POST'])
-@login_required
-def cambiar_estado(id):
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para cambiar el estado.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-    
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-
-    if presupuesto.estado in ['perdido', 'eliminado']:
-        flash('No puedes modificar el estado de un presupuesto archivado.', 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
-    nuevo_estado = request.form.get('estado')
-    
-    if nuevo_estado not in ['borrador', 'enviado', 'aprobado', 'rechazado']:
-        flash('Estado no válido.', 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-    
-    presupuesto.estado = nuevo_estado
-    
-    try:
-        db.session.commit()
-        flash(f'Estado cambiado a {nuevo_estado} exitosamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al cambiar el estado.', 'danger')
-    
-    return redirect(url_for('presupuestos.detalle', id=id))
-
-@presupuestos_bp.route('/<int:id>/pdf')
-@login_required
-def generar_pdf(id):
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        flash('No tienes permisos para generar PDFs.', 'danger')
+    roles = _get_roles_usuario(current_user)
+    if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras') and 'operario' not in roles:
+        flash('No tienes permisos para ver obras.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    if not REPORTLAB_AVAILABLE:
-        flash(
-            "La generación de PDF requiere la librería reportlab. Instálala ejecutando 'pip install reportlab'.",
-            'danger'
-        )
-        return redirect(url_for('presupuestos.detalle', id=id))
-
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-    items = presupuesto.items.all()
-
-    # Crear buffer para el PDF
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    story = []
-    
-    # Estilos
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        spaceAfter=30,
-        alignment=TA_CENTER
-    )
-    
-    # Título
-    story.append(Paragraph('PRESUPUESTO DE OBRA', title_style))
-    story.append(Spacer(1, 20))
-    
-    # Información del presupuesto
-    info_data = [
-        ['Número:', presupuesto.numero],
-        ['Fecha:', presupuesto.fecha.strftime('%d/%m/%Y')],
-        ['Obra:', presupuesto.obra.nombre],
-        ['Cliente:', presupuesto.obra.cliente],
-        ['Estado:', presupuesto.estado.upper()]
-    ]
-    
-    info_table = Table(info_data, colWidths=[2*inch, 4*inch])
-    info_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    
-    story.append(info_table)
-    story.append(Spacer(1, 30))
-    
-    # Tabla de items
-    if items:
-        # Encabezados
-        data = [['Descripción', 'Unidad', 'Cantidad', 'P. Unit.', 'Total']]
-        
-        # Materiales
-        materiales = [item for item in items if item.tipo == 'material']
-        if materiales:
-            data.append(['MATERIALES', '', '', '', ''])
-            for item in materiales:
-                data.append([
-                    item.descripcion,
-                    item.unidad,
-                    f"{item.cantidad:.2f}",
-                    f"${item.precio_unitario:.2f}",
-                    f"${item.total:.2f}"
-                ])
-            data.append(['', '', '', 'Subtotal Materiales:', f"${presupuesto.subtotal_materiales:.2f}"])
-        
-        # Mano de obra
-        mano_obra = [item for item in items if item.tipo == 'mano_obra']
-        if mano_obra:
-            data.append(['', '', '', '', ''])
-            data.append(['MANO DE OBRA', '', '', '', ''])
-            for item in mano_obra:
-                data.append([
-                    item.descripcion,
-                    item.unidad,
-                    f"{item.cantidad:.2f}",
-                    f"${item.precio_unitario:.2f}",
-                    f"${item.total:.2f}"
-                ])
-            data.append(['', '', '', 'Subtotal Mano de Obra:', f"${presupuesto.subtotal_mano_obra:.2f}"])
-        
-        # Equipos
-        equipos = [item for item in items if item.tipo == 'equipo']
-        if equipos:
-            data.append(['', '', '', '', ''])
-            data.append(['EQUIPOS', '', '', '', ''])
-            for item in equipos:
-                data.append([
-                    item.descripcion,
-                    item.unidad,
-                    f"{item.cantidad:.2f}",
-                    f"${item.precio_unitario:.2f}",
-                    f"${item.total:.2f}"
-                ])
-            data.append(['', '', '', 'Subtotal Equipos:', f"${presupuesto.subtotal_equipos:.2f}"])
-        
-        # Totales
-        data.append(['', '', '', '', ''])
-        data.append(['', '', '', 'TOTAL SIN IVA:', f"${presupuesto.total_sin_iva:.2f}"])
-        data.append(['', '', '', f'IVA ({presupuesto.iva_porcentaje}%):', f"${(presupuesto.total_con_iva - presupuesto.total_sin_iva):.2f}"])
-        data.append(['', '', '', 'TOTAL CON IVA:', f"${presupuesto.total_con_iva:.2f}"])
-        
-        table = Table(data, colWidths=[3*inch, 0.8*inch, 0.8*inch, 1.2*inch, 1.2*inch])
-        table.setStyle(TableStyle([
-            # Encabezado
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            
-            # Cuerpo
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            
-            # Subtotales y totales en negrita
-            ('FONTNAME', (3, -4), (-1, -1), 'Helvetica-Bold'),
-        ]))
-        
-        story.append(table)
-    
-    # Observaciones
-    if presupuesto.observaciones:
-        story.append(Spacer(1, 30))
-        story.append(Paragraph('Observaciones:', styles['Heading2']))
-        story.append(Paragraph(presupuesto.observaciones, styles['Normal']))
-    
-    # Generar PDF
-    doc.build(story)
-    buffer.seek(0)
-    
-    response = make_response(buffer.getvalue())
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=presupuesto_{presupuesto.numero}.pdf'
-    
-    return response
-
-@presupuestos_bp.route('/<int:id>/editar-obra', methods=['POST'])
-@login_required
-def editar_obra(id):
-    """Editar información de la obra asociada al presupuesto"""
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'Sin permisos'}), 403
-
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-
-    if presupuesto.estado != 'borrador':
-        return jsonify({'error': 'Solo puedes editar presupuestos en borrador.'}), 400
-
-    payload = request.get_json(silent=True) or request.form.to_dict()
-    if not payload:
-        return jsonify({'error': 'No se recibieron datos para actualizar la obra.'}), 400
-
-    obra: Optional[Obra] = None
-    new_obra_created = False
-
-    raw_obra_id = payload.get('obra_id') or presupuesto.obra_id
-    if raw_obra_id:
-        try:
-            obra_id = int(raw_obra_id)
-        except (TypeError, ValueError):
-            return jsonify({'error': 'Identificador de obra inválido.'}), 400
-
-        obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first()
-        if obra is None:
-            return jsonify({'error': 'Obra asociada no encontrada.'}), 404
-    else:
-        obra = presupuesto.obra
-
-    if obra and obra.organizacion_id != current_user.organizacion_id:
-        return jsonify({'error': 'No tienes permisos para modificar esta obra.'}), 403
-
-    if obra is None:
-        obra = Obra(
-            organizacion_id=current_user.organizacion_id,
-            estado='planificacion',
-            cliente='Cliente sin especificar'
-        )
-        presupuesto.obra = obra
-        db.session.add(obra)
-        new_obra_created = True
-
-    try:
-        if 'nombre' in payload:
-            nombre = _clean_text(payload.get('nombre'))
-            if not nombre:
-                return jsonify({'error': 'El nombre de la obra no puede estar vacío.'}), 400
-            obra.nombre = nombre
-        elif new_obra_created:
-            return jsonify({'error': 'El nombre de la obra es obligatorio.'}), 400
-
-        if 'cliente' in payload:
-            cliente = _clean_text(payload.get('cliente')) or 'Cliente sin especificar'
-            obra.cliente = cliente
-        elif new_obra_created and not obra.cliente:
-            obra.cliente = 'Cliente sin especificar'
-
-        for campo in ('descripcion', 'direccion'):
-            if campo in payload:
-                setattr(obra, campo, _clean_text(payload.get(campo)))
-
-        if 'fecha_inicio' in payload:
-            parsed = _parse_date(payload.get('fecha_inicio'))
-            if payload.get('fecha_inicio') and parsed is None:
-                return jsonify({'error': 'Formato de fecha de inicio inválido.'}), 400
-            obra.fecha_inicio = parsed
-
-        if 'fecha_fin_estimada' in payload:
-            parsed = _parse_date(payload.get('fecha_fin_estimada'))
-            if payload.get('fecha_fin_estimada') and parsed is None:
-                return jsonify({'error': 'Formato de fecha de finalización inválido.'}), 400
-            obra.fecha_fin_estimada = parsed
-
-        if 'presupuesto_total' in payload:
-            bruto_presupuesto = payload.get('presupuesto_total')
-            if bruto_presupuesto in (None, ''):
-                obra.presupuesto_total = None
-            else:
-                try:
-                    obra.presupuesto_total = _quantize_currency(_to_decimal(bruto_presupuesto, '0'))
-                except (InvalidOperation, ValueError, TypeError):
-                    return jsonify({'error': 'El presupuesto total debe ser numérico.'}), 400
-
-        db.session.commit()
-        return jsonify({
-            'exito': True,
-            'mensaje': 'Obra actualizada correctamente',
-            'obra_id': obra.id
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception('Error actualizando la obra asociada al presupuesto %s', id)
-        return jsonify({'error': f'Error actualizando obra: {str(e)}'}), 500
-
-@presupuestos_bp.route('/item/<int:item_id>/editar', methods=['POST'])
-@login_required
-def editar_item(item_id):
-    """Editar un item específico del presupuesto"""
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'Sin permisos'}), 403
-    
-    item = ItemPresupuesto.query.get_or_404(item_id)
-    presupuesto = item.presupuesto
-
-    if presupuesto.organizacion_id != current_user.organizacion_id or presupuesto.deleted_at is not None:
-        return jsonify({'error': 'No tienes permisos para editar este item.'}), 403
-
-    if presupuesto.estado != 'borrador':
-        return jsonify({'error': 'Solo puedes editar items en presupuestos en borrador.'}), 400
-    
-    data = request.get_json()
-    
-    try:
-        # Actualizar campos del item
-        if 'descripcion' in data:
-            item.descripcion = data['descripcion']
-        if 'unidad' in data:
-            item.unidad = data['unidad']
-        if 'cantidad' in data:
-            item.cantidad = _quantize_quantity(_to_decimal(data['cantidad'], '0'))
-        if 'precio_unitario' in data:
-            item.precio_unitario = _quantize_currency(_to_decimal(data['precio_unitario'], '0'))
-
-        cantidad_dec = _to_decimal(item.cantidad, '0')
-        precio_unitario_dec = _to_decimal(item.precio_unitario, '0')
-
-        # Recalcular total
-        item.total = _quantize_currency(cantidad_dec * precio_unitario_dec)
-        
-        # Recalcular totales del presupuesto
-        presupuesto.calcular_totales()
-        
-        db.session.commit()
-        return jsonify({
-            'exito': True, 
-            'mensaje': 'Item actualizado correctamente',
-            'nuevo_total': float(item.total),
-            'subtotal_materiales': float(presupuesto.subtotal_materiales),
-            'subtotal_mano_obra': float(presupuesto.subtotal_mano_obra),
-            'subtotal_equipos': float(presupuesto.subtotal_equipos),
-            'total_sin_iva': float(presupuesto.total_sin_iva),
-            'total_con_iva': float(presupuesto.total_con_iva)
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Error actualizando item: {str(e)}'}), 500
-
-
-@presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
-@login_required
-def confirmar_como_obra(id):
-    """Convierte un presupuesto borrador en una obra confirmada."""
-
-    wants_json = request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    payload = request.get_json(silent=True) if request.is_json else None
-    payload = payload or request.form
-
-    crear_tareas = _to_bool(payload.get('crear_tareas'), True)
-    normalizar_slugs = _to_bool(payload.get('normalizar_slugs'), True)
-    notificar = _to_bool(payload.get('notificar'), True)
-    trigger_source = 'list_modal' if wants_json else 'detail_view'
-
-    puede_acceder = getattr(current_user, 'puede_acceder_modulo', lambda modulo: True)
-    role_checker = getattr(current_user, 'tiene_rol', None)
-    is_admin_membership = bool(callable(role_checker) and role_checker('admin'))
-    es_admin_compat = False
-    es_admin_method = getattr(current_user, 'es_admin', None)
-    if callable(es_admin_method):
-        try:
-            es_admin_compat = bool(es_admin_method())
-        except Exception:  # pragma: no cover - compatibilidad legacy
-            es_admin_compat = False
-    legacy_role = (getattr(current_user, 'rol', None) or '').lower()
-    legacy_is_admin = legacy_role in {'administrador', 'administrador_general', 'admin'}
-
-    if not puede_acceder('presupuestos') or not (is_admin_membership or es_admin_compat or legacy_is_admin):
-        mensaje = 'No tienes permisos para confirmar obras.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 403
-        flash(mensaje, 'danger')
-        return redirect(url_for('presupuestos.lista'))
+    if 'operario' in roles and not es_miembro_obra(id, current_user.id):
+        flash('No tienes permisos para ver esta obra.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
 
     org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     if not org_id:
-        mensaje = 'No se pudo determinar la organización activa.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'danger')
-        return redirect(url_for('presupuestos.lista'))
+        abort(404)
 
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == org_id
-    ).first_or_404()
+    obra = Obra.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+    if not obra_tiene_presupuesto_confirmado(obra):
+        abort(404)
+    etapas = obra.etapas.order_by(EtapaObra.orden).all()
+    asignaciones = obra.asignaciones.filter_by(activo=True).all()
+    usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=org_id).all()
+    etapas_disponibles = obtener_etapas_disponibles()
 
-    if presupuesto.deleted_at is not None:
-        mensaje = 'No puedes confirmar un presupuesto eliminado.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'danger')
-        return redirect(url_for('presupuestos.lista'))
+    miembros = (ObraMiembro.query
+                .filter_by(obra_id=obra.id)
+                .join(Usuario, ObraMiembro.usuario_id == Usuario.id)
+                .order_by(Usuario.nombre.asc())
+                .all())
 
-    if presupuesto.confirmado_como_obra:
-        obra_url = url_for('obras.detalle', id=presupuesto.obra_id) if presupuesto.obra_id else None
-        mensaje = 'Este presupuesto ya fue confirmado como obra.'
-        if wants_json:
-            return jsonify({
-                'status': 'already_confirmed',
-                'message': mensaje,
-                'obra_id': presupuesto.obra_id,
-                'obra_url': obra_url,
-                'presupuesto_estado': presupuesto.estado
-            })
-        flash(mensaje, 'warning')
-        return redirect(obra_url or url_for('presupuestos.detalle', id=id))
+    responsables_query = (ObraMiembro.query
+                         .filter_by(obra_id=obra.id)
+                         .join(Usuario)
+                         .all())
 
-    if presupuesto.estado != 'borrador':
-        mensaje = 'Solo los presupuestos en borrador pueden confirmarse como obra.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+    responsables = [
+        {
+            'usuario': {
+                'id': r.usuario.id,
+                'nombre_completo': r.usuario.nombre_completo,
+                'rol': r.usuario.rol
+            },
+            'rol_en_obra': r.rol_en_obra
+        }
+        for r in responsables_query
+    ]
 
-    datos_proyecto: dict[str, Any] = {}
-    if presupuesto.datos_proyecto:
-        try:
-            datos_proyecto = json.loads(presupuesto.datos_proyecto)
-        except json.JSONDecodeError:
-            datos_proyecto = {}
+    from tareas_predefinidas import TAREAS_POR_ETAPA
 
-    cliente = None
-    if presupuesto.obra:
-        cliente = presupuesto.obra.cliente
-    elif isinstance(datos_proyecto, dict):
-        cliente = datos_proyecto.get('cliente')
-    if not cliente:
-        mensaje = 'Completa los datos del cliente antes de confirmar el presupuesto.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+    cert_resumen = certification_totals(obra)
+    cert_recientes = (
+        obra.work_certifications.filter_by(estado='aprobada')
+        .order_by(WorkCertification.approved_at.desc().nullslast(), WorkCertification.created_at.desc())
+        .limit(3)
+        .all()
+    )
 
-    ubicacion_texto = presupuesto.ubicacion_texto
-    if not ubicacion_texto and isinstance(datos_proyecto, dict):
-        ubicacion_texto = datos_proyecto.get('ubicacion')
-    if not ubicacion_texto:
-        mensaje = 'Debes indicar una ubicación válida antes de confirmar el presupuesto.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+    return render_template('obras/detalle.html',
+                         obra=obra,
+                         etapas=etapas,
+                         asignaciones=asignaciones,
+                         usuarios_disponibles=usuarios_disponibles,
+                         miembros=miembros,
+                         responsables=responsables_query,
+                         responsables_json=responsables,
+                         etapas_disponibles=etapas_disponibles,
+                         roles_por_categoria=obtener_roles_por_categoria(),
+                         TAREAS_POR_ETAPA=TAREAS_POR_ETAPA,
+                         can_manage=can_manage_obra(obra),
+                         current_user_id=current_user.id,
+                         certificaciones_resumen=cert_resumen,
+                         certificaciones_recientes=cert_recientes,
+                         wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
+                         wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
 
-    if presupuesto.currency not in ALLOWED_CURRENCIES:
-        mensaje = 'La moneda seleccionada no es compatible con la conversión a obra.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+@obras_bp.route('/<int:id>/editar', methods=['POST'])
+@login_required
+def editar(id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para editar obras.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
 
-    if presupuesto.currency != 'ARS' and not presupuesto.tasa_usd_venta:
-        mensaje = 'No se encontró el tipo de cambio aplicado para este presupuesto. Vuelve a calcular antes de confirmar.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+    obra = Obra.query.get_or_404(id)
 
-    if presupuesto.indice_cac_valor is None:
-        mensaje = 'Debes aplicar el índice CAC vigente antes de confirmar el presupuesto.'
-        if wants_json:
-            return jsonify({'error': mensaje}), 400
-        flash(mensaje, 'warning')
-        return redirect(url_for('presupuestos.detalle', id=id))
+    nuevo_estado = request.form.get('estado', obra.estado)
+    if nuevo_estado == 'pausada' and not obra.puede_ser_pausada_por(current_user):
+        flash('No tienes permisos para pausar esta obra.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
 
-    nueva_obra = None
+    obra.nombre = request.form.get('nombre', obra.nombre)
+    obra.descripcion = request.form.get('descripcion', obra.descripcion)
+    nueva_direccion = request.form.get('direccion', obra.direccion)
+    obra.estado = nuevo_estado
+    obra.cliente = request.form.get('cliente', obra.cliente)
+    obra.telefono_cliente = request.form.get('telefono_cliente', obra.telefono_cliente)
+    obra.email_cliente = request.form.get('email_cliente', obra.email_cliente)
+
+    if nueva_direccion != obra.direccion:
+        obra.direccion = nueva_direccion
+        if nueva_direccion:
+            coords = geolocalizar_direccion(nueva_direccion)
+            if coords:
+                obra.latitud, obra.longitud = coords
+    obra.estado = request.form.get('estado', obra.estado)
     try:
-        _congelar_presupuesto_para_confirmacion(presupuesto)
-        presupuesto.vigencia_bloqueada = True
+        obra.progreso = int(request.form.get('progreso', obra.progreso))
+    except Exception:
+        pass
 
-        nombre_obra = None
-        if isinstance(datos_proyecto, dict):
-            nombre_obra = datos_proyecto.get('nombre')
-        if not nombre_obra:
-            nombre_obra = f'Obra desde Presupuesto {presupuesto.numero}'
+    fecha_inicio = request.form.get('fecha_inicio')
+    if fecha_inicio:
+        try:
+            obra.fecha_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
-        nueva_obra = Obra()
-        nueva_obra.nombre = nombre_obra
-        nueva_obra.cliente = cliente
-        if isinstance(datos_proyecto, dict):
-            descripcion = (
-                f"Superficie: {datos_proyecto.get('superficie', 0)}m² - "
-                f"{datos_proyecto.get('ubicacion', 'Ubicación no especificada')} - "
-                f"Tipo: {datos_proyecto.get('tipo_construccion', 'Estándar')}"
-            )
-        else:
-            descripcion = f'Obra creada a partir del presupuesto {presupuesto.numero}'
-        nueva_obra.descripcion = descripcion
-        nueva_obra.direccion = presupuesto.ubicacion_texto or ubicacion_texto or 'Por especificar'
-        nueva_obra.direccion_normalizada = presupuesto.ubicacion_normalizada or (
-            datos_proyecto.get('ubicacion_normalizada') if isinstance(datos_proyecto, dict) else None
-        )
-        nueva_obra.estado = 'planificacion'
-        nueva_obra.presupuesto_total = _quantize_currency(_to_decimal(presupuesto.total_con_iva, '0'))
-        nueva_obra.organizacion_id = org_id
+    fecha_fin_estimada = request.form.get('fecha_fin_estimada')
+    if fecha_fin_estimada:
+        try:
+            obra.fecha_fin_estimada = datetime.strptime(fecha_fin_estimada, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
-        lat_decimal = presupuesto.geo_latitud
-        if lat_decimal is None and isinstance(datos_proyecto, dict):
-            lat_decimal = datos_proyecto.get('latitud')
-        lng_decimal = presupuesto.geo_longitud
-        if lng_decimal is None and isinstance(datos_proyecto, dict):
-            lng_decimal = datos_proyecto.get('longitud')
+    presupuesto_total = request.form.get('presupuesto_total')
+    if presupuesto_total:
+        try:
+            obra.presupuesto_total = float(presupuesto_total)
+        except ValueError:
+            pass
 
-        if lat_decimal is not None and lng_decimal is not None:
+    try:
+        db.session.commit()
+        flash('Obra actualizada exitosamente.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Error al actualizar la obra.', 'danger')
+
+    return redirect(url_for('obras.detalle', id=id))
+
+
+def geolocalizar_direccion(direccion):
+    """Geolocaliza una dirección usando OpenStreetMap Nominatim API"""
+    try:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {'q': f"{direccion}, Argentina", 'format': 'json', 'limit': 1, 'addressdetails': 1}
+        headers = {'User-Agent': 'OBYRA-IA-Construction-Management'}
+        response = requests.get(url, params=params, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                lat = float(data[0]['lat'])
+                lon = float(data[0]['lon'])
+                return (lat, lon)
+    except Exception as e:
+        current_app.logger.warning(f"Error geolocalizando {direccion}: {str(e)}")
+    return None
+
+
+@obras_bp.route('/<int:id>/agregar_etapas', methods=['POST'])
+@login_required
+def agregar_etapas(id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para gestionar etapas.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    obra = Obra.query.get_or_404(id)
+    etapas_json = request.form.getlist('etapas[]')
+
+    if not etapas_json:
+        flash('Selecciona al menos una etapa.', 'warning')
+        return redirect(url_for('obras.detalle', id=id))
+
+    try:
+        etapas_creadas = 0
+
+        for etapa_json in etapas_json:
             try:
-                nueva_obra.latitud = _quantize_coord(lat_decimal)
-                nueva_obra.longitud = _quantize_coord(lng_decimal)
-            except Exception:
-                nueva_obra.latitud = _quantize_coord(lat_decimal)
-                nueva_obra.longitud = _quantize_coord(lng_decimal)
-        else:
-            resolved = resolve_geocode(ubicacion_texto)
-            if resolved:
-                nueva_obra.latitud = _quantize_coord(resolved.get('lat'))
-                nueva_obra.longitud = _quantize_coord(resolved.get('lng'))
-                nueva_obra.geocode_place_id = resolved.get('place_id')
-                nueva_obra.geocode_provider = resolved.get('provider')
-                nueva_obra.geocode_status = resolved.get('status') or 'ok'
-                raw_payload = resolved.get('raw')
-                nueva_obra.geocode_raw = json.dumps(raw_payload) if raw_payload else None
-                nueva_obra.geocode_actualizado = dt.datetime.utcnow()
+                etapa_data = json.loads(etapa_json)
+                nombre = etapa_data.get('nombre', '').strip()
+                descripcion = etapa_data.get('descripcion', '').strip()
+                orden = int(etapa_data.get('orden', 1))
 
-        nueva_obra.geocode_place_id = presupuesto.geocode_place_id or nueva_obra.geocode_place_id
-        nueva_obra.geocode_provider = presupuesto.geocode_provider or nueva_obra.geocode_provider
-        nueva_obra.geocode_status = presupuesto.geocode_status or nueva_obra.geocode_status
-        nueva_obra.geocode_raw = presupuesto.geocode_raw or nueva_obra.geocode_raw
-        if presupuesto.geocode_actualizado:
-            nueva_obra.geocode_actualizado = presupuesto.geocode_actualizado
-
-        db.session.add(nueva_obra)
-        db.session.flush()
-
-        presupuesto.obra_id = nueva_obra.id
-        presupuesto.confirmado_como_obra = True
-        presupuesto.estado = 'confirmado'
-
-        etapas_existentes = EtapaObra.query.filter_by(obra_id=nueva_obra.id).count()
-
-        if etapas_existentes == 0:
-            raw_etapas = []
-            if isinstance(datos_proyecto, dict):
-                raw_etapas = datos_proyecto.get('etapas') or []
-
-            etapas_config = []
-            for etapa in raw_etapas:
-                if not isinstance(etapa, dict):
+                if not nombre:
                     continue
-                nombre_etapa = (etapa.get('nombre') or '').strip()
-                if not nombre_etapa:
-                    continue
-                descripcion_etapa = (etapa.get('descripcion') or '').strip()
-                slug_original = etapa.get('slug') or nombre_etapa
-                slug_etapa = slugify_etapa(slug_original) if normalizar_slugs else slug_original.strip()
-                etapas_config.append({
-                    'nombre': nombre_etapa,
-                    'descripcion': descripcion_etapa,
-                    'orden': etapa.get('orden'),
-                    'slug': slug_etapa
-                })
 
-            if not etapas_config:
-                etapas_config = [
-                    {'nombre': 'Excavación', 'descripcion': 'Preparación del terreno y excavaciones', 'orden': 1},
-                    {'nombre': 'Fundaciones', 'descripcion': 'Construcción de fundaciones y bases', 'orden': 2},
-                    {'nombre': 'Estructura', 'descripcion': 'Construcción de estructura principal', 'orden': 3},
-                    {'nombre': 'Mampostería', 'descripcion': 'Construcción de muros y paredes', 'orden': 4},
-                    {'nombre': 'Techos', 'descripcion': 'Construcción de techos y cubiertas', 'orden': 5},
-                    {'nombre': 'Instalaciones', 'descripcion': 'Instalaciones eléctricas, sanitarias y gas', 'orden': 6},
-                    {'nombre': 'Terminaciones', 'descripcion': 'Acabados y terminaciones finales', 'orden': 7}
-                ]
-
-            slugs_creados = set()
-            for idx, etapa_data in enumerate(etapas_config, start=1):
-                nombre = (etapa_data.get('nombre') or '').strip() or f'Etapa {idx}'
-                descripcion = etapa_data.get('descripcion') or ''
-                try:
-                    orden = int(etapa_data.get('orden') or idx)
-                except (TypeError, ValueError):
-                    orden = idx
-                slug_fuente = etapa_data.get('slug') or nombre
-                slug = slugify_etapa(slug_fuente) if normalizar_slugs else slug_fuente.strip()
-                if slug in slugs_creados:
+                existe = EtapaObra.query.filter_by(obra_id=obra.id, nombre=nombre).first()
+                if existe:
                     continue
-                slugs_creados.add(slug)
 
                 nueva_etapa = EtapaObra(
-                    obra_id=nueva_obra.id,
+                    obra_id=obra.id,
                     nombre=nombre,
                     descripcion=descripcion,
                     orden=orden,
@@ -2184,284 +658,2159 @@ def confirmar_como_obra(id):
                 db.session.add(nueva_etapa)
                 db.session.flush()
 
-                creadas = 0
-                if crear_tareas:
-                    creadas = seed_tareas_para_etapa(
-                        nueva_etapa,
-                        auto_commit=False,
-                        slug=slug,
-                    ) or 0
-                if not crear_tareas or creadas == 0:
-                    db.session.add(TareaEtapa(
-                        etapa_id=nueva_etapa.id,
-                        nombre=f'Tarea inicial de {nombre}',
-                        descripcion='Tarea generada automáticamente al confirmar el presupuesto.',
-                        estado='pendiente'
-                    ))
+                slug_normalizado = slugify_nombre_etapa(nombre)
+                seed_tareas_para_etapa(nueva_etapa, slug=slug_normalizado)
 
-                etapa_data['slug'] = slug
+                tareas_adicionales = etapa_data.get('tareas', [])
+                for tarea_data in tareas_adicionales:
+                    nombre_tarea = tarea_data.get('nombre', '').strip()
+                    if nombre_tarea:
+                        nueva_tarea = TareaEtapa(
+                            etapa_id=nueva_etapa.id,
+                            nombre=nombre_tarea,
+                            descripcion=f"Tarea personalizada para {nombre}",
+                            estado='pendiente'
+                        )
+                        db.session.add(nueva_tarea)
 
-            if isinstance(datos_proyecto, dict):
-                datos_proyecto['etapas'] = etapas_config
-                presupuesto.datos_proyecto = json.dumps(datos_proyecto, default=str)
+                etapas_creadas += 1
 
-        db.session.commit()
+            except (json.JSONDecodeError, ValueError):
+                continue
 
-    except Exception as exc:
-        db.session.rollback()
-        current_app.logger.exception('Error confirmando presupuesto %s: %s', id, exc)
-        mensaje = f'Error al confirmar obra: {str(exc)}'
-        if wants_json:
-            return jsonify({'error': mensaje}), 500
-        flash(mensaje, 'danger')
-        return redirect(url_for('presupuestos.detalle', id=id))
-
-    obra_creada_id = nueva_obra.id if nueva_obra else None
-    obra_nombre = nueva_obra.nombre if nueva_obra else ''
-    estado_respuesta = presupuesto.estado
-
-    mensaje_exito = f'¡Presupuesto {presupuesto.numero} confirmado! Obra "{obra_nombre}" creada correctamente.'
-    flash(mensaje_exito, 'success')
-
-    _registrar_evento_confirmacion(
-        org_id=org_id,
-        obra_id=obra_creada_id,
-        presupuesto_id=presupuesto.id,
-        usuario_id=getattr(current_user, 'id', None),
-        trigger=trigger_source,
-    )
-
-    if notificar:
-        current_app.logger.info(
-            'Confirmación de presupuesto %s solicitó notificación por email (pendiente de implementación).',
-            presupuesto.numero
-        )
-
-    obra_url = url_for('obras.detalle', id=obra_creada_id) if obra_creada_id else None
-
-    if wants_json:
-        return jsonify({
-            'status': 'ok',
-            'message': mensaje_exito,
-            'obra_id': obra_creada_id,
-            'obra_url': obra_url,
-            'redirect_url': obra_url,
-            'presupuesto_estado': estado_respuesta,
-            'trigger': trigger_source
-        })
-
-    return redirect(obra_url or url_for('presupuestos.detalle', id=id))
-@presupuestos_bp.route('/<int:id>/perder', methods=['POST'])
-@login_required
-def marcar_presupuesto_perdido(id: int):
-    """Marca un presupuesto como perdido y registra el motivo."""
-
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
-
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-
-    if presupuesto.estado != 'borrador':
-        return jsonify({'error': 'Solo los presupuestos en borrador pueden marcarse como perdidos.'}), 400
-
-    data = request.get_json(silent=True) or request.form
-    motivo_principal = _clean_text(data.get('motivo')) if data else None
-    detalle = _clean_text(data.get('detalle')) if data else None
-
-    if not motivo_principal and not detalle:
-        return jsonify({'error': 'Indica al menos un motivo para registrar el cambio.'}), 400
-
-    if motivo_principal and detalle:
-        motivo = f"{motivo_principal} - {detalle}"
-    else:
-        motivo = motivo_principal or detalle
-
-    presupuesto.estado = 'perdido'
-    presupuesto.perdido_motivo = motivo
-    presupuesto.perdido_fecha = dt.datetime.utcnow()
-    presupuesto.confirmado_como_obra = False
-
-    try:
-        db.session.commit()
-        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
-        current_app.logger.info(
-            'Presupuesto %s marcado como perdido por %s',
-            presupuesto.numero,
-            actor
-        )
-        return jsonify({'mensaje': 'Presupuesto archivado como perdido.'})
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception('Error marcando presupuesto %s como perdido', id)
-        return jsonify({'error': 'No se pudo actualizar el presupuesto.'}), 500
-
-
-@presupuestos_bp.route('/<int:id>/restaurar', methods=['POST'])
-@login_required
-def restaurar_presupuesto(id: int):
-    """Restaura un presupuesto perdido a estado borrador."""
-
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol not in ['administrador', 'tecnico']:
-        return jsonify({'error': 'No tienes permisos para modificar presupuestos.'}), 403
-
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-
-    if presupuesto.estado != 'perdido':
-        return jsonify({'error': 'Solo los presupuestos perdidos pueden restaurarse.'}), 400
-
-    presupuesto.estado = 'borrador'
-    presupuesto.perdido_fecha = None
-    presupuesto.perdido_motivo = None
-
-    try:
-        db.session.commit()
-        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
-        current_app.logger.info(
-            'Presupuesto %s restaurado a borrador por %s',
-            presupuesto.numero,
-            actor
-        )
-        return jsonify({'mensaje': 'Presupuesto restaurado a borrador.'})
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception('Error restaurando presupuesto %s', id)
-        return jsonify({'error': 'No se pudo restaurar el presupuesto.'}), 500
-
-
-@presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
-@login_required
-def eliminar_presupuesto(id: int):
-    """Realiza un soft-delete del presupuesto seleccionado."""
-
-    if not current_user.puede_acceder_modulo('presupuestos') or current_user.rol != 'administrador':
-        return jsonify({'error': 'Solo los administradores pueden eliminar presupuestos.'}), 403
-
-    presupuesto = Presupuesto.query.filter(
-        Presupuesto.id == id,
-        Presupuesto.organizacion_id == current_user.organizacion_id,
-        Presupuesto.deleted_at.is_(None)
-    ).first_or_404()
-
-    if presupuesto.estado not in ['borrador', 'perdido']:
-        return jsonify({'error': 'Solo los presupuestos en borrador o perdidos pueden eliminarse.'}), 400
-
-    presupuesto.estado = 'eliminado'
-    presupuesto.deleted_at = dt.datetime.utcnow()
-
-    try:
-        db.session.commit()
-        actor = getattr(current_user, 'email', None) or str(getattr(current_user, 'id', 'desconocido'))
-        current_app.logger.info(
-            'Presupuesto %s eliminado por %s',
-            presupuesto.numero,
-            actor
-        )
-        return jsonify({'mensaje': 'Presupuesto eliminado correctamente.'})
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception('Error eliminando presupuesto %s', id)
-        return jsonify({'error': 'No se pudo eliminar el presupuesto.'}), 500
-
-
-@presupuestos_bp.route("/guardar", methods=["POST"])
-@login_required
-def guardar_presupuesto():
-    """Guarda presupuesto con opción de crear obra nueva o usar existente"""
-    if not current_user.puede_acceder_modulo('presupuestos'):
-        return jsonify({'error': 'Sin permisos'}), 403
-    
-    data = request.form or request.json
-
-    obra_id = data.get("obra_id")  # id si seleccionó obra existente
-    crear_nueva = data.get("crear_nueva_obra") == "1"
-    
-    try:
-        if crear_nueva:
-            # Crear nueva obra con los datos del formulario
-            obra = Obra(
-                nombre = data.get("obra_nombre") or "Obra sin nombre",
-                organizacion_id = current_user.organizacion_id,  # Usar organizacion_id del sistema actual
-                cliente_nombre = data.get("cliente_nombre"),
-                cliente_email  = data.get("cliente_email"),
-                cliente_telefono = data.get("cliente_telefono"),
-                direccion = data.get("direccion"),
-                ciudad    = data.get("ciudad"),
-                provincia = data.get("provincia"),
-                pais      = data.get("pais") or "Argentina",
-                codigo_postal = data.get("codigo_postal"),
-                referencia = data.get("referencia"),
-                notas = data.get("obra_notas"),
-                estado = 'planificacion'
-            )
-            db.session.add(obra)
-            db.session.flush()   # obtiene obra.id
-            obra_id = obra.id
+        if etapas_creadas > 0:
+            db.session.commit()
+            flash(f'Se agregaron {etapas_creadas} etapas con sus tareas correspondientes a la obra.', 'success')
         else:
-            obra = Obra.query.get(obra_id) if obra_id else None
+            flash('No se agregaron etapas nuevas. Las etapas seleccionadas ya existen en esta obra.', 'info')
 
-        # Generar número de presupuesto único
-        ultimo_numero = db.session.query(db.func.max(Presupuesto.numero)).scalar()
-        if ultimo_numero and ultimo_numero.startswith('PRES-'):
-            try:
-                siguiente_num = int(ultimo_numero.split('-')[1]) + 1
-            except:
-                siguiente_num = 1
-        else:
-            siguiente_num = 1
-
-        # Asegurar que el número sea único
-        while True:
-            numero = f"PRES-{siguiente_num:04d}"
-            existe = Presupuesto.query.filter_by(numero=numero).first()
-            if not existe:
-                break
-            siguiente_num += 1
-
-        iva_valor = _to_decimal(data.get("iva_porcentaje") or '21')
-        try:
-            iva_valor = iva_valor.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        except InvalidOperation:
-            iva_valor = Decimal('21.00')
-
-        # Crear presupuesto asociado
-        p = Presupuesto(
-            obra_id = obra_id,
-            numero = numero,
-            organizacion_id = current_user.organizacion_id,
-            observaciones = data.get("observaciones"),
-            iva_porcentaje = iva_valor,
-            estado = 'borrador'
-        )
-
-        # Agregar campos adicionales si están disponibles
-        superficie_val = data.get("superficie")
-        superficie_decimal = _to_decimal(superficie_val) if superficie_val else None
-        if superficie_decimal is not None and superficie_decimal != DECIMAL_ZERO:
-            p.observaciones = f"{p.observaciones or ''} | Superficie: {superficie_decimal} m²"
-
-        if data.get("tipo_construccion"):
-            p.observaciones = f"{p.observaciones or ''} | Tipo: {data.get('tipo_construccion')}"
-
-        if data.get("calculo_json"):
-            p.datos_proyecto = data.get("calculo_json")
-
-        if data.get("total_estimado"):
-            total_estimado = _quantize_currency(_to_decimal(data.get("total_estimado")))
-            p.total_con_iva = total_estimado
-
-        db.session.add(p)
-        db.session.commit()
-        
-        return jsonify({"ok": True, "presupuesto_id": p.id, "obra_id": obra_id})
-        
     except Exception as e:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(e)}), 500
+        flash(f'Error al agregar etapas: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/<int:obra_id>/asignar_usuario', methods=['POST'])
+@login_required
+def asignar_usuario(obra_id):
+    """Asignar usuarios a obra (form tradicional + AJAX)"""
+    if not is_admin():
+        flash('Solo administradores pueden asignar usuarios', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+    is_ajax = request.headers.get('Content-Type') == 'application/json' or 'XMLHttpRequest' in str(request.headers.get('X-Requested-With', ''))
+
+    try:
+        user_ids = request.form.getlist('user_ids[]')
+        if not user_ids:
+            uid = request.form.get('usuario_id')
+            if uid:
+                user_ids = [uid]
+
+        if not user_ids:
+            if is_ajax:
+                return jsonify({"ok": False, "error": "Seleccioná al menos un usuario"}), 400
+            else:
+                flash('Seleccioná al menos un usuario', 'danger')
+                return redirect(url_for('obras.detalle', id=obra_id))
+
+        usuarios = Usuario.query.filter(Usuario.id.in_(user_ids)).all()
+        if not usuarios:
+            if is_ajax:
+                return jsonify({"ok": False, "error": "Usuarios inválidos"}), 400
+            else:
+                flash('Usuarios inválidos', 'danger')
+                return redirect(url_for('obras.detalle', id=obra_id))
+
+        rol_en_obra = request.form.get('rol') or 'operario'
+        etapa_id = request.form.get('etapa_id') or None
+
+        creados = 0
+        ya_existian = 0
+        for uid in user_ids:
+            try:
+                result = db.session.execute(
+                    text("""
+                    INSERT INTO obra_miembros (obra_id, usuario_id, rol_en_obra, etapa_id)
+                    VALUES (:o, :u, :rol, :etapa)
+                    ON CONFLICT (obra_id, usuario_id) DO NOTHING
+                    """), {"o": obra_id, "u": int(uid), "rol": rol_en_obra, "etapa": etapa_id}
+                )
+                if result.rowcount == 0:
+                    ya_existian += 1
+                else:
+                    creados += 1
+            except Exception:
+                current_app.logger.exception(f"Error inserting user {uid}")
+                db.session.rollback()
+                if is_ajax:
+                    return jsonify({"ok": False, "error": "Error asignando usuario"}), 500
+                else:
+                    flash('Error asignando usuario', 'danger')
+                    return redirect(url_for('obras.detalle', id=obra_id))
+
+        db.session.commit()
+
+        if is_ajax:
+            return jsonify({"ok": True, "creados": creados, "ya_existian": ya_existian})
+        else:
+            if creados > 0:
+                flash(f'✅ Se asignaron {creados} usuarios a la obra', 'success')
+            if ya_existian > 0:
+                flash(f'ℹ️ {ya_existian} usuarios ya estaban asignados', 'info')
+            return redirect(url_for('obras.detalle', id=obra_id))
+
+    except Exception as e:
+        current_app.logger.exception("obra_miembros insert error obra_id=%s", obra_id)
+        db.session.rollback()
+
+        if is_ajax:
+            if isinstance(e, ProgrammingError):
+                return jsonify({"ok": False, "error": "Error de esquema de base de datos"}), 500
+            return jsonify({"ok": False, "error": f"Error interno: {str(e)}"}), 500
+        else:
+            flash(f'Error al asignar usuarios: {str(e)}', 'danger')
+            return redirect(url_for('obras.detalle', id=obra_id))
+
+
+@obras_bp.route('/<int:id>/etapa', methods=['POST'])
+@login_required
+def agregar_etapa(id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para agregar etapas.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    obra = Obra.query.get_or_404(id)
+    nombre = request.form.get('nombre')
+    descripcion = request.form.get('descripcion')
+
+    if not nombre:
+        flash('El nombre de la etapa es obligatorio.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    ultimo_orden = db.session.query(db.func.max(EtapaObra.orden)).filter_by(obra_id=id).scalar() or 0
+
+    nueva_etapa = EtapaObra(
+        obra_id=id,
+        nombre=nombre,
+        descripcion=descripcion,
+        orden=ultimo_orden + 1
+    )
+
+    try:
+        db.session.add(nueva_etapa)
+        db.session.flush()
+
+        slug_normalizado = slugify_nombre_etapa(nombre)
+        seed_tareas_para_etapa(nueva_etapa, slug=slug_normalizado)
+
+        db.session.commit()
+        flash(f'Etapa "{nombre}" agregada exitosamente con tareas predefinidas.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("ERROR al crear etapa")
+        flash('Error al agregar la etapa.', 'danger')
+
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route("/tareas/crear", methods=['POST'])
+@login_required
+def crear_tareas():
+    """Crear una o múltiples tareas (con o sin sugeridas)."""
+    try:
+        obra_id = request.form.get("obra_id", type=int)
+        obra = Obra.query.get_or_404(obra_id)
+
+        if not can_manage_obra(obra):
+            return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
+        etapa_id = request.form.get("etapa_id", type=int)
+        horas = request.form.get("horas_estimadas", type=float)
+        resp_id = request.form.get("responsable_id", type=int) or None
+        fi = parse_date(request.form.get("fecha_inicio_plan"))
+        ff = parse_date(request.form.get("fecha_fin_plan"))
+
+        sugeridas = request.form.getlist("sugeridas[]")
+
+        if not etapa_id:
+            return jsonify(ok=False, error="Falta el ID de etapa"), 400
+
+        etapa = EtapaObra.query.get_or_404(etapa_id)
+        if etapa.obra.organizacion_id != current_user.organizacion_id:
+            return jsonify(ok=False, error="Sin permisos"), 403
+
+        if not sugeridas:
+            nombre = request.form.get("nombre", "").strip()
+            if not nombre:
+                return jsonify(ok=False, error="Falta el nombre"), 400
+
+            VALID_UNITS = {'m2', 'ml', 'm3', 'un', 'h', 'kg'}
+            unidad_input = request.form.get("unidad", "un").lower()
+            unidad = unidad_input if unidad_input in VALID_UNITS else "un"
+
+            t = TareaEtapa(
+                etapa_id=etapa_id,
+                nombre=nombre,
+                responsable_id=resp_id,
+                horas_estimadas=horas,
+                fecha_inicio_plan=fi,
+                fecha_fin_plan=ff,
+                unidad=unidad
+            )
+            db.session.add(t)
+            db.session.commit()
+            return jsonify(ok=True, created=1)
+
+        created = 0
+        for sid in sugeridas:
+            try:
+                index = int(sid)
+                nombre_etapa = etapa.nombre
+                tareas_disponibles = TAREAS_POR_ETAPA.get(nombre_etapa, [])
+
+                if index >= len(tareas_disponibles):
+                    continue
+
+                tarea_data = tareas_disponibles[index]
+
+                if isinstance(tarea_data, str):
+                    nombre_tarea = tarea_data
+                    tarea_unidad = "un"
+                elif isinstance(tarea_data, dict):
+                    nombre_tarea = tarea_data.get("nombre", "")
+                    tarea_unidad = tarea_data.get("unidad", "un")
+                else:
+                    continue
+
+                if not nombre_tarea:
+                    continue
+
+                t = TareaEtapa(
+                    etapa_id=etapa_id,
+                    nombre=nombre_tarea,
+                    responsable_id=resp_id,
+                    horas_estimadas=horas,
+                    fecha_inicio_plan=fi,
+                    fecha_fin_plan=ff,
+                    unidad=tarea_unidad
+                )
+                db.session.add(t)
+                created += 1
+
+            except (ValueError, IndexError):
+                continue
+
+        if created == 0:
+            db.session.rollback()
+            return jsonify(ok=False, error="No se pudo crear ninguna tarea"), 400
+
+        db.session.commit()
+        return jsonify(ok=True, created=created)
+
+    except Exception as e:
+        current_app.logger.exception("Error en crear_tareas")
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+def parse_date(s):
+    """Parsea fechas en múltiples formatos."""
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except Exception:
+            pass
+    return None
+
+
+@obras_bp.route("/asignar-usuarios", methods=['POST'])
+def asignar_usuarios():
+    """Asignar usuarios a múltiples tareas - Always returns JSON"""
+    try:
+        if not current_user.is_authenticated:
+            return jsonify(ok=False, error="Usuario no autenticado"), 401
+
+        try:
+            tarea_ids = request.form.getlist('tarea_ids[]')
+            user_ids = request.form.getlist('user_ids[]')
+            cuota = request.form.get('cuota_objetivo', type=int)
+            current_app.logger.info(f"asignar_usuarios user={current_user.id} tareas={tarea_ids} users={user_ids} cuota={cuota}")
+        except Exception as e:
+            current_app.logger.exception("Error parsing form data")
+            return jsonify(ok=False, error=f"Error parsing request: {str(e)}"), 400
+
+        if not tarea_ids or not user_ids:
+            return jsonify(ok=False, error='Faltan tareas o usuarios'), 400
+
+        primera_tarea = TareaEtapa.query.get(int(tarea_ids[0]))
+        if not primera_tarea:
+            return jsonify(ok=False, error="Tarea no encontrada"), 404
+
+        obra = primera_tarea.etapa.obra
+        if not can_manage_obra(obra):
+            return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
+
+        for uid in user_ids:
+            user = Usuario.query.get(int(uid))
+            if not user or user.organizacion_id != current_user.organizacion_id:
+                return jsonify(ok=False, error=f"Usuario {uid} no pertenece a la organización"), 403
+
+        asignaciones_creadas = 0
+
+        for tid in tarea_ids:
+            tarea = TareaEtapa.query.get(int(tid))
+            if not tarea or tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                current_app.logger.warning(f"Skipping invalid task {tid}")
+                continue
+
+            for uid in set(user_ids):
+                existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=int(uid)).first()
+                if not existing:
+                    nueva_asignacion = TareaMiembro(
+                        tarea_id=int(tid),
+                        user_id=int(uid),
+                        cuota_objetivo=cuota
+                    )
+                    db.session.add(nueva_asignacion)
+                    asignaciones_creadas += 1
+                else:
+                    existing.cuota_objetivo = cuota
+
+        db.session.commit()
+        return jsonify(ok=True, creados=asignaciones_creadas)
+
+    except Exception:
+        try:
+            db.session.rollback()
+            current_app.logger.exception('Unexpected error in asignar_usuarios')
+        except Exception:
+            pass
+        return jsonify(ok=False, error="Error interno del servidor"), 500
+
+
+# === PERCENTAGE CALCULATION FUNCTIONS ===
+
+def suma_ejecutado(tarea_id):
+    from sqlalchemy import func
+    total = db.session.query(func.coalesce(func.sum(TareaAvance.cantidad), 0)).filter_by(tarea_id=tarea_id, status='aprobado').scalar()
+    return float(total or 0)
+
+def recalc_tarea_pct(tarea_id):
+    tarea = TareaEtapa.query.get(tarea_id)
+    if not tarea:
+        return 0
+
+    meta = float(tarea.cantidad_planificada or 0)
+    if meta <= 0:
+        tarea.porcentaje_avance = 0
+    else:
+        ejecutado = suma_ejecutado(tarea_id)
+        tarea.porcentaje_avance = min(100, round((ejecutado / meta) * 100, 2))
+
+    db.session.commit()
+    return float(tarea.porcentaje_avance or 0)
+
+def pct_etapa(etapa):
+    tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else etapa.tareas
+    if not tareas:
+        return 0
+
+    total_meta = sum((float(t.cantidad_planificada or 0) for t in tareas))
+    if total_meta <= 0:
+        return round(sum((float(t.porcentaje_avance or 0) for t in tareas)) / max(len(tareas), 1), 2)
+
+    weighted_sum = sum((float(t.cantidad_planificada or 0) * float(t.porcentaje_avance or 0) / 100 for t in tareas))
+    return round((weighted_sum / total_meta) * 100, 2)
+
+def pct_obra(obra):
+    etapas = obra.etapas.all() if hasattr(obra.etapas, 'all') else obra.etapas
+    if not etapas:
+        return 0
+
+    total_meta = 0
+    total_ejecutado = 0
+
+    for etapa in etapas:
+        etapa_meta = sum((float(t.cantidad_planificada or 0) for t in etapa.tareas))
+        etapa_pct = pct_etapa(etapa)
+        total_meta += etapa_meta
+        total_ejecutado += etapa_meta * (etapa_pct / 100)
+
+    if total_meta > 0:
+        return round((total_ejecutado / total_meta) * 100, 2)
+    else:
+        etapa_pcts = [pct_etapa(e) for e in etapas]
+        return round(sum(etapa_pcts) / max(len(etapa_pcts), 1), 2)
+
+
+UNIT_MAP = {
+    "m2": "m2", "m²": "m2", "M2": "m2", "metro2": "m2",
+    "m3": "m3", "m³": "m3", "M3": "m3", "metro3": "m3",
+    "ml": "ml", "m": "ml", "metro": "ml",
+    "u": "un", "un": "un", "unidad": "un", "uni": "un", "unidades": "un",
+    "kg": "kg", "kilo": "kg", "kilos": "kg",
+    "h": "h", "hr": "h", "hora": "h", "horas": "h", "hs": "h",
+    "lt": "lt", "l": "lt", "lts": "lt", "litro": "lt", "litros": "lt"
+}
+
+def normalize_unit(unit):
+    if not unit or not str(unit).strip():
+        return "un"
+    unit_clean = str(unit).strip().lower()
+    return UNIT_MAP.get(unit_clean, unit_clean)
+
+
+@obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
+@login_required
+def crear_avance(tarea_id):
+    """Registrar avance con fotos (operarios desde dashboard)."""
+    from werkzeug.utils import secure_filename
+    from pathlib import Path
+
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'pm', 'operario', 'administrador', 'tecnico', 'project_manager'}):
+        return jsonify(ok=False, error="Solo operarios pueden registrar avances"), 403
+
+    if 'operario' in roles:
+        is_responsible = tarea.responsable_id == current_user.id
+        is_assigned = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
+        if not (is_responsible or is_assigned):
+            return jsonify(ok=False, error="No estás asignado a esta tarea"), 403
+
+    if not can_log_avance(tarea):
+        return jsonify(ok=False, error="Sin permisos para registrar avances en esta tarea"), 403
+
+    cantidad_str = str(request.form.get("cantidad", "")).replace(",", ".")
+    try:
+        cantidad = float(cantidad_str)
+        if cantidad <= 0:
+            return jsonify(ok=False, error="La cantidad debe ser mayor a 0"), 400
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error="Cantidad inválida"), 400
+
+    unidad = normalize_unit(tarea.unidad)
+    horas = request.form.get("horas", type=float)
+    notas = request.form.get("notas", "")
+
+    try:
+        av = TareaAvance(
+            tarea_id=tarea.id,
+            user_id=current_user.id,
+            cantidad=cantidad,
+            unidad=unidad,
+            horas=horas,
+            notas=notas,
+            cantidad_ingresada=cantidad,
+            unidad_ingresada=unidad
+        )
+
+        if roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
+            av.status = "aprobado"
+            av.confirmed_by = current_user.id
+            av.confirmed_at = datetime.utcnow()
+
+        db.session.add(av)
+
+        if not tarea.fecha_inicio_real and av.status == "aprobado":
+            tarea.fecha_inicio_real = datetime.utcnow()
+
+        uploaded_files = request.files.getlist("fotos")
+        for f in uploaded_files:
+            if f.filename:
+                fname = secure_filename(f.filename)
+                base = Path(current_app.static_folder) / "uploads" / "obras" / str(tarea.etapa.obra_id) / "tareas" / str(tarea.id)
+                base.mkdir(parents=True, exist_ok=True)
+                file_path = base / fname
+                f.save(file_path)
+
+                adjunto = TareaAdjunto(
+                    tarea_id=tarea.id,
+                    avance_id=av.id,
+                    uploaded_by=current_user.id,
+                    path=f"/static/uploads/obras/{tarea.etapa.obra_id}/tareas/{tarea.id}/{fname}"
+                )
+                db.session.add(adjunto)
+
+        db.session.commit()
+        return jsonify(ok=True)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error en crear_avance")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route("/api/tareas/<int:tarea_id>/avances", methods=['POST'])
+@login_required
+def api_crear_avance_fotos(tarea_id):
+    """Create progress entry with multiple photos - specification compliant"""
+    from werkzeug.utils import secure_filename
+    from pathlib import Path
+    import uuid
+
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+
+    if not can_log_avance(tarea):
+        return jsonify(ok=False, error="Sin permisos para registrar avance en esta tarea"), 403
+
+    roles = _get_roles_usuario(current_user)
+    if 'operario' in roles:
+        from_dashboard = request.headers.get('X-From-Dashboard') == '1'
+        if not from_dashboard:
+            return jsonify(ok=False, error="Los operarios solo pueden registrar avances desde su dashboard"), 403
+
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    cantidad_str = str(request.form.get("cantidad_ingresada", "")).replace(",", ".")
+    try:
+        cantidad = float(cantidad_str)
+        if cantidad <= 0:
+            return jsonify(ok=False, error="La cantidad debe ser mayor a 0"), 400
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error="Cantidad inválida"), 400
+
+    unidad_servidor = normalize_unit(tarea.unidad)
+    horas_trabajadas = request.form.get("horas_trabajadas", type=float)
+    notas = request.form.get("nota", "")
+
+    try:
+        avance = TareaAvance(
+            tarea_id=tarea.id,
+            user_id=current_user.id,
+            cantidad=cantidad,
+            unidad=unidad_servidor,
+            horas=horas_trabajadas,
+            notas=notas,
+            cantidad_ingresada=cantidad,
+            unidad_ingresada=unidad_servidor,
+            horas_trabajadas=horas_trabajadas
+        )
+
+        if roles & {'administrador', 'tecnico', 'admin', 'pm', 'project_manager'}:
+            avance.status = "aprobado"
+            avance.confirmed_by = current_user.id
+            avance.confirmed_at = datetime.utcnow()
+
+        db.session.add(avance)
+        db.session.flush()
+
+        if not tarea.fecha_inicio_real and avance.status == "aprobado":
+            tarea.fecha_inicio_real = datetime.utcnow()
+
+        media_base = Path(current_app.instance_path) / "media"
+        media_base.mkdir(exist_ok=True)
+
+        uploaded_files = request.files.getlist("fotos")
+        for foto_file in uploaded_files:
+            if foto_file.filename:
+                extension = Path(foto_file.filename).suffix.lower()
+                unique_name = f"{uuid.uuid4()}{extension}"
+
+                avance_dir = media_base / "avances" / str(avance.id)
+                avance_dir.mkdir(parents=True, exist_ok=True)
+
+                file_path = avance_dir / unique_name
+                foto_file.save(file_path)
+
+                width, height = None, None
+                try:
+                    from PIL import Image
+                    with Image.open(file_path) as img:
+                        width, height = img.size
+                except Exception:
+                    pass
+
+                relative_path = f"avances/{avance.id}/{unique_name}"
+                foto = TareaAvanceFoto(
+                    avance_id=avance.id,
+                    file_path=relative_path,
+                    mime_type=foto_file.content_type,
+                    width=width,
+                    height=height
+                )
+                db.session.add(foto)
+
+        db.session.commit()
+
+        recalc_tarea_pct(tarea.id)
+
+        return jsonify(ok=True, avance_id=avance.id, porcentaje_actualizado=tarea.porcentaje_avance)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error creating progress with photos")
+        return jsonify(ok=False, error="Error interno del servidor"), 500
+
+
+@obras_bp.route("/tareas/<int:tarea_id>/complete", methods=['POST'])
+@login_required
+def completar_tarea(tarea_id):
+    """Completar tarea - solo si restante = 0"""
+    from models import resumen_tarea as _rt
+
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra
+
+    if not can_manage_obra(obra):
+        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
+
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    try:
+        m = _rt(tarea)
+        if m["restante"] > 0:
+            return jsonify(ok=False, error="Aún faltan cantidades"), 400
+
+        tarea.estado = "completada"
+        tarea.fecha_fin_real = datetime.utcnow()
+        db.session.commit()
+        return jsonify(ok=True)
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error en completar_tarea")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+def _serialize_tarea_detalle(tarea):
+    """Construye el payload detallado de una tarea para API y vistas"""
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    def _format_date(dt):
+        return dt.strftime('%d/%m/%Y') if dt else None
+
+    def _format_datetime(dt):
+        return dt.isoformat() if dt else None
+
+    def _to_float(value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    avances = sorted(
+        list(tarea.avances),
+        key=lambda a: a.created_at or datetime.min,
+        reverse=True,
+    )
+
+    aprobados = [a for a in avances if a.status == 'aprobado']
+
+    fechas_reales = [a.fecha for a in aprobados if a.fecha]
+    if not fechas_reales:
+        fechas_reales = [a.fecha for a in avances if a.fecha]
+
+    fecha_inicio_real = min(fechas_reales) if fechas_reales else None
+    fecha_fin_real = max(fechas_reales) if fechas_reales else None
+    duracion_real_dias = None
+    if fecha_inicio_real and fecha_fin_real:
+        try:
+            duracion_real_dias = (fecha_fin_real - fecha_inicio_real).days + 1
+        except Exception:
+            duracion_real_dias = None
+
+    def _safe_sum(iterable):
+        total = 0.0
+        for a in iterable:
+            v = _to_float(a.cantidad if a.cantidad is not None else a.cantidad_ingresada)
+            if v is not None:
+                total += v
+        return total
+
+    cantidad_plan = _to_float(tarea.cantidad_planificada)
+    cantidad_ejecutada = _safe_sum(aprobados)
+
+    cantidad_restante = None
+    if cantidad_plan is not None:
+        cantidad_restante = max(cantidad_plan - cantidad_ejecutada, 0.0)
+
+    status_labels = {'aprobado': 'Aprobado', 'pendiente': 'Pendiente', 'rechazado': 'Rechazado'}
+
+    avances_data = []
+    for avance in avances:
+        avances_data.append({
+            'id': avance.id,
+            'fecha': _format_date(avance.fecha) or _format_date(avance.created_at.date() if avance.created_at else None),
+            'fecha_iso': avance.fecha.isoformat() if avance.fecha else None,
+            'creado_en': _format_datetime(avance.created_at),
+            'cantidad': _to_float(avance.cantidad if avance.cantidad is not None else avance.cantidad_ingresada),
+            'unidad': avance.unidad or tarea.unidad,
+            'horas': _to_float(avance.horas or getattr(avance, 'horas_trabajadas', None)),
+            'notas': avance.notas or '',
+            'status': avance.status or 'pendiente',
+            'status_label': status_labels.get(avance.status, (avance.status or 'Registrado').title()),
+            'usuario': getattr(avance.usuario, 'nombre_completo', None),
+            'fotos': [
+                {
+                    'id': foto.id,
+                    'url': url_for('serve_media', relpath=foto.file_path),
+                    'created_at': _format_datetime(foto.created_at),
+                }
+                for foto in sorted(
+                    list(avance.fotos),
+                    key=lambda f: f.created_at or avance.created_at or datetime.min,
+                    reverse=True,
+                )
+            ]
+        })
+
+    fotos_data = []
+    total_fotos = 0
+    for avance in avances:
+        for foto in sorted(
+            list(avance.fotos),
+            key=lambda f: f.created_at or avance.created_at or datetime.min,
+            reverse=True,
+        ):
+            total_fotos += 1
+            fotos_data.append({
+                'id': foto.id,
+                'avance_id': avance.id,
+                'url': url_for('serve_media', relpath=foto.file_path),
+                'thumbnail_url': url_for('serve_media', relpath=foto.file_path),
+                'status': avance.status,
+                'status_label': status_labels.get(avance.status, (avance.status or 'Registrado').title()),
+                'fecha': _format_date(avance.fecha) or _format_date(foto.created_at.date() if foto.created_at else None),
+                'fecha_iso': avance.fecha.isoformat() if avance.fecha else None,
+                'capturado_en': _format_datetime(foto.created_at),
+                'registrado_en': _format_datetime(avance.created_at),
+                'subido_por': getattr(avance.usuario, 'nombre_completo', None),
+                'cantidad': _to_float(avance.cantidad if avance.cantidad is not None else avance.cantidad_ingresada),
+                'unidad': avance.unidad or tarea.unidad,
+                'notas': avance.notas or '',
+            })
+
+    payload = {
+        'ok': True,
+        'tarea': {
+            'id': tarea.id,
+            'nombre': tarea.nombre,
+            'descripcion': tarea.descripcion,
+            'estado': tarea.estado,
+            'etapa': tarea.etapa.nombre if tarea.etapa else None,
+            'obra': obra.nombre if obra else None,
+            'obra_id': obra.id if obra else None,
+            'unidad': tarea.unidad,
+            'cantidad_planificada': cantidad_plan,
+            'cantidad_ejecutada': cantidad_ejecutada,
+            'cantidad_restante': cantidad_restante,
+            'fecha_inicio_plan': _format_datetime(tarea.fecha_inicio_plan),
+            'fecha_fin_plan': _format_datetime(tarea.fecha_fin_plan),
+            'fecha_inicio_plan_label': _format_date(tarea.fecha_inicio_plan),
+            'fecha_fin_plan_label': _format_date(tarea.fecha_fin_plan),
+            'fecha_inicio_real': _format_datetime(fecha_inicio_real),
+            'fecha_fin_real': _format_datetime(fecha_fin_real),
+            'fecha_inicio_real_label': _format_date(fecha_inicio_real),
+            'fecha_fin_real_label': _format_date(fecha_fin_real),
+            'duracion_real_dias': duracion_real_dias,
+            'total_avances': len(avances),
+            'total_fotos': total_fotos,
+            'responsable': getattr(tarea.responsable, 'nombre_completo', None),
+            'ultimo_registro': _format_datetime(avances[0].created_at) if avances else None,
+        },
+        'avances': avances_data,
+        'fotos': fotos_data,
+    }
+    return payload
+
+
+@obras_bp.route('/mis-tareas')
+@login_required
+def mis_tareas():
+    from collections import OrderedDict
+
+    q = (
+        db.session.query(TareaEtapa)
+        .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+        .join(EtapaObra, EtapaObra.id == TareaEtapa.etapa_id)
+        .join(Obra, Obra.id == EtapaObra.obra_id)
+        .filter(TareaMiembro.user_id == current_user.id)
+        .filter(Obra.organizacion_id == current_user.organizacion_id)
+        .order_by(Obra.nombre, EtapaObra.orden, TareaEtapa.id.desc())
+    )
+    tareas = q.all()
+    current_app.logger.info(
+        "mis_tareas user=%s unidades=%s",
+        current_user.id,
+        [(t.id, t.unidad, t.rendimiento) for t in tareas],
+    )
+
+    estados = OrderedDict([
+        ('pendiente', {'label': 'Pendientes', 'icon': 'far fa-circle'}),
+        ('en_curso', {'label': 'En curso', 'icon': 'fas fa-play-circle'}),
+        ('completada', {'label': 'Finalizadas', 'icon': 'fas fa-check-circle'}),
+    ])
+
+    tareas_por_estado = {clave: [] for clave in estados.keys()}
+    for tarea in tareas:
+        estado_normalizado = (tarea.estado or 'pendiente').lower()
+        if estado_normalizado not in tareas_por_estado:
+            estado_normalizado = 'pendiente'
+        tareas_por_estado[estado_normalizado].append(tarea)
+
+    resumen_estados = {clave: len(valor) for clave, valor in tareas_por_estado.items()}
+
+    return render_template(
+        'obras/mis_tareas.html',
+        tareas=tareas,
+        tareas_por_estado=tareas_por_estado,
+        estados=estados,
+        resumen_estados=resumen_estados,
+    )
+
+
+@obras_bp.route('/mis-tareas/<int:tarea_id>')
+@login_required
+def mis_tareas_detalle(tarea_id):
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    if not obra or obra.organizacion_id != current_user.organizacion_id:
+        flash('No tienes permisos para ver esta tarea.', 'danger')
+        return redirect(url_for('obras.mis_tareas'))
+
+    es_responsable = tarea.responsable_id == current_user.id
+    es_miembro = any(mi.user_id == current_user.id for mi in tarea.miembros)
+
+    if not (es_responsable or es_miembro or can_manage_obra(obra)):
+        flash('No tienes permisos para ver esta tarea.', 'danger')
+        return redirect(url_for('obras.mis_tareas'))
+
+    payload = _serialize_tarea_detalle(tarea)
+    puede_actualizar_estado = es_responsable or es_miembro
+
+    return render_template(
+        'obras/mis_tareas_detalle.html',
+        tarea=tarea,
+        obra=obra,
+        detalle=payload['tarea'],
+        avances=payload['avances'],
+        puede_actualizar_estado=puede_actualizar_estado,
+    )
+
+
+@obras_bp.route('/api/mis-tareas/<int:tarea_id>/estado', methods=['POST'])
+@login_required
+def api_mis_tareas_estado(tarea_id):
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    if not obra or obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    es_responsable = tarea.responsable_id == current_user.id
+    es_miembro = any(mi.user_id == current_user.id for mi in tarea.miembros)
+
+    if not (es_responsable or es_miembro or can_manage_obra(obra)):
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    data = request.get_json(silent=True) or {}
+    nuevo_estado = (data.get('estado') or '').lower()
+    estados_validos = {'pendiente', 'en_curso', 'completada'}
+
+    if nuevo_estado not in estados_validos:
+        return jsonify({'ok': False, 'error': 'Estado no válido'}), 400
+
+    try:
+        cambio_realizado = tarea.estado != nuevo_estado
+        tarea.estado = nuevo_estado
+
+        ahora = datetime.utcnow()
+        if nuevo_estado == 'en_curso' and tarea.fecha_inicio_real is None:
+            tarea.fecha_inicio_real = ahora
+        if nuevo_estado == 'completada':
+            if tarea.fecha_inicio_real is None:
+                tarea.fecha_inicio_real = ahora
+            tarea.fecha_fin_real = ahora
+
+        db.session.commit()
+        payload = _serialize_tarea_detalle(tarea)
+        return jsonify({
+            'ok': True,
+            'cambio': cambio_realizado,
+            'tarea': payload['tarea'],
+        })
+    except Exception as exc:
+        current_app.logger.exception('Error actualizando estado de tarea %s: %s', tarea_id, exc)
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': 'No se pudo actualizar la tarea'}), 500
+
+
+@obras_bp.route('/api/tareas/<int:tarea_id>/avances-pendientes')
+@login_required
+def obtener_avances_pendientes(tarea_id):
+    """API endpoint para obtener avances pendientes de una tarea con fotos"""
+    from utils.permissions import is_admin_or_pm
+
+    if not is_admin_or_pm(current_user):
+        return jsonify(ok=False, error="Sin permisos"), 403
+
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    try:
+        avances_pendientes = (
+            TareaAvance.query
+            .filter_by(tarea_id=tarea_id, status='pendiente')
+            .order_by(TareaAvance.created_at.desc())
+            .all()
+        )
+
+        avances_data = []
+        for avance in avances_pendientes:
+            fotos = []
+            for foto in avance.fotos:
+                fotos.append({
+                    'id': foto.id,
+                    'url': f"/media/{foto.file_path}",
+                    'thumbnail_url': f"/media/{foto.file_path}",
+                    'width': foto.width,
+                    'height': foto.height,
+                    'mime_type': foto.mime_type
+                })
+
+            avances_data.append({
+                'id': avance.id,
+                'cantidad': float(avance.cantidad),
+                'unidad': avance.unidad,
+                'horas': float(avance.horas or 0),
+                'notas': avance.notas or '',
+                'fecha': avance.created_at.strftime('%d/%m/%Y %H:%M'),
+                'operario': {
+                    'id': avance.usuario.id,
+                    'nombre': avance.usuario.nombre_completo
+                },
+                'fotos': fotos,
+                'fotos_count': len(fotos)
+            })
+
+        return jsonify({
+            'ok': True,
+            'tarea': {
+                'id': tarea.id,
+                'nombre': tarea.nombre,
+                'unidad': tarea.unidad
+            },
+            'avances': avances_data,
+            'total': len(avances_data)
+        })
+
+    except Exception as e:
+        current_app.logger.exception("Error al obtener avances pendientes")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route('/api/tareas/<int:tarea_id>/galeria')
+@login_required
+def api_tarea_galeria(tarea_id):
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra if tarea.etapa else None
+
+    if not obra or obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    puede_ver = False
+    if can_manage_obra(obra):
+        puede_ver = True
+    elif tarea.responsable_id == current_user.id:
+        puede_ver = True
+    else:
+        for miembro in tarea.miembros:
+            if miembro.user_id == current_user.id:
+                puede_ver = True
+                break
+
+    if not puede_ver:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    return jsonify(_serialize_tarea_detalle(tarea))
+
+
+@obras_bp.route('/etapa/<int:id>/tarea', methods=['POST'])
+@login_required
+def agregar_tarea(id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para agregar tareas.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    etapa = EtapaObra.query.get_or_404(id)
+
+    horas_estimadas = request.form.get('horas_estimadas')
+    responsable_id = request.form.get('responsable_id')
+    fecha_inicio_plan = request.form.get('fecha_inicio_plan')
+    fecha_fin_plan = request.form.get('fecha_fin_plan')
+
+    fecha_inicio_plan_date = None
+    fecha_fin_plan_date = None
+    if fecha_inicio_plan:
+        try:
+            fecha_inicio_plan_date = datetime.strptime(fecha_inicio_plan, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    if fecha_fin_plan:
+        try:
+            fecha_fin_plan_date = datetime.strptime(fecha_fin_plan, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    tareas_sugeridas = []
+    form_keys = list(request.form.keys())
+    for key in form_keys:
+        if key.startswith('sugeridas[') and key.endswith('][nombre]'):
+            index = key.split('[')[1].split(']')[0]
+            nombre_sugerida = request.form.get(f'sugeridas[{index}][nombre]')
+            descripcion_sugerida = request.form.get(f'sugeridas[{index}][descripcion]', '')
+            if nombre_sugerida:
+                tareas_sugeridas.append({
+                    'nombre': nombre_sugerida,
+                    'descripcion': descripcion_sugerida
+                })
+
+    if tareas_sugeridas:
+        tareas_creadas = 0
+        try:
+            for tarea_data in tareas_sugeridas:
+                nueva_tarea = TareaEtapa(
+                    etapa_id=id,
+                    nombre=tarea_data['nombre'],
+                    descripcion=tarea_data['descripcion'],
+                    horas_estimadas=float(horas_estimadas) if horas_estimadas else None,
+                    responsable_id=int(responsable_id) if responsable_id else None,
+                    fecha_inicio_plan=fecha_inicio_plan_date,
+                    fecha_fin_plan=fecha_fin_plan_date
+                )
+                db.session.add(nueva_tarea)
+                tareas_creadas += 1
+
+            db.session.commit()
+            return jsonify({'ok': True, 'created': tareas_creadas})
+        except Exception:
+            db.session.rollback()
+            return jsonify({'ok': False, 'error': 'Error al crear las tareas múltiples'})
+
+    else:
+        nombre = request.form.get('nombre')
+        descripcion = request.form.get('descripcion')
+
+        if not nombre:
+            flash('El nombre de la tarea es obligatorio.', 'danger')
+            return redirect(url_for('obras.detalle', id=etapa.obra_id))
+
+        nueva_tarea = TareaEtapa(
+            etapa_id=id,
+            nombre=nombre,
+            descripcion=descripcion,
+            horas_estimadas=float(horas_estimadas) if horas_estimadas else None,
+            responsable_id=int(responsable_id) if responsable_id else None,
+            fecha_inicio_plan=fecha_inicio_plan_date,
+            fecha_fin_plan=fecha_fin_plan_date
+        )
+
+        try:
+            db.session.add(nueva_tarea)
+            db.session.commit()
+            flash(f'Tarea "{nombre}" agregada exitosamente.', 'success')
+        except Exception:
+            db.session.rollback()
+            flash('Error al agregar la tarea.', 'danger')
+
+        return redirect(url_for('obras.detalle', id=etapa.obra_id))
+
+
+@obras_bp.route('/admin/backfill_tareas', methods=['POST'])
+@login_required
+def admin_backfill_tareas():
+    if getattr(current_user, 'email', '') not in ['brenda@gmail.com', 'admin@obyra.com']:
+        flash('No tienes permisos para ejecutar el backfill.', 'danger')
+        return redirect(url_for('obras.lista'))
+
+    try:
+        etapas_procesadas = 0
+        tareas_creadas_total = 0
+
+        etapas = EtapaObra.query.all()
+
+        for etapa in etapas:
+            tareas_existentes = TareaEtapa.query.filter_by(etapa_id=etapa.id).count()
+            if tareas_existentes < 5:
+                tareas_nuevas = seed_tareas_para_etapa(etapa)
+                tareas_creadas_total += tareas_nuevas
+                etapas_procesadas += 1
+
+        db.session.commit()
+
+        flash(f'Backfill completado: {etapas_procesadas} etapas procesadas, {tareas_creadas_total} tareas creadas.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("ERROR en backfill")
+        flash(f'Error en backfill: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.lista'))
+
+
+@obras_bp.route('/etapas/<int:etapa_id>/tareas')
+@login_required
+def api_listar_tareas(etapa_id):
+    etapa = EtapaObra.query.get_or_404(etapa_id)
+
+    if etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    if is_pm_global():
+        q = (TareaEtapa.query
+             .filter(TareaEtapa.etapa_id == etapa_id)
+             .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
+    else:
+        if not es_miembro_obra(etapa.obra_id, current_user.id):
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        q = (TareaEtapa.query
+             .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
+             .filter(TareaEtapa.etapa_id == etapa_id,
+                     TareaMiembro.user_id == current_user.id)
+             .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
+
+    try:
+        tareas = q.order_by(TareaEtapa.id.asc()).all()
+        html = render_template('obras/_tareas_lista.html', tareas=tareas)
+        return jsonify({'ok': True, 'html': html})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
+
+
+@obras_bp.route('/api/tareas/<int:tarea_id>/curva-s')
+@login_required
+def api_curva_s_tarea(tarea_id):
+    """API para obtener datos de curva S (PV/EV/AC) de una tarea"""
+    from evm_utils import curva_s_tarea
+
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+    if 'operario' in _get_roles_usuario(current_user):
+        es_miembro = TareaMiembro.query.filter_by(
+            tarea_id=tarea_id,
+            user_id=current_user.id
+        ).first()
+        if not es_miembro:
+            return jsonify({'ok': False, 'error': 'Sin permisos para esta tarea'}), 403
+
+    desde_str = request.args.get('desde')
+    hasta_str = request.args.get('hasta')
+
+    desde = hasta = None
+    try:
+        if desde_str:
+            desde = datetime.strptime(desde_str, '%Y-%m-%d').date()
+        if hasta_str:
+            hasta = datetime.strptime(hasta_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'Formato de fecha inválido. Use YYYY-MM-DD'}), 400
+
+    try:
+        curve_data = curva_s_tarea(tarea_id, desde, hasta)
+
+        task_info = {
+            'id': tarea.id,
+            'nombre': tarea.nombre,
+            'fecha_inicio': getattr(tarea, 'fecha_inicio', None).isoformat() if getattr(tarea, 'fecha_inicio', None) else None,
+            'fecha_fin': getattr(tarea, 'fecha_fin', None).isoformat() if getattr(tarea, 'fecha_fin', None) else None,
+            'presupuesto_mo': float(getattr(tarea, 'presupuesto_mo', 0) or 0),
+            'unidad': tarea.unidad,
+            'pct_completado': round(getattr(tarea, 'pct_completado', 0) or 0, 2)
+        }
+
+        return jsonify({
+            'ok': True,
+            'tarea': task_info,
+            'curva_s': curve_data,
+            'fecha_consulta': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Error al calcular curva S: {str(e)}'}), 500
+
+
+@obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
+@login_required
+def eliminar_tarea(tarea_id):
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra
+
+    if not can_manage_obra(obra):
+        return jsonify({'success': False, 'error': 'Sin permisos para gestionar esta obra'}), 403
+
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify({'success': False, 'error': 'Sin permisos'}), 403
+
+    try:
+        obra = tarea.etapa.obra
+        db.session.delete(tarea)
+        obra.calcular_progreso_automatico()
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@obras_bp.route('/api/tareas/bulk_delete', methods=['POST'])
+@login_required
+def api_tareas_bulk_delete():
+    data = request.get_json()
+    ids = data.get('ids', [])
+
+    if not ids:
+        return jsonify({'error': 'No se proporcionaron IDs', 'ok': False}), 400
+
+    primera_tarea = TareaEtapa.query.get(ids[0])
+    if not primera_tarea:
+        return jsonify({'error': 'Tarea no encontrada', 'ok': False}), 404
+
+    obra = primera_tarea.etapa.obra
+    if not can_manage_obra(obra):
+        return jsonify({'error': 'Sin permisos para gestionar esta obra', 'ok': False}), 403
+
+    data = request.get_json() or {}
+    ids = data.get("ids") or []
+
+    if not ids:
+        return jsonify({'error': 'IDs requeridos', 'ok': False}), 400
+
+    try:
+        task_ids = []
+        for task_id in ids:
+            try:
+                task_ids.append(int(task_id))
+            except (ValueError, TypeError):
+                continue
+
+        if not task_ids:
+            return jsonify({'error': 'IDs inválidos', 'ok': False}), 400
+
+        tareas = TareaEtapa.query.filter(TareaEtapa.id.in_(task_ids)).all()
+
+        if not tareas:
+            return jsonify({'error': 'No se encontraron tareas', 'ok': False}), 404
+
+        obras_a_actualizar = set()
+        for tarea in tareas:
+            try:
+                if tarea.etapa and tarea.etapa.obra and tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+                    return jsonify({'error': 'Sin permisos para algunas tareas', 'ok': False}), 403
+                if tarea.etapa and tarea.etapa.obra:
+                    obras_a_actualizar.add(tarea.etapa.obra)
+            except AttributeError as e:
+                current_app.logger.warning(f"Error accediendo a relaciones de tarea {tarea.id}: {str(e)}")
+                continue
+
+        deleted = 0
+        for tarea in tareas:
+            try:
+                db.session.delete(tarea)
+                deleted += 1
+            except Exception as e:
+                current_app.logger.warning(f"Error eliminando tarea {tarea.id}: {str(e)}")
+                continue
+
+        for obra in obras_a_actualizar:
+            try:
+                obra.calcular_progreso_automatico()
+            except Exception as e:
+                current_app.logger.warning(f"Error recalculando progreso para obra {obra.id}: {str(e)}")
+                continue
+
+        db.session.commit()
+        return jsonify({'ok': True, 'deleted': deleted})
+
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Error interno del servidor', 'ok': False}), 500
+
+
+@obras_bp.route('/api/etapas/bulk_delete', methods=['POST'])
+@login_required
+def api_etapas_bulk_delete():
+    data = request.get_json()
+    ids = data.get('ids', [])
+
+    if not ids:
+        return jsonify({'error': 'No se proporcionaron IDs', 'ok': False}), 400
+
+    primera_etapa = EtapaObra.query.get(ids[0])
+    if not primera_etapa:
+        return jsonify({'error': 'Etapa no encontrada', 'ok': False}), 404
+
+    obra = primera_etapa.obra
+    if not can_manage_obra(obra):
+        return jsonify({'error': 'Sin permisos para gestionar esta obra', 'ok': False}), 403
+
+    data = request.get_json() or {}
+    ids = data.get("ids") or []
+
+    if not ids:
+        return jsonify({'error': 'IDs requeridos', 'ok': False}), 400
+
+    try:
+        etapas = EtapaObra.query.filter(EtapaObra.id.in_(ids)).all()
+
+        obras_a_actualizar = set()
+        for etapa in etapas:
+            if etapa.obra.organizacion_id != current_user.organizacion_id:
+                return jsonify({'error': 'Sin permisos para algunas etapas', 'ok': False}), 403
+            obras_a_actualizar.add(etapa.obra)
+
+        deleted = 0
+        for etapa in etapas:
+            db.session.delete(etapa)
+            deleted += 1
+
+        for obra in obras_a_actualizar:
+            obra.calcular_progreso_automatico()
+
+        db.session.commit()
+        return jsonify({'ok': True, 'deleted': deleted})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e), 'ok': False}), 500
+
+
+@obras_bp.route('/geocodificar-todas', methods=['POST'])
+@login_required
+def geocodificar_todas():
+    if not is_admin():
+        flash('Solo los administradores pueden ejecutar esta acción.', 'danger')
+        return redirect(url_for('obras.lista'))
+
+    try:
+        from geocoding import geocodificar_obras_existentes
+        exitosas, fallidas = geocodificar_obras_existentes()
+
+        if exitosas > 0:
+            flash(f'Geocodificación completada: {exitosas} obras actualizadas, {fallidas} fallaron.', 'success')
+        else:
+            flash('No se pudieron geocodificar las obras. Verifica las direcciones.', 'warning')
+
+    except Exception as e:
+        flash(f'Error en la geocodificación: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.lista'))
+
+
+@obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
+@login_required
+def eliminar_obra(obra_id):
+    if getattr(current_user, 'email', '') not in ['brenda@gmail.com', 'admin@obyra.com']:
+        flash('No tienes permisos para eliminar obras.', 'danger')
+        return redirect(url_for('obras.lista'))
+
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first_or_404()
+    nombre_obra = obra.nombre
+
+    try:
+        AsignacionObra.query.filter_by(obra_id=obra_id).delete()
+
+        for etapa in obra.etapas:
+            TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
+
+        EtapaObra.query.filter_by(obra_id=obra_id).delete()
+
+        db.session.delete(obra)
+        db.session.commit()
+
+        flash(f'La obra "{nombre_obra}" ha sido eliminada exitosamente.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Error al eliminar la obra. Inténtalo nuevamente.', 'danger')
+
+    return redirect(url_for('obras.lista'))
+
+
+@obras_bp.route('/super-admin/reiniciar-sistema', methods=['POST'])
+@login_required
+def reiniciar_sistema():
+    if getattr(current_user, 'email', '') not in ['brenda@gmail.com', 'admin@obyra.com']:
+        flash('No tienes permisos para reiniciar el sistema.', 'danger')
+        return redirect(url_for('obras.lista'))
+
+    try:
+        AsignacionObra.query.delete()
+        TareaEtapa.query.delete()
+        EtapaObra.query.delete()
+        Obra.query.delete()
+
+        db.session.commit()
+        flash('Sistema reiniciado exitosamente. Todas las obras han sido eliminadas.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Error al reiniciar el sistema. Inténtalo nuevamente.', 'danger')
+
+    return redirect(url_for('obras.lista'))
+
+
+# ==== CERTIFICACIONES ====
+
+@obras_bp.route('/<int:id>/certificar_avance', methods=['POST'])
+@login_required
+def certificar_avance(id):
+    """Compat wrapper: crea certificación usando el flujo 2.0."""
+    obra = Obra.query.get_or_404(id)
+
+    membership = get_current_membership()
+    if not membership or membership.org_id != obra.organizacion_id or membership.role not in ('admin', 'project_manager'):
+        flash('No tienes permisos para certificar avances.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    porcentaje_avance = request.form.get('porcentaje_avance') or request.form.get('porcentaje')
+    if not porcentaje_avance:
+        flash('El porcentaje de avance es obligatorio.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    periodo_desde = _parse_date(request.form.get('periodo_desde'))
+    periodo_hasta = _parse_date(request.form.get('periodo_hasta'))
+    notas = request.form.get('notas')
+
+    try:
+        porcentaje = Decimal(str(porcentaje_avance).replace(',', '.'))
+        cert = create_certification(
+            obra,
+            current_user,
+            porcentaje,
+            periodo=(periodo_desde, periodo_hasta),
+            notas=notas,
+            aprobar=True,
+        )
+        db.session.commit()
+        flash(
+            f'Se registró la certificación #{cert.id} por {porcentaje}% correctamente.',
+            'success',
+        )
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error al registrar certificación: {exc}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/<int:id>/actualizar_progreso', methods=['POST'])
+@login_required
+def actualizar_progreso_automatico(id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para actualizar el progreso.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    obra = Obra.query.get_or_404(id)
+
+    try:
+        progreso_anterior = obra.progreso
+        nuevo_progreso = obra.calcular_progreso_automatico()
+
+        db.session.commit()
+
+        flash(f'Progreso actualizado de {progreso_anterior}% a {nuevo_progreso}%.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar progreso: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=id))
+
+
+@obras_bp.route('/tarea/<int:id>/actualizar_estado', methods=['POST'])
+@login_required
+def actualizar_estado_tarea(id):
+    tarea = TareaEtapa.query.get_or_404(id)
+    obra = tarea.etapa.obra
+
+    is_admin_like = is_admin() or ('tecnico' in _get_roles_usuario(current_user))
+    is_responsible = tarea.responsable_id == current_user.id
+
+    asignado = db.session.query(TareaResponsables.id)\
+        .filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
+
+    if not (is_admin_like or is_responsible or asignado):
+        flash('No tienes permisos para actualizar esta tarea.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra.id))
+
+    nuevo_estado = request.form.get('estado')
+    porcentaje_avance = request.form.get('porcentaje_avance')
+
+    if nuevo_estado not in ['pendiente', 'en_curso', 'completada', 'cancelada']:
+        flash('Estado no válido.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra.id))
+
+    try:
+        tarea.estado = nuevo_estado
+
+        if porcentaje_avance:
+            tarea.porcentaje_avance = Decimal(str(porcentaje_avance).replace(',', '.'))
+
+        if nuevo_estado == 'completada':
+            tarea.porcentaje_avance = Decimal('100')
+            tarea.fecha_fin_real = date.today()
+        elif nuevo_estado == 'en_curso' and not tarea.fecha_inicio_real:
+            tarea.fecha_inicio_real = date.today()
+
+        obra.calcular_progreso_automatico()
+
+        db.session.commit()
+        flash('Estado de tarea actualizado exitosamente.', 'success')
+
+    except ValueError:
+        flash('Porcentaje de avance no válido.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar tarea: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=obra.id))
+
+
+@obras_bp.route('/tareas/<int:tarea_id>/asignar', methods=['POST'])
+@login_required
+def tarea_asignar(tarea_id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+
+    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    data = request.get_json(force=True) or {}
+    user_ids = list({int(x) for x in data.get("user_ids", [])})
+
+    try:
+        TareaResponsables.query.filter_by(tarea_id=tarea.id).delete()
+
+        for uid in user_ids:
+            usuario = Usuario.query.filter_by(id=uid, organizacion_id=current_user.organizacion_id).first()
+            if usuario:
+                asignacion = TareaResponsables(tarea_id=tarea.id, user_id=uid)
+                db.session.add(asignacion)
+
+        db.session.commit()
+        return jsonify(ok=True, count=len(user_ids))
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/<int:id>/certificaciones', methods=['GET', 'POST'])
+@login_required
+def historial_certificaciones(id):
+    obra = Obra.query.filter_by(id=id, organizacion_id=get_current_org_id()).first_or_404()
+    membership = get_current_membership()
+
+    if request.method == 'POST':
+        payload = request.get_json(silent=True) or request.form
+        if not membership or membership.role not in ('admin', 'project_manager'):
+            error_msg = 'No tienes permisos para crear certificaciones.'
+            if request.is_json:
+                return jsonify(ok=False, error=error_msg), 403
+            flash(error_msg, 'danger')
+            return redirect(url_for('obras.historial_certificaciones', id=id))
+
+        cert_id = payload.get('certificacion_id')
+        periodo = (
+            _parse_date(payload.get('periodo_desde')),
+            _parse_date(payload.get('periodo_hasta')),
+        )
+        aprobar_flag = str(payload.get('aprobar', 'true')).lower() in {'1', 'true', 'yes', 'y', 'on'}
+        notas = payload.get('notas')
+
+        try:
+            if cert_id:
+                cert = WorkCertification.query.get_or_404(int(cert_id))
+                if cert.obra_id != obra.id:
+                    abort(404)
+                if payload.get('porcentaje'):
+                    cert.porcentaje_avance = Decimal(str(payload['porcentaje']).replace(',', '.'))
+                if aprobar_flag and cert.estado != 'aprobada':
+                    cert.marcar_aprobada(current_user)
+                if periodo[0] or periodo[1]:
+                    cert.periodo_desde, cert.periodo_hasta = periodo
+                if notas is not None:
+                    cert.notas = notas
+                db.session.commit()
+                response = {'ok': True, 'certificacion_id': cert.id, 'estado': cert.estado}
+                if request.is_json:
+                    return jsonify(response)
+                flash('Certificación actualizada correctamente.', 'success')
+                return redirect(url_for('obras.historial_certificaciones', id=id))
+
+            porcentaje_raw = payload.get('porcentaje') or payload.get('porcentaje_avance')
+            if not porcentaje_raw:
+                raise ValueError('Debes indicar el porcentaje de avance a certificar.')
+
+            porcentaje = Decimal(str(porcentaje_raw).replace(',', '.'))
+            cert = create_certification(
+                obra,
+                current_user,
+                porcentaje,
+                periodo=periodo,
+                notas=notas,
+                aprobar=aprobar_flag,
+                fuente=payload.get('fuente', 'tareas'),
+            )
+            db.session.commit()
+            response = {'ok': True, 'certificacion_id': cert.id, 'estado': cert.estado}
+            if request.is_json:
+                return jsonify(response)
+            flash('Certificación creada correctamente.', 'success')
+            return redirect(url_for('obras.historial_certificaciones', id=id))
+        except Exception as exc:
+            db.session.rollback()
+            if request.is_json:
+                return jsonify(ok=False, error=str(exc)), 400
+            flash(f'Error al crear la certificación: {exc}', 'danger')
+            return redirect(url_for('obras.historial_certificaciones', id=id))
+
+    resumen = certification_totals(obra)
+    pendientes = build_pending_entries(obra)
+    aprobadas = approved_entries(obra)
+    pct_aprobado, pct_borrador, pct_sugerido = pending_percentage(obra)
+    context = resolve_budget_context(obra)
+    puede_aprobar = membership and membership.role in ('admin', 'project_manager')
+
+    if request.args.get('format') == 'json':
+        return jsonify(
+            ok=True,
+            resumen={k: str(v) for k, v in resumen.items()},
+            pendientes=[
+                {**row, 'porcentaje': str(row['porcentaje']), 'monto_ars': str(row['monto_ars']), 'monto_usd': str(row['monto_usd'])}
+                for row in pendientes
+            ],
+            aprobadas=[
+                {
+                    **row,
+                    'porcentaje': str(row['porcentaje']),
+                    'monto_ars': str(row['monto_ars']),
+                    'monto_usd': str(row['monto_usd']),
+                    'pagado_ars': str(row['pagado_ars']),
+                    'pagado_usd': str(row['pagado_usd']),
+                    'saldo_ars': str(row['saldo_ars']),
+                    'saldo_usd': str(row['saldo_usd']),
+                }
+                for row in aprobadas
+            ],
+            porcentajes={
+                'aprobado': str(pct_aprobado),
+                'borrador': str(pct_borrador),
+                'sugerido': str(pct_sugerido),
+            },
+        )
+
+    return render_template(
+        'obras/certificaciones.html',
+        obra=obra,
+        pendientes=pendientes,
+        certificaciones_aprobadas=aprobadas,
+        resumen=resumen,
+        porcentajes=(pct_aprobado, pct_borrador, pct_sugerido),
+        puede_aprobar=bool(puede_aprobar),
+        contexto=context,
+    )
+
+
+@obras_bp.route('/certificacion/<int:id>/desactivar', methods=['POST'])
+@login_required
+def desactivar_certificacion(id):
+    roles = _get_roles_usuario(current_user)
+    if 'administrador' not in roles and 'admin' not in roles:
+        flash('Solo los administradores pueden desactivar certificaciones.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    certificacion = CertificacionAvance.query.get_or_404(id)
+    obra = certificacion.obra
+
+    try:
+        certificacion.activa = False
+        obra.costo_real -= certificacion.costo_certificado
+        obra.calcular_progreso_automatico()
+        db.session.commit()
+        flash('Certificación desactivada exitosamente.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al desactivar certificación: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+
+@obras_bp.route('/certificaciones/<int:cert_id>/pagos', methods=['POST'])
+@login_required
+def registrar_pago_certificacion(cert_id):
+    certificacion = WorkCertification.query.get_or_404(cert_id)
+    obra = certificacion.obra
+
+    membership = get_current_membership()
+    if not membership or membership.org_id != obra.organizacion_id or membership.role not in ('admin', 'project_manager'):
+        error_msg = 'No tienes permisos para registrar pagos.'
+        if request.is_json:
+            return jsonify(ok=False, error=error_msg), 403
+        flash(error_msg, 'danger')
+        return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+    data = request.get_json(silent=True) or request.form
+    monto_raw = data.get('monto')
+    metodo = data.get('metodo') or data.get('metodo_pago')
+    if not monto_raw or not metodo:
+        msg = 'Debe indicar monto y método de pago.'
+        if request.is_json:
+            return jsonify(ok=False, error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+    moneda = (data.get('moneda') or 'ARS').upper()
+    notas = data.get('notas')
+    tc_usd = data.get('tc_usd') or data.get('tc_usd_pago')
+    fecha_pago = _parse_date(data.get('fecha_pago'))
+    operario_id = data.get('operario_id') or data.get('usuario_id')
+    try:
+        operario_id = int(operario_id) if operario_id else None
+    except (TypeError, ValueError):
+        operario_id = None
+
+    try:
+        monto = Decimal(str(monto_raw).replace(',', '.'))
+        payment = register_payment(
+            certificacion,
+            obra,
+            current_user,
+            monto=monto,
+            metodo=metodo,
+            moneda=moneda,
+            fecha=fecha_pago,
+            tc_usd=Decimal(str(tc_usd).replace(',', '.')) if tc_usd else None,
+            notas=notas,
+            operario_id=operario_id,
+            comprobante_url=data.get('comprobante_url'),
+        )
+        db.session.commit()
+        payload = {'ok': True, 'pago_id': payment.id, 'certificacion_id': certificacion.id}
+        if request.is_json:
+            return jsonify(payload)
+        flash('Pago registrado correctamente.', 'success')
+    except Exception as exc:
+        db.session.rollback()
+        if request.is_json:
+            return jsonify(ok=False, error=str(exc)), 400
+        flash(f'Error al registrar el pago: {exc}', 'danger')
+
+    return redirect(url_for('obras.historial_certificaciones', id=obra.id))
+
+
+@obras_bp.route('/<int:obra_id>/etapas/<int:etapa_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_etapa(obra_id, etapa_id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para eliminar etapas.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
+
+    obra = Obra.query.filter_by(id=obra_id, organizacion_id=current_user.organizacion_id).first_or_404()
+    etapa = EtapaObra.query.filter_by(id=etapa_id, obra_id=obra_id).first_or_404()
+
+    try:
+        nombre_etapa = etapa.nombre
+        db.session.delete(etapa)
+        obra.calcular_progreso_automatico()
+        db.session.commit()
+        flash(f'Etapa "{nombre_etapa}" eliminada exitosamente.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar etapa: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=obra_id))
+
+
+@obras_bp.route('/etapa/<int:etapa_id>/cambiar_estado', methods=['POST'])
+@login_required
+def cambiar_estado_etapa(etapa_id):
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para cambiar el estado de etapas.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    etapa = EtapaObra.query.get_or_404(etapa_id)
+    nuevo_estado = request.form.get('estado')
+
+    estados_validos = ['pendiente', 'en_curso', 'pausada', 'finalizada']
+    if nuevo_estado not in estados_validos:
+        flash('Estado no válido.', 'danger')
+        return redirect(url_for('obras.detalle', id=etapa.obra_id))
+
+    try:
+        estado_anterior = etapa.estado
+        etapa.estado = nuevo_estado
+
+        if nuevo_estado == 'finalizada':
+            for tarea in etapa.tareas.filter_by(estado='pendiente'):
+                tarea.estado = 'completada'
+
+        etapa.obra.calcular_progreso_automatico()
+
+        db.session.commit()
+        flash(f'Estado de etapa "{etapa.nombre}" cambiado de "{estado_anterior}" a "{nuevo_estado}".', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al cambiar estado: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=etapa.obra_id))
+
+
+# ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
+
+@obras_bp.route("/avances/<int:avance_id>/aprobar", methods=['POST'])
+@login_required
+def aprobar_avance(avance_id):
+    from utils.permissions import can_approve_avance
+
+    av = TareaAvance.query.get_or_404(avance_id)
+
+    if not can_approve_avance(current_user, av):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    if av.status == "aprobado":
+        return jsonify(ok=True)
+
+    try:
+        av.status = "aprobado"
+        av.confirmed_by = current_user.id
+        av.confirmed_at = datetime.utcnow()
+
+        t = TareaEtapa.query.get(av.tarea_id)
+        if t and not t.fecha_inicio_real:
+            t.fecha_inicio_real = datetime.utcnow()
+
+        db.session.commit()
+        return jsonify(ok=True)
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error en aprobar_avance")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route("/avances/<int:avance_id>/rechazar", methods=['POST'])
+@login_required
+def rechazar_avance(avance_id):
+    from utils.permissions import can_approve_avance
+
+    av = TareaAvance.query.get_or_404(avance_id)
+
+    if not can_approve_avance(current_user, av):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    try:
+        av.status = "rechazado"
+        av.reject_reason = request.form.get("motivo")
+        av.confirmed_by = current_user.id
+        av.confirmed_at = datetime.utcnow()
+
+        db.session.commit()
+        return jsonify(ok=True)
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error en rechazar_avance")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route('/<int:obra_id>/wizard/tareas', methods=['POST'])
+@login_required
+def wizard_crear_tareas(obra_id):
+    """Wizard: creación masiva de tareas/miembros en un paso."""
+    obra = Obra.query.get_or_404(obra_id)
+    if not can_manage_obra(obra):
+        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify(ok=False, error="JSON requerido"), 400
+
+        etapas_data = data.get('etapas', [])
+        evitar_duplicados = data.get('evitar_duplicados', True)
+
+        if not etapas_data:
+            return jsonify(ok=False, error="Se requiere al menos una etapa"), 400
+
+        creadas = 0
+        ya_existian = 0
+        asignaciones_creadas = 0
+
+        db.session.begin()
+        current_app.logger.info(f"WIZARD: Creando tareas para obra {obra_id}")
+
+        for etapa_data in etapas_data:
+            etapa_id = etapa_data.get('etapa_id')
+            tareas_data = etapa_data.get('tareas', [])
+
+            etapa = EtapaObra.query.filter_by(id=etapa_id, obra_id=obra_id).first()
+            if not etapa:
+                db.session.rollback()
+                return jsonify(ok=False, error=f"Etapa {etapa_id} no existe en esta obra"), 400
+
+            for tarea_data in tareas_data:
+                nombre = tarea_data.get('nombre')
+                inicio = tarea_data.get('inicio')
+                fin = tarea_data.get('fin')
+                horas_estimadas = tarea_data.get('horas_estimadas')
+                unidad = tarea_data.get('unidad', 'h')
+                responsable_id = tarea_data.get('responsable_id')
+
+                if not nombre:
+                    db.session.rollback()
+                    return jsonify(ok=False, error="Nombre de tarea requerido"), 400
+
+                if responsable_id:
+                    miembro = ObraMiembro.query.filter_by(obra_id=obra_id, usuario_id=responsable_id).first()
+                    if not miembro:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Usuario {responsable_id} no es miembro de esta obra"), 400
+
+                fecha_inicio_plan = None
+                fecha_fin_plan = None
+
+                if inicio:
+                    try:
+                        fecha_inicio_plan = datetime.strptime(inicio, '%Y-%m-%d').date()
+                    except ValueError:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Fecha inicio inválida: {inicio}"), 400
+
+                if fin:
+                    try:
+                        fecha_fin_plan = datetime.strptime(fin, '%Y-%m-%d').date()
+                    except ValueError:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Fecha fin inválida: {fin}"), 400
+
+                tarea_existente = None
+                if evitar_duplicados:
+                    tarea_existente = TareaEtapa.query.filter_by(etapa_id=etapa_id, nombre=nombre).first()
+
+                if tarea_existente:
+                    ya_existian += 1
+                    tarea = tarea_existente
+                    if fecha_inicio_plan:
+                        tarea.fecha_inicio_plan = fecha_inicio_plan
+                    if fecha_fin_plan:
+                        tarea.fecha_fin_plan = fecha_fin_plan
+                    if horas_estimadas:
+                        tarea.horas_estimadas = horas_estimadas
+                    if unidad:
+                        tarea.unidad = unidad
+                    if responsable_id:
+                        tarea.responsable_id = responsable_id
+                else:
+                    tarea = TareaEtapa(
+                        etapa_id=etapa_id,
+                        nombre=nombre,
+                        descripcion="Creada via wizard",
+                        estado='pendiente',
+                        fecha_inicio_plan=fecha_inicio_plan,
+                        fecha_fin_plan=fecha_fin_plan,
+                        horas_estimadas=horas_estimadas,
+                        unidad=unidad,
+                        responsable_id=responsable_id
+                    )
+                    db.session.add(tarea)
+                    db.session.flush()
+                    creadas += 1
+
+                if responsable_id:
+                    asignacion_existente = TareaMiembro.query.filter_by(
+                        tarea_id=tarea.id, user_id=responsable_id
+                    ).first()
+                    if not asignacion_existente:
+                        asignacion = TareaMiembro(tarea_id=tarea.id, user_id=responsable_id, cuota_objetivo=None)
+                        db.session.add(asignacion)
+                        asignaciones_creadas += 1
+
+        db.session.commit()
+
+        return jsonify(ok=True, creadas=creadas, ya_existian=ya_existian, asignaciones_creadas=asignaciones_creadas)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("WIZARD: Error creando tareas")
+        return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
+
+
+# ==== Wizard: catálogos ====
+
+@obras_bp.route('/api/catalogo/etapas', methods=['GET'])
+@login_required
+def get_catalogo_etapas():
+    try:
+        catalogo = obtener_etapas_disponibles()
+        response = jsonify({"ok": True, "etapas_catalogo": catalogo})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
+    except Exception as e:
+        current_app.logger.exception("API Error obteniendo catálogo de etapas")
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 400
+
+
+@obras_bp.route('/api/wizard-tareas/etapas', methods=['GET'])
+@login_required
+def get_wizard_etapas():
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        if not obra_id:
+            response = jsonify({"ok": False, "error": "obra_id es requerido"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
+
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
+
+        catalogo = obtener_etapas_disponibles()
+
+        etapas_creadas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
+        etapas_creadas_data = [{"id": e.id, "slug": None, "nombre": e.nombre} for e in etapas_creadas]
+
+        for etapa_creada in etapas_creadas_data:
+            etapa_catalogo = next((c for c in catalogo if c['nombre'] == etapa_creada['nombre']), None)
+            if etapa_catalogo:
+                etapa_creada['slug'] = etapa_catalogo['slug']
+
+        response = jsonify({"ok": True, "etapas_catalogo": catalogo, "etapas_creadas": etapas_creadas_data})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
+
+    except Exception as e:
+        current_app.logger.exception("API Error obteniendo etapas para wizard")
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 400
+
+
+@obras_bp.route('/api/wizard-tareas/tareas', methods=['POST','GET'])
+@login_required
+def wizard_tareas_catalogo():
+    try:
+        if request.method == 'POST' and request.is_json:
+            data = request.get_json(silent=True) or {}
+            obra_id = data.get('obra_id')
+            etapas  = data.get('etapas')
+        else:
+            obra_id = request.args.get('obra_id', type=int)
+            etapas  = request.args.getlist('etapas')
+
+        if not obra_id or not etapas:
+            response = jsonify({'ok': False, 'error': 'obra_id y etapas son requeridos'})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
+
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
+
+        from tareas_predefinidas import obtener_tareas_por_etapa
+        from etapas_predefinidas import obtener_etapas_disponibles
+
+        catalogo_etapas = obtener_etapas_disponibles()
+        slug_to_nombre = {e['slug']: e['nombre'] for e in catalogo_etapas}
+
+        resp = []
+        for slug in etapas:
+            nombre_etapa = slug_to_nombre.get(slug)
+            if nombre_etapa:
+                tareas_etapa = obtener_tareas_por_etapa(nombre_etapa)
+                for idx, tarea in enumerate(tareas_etapa):
+                    resp.append({
+                        'id': f'{slug}-{idx+1}',
+                        'nombre': tarea['nombre'],
+                        'descripcion': tarea.get('descripcion', ''),
+                        'etapa_slug': slug,
+                        'horas': tarea.get('horas', 0)
+                    })
+
+        resp.sort(key=lambda t: (t['etapa_slug'], t['nombre']))
+
+        response = jsonify({'ok': True, 'tareas_catalogo': resp})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error en wizard_tareas_endpoint: {e}")
+        response = jsonify({"ok": False, "error": "Error interno del servidor"})
+        response.headers['Content-Type'] = 'application/json'
+        return response, 500
+
+
+@obras_bp.route('/api/wizard-tareas/opciones')
+@login_required
+def wizard_tareas_opciones():
+    """Paso 3 del wizard: devuelve unidades sugeridas y equipo de la obra."""
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        if not obra_id:
+            response = jsonify({"ok": False, "error": "obra_id requerido"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 400
+
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            response = jsonify({"ok": False, "error": "Sin permisos para gestionar esta obra"})
+            response.headers['Content-Type'] = 'application/json'
+            return response, 403
+
+        # Unidades base para construcción
+        unidades = ['m2', 'ml', 'm3', 'un', 'kg', 'h']
+
+        usuarios = []
+        try:
+            query_result = (db.session.query(Usuario.id, Usuario.nombre, Usuario.apellido, ObraMiembro.rol_en_obra)
+                           .join(ObraMiembro, ObraMiembro.usuario_id == Usuario.id)
+                           .filter(ObraMiembro.obra_id == obra_id)
+                           .filter(Usuario.activo == True)
+                           .all())
+
+            for user_id, nombre, apellido, rol in query_result:
+                nombre_completo = f"{(nombre or '').strip()} {(apellido or '').strip()}".strip() or "Sin nombre"
+                usuarios.append({
+                    'id': user_id,
+                    'nombre': nombre_completo,
+                    'rol': rol or 'Sin rol'
+                })
+        except Exception as e:
+            current_app.logger.warning(f"Error al obtener equipo de obra {obra_id}: {e}")
+
+        return jsonify({"ok": True, "unidades": unidades, "usuarios": usuarios}), 200
+
+    except Exception as e:
+        current_app.logger.exception("API Error wizard_tareas_opciones")
+        return jsonify({"ok": False, "error": str(e)}), 400
+

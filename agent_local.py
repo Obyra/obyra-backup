@@ -7,6 +7,8 @@ import importlib.util
 import time
 import json
 import io
+
+# Optional openpyxl import (robusto si la librería no está instalada)
 try:
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -139,7 +141,7 @@ def procesar_consulta():
                     respuesta += "¿Te gustaría ver detalles específicos de alguna obra?"
         
         elif 'presupuesto' in consulta or 'costo' in consulta or 'precio' in consulta:
-            if 'mes' in consulta or 'mensual' in consulta:
+            if 'mes' in consulta o 'mensual' in consulta:
                 # Consulta sobre presupuestos del mes actual
                 from datetime import datetime
                 mes_actual = datetime.now().month
@@ -246,7 +248,7 @@ def procesar_consulta():
                     else:
                         respuesta = f"✅ <strong>Inventario en buen estado:</strong> Tienes {total_items} elemento(s) registrado(s) y todos están en niveles seguros."
         
-        elif 'usuario' in consulta or 'equipo' in consulta or 'persona' in consulta or 'operario' in consulta or 'responsable' in consulta:
+        elif 'usuario' in consulta or 'equipo' in consulta or 'persona' in consulta o 'operario' in consulta or 'responsable' in consulta:
             if 'operario' in consulta or 'asignado' in consulta:
                 # Consulta sobre operarios asignados a obras
                 from models import AsignacionObra

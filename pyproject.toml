@@ -3,6 +3,7 @@ name = "repl-nix-workspace"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
+
 dependencies = [
     "authlib~=1.6.5",
     "flask~=3.1.1",
@@ -16,7 +17,7 @@ dependencies = [
     "openai~=1.97.1",
     "openpyxl~=3.1.5",
     "pillow~=11.3.0",
-    "psycopg[binary]>=3.2,<3.3",
+    "psycopg[binary]>=3.2,<3.3",   # reemplaza psycopg2-binary por psycopg v3
     "pypdf2~=3.0.1",
     "reportlab~=4.4.2",
     "requests~=2.32.3",
@@ -25,3 +26,4 @@ dependencies = [
     "weasyprint~=66.0",
     "xlsxwriter~=3.2.5",
 ]
+
