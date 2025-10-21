@@ -3,7 +3,10 @@ OBYRA Market - Database Initialization
 Creates tables and seeds initial data for the marketplace
 """
 
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from models_marketplace import *
 from datetime import datetime
 import os

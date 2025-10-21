@@ -31,7 +31,7 @@ else:  # pragma: no cover - executed only when optional deps missing
     getSampleStyleSheet = ParagraphStyle = _missing_reportlab  # type: ignore[assignment]
     TA_CENTER = TA_RIGHT = None  # type: ignore[assignment]
 
-from app import db
+from app.extensions import db
 from models_marketplace import *
 
 def generate_purchase_orders(order_id):

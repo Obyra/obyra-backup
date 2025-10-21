@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from flask import current_app, render_template, render_template_string
 from sqlalchemy import func
 
-from extensions import db
+from app.extensions import db
 from models import InventoryCategory, Organizacion
 from seed_inventory_categories import seed_inventory_categories_for_company
 

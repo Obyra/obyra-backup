@@ -28,7 +28,7 @@ def sugerencias_direccion(direccion: str, *, provider: Optional[str] = None):
 def geocodificar_obras_existentes():
     """Geocodifica obras sin coordenadas usando el servicio actual."""
 
-    from app import db
+    from app.extensions import db
     from models import Obra
 
     obras_pendientes = Obra.query.filter(

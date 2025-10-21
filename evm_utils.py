@@ -6,7 +6,7 @@ Implements S-curve analysis, planning distribution, and performance monitoring
 from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy import func
-from app import db
+from app.extensions import db
 
 
 def lunes_iso(d: date) -> date:

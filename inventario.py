@@ -16,7 +16,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional
 from jinja2 import TemplateNotFound
 
-from app import db
+from app.extensions import db
 from models import (
     ItemInventario,
     CategoriaInventario,

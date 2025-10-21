@@ -4,7 +4,7 @@ Following strict instructions for namespaced routes and seller masking
 """
 
 from flask import Blueprint, request, jsonify, current_app
-from app import db
+from app.extensions import db
 from marketplace.models import *
 from marketplace.services.masking import redact_public, apply_seller_masking, get_masked_seller_name
 from marketplace.services.commissions import compute as compute_commission

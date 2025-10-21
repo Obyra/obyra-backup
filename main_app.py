@@ -7,7 +7,10 @@ import os
 from flask import Flask, request, redirect, url_for, session, flash, render_template
 from flask_login import login_user, current_user
 from authlib.integrations.flask_client import OAuth
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from models import Usuario
 from datetime import datetime
 

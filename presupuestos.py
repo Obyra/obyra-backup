@@ -38,7 +38,7 @@ if XLSXWRITER_AVAILABLE:
 else:  # pragma: no cover - executed only when optional deps missing
     xlsxwriter = None  # type: ignore[assignment]
 
-from app import db
+from app.extensions import db
 from models import Presupuesto, ItemPresupuesto, Obra, EtapaObra, TareaEtapa, Event
 from calculadora_ia import (
     procesar_presupuesto_ia,

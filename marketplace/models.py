@@ -3,7 +3,7 @@ OBYRA Marketplace Models - ISOLATED TABLES WITH mk_ PREFIX
 Following strict instructions - NO modification of existing tables
 """
 
-from app import db
+from app.extensions import db
 from datetime import datetime
 from sqlalchemy import func
 import json

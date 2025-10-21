@@ -4,7 +4,7 @@ Following ML-like B2B marketplace specification with seller masking
 """
 from datetime import datetime, date
 from flask_login import UserMixin
-from app import db
+from app.extensions import db
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import JSON
 import uuid

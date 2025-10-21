@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from alembic import op
 
-from app import app
-from extensions import db
+from app import create_app
+app = create_app()
+from app.extensions import db
 
 # revision identifiers, used by Alembic.
 revision = '0001_initial_schema'
@@ -16,6 +17,9 @@ depends_on = None
 
 def upgrade() -> None:
     """Create all tables defined in SQLAlchemy metadata."""
+
+    op.execute("CREATE SCHEMA IF NOT EXISTS core")
+    op.execute("CREATE SCHEMA IF NOT EXISTS ops")
 
     with app.app_context():
         bind = op.get_bind()

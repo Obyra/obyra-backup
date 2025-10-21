@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
-from extensions import db
+from app.extensions import db
 from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser, OrgMembership
 from sqlalchemy import func
 from datetime import datetime

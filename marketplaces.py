@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from datetime import datetime
 from decimal import Decimal
-from app import db
+from app.extensions import db
 from models import Proveedor, CategoriaProveedor, SolicitudCotizacion, Usuario
 
 marketplaces_bp = Blueprint('marketplaces', __name__)

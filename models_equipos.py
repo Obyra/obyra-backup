@@ -1,5 +1,5 @@
 # Modelos para el módulo de Equipos
-from app import db
+from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index
 

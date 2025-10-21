@@ -5,7 +5,7 @@ Blueprint del Marketplace público - Listado de productos y detalle
 from flask import Blueprint, render_template, request, abort, redirect, url_for, flash
 from flask_login import current_user
 from sqlalchemy import or_, and_, desc
-from app import db
+from app.extensions import db
 from models import Product, ProductVariant, Category, Supplier
 from decimal import Decimal
 import re

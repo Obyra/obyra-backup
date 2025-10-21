@@ -6,7 +6,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
-from extensions import db
+from app.extensions import db
 from models import PerfilUsuario, Usuario
 from auth import normalizar_cuit, validar_cuit
 

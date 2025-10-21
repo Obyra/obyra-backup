@@ -2,7 +2,7 @@
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask import session
 from flask_login import UserMixin
-from extensions import db
+from app.extensions import db
 from sqlalchemy import func, inspect
 from sqlalchemy.orm import backref
 from werkzeug.security import generate_password_hash, check_password_hash

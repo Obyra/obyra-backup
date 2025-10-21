@@ -5,7 +5,7 @@ from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import json
 import requests
-from app import db
+from app.extensions import db
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
 from models import (

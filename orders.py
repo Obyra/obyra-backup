@@ -4,7 +4,7 @@ Blueprint para manejo de órdenes - vista tanto para compradores como proveedore
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort
 from flask_login import login_required, current_user
-from app import db
+from app.extensions import db
 from models import Order, OrderItem, OrderCommission, Supplier
 from datetime import datetime
 
