@@ -14,7 +14,7 @@ class Equipment(db.Model):
     modelo = db.Column(db.String(100))
     nro_serie = db.Column(db.String(100))
     costo_hora = db.Column(db.Numeric(12, 2), default=0)
-    estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado'), default='activo')
+    estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado', schema='app'), default='activo')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
@@ -48,7 +48,7 @@ class EquipmentAssignment(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     fecha_desde = db.Column(db.Date, nullable=False)
     fecha_hasta = db.Column(db.Date)
-    estado = db.Column(db.Enum('asignado', 'liberado', name='assignment_estado'), default='asignado')
+    estado = db.Column(db.Enum('asignado', 'liberado', name='assignment_estado', schema='app'), default='asignado')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
@@ -71,7 +71,7 @@ class EquipmentUsage(db.Model):
     avance_m3 = db.Column(db.Numeric(12, 2))
     notas = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    estado = db.Column(db.Enum('pendiente', 'aprobado', 'rechazado', name='usage_estado'), default='pendiente')
+    estado = db.Column(db.Enum('pendiente', 'aprobado', 'rechazado', name='usage_estado', schema='app'), default='pendiente')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     approved_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     approved_at = db.Column(db.DateTime)
@@ -91,12 +91,12 @@ class MaintenanceTask(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False)
-    tipo = db.Column(db.Enum('programado', 'correctivo', name='maintenance_tipo'), nullable=False)
+    tipo = db.Column(db.Enum('programado', 'correctivo', name='maintenance_tipo', schema='app'), nullable=False)
     fecha_prog = db.Column(db.Date, nullable=False)
     fecha_real = db.Column(db.Date)
     costo = db.Column(db.Numeric(12, 2))
     notas = db.Column(db.Text)
-    status = db.Column(db.Enum('abierta', 'en_proceso', 'cerrada', name='maintenance_status'), default='abierta')
+    status = db.Column(db.Enum('abierta', 'en_proceso', 'cerrada', name='maintenance_status', schema='app'), default='abierta')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     

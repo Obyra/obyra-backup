@@ -1791,7 +1791,7 @@ class Equipment(db.Model):
     modelo = db.Column(db.String(100))
     nro_serie = db.Column(db.String(100))
     costo_hora = db.Column(db.Numeric(12, 2), default=0)
-    estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado'), default='activo')
+    estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado', schema='app'), default='activo')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
@@ -1825,7 +1825,7 @@ class EquipmentAssignment(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     fecha_desde = db.Column(db.Date, nullable=False)
     fecha_hasta = db.Column(db.Date)
-    estado = db.Column(db.Enum('asignado', 'liberado', name='assignment_estado'), default='asignado')
+    estado = db.Column(db.Enum('asignado', 'liberado', name='assignment_estado', schema='app'), default='asignado')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
@@ -1848,7 +1848,7 @@ class EquipmentUsage(db.Model):
     avance_m3 = db.Column(db.Numeric(12, 2))
     notas = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    estado = db.Column(db.Enum('pendiente', 'aprobado', 'rechazado', name='usage_estado'), default='pendiente')
+    estado = db.Column(db.Enum('pendiente', 'aprobado', 'rechazado', name='usage_estado', schema='app'), default='pendiente')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     approved_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     approved_at = db.Column(db.DateTime)
@@ -1868,12 +1868,12 @@ class MaintenanceTask(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False)
-    tipo = db.Column(db.Enum('programado', 'correctivo', name='maintenance_tipo'), nullable=False)
+    tipo = db.Column(db.Enum('programado', 'correctivo', name='maintenance_tipo', schema='app'), nullable=False)
     fecha_prog = db.Column(db.Date, nullable=False)
     fecha_real = db.Column(db.Date)
     costo = db.Column(db.Numeric(12, 2))
     notas = db.Column(db.Text)
-    status = db.Column(db.Enum('abierta', 'en_proceso', 'cerrada', name='maintenance_status'), default='abierta')
+    status = db.Column(db.Enum('abierta', 'en_proceso', 'cerrada', name='maintenance_status', schema='app'), default='abierta')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     
@@ -2132,7 +2132,7 @@ class StockMovement(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
-    tipo = db.Column(db.Enum('ingreso', 'egreso', 'transferencia', 'ajuste', name='movement_tipo'), nullable=False)
+    tipo = db.Column(db.Enum('ingreso', 'egreso', 'transferencia', 'ajuste', name='movement_tipo', schema='app'), nullable=False)
     qty = db.Column(db.Numeric(14, 3), nullable=False)
     origen_warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'))
     destino_warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'))
@@ -2171,7 +2171,7 @@ class StockReservation(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     qty = db.Column(db.Numeric(14, 3), nullable=False)
-    estado = db.Column(db.Enum('activa', 'liberada', 'consumida', name='reservation_estado'), default='activa')
+    estado = db.Column(db.Enum('activa', 'liberada', 'consumida', name='reservation_estado', schema='app'), default='activa')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -2198,7 +2198,7 @@ class Supplier(db.Model):
     direccion = db.Column(db.Text)
     descripcion = db.Column(db.Text)
     ubicacion = db.Column(db.String(100))  # Ciudad/Provincia
-    estado = db.Column(db.Enum('activo', 'suspendido', name='supplier_estado'), default='activo')
+    estado = db.Column(db.Enum('activo', 'suspendido', name='supplier_estado', schema='app'), default='activo')
     verificado = db.Column(db.Boolean, default=False)
     mp_collector_id = db.Column(db.String(50))  # Para Mercado Pago
     logo_url = db.Column(db.String(500))
@@ -2234,7 +2234,7 @@ class SupplierUser(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    rol = db.Column(db.Enum('owner', 'editor', name='supplier_user_rol'), default='editor')
+    rol = db.Column(db.Enum('owner', 'editor', name='supplier_user_rol', schema='app'), default='editor')
     activo = db.Column(db.Boolean, default=True)
     last_login = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -2291,7 +2291,7 @@ class Product(db.Model):
     nombre = db.Column(db.String(200), nullable=False)
     slug = db.Column(db.String(220), unique=True, nullable=False)  # SEO friendly URL
     descripcion = db.Column(db.Text)
-    estado = db.Column(db.Enum('borrador', 'publicado', 'pausado', name='product_estado'), default='borrador')
+    estado = db.Column(db.Enum('borrador', 'publicado', 'pausado', name='product_estado', schema='app'), default='borrador')
     rating_prom = db.Column(db.Numeric(2, 1), default=0)
     published_at = db.Column(db.DateTime)  # Fecha de publicaciÃ³n
     visitas = db.Column(db.Integer, default=0)  # Contador de visitas
@@ -2420,9 +2420,9 @@ class Order(db.Model):
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
     total = db.Column(db.Numeric(12, 2), nullable=False)
     moneda = db.Column(db.String(3), default='ARS')
-    estado = db.Column(db.Enum('pendiente', 'pagado', 'entregado', 'cancelado', name='order_estado'), default='pendiente')
-    payment_method = db.Column(db.Enum('online', 'offline', name='payment_method'))
-    payment_status = db.Column(db.Enum('init', 'approved', 'rejected', 'refunded', name='payment_status'), default='init')
+    estado = db.Column(db.Enum('pendiente', 'pagado', 'entregado', 'cancelado', name='order_estado', schema='app'), default='pendiente')
+    payment_method = db.Column(db.Enum('online', 'offline', name='payment_method', schema='app'))
+    payment_status = db.Column(db.Enum('init', 'approved', 'rejected', 'refunded', name='payment_status', schema='app'), default='init')
     payment_ref = db.Column(db.String(100))  # ID de pago de MP
     buyer_invoice_url = db.Column(db.String(500))  # Factura del proveedor al comprador
     supplier_invoice_number = db.Column(db.String(50))
@@ -2477,7 +2477,7 @@ class OrderCommission(db.Model):
     monto = db.Column(db.Numeric(12, 2), nullable=False)  # ComisiÃ³n sin IVA
     iva = db.Column(db.Numeric(12, 2), default=0)  # IVA sobre la comisiÃ³n
     total = db.Column(db.Numeric(12, 2), nullable=False)  # ComisiÃ³n + IVA
-    status = db.Column(db.Enum('pendiente', 'facturado', 'cobrado', 'anulado', name='commission_status'), default='pendiente')
+    status = db.Column(db.Enum('pendiente', 'facturado', 'cobrado', 'anulado', name='commission_status', schema='app'), default='pendiente')
     invoice_number = db.Column(db.String(50))
     invoice_pdf_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -2569,7 +2569,7 @@ class SupplierPayout(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'))  # Puede ser NULL
-    tipo = db.Column(db.Enum('ingreso', 'deuda', 'pago_comision', name='payout_tipo'), nullable=False)
+    tipo = db.Column(db.Enum('ingreso', 'deuda', 'pago_comision', name='payout_tipo', schema='app'), nullable=False)
     monto = db.Column(db.Numeric(12, 2), nullable=False)
     moneda = db.Column(db.String(3), default='ARS')
     saldo_resultante = db.Column(db.Numeric(12, 2), nullable=False)
@@ -2600,15 +2600,15 @@ class Event(db.Model):
     
     # Tipo de evento
     type = db.Column(db.Enum(
-        'alert', 'milestone', 'delay', 'cost_overrun', 'stock_low', 
+        'alert', 'milestone', 'delay', 'cost_overrun', 'stock_low',
         'status_change', 'budget_created', 'inventory_alert', 'custom',
-        name='event_type'
+        name='event_type', schema='app'
     ), nullable=False)
     
     # Severidad del evento
     severity = db.Column(db.Enum(
         'baja', 'media', 'alta', 'critica',
-        name='event_severity'
+        name='event_severity', schema='app'
     ), nullable=True)
     
     # Contenido del evento
