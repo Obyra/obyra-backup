@@ -7,7 +7,7 @@ import os
 from flask import Flask, request, redirect, url_for, session, flash, render_template
 from flask_login import login_user, current_user
 from authlib.integrations.flask_client import OAuth
-from app import create_app
+from app import create_app, set_current_org
 from app.extensions import db
 
 app = create_app()
@@ -142,6 +142,14 @@ def google_callback():
         
         # Realizar login del usuario
         login_user(usuario, remember=True)
+        memberships = usuario.active_memberships() if hasattr(usuario, 'active_memberships') else []
+        default_org_id = (
+            getattr(usuario, 'primary_org_id', None)
+            or (memberships[0].org_id if memberships else None)
+            or getattr(usuario, 'organizacion_id', None)
+        )
+        if default_org_id:
+            set_current_org(usuario, default_org_id)
         
         # Mensaje de bienvenida personalizado
         if usuario.created_at and (datetime.utcnow() - usuario.created_at).seconds < 60:

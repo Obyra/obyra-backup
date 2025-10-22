@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app, g
 from flask_login import login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
 from app.extensions import db
@@ -14,6 +14,7 @@ import string
 from werkzeug.routing import BuildError
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
+from app import set_current_org
 from services.email_service import send_email
 from services.memberships import (
     initialize_membership_session,
@@ -134,6 +135,17 @@ Para más información: https://docs.replit.com/additional-resources/google-auth
 AuthResult = Tuple[bool, Union[Usuario, Dict[str, str]]]
 
 
+def _set_default_org_for_user(user: Usuario) -> None:
+    default_org_id = (
+        user.primary_org_id
+        or (user.active_memberships()[0].org_id if user.active_memberships() else None)
+        or user.organizacion_id
+    )
+
+    if default_org_id:
+        set_current_org(user, default_org_id)
+
+
 def authenticate_manual_user(email: Optional[str], password: Optional[str], *, remember: bool = False) -> AuthResult:
     """Autentica a un usuario interno y devuelve (success, payload)."""
     normalized_email = (email or '').strip()
@@ -172,6 +184,7 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
         }
 
     login_user(usuario, remember=remember)
+    _set_default_org_for_user(usuario)
     return True, usuario
 
 
@@ -420,6 +433,28 @@ def seleccionar_organizacion():
     return render_template('auth/seleccionar_organizacion.html', memberships=memberships, next_url=next_url)
 
 
+@auth_bp.post('/org/switch/<int:org_id>')
+@login_required
+def switch_org(org_id: int):
+    membership = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == org_id,
+            OrgMembership.user_id == current_user.id,
+            OrgMembership.archived.is_(False)
+        )
+        .first()
+    )
+
+    if not membership:
+        membership = current_user.ensure_membership(org_id, status='active')
+        db.session.commit()
+
+    set_current_org(current_user, org_id)
+    g.current_membership = membership
+    return {"ok": True, "current_org_id": org_id}
+
+
 @auth_bp.route('/forgot', methods=['GET', 'POST'])
 def forgot_password():
     portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
@@ -615,6 +650,7 @@ def register():
 
             # Auto-login después del registro
             login_user(nuevo_usuario)
+            _set_default_org_for_user(nuevo_usuario)
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
             destino = _post_login_destination(nuevo_usuario)
             return redirect(destino)
@@ -701,6 +737,7 @@ def google_callback():
                 # Guardar cambios en la base de datos
                 db.session.commit()
                 login_user(usuario)
+                _set_default_org_for_user(usuario)
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
                 destino = _post_login_destination(usuario)
                 return redirect(destino)
@@ -793,6 +830,7 @@ def google_callback():
                 db.session.commit()
 
                 login_user(nuevo_usuario)
+                _set_default_org_for_user(nuevo_usuario)
                 flash(mensaje, 'success')
                 destino = _post_login_destination(nuevo_usuario)
                 return redirect(destino)
@@ -1331,6 +1369,7 @@ def aceptar_invitacion():
             session.pop('organizacion_invitacion', None)
             
             login_user(usuario)
+            _set_default_org_for_user(usuario)
             flash(f'¡Bienvenido/a a {organizacion.nombre}!', 'success')
             return redirect(url_for('reportes.dashboard'))
         else:

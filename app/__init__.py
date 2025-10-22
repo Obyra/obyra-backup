@@ -15,11 +15,14 @@ from typing import Optional, Tuple
 import click
 from flask import (
     Flask,
+    abort,
     flash,
+    g,
     has_request_context,
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 from flask.cli import AppGroup
@@ -29,6 +32,7 @@ from werkzeug.routing import BuildError
 
 from .config import AppConfig
 from .extensions import db, login_manager, migrate
+from models import OrgMembership
 
 _logger = logging.getLogger(__name__)
 
@@ -85,6 +89,61 @@ def _safe_cli_print(*args, **kwargs):
 
 
 print = _safe_cli_print  # type: ignore[assignment]
+
+
+# ====== ORG CONTEXT (sin archivo nuevo) ======
+def set_current_org(user, org_id: int):
+    """Fija la organización actual en sesión y asegura membresía activa."""
+    if not user or not getattr(user, "id", None):
+        raise RuntimeError("Usuario no autenticado para fijar organización.")
+
+    membership = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == org_id,
+            OrgMembership.user_id == user.id,
+            OrgMembership.archived.is_(False)
+        )
+        .first()
+    )
+
+    if not membership:
+        # Crear membresía activa por defecto (o cambiar por 403 si querés estricto)
+        membership = user.ensure_membership(org_id, status='active')
+        db.session.commit()
+
+    session['current_org_id'] = org_id
+    return membership
+
+
+def load_current_membership():
+    """Carga g.current_membership en cada request según la org actual."""
+    g.current_membership = None
+    if not current_user.is_authenticated:
+        return
+
+    org_id = (
+        session.get('current_org_id')
+        or current_user.primary_org_id
+        or current_user.organizacion_id
+    )
+    if not org_id:
+        return
+
+    membership = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == org_id,
+            OrgMembership.user_id == current_user.id,
+            OrgMembership.archived.is_(False)
+        )
+        .first()
+    )
+    if membership:
+        g.current_membership = membership
+        if session.get('current_org_id') != org_id:
+            session['current_org_id'] = org_id
+# ====== FIN ORG CONTEXT ======
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -634,6 +693,8 @@ def create_app(config: Optional[AppConfig] = None) -> Flask:
     login_manager.login_message = "Por favor inicia sesión para acceder a esta página."
     login_manager.login_message_category = "info"
 
+    app.before_request(load_current_membership)
+
     _register_clis(app)
     _register_blueprints(app)
     _register_routes(app)
@@ -642,4 +703,4 @@ def create_app(config: Optional[AppConfig] = None) -> Flask:
     return app
 
 
-__all__ = ["create_app", "db", "login_manager", "migrate"]
+__all__ = ["create_app", "db", "login_manager", "migrate", "set_current_org"]
