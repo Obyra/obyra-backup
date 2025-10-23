@@ -55,7 +55,7 @@ DEFAULT_PERMISSIONS = {
 def upgrade() -> None:
     statement = sa.text(
         """
-        INSERT INTO role_modules (role, module, can_view, can_edit)
+        INSERT INTO app.role_modules (role, module, can_view, can_edit)
         VALUES (:role, :module, :can_view, :can_edit)
         ON CONFLICT (role, module)
         DO UPDATE SET can_view = EXCLUDED.can_view, can_edit = EXCLUDED.can_edit
@@ -79,7 +79,7 @@ def downgrade() -> None:
     
     for role in DEFAULT_PERMISSIONS:
         op.execute(
-            sa.text("DELETE FROM role_modules WHERE role = :role"),
+            sa.text("DELETE FROM app.role_modules WHERE role = :role"),
             {"role": role},
         )
 

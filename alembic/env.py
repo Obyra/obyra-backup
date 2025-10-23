@@ -1,11 +1,17 @@
 import logging
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 
-from app import create_app
-from app.extensions import db
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
+from app import create_app  # noqa: E402
+from app.extensions import db  # noqa: E402
 
 config = context.config
 
@@ -38,7 +44,7 @@ def run_migrations_offline() -> None:
         include_schemas=True,
         compare_type=True,
         compare_server_default=True,
-        version_table_schema="ops",
+        version_table_schema="app",
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -61,7 +67,7 @@ def run_migrations_online() -> None:
                 include_schemas=True,
                 compare_type=True,
                 compare_server_default=True,
-                version_table_schema="ops",
+                version_table_schema="app",
             )
 
             with context.begin_transaction():

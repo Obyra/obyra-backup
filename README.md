@@ -16,6 +16,40 @@ docker compose up --build app
 
 El servicio `app` aplica las migraciones (`flask db upgrade`) contra el contenedor PostgreSQL antes de levantar `gunicorn`. Para conexiones locales sin TLS, exporta `DB_SSLMODE=disable` (en producción debe ser `require` o `verify-full`).
 
+## Configuración de base de datos local
+
+1. Reinicia el contenedor de Postgres para partir de una base limpia:
+
+   ```bash
+   docker compose down --volumes
+   docker compose up -d db
+   ```
+
+2. Exporta las variables necesarias y aplica las migraciones desde cero:
+
+   ```bash
+   export FLASK_APP=wsgi.py
+   export DATABASE_URL="postgresql+psycopg://obyra:postgres@localhost:5432/obyra_dev?sslmode=disable"
+   flask db upgrade
+   ```
+
+3. Verifica que todos los objetos estén en el esquema `app`:
+
+   ```sql
+   SELECT table_schema, table_name
+   FROM information_schema.tables
+   WHERE table_schema = 'app'
+   ORDER BY table_name;
+
+   SELECT n.nspname AS schema, t.typname AS type
+   FROM pg_type t
+   JOIN pg_namespace n ON n.oid = t.typnamespace
+   WHERE n.nspname = 'app' AND t.typtype = 'e'
+   ORDER BY t.typname;
+   ```
+
+   Debes ver las tablas de negocio (incluida `inventory_category`) y los tipos ENUM creados en `app`, junto a la tabla `app.alembic_version` con la versión más reciente.
+
 ## Migraciones Alembic
 
 Comandos disponibles:
@@ -26,7 +60,7 @@ flask db upgrade
 flask db downgrade
 ```
 
-La tabla `alembic_version` vive en el esquema `ops`, mientras que los objetos de negocio residen en el esquema `core`. Las migraciones de seeds deben ser idempotentes utilizando `INSERT ... ON CONFLICT DO UPDATE`.
+La tabla `alembic_version` vive en el esquema `app`. Las migraciones de seeds deben ser idempotentes utilizando `INSERT ... ON CONFLICT DO UPDATE`.
 
 ## Scripts útiles
 

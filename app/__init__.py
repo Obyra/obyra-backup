@@ -1,9 +1,13 @@
 """Application factory and bootstrap helpers."""
 from __future__ import annotations
 
-from dotenv import load_dotenv
+try:  # pragma: no cover - optional during CLI usage
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - fallback when dependency is absent
+    load_dotenv = None
 
-load_dotenv()
+if load_dotenv is not None:
+    load_dotenv()
 
 import importlib
 import logging
