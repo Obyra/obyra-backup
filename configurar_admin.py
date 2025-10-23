@@ -3,7 +3,10 @@
 Script para configurar acceso de administrador completo
 """
 
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from models import Usuario
 
 def configurar_admin_completo():

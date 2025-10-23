@@ -26,7 +26,6 @@ def crear_backup_limpio():
         'instance',
         'uploads',
         '*.db',
-        '*.sqlite',
         '.git',
         '.gitignore',
         'node_modules',

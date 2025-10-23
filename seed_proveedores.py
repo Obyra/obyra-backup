@@ -5,7 +5,10 @@ Script para poblar la base de datos con proveedores de ejemplo
 
 from datetime import datetime
 from decimal import Decimal
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from models import Proveedor, Organizacion
 
 def seed_proveedores():

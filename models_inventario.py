@@ -1,5 +1,5 @@
 # Modelos para el módulo de Inventario
-from app import db
+from app.extensions import db
 from datetime import datetime
 from sqlalchemy import Index, UniqueConstraint
 
@@ -138,7 +138,7 @@ class StockMovement(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
-    tipo = db.Column(db.Enum('ingreso', 'egreso', 'transferencia', 'ajuste', name='movement_tipo'), nullable=False)
+    tipo = db.Column(db.Enum('ingreso', 'egreso', 'transferencia', 'ajuste', name='movement_tipo', schema='app'), nullable=False)
     qty = db.Column(db.Numeric(14, 3), nullable=False)
     origen_warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'))
     destino_warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'))
@@ -177,7 +177,7 @@ class StockReservation(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('inventory_item.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     qty = db.Column(db.Numeric(14, 3), nullable=False)
-    estado = db.Column(db.Enum('activa', 'liberada', 'consumida', name='reservation_estado'), default='activa')
+    estado = db.Column(db.Enum('activa', 'liberada', 'consumida', name='reservation_estado', schema='app'), default='activa')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

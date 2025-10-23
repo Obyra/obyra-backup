@@ -3,7 +3,10 @@
 Script para poblar la base de datos con datos demo de Equipos e Inventario
 """
 
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from models import (
     Organizacion, Equipment, EquipmentAssignment, EquipmentUsage,
     MaintenanceTask, InventoryCategory, InventoryItem, Warehouse,

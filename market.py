@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, session, flash, redirect, url_for, jsonify
 from flask_login import current_user, login_required
-from app import db
+from app.extensions import db
 from models import (
     Product, ProductVariant, Category, Supplier, ProductQNA, 
     Order, OrderItem, Usuario

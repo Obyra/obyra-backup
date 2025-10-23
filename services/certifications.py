@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from flask import current_app
 from sqlalchemy import func
 
-from extensions import db
+from app.extensions import db
 from models import Obra, Presupuesto, WorkCertification, WorkCertificationItem, WorkPayment
 
 

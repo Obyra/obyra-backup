@@ -5,7 +5,7 @@ ML-like B2B marketplace with seller masking and purchase order generation
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
-from app import db
+from app.extensions import db
 from models_marketplace import *
 from sqlalchemy import func
 import json

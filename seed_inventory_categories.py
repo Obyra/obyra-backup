@@ -14,7 +14,7 @@ import sys
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from extensions import db
+from app.extensions import db
 from models import InventoryCategory, Organizacion
 from sqlalchemy import func, or_
 
@@ -305,7 +305,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     verbose = not args.quiet
 
-    from app import app
+    from app import create_app
+    app = create_app()
 
     with app.app_context():
         if args.all or not args.org:

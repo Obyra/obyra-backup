@@ -8,7 +8,7 @@ from typing import Callable, Optional
 
 from flask import current_app
 
-from extensions import db
+from app.extensions import db
 from models import ExchangeRate
 
 

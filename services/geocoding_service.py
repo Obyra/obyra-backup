@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from flask import current_app
 
-from extensions import db
+from app.extensions import db
 from models import GeocodeCache
 
 DEFAULT_PROVIDER = "nominatim"

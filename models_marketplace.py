@@ -4,7 +4,7 @@ Following ML-like B2B marketplace specification with seller masking
 """
 from datetime import datetime, date
 from flask_login import UserMixin
-from app import db
+from app.extensions import db
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import JSON
 import uuid
@@ -20,12 +20,12 @@ class MarketCompany(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     cuit = db.Column(db.String(13), unique=True, nullable=False)
-    type = db.Column(db.Enum('buyer', 'seller', 'both', name='company_type'), nullable=False)
+    type = db.Column(db.Enum('buyer', 'seller', 'both', name='company_type', schema='app'), nullable=False)
     iva_condition = db.Column(db.String(50), nullable=False)  # RI, EXENTO, MONOTRIBUTO
     billing_email = db.Column(db.String(120), nullable=False)
     address_json = db.Column(JSON)
     is_active = db.Column(db.Boolean, default=True)
-    kyc_status = db.Column(db.Enum('pending', 'approved', 'rejected', name='kyc_status'), default='pending')
+    kyc_status = db.Column(db.Enum('pending', 'approved', 'rejected', name='kyc_status', schema='app'), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
@@ -45,7 +45,7 @@ class MarketUser(UserMixin, db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('market_companies.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    role = db.Column(db.Enum('buyer_admin', 'buyer_user', 'seller_admin', 'seller_operator', 'backoffice_admin', name='market_role'), nullable=False)
+    role = db.Column(db.Enum('buyer_admin', 'buyer_user', 'seller_admin', 'seller_operator', 'backoffice_admin', name='market_role', schema='app'), nullable=False)
     password_hash = db.Column(db.String(256), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -94,7 +94,7 @@ class MarketAttribute(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey('market_categories.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     code = db.Column(db.String(50), nullable=False)
-    data_type = db.Column(db.Enum('text', 'number', 'boolean', 'select', name='attr_type'), nullable=False)
+    data_type = db.Column(db.Enum('text', 'number', 'boolean', 'select', name='attr_type', schema='app'), nullable=False)
     is_required = db.Column(db.Boolean, default=False)
     options_json = db.Column(JSON)  # Para select
     
@@ -178,7 +178,7 @@ class MarketProductFile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('market_products.id'), nullable=False)
     url = db.Column(db.String(500), nullable=False)
-    file_type = db.Column(db.Enum('techsheet', 'manual', 'certificate', name='file_type'), nullable=False)
+    file_type = db.Column(db.Enum('techsheet', 'manual', 'certificate', name='file_type', schema='app'), nullable=False)
     filename = db.Column(db.String(200), nullable=False)
     
     # Relaciones
@@ -292,8 +292,8 @@ class MarketPublication(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('market_products.id'), nullable=False)
-    exposure = db.Column(db.Enum('clasica', 'premium', name='publication_exposure'), default='clasica')
-    status = db.Column(db.Enum('draft', 'active', 'paused', 'banned', name='publication_status'), default='draft')
+    exposure = db.Column(db.Enum('clasica', 'premium', name='publication_exposure', schema='app'), default='clasica')
+    status = db.Column(db.Enum('draft', 'active', 'paused', 'banned', name='publication_status', schema='app'), default='draft')
     start_at = db.Column(db.DateTime, default=datetime.utcnow)
     end_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -375,7 +375,7 @@ class MarketOrder(db.Model):
     buyer_user_id = db.Column(db.Integer, db.ForeignKey('market_users.id'), nullable=False)
     
     # Estados de orden
-    status = db.Column(db.Enum('pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', name='order_status'), default='pending')
+    status = db.Column(db.Enum('pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', name='order_status', schema='app'), default='pending')
     
     # Totales
     total = db.Column(db.Numeric(12, 2), nullable=False)
@@ -386,7 +386,7 @@ class MarketOrder(db.Model):
     shipping_json = db.Column(JSON, nullable=False)
     
     # Pagos
-    payment_status = db.Column(db.Enum('pending', 'paid', 'failed', 'refunded', name='payment_status'), default='pending')
+    payment_status = db.Column(db.Enum('pending', 'paid', 'failed', 'refunded', name='payment_status', schema='app'), default='pending')
     payment_method = db.Column(db.String(50))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -468,7 +468,7 @@ class MarketPurchaseOrder(db.Model):
     seller_company_id = db.Column(db.Integer, db.ForeignKey('market_companies.id'), nullable=False)
     buyer_company_id = db.Column(db.Integer, db.ForeignKey('market_companies.id'), nullable=False)
     
-    status = db.Column(db.Enum('created', 'sent', 'acknowledged', 'fulfilled', name='po_status'), default='created')
+    status = db.Column(db.Enum('created', 'sent', 'acknowledged', 'fulfilled', name='po_status', schema='app'), default='created')
     oc_number = db.Column(db.String(50), unique=True)
     pdf_url = db.Column(db.String(500))
     sent_at = db.Column(db.DateTime)
@@ -497,7 +497,7 @@ class MarketShipment(db.Model):
     carrier = db.Column(db.String(50))  # Andreani, OCA, etc.
     tracking_code = db.Column(db.String(100))
     cost = db.Column(db.Numeric(10, 2), default=0)
-    status = db.Column(db.Enum('preparing', 'shipped', 'in_transit', 'delivered', 'failed', name='shipment_status'), default='preparing')
+    status = db.Column(db.Enum('preparing', 'shipped', 'in_transit', 'delivered', 'failed', name='shipment_status', schema='app'), default='preparing')
     label_url = db.Column(db.String(500))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -538,7 +538,7 @@ class MarketCommission(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     category_id = db.Column(db.Integer, db.ForeignKey('market_categories.id'), nullable=False)
-    exposure = db.Column(db.Enum('clasica', 'premium', name='commission_exposure'), nullable=False)
+    exposure = db.Column(db.Enum('clasica', 'premium', name='commission_exposure', schema='app'), nullable=False)
     take_rate_pct = db.Column(db.Numeric(5, 2), nullable=False)  # Porcentaje de comisión
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -572,9 +572,9 @@ class MarketPayment(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('market_orders.id'), nullable=False)
-    provider = db.Column(db.Enum('mercadopago', 'bank', 'manual', name='payment_provider'), nullable=False)
+    provider = db.Column(db.Enum('mercadopago', 'bank', 'manual', name='payment_provider', schema='app'), nullable=False)
     provider_ref = db.Column(db.String(100))  # ID del proveedor
-    status = db.Column(db.Enum('pending', 'approved', 'rejected', 'cancelled', 'refunded', name='payment_status'), default='pending')
+    status = db.Column(db.Enum('pending', 'approved', 'rejected', 'cancelled', 'refunded', name='payment_status', schema='app'), default='pending')
     paid_at = db.Column(db.DateTime)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     currency = db.Column(db.String(3), default='ARS')
@@ -601,7 +601,7 @@ class MarketPayout(db.Model):
     total_fees = db.Column(db.Numeric(12, 2), default=0)
     total_net = db.Column(db.Numeric(12, 2), default=0)
     
-    status = db.Column(db.Enum('calculating', 'ready', 'paid', name='payout_status'), default='calculating')
+    status = db.Column(db.Enum('calculating', 'ready', 'paid', name='payout_status', schema='app'), default='calculating')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     paid_at = db.Column(db.DateTime)
     

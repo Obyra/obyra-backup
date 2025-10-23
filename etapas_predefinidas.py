@@ -124,7 +124,7 @@ def obtener_etapa_por_slug(slug):
 
 def crear_etapas_para_obra(obra_id, etapas_seleccionadas):
     """Crea las etapas seleccionadas para una obra específica"""
-    from app import db
+    from app.extensions import db
     from models import EtapaObra
     
     etapas_creadas = []
@@ -150,7 +150,7 @@ def crear_etapas_para_obra(obra_id, etapas_seleccionadas):
 
 def crear_etapas_desde_catalogo(obra_id, catalogo_ids):
     """Crea etapas en la obra basadas en IDs del catálogo (idempotente)"""
-    from app import db
+    from app.extensions import db
     from models import EtapaObra
     
     creadas = []

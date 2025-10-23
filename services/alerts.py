@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import db
+from app.extensions import db
 from models import Event, Presupuesto
 
 

@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 
 import roles_construccion as roles_defs
-from app import db
+from app.extensions import db
 from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership
 from services.memberships import get_current_membership
 from sqlalchemy.exc import IntegrityError

@@ -4,7 +4,10 @@ Script para poblar la base de datos con datos demo del Portal de Proveedores
 """
 
 from decimal import Decimal
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from models import (
     Supplier, SupplierUser, Category, Product, ProductVariant, 
     ProductImage, Order, OrderItem, OrderCommission, Organizacion

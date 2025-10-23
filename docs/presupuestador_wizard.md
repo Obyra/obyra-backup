@@ -34,7 +34,7 @@ Este módulo extiende el wizard de tareas para estimar automáticamente el presu
   ```python
   from services.wizard_budgeting import seed_default_coefficients_if_needed
   from models import WizardStageVariant, WizardStageCoefficient
-  from extensions import db
+  from app.extensions import db
 
   variante = WizardStageVariant(stage_slug='mamposteria', variant_key='ladrillo_hueco', nombre='Ladrillo hueco')
   coef = WizardStageCoefficient(stage_slug='mamposteria', variant=variante, unit='m2', materials_per_unit=21000, labor_per_unit=14500, equipment_per_unit=3500, currency='ARS')

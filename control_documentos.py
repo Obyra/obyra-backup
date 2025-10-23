@@ -10,7 +10,7 @@ from datetime import datetime, date
 import json
 import os
 from werkzeug.utils import secure_filename
-from app import db
+from app.extensions import db
 from models import *
 from utils import *
 

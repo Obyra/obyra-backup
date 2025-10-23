@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from supplier_auth import supplier_login_required, get_current_supplier_user, get_current_supplier
-from app import db
+from app.extensions import db
 from models import (
     Supplier, Product, ProductVariant, ProductImage, ProductQNA, 
     Order, OrderCommission, Category

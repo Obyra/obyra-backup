@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 import json
 import math
-from app import db
+from app.extensions import db
 from models import *
 from utils import *
 

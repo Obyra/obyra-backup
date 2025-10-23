@@ -4,7 +4,7 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: obyra
+      POSTGRES_USER: migrator
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: obyra_dev
     ports:
@@ -12,10 +12,31 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U obyra -d obyra_dev"]
+      test: ["CMD-SHELL", "pg_isready -U migrator -d obyra_dev"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_APP: wsgi.py
+      DATABASE_URL: postgresql+psycopg://migrator:postgres@db:5432/obyra_dev
+      DB_SSLMODE: disable
+      DB_POOL_SIZE: 5
+      DB_MAX_OVERFLOW: 5
+      DB_POOL_RECYCLE: 1800
+      DB_POOL_PRE_PING: 1
+      SESSION_SECRET: dev-secret-key-change-me
+    command: >
+      sh -c "flask db upgrade && gunicorn wsgi:app --bind 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
 
 volumes:
   postgres_data:

@@ -8,7 +8,10 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, db
+from app import create_app
+from app.extensions import db
+
+app = create_app()
 from marketplace.models import *
 
 def create_marketplace_tables():

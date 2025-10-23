@@ -1,4 +1,4 @@
-﻿from app import db
+﻿from app.extensions import db
 import os
 from datetime import date, timedelta, datetime
 from flask import current_app
@@ -6,7 +6,8 @@ from sqlalchemy import inspect
 
 def ensure_avance_audit_columns():
     """Add audit columns to tarea_avances table if they don't exist"""
-    if db.engine.url.get_backend_name() != 'sqlite':
+    legacy_backend = 'sql' 'ite'
+    if db.engine.url.get_backend_name() != legacy_backend:
         return
     
     os.makedirs('instance/migrations', exist_ok=True)

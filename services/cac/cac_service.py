@@ -9,7 +9,7 @@ from typing import Optional
 from flask import current_app
 from sqlalchemy import desc
 
-from extensions import db
+from app.extensions import db
 from models import CACIndex
 
 try:  # pragma: no cover - optional provider import
