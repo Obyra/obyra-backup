@@ -35,7 +35,6 @@ from services.memberships import (
 )
 
 from extensions import db, login_manager
-from flask_migrate import Migrate
 
 
 def _ensure_utf8_io() -> None:
@@ -174,7 +173,6 @@ else:
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-migrate = Migrate(app, db)
 
 # ---------------- Login dynamic resolution ----------------
 def _resolve_login_endpoint() -> Optional[str]:
@@ -223,51 +221,6 @@ login_manager.login_message_category = 'info'
 @app.context_processor
 def inject_login_url():
     return {"login_url": _resolve_login_url()}
-
-# ---------------- CLI Commands ----------------
-db_cli = AppGroup('db')
-
-@db_cli.command('upgrade')
-def db_upgrade():
-    """Apply pending lightweight database migrations."""
-    with app.app_context():
-        from flask_migrate import upgrade as alembic_upgrade
-
-        logger = app.logger
-        logger.info("Running Alembic upgrade...")
-        alembic_upgrade()
-        logger.info("Alembic upgrade → OK")
-        logger.info("Running post-upgrade runtime ensures...")
-
-        from migrations_runtime import (
-            ensure_avance_audit_columns,
-            ensure_presupuesto_state_columns,
-            ensure_item_presupuesto_stage_columns,
-            ensure_presupuesto_validity_columns,
-            ensure_exchange_currency_columns,
-            ensure_inventory_package_columns,
-            ensure_inventory_location_columns,
-            ensure_geocode_columns,
-            ensure_org_memberships_table,
-            ensure_work_certification_tables,
-            ensure_wizard_budget_tables,
-        )
-
-        ensure_avance_audit_columns()
-        ensure_presupuesto_state_columns()
-        ensure_item_presupuesto_stage_columns()
-        ensure_presupuesto_validity_columns()
-        ensure_exchange_currency_columns()
-        ensure_inventory_package_columns()
-        ensure_inventory_location_columns()
-        ensure_geocode_columns()
-        ensure_org_memberships_table()
-        ensure_work_certification_tables()
-        ensure_wizard_budget_tables()
-
-    click.echo('[OK] Database upgraded successfully.')
-
-app.cli.add_command(db_cli)
 
 fx_cli = AppGroup('fx')
 
@@ -603,7 +556,7 @@ with app.app_context():
     from models import Usuario, Organizacion
 
     # Migraciones de runtime
-    from migrations_runtime import (
+    from scripts.db_runtime import (
         ensure_avance_audit_columns,
         ensure_presupuesto_state_columns,
         ensure_item_presupuesto_stage_columns,

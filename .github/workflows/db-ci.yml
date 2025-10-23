@@ -1,0 +1,75 @@
+name: Database CI
+
+on:
+  pull_request:
+    paths:
+      - 'alembic/**'
+      - 'infra/sql/**'
+      - 'docs/db/**'
+      - '.github/workflows/db-ci.yml'
+      - 'Makefile'
+      - 'README.md'
+  push:
+    branches:
+      - codex/db-blueprint
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: obyra_ci
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/obyra_ci
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/obyra_ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install alembic psycopg[binary]
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..10}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 3
+          done
+
+      - name: Provision schema and roles
+        run: |
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -v ON_ERROR_STOP=1 -f infra/sql/01_schemas_roles.sql
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -v ON_ERROR_STOP=1 -f infra/sql/02_grants.sql
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -v ON_ERROR_STOP=1 -f infra/sql/03_observability.sql
+
+      - name: Upgrade to head
+        run: alembic upgrade head
+
+      - name: Downgrade last revision and re-upgrade
+        run: |
+          alembic downgrade -1
+          alembic upgrade head
+
+      - name: Verify search_path and alembic version table
+        run: |
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -At -c "SET ROLE obyra_migrator; SHOW search_path;" | tail -n 1 | grep '^app, public$'
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -At -c "select table_schema from information_schema.tables where table_name = 'alembic_version';" | grep '^app$'
