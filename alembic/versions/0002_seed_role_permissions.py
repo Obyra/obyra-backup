@@ -1,16 +1,14 @@
-"""Seed estructural de permisos de rol para la aplicación.
+"""Seed estructural de permisos de roles (plantilla).
 
-Este archivo sirve como plantilla: copie y adapte el contenido antes de ejecutarlo en producción.
-- El seed es idempotente gracias a UPSERT (`ON CONFLICT`).
-- Solo se ejecuta si existe la tabla objetivo.
-- Documente cualquier cambio adicional en docs/db/migrations-policy.md.
+Copiar y adaptar antes de ejecutar en entornos productivos.
+El seed es idempotente y sólo afecta al esquema ``app``.
 """
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0003_seed_role_permissions"
-down_revision = "0001_app_schema"
+revision = "0002_seed_role_permissions"
+down_revision = "0001_initial_baseline"
 branch_labels = None
 depends_on = None
 

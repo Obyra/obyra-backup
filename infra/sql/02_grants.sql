@@ -26,7 +26,9 @@ BEGIN
     END LOOP;
 END$$;
 
--- Permisos por defecto para objetos futuros
+-- Ejecutar como propietario del esquema app para definir privilegios por defecto
+SET ROLE obyra_migrator;
+
 ALTER DEFAULT PRIVILEGES FOR ROLE obyra_migrator IN SCHEMA app
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO obyra_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE obyra_migrator IN SCHEMA app
@@ -35,3 +37,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE obyra_migrator IN SCHEMA app
     GRANT USAGE, SELECT ON SEQUENCES TO obyra_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE obyra_migrator IN SCHEMA app
     GRANT SELECT ON SEQUENCES TO obyra_readonly;
+
+RESET ROLE;

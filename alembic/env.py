@@ -1,7 +1,7 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool, text
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -50,6 +50,7 @@ def run_migrations_offline() -> None:
         version_table_schema=APP_SCHEMA,
         include_schemas=True,
         include_object=include_object,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -69,7 +70,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        connection.execute(text(f"SET search_path TO {SEARCH_PATH}"))
+        connection.exec_driver_sql(f"SET search_path TO {SEARCH_PATH}")
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -77,6 +78,7 @@ def run_migrations_online() -> None:
             version_table_schema=APP_SCHEMA,
             include_schemas=True,
             include_object=include_object,
+            compare_type=True,
         )
 
         with context.begin_transaction():

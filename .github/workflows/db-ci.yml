@@ -55,8 +55,11 @@ jobs:
             sleep 3
           done
 
-      - name: Ensure schema exists
-        run: psql postgresql://postgres:postgres@localhost:5432/obyra_ci -c "CREATE SCHEMA IF NOT EXISTS app;"
+      - name: Provision schema and roles
+        run: |
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -v ON_ERROR_STOP=1 -f infra/sql/01_schemas_roles.sql
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -v ON_ERROR_STOP=1 -f infra/sql/02_grants.sql
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -v ON_ERROR_STOP=1 -f infra/sql/03_observability.sql
 
       - name: Upgrade to head
         run: alembic upgrade head
@@ -66,6 +69,7 @@ jobs:
           alembic downgrade -1
           alembic upgrade head
 
-      - name: Verify app schema
+      - name: Verify search_path and alembic version table
         run: |
-          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -t -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'app';" | grep app
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -At -c "SET ROLE obyra_migrator; SHOW search_path;" | tail -n 1 | grep '^app, public$'
+          psql postgresql://postgres:postgres@localhost:5432/obyra_ci -At -c "select table_schema from information_schema.tables where table_name = 'alembic_version';" | grep '^app$'
