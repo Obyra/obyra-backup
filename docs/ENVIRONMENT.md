@@ -11,7 +11,7 @@ Este documento define la configuración mínima viable por entorno, variables re
 | `FLASK_ENV`                       | `development`                                 | `production`                                     | `production`                                     |
 | `FLASK_RUN_PORT`                  | `8080`                                        | (gestionado por WSGI/Reverse Proxy)              | (gestionado por WSGI/Reverse Proxy)              |
 | `PYTHONIOENCODING`               | `utf-8`                                       | `utf-8`                                          | `utf-8`                                          |
-| `SECRET_KEY`                      | **Generar** (ej.: `python -c "import secrets;print(secrets.token_urlsafe(32))"`) | **CREDENCIAL** (KMS/Secrets Manager) | **CREDENCIAL** (KMS/Secrets Manager) |
+| `SECRET_KEY`                      | **Generar** (ej.: `python -c "import secrets; print(secrets.token_urlsafe(32))"`) | **CREDENCIAL** (KMS/Secrets Manager) | **CREDENCIAL** (KMS/Secrets Manager) |
 | `SESSION_SECRET`                  | `${SECRET_KEY}`                               | `${SECRET_KEY}`                                  | `${SECRET_KEY}`                                  |
 | `DATABASE_URL`                    | `postgresql+psycopg://obyra:obyra@localhost:5435/obyra_dev` | `postgresql+psycopg://USER:PASS@HOST:PORT/DB`    | `postgresql+psycopg://USER:PASS@HOST:PORT/DB`    |
 | `ALEMBIC_DATABASE_URL`            | `postgresql+psycopg://obyra_migrator:<PASS>@localhost:5435/obyra_dev` | `postgresql+psycopg://obyra_migrator:<PASS>@HOST:PORT/DB` | `postgresql+psycopg://obyra_migrator:<PASS>@HOST:PORT/DB` |
@@ -26,7 +26,7 @@ Este documento define la configuración mínima viable por entorno, variables re
 | `GOOGLE_OAUTH_CLIENT_SECRET`      | (vacío o credencial de pruebas)               | **CREDENCIAL**                                   | **CREDENCIAL**                                   |
 | `ENABLE_GOOGLE_OAUTH_HELP`        | `true`                                        | `false`                                          | `false`                                          |
 | `MP_ACCESS_TOKEN`                 | **Sandbox** (si se prueba MP)                 | **Prod (secreto)**                                | **Prod (secreto)**                                |
-| `MP_WEBHOOK_PUBLIC_URL`           | `http://127.0.0.1:8080/api/market/payments/mp/webhook` | `https://staging.obyra.example/api/market/payments/mp/webhook` | `https://app.obyra.example/api/market/payments/mp/webhook` |
+| `MP_WEBHOOK_PUBLIC_URL`           | `http://127.0.0.1:8080/api/payments/mp/webhook` | `https://staging.obyra.example/api/payments/mp/webhook` | `https://app.obyra.example/api/payments/mp/webhook` |
 | `SMTP_HOST` / `SMTP_PORT`         | Mailtrap (dev)                                | Proveedor transaccional (SendGrid/SES/etc.)       | Proveedor transaccional                           |
 | `SMTP_USER` / `SMTP_PASS`         | credenciales dev                              | **CREDENCIAL**                                    | **CREDENCIAL**                                    |
 | `FROM_EMAIL` / `MAIL_FROM`        | `OBYRA IA <no-reply@obyra.local>`             | `no-reply@staging.obyra.example`                 | `no-reply@app.obyra.example`                     |
@@ -48,19 +48,21 @@ Este documento define la configuración mínima viable por entorno, variables re
 ### 2.1. Base de datos con Docker
 ```powershell
 docker rm -f obyra-pg-stg 2>$null
-docker run --name obyra-pg-stg -p 5435:5432 \
-  -e POSTGRES_USER=obyra \
-  -e POSTGRES_PASSWORD=obyra \
-  -e POSTGRES_DB=obyra_dev \
+docker run --name obyra-pg-stg -p 5435:5432 `
+  -e POSTGRES_USER=obyra `
+  -e POSTGRES_PASSWORD=obyra `
+  -e POSTGRES_DB=obyra_dev `
   -d postgres:16
-
 2.2. Entorno virtual e instalación
+powershell
+Copiar código
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -U pip
 pip install -r requirements.txt
-
 2.3. Variables mínimas de sesión y run
+powershell
+Copiar código
 $env:FLASK_APP="app.py"
 $env:FLASK_ENV="development"
 $env:FLASK_RUN_PORT="8080"
@@ -71,19 +73,16 @@ $env:ALEMBIC_DATABASE_URL="postgresql+psycopg://obyra_migrator:<PASS>@localhost:
 # Primer upgrade + arranque
 python -m flask db upgrade
 python -m flask run --port 8080
-```
-
-## 3. Auditoría de dependencias
-
+3. Auditoría de dependencias
 Ejecutar en un entorno aislado (venv), con requirements.txt actualizado.
 
-### 3.1. Herramientas
-```powershell
+3.1. Herramientas
+powershell
+Copiar código
 pip install pip-audit safety deptry
-```
-
-### 3.2. Comandos
-```powershell
+3.2. Comandos
+powershell
+Copiar código
 # CVEs conocidos en deps instaladas
 pip-audit
 
@@ -95,10 +94,7 @@ safety check --full-report
 
 # Descubrir dependencias huérfanas / no usadas
 deptry .
-```
-
-### 3.3. Criterios de limpieza
-
+3.3. Criterios de limpieza
 Unificar PostgreSQL en psycopg 3 (psycopg).
 
 Remover psycopg2-binary y psycopg-binary si no son necesarias.
@@ -109,50 +105,48 @@ Congelar versiones mínimas seguras si hay CVEs.
 
 Documentar hallazgos y cambios en PR.
 
-## 4. Notas de integración externas
+4. Notas de integración externas
+Google OAuth (opcional en dev): crear Client ID/Secret y setear GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET.
+Callback típico: ${BASE_URL}/login/google/callback.
 
-- **Google OAuth (opcional en dev)**: crear Client ID/Secret y setear `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`.
-  - Callback típico: `${BASE_URL}/login/google/callback`.
-- **Mercado Pago**: por ahora omitido (no hay `mk_orders` implementado). Dejar variables preparadas para cuando se implemente.
-- **SMTP**: en DEV usar Mailtrap; en STAGING/PROD proveedor transaccional (p. ej. SendGrid/SES). Mantener `FROM_EMAIL` coherente con el dominio.
+Mercado Pago: dejar variables listas; el webhook oficial es /api/payments/mp/webhook.
 
-## 5. Migraciones y bootstrap
+SMTP: en DEV usar Mailtrap; en STAGING/PROD proveedor transaccional (p. ej. SendGrid/SES). Mantener FROM_EMAIL coherente con el dominio.
 
-```powershell
+5. Migraciones y bootstrap
+powershell
+Copiar código
 $env:ALEMBIC_DATABASE_URL="postgresql+psycopg://obyra_migrator:<PASS>@localhost:5435/obyra_dev"
 alembic current
 alembic upgrade head
-```
+Si un entorno fresco necesita bootstrap de tablas básicas y no hay migraciones iniciales, usar script temporal con db.create_all() (solo dev/staging y con una guarda, p. ej. AUTO_CREATE_DB=1).
 
-Si un entorno fresco necesita bootstrap de tablas básicas y no hay migraciones iniciales, usar script temporal con `db.create_all()` (solo dev/staging y con `AUTO_CREATE_DB=1` si se implementa esta guarda).
+6. Troubleshooting rápido
+“DATABASE_URL debe usar PostgreSQL”: asegurar que la variable de proceso apunta a postgresql+psycopg://…. Limpiar variables de usuario/máquina si pisan el valor.
 
-## 6. Troubleshooting rápido
+“relation X does not exist”: correr flask db upgrade.
 
-- “DATABASE_URL debe usar PostgreSQL”: asegurar que la variable de proceso apunta a `postgresql+psycopg://…`. Limpiar variables de usuario/máquina si pisan el valor.
-- “relation X does not exist”: correr `flask db upgrade`.
-- **WeasyPrint**: requiere binarios del sistema para render PDF; en dev se puede desactivar `ENABLE_REPORTS=0`.
-- **Puerto ocupado (8080)**:
+WeasyPrint: requiere binarios del sistema para render PDF; en dev se puede desactivar ENABLE_REPORTS=0.
 
-```powershell
+Puerto ocupado (8080):
+
+powershell
+Copiar código
 Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
 $pid8080 = (Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
 if ($pid8080) { Stop-Process -Id $pid8080 -Force }
-```
+7. Valores por defecto seguros (DEV)
+Variable	Valor sugerido	Comentario
+DATABASE_URL	postgresql+psycopg://obyra:obyra@localhost:5435/obyra_dev	Contenedor local de PostgreSQL 16 expuesto en 5435 (obyra-pg-stg). Agregar ?sslmode=require si el host fuerza TLS.
+SECRET_KEY	changeme-dev-secret	Reemplazar por secreto fuerte generado con secrets.token_urlsafe.
+BASE_URL / APP_BASE_URL	http://127.0.0.1:8080	Mantener coherente con FLASK_RUN_PORT.
+SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS	smtp.mailtrap.io / 2525 / <user> / <pass>	Usar inbox de Mailtrap para pruebas locales.
+FX_PROVIDER	bna	Tasas oficiales del Banco Nación, sin claves adicionales.
+MAPS_PROVIDER / MAPS_USER_AGENT	nominatim / obyra-dev-bot	Nominatim sin API key, respetar user agent.
+ENABLE_REPORTS	1	Activar reportes PDF; cambiar a 0 si faltan dependencias de WeasyPrint.
 
-## 7. Valores por defecto seguros (DEV)
+8. Cómo validar DEV parity
+a. python -m flask db upgrade
+b. python -m flask run --port 8080
+c. GET http://127.0.0.1:8080/reportes/dashboard ⇒ confirmar HTTP 200.
 
-| Variable | Valor sugerido | Comentario |
-|----------|----------------|------------|
-| `DATABASE_URL` | `postgresql+psycopg://obyra:obyra@localhost:5435/obyra_dev` | Contenedor local de PostgreSQL 16 expuesto en 5435 (obyra-pg-stg). Agregar `?sslmode=require` si el host fuerza TLS. |
-| `SECRET_KEY` | `changeme-dev-secret` | Reemplazar por secreto fuerte generado con `secrets.token_urlsafe`. |
-| `BASE_URL` / `APP_BASE_URL` | `http://127.0.0.1:8080` | Mantener coherente con `FLASK_RUN_PORT`. |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | `smtp.mailtrap.io` / `2525` / `<user>` / `<pass>` | Usar inbox de Mailtrap para pruebas locales. |
-| `FX_PROVIDER` | `bna` | Tasas oficiales del Banco Nación, sin claves adicionales. |
-| `MAPS_PROVIDER` / `MAPS_USER_AGENT` | `nominatim` / `obyra-dev-bot` | Nominatim sin API key, respetar user agent. |
-| `ENABLE_REPORTS` | `1` | Activar reportes PDF; cambiar a `0` si faltan dependencias de WeasyPrint. |
-
-## 8. Cómo validar DEV parity
-
-a. `python -m flask db upgrade`
-b. `python -m flask run --port 8080`
-c. Hacer `GET http://127.0.0.1:8080/reportes/dashboard` y confirmar respuesta HTTP 200.
