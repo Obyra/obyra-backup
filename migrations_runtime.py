@@ -210,8 +210,9 @@ def ensure_presupuesto_validity_columns():
                 conn.exec_driver_sql(stmt)
 
             # Recalcular vigencia para todos los presupuestos (nuevos o existentes)
+            coalesce_literal = "FALSE" if backend == 'postgresql' else "0"
             rows = conn.exec_driver_sql(
-                "SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, 1) FROM presupuestos"
+                f"SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, {coalesce_literal}) FROM presupuestos"
             ).fetchall()
 
             if backend == 'postgresql':

@@ -37,6 +37,7 @@
   - No editar migraciones ya aplicadas en Prod.
   - Una migración por cambio lógico.
   - Revisar `downgrade()` cuando sea viable.
+  - Variables: `DATABASE_URL` (app_rw) para runtime y `ALEMBIC_DATABASE_URL` (obyra_migrator) para migraciones.
 
 ## Seeds (datos de arranque)
 - Mantener **seed idempotente** y versionado.

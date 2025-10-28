@@ -1,8 +1,15 @@
 # Migraciones y Seeds – OBYRA
 
 ## Migraciones (Alembic / Flask-Migrate)
-- Generar: `flask db migrate -m "YYYYMMDD_hhmm_descriptivo"`
-- Aplicar: `flask db upgrade`
+- Exportar variables (Windows PowerShell):
+  ```powershell
+  $env:ALEMBIC_DATABASE_URL="postgresql+psycopg://obyra_migrator:<PASS>@localhost:5435/obyra_dev"
+  ```
+- Ver estado actual: `alembic current`
+- Historial completo: `alembic history --verbose`
+- Generar desde modelos: `flask db migrate -m "YYYYMMDD_hhmm_descriptivo"`
+- Crear baseline vacío: `alembic revision --empty -m "baseline"`
+- Aplicar: `alembic upgrade head`
 - No modificar migraciones ya aplicadas en producción.
 - Revisar `downgrade()` cuando aplique.
 
