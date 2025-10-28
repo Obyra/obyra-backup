@@ -42,7 +42,7 @@ Este documento consolida las variables de entorno realmente usadas por la aplica
 
 | Variable | Desarrollo local | Staging | Producción |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | `postgresql+psycopg://obyra:password@localhost:5433/obyra_dev` | `postgresql+psycopg://obyra:<password>@staging-db:5432/obyra_stg` | `postgresql+psycopg://obyra:<password>@prod-db:5432/obyra_prod` |
+| `DATABASE_URL` | `postgresql+psycopg://obyra:password@localhost:5435/obyra_dev` | `postgresql+psycopg://obyra:<password>@staging-db:5432/obyra_stg` | `postgresql+psycopg://obyra:<password>@prod-db:5432/obyra_prod` |
 | `SECRET_KEY` / `SESSION_SECRET` | Valores simples pero únicos en `.env`. | Generados en un gestor de secretos por entorno. | Claves de alta entropía con rotación programada. |
 | `MP_ACCESS_TOKEN` | Token sandbox. | Token de la cuenta staging. | Token productivo (vault). |
 | `MP_WEBHOOK_PUBLIC_URL` | URL pública del túnel apuntando a `/api/payments/mp/webhook`. | `https://staging.tu-dominio.com/api/payments/mp/webhook`. | `https://app.tu-dominio.com/api/payments/mp/webhook`. |
@@ -52,6 +52,8 @@ Este documento consolida las variables de entorno realmente usadas por la aplica
 | `MAPS_PROVIDER` / `MAPS_API_KEY` | `nominatim` o proveedor alternativo de pruebas. | Proveedor contratado con key restringida. | Proveedor con SLA y límites configurados. |
 | `PLATFORM_COMMISSION_RATE` | `0.02` (default). | Ajustado al escenario de pruebas. | Porcentaje oficial del marketplace. |
 | `FX_PROVIDER` / `EXCHANGE_FALLBACK_RATE` | `bna` + fallback opcional. | Igual a producción (validar monitoreo). | Según política financiera. |
+
+> Nota: usa `postgresql+psycopg://` en todos los entornos. El contenedor local recomendado es `obyra-pg-stg` en el puerto `5435`. Agrega `?sslmode=require` si el proveedor administrado de PostgreSQL lo exige.
 
 ## 3. Mercado Pago: pruebas y verificación
 

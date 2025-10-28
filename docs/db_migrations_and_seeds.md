@@ -17,6 +17,6 @@ Roles/Conexión
 
 App usa DATABASE_URL con rol app_rw.
 
-CI/CD usa DATABASE_URL_ADMIN (rol app_admin) para migraciones.
+CI/CD usa DATABASE_URL_MIGRATOR (rol obyra_migrator) para migraciones.
 
 SSL: usar sslmode=require en hosts administrados.

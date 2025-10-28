@@ -2,14 +2,14 @@
 
 ## Conexión y roles
 [ ] La app usa rol `app_rw`
-[ ] CI/CD usa rol `app_admin` sólo para migraciones
+[ ] CI/CD usa rol `obyra_migrator` sólo para migraciones
 [ ] Existe rol `app_ro` para lecturas/BI
 [ ] Esquema `app` creado y con `app_owner` como owner
 [ ] `sslmode=require` en `DATABASE_URL` cuando aplique
 
 ## Secrets
 [ ] `DATABASE_URL` (app_rw) en GitHub Secrets
-[ ] `DATABASE_URL_ADMIN` (app_admin) en GitHub Secrets
+[ ] `DATABASE_URL_MIGRATOR` (obyra_migrator) en GitHub Secrets
 [ ] Rotación de credenciales cada 90 días documentada
 
 ## Migraciones y seeds
