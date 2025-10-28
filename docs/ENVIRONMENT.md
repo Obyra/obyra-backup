@@ -13,7 +13,8 @@ Este documento define la configuración mínima viable por entorno, variables re
 | `PYTHONIOENCODING`               | `utf-8`                                       | `utf-8`                                          | `utf-8`                                          |
 | `SECRET_KEY`                      | **Generar** (ej.: `python -c "import secrets;print(secrets.token_urlsafe(32))"`) | **CREDENCIAL** (KMS/Secrets Manager) | **CREDENCIAL** (KMS/Secrets Manager) |
 | `SESSION_SECRET`                  | `${SECRET_KEY}`                               | `${SECRET_KEY}`                                  | `${SECRET_KEY}`                                  |
-| `DATABASE_URL`                    | `postgresql+psycopg://obyra:obyra@localhost:5433/obyra_dev` | `postgresql+psycopg://USER:PASS@HOST:PORT/DB`    | `postgresql+psycopg://USER:PASS@HOST:PORT/DB`    |
+| `DATABASE_URL`                    | `postgresql+psycopg://obyra:obyra@localhost:5435/obyra_dev` | `postgresql+psycopg://USER:PASS@HOST:PORT/DB`    | `postgresql+psycopg://USER:PASS@HOST:PORT/DB`    |
+| `ALEMBIC_DATABASE_URL`            | `postgresql+psycopg://obyra_migrator:<PASS>@localhost:5435/obyra_dev` | `postgresql+psycopg://obyra_migrator:<PASS>@HOST:PORT/DB` | `postgresql+psycopg://obyra_migrator:<PASS>@HOST:PORT/DB` |
 | `SQLALCHEMY_POOL_SIZE`            | `10`                                          | `20`                                             | `20`–`50` según carga                            |
 | `SQLALCHEMY_MAX_OVERFLOW`         | `10`                                          | `20`                                             | `20`–`50`                                        |
 | `SQLALCHEMY_POOL_TIMEOUT`         | `30`                                          | `30`                                             | `30`                                             |
@@ -38,7 +39,7 @@ Este documento define la configuración mínima viable por entorno, variables re
 | Flags `WIZARD_*`, `SHOW_IA_CALCULATOR_BUTTON` | según QA                      | según QA                                         | según producto                                    |
 | `PLATFORM_COMMISSION_RATE`        | `0.02`                                        | según negocio                                     | según negocio                                     |
 
-> **Importante**: en todos los entornos usamos **PostgreSQL** (driver `psycopg` 3). Evitar SQLite.
+> **Importante**: en todos los entornos usamos **PostgreSQL** (driver `psycopg` 3). Evitar SQLite. Agregar `?sslmode=require` cuando el proveedor administrado (Neon, RDS, etc.) lo exija.
 
 ---
 
@@ -46,8 +47,8 @@ Este documento define la configuración mínima viable por entorno, variables re
 
 ### 2.1. Base de datos con Docker
 ```powershell
-docker rm -f obyra-pg 2>$null
-docker run --name obyra-pg -p 5433:5432 \
+docker rm -f obyra-pg-stg 2>$null
+docker run --name obyra-pg-stg -p 5435:5432 \
   -e POSTGRES_USER=obyra \
   -e POSTGRES_PASSWORD=obyra \
   -e POSTGRES_DB=obyra_dev \
@@ -64,7 +65,8 @@ $env:FLASK_APP="app.py"
 $env:FLASK_ENV="development"
 $env:FLASK_RUN_PORT="8080"
 $env:PYTHONIOENCODING="utf-8"
-$env:DATABASE_URL="postgresql+psycopg://obyra:obyra@localhost:5433/obyra_dev"
+$env:DATABASE_URL="postgresql+psycopg://obyra:obyra@localhost:5435/obyra_dev"
+$env:ALEMBIC_DATABASE_URL="postgresql+psycopg://obyra_migrator:<PASS>@localhost:5435/obyra_dev"
 
 # Primer upgrade + arranque
 python -m flask db upgrade
@@ -117,7 +119,9 @@ Documentar hallazgos y cambios en PR.
 ## 5. Migraciones y bootstrap
 
 ```powershell
-python -m flask db upgrade
+$env:ALEMBIC_DATABASE_URL="postgresql+psycopg://obyra_migrator:<PASS>@localhost:5435/obyra_dev"
+alembic current
+alembic upgrade head
 ```
 
 Si un entorno fresco necesita bootstrap de tablas básicas y no hay migraciones iniciales, usar script temporal con `db.create_all()` (solo dev/staging y con `AUTO_CREATE_DB=1` si se implementa esta guarda).
@@ -139,7 +143,7 @@ if ($pid8080) { Stop-Process -Id $pid8080 -Force }
 
 | Variable | Valor sugerido | Comentario |
 |----------|----------------|------------|
-| `DATABASE_URL` | `postgresql+psycopg://obyra:obyra@localhost:5433/obyra_dev` | Contenedor local de PostgreSQL 16 expuesto en 5433. |
+| `DATABASE_URL` | `postgresql+psycopg://obyra:obyra@localhost:5435/obyra_dev` | Contenedor local de PostgreSQL 16 expuesto en 5435 (obyra-pg-stg). Agregar `?sslmode=require` si el host fuerza TLS. |
 | `SECRET_KEY` | `changeme-dev-secret` | Reemplazar por secreto fuerte generado con `secrets.token_urlsafe`. |
 | `BASE_URL` / `APP_BASE_URL` | `http://127.0.0.1:8080` | Mantener coherente con `FLASK_RUN_PORT`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | `smtp.mailtrap.io` / `2525` / `<user>` / `<pass>` | Usar inbox de Mailtrap para pruebas locales. |
