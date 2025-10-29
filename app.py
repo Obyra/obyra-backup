@@ -22,7 +22,7 @@ from flask import (
     session,
     has_request_context,
 )
-from flask.cli import AppGroup
+from flask.cli import AppGroup, with_appcontext
 from flask_login import login_required, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
@@ -228,42 +228,42 @@ def inject_login_url():
 db_cli = AppGroup('db')
 
 @db_cli.command('upgrade')
+@with_appcontext
 def db_upgrade():
     """Apply pending lightweight database migrations."""
-    with app.app_context():
-        from flask_migrate import upgrade as alembic_upgrade
+    from flask_migrate import upgrade as alembic_upgrade
 
-        logger = app.logger
-        logger.info("Running Alembic upgrade...")
-        alembic_upgrade()
-        logger.info("Alembic upgrade → OK")
-        logger.info("Running post-upgrade runtime ensures...")
+    logger = app.logger
+    logger.info("Running Alembic upgrade...")
+    alembic_upgrade()
+    logger.info("Alembic upgrade → OK")
+    logger.info("Running post-upgrade runtime ensures...")
 
-        from migrations_runtime import (
-            ensure_avance_audit_columns,
-            ensure_presupuesto_state_columns,
-            ensure_item_presupuesto_stage_columns,
-            ensure_presupuesto_validity_columns,
-            ensure_exchange_currency_columns,
-            ensure_inventory_package_columns,
-            ensure_inventory_location_columns,
-            ensure_geocode_columns,
-            ensure_org_memberships_table,
-            ensure_work_certification_tables,
-            ensure_wizard_budget_tables,
-        )
+    from migrations_runtime import (
+        ensure_avance_audit_columns,
+        ensure_presupuesto_state_columns,
+        ensure_item_presupuesto_stage_columns,
+        ensure_presupuesto_validity_columns,
+        ensure_exchange_currency_columns,
+        ensure_inventory_package_columns,
+        ensure_inventory_location_columns,
+        ensure_geocode_columns,
+        ensure_org_memberships_table,
+        ensure_work_certification_tables,
+        ensure_wizard_budget_tables,
+    )
 
-        ensure_avance_audit_columns()
-        ensure_presupuesto_state_columns()
-        ensure_item_presupuesto_stage_columns()
-        ensure_presupuesto_validity_columns()
-        ensure_exchange_currency_columns()
-        ensure_inventory_package_columns()
-        ensure_inventory_location_columns()
-        ensure_geocode_columns()
-        ensure_org_memberships_table()
-        ensure_work_certification_tables()
-        ensure_wizard_budget_tables()
+    ensure_avance_audit_columns()
+    ensure_presupuesto_state_columns()
+    ensure_item_presupuesto_stage_columns()
+    ensure_presupuesto_validity_columns()
+    ensure_exchange_currency_columns()
+    ensure_inventory_package_columns()
+    ensure_inventory_location_columns()
+    ensure_geocode_columns()
+    ensure_org_memberships_table()
+    ensure_work_certification_tables()
+    ensure_wizard_budget_tables()
 
     click.echo('[OK] Database upgraded successfully.')
 
@@ -770,7 +770,6 @@ except Exception as exc:
 
 for module_name, attr_name, prefix in [
     ('obras', 'obras_bp', '/obras'),
-    ('presupuestos', 'presupuestos_bp', '/presupuestos'),
     ('equipos', 'equipos_bp', '/equipos'),
     ('inventario', 'inventario_bp', '/inventario'),
     ('marketplaces', 'marketplaces_bp', '/marketplaces'),
@@ -779,7 +778,6 @@ for module_name, attr_name, prefix in [
     ('cotizacion_inteligente', 'cotizacion_bp', '/cotizacion'),
     ('control_documentos', 'documentos_bp', '/documentos'),
     ('seguridad_cumplimiento', 'seguridad_bp', '/seguridad'),
-    ('agent_local', 'agent_bp', None),
     ('planes', 'planes_bp', None),
     ('events_service', 'events_bp', None),
     ('account', 'account_bp', None),
@@ -795,6 +793,18 @@ if core_failures:
     print("[WARN] Some core blueprints not available: " + "; ".join(core_failures))
 else:
     print("[OK] Core blueprints registered successfully")
+
+for module_name, attr_name, prefix in [
+    ('presupuestos', 'presupuestos_bp', '/presupuestos'),
+    ('agent_local', 'agent_bp', None),
+]:
+    try:
+        blueprint = _import_blueprint(module_name, attr_name)
+        app.register_blueprint(blueprint, url_prefix=prefix)
+    except Exception as exc:
+        app.logger.warning(
+            "Blueprint opcional %s no disponible: %s", module_name, exc
+        )
 
 _refresh_login_view()
 
@@ -858,8 +868,8 @@ try:
     def inventory_alertas_redirect():
         return redirect(url_for('inventario_new.alertas'))
     print("[OK] Enhanced blueprints registered successfully")
-except ImportError as e:
-    print(f"[WARN] Enhanced blueprints not available: {e}")
+except Exception as exc:
+    app.logger.warning("Enhanced blueprints not available: %s", exc)
 
 # Supplier portal
 try:
