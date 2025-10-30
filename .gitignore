@@ -1,41 +1,84 @@
-# Python
+# =========================
+# Python / entorno local
+# =========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .venv/
 venv/
+.python-version
 
-# Entorno / secretos
+# =========================
+# Secretos / config runtime
+# =========================
 .env
 .env.*
 !.env.example
 *.key
 *.pem
 
-# Frontend / build
+# =========================
+# Repos/archivos locales app
+# =========================
+# Instancia Flask (runtime data, sqlite locales, media de usuario, etc.)
+instance/
+# Si usás solo una subcarpeta, igual ignoramos todo instance/ arriba.
+# Mantener si querés artefactos generados por Alembic como banderitas locales:
+instance/migrations/*.done
+
+# Uploads locales (NO ignoramos imágenes del repo, solo las subidas en runtime)
+uploads/
+# Si tenés otro bucket/carpeta de runtime:
+media/
+storage/
+
+# =========================
+# Construcción frontend
+# =========================
 node_modules/
 dist/
 build/
 .npm/
 
+# =========================
 # Replit
-.repldb
 # (dejamos .replit y replit.nix para reproducir el entorno)
+# =========================
+.repldb
 
-# Archivos pesados locales
-uploads/
-*.sqlite*
-*.db
+# =========================
+# Archivos pesados / dumps
+# =========================
+# Evitar subir dumps/exports
+*.dump
+*.bak
+# SQL sueltos (pero NO bloqueamos migrations/*.sql si algún día los usás)
+*.sql
+!migrations/**/*.sql
 
-# SO
+# =========================
+# SO / editores
+# =========================
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
 
-# Dev artifacts
-attached_assets/
-instance/media/
-*.png
-*.jpg
-*.jpeg
-*.webp
+# =========================
+# Tests / reports
+# =========================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Imágenes del proyecto
+# =========================
+# IMPORTANTE: NO ignoramos PNG/JPG del repo
+# (si querés ignorar solo contenido generado por usuario ya está cubierto en /uploads)
