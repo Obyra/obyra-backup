@@ -1,32 +1,29 @@
-"""Alembic environment configuration for the obyra project."""
+"""Alembic environment configuration for the OBYRA project."""
 
 from __future__ import annotations
+
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
 from contextlib import nullcontext
 from logging.config import fileConfig
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
-
+from sqlalchemy import engine_from_config, pool, text
 from extensions import db
-
-if TYPE_CHECKING:  # pragma: no cover - hints only
-    from flask import Flask
-    from sqlalchemy.engine import Connection
-
 
 config = context.config
 target_metadata = db.metadata
+
 
 def _configure_logging() -> None:
     candidates = []
     if config.config_file_name:
         candidates.append(Path(config.config_file_name))
     candidates.append(Path(__file__).resolve().parent.parent / "alembic.ini")
-
     for candidate in candidates:
         if candidate and candidate.exists():
             fileConfig(str(candidate))
@@ -60,7 +57,7 @@ def _get_url() -> str:
     raise RuntimeError("No database URL available for Alembic")
 
 
-def _load_flask_app() -> Optional[Flask]:
+def _load_flask_app() -> Optional["Flask"]:
     try:
         from app import app as flask_app
         return flask_app
@@ -80,7 +77,6 @@ def _app_context_scope():
         return nullcontext()
     try:
         from flask import has_app_context
-
         if has_app_context():
             return nullcontext()
     except Exception:
@@ -90,7 +86,7 @@ def _app_context_scope():
 
 def _ensure_models_loaded() -> None:
     try:
-        import models  # noqa: F401  # pylint: disable=unused-import
+        import models  # noqa: F401
     except Exception as exc:
         logger = None
         if _flask_app is not None:
@@ -107,9 +103,11 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
+        version_table="alembic_version",
         version_table_schema="app",
+        compare_type=True,
+        compare_server_default=True,
     )
-
     with _app_context_scope():
         _ensure_models_loaded()
         context.configure(**configure_args)
@@ -126,14 +124,24 @@ def run_migrations_online() -> None:
         section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        future=True,
     )
 
-    with connectable.connect() as connection:  # type: Connection
+    with connectable.connect() as connection:
+        try:
+            # Asegura que todo caiga en schema app por defecto
+            connection.exec_driver_sql("SET search_path TO app, public")
+        except Exception:
+            pass
+
         configure_args = dict(
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
+            version_table="alembic_version",
             version_table_schema="app",
+            compare_type=True,
+            compare_server_default=True,
         )
         with _app_context_scope():
             _ensure_models_loaded()

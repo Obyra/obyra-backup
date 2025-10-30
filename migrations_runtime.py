@@ -4,86 +4,111 @@ from datetime import date, timedelta, datetime
 from flask import current_app
 from sqlalchemy import inspect
 
+# ---------------------- Helpers de compatibilidad/defensa ----------------------
+
+def _backend():
+    return db.engine.url.get_backend_name()
+
+def _is_pg():
+    return _backend() == "postgresql"
+
+def _set_search_path(conn):
+    """Solo en Postgres: fuerza esquema app primero."""
+    if _is_pg():
+        conn.exec_driver_sql("SET search_path TO app, public")
+
+def _table_exists(conn, table_name, schema="app"):
+    """
+    Chequea existencia de tabla de forma portable.
+    - En PG usa to_regclass('schema.table')
+    - En SQLite usa inspector
+    """
+    try:
+        if _is_pg():
+            return bool(conn.exec_driver_sql(
+                "SELECT to_regclass(%s)", (f"{schema}.{table_name}",)
+            ).scalar())
+        else:
+            insp = inspect(conn)
+            return table_name in set(insp.get_table_names())
+    except Exception:
+        return False
+
+def _columns(conn, table_name):
+    """Devuelve set de columnas de una tabla o set() si no existe."""
+    try:
+        insp = inspect(conn)
+        return {c["name"] for c in insp.get_columns(table_name)}
+    except Exception:
+        return set()
+
+def _ensure_instance_dir():
+    os.makedirs("instance/migrations", exist_ok=True)
+
+def _log_ok(msg):
+    if current_app:
+        current_app.logger.info(msg)
+
+def _log_ex(msg):
+    if current_app:
+        current_app.logger.exception(msg)
+
+# ------------------------------ Migraciones runtime ----------------------------
+
 def ensure_avance_audit_columns():
-    """Add audit columns to tarea_avances table if they don't exist"""
-    if db.engine.url.get_backend_name() != 'sqlite':
+    """Add audit columns to tarea_avances table if they don't exist (solo SQLite)."""
+    if _backend() != "sqlite":
         return
-    
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250910_add_avance_audit_cols.done'
-    
+
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250910_add_avance_audit_cols.done"
     if os.path.exists(sentinel):
         return
-    
+
     try:
-        with db.engine.begin() as conn:  # connection-level txn, autocommit on success
+        with db.engine.begin() as conn:
             cols = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(tarea_avances)").fetchall()]
-            
-            if 'cantidad_ingresada' not in cols:
+            if "cantidad_ingresada" not in cols:
                 conn.exec_driver_sql("ALTER TABLE tarea_avances ADD COLUMN cantidad_ingresada NUMERIC")
-            
-            if 'unidad_ingresada' not in cols:
+            if "unidad_ingresada" not in cols:
                 conn.exec_driver_sql("ALTER TABLE tarea_avances ADD COLUMN unidad_ingresada VARCHAR(10)")
-        
-        with open(sentinel, 'w') as f:
-            f.write('ok')
-            
-        if current_app:
-            current_app.logger.info("✅ Migration completed: added audit columns to tarea_avances")
-            
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: added audit columns to tarea_avances")
     except Exception:
-        # log but don't leave partial sentinel
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: add avance audit columns')
+        _log_ex("❌ Migration failed: add avance audit columns")
 
 
 def ensure_presupuesto_state_columns():
-    """Ensure presupuesto state management columns exist and are backfilled."""
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250316_presupuesto_states.done'
-
+    """Estado de presupuestos (idempotente, no-op si tabla no existe)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250316_presupuesto_states.done"
     if os.path.exists(sentinel):
         return
 
     try:
-        engine = db.engine
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            try:
-                columns = {col['name'] for col in inspector.get_columns('presupuestos')}
-            except Exception:
-                columns = set()
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            if not _table_exists(conn, "presupuestos"):
+                print("[SKIP] presupuestos no existe; salto state columns.")
+                return
 
-            statements = []
+            columns = _columns(conn, "presupuestos")
+            stmts = []
+            if "estado" not in columns:
+                coltype = "VARCHAR(20)" if _is_pg() else "TEXT"
+                stmts.append(f"ALTER TABLE presupuestos ADD COLUMN estado {coltype} DEFAULT 'borrador'")
+            if "perdido_motivo" not in columns:
+                stmts.append("ALTER TABLE presupuestos ADD COLUMN perdido_motivo TEXT")
+            if "perdido_fecha" not in columns:
+                coltype = "TIMESTAMP" if _is_pg() else "DATETIME"
+                stmts.append(f"ALTER TABLE presupuestos ADD COLUMN perdido_fecha {coltype}")
+            if "deleted_at" not in columns:
+                coltype = "TIMESTAMP" if _is_pg() else "DATETIME"
+                stmts.append(f"ALTER TABLE presupuestos ADD COLUMN deleted_at {coltype}")
+            for s in stmts:
+                conn.exec_driver_sql(s)
 
-            if 'estado' not in columns:
-                if engine.url.get_backend_name() == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN estado VARCHAR(20) DEFAULT 'borrador'")
-                else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN estado TEXT DEFAULT 'borrador'")
-            else:
-                # Even if the column exists, make sure NULL/empty rows are updated below
-                pass
-
-            if 'perdido_motivo' not in columns:
-                statements.append("ALTER TABLE presupuestos ADD COLUMN perdido_motivo TEXT")
-
-            if 'perdido_fecha' not in columns:
-                if engine.url.get_backend_name() == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN perdido_fecha TIMESTAMP")
-                else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN perdido_fecha DATETIME")
-
-            if 'deleted_at' not in columns:
-                if engine.url.get_backend_name() == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN deleted_at TIMESTAMP")
-                else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN deleted_at DATETIME")
-
-            for stmt in statements:
-                conn.exec_driver_sql(stmt)
-
-            # Backfill estado column after creation/update
             conn.exec_driver_sql(
                 """
                 UPDATE presupuestos
@@ -95,141 +120,103 @@ def ensure_presupuesto_state_columns():
                 """
             )
 
-        with open(sentinel, 'w') as f:
-            f.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: presupuesto state columns ready')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: presupuesto state columns ready")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: presupuesto state columns')
+        _log_ex("❌ Migration failed: presupuesto state columns")
         raise
 
 
 def ensure_item_presupuesto_stage_columns():
-    """Ensure ItemPresupuesto tiene columnas para vincular etapas y origen."""
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250317_item_stage_cols.done'
-
+    """Columns etapa_id / origen en items_presupuesto (no-op si no existe)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250317_item_stage_cols.done"
     if os.path.exists(sentinel):
         return
 
     try:
-        engine = db.engine
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            try:
-                columns = {col['name'] for col in inspector.get_columns('items_presupuesto')}
-            except Exception:
-                columns = set()
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            if not _table_exists(conn, "items_presupuesto"):
+                print("[SKIP] items_presupuesto no existe; salto stage cols.")
+                return
 
-            statements = []
+            columns = _columns(conn, "items_presupuesto")
+            if "etapa_id" not in columns:
+                conn.exec_driver_sql("ALTER TABLE items_presupuesto ADD COLUMN etapa_id INTEGER")
+            if "origen" not in columns:
+                coltype = "VARCHAR(20)" if _is_pg() else "VARCHAR(20)"
+                conn.exec_driver_sql(f"ALTER TABLE items_presupuesto ADD COLUMN origen {coltype} DEFAULT 'manual'")
 
-            if 'etapa_id' not in columns:
-                statements.append("ALTER TABLE items_presupuesto ADD COLUMN etapa_id INTEGER")
+            conn.exec_driver_sql("UPDATE items_presupuesto SET origen = COALESCE(NULLIF(origen, ''), 'manual')")
 
-            if 'origen' not in columns:
-                default_clause = "DEFAULT 'manual'" if engine.url.get_backend_name() != 'postgresql' else "DEFAULT 'manual'"
-                statements.append(f"ALTER TABLE items_presupuesto ADD COLUMN origen VARCHAR(20) {default_clause}")
-
-            for stmt in statements:
-                conn.exec_driver_sql(stmt)
-
-            conn.exec_driver_sql(
-                """
-                UPDATE items_presupuesto
-                SET origen = COALESCE(NULLIF(origen, ''), 'manual')
-                """
-            )
-
-        with open(sentinel, 'w') as f:
-            f.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: item presupuesto stage columns ensured')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: item presupuesto stage columns ensured")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: item presupuesto stage columns')
+        _log_ex("❌ Migration failed: item presupuesto stage columns")
         raise
 
 
 def ensure_presupuesto_validity_columns():
-    """Ensure presupuesto vigencia columns exist and are populated."""
-    os.makedirs('instance/migrations', exist_ok=True)
-
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
-    # Previous sentinel (sin vigencia_bloqueada) that may exist en instalaciones viejas
-    legacy_sentinel = 'instance/migrations/20250318_presupuesto_validity.done'
-    sentinel = 'instance/migrations/20250319_presupuesto_validity_v2.done'
+    """
+    Asegura vigencia_* en presupuestos. Si la tabla no existe aún, NO rompe: no-op.
+    """
+    _ensure_instance_dir()
+    legacy_sentinel = "instance/migrations/20250318_presupuesto_validity.done"
+    sentinel = "instance/migrations/20250319_presupuesto_validity_v2.done"
 
     try:
-        with engine.connect() as conn:
-            inspector = inspect(conn)
-            try:
-                existing_columns = {col['name'] for col in inspector.get_columns('presupuestos')}
-            except Exception:
-                existing_columns = set()
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
 
-        required_columns = {'vigencia_dias', 'fecha_vigencia', 'vigencia_bloqueada'}
-        missing_columns = required_columns - existing_columns
+            # Si no existe la tabla, no hacemos nada (clave para tu error actual)
+            if not _table_exists(conn, "presupuestos"):
+                print("[SKIP] presupuestos no existe; salto runtime patch de vigencia.")
+                # Si el sentinel viejo existiera, no nos importa por ahora
+                return
 
-        # Si el sentinel viejo existe pero faltan columnas nuevas, forzamos re-ejecución
-        if missing_columns and os.path.exists(legacy_sentinel):
-            os.remove(legacy_sentinel)
+            existing = _columns(conn, "presupuestos")
+            required = {"vigencia_dias", "fecha_vigencia", "vigencia_bloqueada"}
+            missing = required - existing
 
-        if not missing_columns and os.path.exists(sentinel):
-            return
+            # Re-ejecución si hacía falta (cuando venías de legacy sentinel)
+            if missing and os.path.exists(legacy_sentinel):
+                os.remove(legacy_sentinel)
 
-        with engine.begin() as conn:
-            statements = []
+            # Si ya está todo y existe sentinel nuevo, salir
+            if not missing and os.path.exists(sentinel):
+                return
 
-            if 'vigencia_dias' not in existing_columns:
-                statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_dias INTEGER DEFAULT 30")
-
-            if 'fecha_vigencia' not in existing_columns:
-                if backend == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
+            if "vigencia_dias" not in existing:
+                conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN vigencia_dias INTEGER DEFAULT 30")
+            if "fecha_vigencia" not in existing:
+                conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
+            if "vigencia_bloqueada" not in existing:
+                if _is_pg():
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT FALSE")
                 else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN fecha_vigencia DATE")
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada INTEGER DEFAULT 0")
 
-            if 'vigencia_bloqueada' not in existing_columns:
-                if backend == 'postgresql':
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada BOOLEAN DEFAULT TRUE")
-                else:
-                    statements.append("ALTER TABLE presupuestos ADD COLUMN vigencia_bloqueada INTEGER DEFAULT 1")
-
-            for stmt in statements:
-                conn.exec_driver_sql(stmt)
-
-            # Recalcular vigencia para todos los presupuestos (nuevos o existentes)
-            coalesce_literal = "FALSE" if backend == 'postgresql' else "0"
+            # Backfill seguro
+            coalesce_literal = "FALSE" if _is_pg() else "0"
             rows = conn.exec_driver_sql(
                 f"SELECT id, fecha, vigencia_dias, COALESCE(vigencia_bloqueada, {coalesce_literal}) FROM presupuestos"
             ).fetchall()
 
-            if backend == 'postgresql':
-                update_sql = (
-                    "UPDATE presupuestos SET vigencia_dias = %s, fecha_vigencia = %s, vigencia_bloqueada = %s WHERE id = %s"
-                )
+            if _is_pg():
+                upd = "UPDATE presupuestos SET vigencia_dias = %s, fecha_vigencia = %s, vigencia_bloqueada = %s WHERE id = %s"
             else:
-                update_sql = (
-                    "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ?, vigencia_bloqueada = ? WHERE id = ?"
-                )
+                upd = "UPDATE presupuestos SET vigencia_dias = ?, fecha_vigencia = ?, vigencia_bloqueada = ? WHERE id = ?"
 
             for presupuesto_id, fecha_valor, vigencia_valor, bloqueada in rows:
                 dias = vigencia_valor if vigencia_valor and vigencia_valor > 0 else 30
-                if dias < 1:
-                    dias = 1
-                elif dias > 180:
-                    dias = 180
+                dias = 1 if dias < 1 else (180 if dias > 180 else dias)
 
                 if not fecha_valor:
                     fecha_base = date.today()
@@ -241,130 +228,100 @@ def ensure_presupuesto_validity_columns():
                 else:
                     fecha_base = fecha_valor
 
-                fecha_vigencia = fecha_base + timedelta(days=dias)
+                fecha_vig = fecha_base + timedelta(days=dias)
                 bloqueada_flag = bool(bloqueada)
-                if backend != 'postgresql':
+                if not _is_pg():
                     bloqueada_flag = 1 if bloqueada_flag else 0
 
-                conn.exec_driver_sql(update_sql, (dias, fecha_vigencia, bloqueada_flag, presupuesto_id))
+                conn.exec_driver_sql(upd, (dias, fecha_vig, bloqueada_flag, presupuesto_id))
 
-        # Guardamos sentinel actualizado y eliminamos el anterior si quedó
         if os.path.exists(legacy_sentinel):
             os.remove(legacy_sentinel)
-
-        with open(sentinel, 'w') as f:
-            f.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: presupuesto validity columns ensured')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: presupuesto validity columns ensured")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: presupuesto validity columns')
+        _log_ex("❌ Migration failed: presupuesto validity columns")
         raise
 
 
 def ensure_inventory_package_columns():
-    """Ensure inventory items support configurable package options."""
-
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250912_inventory_package_options.done'
-
+    """Config de package_options en inventory_item (no-op si la tabla no existe)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250912_inventory_package_options.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
     try:
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            try:
-                columns = {col['name'] for col in inspector.get_columns('inventory_item')}
-            except Exception:
-                columns = set()
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            if not _table_exists(conn, "inventory_item"):
+                print("[SKIP] inventory_item no existe; salto package_options.")
+                return
 
-            if 'package_options' not in columns:
+            columns = _columns(conn, "inventory_item")
+            if "package_options" not in columns:
                 conn.exec_driver_sql("ALTER TABLE inventory_item ADD COLUMN package_options TEXT")
 
-        with open(sentinel, 'w') as sentinel_file:
-            sentinel_file.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: inventory item package options column ready')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: inventory item package options column ready")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: inventory item package options column')
+        _log_ex("❌ Migration failed: inventory item package options column")
         raise
 
 
 def ensure_inventory_location_columns():
-    """Ensure warehouses have metadata to distinguish deposits and works."""
-
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250915_inventory_location_type.done'
-
+    """Metadata de depósitos/obras en warehouse (no-op si la tabla no existe)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250915_inventory_location_type.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
     try:
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            try:
-                columns = {col['name'] for col in inspector.get_columns('warehouse')}
-            except Exception:
-                columns = set()
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            if not _table_exists(conn, "warehouse"):
+                print("[SKIP] warehouse no existe; salto location type.")
+                return
 
-            statements = []
-            if 'tipo' not in columns:
-                if backend == 'postgresql':
-                    statements.append("ALTER TABLE warehouse ADD COLUMN tipo VARCHAR(20) DEFAULT 'deposito'")
-                else:
-                    statements.append("ALTER TABLE warehouse ADD COLUMN tipo TEXT DEFAULT 'deposito'")
+            columns = _columns(conn, "warehouse")
+            if "tipo" not in columns:
+                coltype = "VARCHAR(20)" if _is_pg() else "TEXT"
+                conn.exec_driver_sql(f"ALTER TABLE warehouse ADD COLUMN tipo {coltype} DEFAULT 'deposito'")
 
-            for statement in statements:
-                conn.exec_driver_sql(statement)
+            conn.exec_driver_sql("UPDATE warehouse SET tipo = COALESCE(NULLIF(tipo, ''), 'deposito')")
 
-            if 'tipo' in columns or statements:
-                conn.exec_driver_sql(
-                    "UPDATE warehouse SET tipo = COALESCE(NULLIF(tipo, ''), 'deposito')"
-                )
-
-        with open(sentinel, 'w') as sentinel_file:
-            sentinel_file.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: warehouse location type column ready')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: warehouse location type column ready")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: warehouse location type column')
+        _log_ex("❌ Migration failed: warehouse location type column")
         raise
 
 
 def ensure_exchange_currency_columns():
-    """Ensure exchange rate tables and currency columns exist."""
-
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250321_exchange_currency_fx_cac.done'
-
+    """
+    Tablas de FX/indices y columnas monetarias.
+    Si presupuestos/items no existen aún, se omiten esas ALTER/UPDATE sin romper.
+    """
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250321_exchange_currency_fx_cac.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
     try:
-        with engine.begin() as conn:
-            if backend == 'postgresql':
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+
+            # Tablas maestras (siempre se pueden crear)
+            if _is_pg():
                 conn.exec_driver_sql(
                     """
                     CREATE TABLE IF NOT EXISTS exchange_rates (
@@ -459,314 +416,198 @@ def ensure_exchange_currency_columns():
                     """
                 )
 
-            inspector = inspect(conn)
-            try:
-                exchange_columns = {col['name'] for col in inspector.get_columns('exchange_rates')}
-            except Exception:
-                exchange_columns = set()
-
-            try:
-                pricing_columns = {col['name'] for col in inspector.get_columns('pricing_indices')}
-            except Exception:
-                pricing_columns = set()
-
-            if 'created_at' not in pricing_columns:
-                if backend == 'postgresql':
-                    conn.exec_driver_sql(
-                        "ALTER TABLE pricing_indices ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW()"
-                    )
-                else:
-                    conn.exec_driver_sql(
-                        "ALTER TABLE pricing_indices ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
-                    )
-
-            if 'updated_at' not in pricing_columns:
-                if backend == 'postgresql':
-                    conn.exec_driver_sql(
-                        "ALTER TABLE pricing_indices ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW()"
-                    )
-                else:
-                    conn.exec_driver_sql(
-                        "ALTER TABLE pricing_indices ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
-                    )
-
+            # Defaults de created/updated en pricing_indices (idempotente)
+            pricing_cols = _columns(conn, "pricing_indices")
+            if "created_at" not in pricing_cols:
+                col = "TIMESTAMP NOT NULL DEFAULT NOW()" if _is_pg() else "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                conn.exec_driver_sql(f"ALTER TABLE pricing_indices ADD COLUMN created_at {col}")
+            if "updated_at" not in pricing_cols:
+                col = "TIMESTAMP NOT NULL DEFAULT NOW()" if _is_pg() else "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                conn.exec_driver_sql(f"ALTER TABLE pricing_indices ADD COLUMN updated_at {col}")
             conn.exec_driver_sql(
-                """
-                UPDATE pricing_indices
-                   SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
-                       updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
-                """
+                "UPDATE pricing_indices SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)"
             )
+            if _is_pg():
+                conn.exec_driver_sql("ALTER TABLE pricing_indices ALTER COLUMN created_at SET DEFAULT NOW()")
+                conn.exec_driver_sql("ALTER TABLE pricing_indices ALTER COLUMN updated_at SET DEFAULT NOW()")
 
-            if backend == 'postgresql':
+            # ALTER en presupuestos/items solo si existen
+            if _table_exists(conn, "presupuestos"):
+                pcols = _columns(conn, "presupuestos")
+                if "currency" not in pcols:
+                    col = "VARCHAR(3) DEFAULT 'ARS'"
+                    conn.exec_driver_sql(f"ALTER TABLE presupuestos ADD COLUMN currency {col}")
+                if "exchange_rate_id" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN exchange_rate_id INTEGER")
+                if "exchange_rate_value" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN exchange_rate_value NUMERIC(18,6)")
+                if "exchange_rate_provider" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN exchange_rate_provider VARCHAR(50)")
+                if "exchange_rate_fetched_at" not in pcols:
+                    col = "TIMESTAMP" if _is_pg() else "DATETIME"
+                    conn.exec_driver_sql(f"ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at {col}")
+                if "exchange_rate_as_of" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN exchange_rate_as_of DATE")
+                if "tasa_usd_venta" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN tasa_usd_venta NUMERIC(10,4)")
+                if "indice_cac_valor" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN indice_cac_valor NUMERIC(12,2)")
+                if "indice_cac_fecha" not in pcols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN indice_cac_fecha DATE")
+                conn.exec_driver_sql("UPDATE presupuestos SET currency = COALESCE(NULLIF(currency, ''), 'ARS')")
+
+            if _table_exists(conn, "items_presupuesto"):
+                icols = _columns(conn, "items_presupuesto")
+                if "currency" not in icols:
+                    conn.exec_driver_sql("ALTER TABLE items_presupuesto ADD COLUMN currency VARCHAR(3) DEFAULT 'ARS'")
+                if "price_unit_currency" not in icols:
+                    conn.exec_driver_sql("ALTER TABLE items_presupuesto ADD COLUMN price_unit_currency NUMERIC(15,2)")
+                if "total_currency" not in icols:
+                    conn.exec_driver_sql("ALTER TABLE items_presupuesto ADD COLUMN total_currency NUMERIC(15,2)")
+                if "price_unit_ars" not in icols:
+                    conn.exec_driver_sql("ALTER TABLE items_presupuesto ADD COLUMN price_unit_ars NUMERIC(15,2)")
+                if "total_ars" not in icols:
+                    conn.exec_driver_sql("ALTER TABLE items_presupuesto ADD COLUMN total_ars NUMERIC(15,2)")
+                conn.exec_driver_sql("UPDATE items_presupuesto SET currency = COALESCE(NULLIF(currency, ''), 'ARS')")
                 conn.exec_driver_sql(
-                    "ALTER TABLE pricing_indices ALTER COLUMN created_at SET DEFAULT NOW()"
-                )
-                conn.exec_driver_sql(
-                    "ALTER TABLE pricing_indices ALTER COLUMN updated_at SET DEFAULT NOW()"
+                    "UPDATE items_presupuesto SET price_unit_currency = COALESCE(price_unit_currency, precio_unitario), total_currency = COALESCE(total_currency, total)"
                 )
 
-            if 'as_of_date' not in exchange_columns:
-                conn.exec_driver_sql("ALTER TABLE exchange_rates ADD COLUMN as_of_date DATE")
+            # Catálogos (si existen)
+            for t in ("materiales", "mano_obra", "equipos"):
+                if _table_exists(conn, t):
+                    ccols = _columns(conn, t)
+                    currency_sql = "VARCHAR(3) DEFAULT 'ARS'" if _is_pg() else "TEXT DEFAULT 'ARS'"
+                    fx_rate_sql = "NUMERIC(18,6)"
+                    fx_source_sql = "VARCHAR(100)" if _is_pg() else "TEXT"
+                    fx_date_sql = "DATE"
+                    if "currency_code" not in ccols:
+                        conn.exec_driver_sql(f"ALTER TABLE {t} ADD COLUMN currency_code {currency_sql}")
+                    if "fx_rate" not in ccols:
+                        conn.exec_driver_sql(f"ALTER TABLE {t} ADD COLUMN fx_rate {fx_rate_sql}")
+                    if "fx_source" not in ccols:
+                        conn.exec_driver_sql(f"ALTER TABLE {t} ADD COLUMN fx_source {fx_source_sql}")
+                    if "fx_date" not in ccols:
+                        conn.exec_driver_sql(f"ALTER TABLE {t} ADD COLUMN fx_date {fx_date_sql}")
 
-            try:
-                presupuesto_columns = {col['name'] for col in inspector.get_columns('presupuestos')}
-            except Exception:
-                presupuesto_columns = set()
-
-            try:
-                item_columns = {col['name'] for col in inspector.get_columns('items_presupuesto')}
-            except Exception:
-                item_columns = set()
-
-            pres_alter_statements = []
-            if 'currency' not in presupuesto_columns:
-                default_clause = "DEFAULT 'ARS'" if backend != 'postgresql' else "DEFAULT 'ARS'"
-                pres_alter_statements.append(f"ALTER TABLE presupuestos ADD COLUMN currency VARCHAR(3) {default_clause}")
-            if 'exchange_rate_id' not in presupuesto_columns:
-                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_id INTEGER")
-            if 'exchange_rate_value' not in presupuesto_columns:
-                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_value NUMERIC(18,6)")
-            if 'exchange_rate_provider' not in presupuesto_columns:
-                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN exchange_rate_provider VARCHAR(50)")
-            if 'exchange_rate_fetched_at' not in presupuesto_columns:
-                column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-                pres_alter_statements.append(f"ALTER TABLE presupuestos ADD COLUMN exchange_rate_fetched_at {column_type}")
-            if 'exchange_rate_as_of' not in presupuesto_columns:
-                column_type = 'DATE'
-                pres_alter_statements.append(f"ALTER TABLE presupuestos ADD COLUMN exchange_rate_as_of {column_type}")
-            if 'tasa_usd_venta' not in presupuesto_columns:
-                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN tasa_usd_venta NUMERIC(10,4)")
-            if 'indice_cac_valor' not in presupuesto_columns:
-                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN indice_cac_valor NUMERIC(12,2)")
-            if 'indice_cac_fecha' not in presupuesto_columns:
-                pres_alter_statements.append("ALTER TABLE presupuestos ADD COLUMN indice_cac_fecha DATE")
-
-            for stmt in pres_alter_statements:
-                conn.exec_driver_sql(stmt)
-
-            item_alter_statements = []
-            if 'currency' not in item_columns:
-                default_clause = "DEFAULT 'ARS'" if backend != 'postgresql' else "DEFAULT 'ARS'"
-                item_alter_statements.append(f"ALTER TABLE items_presupuesto ADD COLUMN currency VARCHAR(3) {default_clause}")
-            if 'price_unit_currency' not in item_columns:
-                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN price_unit_currency NUMERIC(15,2)")
-            if 'total_currency' not in item_columns:
-                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN total_currency NUMERIC(15,2)")
-            if 'price_unit_ars' not in item_columns:
-                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN price_unit_ars NUMERIC(15,2)")
-            if 'total_ars' not in item_columns:
-                item_alter_statements.append("ALTER TABLE items_presupuesto ADD COLUMN total_ars NUMERIC(15,2)")
-
-            for stmt in item_alter_statements:
-                conn.exec_driver_sql(stmt)
-
-            currency_column_sql = "VARCHAR(3) DEFAULT 'ARS'" if backend == 'postgresql' else "TEXT DEFAULT 'ARS'"
-            fx_rate_sql = "NUMERIC(18,6)"
-            fx_source_sql = "VARCHAR(100)" if backend == 'postgresql' else "TEXT"
-            fx_date_sql = 'DATE'
-
-            for catalog_table in ('materiales', 'mano_obra', 'equipos'):
-                try:
-                    catalog_columns = {col['name'] for col in inspector.get_columns(catalog_table)}
-                except Exception:
-                    # Tabla inexistente en esta instalación, continuar sin error
-                    continue
-
-                catalog_alter_statements = []
-                if 'currency_code' not in catalog_columns:
-                    catalog_alter_statements.append(
-                        f"ALTER TABLE {catalog_table} ADD COLUMN currency_code {currency_column_sql}"
-                    )
-                if 'fx_rate' not in catalog_columns:
-                    catalog_alter_statements.append(
-                        f"ALTER TABLE {catalog_table} ADD COLUMN fx_rate {fx_rate_sql}"
-                    )
-                if 'fx_source' not in catalog_columns:
-                    catalog_alter_statements.append(
-                        f"ALTER TABLE {catalog_table} ADD COLUMN fx_source {fx_source_sql}"
-                    )
-                if 'fx_date' not in catalog_columns:
-                    catalog_alter_statements.append(
-                        f"ALTER TABLE {catalog_table} ADD COLUMN fx_date {fx_date_sql}"
-                    )
-
-                for stmt in catalog_alter_statements:
-                    conn.exec_driver_sql(stmt)
-
-            # Backfill defaults
-            conn.exec_driver_sql(
-                """
-                UPDATE presupuestos
-                SET currency = COALESCE(NULLIF(currency, ''), 'ARS')
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                UPDATE items_presupuesto
-                SET currency = COALESCE(NULLIF(currency, ''), 'ARS')
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                UPDATE items_presupuesto
-                SET price_unit_currency = COALESCE(price_unit_currency, precio_unitario),
-                    total_currency = COALESCE(total_currency, total)
-                """
-            )
-
-            # Seed CAC index if empty
-            existing_index = conn.exec_driver_sql(
-                "SELECT COUNT(1) FROM pricing_indices WHERE name = 'CAC'"
-            ).scalar()
-            if not existing_index:
+            # Seed mínimo CAC
+            exists_cac = conn.exec_driver_sql("SELECT COUNT(1) FROM pricing_indices WHERE name = 'CAC'").scalar()
+            if not exists_cac:
                 now = datetime.utcnow()
-                if backend == 'postgresql':
-                    insert_sql = (
-                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)"
-                    )
+                if _is_pg():
                     conn.exec_driver_sql(
-                        insert_sql,
-                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', now, now),
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at, updated_at) VALUES (%s,%s,%s,%s,%s,%s)",
+                        ("CAC", 1.0, date.today(), "Valor inicial CAC", now, now),
                     )
                 else:
                     conn.exec_driver_sql(
-                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                        ('CAC', 1.0, date.today(), 'Valor inicial CAC', now, now),
+                        "INSERT INTO pricing_indices (name, value, valid_from, notes, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                        ("CAC", 1.0, date.today(), "Valor inicial CAC", now, now),
                     )
 
-        with open(sentinel, 'w') as f:
-            f.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: exchange rates and currency columns ready')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: exchange rates and currency columns ready")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: exchange rates and currency columns')
+        _log_ex("❌ Migration failed: exchange rates and currency columns")
         raise
 
 
 def ensure_geocode_columns():
-    """Ensure geocoding metadata tables and columns exist."""
-
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250320_geocode_columns.done'
-
+    """Columnas de geocodificación en obras/presupuestos (no-op si tablas faltan)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250320_geocode_columns.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
     try:
-        with engine.begin() as conn:
-            inspector = inspect(conn)
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
 
-            try:
-                obras_columns = {col['name'] for col in inspector.get_columns('obras')}
-            except Exception:
-                obras_columns = set()
-
-            try:
-                presup_columns = {col['name'] for col in inspector.get_columns('presupuestos')}
-            except Exception:
-                presup_columns = set()
-
-            from models import GeocodeCache  # Lazy import to avoid circular deps
-
+            # Cache (model) siempre checkfirst
+            from models import GeocodeCache  # lazy import
             GeocodeCache.__table__.create(bind=conn, checkfirst=True)
 
-            obras_statements = []
-            if 'direccion_normalizada' not in obras_columns:
-                obras_statements.append("ALTER TABLE obras ADD COLUMN direccion_normalizada TEXT")
-            if 'geocode_place_id' not in obras_columns:
-                obras_statements.append("ALTER TABLE obras ADD COLUMN geocode_place_id TEXT")
-            if 'geocode_provider' not in obras_columns:
-                obras_statements.append("ALTER TABLE obras ADD COLUMN geocode_provider TEXT")
-            if 'geocode_status' not in obras_columns:
-                default_clause = "DEFAULT 'pending'" if backend != 'postgresql' else "DEFAULT 'pending'"
-                obras_statements.append(f"ALTER TABLE obras ADD COLUMN geocode_status TEXT {default_clause}")
-            if 'geocode_raw' not in obras_columns:
-                obras_statements.append("ALTER TABLE obras ADD COLUMN geocode_raw TEXT")
-            if 'geocode_actualizado' not in obras_columns:
-                column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-                obras_statements.append(f"ALTER TABLE obras ADD COLUMN geocode_actualizado {column_type}")
+            if _table_exists(conn, "obras"):
+                obras_cols = _columns(conn, "obras")
+                if "direccion_normalizada" not in obras_cols:
+                    conn.exec_driver_sql("ALTER TABLE obras ADD COLUMN direccion_normalizada TEXT")
+                if "geocode_place_id" not in obras_cols:
+                    conn.exec_driver_sql("ALTER TABLE obras ADD COLUMN geocode_place_id TEXT")
+                if "geocode_provider" not in obras_cols:
+                    conn.exec_driver_sql("ALTER TABLE obras ADD COLUMN geocode_provider TEXT")
+                if "geocode_status" not in obras_cols:
+                    col = "TEXT DEFAULT 'pending'"
+                    conn.exec_driver_sql(f"ALTER TABLE obras ADD COLUMN geocode_status {col}")
+                if "geocode_raw" not in obras_cols:
+                    conn.exec_driver_sql("ALTER TABLE obras ADD COLUMN geocode_raw TEXT")
+                if "geocode_actualizado" not in obras_cols:
+                    col = "TIMESTAMP" if _is_pg() else "DATETIME"
+                    conn.exec_driver_sql(f"ALTER TABLE obras ADD COLUMN geocode_actualizado {col}")
+                conn.exec_driver_sql(
+                    "UPDATE obras SET geocode_status = COALESCE(NULLIF(geocode_status, ''), 'pending')"
+                )
+            else:
+                print("[SKIP] obras no existe; salto geocode en obras.")
 
-            for stmt in obras_statements:
-                conn.exec_driver_sql(stmt)
+            if _table_exists(conn, "presupuestos"):
+                presup_cols = _columns(conn, "presupuestos")
+                if "ubicacion_texto" not in presup_cols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN ubicacion_texto TEXT")
+                if "ubicacion_normalizada" not in presup_cols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN ubicacion_normalizada TEXT")
+                if "geo_latitud" not in presup_cols:
+                    col = "NUMERIC(10,8)" if _is_pg() else "NUMERIC"
+                    conn.exec_driver_sql(f"ALTER TABLE presupuestos ADD COLUMN geo_latitud {col}")
+                if "geo_longitud" not in presup_cols:
+                    col = "NUMERIC(11,8)" if _is_pg() else "NUMERIC"
+                    conn.exec_driver_sql(f"ALTER TABLE presupuestos ADD COLUMN geo_longitud {col}")
+                if "geocode_place_id" not in presup_cols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN geocode_place_id TEXT")
+                if "geocode_provider" not in presup_cols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN geocode_provider TEXT")
+                if "geocode_status" not in presup_cols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN geocode_status TEXT DEFAULT 'pending'")
+                if "geocode_raw" not in presup_cols:
+                    conn.exec_driver_sql("ALTER TABLE presupuestos ADD COLUMN geocode_raw TEXT")
+                if "geocode_actualizado" not in presup_cols:
+                    col = "TIMESTAMP" if _is_pg() else "DATETIME"
+                    conn.exec_driver_sql(f"ALTER TABLE presupuestos ADD COLUMN geocode_actualizado {col}")
+                conn.exec_driver_sql(
+                    "UPDATE presupuestos SET geocode_status = COALESCE(NULLIF(geocode_status, ''), 'pending')"
+                )
+            else:
+                print("[SKIP] presupuestos no existe; salto geocode en presupuestos.")
 
-            presup_statements = []
-            if 'ubicacion_texto' not in presup_columns:
-                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN ubicacion_texto TEXT")
-            if 'ubicacion_normalizada' not in presup_columns:
-                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN ubicacion_normalizada TEXT")
-            if 'geo_latitud' not in presup_columns:
-                column_def = "NUMERIC(10,8)" if backend == 'postgresql' else "NUMERIC"
-                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geo_latitud {column_def}")
-            if 'geo_longitud' not in presup_columns:
-                column_def = "NUMERIC(11,8)" if backend == 'postgresql' else "NUMERIC"
-                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geo_longitud {column_def}")
-            if 'geocode_place_id' not in presup_columns:
-                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN geocode_place_id TEXT")
-            if 'geocode_provider' not in presup_columns:
-                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN geocode_provider TEXT")
-            if 'geocode_status' not in presup_columns:
-                default_clause = "DEFAULT 'pending'" if backend != 'postgresql' else "DEFAULT 'pending'"
-                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geocode_status TEXT {default_clause}")
-            if 'geocode_raw' not in presup_columns:
-                presup_statements.append("ALTER TABLE presupuestos ADD COLUMN geocode_raw TEXT")
-            if 'geocode_actualizado' not in presup_columns:
-                column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-                presup_statements.append(f"ALTER TABLE presupuestos ADD COLUMN geocode_actualizado {column_type}")
-
-            for stmt in presup_statements:
-                conn.exec_driver_sql(stmt)
-
-            conn.exec_driver_sql(
-                "UPDATE obras SET geocode_status = COALESCE(NULLIF(geocode_status, ''), 'pending')"
-            )
-            conn.exec_driver_sql(
-                "UPDATE presupuestos SET geocode_status = COALESCE(NULLIF(geocode_status, ''), 'pending')"
-            )
-
-        with open(sentinel, 'w') as handler:
-            handler.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Geocoding columns ensured')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Geocoding columns ensured")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: geocoding columns')
+        _log_ex("❌ Migration failed: geocoding columns")
         raise
 
 
 def ensure_org_memberships_table():
-    """Ensure org_memberships table exists and memberships are backfilled."""
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250321_org_memberships_v2.done'
-
+    """Crea/ajusta org_memberships y backfill, si las tablas base existen."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250321_org_memberships_v2.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
     try:
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            tables = inspector.get_table_names()
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            insp = inspect(conn)
+            tables = set(insp.get_table_names())
 
-            if 'usuarios' in tables:
-                usuario_columns = {col['name'] for col in inspector.get_columns('usuarios')}
-                if 'primary_org_id' not in usuario_columns:
+            if "usuarios" in tables:
+                usuario_columns = _columns(conn, "usuarios")
+                if "primary_org_id" not in usuario_columns:
                     conn.exec_driver_sql("ALTER TABLE usuarios ADD COLUMN primary_org_id INTEGER")
-
                 conn.exec_driver_sql(
                     """
                     UPDATE usuarios
@@ -775,8 +616,9 @@ def ensure_org_memberships_table():
                     """
                 )
 
-            if 'org_memberships' not in tables:
-                if backend == 'postgresql':
+            # Crear/ajustar org_memberships
+            if "org_memberships" not in tables:
+                if _is_pg():
                     conn.exec_driver_sql(
                         """
                         CREATE TABLE IF NOT EXISTS org_memberships (
@@ -813,116 +655,106 @@ def ensure_org_memberships_table():
                         """
                     )
             else:
-                columns = {col['name'] for col in inspector.get_columns('org_memberships')}
-                alterations = []
-                if 'role' not in columns:
-                    column_type = 'VARCHAR(20)' if backend == 'postgresql' else 'TEXT'
-                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN role {column_type} DEFAULT 'operario'")
-                if 'status' not in columns:
-                    column_type = 'VARCHAR(20)' if backend == 'postgresql' else 'TEXT'
-                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN status {column_type} DEFAULT 'pending'")
-                if 'archived' not in columns:
-                    column_type = 'BOOLEAN' if backend == 'postgresql' else 'INTEGER'
-                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN archived {column_type} DEFAULT 0")
-                if 'archived_at' not in columns:
-                    column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN archived_at {column_type}")
-                if 'invited_by' not in columns:
-                    alterations.append("ALTER TABLE org_memberships ADD COLUMN invited_by INTEGER")
-                if 'invited_at' not in columns:
-                    column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN invited_at {column_type} DEFAULT CURRENT_TIMESTAMP")
-                if 'accepted_at' not in columns:
-                    column_type = 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-                    alterations.append(f"ALTER TABLE org_memberships ADD COLUMN accepted_at {column_type}")
+                columns = _columns(conn, "org_memberships")
+                alters = []
+                if "role" not in columns:
+                    col = "VARCHAR(20)" if _is_pg() else "TEXT"
+                    alters.append(f"ALTER TABLE org_memberships ADD COLUMN role {col} DEFAULT 'operario'")
+                if "status" not in columns:
+                    col = "VARCHAR(20)" if _is_pg() else "TEXT"
+                    alters.append(f"ALTER TABLE org_memberships ADD COLUMN status {col} DEFAULT 'pending'")
+                if "archived" not in columns:
+                    col = "BOOLEAN" if _is_pg() else "INTEGER"
+                    defv = "FALSE" if _is_pg() else "0"
+                    alters.append(f"ALTER TABLE org_memberships ADD COLUMN archived {col} DEFAULT {defv}")
+                if "archived_at" not in columns:
+                    col = "TIMESTAMP" if _is_pg() else "DATETIME"
+                    alters.append(f"ALTER TABLE org_memberships ADD COLUMN archived_at {col}")
+                if "invited_by" not in columns:
+                    alters.append("ALTER TABLE org_memberships ADD COLUMN invited_by INTEGER")
+                if "invited_at" not in columns:
+                    col = "TIMESTAMP" if _is_pg() else "DATETIME"
+                    alters.append(f"ALTER TABLE org_memberships ADD COLUMN invited_at {col} DEFAULT CURRENT_TIMESTAMP")
+                if "accepted_at" not in columns:
+                    col = "TIMESTAMP" if _is_pg() else "DATETIME"
+                    alters.append(f"ALTER TABLE org_memberships ADD COLUMN accepted_at {col}")
+                for s in alters:
+                    conn.exec_driver_sql(s)
 
-                for statement in alterations:
-                    conn.exec_driver_sql(statement)
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_membership_user ON org_memberships(user_id)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_membership_org ON org_memberships(org_id)")
 
-            conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_membership_user ON org_memberships(user_id)"
-            )
-            conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_membership_org ON org_memberships(org_id)"
-            )
-
-            if backend == 'postgresql':
-                conn.exec_driver_sql(
-                    """
-                    INSERT INTO org_memberships (org_id, user_id, role, status, archived, invited_at, accepted_at)
-                    SELECT u.organizacion_id,
-                           u.id,
-                           CASE WHEN u.rol IN ('administrador', 'admin', 'administrador_general') THEN 'admin' ELSE 'operario' END,
-                           CASE WHEN u.activo IS NULL OR u.activo = TRUE THEN 'active' ELSE 'inactive' END,
-                           FALSE,
-                           CURRENT_TIMESTAMP,
-                           CASE WHEN u.activo IS NULL OR u.activo = TRUE THEN CURRENT_TIMESTAMP ELSE NULL END
-                    FROM usuarios u
-                    WHERE u.organizacion_id IS NOT NULL
-                      AND NOT EXISTS (
-                        SELECT 1 FROM org_memberships m WHERE m.org_id = u.organizacion_id AND m.user_id = u.id
+            # Backfill desde usuarios si existen ambas tablas
+            if "usuarios" in tables:
+                if _is_pg():
+                    conn.exec_driver_sql(
+                        """
+                        INSERT INTO org_memberships (org_id, user_id, role, status, archived, invited_at, accepted_at)
+                        SELECT u.organizacion_id,
+                               u.id,
+                               CASE WHEN u.rol IN ('administrador','admin','administrador_general') THEN 'admin' ELSE 'operario' END,
+                               CASE WHEN u.activo IS NULL OR u.activo = TRUE THEN 'active' ELSE 'inactive' END,
+                               FALSE,
+                               CURRENT_TIMESTAMP,
+                               CASE WHEN u.activo IS NULL OR u.activo = TRUE THEN CURRENT_TIMESTAMP ELSE NULL END
+                        FROM usuarios u
+                        WHERE u.organizacion_id IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1 FROM org_memberships m WHERE m.org_id = u.organizacion_id AND m.user_id = u.id
+                          )
+                        """
                     )
-                    """
-                )
-            else:
-                conn.exec_driver_sql(
-                    """
-                    INSERT INTO org_memberships (org_id, user_id, role, status, archived, invited_at, accepted_at)
-                    SELECT u.organizacion_id,
-                           u.id,
-                           CASE WHEN u.rol IN ('administrador', 'admin', 'administrador_general') THEN 'admin' ELSE 'operario' END,
-                           CASE WHEN u.activo IS NULL OR u.activo = 1 THEN 'active' ELSE 'inactive' END,
-                           0,
-                           CURRENT_TIMESTAMP,
-                           CASE WHEN u.activo IS NULL OR u.activo = 1 THEN CURRENT_TIMESTAMP ELSE NULL END
-                    FROM usuarios u
-                    WHERE u.organizacion_id IS NOT NULL
-                      AND NOT EXISTS (
-                        SELECT 1 FROM org_memberships m WHERE m.org_id = u.organizacion_id AND m.user_id = u.id
+                else:
+                    conn.exec_driver_sql(
+                        """
+                        INSERT INTO org_memberships (org_id, user_id, role, status, archived, invited_at, accepted_at)
+                        SELECT u.organizacion_id,
+                               u.id,
+                               CASE WHEN u.rol IN ('administrador','admin','administrador_general') THEN 'admin' ELSE 'operario' END,
+                               CASE WHEN u.activo IS NULL OR u.activo = 1 THEN 'active' ELSE 'inactive' END,
+                               0,
+                               CURRENT_TIMESTAMP,
+                               CASE WHEN u.activo IS NULL OR u.activo = 1 THEN CURRENT_TIMESTAMP ELSE NULL END
+                        FROM usuarios u
+                        WHERE u.organizacion_id IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1 FROM org_memberships m WHERE m.org_id = u.organizacion_id AND m.user_id = u.id
+                          )
+                        """
                     )
-                    """
-                )
 
-        with open(sentinel, 'w') as handle:
-            handle.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Migration completed: org_memberships table ready')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Migration completed: org_memberships table ready")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: org_memberships table')
+        _log_ex("❌ Migration failed: org_memberships table")
         raise
 
 
 def ensure_work_certification_tables():
-    """Ensure work certification & payment tables exist."""
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250901_work_certifications.done'
-
+    """Tablas de certificaciones y pagos (crea si faltan; idempotente)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250901_work_certifications.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
-    def numeric_type(precision, scale):
-        if backend == 'postgresql':
-            return f'NUMERIC({precision},{scale})'
-        return 'NUMERIC'
-
-    def timestamp_type():
-        return 'TIMESTAMP' if backend == 'postgresql' else 'DATETIME'
-
     try:
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            tables = set(inspector.get_table_names())
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            insp = inspect(conn)
+            tables = set(insp.get_table_names())
 
-            if 'work_certifications' not in tables:
-                if backend == 'postgresql':
+            def num(p, s):
+                return f"NUMERIC({p},{s})" if _is_pg() else "NUMERIC"
+
+            def ts():
+                return "TIMESTAMP" if _is_pg() else "DATETIME"
+
+            # work_certifications
+            if "work_certifications" not in tables:
+                if _is_pg():
                     conn.exec_driver_sql(
                         """
                         CREATE TABLE IF NOT EXISTS work_certifications (
@@ -973,30 +805,31 @@ def ensure_work_certification_tables():
                         """
                     )
             else:
-                columns = {col['name'] for col in inspector.get_columns('work_certifications')}
-                alterations = []
-                for name, col_type, default in [
-                    ('moneda_base', 'VARCHAR(3)' if backend == 'postgresql' else 'TEXT', "DEFAULT 'ARS'"),
-                    ('tc_usd', numeric_type(12, 4), None),
-                    ('indice_cac', numeric_type(12, 4), None),
-                    ('notas', 'TEXT', None),
-                    ('approved_at', timestamp_type(), None),
-                    ('updated_at', timestamp_type(), "DEFAULT CURRENT_TIMESTAMP"),
-                ]:
-                    if name not in columns:
-                        stmt = f"ALTER TABLE work_certifications ADD COLUMN {name} {col_type}"
-                        if default:
-                            stmt += f" {default}"
-                        alterations.append(stmt)
-                for stmt in alterations:
-                    conn.exec_driver_sql(stmt)
+                cols = _columns(conn, "work_certifications")
+                alters = []
+                if "moneda_base" not in cols:
+                    col = "VARCHAR(3)" if _is_pg() else "TEXT"
+                    alters.append(f"ALTER TABLE work_certifications ADD COLUMN moneda_base {col} DEFAULT 'ARS'")
+                if "tc_usd" not in cols:
+                    alters.append(f"ALTER TABLE work_certifications ADD COLUMN tc_usd {num(12,4)}")
+                if "indice_cac" not in cols:
+                    alters.append(f"ALTER TABLE work_certifications ADD COLUMN indice_cac {num(12,4)}")
+                if "notas" not in cols:
+                    alters.append("ALTER TABLE work_certifications ADD COLUMN notas TEXT")
+                if "approved_at" not in cols:
+                    alters.append(f"ALTER TABLE work_certifications ADD COLUMN approved_at {ts()}")
+                if "updated_at" not in cols:
+                    alters.append(f"ALTER TABLE work_certifications ADD COLUMN updated_at {ts()} DEFAULT CURRENT_TIMESTAMP")
+                for s in alters:
+                    conn.exec_driver_sql(s)
 
             conn.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_work_certifications_obra_estado ON work_certifications(obra_id, estado)"
             )
 
-            if 'work_certification_items' not in tables:
-                if backend == 'postgresql':
+            # work_certification_items
+            if "work_certification_items" not in tables:
+                if _is_pg():
                     conn.exec_driver_sql(
                         """
                         CREATE TABLE IF NOT EXISTS work_certification_items (
@@ -1031,18 +864,17 @@ def ensure_work_certification_tables():
                         """
                     )
             else:
-                columns = {col['name'] for col in inspector.get_columns('work_certification_items')}
-                if 'created_at' not in columns:
-                    conn.exec_driver_sql(
-                        f"ALTER TABLE work_certification_items ADD COLUMN created_at {timestamp_type()}"
-                    )
+                cols = _columns(conn, "work_certification_items")
+                if "created_at" not in cols:
+                    conn.exec_driver_sql(f"ALTER TABLE work_certification_items ADD COLUMN created_at {ts()}")
 
             conn.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_work_certification_items_certificacion ON work_certification_items(certificacion_id)"
             )
 
-            if 'work_payments' not in tables:
-                if backend == 'postgresql':
+            # work_payments
+            if "work_payments" not in tables:
+                if _is_pg():
                     conn.exec_driver_sql(
                         """
                         CREATE TABLE IF NOT EXISTS work_payments (
@@ -1089,55 +921,40 @@ def ensure_work_certification_tables():
                         """
                     )
             else:
-                columns = {col['name'] for col in inspector.get_columns('work_payments')}
-                for name, col_type, default in [
-                    ('tc_usd_pago', numeric_type(12, 4), None),
-                    ('comprobante_url', 'TEXT', None),
-                    ('notas', 'TEXT', None),
-                    ('updated_at', timestamp_type(), "DEFAULT CURRENT_TIMESTAMP"),
-                ]:
-                    if name not in columns:
-                        stmt = f"ALTER TABLE work_payments ADD COLUMN {name} {col_type}"
-                        if default:
-                            stmt += f" {default}"
-                        conn.exec_driver_sql(stmt)
+                cols = _columns(conn, "work_payments")
+                if "tc_usd_pago" not in cols:
+                    conn.exec_driver_sql(f"ALTER TABLE work_payments ADD COLUMN tc_usd_pago {num(12,4)}")
+                if "comprobante_url" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE work_payments ADD COLUMN comprobante_url TEXT")
+                if "notas" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE work_payments ADD COLUMN notas TEXT")
+                if "updated_at" not in cols:
+                    conn.exec_driver_sql(f"ALTER TABLE work_payments ADD COLUMN updated_at {ts()} DEFAULT CURRENT_TIMESTAMP")
 
-            conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_work_payments_certificacion ON work_payments(certificacion_id)"
-            )
-            conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_work_payments_estado ON work_payments(estado)"
-            )
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_work_payments_certificacion ON work_payments(certificacion_id)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_work_payments_estado ON work_payments(estado)")
 
-        with open(sentinel, 'w') as handle:
-            handle.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Work certification tables ensured')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Work certification tables ensured")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: work certification tables')
+        _log_ex("❌ Migration failed: work certification tables")
         raise
 
 
 def ensure_wizard_budget_tables():
-    """Create tables para variantes y coeficientes del presupuestador wizard."""
-
-    os.makedirs('instance/migrations', exist_ok=True)
-    sentinel = 'instance/migrations/20250330_wizard_budget_tables.done'
-
+    """Tablas para el wizard del presupuestador (creación idempotente)."""
+    _ensure_instance_dir()
+    sentinel = "instance/migrations/20250330_wizard_budget_tables.done"
     if os.path.exists(sentinel):
         return
 
-    engine = db.engine
-    backend = engine.url.get_backend_name()
-
     try:
-        with engine.begin() as conn:
-            if backend == 'postgresql':
+        with db.engine.begin() as conn:
+            _set_search_path(conn)
+            if _is_pg():
                 conn.exec_driver_sql(
                     """
                     CREATE TABLE IF NOT EXISTS wizard_stage_variants (
@@ -1218,22 +1035,16 @@ def ensure_wizard_budget_tables():
 
         try:
             from services.wizard_budgeting import seed_default_coefficients_if_needed
-
             seed_default_coefficients_if_needed()
         except Exception:
-            if current_app:
-                current_app.logger.exception('❌ Error seeding wizard baseline coefficients')
+            _log_ex("❌ Error seeding wizard baseline coefficients")
             raise
 
-        with open(sentinel, 'w') as handle:
-            handle.write('ok')
-
-        if current_app:
-            current_app.logger.info('✅ Wizard budget tables ensured and seeded')
-
+        with open(sentinel, "w") as f:
+            f.write("ok")
+        _log_ok("✅ Wizard budget tables ensured and seeded")
     except Exception:
         if os.path.exists(sentinel):
             os.remove(sentinel)
-        if current_app:
-            current_app.logger.exception('❌ Migration failed: wizard budget tables')
+        _log_ex("❌ Migration failed: wizard budget tables")
         raise
