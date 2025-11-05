@@ -182,6 +182,7 @@
                                                     <ul class="dropdown-menu">
                                                         <li>
                                                             <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                                 <input type="hidden" name="estado" value="pendiente">
                                                                 <button class="dropdown-item" type="submit">
                                                                     <span class="badge bg-secondary me-2">Pendiente</span>
@@ -190,6 +191,7 @@
                                                         </li>
                                                         <li>
                                                             <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                                 <input type="hidden" name="estado" value="en_curso">
                                                                 <button class="dropdown-item" type="submit">
                                                                     <span class="badge bg-primary me-2">En Curso</span>
@@ -198,6 +200,7 @@
                                                         </li>
                                                         <li>
                                                             <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                                 <input type="hidden" name="estado" value="pausada">
                                                                 <button class="dropdown-item" type="submit">
                                                                     <span class="badge bg-warning me-2">Pausada</span>
@@ -206,6 +209,7 @@
                                                         </li>
                                                         <li>
                                                             <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                                 <input type="hidden" name="estado" value="finalizada">
                                                                 <button class="dropdown-item" type="submit">
                                                                     <span class="badge bg-success me-2">Finalizada</span>
@@ -392,6 +396,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('obras.editar', id=obra.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Editar Obra</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -525,6 +530,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" id="formNuevaTarea">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Nueva Tarea - <span id="nombreEtapa"></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -739,6 +745,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('obras.asignar_usuario', obra_id=obra.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Asignar Usuario</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -806,6 +813,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('obras.agregar_etapas', id=obra.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Seleccionar Etapas del Proyecto</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -877,13 +885,13 @@
                         <h6>Paso 1: Catálogo de Etapas</h6>
                         <p class="text-muted">Selecciona las etapas del catálogo que deseas incluir en esta obra:</p>
                         <div class="mb-3">
-                            <button type="button" class="btn btn-sm btn-outline-primary me-2" id="wzSelectAllEtapas">
-                                <i class="fas fa-check-square me-1"></i>Seleccionar Todas
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="wzDeselectAllEtapas">
-                                <i class="far fa-square me-1"></i>Deseleccionar Todas
-                            </button>
-                            <button id="btnAgregarEtapasSel" type="button" class="btn btn-sm btn-success" data-action="add-etapas" disabled style="display: none;">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="wzToggleAllEtapas">
+                                <label class="form-check-label" for="wzToggleAllEtapas">
+                                    <strong>Seleccionar todas las etapas</strong>
+                                </label>
+                            </div>
+                            <button id="btnAgregarEtapasSel" type="button" class="btn btn-sm btn-success mt-2" data-action="add-etapas" disabled style="display: none;">
                                 <i class="fas fa-plus me-1"></i>Agregar Etapas Seleccionadas
                             </button>
                         </div>
@@ -903,6 +911,14 @@
                     <div id="wizardStep2" class="tab-pane" data-wz-step="2" data-paso="2">
                         <h6>Paso 2: Seleccionar Tareas</h6>
                         <p class="text-muted">Marca las tareas que quieres crear para cada etapa:</p>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="wzToggleAllTareas">
+                                <label class="form-check-label" for="wzToggleAllTareas">
+                                    <strong>Seleccionar todas las tareas</strong>
+                                </label>
+                            </div>
+                        </div>
                         <div id="wizardSpinnerTareas" class="text-center my-3 d-none">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Cargando tareas...</span>
@@ -941,7 +957,6 @@
                                         <th>Horas Est.</th>
                                         <th>Cantidad</th>
                                         <th>Unidad</th>
-                                        <th class="wizard-budget-col d-none" data-budget-col="variant">Variante</th>
                                         <th>Asignado a</th>
                                         <th>Prioridad</th>
                                     </tr>
@@ -1003,6 +1018,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="{{ url_for('obras.certificar_avance', id=obra.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="porcentaje_avance" class="form-label">Porcentaje de Avance *</label>

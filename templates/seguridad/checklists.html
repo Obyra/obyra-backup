@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Checklists de Seguridad - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-clipboard-check me-2 text-warning"></i>Checklists de Seguridad
+                </h1>
+                <div class="d-flex gap-2">
+                    {% if has_endpoint('seguridad.dashboard') %}
+                    <a href="{{ url_for('seguridad.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    {% endif %}
+                    {% if has_endpoint('seguridad.crear_checklist') %}
+                    <a href="{{ url_for('seguridad.crear_checklist') }}" class="btn btn-success">
+                        <i class="fas fa-plus me-1"></i>Nuevo Checklist
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Obra</label>
+                    <select name="obra_id" class="form-select">
+                        <option value="">Todas las obras</option>
+                        {% for obra in obras %}
+                        <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="completado">Completado</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if checklists and checklists.items %}
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Obra</th>
+                            <th>Tipo</th>
+                            <th>Completado Por</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for checklist in checklists.items %}
+                        <tr>
+                            <td>{{ checklist.fecha.strftime('%d/%m/%Y') if checklist.fecha else '-' }}</td>
+                            <td>{{ checklist.obra.nombre if checklist.obra else '-' }}</td>
+                            <td>{{ checklist.tipo or '-' }}</td>
+                            <td>{{ checklist.completado_por.nombre if checklist.completado_por else '-' }}</td>
+                            <td>
+                                {% if checklist.estado == 'completado' %}
+                                <span class="badge bg-success">Completado</span>
+                                {% else %}
+                                <span class="badge bg-warning">Pendiente</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if has_endpoint('seguridad.ver_checklist') %}
+                                <a href="{{ url_for('seguridad.ver_checklist', checklist_id=checklist.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Controles de paginación -->
+            {% if checklists.pages > 1 %}
+            <nav aria-label="Paginación" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item {% if not checklists.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for(request.endpoint, page=checklists.prev_num, obra_id=request.args.get('obra_id'), estado=request.args.get('estado')) }}">Anterior</a>
+                    </li>
+                    {% for page_num in checklists.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                            <li class="page-item {% if page_num == checklists.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for(request.endpoint, page=page_num, obra_id=request.args.get('obra_id'), estado=request.args.get('estado')) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not checklists.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for(request.endpoint, page=checklists.next_num, obra_id=request.args.get('obra_id'), estado=request.args.get('estado')) }}">Siguiente</a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-clipboard-check fa-3x text-muted mb-3"></i>
+            <h4>No hay checklists registrados</h4>
+            <p class="text-muted">Crea checklists para verificar cumplimiento de seguridad</p>
+            {% if has_endpoint('seguridad.crear_checklist') %}
+            <a href="{{ url_for('seguridad.crear_checklist') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i>Crear Primer Checklist
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

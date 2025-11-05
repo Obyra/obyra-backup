@@ -11,6 +11,7 @@ from commission_utils import get_commission_summary
 from decimal import Decimal
 from collections import defaultdict
 import uuid
+from utils import safe_decimal
 
 cart_bp = Blueprint('cart', __name__, url_prefix='/cart')
 
@@ -63,7 +64,7 @@ def view_cart():
 def add_to_cart():
     """Agregar producto al carrito"""
     variant_id = request.form.get('variant_id', type=int)
-    qty = Decimal(request.form.get('qty', '1'))
+    qty = safe_decimal(request.form.get('qty', '1'), default=1)
     
     if not variant_id or qty <= 0:
         flash('Datos de producto inválidos', 'error')
@@ -119,7 +120,7 @@ def add_to_cart():
 def update_cart():
     """Actualizar cantidades en el carrito"""
     item_id = request.form.get('item_id', type=int)
-    qty = Decimal(request.form.get('qty', '0'))
+    qty = safe_decimal(request.form.get('qty', '0'))
     
     if not item_id:
         flash('Item no encontrado', 'error')

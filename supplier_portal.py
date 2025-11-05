@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from supplier_auth import supplier_login_required, get_current_supplier_user, get_current_supplier
 from app import db
 from models import (
-    Supplier, Product, ProductVariant, ProductImage, ProductQNA, 
+    Supplier, Product, ProductVariant, ProductImage, ProductQNA,
     Order, OrderCommission, Category
 )
 from werkzeug.utils import secure_filename
@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import os
 import json
 from sqlalchemy import func
+from utils import safe_float
 
 supplier_portal_bp = Blueprint('supplier_portal', __name__, url_prefix='/proveedor')
 
@@ -181,8 +182,8 @@ def nueva_variante(id):
             sku=request.form.get('sku', '').strip(),
             atributos_json=atributos if atributos else None,
             unidad=request.form.get('unidad', '').strip(),
-            precio=float(request.form.get('precio', 0)),
-            stock=float(request.form.get('stock', 0))
+            precio=safe_float(request.form.get('precio', 0)),
+            stock=safe_float(request.form.get('stock', 0))
         )
         
         db.session.add(variante)
@@ -219,8 +220,8 @@ def editar_variante(var_id):
         variante.sku = request.form.get('sku', '').strip()
         variante.atributos_json = atributos if atributos else None
         variante.unidad = request.form.get('unidad', '').strip()
-        variante.precio = float(request.form.get('precio', 0))
-        variante.stock = float(request.form.get('stock', 0))
+        variante.precio = safe_float(request.form.get('precio', 0))
+        variante.stock = safe_float(request.form.get('stock', 0))
         variante.visible = bool(request.form.get('visible'))
         
         db.session.commit()

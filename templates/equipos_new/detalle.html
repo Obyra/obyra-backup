@@ -297,6 +297,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('equipos_new.asignar', id=equipo.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Asignar Equipo a Proyecto</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -332,6 +333,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('equipos_new.crear_uso', id=equipo.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Nuevo Parte de Uso</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -374,6 +376,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('equipos_new.nuevo_mantenimiento', id=equipo.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Nueva Tarea de Mantenimiento</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

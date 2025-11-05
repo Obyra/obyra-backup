@@ -24,25 +24,26 @@ def upgrade() -> None:
     ).scalar()
 
     if exists_role_modules:
-        # crear/normalizar secuencia y defaults
+        # crear/normalizar secuencia y defaults (defensivo para ownership)
         conn.execute(
             text("""
-            CREATE SEQUENCE IF NOT EXISTS app.role_modules_id_seq
-                AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1
-            """)
-        )
-        conn.execute(text("ALTER SEQUENCE app.role_modules_id_seq OWNED BY app.role_modules.id"))
-        conn.execute(text("ALTER TABLE app.role_modules ALTER COLUMN id TYPE BIGINT"))
-        conn.execute(
-            text("ALTER TABLE app.role_modules ALTER COLUMN id SET DEFAULT nextval('app.role_modules_id_seq'::regclass)")
-        )
-        conn.execute(
-            text("""
-            SELECT setval(
-              'app.role_modules_id_seq',
-              COALESCE((SELECT MAX(id) FROM app.role_modules), 1),
-              (SELECT EXISTS(SELECT 1 FROM app.role_modules))
-            )
+            DO $$
+            BEGIN
+              CREATE SEQUENCE IF NOT EXISTS app.role_modules_id_seq
+                  AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+
+              -- Solo alterar sequence si somos dueños de la tabla
+              IF (SELECT tableowner FROM pg_tables WHERE schemaname = 'app' AND tablename = 'role_modules') = current_user THEN
+                ALTER SEQUENCE app.role_modules_id_seq OWNED BY app.role_modules.id;
+                ALTER TABLE app.role_modules ALTER COLUMN id TYPE BIGINT;
+                ALTER TABLE app.role_modules ALTER COLUMN id SET DEFAULT nextval('app.role_modules_id_seq'::regclass);
+                PERFORM setval(
+                  'app.role_modules_id_seq',
+                  COALESCE((SELECT MAX(id) FROM app.role_modules), 1),
+                  (SELECT EXISTS(SELECT 1 FROM app.role_modules))
+                );
+              END IF;
+            END$$;
             """)
         )
         # grants opcionales si los roles existen

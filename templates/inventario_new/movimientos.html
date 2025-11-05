@@ -24,6 +24,7 @@
                         </div>
                     {% endif %}
                     <form method="POST" action="{{ url_for('inventario_new.movimientos') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label class="form-label">Item</label>
                             <select class="form-select" name="item_id" required {% if not can_manage_movements or locations|length == 0 %}disabled{% endif %}>

@@ -2,8 +2,10 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from datetime import datetime
 from decimal import Decimal
+from utils.pagination import Pagination
 from app import db
 from models import Proveedor, CategoriaProveedor, SolicitudCotizacion, Usuario
+from utils import safe_decimal
 
 marketplaces_bp = Blueprint('marketplaces', __name__)
 
@@ -76,7 +78,9 @@ def index():
     categoria = request.args.get('categoria', '')
     ubicacion = request.args.get('ubicacion', '')
     buscar = request.args.get('buscar', '')
-    
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
     # Query base
     query = Proveedor.query.filter_by(organizacion_id=current_user.organizacion_id, activo=True)
     
@@ -95,8 +99,8 @@ def index():
             )
         )
     
-    proveedores = query.order_by(Proveedor.calificacion.desc()).limit(20).all()
-    
+    proveedores = query.order_by(Proveedor.calificacion.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
     # Estadísticas
     total_proveedores = Proveedor.query.filter_by(organizacion_id=current_user.organizacion_id, activo=True).count()
     cotizaciones_pendientes = SolicitudCotizacion.query.filter_by(
@@ -286,8 +290,8 @@ def crear_proveedor():
                 ubicacion=request.form.get('ubicacion', '').strip(),
                 telefono=request.form.get('telefono', '').strip(),
                 email=request.form.get('email', '').strip(),
-                precio_promedio=Decimal(request.form.get('precio_promedio', 0) or 0),
-                calificacion=Decimal(request.form.get('calificacion', 5.0) or 5.0),
+                precio_promedio=safe_decimal(request.form.get('precio_promedio', 0)),
+                calificacion=safe_decimal(request.form.get('calificacion', 5.0), default=5.0),
                 verificado=request.form.get('verificado') == 'on',
                 activo=True,
                 fecha_registro=datetime.utcnow()

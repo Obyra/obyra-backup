@@ -10,6 +10,7 @@ from datetime import datetime, date
 import json
 import os
 from werkzeug.utils import secure_filename
+from utils.pagination import Pagination
 from app import db
 from models import *
 from utils import *
@@ -122,7 +123,9 @@ def biblioteca():
     tipo_id = request.args.get('tipo_id', type=int)
     estado = request.args.get('estado')
     busqueda = request.args.get('q')
-    
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
     # Query base
     query = DocumentoObra.query
     
@@ -135,13 +138,13 @@ def biblioteca():
         query = query.filter_by(estado=estado)
     if busqueda:
         query = query.filter(DocumentoObra.nombre.contains(busqueda))
-    
-    documentos = query.order_by(DocumentoObra.fecha_modificacion.desc()).all()
-    
+
+    documentos = query.order_by(DocumentoObra.fecha_modificacion.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
     # Datos para filtros
     obras = Obra.query.all()
     tipos_documento = TipoDocumento.query.filter_by(activo=True).all()
-    
+
     return render_template('documentos/biblioteca.html',
                          documentos=documentos,
                          obras=obras,

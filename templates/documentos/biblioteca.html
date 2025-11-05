@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Biblioteca de Documentos - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-book me-2 text-primary"></i>Biblioteca de Documentos
+                </h1>
+                <div class="d-flex gap-2">
+                    {% if has_endpoint('documentos.dashboard') %}
+                    <a href="{{ url_for('documentos.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    {% endif %}
+                    {% if has_endpoint('documentos.subir_documento') %}
+                    <a href="{{ url_for('documentos.subir_documento') }}" class="btn btn-success">
+                        <i class="fas fa-upload me-1"></i>Subir Documento
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Buscar</label>
+                    <input type="text" name="q" class="form-control" placeholder="Nombre del documento..." value="{{ request.args.get('q', '') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Obra</label>
+                    <select name="obra_id" class="form-select">
+                        <option value="">Todas las obras</option>
+                        {% for obra in obras %}
+                        <option value="{{ obra.id }}" {% if request.args.get('obra_id', type=int) == obra.id %}selected{% endif %}>
+                            {{ obra.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Tipo</label>
+                    <select name="tipo_id" class="form-select">
+                        <option value="">Todos los tipos</option>
+                        {% for tipo in tipos_documento %}
+                        <option value="{{ tipo.id }}" {% if request.args.get('tipo_id', type=int) == tipo.id %}selected{% endif %}>
+                            {{ tipo.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="revision" {% if request.args.get('estado') == 'revision' %}selected{% endif %}>Revisión</option>
+                        <option value="aprobado" {% if request.args.get('estado') == 'aprobado' %}selected{% endif %}>Aprobado</option>
+                        <option value="rechazado" {% if request.args.get('estado') == 'rechazado' %}selected{% endif %}>Rechazado</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de Documentos -->
+    {% if documentos and documentos.items %}
+        <div class="row">
+            {% for doc in documentos.items %}
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-1">
+                                    <i class="fas fa-file-alt text-muted me-2"></i>{{ doc.nombre }}
+                                </h5>
+                                {% if doc.descripcion %}
+                                <p class="card-text text-muted small">{{ doc.descripcion|truncate(80) }}</p>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if doc.estado == 'aprobado' %}
+                                <span class="badge bg-success">Aprobado</span>
+                                {% elif doc.estado == 'revision' %}
+                                <span class="badge bg-warning">Revisión</span>
+                                {% elif doc.estado == 'rechazado' %}
+                                <span class="badge bg-danger">Rechazado</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ doc.estado }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            {% if doc.obra %}
+                            <div class="small text-muted mb-1">
+                                <i class="fas fa-building me-1"></i>{{ doc.obra.nombre }}
+                            </div>
+                            {% endif %}
+                            {% if doc.tipo_documento %}
+                            <div class="small">
+                                <span class="badge bg-info">{{ doc.tipo_documento.nombre }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="small text-muted mb-3">
+                            <div><i class="fas fa-calendar me-1"></i>Creado: {{ doc.fecha_creacion.strftime('%d/%m/%Y') }}</div>
+                            <div><i class="fas fa-edit me-1"></i>Modificado: {{ doc.fecha_modificacion.strftime('%d/%m/%Y') }}</div>
+                            {% if doc.subido_por %}
+                            <div><i class="fas fa-user me-1"></i>Por: {{ doc.subido_por.nombre }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            {% if has_endpoint('documentos.ver_documento') %}
+                            <a href="{{ url_for('documentos.ver_documento', documento_id=doc.id) }}"
+                               class="btn btn-sm btn-primary flex-grow-1">
+                                <i class="fas fa-eye me-1"></i>Ver
+                            </a>
+                            {% endif %}
+                            {% if has_endpoint('documentos.descargar_documento') %}
+                            <a href="{{ url_for('documentos.descargar_documento', documento_id=doc.id) }}"
+                               class="btn btn-sm btn-outline-success"
+                               title="Descargar">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            {% endif %}
+                            {% if current_user.rol == 'administrador' and has_endpoint('documentos.editar_documento') %}
+                            <a href="{{ url_for('documentos.editar_documento', documento_id=doc.id) }}"
+                               class="btn btn-sm btn-outline-secondary"
+                               title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Controles de paginación -->
+        {% if documentos.pages > 1 %}
+        <nav aria-label="Paginación" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {% if not documentos.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for(request.endpoint, page=documentos.prev_num, q=request.args.get('q'), obra_id=request.args.get('obra_id'), tipo_id=request.args.get('tipo_id'), estado=request.args.get('estado')) }}">Anterior</a>
+                </li>
+                {% for page_num in documentos.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == documentos.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for(request.endpoint, page=page_num, q=request.args.get('q'), obra_id=request.args.get('obra_id'), tipo_id=request.args.get('tipo_id'), estado=request.args.get('estado')) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not documentos.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for(request.endpoint, page=documentos.next_num, q=request.args.get('q'), obra_id=request.args.get('obra_id'), tipo_id=request.args.get('tipo_id'), estado=request.args.get('estado')) }}">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                <h4>No se encontraron documentos</h4>
+                <p class="text-muted">
+                    {% if request.args.get('q') or request.args.get('obra_id') or request.args.get('tipo_id') or request.args.get('estado') %}
+                    No hay documentos que coincidan con los filtros seleccionados.
+                    <a href="{{ url_for('documentos.biblioteca') }}">Ver todos los documentos</a>
+                    {% else %}
+                    No hay documentos en la biblioteca.
+                    {% endif %}
+                </p>
+                {% if has_endpoint('documentos.subir_documento') %}
+                <a href="{{ url_for('documentos.subir_documento') }}" class="btn btn-success">
+                    <i class="fas fa-upload me-1"></i>Subir Primer Documento
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

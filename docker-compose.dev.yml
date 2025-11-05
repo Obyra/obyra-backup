@@ -1,0 +1,213 @@
+# ============================================
+# OBYRA - Development Docker Compose
+# ============================================
+# Usage: docker-compose -f docker-compose.dev.yml up
+
+services:
+  # ==========================================
+  # PostgreSQL Database (Development)
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: obyra-postgres-dev
+    environment:
+      POSTGRES_DB: obyra_dev
+      POSTGRES_USER: obyra
+      POSTGRES_PASSWORD: obyra_dev_password
+      # Create migrator role
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5434:5432"  # Puerto 5434 (5432, 5433, 5435 ocupados)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U obyra -d obyra_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - obyra-dev-network
+
+  # ==========================================
+  # Redis - Cache & Session Store (Dev)
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: obyra-redis-dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_dev_data:/data
+    ports:
+      - "6382:6379"  # Puerto 6382 (6379, 6380, 6381 ocupados)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - obyra-dev-network
+
+  # ==========================================
+  # Flask Application (Development Mode)
+  # ==========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: obyra-app-dev
+    environment:
+      # Flask Development
+      FLASK_APP: app.py
+      FLASK_ENV: development
+      FLASK_DEBUG: 1
+      SECRET_KEY: dev-secret-key-for-local-only
+
+      # Database (using app role for simplicity in dev)
+      DATABASE_URL: postgresql+psycopg://obyra:obyra_dev_password@postgres:5432/obyra_dev
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://obyra_migrator:migrator_dev_password@postgres:5432/obyra_dev
+
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+
+      # Application
+      BASE_URL: http://localhost:5000
+
+      # Email (Mailtrap for dev)
+      SMTP_HOST: sandbox.smtp.mailtrap.io
+      SMTP_PORT: 2525
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FROM_EMAIL: dev@obyra.local
+
+      # Feature Flags (all enabled in dev)
+      ENABLE_REPORTS: 1
+      WIZARD_BUDGET_BREAKDOWN_ENABLED: 1
+      SHOW_IA_CALCULATOR_BUTTON: 1
+
+      # Maps
+      MAPS_PROVIDER: nominatim
+      MAPS_USER_AGENT: OBYRA-Dev/1.0
+
+      # Migrations
+      RUN_MIGRATIONS: true
+
+    volumes:
+      # Mount source code for hot reload
+      - .:/app:cached
+      # But exclude these
+      - /app/__pycache__
+      - /app/.pytest_cache
+      - /app/instance
+      # Persistent storage
+      - app_dev_storage:/app/storage
+      - app_dev_reports:/app/reports
+      - app_dev_logs:/app/logs
+      - app_dev_instance:/app/instance
+    ports:
+      - "5002:5000"  # Puerto 5002 (5000, 5001 ocupados)
+    command: >
+      gunicorn --bind 0.0.0.0:5000 --reload --workers 1 --threads 2 --timeout 120 --access-logfile - --error-logfile - --log-level debug app:app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - obyra-dev-network
+    stdin_open: true
+    tty: true
+
+  # ==========================================
+  # Celery Worker (Development)
+  # ==========================================
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: obyra-celery-worker-dev
+    command: celery -A celery_app worker --loglevel=debug --concurrency=2
+    environment:
+      FLASK_APP: app.py
+      FLASK_ENV: development
+      SECRET_KEY: dev-secret-key-for-local-only
+      DATABASE_URL: postgresql+psycopg://obyra:obyra_dev_password@postgres:5432/obyra_dev
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - .:/app:cached
+      - app_dev_storage:/app/storage
+      - app_dev_reports:/app/reports
+      - app_dev_logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - obyra-dev-network
+
+  # ==========================================
+  # PostgreSQL Admin (pgAdmin) - Optional
+  # ==========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: obyra-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@obyra.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5051:80"  # Puerto 5051 para evitar conflictos
+    depends_on:
+      - postgres
+    networks:
+      - obyra-dev-network
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
+  # ==========================================
+  # Redis Commander - Optional
+  # ==========================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: obyra-redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8082:8081"  # Puerto 8082 para evitar conflictos
+    depends_on:
+      - redis
+    networks:
+      - obyra-dev-network
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  obyra-dev-network:
+    driver: bridge
+
+# ============================================
+# Volumes (Development Data)
+# ============================================
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  app_dev_storage:
+    driver: local
+  app_dev_reports:
+    driver: local
+  app_dev_logs:
+    driver: local
+  app_dev_instance:
+    driver: local
+  pgadmin_data:
+    driver: local

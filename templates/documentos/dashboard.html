@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Control de Documentos - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-folder-open me-2 text-primary"></i>Control de Documentos
+                </h1>
+                <div class="d-flex gap-2">
+                    {% if has_endpoint('documentos.subir_documento') %}
+                    <a href="{{ url_for('documentos.subir_documento') }}" class="btn btn-success">
+                        <i class="fas fa-upload me-1"></i>Subir Documento
+                    </a>
+                    {% endif %}
+                    {% if has_endpoint('documentos.biblioteca') %}
+                    <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-primary">
+                        <i class="fas fa-book me-1"></i>Biblioteca
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ total_documentos }}</h3>
+                            <p class="mb-0 text-muted">Total Documentos</p>
+                        </div>
+                        <i class="fas fa-file-alt fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ documentos_pendientes }}</h3>
+                            <p class="mb-0 text-muted">Pendientes Revisión</p>
+                        </div>
+                        <i class="fas fa-clock fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ documentos_mes }}</h3>
+                            <p class="mb-0 text-muted">Este Mes</p>
+                        </div>
+                        <i class="fas fa-calendar-alt fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Documentos Recientes -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Documentos Recientes</h5>
+                    {% if has_endpoint('documentos.biblioteca') %}
+                    <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-sm btn-outline-primary">
+                        Ver todos
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if documentos_recientes %}
+                    <div class="list-group list-group-flush">
+                        {% for doc in documentos_recientes %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">
+                                        <i class="fas fa-file text-muted me-2"></i>{{ doc.nombre }}
+                                    </h6>
+                                    <div class="small text-muted">
+                                        {% if doc.obra %}
+                                        <span class="me-3"><i class="fas fa-building me-1"></i>{{ doc.obra.nombre }}</span>
+                                        {% endif %}
+                                        {% if doc.tipo_documento %}
+                                        <span class="badge bg-info">{{ doc.tipo_documento.nombre }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted d-block">
+                                        {{ doc.fecha_modificacion.strftime('%d/%m/%Y %H:%M') }}
+                                    </small>
+                                    {% if doc.estado == 'aprobado' %}
+                                    <span class="badge bg-success">Aprobado</span>
+                                    {% elif doc.estado == 'revision' %}
+                                    <span class="badge bg-warning">Revisión</span>
+                                    {% elif doc.estado == 'rechazado' %}
+                                    <span class="badge bg-danger">Rechazado</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ doc.estado }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No hay documentos recientes</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentos por Aprobar -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i>Por Aprobar</h5>
+                </div>
+                <div class="card-body">
+                    {% if documentos_aprobar %}
+                    <div class="list-group list-group-flush">
+                        {% for doc in documentos_aprobar %}
+                        <div class="list-group-item px-0">
+                            <h6 class="mb-1">{{ doc.nombre|truncate(30) }}</h6>
+                            <small class="text-muted">
+                                {% if doc.obra %}{{ doc.obra.nombre|truncate(25) }}{% endif %}
+                            </small>
+                            <div class="mt-2">
+                                {% if has_endpoint('documentos.aprobar_documento') %}
+                                <button class="btn btn-sm btn-success me-1" onclick="aprobarDocumento({{ doc.id }})">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                {% endif %}
+                                {% if has_endpoint('documentos.ver_documento') %}
+                                <a href="{{ url_for('documentos.ver_documento', documento_id=doc.id) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-check-circle fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No hay documentos pendientes</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accesos Rápidos -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-th me-2"></i>Accesos Rápidos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% if has_endpoint('documentos.biblioteca') %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="fas fa-book fa-2x me-3"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">Biblioteca</div>
+                                    <small>Ver todos los documentos</small>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if has_endpoint('documentos.subir_documento') %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documentos.subir_documento') }}" class="btn btn-outline-success w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="fas fa-upload fa-2x me-3"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">Subir</div>
+                                    <small>Nuevo documento</small>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if current_user.rol == 'administrador' and has_endpoint('documentos.configuracion_tipos') %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documentos.configuracion_tipos') }}" class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="fas fa-cog fa-2x me-3"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">Configuración</div>
+                                    <small>Tipos de documento</small>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if has_endpoint('documentos.reportes') %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documentos.reportes') }}" class="btn btn-outline-info w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="fas fa-chart-bar fa-2x me-3"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">Reportes</div>
+                                    <small>Estadísticas</small>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function aprobarDocumento(docId) {
+    if (confirm('¿Deseas aprobar este documento?')) {
+        fetch(`/documentos/aprobar/${docId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo aprobar el documento'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al aprobar el documento');
+        });
+    }
+}
+</script>
+{% endblock %}

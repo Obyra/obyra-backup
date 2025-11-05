@@ -2,11 +2,12 @@ from flask import Blueprint, render_template, request, session, flash, redirect,
 from flask_login import current_user, login_required
 from app import db
 from models import (
-    Product, ProductVariant, Category, Supplier, ProductQNA, 
+    Product, ProductVariant, Category, Supplier, ProductQNA,
     Order, OrderItem, Usuario
 )
 from sqlalchemy import or_, func
 import json
+from utils import safe_float, safe_int
 
 market_bp = Blueprint('market', __name__, url_prefix='/market')
 
@@ -154,7 +155,7 @@ def carrito():
 def agregar_carrito():
     """Agregar producto al carrito"""
     variant_id = request.form.get('variant_id')
-    qty = float(request.form.get('qty', 1))
+    qty = safe_float(request.form.get('qty', 1), default=1.0)
     
     if not variant_id:
         return jsonify({'error': 'Variante no especificada'}), 400
@@ -190,8 +191,8 @@ def agregar_carrito():
 @market_bp.route('/carrito/actualizar', methods=['POST'])
 def actualizar_carrito():
     """Actualizar cantidad en carrito"""
-    variant_id = int(request.form.get('variant_id'))
-    qty = float(request.form.get('qty', 0))
+    variant_id = safe_int(request.form.get('variant_id'))
+    qty = safe_float(request.form.get('qty', 0))
     
     carrito = session.get('carrito', [])
     

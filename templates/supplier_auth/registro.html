@@ -48,6 +48,7 @@
                         {% endwith %}
                         
                         <form method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <!-- Datos de la Empresa -->
                             <div class="mb-4">
                                 <h6 class="text-primary">

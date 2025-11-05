@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
-from extensions import db
+from extensions import db, limiter
 from app import _login_redirect
 from models import Usuario, Organizacion, PerfilUsuario, OnboardingStatus, SupplierUser, OrgMembership
 from sqlalchemy import func
@@ -24,6 +24,13 @@ from services.memberships import (
     set_current_membership,
     activate_pending_memberships,
     ensure_active_membership_for_user,
+)
+from utils.security_logger import (
+    log_login_attempt,
+    log_logout,
+    log_password_change,
+    log_data_modification,
+    log_permission_change,
 )
 
 def normalizar_cuit(valor: Optional[str]) -> str:
@@ -81,14 +88,6 @@ def _extract_portal_from_payload(payload: Optional[Any]) -> str:
 def _forgot_url_for_portal(portal: str) -> str:
     return url_for('auth.forgot_password', portal=portal) if portal == 'supplier' else url_for('auth.forgot_password')
 
-# Lista blanca de emails para administradores automáticos
-ADMIN_EMAILS = [
-    'brenda@gmail.com',
-    'cliente@empresa.com',
-    'admin@obyra.com',
-    'admin@obyra.ia'
-]
-
 def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -132,18 +131,24 @@ def authenticate_manual_user(email: Optional[str], password: Optional[str], *, r
     usuario = Usuario.query.filter(func.lower(Usuario.email) == normalized_email.lower()).first()
 
     if not usuario or not usuario.activo:
+        log_login_attempt(normalized_email, False, 'Usuario no existe o inactivo')
         return False, {'message': 'Email o contraseña incorrectos, o cuenta inactiva.', 'category': 'danger'}
 
     if usuario.auth_provider == 'google':
+        log_login_attempt(normalized_email, False, 'Cuenta vinculada con Google')
         return False, {'message': 'Esta cuenta está vinculada con Google. Usa "Iniciar sesión con Google".', 'category': 'warning'}
 
     if usuario.auth_provider != 'manual' or not usuario.password_hash:
+        log_login_attempt(normalized_email, False, 'Credenciales incorrectas')
         return False, {'message': 'Credenciales incorrectas.', 'category': 'danger'}
 
     if not usuario.check_password(password):
+        log_login_attempt(normalized_email, False, 'Contrasena incorrecta')
         return False, {'message': 'Credenciales incorrectas.', 'category': 'danger'}
 
     login_user(usuario, remember=remember)
+    log_login_attempt(normalized_email, True)
+    current_app.logger.info(f'Login exitoso: {normalized_email} desde {request.remote_addr}')
     return True, usuario
 
 def _resolve_dashboard_url() -> str:
@@ -283,6 +288,7 @@ def send_new_member_invitation(
     return reset_url
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     next_page = request.args.get('next') or request.form.get('next')
     form_data = {'email': request.form.get('email', ''), 'remember': bool(request.form.get('remember'))}
@@ -355,6 +361,7 @@ def seleccionar_organizacion():
     return render_template('auth/seleccionar_organizacion.html', memberships=memberships, next_url=next_url)
 
 @auth_bp.route('/forgot', methods=['GET', 'POST'])
+@limiter.limit("5 per minute", methods=["POST"])
 def forgot_password():
     portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
     submit_url = url_for('auth.forgot_password', portal=portal) if portal != 'user' else url_for('auth.forgot_password')
@@ -391,6 +398,7 @@ def forgot_password():
     return render_template('auth/forgot.html', portal=portal, submit_url=submit_url, back_url=back_url)
 
 @auth_bp.route('/reset/<token>', methods=['GET', 'POST'])
+@limiter.limit("5 per minute", methods=["POST"])
 def reset_password(token: str):
     requested_portal = _normalize_portal(request.args.get('portal') or request.form.get('portal'))
 
@@ -434,6 +442,9 @@ def reset_password(token: str):
             activate_pending_memberships(account)
         db.session.commit()
 
+        log_password_change(account.email, is_reset=True)
+        current_app.logger.info(f'Contrasena restablecida para: {account.email}')
+
         flash('Tu contraseña fue actualizada. Ahora puedes iniciar sesión.', 'success')
         return redirect(url_for(_portal_login_endpoint(portal)))
 
@@ -442,7 +453,10 @@ def reset_password(token: str):
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    user_email = current_user.email
     logout_user()
+    log_logout(user_email)
+    current_app.logger.info(f'Logout: {user_email}')
     session.pop('current_membership_id', None)
     session.pop('current_org_id', None)
     session.pop('membership_selection_confirmed', None)
@@ -450,6 +464,7 @@ def logout():
     return redirect(url_for('index'))
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
+@limiter.limit("3 per minute", methods=["POST"])
 def register():
     # Permitir registro público, pero usuarios existentes van al dashboard
     if current_user.is_authenticated:
@@ -541,11 +556,14 @@ def register():
             db.session.commit()
 
             login_user(nuevo_usuario)
+            log_login_attempt(email.lower(), True)
+            current_app.logger.info(f'Nuevo usuario registrado: {email.lower()} - Organizacion: {nueva_organizacion.id}')
             flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
             destino = _post_login_destination(nuevo_usuario)
             return redirect(destino)
-        except Exception:
+        except Exception as e:
             db.session.rollback()
+            current_app.logger.error(f'Error al crear cuenta para {email.lower()}: {str(e)}', exc_info=True)
             flash('Error al crear la cuenta. Por favor, intenta de nuevo.', 'danger')
             return render_template('auth/register.html', google_available=bool(google))
     
@@ -604,10 +622,13 @@ def google_callback():
             if usuario.activo:
                 db.session.commit()
                 login_user(usuario)
+                log_login_attempt(email, True)
+                current_app.logger.info(f'Login exitoso con Google: {email}')
                 flash(f'¡Bienvenido/a de vuelta, {usuario.nombre}!', 'success')
                 destino = _post_login_destination(usuario)
                 return redirect(destino)
             else:
+                log_login_attempt(email, False, 'Cuenta inactiva')
                 flash('Tu cuenta está inactiva. Contacta al administrador.', 'warning')
                 return _login_redirect()
         else:
@@ -645,8 +666,11 @@ def google_callback():
                         flash('Token de invitación inválido.', 'danger')
                         return _login_redirect()
                 else:
-                    rol_usuario = 'administrador' if email.lower() in ADMIN_EMAILS else 'administrador'
+                    # Super admin debe configurarse manualmente en la base de datos por seguridad
+                    # No se asigna automáticamente durante el registro
+                    rol_usuario = 'administrador'
                     role_front = 'admin'
+                    is_super = False  # Super admin flag must be set manually in database
                     nueva_organizacion = Organizacion(
                         nombre=f"Organización de {nombre} {apellido}",
                         fecha_creacion=datetime.utcnow()
@@ -662,6 +686,7 @@ def google_callback():
                         profile_picture=profile_picture,
                         rol=rol_usuario,
                         role=role_front,
+                        is_super_admin=is_super,
                         activo=True,
                         password_hash=None,
                         organizacion_id=nueva_organizacion.id,
@@ -687,11 +712,13 @@ def google_callback():
                 flash(mensaje, 'success')
                 destino = _post_login_destination(nuevo_usuario)
                 return redirect(destino)
-            except Exception:
+            except Exception as e:
                 db.session.rollback()
+                current_app.logger.error(f'Error al crear cuenta con Google para {email}: {str(e)}', exc_info=True)
                 flash('Error al crear la cuenta con Google. Intenta de nuevo.', 'danger')
                 return _login_redirect()
-    except Exception:
+    except Exception as e:
+        current_app.logger.error(f'Error en autenticación OAuth con Google: {str(e)}', exc_info=True)
         flash('Error en la autenticación con Google. Intenta de nuevo.', 'danger')
         return _login_redirect()
 
@@ -700,6 +727,7 @@ def google_callback():
 # ================================
 @auth_bp.route('/admin/register', methods=['GET', 'POST'])
 @login_required
+@limiter.limit("10 per minute", methods=["POST"])
 def admin_register():
     """Registro administrativo - solo para administradores"""
     if current_user.rol != 'administrador':
@@ -759,8 +787,9 @@ def admin_register():
             db.session.commit()
             flash(f'Usuario {nombre} {apellido} registrado exitosamente.', 'success')
             return redirect(url_for('auth.usuarios_admin'))
-        except Exception:
+        except Exception as e:
             db.session.rollback()
+            current_app.logger.error(f'Error al registrar usuario admin: {str(e)}', exc_info=True)
             flash('Error al registrar el usuario. Intenta nuevamente.', 'danger')
     
     from roles_construccion import obtener_roles_por_categoria
@@ -823,6 +852,7 @@ def usuarios_admin():
 @auth_bp.route('/usuarios/integrantes', methods=['POST'])
 @login_required
 @require_membership('admin')
+@limiter.limit("20 per minute")
 def crear_integrante_desde_panel():
     """Invita o crea un integrante dentro de la organización activa."""
     payload = request.get_json(silent=True) or request.form
@@ -962,9 +992,9 @@ def crear_integrante_desde_panel():
             usuario_objetivo.ensure_onboarding_status()
 
         db.session.commit()
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-        current_app.logger.exception('Error al crear/invitar integrante')
+        current_app.logger.error(f'Error al crear/invitar integrante {email}: {str(e)}', exc_info=True)
         return jsonify({'success': False, 'message': 'No se pudo crear el integrante. Intenta nuevamente.'}), 500
 
     send_new_member_invitation(usuario_objetivo, membership_nuevo, temp_password)
@@ -975,6 +1005,7 @@ def crear_integrante_desde_panel():
 @auth_bp.route('/usuarios/cambiar_rol', methods=['POST'])
 @login_required
 @require_membership('admin')
+@limiter.limit("30 per minute")
 def cambiar_rol():
     """Cambiar el rol de un usuario dentro de la organización actual."""
     usuario_id = request.form.get('usuario_id')
@@ -1009,18 +1040,25 @@ def cambiar_rol():
         return jsonify({'success': False, 'message': 'El usuario no pertenece a esta organización.'}), 404
 
     try:
+        old_role = objetivo.role
         objetivo.role = rol_map[nuevo_rol]
         objetivo.usuario.rol = nuevo_rol
         objetivo.usuario.role = rol_map[nuevo_rol]
         db.session.commit()
+
+        log_permission_change(objetivo.usuario.email, old_role, rol_map[nuevo_rol], current_user.email)
+        current_app.logger.info(f'Cambio de rol: {objetivo.usuario.email} {old_role} -> {rol_map[nuevo_rol]} por {current_user.email}')
+
         return jsonify({'success': True, 'message': 'Rol actualizado correctamente.'})
-    except Exception:
+    except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f'Error al cambiar rol de usuario {usuario_id}: {str(e)}', exc_info=True)
         return jsonify({'success': False, 'message': 'Error al cambiar el rol'})
 
 @auth_bp.route('/usuarios/toggle_usuario', methods=['POST'])
 @login_required
 @require_membership('admin')
+@limiter.limit("30 per minute")
 def toggle_usuario():
     """Activar o desactivar un integrante dentro de la organización actual."""
     usuario_id = request.form.get('usuario_id')
@@ -1058,6 +1096,9 @@ def toggle_usuario():
         db.session.commit()
 
         estado_texto = 'activado' if activar else 'desactivado'
+        log_data_modification('Usuario', usuario_id_int, estado_texto.capitalize(), current_user.email)
+        current_app.logger.info(f'Usuario {estado_texto}: {objetivo.usuario.email} por {current_user.email}')
+
         return jsonify({
             'success': True,
             'message': f'Usuario {estado_texto} exitosamente',
@@ -1065,8 +1106,9 @@ def toggle_usuario():
             'usuario_activo': activar,
             'usuario_id': usuario_id_int,
         })
-    except Exception:
+    except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f'Error al toggle estado de usuario {usuario_id}: {str(e)}', exc_info=True)
         return jsonify({'success': False, 'message': 'Error al cambiar el estado del usuario'})
 
 # ================================
@@ -1124,8 +1166,9 @@ def invitar_usuario():
             link_invitacion = url_for('auth.unirse_organizacion', token=current_user.organizacion.token_invitacion, _external=True)
             flash(f'Invitación enviada a {email}. Comparte este link: {link_invitacion}', 'success')
             return redirect(url_for('auth.usuarios_admin'))
-        except Exception:
+        except Exception as e:
             db.session.rollback()
+            current_app.logger.error(f'Error al invitar usuario {email}: {str(e)}', exc_info=True)
             flash('Error al enviar la invitación. Intenta de nuevo.', 'danger')
     
     return render_template('auth/invitar.html')

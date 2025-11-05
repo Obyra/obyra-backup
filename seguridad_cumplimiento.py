@@ -8,6 +8,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 import json
+from utils.pagination import Pagination
 from app import db
 from models import *
 from utils import *
@@ -176,7 +177,7 @@ def procesar_protocolo():
             descripcion=request.form.get('descripcion'),
             categoria=request.form.get('categoria'),
             obligatorio=request.form.get('obligatorio') == 'on',
-            frecuencia_revision=int(request.form.get('frecuencia_revision', 30)),
+            frecuencia_revision=safe_int(request.form.get('frecuencia_revision', 30), default=30),
             normativa_referencia=request.form.get('normativa_referencia')
         )
         
@@ -197,17 +198,19 @@ def checklists():
     """Lista de checklists de seguridad"""
     obra_id = request.args.get('obra_id', type=int)
     estado = request.args.get('estado')
-    
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
     query = ChecklistSeguridad.query
-    
+
     if obra_id:
         query = query.filter_by(obra_id=obra_id)
     if estado:
         query = query.filter_by(estado=estado)
-    
-    checklists = query.order_by(ChecklistSeguridad.fecha_inspeccion.desc()).all()
+
+    checklists = query.order_by(ChecklistSeguridad.fecha_inspeccion.desc()).paginate(page=page, per_page=per_page, error_out=False)
     obras = Obra.query.all()
-    
+
     return render_template('seguridad/checklists.html', checklists=checklists, obras=obras)
 
 @seguridad_bp.route('/nuevo_checklist')
@@ -322,7 +325,7 @@ def procesar_incidente():
             testigos=request.form.get('testigos'),
             primeros_auxilios=request.form.get('primeros_auxilios') == 'on',
             atencion_medica=request.form.get('atencion_medica') == 'on',
-            dias_perdidos=int(request.form.get('dias_perdidos', 0)),
+            dias_perdidos=safe_int(request.form.get('dias_perdidos', 0)),
             acciones_inmediatas=request.form.get('acciones_inmediatas'),
             responsable_id=current_user.id
         )

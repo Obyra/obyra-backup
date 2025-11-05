@@ -1,0 +1,112 @@
+# =========================
+# Git & Version Control
+# =========================
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# =========================
+# Docker files
+# =========================
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# =========================
+# Documentation
+# =========================
+docs/
+*.md
+!README.md
+
+# =========================
+# Python / entorno local
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.python-version
+*.egg-info/
+.eggs/
+
+# =========================
+# Secretos / config runtime
+# =========================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# =========================
+# Datos de runtime (NO copiar al container)
+# =========================
+# Instancia Flask (sqlite locales, media de usuario)
+instance/
+# Uploads locales
+uploads/
+media/
+storage/
+reports/
+logs/
+
+# =========================
+# Frontend build artifacts
+# =========================
+node_modules/
+dist/
+build/
+.npm/
+
+# =========================
+# Replit specific
+# =========================
+.replit
+replit.nix
+.repldb
+
+# =========================
+# Archivos pesados / dumps
+# =========================
+*.dump
+*.bak
+*.sql
+!migrations/**/*.sql
+!sql/*.sql
+
+# =========================
+# OS / Editores
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =========================
+# Tests / Coverage
+# =========================
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Temporary files
+# =========================
+tmp/
+temp/
+*.tmp

@@ -234,6 +234,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalConfirmarCertificacionLabel"><i class="fas fa-check-circle me-2"></i>Confirmar certificación</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
@@ -289,6 +290,7 @@
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content">
             <form method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalRegistrarPagoLabel"><i class="fas fa-coins me-2"></i>Registrar pago</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>

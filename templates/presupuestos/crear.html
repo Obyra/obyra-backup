@@ -16,9 +16,11 @@
                     <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left"></i> Volver
                     </a>
-                    <a href="{{ url_for('presupuestos.calculadora_ia') }}" class="btn btn-success">
+                    {% if has_endpoint('cotizacion.calculadora_inteligente') %}
+                    <a href="{{ url_for('cotizacion.calculadora_inteligente') }}" class="btn btn-success">
                         <i class="fas fa-brain"></i> Calculadora IA
                     </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -33,6 +35,8 @@
                 </div>
                 <div class="card-body">
                     <form id="nuevoPresupuestoForm" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="numero" id="numeroPresupuesto" value="{{ numero_sugerido }}">
                         <input type="hidden" id="iaEtapasPayload" name="ia_etapas_payload">
                         <input type="hidden" id="presupuestoIdInput" name="presupuesto_id" value="{{ presupuesto.id if presupuesto is defined and presupuesto else '' }}">
                         
@@ -668,7 +672,7 @@ function aplicarGeocodificacion(data, index = 0) {
     }
 
     const latNum = Number(data.lat);
-    const lngNum = Number(data.lng);
+    const lngNum = Number(data.lon);
     if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
         const latInput = document.getElementById('ubicacion_lat');
         const lngInput = document.getElementById('ubicacion_lng');
@@ -747,12 +751,12 @@ async function buscarUbicacion(query = null, options = {}) {
     }
 
     try {
-        const response = await fetch(`/presupuestos/geo/sugerencias?q=${encodeURIComponent(direccion)}`);
+        const response = await fetch(`/obras/api/buscar-direcciones?q=${encodeURIComponent(direccion)}`);
         if (!response.ok) {
             throw new Error('No se pudo validar la dirección');
         }
         const data = await response.json();
-        sugerenciasActuales = (data && data.resultados) ? data.resultados : [];
+        sugerenciasActuales = (data && data.results) ? data.results : [];
         geocodeSugerenciasCache.set(cacheKey, sugerenciasActuales);
 
         if (sugerenciasActuales.length === 0) {
@@ -1076,9 +1080,16 @@ function solicitarCalculoEtapas(etapas) {
     document.getElementById('resumenEtapasIAMetadatos').style.display = 'none';
     modal.show();
 
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+    }
+
     fetch('/presupuestos/ia/calcular/etapas', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(payload)
     })
         .then(resp => resp.json())
@@ -1222,9 +1233,14 @@ function aplicarResultadosEtapasIA() {
             moneda: persistCurrency
         };
 
+        const persistHeaders = { 'Content-Type': 'application/json' };
+        if (csrfToken) {
+            persistHeaders['X-CSRFToken'] = csrfToken;
+        }
+
         fetch('/presupuestos/ia/calcular/etapas', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: persistHeaders,
             body: JSON.stringify(persistPayload)
         })
             .then(resp => resp.json())

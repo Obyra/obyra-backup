@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Error 500 - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="error-template">
+                <h1 class="display-1 fw-bold text-danger">500</h1>
+                <h2 class="mb-4">Error Interno del Servidor</h2>
+                <div class="error-details mb-4">
+                    <p class="lead">Lo sentimos, algo salio mal en nuestros servidores.</p>
+                    <p>Nuestro equipo ha sido notificado y estamos trabajando para resolver el problema.</p>
+                </div>
+                <div class="error-actions mt-5">
+                    <a href="/" class="btn btn-primary btn-lg me-2">
+                        <i class="bi bi-house-door"></i> Ir al Inicio
+                    </a>
+                    <a href="javascript:history.back()" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-arrow-left"></i> Volver Atras
+                    </a>
+                </div>
+
+                <div class="mt-5 text-muted">
+                    <small>
+                        Si el problema persiste, contacta a nuestro soporte tecnico.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .error-template {
+        padding: 40px 15px;
+    }
+    .error-template h1 {
+        font-size: 8rem;
+    }
+    .error-details {
+        padding: 20px;
+    }
+</style>
+{% endblock %}

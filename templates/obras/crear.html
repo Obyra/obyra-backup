@@ -20,6 +20,7 @@
             <div class="card shadow">
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <!-- Información básica -->
                         <h5 class="border-bottom pb-2 mb-3">Información Básica</h5>
                         
@@ -133,19 +134,19 @@ let debounceTimer;
 
 direccionInput.addEventListener('input', function() {
     const query = this.value.trim();
-    
+
     // Limpiar timer anterior
     clearTimeout(debounceTimer);
-    
+
     if (query.length < 3) {
         hideSuggestions();
         return;
     }
-    
-    // Esperar 300ms antes de hacer la búsqueda
+
+    // Esperar 600ms antes de hacer la búsqueda (aumentado para mejor UX)
     debounceTimer = setTimeout(() => {
         searchAddresses(query);
-    }, 300);
+    }, 600);
 });
 
 // Ocultar sugerencias al hacer clic fuera
@@ -156,13 +157,20 @@ document.addEventListener('click', function(e) {
 });
 
 function searchAddresses(query) {
-    // Usar Nominatim (OpenStreetMap) como alternativa gratuita a Google Places
-    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(query + ' Argentina')}`;
-    
-    fetch(url)
+    // Usar el endpoint del backend que llama a Nominatim con headers apropiados
+    const url = `/obras/api/buscar-direcciones?q=${encodeURIComponent(query)}`;
+
+    fetch(url, {
+        credentials: 'same-origin'
+    })
         .then(response => response.json())
         .then(data => {
-            displaySuggestions(data);
+            if (data.ok && data.results) {
+                displaySuggestions(data.results);
+            } else {
+                console.warn('No se encontraron resultados');
+                hideSuggestions();
+            }
         })
         .catch(error => {
             console.error('Error al buscar direcciones:', error);

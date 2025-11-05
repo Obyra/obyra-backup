@@ -136,6 +136,7 @@
                             <form method="POST" action="{{ url_for('equipos.toggle_activo', id=usuario.id) }}"
                                   style="display: inline;"
                                   onsubmit="return confirm('¿{{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }} este usuario?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if miembro.status == 'active' and usuario.activo else 'btn-outline-success' }} w-100">
                                     <i class="fas fa-{{ 'user-slash' if miembro.status == 'active' and usuario.activo else 'user-check' }} me-1"></i>
                                     {{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }}

@@ -1,0 +1,244 @@
+# ============================================
+# OBYRA - Production Docker Compose
+# ============================================
+
+services:
+  # ==========================================
+  # PostgreSQL Database
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: obyra-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-obyra_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-obyra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      # Performance tuning
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5436:5432"  # Puerto externo 5436 (libre)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-obyra} -d ${POSTGRES_DB:-obyra_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - obyra-network
+
+  # ==========================================
+  # Redis - Cache & Session Store
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: obyra-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6381:6379"  # Puerto externo 6381 (libre)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - obyra-network
+
+  # ==========================================
+  # Flask Application (Gunicorn)
+  # ==========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: obyra-app
+    restart: unless-stopped
+    environment:
+      # Flask
+      FLASK_APP: app.py
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+
+      # Database
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-obyra}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-obyra_prod}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_MIGRATOR_USER:-obyra_migrator}:${POSTGRES_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-obyra_prod}
+
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      SESSION_TYPE: redis
+
+      # Application
+      BASE_URL: ${BASE_URL:-http://localhost}
+
+      # Email
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@obyra.com}
+
+      # Payments
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
+      MP_WEBHOOK_PUBLIC_URL: ${MP_WEBHOOK_PUBLIC_URL}
+      PLATFORM_COMMISSION_RATE: ${PLATFORM_COMMISSION_RATE:-0.10}
+
+      # AI Services (Optional)
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # OAuth (Optional)
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+
+      # Maps/Geocoding
+      MAPS_PROVIDER: ${MAPS_PROVIDER:-nominatim}
+      MAPS_API_KEY: ${MAPS_API_KEY}
+      MAPS_USER_AGENT: ${MAPS_USER_AGENT:-OBYRA/1.0}
+
+      # Feature Flags
+      ENABLE_REPORTS: ${ENABLE_REPORTS:-1}
+      ENABLE_GOOGLE_OAUTH_HELP: ${ENABLE_GOOGLE_OAUTH_HELP:-0}
+      WIZARD_BUDGET_BREAKDOWN_ENABLED: ${WIZARD_BUDGET_BREAKDOWN_ENABLED:-1}
+
+      # Migrations
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+
+    volumes:
+      - app_storage:/app/storage
+      - app_reports:/app/reports
+      - app_logs:/app/logs
+      - app_instance:/app/instance
+    ports:
+      - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - obyra-network
+
+  # ==========================================
+  # Celery Worker - Background Tasks
+  # ==========================================
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: obyra-celery-worker
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info --concurrency=4
+    environment:
+      # Same env as app but for celery
+      FLASK_APP: app.py
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-obyra}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-obyra_prod}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      RUN_MIGRATIONS: "false"  # Don't run migrations in celery workers
+    volumes:
+      - app_storage:/app/storage
+      - app_reports:/app/reports
+      - app_logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - obyra-network
+
+  # ==========================================
+  # Celery Beat - Scheduled Tasks
+  # ==========================================
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: obyra-celery-beat
+    restart: unless-stopped
+    command: celery -A celery_app beat --loglevel=info --schedule=/app/logs/celerybeat-schedule
+    environment:
+      FLASK_APP: app.py
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-obyra}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-obyra_prod}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      RUN_MIGRATIONS: "false"  # Don't run migrations in celery beat
+    volumes:
+      - app_logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - obyra-network
+
+  # ==========================================
+  # Nginx - Reverse Proxy & Static Files
+  # ==========================================
+  nginx:
+    image: nginx:alpine
+    container_name: obyra-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"   # Puerto externo 8080 (80 puede requerir root)
+      - "8443:443"  # Puerto externo 8443
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./static:/app/static:ro
+      - nginx_logs:/var/log/nginx
+      # For SSL certificates (if using Let's Encrypt)
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - obyra-network
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  obyra-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+# ============================================
+# Volumes (Persistent Data)
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_storage:
+    driver: local
+  app_reports:
+    driver: local
+  app_logs:
+    driver: local
+  app_instance:
+    driver: local
+  nginx_logs:
+    driver: local

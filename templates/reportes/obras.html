@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de Obras - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-building me-2 text-primary"></i>Reporte de Obras
+                </h1>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Dashboard
+                    </a>
+                    <button class="btn btn-success" onclick="exportarReporte()">
+                        <i class="fas fa-file-excel me-1"></i>Exportar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs / Estadísticas -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ estadisticas.total_obras }}</h3>
+                            <p class="mb-0 text-muted">Total de Obras</p>
+                        </div>
+                        <i class="fas fa-building fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">${{ estadisticas.total_presupuesto|default(0)|round(1) }}M</h3>
+                            <p class="mb-0 text-muted">Presupuesto Total</p>
+                        </div>
+                        <i class="fas fa-dollar-sign fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ estadisticas.progreso_promedio|default(0)|round(1) }}%</h3>
+                            <p class="mb-0 text-muted">Progreso Promedio</p>
+                        </div>
+                        <i class="fas fa-chart-line fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todos los estados</option>
+                        <option value="planificacion" {% if estado == 'planificacion' %}selected{% endif %}>Planificación</option>
+                        <option value="en_curso" {% if estado == 'en_curso' %}selected{% endif %}>En Curso</option>
+                        <option value="pausada" {% if estado == 'pausada' %}selected{% endif %}>Pausada</option>
+                        <option value="finalizada" {% if estado == 'finalizada' %}selected{% endif %}>Finalizada</option>
+                        <option value="cancelada" {% if estado == 'cancelada' %}selected{% endif %}>Cancelada</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fecha Desde</label>
+                    <input type="date" name="fecha_desde" class="form-control" value="{{ fecha_desde }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fecha Hasta</label>
+                    <input type="date" name="fecha_hasta" class="form-control" value="{{ fecha_hasta }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de Obras -->
+    {% if obras %}
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Obra</th>
+                                <th>Cliente</th>
+                                <th>Fechas</th>
+                                <th>Presupuesto</th>
+                                <th>Costo Real</th>
+                                <th>Progreso</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for obra in obras %}
+                            <tr>
+                                <td>
+                                    <div>
+                                        <strong>{{ obra.nombre }}</strong>
+                                        {% if obra.descripcion %}
+                                        <div class="small text-muted">{{ obra.descripcion|truncate(50) }}</div>
+                                        {% endif %}
+                                        {% if obra.direccion %}
+                                        <div class="small text-muted">
+                                            <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion|truncate(40) }}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>{{ obra.cliente or obra.cliente_nombre or '-' }}</div>
+                                    {% if obra.telefono_cliente %}
+                                    <div class="small text-muted">
+                                        <i class="fas fa-phone me-1"></i>{{ obra.telefono_cliente }}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if obra.fecha_inicio %}
+                                    <div class="small">
+                                        <strong>Inicio:</strong> {{ obra.fecha_inicio.strftime('%d/%m/%Y') }}
+                                    </div>
+                                    {% endif %}
+                                    {% if obra.fecha_fin_estimada %}
+                                    <div class="small">
+                                        <strong>Fin Est:</strong> {{ obra.fecha_fin_estimada.strftime('%d/%m/%Y') }}
+                                    </div>
+                                    {% endif %}
+                                    {% if obra.fecha_fin_real %}
+                                    <div class="small text-success">
+                                        <strong>Fin Real:</strong> {{ obra.fecha_fin_real.strftime('%d/%m/%Y') }}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong class="text-primary">
+                                        ${{ obra.presupuesto_total|default(0)|round(2)|moneda }}
+                                    </strong>
+                                </td>
+                                <td>
+                                    {% set costo = obra.costo_real|default(0) %}
+                                    {% set presupuesto = obra.presupuesto_total|default(1) %}
+                                    {% set porcentaje = (costo / presupuesto * 100) if presupuesto > 0 else 0 %}
+
+                                    <div>
+                                        <strong class="{% if porcentaje > 100 %}text-danger{% else %}text-success{% endif %}">
+                                            ${{ costo|round(2)|moneda }}
+                                        </strong>
+                                    </div>
+                                    {% if presupuesto > 0 %}
+                                    <div class="small {% if porcentaje > 100 %}text-danger{% else %}text-muted{% endif %}">
+                                        {{ porcentaje|round(1) }}% del presupuesto
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress flex-grow-1" style="height: 20px; min-width: 80px;">
+                                            <div class="progress-bar
+                                                {% if obra.progreso >= 75 %}bg-success
+                                                {% elif obra.progreso >= 50 %}bg-info
+                                                {% elif obra.progreso >= 25 %}bg-warning
+                                                {% else %}bg-danger{% endif %}"
+                                                role="progressbar"
+                                                style="width: {{ obra.progreso }}%"
+                                                aria-valuenow="{{ obra.progreso }}"
+                                                aria-valuemin="0"
+                                                aria-valuemax="100">
+                                                {{ obra.progreso }}%
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if obra.estado == 'planificacion' %}
+                                    <span class="badge bg-secondary">Planificación</span>
+                                    {% elif obra.estado == 'en_curso' %}
+                                    <span class="badge bg-primary">En Curso</span>
+                                    {% elif obra.estado == 'pausada' %}
+                                    <span class="badge bg-warning">Pausada</span>
+                                    {% elif obra.estado == 'finalizada' %}
+                                    <span class="badge bg-success">Finalizada</span>
+                                    {% elif obra.estado == 'cancelada' %}
+                                    <span class="badge bg-danger">Cancelada</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ obra.estado }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        {% if has_endpoint('obras.ver_obra') %}
+                                        <a href="{{ url_for('obras.ver_obra', obra_id=obra.id) }}"
+                                           class="btn btn-outline-primary"
+                                           title="Ver detalle">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        {% endif %}
+                                        {% if has_endpoint('obras.editar_obra') %}
+                                        <a href="{{ url_for('obras.editar_obra', obra_id=obra.id) }}"
+                                           class="btn btn-outline-secondary"
+                                           title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                <h4>No se encontraron obras</h4>
+                <p class="text-muted">
+                    {% if estado or fecha_desde or fecha_hasta %}
+                    No hay obras que coincidan con los filtros seleccionados.
+                    <a href="{{ url_for('reportes.reporte_obras') }}">Ver todas las obras</a>
+                    {% else %}
+                    No hay obras registradas en el sistema.
+                    {% endif %}
+                </p>
+                {% if has_endpoint('obras.crear_obra') %}
+                <a href="{{ url_for('obras.crear_obra') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Crear Primera Obra
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Resumen por Estado -->
+    {% if obras %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Resumen por Estado</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% set estados_count = {} %}
+                        {% for obra in obras %}
+                            {% if obra.estado not in estados_count %}
+                                {% set _ = estados_count.update({obra.estado: 0}) %}
+                            {% endif %}
+                            {% set _ = estados_count.update({obra.estado: estados_count[obra.estado] + 1}) %}
+                        {% endfor %}
+
+                        {% for estado_key, count in estados_count.items() %}
+                        <div class="col-md-4 mb-3">
+                            <div class="d-flex justify-content-between align-items-center p-3 border rounded">
+                                <div>
+                                    <h6 class="mb-0">
+                                        {% if estado_key == 'planificacion' %}Planificación
+                                        {% elif estado_key == 'en_curso' %}En Curso
+                                        {% elif estado_key == 'pausada' %}Pausada
+                                        {% elif estado_key == 'finalizada' %}Finalizada
+                                        {% elif estado_key == 'cancelada' %}Cancelada
+                                        {% else %}{{ estado_key|title }}
+                                        {% endif %}
+                                    </h6>
+                                    <small class="text-muted">{{ (count / obras|length * 100)|round(1) }}% del total</small>
+                                </div>
+                                <h3 class="mb-0">{{ count }}</h3>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportarReporte() {
+    // Obtener los parámetros de filtro actuales
+    const params = new URLSearchParams(window.location.search);
+    params.append('export', 'excel');
+
+    // Crear URL de exportación
+    const exportUrl = `{{ url_for('reportes.reporte_obras') }}?${params.toString()}`;
+
+    // Abrir en nueva pestaña o descargar
+    window.location.href = exportUrl;
+}
+
+// Opcional: Auto-actualizar cada 5 minutos si está en vista de obras en curso
+{% if estado == 'en_curso' %}
+setTimeout(() => {
+    console.log('Auto-refrescando reporte de obras en curso...');
+    location.reload();
+}, 300000); // 5 minutos
+{% endif %}
+</script>
+{% endblock %}

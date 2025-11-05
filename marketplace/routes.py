@@ -4,12 +4,15 @@ Following strict instructions for namespaced routes and seller masking
 """
 
 from flask import Blueprint, request, jsonify, current_app
+from flask_login import login_required, current_user
 from app import db
 from marketplace.models import *
 from marketplace.services.masking import redact_public, apply_seller_masking, get_masked_seller_name
 from marketplace.services.commissions import compute as compute_commission
 from marketplace.services.po_pdf import generate_po_pdf
 from marketplace.services.emailer import send_po_notification, send_order_confirmation
+from services.memberships import get_current_org_id
+from utils.security_logger import log_transaction, log_data_modification
 import json
 import logging
 from datetime import datetime
@@ -104,14 +107,14 @@ def api_product_detail(product_id):
 
 # ===== AUTHENTICATED API (REAL SELLER IN CART/ORDERS) =====
 @bp.route('/api/market/cart/items', methods=['POST'])
+@login_required
 def api_add_to_cart():
     """Add item to cart"""
-    # TODO: Add authentication check
     data = request.get_json()
     variant_id = data.get('variant_id')
     qty = data.get('qty', 1)
-    buyer_user_id = data.get('buyer_user_id', 1)  # TODO: Get from auth
-    buyer_company_id = data.get('buyer_company_id', 1)  # TODO: Get from auth
+    buyer_user_id = current_user.id
+    buyer_company_id = get_current_org_id()
     
     variant = MkProductVariant.query.get_or_404(variant_id)
     
@@ -153,11 +156,11 @@ def api_add_to_cart():
     return jsonify({"message": "Item added to cart", "cart_total": float(cart.total_amount)})
 
 @bp.route('/api/market/cart')
+@login_required
 def api_get_cart():
     """Get cart with REAL seller names (authenticated endpoint)"""
-    # TODO: Get from authentication
-    buyer_user_id = request.args.get('buyer_user_id', 1, type=int)
-    buyer_company_id = request.args.get('buyer_company_id', 1, type=int)
+    buyer_user_id = current_user.id
+    buyer_company_id = get_current_org_id()
     
     cart = MkCart.query.filter_by(
         buyer_company_id=buyer_company_id,
@@ -193,17 +196,20 @@ def api_get_cart():
     return jsonify({"groups": groups})
 
 @bp.route('/api/market/checkout', methods=['POST'])
+@login_required
 def api_checkout():
     """Create order from cart with commission calculation"""
     data = request.get_json()
-    cart_id = data.get('cart_id', 1)  # TODO: Get from authenticated cart
-    buyer_user_id = data.get('buyer_user_id', 1)  # TODO: Get from auth
-    buyer_company_id = data.get('buyer_company_id', 1)  # TODO: Get from auth
+    buyer_user_id = current_user.id
+    buyer_company_id = get_current_org_id()
     billing = data.get('billing', {})
     shipping = data.get('shipping', {})
-    
-    # Get cart
-    cart = MkCart.query.get_or_404(cart_id)
+
+    # Get cart for authenticated user
+    cart = MkCart.query.filter_by(
+        buyer_company_id=buyer_company_id,
+        buyer_user_id=buyer_user_id
+    ).first_or_404()
     
     if not cart.items.count():
         return jsonify({"error": "Cart is empty"}), 400
@@ -245,12 +251,17 @@ def api_checkout():
     
     # Clear cart
     MkCartItem.query.filter_by(cart_id=cart.id).delete()
-    
+
     db.session.commit()
-    
+
+    # Log transaction
+    user_email = current_user.email if current_user.is_authenticated else 'anonymous'
+    log_transaction('ORDEN_CREADA', float(order.total), order.currency, order.order_number, user_email)
+    current_app.logger.info(f'Orden marketplace creada: {order.id} - {order.order_number} por {user_email} - Total: {order.currency} {order.total}')
+
     # TODO: Create payment URL with MercadoPago
     payment_url = f"/market/payment/{order.id}"
-    
+
     return jsonify({
         "order_id": order.id,
         "order_number": order.order_number,
@@ -288,6 +299,11 @@ def api_mp_webhook():
             currency='ARS'
         )
         db.session.add(payment)
+
+        # Log payment
+        user_email = order.buyer_user.email if order.buyer_user else 'unknown'
+        log_transaction('PAGO_APROBADO', float(amount), 'ARS', f'MP-{payment_id}', user_email)
+        current_app.logger.info(f'Pago marketplace aprobado: Order {order.id} - Payment {payment_id} - Amount: ARS {amount}')
         
         # Generate purchase orders by seller
         sellers_items = {}

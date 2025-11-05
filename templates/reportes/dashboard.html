@@ -301,13 +301,15 @@
                             </div>
                         </a>
                         
-                        <a href="{{ url_for('presupuestos.calculadora_ia') }}" class="btn btn-success d-flex align-items-center">
+                        {% if has_endpoint('cotizacion.calculadora_inteligente') %}
+                        <a href="{{ url_for('cotizacion.calculadora_inteligente') }}" class="btn btn-success d-flex align-items-center">
                             <i class="fas fa-calculator me-3"></i>
                             <div class="text-start">
                                 <div class="fw-bold">Calcular Cómputo</div>
                                 <small>Estimar materiales</small>
                             </div>
                         </a>
+                        {% endif %}
                         
                         <a href="{{ url_for('marketplaces.index') }}" class="btn btn-warning d-flex align-items-center">
                             <i class="fas fa-store me-3"></i>

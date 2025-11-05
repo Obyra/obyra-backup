@@ -11,6 +11,7 @@
         </div>
 
         <form method="POST" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="row">
                 <div class="col-md-6 mb-3">
                     <label for="nombre" class="form-label">Nombre <span class="text-danger">*</span></label>

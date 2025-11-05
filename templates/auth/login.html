@@ -12,6 +12,7 @@
         </div>
 
         <form method="POST" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             {% if next_value %}
             <input type="hidden" name="next" value="{{ next_value }}">
             {% endif %}

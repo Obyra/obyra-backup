@@ -4,7 +4,7 @@ from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
-                   AsignacionObra, UsoInventario, MovimientoInventario)
+                   AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia
 from services.memberships import get_current_org_id
 from services.obras_filters import obras_visibles_clause
@@ -439,8 +439,8 @@ def reporte_inventario():
     
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
-    
-    items = query.filter_by(activo=True).order_by(ItemInventario.nombre).all()
+
+    items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
     
     # Calcular valor total del inventario
     valor_total = sum(float(item.stock_actual) * float(item.precio_promedio) for item in items)

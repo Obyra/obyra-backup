@@ -12,6 +12,7 @@
         </div>
 
         <form method="POST" class="auth-form" action="{{ submit_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="portal" value="{{ portal }}">
             <div class="mb-3">
                 <label for="password" class="form-label">Nueva contraseña</label>

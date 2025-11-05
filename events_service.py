@@ -9,6 +9,7 @@ from models import Event, Obra, db
 from sqlalchemy import desc
 from datetime import datetime, timedelta
 import logging
+from utils import safe_int
 
 # Blueprint para endpoints de eventos
 events_bp = Blueprint('events', __name__)
@@ -31,8 +32,8 @@ def get_events():
     """
     try:
         # Parámetros con validación
-        limit = min(int(request.args.get('limit', 25)), 100)
-        offset = max(int(request.args.get('offset', 0)), 0)
+        limit = min(safe_int(request.args.get('limit', 25), default=25), 100)
+        offset = max(safe_int(request.args.get('offset', 0)), 0)
         project_id = request.args.get('project_id', type=int)
         event_type = request.args.get('type')
         severity = request.args.get('severity')

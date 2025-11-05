@@ -41,12 +41,16 @@ document.addEventListener('DOMContentLoaded', () => {
             payload[key] = typeof value === 'string' ? value.trim() : value;
         }
 
+        // Obtener el token CSRF de la meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
         try {
             const response = await fetch(form.action, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify(payload)
             });

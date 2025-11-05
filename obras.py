@@ -7,8 +7,11 @@ import json
 import requests
 import logging
 from app import db
+from extensions import limiter
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
+from utils.pagination import Pagination
+from utils import safe_int
 from models import (
     Obra,
     EtapaObra,
@@ -47,6 +50,8 @@ from services.certifications import (
     resolve_budget_context,
 )
 from services import wizard_budgeting
+from services.project_shared_service import ProjectSharedService
+from utils.security_logger import log_data_modification, log_data_deletion
 
 obras_bp = Blueprint('obras', __name__)
 
@@ -63,79 +68,18 @@ def _to_coord_decimal(value):
         return None
 
 
-def _parse_date(value):
-    if not value:
-        return None
-    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
-        try:
-            return datetime.strptime(value, fmt).date()
-        except ValueError:
-            continue
-    return None
+# ==== Helpers de roles/permiso - Delegados al servicio compartido ====
 
+# Funciones auxiliares
+_parse_date = ProjectSharedService.parse_date
+_get_roles_usuario = ProjectSharedService.get_roles_usuario
+is_admin = ProjectSharedService.is_admin
+is_pm_global = ProjectSharedService.is_pm_global
 
-# ==== Helpers de roles/permiso (compat role/rol) ====
-
-def _get_roles_usuario(user):
-    """Devuelve set normalizado de roles posibles del usuario, considerando .role y .rol."""
-    vals = set()
-    for attr in ('role', 'rol'):
-        v = getattr(user, attr, None)
-        if v:
-            vals.add(str(v).lower())
-    return vals
-
-def is_admin():
-    """Verifica si el usuario actual es admin (admin/administrador)."""
-    roles = _get_roles_usuario(current_user)
-    return any(r in roles for r in ('admin', 'administrador'))
-
-def is_pm_global():
-    """Admin, PM global o técnico (compatibilidad)."""
-    roles = _get_roles_usuario(current_user)
-    return any(r in roles for r in ('admin', 'administrador', 'pm', 'project_manager', 'tecnico'))
-
-def can_manage_obra(obra):
-    """Verifica si el usuario puede gestionar la obra (crear/editar/etapas y tareas)."""
-    if is_admin() or is_pm_global():
-        return True
-    # PM específico de esta obra
-    miembro = ObraMiembro.query.filter_by(
-        obra_id=obra.id,
-        usuario_id=current_user.id,
-        rol_en_obra='pm'
-    ).first()
-    return miembro is not None
-
-def can_log_avance(tarea):
-    """Verifica si el usuario puede registrar avances en una tarea."""
-    if is_admin():
-        return True
-    roles = _get_roles_usuario(current_user)
-    if 'pm' in roles or 'project_manager' in roles or 'tecnico' in roles:
-        return True
-    if tarea.responsable_id == current_user.id:
-        return True
-    miembro = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
-    return miembro is not None
-
-def es_miembro_obra(obra_id, user_id):
-    """Verificar si el usuario es miembro de la obra (cualquier rol)."""
-    if is_pm_global():
-        return True
-
-    miembro = db.session.query(ObraMiembro.id)\
-        .filter_by(obra_id=obra_id, usuario_id=user_id).first()
-    if miembro:
-        return True
-
-    tiene_tareas = (db.session.query(TareaMiembro.id)
-                   .join(TareaEtapa, TareaMiembro.tarea_id == TareaEtapa.id)
-                   .join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id)
-                   .filter(EtapaObra.obra_id == obra_id,
-                           TareaMiembro.user_id == user_id)
-                   .first())
-    return tiene_tareas is not None
+# Funciones de permisos
+can_manage_obra = ProjectSharedService.can_manage_obra
+can_log_avance = ProjectSharedService.can_log_avance
+es_miembro_obra = ProjectSharedService.es_miembro_obra
 
 
 # ==== Error handlers JSON-aware ====
@@ -171,6 +115,72 @@ def handle_403(error):
     if request.is_json or 'application/json' in request.headers.get('Accept', ''):
         return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
     raise error
+
+
+# ==== API endpoints ====
+
+@obras_bp.route('/api/buscar-direcciones', methods=['GET'])
+@login_required
+def buscar_direcciones():
+    """API endpoint para buscar direcciones usando Nominatim (optimizado para Argentina)"""
+    query = request.args.get('q', '').strip()
+
+    if not query:
+        return jsonify({'ok': False, 'error': 'Query is required'}), 400
+
+    try:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            'q': query,
+            'format': 'json',
+            'limit': 10,  # Aumentado para más opciones
+            'addressdetails': 1,
+            'countrycodes': 'ar',  # Limitar a Argentina
+            'bounded': 1,  # Búsqueda acotada
+            'viewbox': '-73.5,-55,-53,-21.5',  # Bounds de Argentina
+            'dedupe': 1  # Eliminar duplicados
+        }
+        headers = {
+            'User-Agent': 'OBYRA-IA-Construction-Management/1.0',
+            'Accept-Language': 'es-AR,es;q=0.9'  # Preferir resultados en español
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=8)
+
+        if response.status_code == 200:
+            data = response.json()
+            # Filtrar y ordenar resultados por relevancia
+            filtered = []
+            for item in data:
+                # Priorizar resultados en Buenos Aires y ciudades principales
+                item['relevance'] = 0
+                if 'address' in item:
+                    addr = item.get('address', {})
+                    # Boost para Buenos Aires y CABA
+                    if 'Buenos Aires' in str(addr) or 'CABA' in str(addr):
+                        item['relevance'] += 2
+                    # Boost si tiene calle + número
+                    if 'road' in addr and 'house_number' in addr:
+                        item['relevance'] += 3
+                    # Penalizar si es solo provincia o país
+                    if addr.get('type') in ['state', 'country']:
+                        item['relevance'] -= 5
+                filtered.append(item)
+
+            # Ordenar por relevancia
+            filtered.sort(key=lambda x: x.get('relevance', 0), reverse=True)
+
+            return jsonify({'ok': True, 'results': filtered[:10]})
+        else:
+            current_app.logger.warning(f"Nominatim returned status {response.status_code}")
+            return jsonify({'ok': False, 'error': 'Search service unavailable'}), 503
+
+    except requests.exceptions.Timeout:
+        current_app.logger.warning(f"Nominatim timeout for query: {query}")
+        return jsonify({'ok': False, 'error': 'Search timeout'}), 504
+    except Exception as e:
+        current_app.logger.error(f"Error searching addresses: {str(e)}")
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
 
 
 # ==== Métricas y utilidades ====
@@ -273,6 +283,8 @@ def lista():
 
     estado = request.args.get('estado', '')
     buscar = (request.args.get('buscar', '') or '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
 
     org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
 
@@ -283,7 +295,7 @@ def lista():
 
     mostrar_borradores = puede_ver_borradores and request.args.get('mostrar_borradores') == '1'
 
-    obras = []
+    obras = None
     if org_id:
         query = Obra.query.filter(Obra.organizacion_id == org_id)
 
@@ -302,10 +314,10 @@ def lista():
                 )
             )
 
-        obras = query.order_by(Obra.fecha_creacion.desc()).all()
+        obras = query.order_by(Obra.fecha_creacion.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
         geocoded = False
-        for obra in obras:
+        for obra in obras.items:
             if (obra.latitud is not None and obra.longitud is not None) or not obra.direccion:
                 continue
 
@@ -358,6 +370,8 @@ def lista():
                 db.session.rollback()
     else:
         flash('Selecciona una organización para ver tus obras.', 'warning')
+        # Crear objeto de paginación vacío
+        obras = Pagination(None, page, per_page, 0, [])
 
     return render_template(
         'obras/lista.html',
@@ -448,6 +462,8 @@ def crear():
         try:
             db.session.add(nueva_obra)
             db.session.commit()
+            log_data_modification('Obra', nueva_obra.id, 'Creada', current_user.email)
+            current_app.logger.info(f'Obra creada: {nueva_obra.id} - {nombre} por usuario {current_user.email}')
             flash(f'Obra "{nombre}" creada exitosamente.', 'success')
             return redirect(url_for('obras.detalle', id=nueva_obra.id))
         except Exception as e:
@@ -561,10 +577,7 @@ def editar(id):
             if coords:
                 obra.latitud, obra.longitud = coords
     obra.estado = request.form.get('estado', obra.estado)
-    try:
-        obra.progreso = int(request.form.get('progreso', obra.progreso))
-    except Exception:
-        pass
+    obra.progreso = safe_int(request.form.get('progreso', obra.progreso), default=obra.progreso)
 
     fecha_inicio = request.form.get('fecha_inicio')
     if fecha_inicio:
@@ -589,6 +602,8 @@ def editar(id):
 
     try:
         db.session.commit()
+        log_data_modification('Obra', obra.id, 'Actualizada', current_user.email)
+        current_app.logger.info(f'Obra actualizada: {obra.id} - {obra.nombre} por usuario {current_user.email}')
         flash('Obra actualizada exitosamente.', 'success')
     except Exception:
         db.session.rollback()
@@ -715,7 +730,17 @@ def asignar_usuario(obra_id):
                 flash('Seleccioná al menos un usuario', 'danger')
                 return redirect(url_for('obras.detalle', id=obra_id))
 
-        usuarios = Usuario.query.filter(Usuario.id.in_(user_ids)).all()
+        # Convertir user_ids a integers
+        try:
+            user_ids_int = [int(uid) for uid in user_ids]
+        except (ValueError, TypeError):
+            if is_ajax:
+                return jsonify({"ok": False, "error": "IDs de usuario inválidos"}), 400
+            else:
+                flash('IDs de usuario inválidos', 'danger')
+                return redirect(url_for('obras.detalle', id=obra_id))
+
+        usuarios = Usuario.query.filter(Usuario.id.in_(user_ids_int)).all()
         if not usuarios:
             if is_ajax:
                 return jsonify({"ok": False, "error": "Usuarios inválidos"}), 400
@@ -728,14 +753,14 @@ def asignar_usuario(obra_id):
 
         creados = 0
         ya_existian = 0
-        for uid in user_ids:
+        for uid in user_ids_int:
             try:
                 result = db.session.execute(
                     text("""
                     INSERT INTO obra_miembros (obra_id, usuario_id, rol_en_obra, etapa_id)
                     VALUES (:o, :u, :rol, :etapa)
                     ON CONFLICT (obra_id, usuario_id) DO NOTHING
-                    """), {"o": obra_id, "u": int(uid), "rol": rol_en_obra, "etapa": etapa_id}
+                    """), {"o": obra_id, "u": uid, "rol": rol_en_obra, "etapa": etapa_id}
                 )
                 if result.rowcount == 0:
                     ya_existian += 1
@@ -954,10 +979,22 @@ def asignar_usuarios():
         if not can_manage_obra(obra):
             return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
 
+        # Validar usuarios - convertir a int primero
+        user_ids_int = []
         for uid in user_ids:
-            user = Usuario.query.get(int(uid))
-            if not user or user.organizacion_id != current_user.organizacion_id:
-                return jsonify(ok=False, error=f"Usuario {uid} no pertenece a la organización"), 403
+            try:
+                user_ids_int.append(int(uid))
+            except (ValueError, TypeError):
+                return jsonify(ok=False, error=f"ID de usuario inválido: {uid}"), 400
+
+        # Verificar que todos los usuarios existen y pertenecen a la organización
+        usuarios = Usuario.query.filter(Usuario.id.in_(user_ids_int)).all()
+        if len(usuarios) != len(user_ids_int):
+            return jsonify(ok=False, error="Uno o más usuarios no existen"), 404
+
+        for user in usuarios:
+            if user.organizacion_id != current_user.organizacion_id:
+                return jsonify(ok=False, error=f"Usuario {user.id} no pertenece a la organización"), 403
 
         asignaciones_creadas = 0
 
@@ -967,12 +1004,12 @@ def asignar_usuarios():
                 current_app.logger.warning(f"Skipping invalid task {tid}")
                 continue
 
-            for uid in set(user_ids):
-                existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=int(uid)).first()
+            for uid in set(user_ids_int):
+                existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=uid).first()
                 if not existing:
                     nueva_asignacion = TareaMiembro(
                         tarea_id=int(tid),
-                        user_id=int(uid),
+                        user_id=uid,
                         cuota_objetivo=cuota
                     )
                     db.session.add(nueva_asignacion)
@@ -1150,103 +1187,7 @@ def crear_avance(tarea_id):
 @login_required
 def api_crear_avance_fotos(tarea_id):
     """Create progress entry with multiple photos - specification compliant"""
-    from werkzeug.utils import secure_filename
-    from pathlib import Path
-    import uuid
-
-    tarea = TareaEtapa.query.get_or_404(tarea_id)
-
-    if not can_log_avance(tarea):
-        return jsonify(ok=False, error="Sin permisos para registrar avance en esta tarea"), 403
-
-    roles = _get_roles_usuario(current_user)
-    if 'operario' in roles:
-        from_dashboard = request.headers.get('X-From-Dashboard') == '1'
-        if not from_dashboard:
-            return jsonify(ok=False, error="Los operarios solo pueden registrar avances desde su dashboard"), 403
-
-    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
-        return jsonify(ok=False, error="Sin permiso"), 403
-
-    cantidad_str = str(request.form.get("cantidad_ingresada", "")).replace(",", ".")
-    try:
-        cantidad = float(cantidad_str)
-        if cantidad <= 0:
-            return jsonify(ok=False, error="La cantidad debe ser mayor a 0"), 400
-    except (ValueError, TypeError):
-        return jsonify(ok=False, error="Cantidad inválida"), 400
-
-    unidad_servidor = normalize_unit(tarea.unidad)
-    horas_trabajadas = request.form.get("horas_trabajadas", type=float)
-    notas = request.form.get("nota", "")
-
-    try:
-        avance = TareaAvance(
-            tarea_id=tarea.id,
-            user_id=current_user.id,
-            cantidad=cantidad,
-            unidad=unidad_servidor,
-            horas=horas_trabajadas,
-            notas=notas,
-            cantidad_ingresada=cantidad,
-            unidad_ingresada=unidad_servidor,
-            horas_trabajadas=horas_trabajadas
-        )
-
-        if roles & {'administrador', 'tecnico', 'admin', 'pm', 'project_manager'}:
-            avance.status = "aprobado"
-            avance.confirmed_by = current_user.id
-            avance.confirmed_at = datetime.utcnow()
-
-        db.session.add(avance)
-        db.session.flush()
-
-        if not tarea.fecha_inicio_real and avance.status == "aprobado":
-            tarea.fecha_inicio_real = datetime.utcnow()
-
-        media_base = Path(current_app.instance_path) / "media"
-        media_base.mkdir(exist_ok=True)
-
-        uploaded_files = request.files.getlist("fotos")
-        for foto_file in uploaded_files:
-            if foto_file.filename:
-                extension = Path(foto_file.filename).suffix.lower()
-                unique_name = f"{uuid.uuid4()}{extension}"
-
-                avance_dir = media_base / "avances" / str(avance.id)
-                avance_dir.mkdir(parents=True, exist_ok=True)
-
-                file_path = avance_dir / unique_name
-                foto_file.save(file_path)
-
-                width, height = None, None
-                try:
-                    from PIL import Image
-                    with Image.open(file_path) as img:
-                        width, height = img.size
-                except Exception:
-                    pass
-
-                relative_path = f"avances/{avance.id}/{unique_name}"
-                foto = TareaAvanceFoto(
-                    avance_id=avance.id,
-                    file_path=relative_path,
-                    mime_type=foto_file.content_type,
-                    width=width,
-                    height=height
-                )
-                db.session.add(foto)
-
-        db.session.commit()
-
-        recalc_tarea_pct(tarea.id)
-
-        return jsonify(ok=True, avance_id=avance.id, porcentaje_actualizado=tarea.porcentaje_avance)
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception("Error creating progress with photos")
-        return jsonify(ok=False, error="Error interno del servidor"), 500
+    return ProjectSharedService.api_crear_avance_fotos(tarea_id, normalize_unit, recalc_tarea_pct)
 
 
 @obras_bp.route("/tareas/<int:tarea_id>/complete", methods=['POST'])
@@ -1733,7 +1674,7 @@ def agregar_tarea(id):
 @obras_bp.route('/admin/backfill_tareas', methods=['POST'])
 @login_required
 def admin_backfill_tareas():
-    if getattr(current_user, 'email', '') not in ['brenda@gmail.com', 'admin@obyra.com']:
+    if not current_user.is_super_admin:
         flash('No tienes permisos para ejecutar el backfill.', 'danger')
         return redirect(url_for('obras.lista'))
 
@@ -1871,6 +1812,7 @@ def eliminar_tarea(tarea_id):
 
 @obras_bp.route('/api/tareas/bulk_delete', methods=['POST'])
 @login_required
+@limiter.limit("20 per minute")
 def api_tareas_bulk_delete():
     data = request.get_json()
     ids = data.get('ids', [])
@@ -1945,6 +1887,7 @@ def api_tareas_bulk_delete():
 
 @obras_bp.route('/api/etapas/bulk_delete', methods=['POST'])
 @login_required
+@limiter.limit("20 per minute")
 def api_etapas_bulk_delete():
     data = request.get_json()
     ids = data.get('ids', [])
@@ -1993,6 +1936,7 @@ def api_etapas_bulk_delete():
 
 @obras_bp.route('/geocodificar-todas', methods=['POST'])
 @login_required
+@limiter.limit("2 per hour")
 def geocodificar_todas():
     if not is_admin():
         flash('Solo los administradores pueden ejecutar esta acción.', 'danger')
@@ -2015,8 +1959,9 @@ def geocodificar_todas():
 
 @obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def eliminar_obra(obra_id):
-    if getattr(current_user, 'email', '') not in ['brenda@gmail.com', 'admin@obyra.com']:
+    if not current_user.is_super_admin:
         flash('No tienes permisos para eliminar obras.', 'danger')
         return redirect(url_for('obras.lista'))
 
@@ -2034,6 +1979,9 @@ def eliminar_obra(obra_id):
         db.session.delete(obra)
         db.session.commit()
 
+        log_data_deletion('Obra', obra_id, current_user.email)
+        current_app.logger.warning(f'Obra eliminada: {obra_id} - {nombre_obra} por usuario {current_user.email}')
+
         flash(f'La obra "{nombre_obra}" ha sido eliminada exitosamente.', 'success')
     except Exception:
         db.session.rollback()
@@ -2044,8 +1992,9 @@ def eliminar_obra(obra_id):
 
 @obras_bp.route('/super-admin/reiniciar-sistema', methods=['POST'])
 @login_required
+@limiter.limit("1 per minute")
 def reiniciar_sistema():
-    if getattr(current_user, 'email', '') not in ['brenda@gmail.com', 'admin@obyra.com']:
+    if not current_user.is_super_admin:
         flash('No tienes permisos para reiniciar el sistema.', 'danger')
         return redirect(url_for('obras.lista'))
 
@@ -2217,117 +2166,17 @@ def tarea_asignar(tarea_id):
 @obras_bp.route('/<int:id>/certificaciones', methods=['GET', 'POST'])
 @login_required
 def historial_certificaciones(id):
-    obra = Obra.query.filter_by(id=id, organizacion_id=get_current_org_id()).first_or_404()
-    membership = get_current_membership()
-
-    if request.method == 'POST':
-        payload = request.get_json(silent=True) or request.form
-        if not membership or membership.role not in ('admin', 'project_manager'):
-            error_msg = 'No tienes permisos para crear certificaciones.'
-            if request.is_json:
-                return jsonify(ok=False, error=error_msg), 403
-            flash(error_msg, 'danger')
-            return redirect(url_for('obras.historial_certificaciones', id=id))
-
-        cert_id = payload.get('certificacion_id')
-        periodo = (
-            _parse_date(payload.get('periodo_desde')),
-            _parse_date(payload.get('periodo_hasta')),
-        )
-        aprobar_flag = str(payload.get('aprobar', 'true')).lower() in {'1', 'true', 'yes', 'y', 'on'}
-        notas = payload.get('notas')
-
-        try:
-            if cert_id:
-                cert = WorkCertification.query.get_or_404(int(cert_id))
-                if cert.obra_id != obra.id:
-                    abort(404)
-                if payload.get('porcentaje'):
-                    cert.porcentaje_avance = Decimal(str(payload['porcentaje']).replace(',', '.'))
-                if aprobar_flag and cert.estado != 'aprobada':
-                    cert.marcar_aprobada(current_user)
-                if periodo[0] or periodo[1]:
-                    cert.periodo_desde, cert.periodo_hasta = periodo
-                if notas is not None:
-                    cert.notas = notas
-                db.session.commit()
-                response = {'ok': True, 'certificacion_id': cert.id, 'estado': cert.estado}
-                if request.is_json:
-                    return jsonify(response)
-                flash('Certificación actualizada correctamente.', 'success')
-                return redirect(url_for('obras.historial_certificaciones', id=id))
-
-            porcentaje_raw = payload.get('porcentaje') or payload.get('porcentaje_avance')
-            if not porcentaje_raw:
-                raise ValueError('Debes indicar el porcentaje de avance a certificar.')
-
-            porcentaje = Decimal(str(porcentaje_raw).replace(',', '.'))
-            cert = create_certification(
-                obra,
-                current_user,
-                porcentaje,
-                periodo=periodo,
-                notas=notas,
-                aprobar=aprobar_flag,
-                fuente=payload.get('fuente', 'tareas'),
-            )
-            db.session.commit()
-            response = {'ok': True, 'certificacion_id': cert.id, 'estado': cert.estado}
-            if request.is_json:
-                return jsonify(response)
-            flash('Certificación creada correctamente.', 'success')
-            return redirect(url_for('obras.historial_certificaciones', id=id))
-        except Exception as exc:
-            db.session.rollback()
-            if request.is_json:
-                return jsonify(ok=False, error=str(exc)), 400
-            flash(f'Error al crear la certificación: {exc}', 'danger')
-            return redirect(url_for('obras.historial_certificaciones', id=id))
-
-    resumen = certification_totals(obra)
-    pendientes = build_pending_entries(obra)
-    aprobadas = approved_entries(obra)
-    pct_aprobado, pct_borrador, pct_sugerido = pending_percentage(obra)
-    context = resolve_budget_context(obra)
-    puede_aprobar = membership and membership.role in ('admin', 'project_manager')
-
-    if request.args.get('format') == 'json':
-        return jsonify(
-            ok=True,
-            resumen={k: str(v) for k, v in resumen.items()},
-            pendientes=[
-                {**row, 'porcentaje': str(row['porcentaje']), 'monto_ars': str(row['monto_ars']), 'monto_usd': str(row['monto_usd'])}
-                for row in pendientes
-            ],
-            aprobadas=[
-                {
-                    **row,
-                    'porcentaje': str(row['porcentaje']),
-                    'monto_ars': str(row['monto_ars']),
-                    'monto_usd': str(row['monto_usd']),
-                    'pagado_ars': str(row['pagado_ars']),
-                    'pagado_usd': str(row['pagado_usd']),
-                    'saldo_ars': str(row['saldo_ars']),
-                    'saldo_usd': str(row['saldo_usd']),
-                }
-                for row in aprobadas
-            ],
-            porcentajes={
-                'aprobado': str(pct_aprobado),
-                'borrador': str(pct_borrador),
-                'sugerido': str(pct_sugerido),
-            },
-        )
-
-    return render_template(
-        'obras/certificaciones.html',
-        obra=obra,
-        pendientes=pendientes,
-        certificaciones_aprobadas=aprobadas,
-        resumen=resumen,
-        porcentajes=(pct_aprobado, pct_borrador, pct_sugerido),
-        puede_aprobar=bool(puede_aprobar),
-        contexto=context,
+    """Historial de certificaciones de una obra"""
+    return ProjectSharedService.historial_certificaciones(
+        id,
+        'obras',
+        create_certification,
+        certification_totals,
+        build_pending_entries,
+        approved_entries,
+        pending_percentage,
+        resolve_budget_context,
+        register_payment
     )
 
 
@@ -2542,122 +2391,7 @@ def rechazar_avance(avance_id):
 @login_required
 def wizard_crear_tareas(obra_id):
     """Wizard: creación masiva de tareas/miembros en un paso."""
-    obra = Obra.query.get_or_404(obra_id)
-    if not can_manage_obra(obra):
-        return jsonify(ok=False, error="Sin permisos para gestionar esta obra"), 403
-
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify(ok=False, error="JSON requerido"), 400
-
-        etapas_data = data.get('etapas', [])
-        evitar_duplicados = data.get('evitar_duplicados', True)
-
-        if not etapas_data:
-            return jsonify(ok=False, error="Se requiere al menos una etapa"), 400
-
-        creadas = 0
-        ya_existian = 0
-        asignaciones_creadas = 0
-
-        db.session.begin()
-        current_app.logger.info(f"WIZARD: Creando tareas para obra {obra_id}")
-
-        for etapa_data in etapas_data:
-            etapa_id = etapa_data.get('etapa_id')
-            tareas_data = etapa_data.get('tareas', [])
-
-            etapa = EtapaObra.query.filter_by(id=etapa_id, obra_id=obra_id).first()
-            if not etapa:
-                db.session.rollback()
-                return jsonify(ok=False, error=f"Etapa {etapa_id} no existe en esta obra"), 400
-
-            for tarea_data in tareas_data:
-                nombre = tarea_data.get('nombre')
-                inicio = tarea_data.get('inicio')
-                fin = tarea_data.get('fin')
-                horas_estimadas = tarea_data.get('horas_estimadas')
-                unidad = tarea_data.get('unidad', 'h')
-                responsable_id = tarea_data.get('responsable_id')
-
-                if not nombre:
-                    db.session.rollback()
-                    return jsonify(ok=False, error="Nombre de tarea requerido"), 400
-
-                if responsable_id:
-                    miembro = ObraMiembro.query.filter_by(obra_id=obra_id, usuario_id=responsable_id).first()
-                    if not miembro:
-                        db.session.rollback()
-                        return jsonify(ok=False, error=f"Usuario {responsable_id} no es miembro de esta obra"), 400
-
-                fecha_inicio_plan = None
-                fecha_fin_plan = None
-
-                if inicio:
-                    try:
-                        fecha_inicio_plan = datetime.strptime(inicio, '%Y-%m-%d').date()
-                    except ValueError:
-                        db.session.rollback()
-                        return jsonify(ok=False, error=f"Fecha inicio inválida: {inicio}"), 400
-
-                if fin:
-                    try:
-                        fecha_fin_plan = datetime.strptime(fin, '%Y-%m-%d').date()
-                    except ValueError:
-                        db.session.rollback()
-                        return jsonify(ok=False, error=f"Fecha fin inválida: {fin}"), 400
-
-                tarea_existente = None
-                if evitar_duplicados:
-                    tarea_existente = TareaEtapa.query.filter_by(etapa_id=etapa_id, nombre=nombre).first()
-
-                if tarea_existente:
-                    ya_existian += 1
-                    tarea = tarea_existente
-                    if fecha_inicio_plan:
-                        tarea.fecha_inicio_plan = fecha_inicio_plan
-                    if fecha_fin_plan:
-                        tarea.fecha_fin_plan = fecha_fin_plan
-                    if horas_estimadas:
-                        tarea.horas_estimadas = horas_estimadas
-                    if unidad:
-                        tarea.unidad = unidad
-                    if responsable_id:
-                        tarea.responsable_id = responsable_id
-                else:
-                    tarea = TareaEtapa(
-                        etapa_id=etapa_id,
-                        nombre=nombre,
-                        descripcion="Creada via wizard",
-                        estado='pendiente',
-                        fecha_inicio_plan=fecha_inicio_plan,
-                        fecha_fin_plan=fecha_fin_plan,
-                        horas_estimadas=horas_estimadas,
-                        unidad=unidad,
-                        responsable_id=responsable_id
-                    )
-                    db.session.add(tarea)
-                    db.session.flush()
-                    creadas += 1
-
-                if responsable_id:
-                    asignacion_existente = TareaMiembro.query.filter_by(
-                        tarea_id=tarea.id, user_id=responsable_id
-                    ).first()
-                    if not asignacion_existente:
-                        asignacion = TareaMiembro(tarea_id=tarea.id, user_id=responsable_id, cuota_objetivo=None)
-                        db.session.add(asignacion)
-                        asignaciones_creadas += 1
-
-        db.session.commit()
-
-        return jsonify(ok=True, creadas=creadas, ya_existian=ya_existian, asignaciones_creadas=asignaciones_creadas)
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception("WIZARD: Error creando tareas")
-        return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
+    return ProjectSharedService.wizard_crear_tareas(obra_id)
 
 
 # ==== Wizard: catálogos ====
@@ -2796,14 +2530,18 @@ def wizard_tareas_opciones():
                            .join(ObraMiembro, ObraMiembro.usuario_id == Usuario.id)
                            .filter(ObraMiembro.obra_id == obra_id)
                            .filter(Usuario.activo == True)
+                           .order_by(ObraMiembro.rol_en_obra)  # Ordenar por rol
                            .all())
 
             for user_id, nombre, apellido, rol in query_result:
                 nombre_completo = f"{(nombre or '').strip()} {(apellido or '').strip()}".strip() or "Sin nombre"
+                rol_display = rol or 'Sin rol'
+                # Incluir el rol en el nombre para que sea más claro
+                nombre_con_rol = f"{nombre_completo} ({rol_display})"
                 usuarios.append({
                     'id': user_id,
-                    'nombre': nombre_completo,
-                    'rol': rol or 'Sin rol'
+                    'nombre': nombre_con_rol,
+                    'rol': rol_display
                 })
         except Exception as e:
             current_app.logger.warning(f"Error al obtener equipo de obra {obra_id}: {e}")
@@ -2813,3 +2551,150 @@ def wizard_tareas_opciones():
     except Exception as e:
         current_app.logger.exception("API Error wizard_tareas_opciones")
         return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@obras_bp.route('/api/wizard-tareas/budget-preview', methods=['POST'])
+@login_required
+def wizard_budget_preview():
+    """
+    Endpoint stub para preview de presupuesto en wizard
+    Esta funcionalidad requiere integración con presupuestos
+    """
+    current_app.logger.warning("Intento de usar /api/wizard-tareas/budget-preview - funcionalidad no implementada")
+
+    # Devolver una respuesta básica para que el wizard pueda continuar
+    return jsonify({
+        'ok': True,
+        'total_estimado': 0,
+        'mensaje': 'La estimación de presupuesto no está disponible. Continúa con la creación de tareas.'
+    }), 200
+
+
+@obras_bp.route('/api/wizard-tareas/create', methods=['POST'])
+@login_required
+def wizard_create_tasks():
+    """
+    Creación masiva de tareas desde wizard
+    """
+    try:
+        data = request.get_json() or {}
+        obra_id = data.get('obra_id')
+        tareas_data = data.get('tareas', [])
+        evitar_duplicados = data.get('evitar_duplicados', True)
+
+        if not obra_id:
+            return jsonify({'ok': False, 'error': 'obra_id requerido'}), 400
+
+        if not tareas_data:
+            return jsonify({'ok': False, 'error': 'No hay tareas para crear'}), 400
+
+        obra = Obra.query.get_or_404(obra_id)
+        if not can_manage_obra(obra):
+            return jsonify({'ok': False, 'error': 'Sin permisos para gestionar esta obra'}), 403
+
+        # Agrupar tareas por etapa
+        tareas_por_etapa = {}
+        for tarea in tareas_data:
+            etapa_key = tarea.get('etapa_slug') or tarea.get('etapa_nombre', '')
+            if not etapa_key:
+                continue
+            if etapa_key not in tareas_por_etapa:
+                tareas_por_etapa[etapa_key] = {
+                    'nombre': tarea.get('etapa_nombre', etapa_key),
+                    'slug': tarea.get('etapa_slug'),
+                    'tareas': []
+                }
+            tareas_por_etapa[etapa_key]['tareas'].append(tarea)
+
+        created_count = 0
+        skipped_count = 0
+        etapas_created = 0
+
+        for etapa_key, etapa_info in tareas_por_etapa.items():
+            # Buscar o crear etapa
+            etapa = EtapaObra.query.filter_by(
+                obra_id=obra_id,
+                nombre=etapa_info['nombre']
+            ).first()
+
+            if not etapa:
+                ultimo_orden = db.session.query(db.func.max(EtapaObra.orden)).filter_by(obra_id=obra_id).scalar() or 0
+                etapa = EtapaObra(
+                    obra_id=obra_id,
+                    nombre=etapa_info['nombre'],
+                    descripcion=f"Etapa creada desde wizard",
+                    orden=ultimo_orden + 1
+                )
+                db.session.add(etapa)
+                db.session.flush()  # Para obtener el ID
+                etapas_created += 1
+
+            # Crear tareas en esta etapa
+            for tarea_data in etapa_info['tareas']:
+                nombre_tarea = tarea_data.get('nombre', '').strip()
+                if not nombre_tarea:
+                    continue
+
+                # Verificar duplicados si es necesario
+                if evitar_duplicados:
+                    existe = TareaEtapa.query.filter_by(
+                        etapa_id=etapa.id,
+                        nombre=nombre_tarea
+                    ).first()
+                    if existe:
+                        skipped_count += 1
+                        continue
+
+                # Parsear fechas
+                fecha_inicio = parse_date(tarea_data.get('fecha_inicio'))
+                fecha_fin = parse_date(tarea_data.get('fecha_fin'))
+
+                # Validar unidad
+                VALID_UNITS = {'m2', 'ml', 'm3', 'un', 'h', 'kg'}
+                unidad = tarea_data.get('unidad', 'h').lower()
+                if unidad not in VALID_UNITS:
+                    unidad = 'h'
+
+                # Crear tarea
+                nueva_tarea = TareaEtapa(
+                    etapa_id=etapa.id,
+                    nombre=nombre_tarea,
+                    horas_estimadas=tarea_data.get('horas'),
+                    cantidad_planificada=tarea_data.get('cantidad'),
+                    unidad=unidad,
+                    fecha_inicio_plan=fecha_inicio,
+                    fecha_fin_plan=fecha_fin,
+                    prioridad=tarea_data.get('prioridad', 'media'),
+                    responsable_id=tarea_data.get('asignado_usuario_id')
+                )
+                db.session.add(nueva_tarea)
+                db.session.flush()  # Para obtener el ID
+
+                # Asignar usuario si viene
+                asignado_id = tarea_data.get('asignado_usuario_id')
+                if asignado_id:
+                    try:
+                        asignacion = TareaMiembro(
+                            tarea_id=nueva_tarea.id,
+                            user_id=int(asignado_id)
+                        )
+                        db.session.add(asignacion)
+                    except Exception as e:
+                        current_app.logger.warning(f"No se pudo asignar usuario {asignado_id} a tarea: {e}")
+
+                created_count += 1
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'creadas': created_count,
+            'omitidas': skipped_count,
+            'etapas_creadas': etapas_created,
+            'mensaje': f'Se crearon {created_count} tareas en {etapas_created} etapas. {skipped_count} tareas omitidas por duplicados.'
+        }), 200
+
+    except Exception as e:
+        current_app.logger.exception("Error en wizard_create_tasks")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500

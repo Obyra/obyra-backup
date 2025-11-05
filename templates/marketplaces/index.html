@@ -128,8 +128,8 @@
 
     <!-- Lista de proveedores -->
     <div class="row">
-        {% if proveedores %}
-            {% for proveedor in proveedores %}
+        {% if proveedores and proveedores.items %}
+            {% for proveedor in proveedores.items %}
             <div class="col-lg-6 mb-4">
                 <div class="card h-100">
                     <div class="card-body">
@@ -196,13 +196,38 @@
                 </div>
             </div>
             {% endfor %}
+
+            <!-- Controles de paginación -->
+            {% if proveedores.pages > 1 %}
+            <div class="col-12">
+                <nav aria-label="Paginación" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item {% if not proveedores.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for(request.endpoint, page=proveedores.prev_num, categoria=categoria, ubicacion=ubicacion, buscar=buscar) }}">Anterior</a>
+                        </li>
+                        {% for page_num in proveedores.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == proveedores.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for(request.endpoint, page=page_num, categoria=categoria, ubicacion=ubicacion, buscar=buscar) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {% if not proveedores.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for(request.endpoint, page=proveedores.next_num, categoria=categoria, ubicacion=ubicacion, buscar=buscar) }}">Siguiente</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
         {% else %}
             <div class="col-12">
                 <div class="card">
                     <div class="card-body text-center py-5">
                         <i class="fas fa-search fa-3x text-muted mb-3"></i>
                         <h4>No se encontraron proveedores</h4>
-                        <p class="text-muted">Intenta ajustar los filtros de búsqueda o 
+                        <p class="text-muted">Intenta ajustar los filtros de búsqueda o
                            <a href="{{ url_for('marketplaces.buscar') }}">usar la búsqueda avanzada</a>
                         </p>
                         {% if current_user.es_admin() %}

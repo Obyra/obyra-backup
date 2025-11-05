@@ -20,6 +20,7 @@
             <div class="card shadow">
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <!-- Información básica -->
                         <h5 class="border-bottom pb-2 mb-3">Información Básica</h5>
                         

@@ -34,7 +34,7 @@ from services.memberships import (
     get_current_org_id,
 )
 
-from extensions import db, login_manager
+from extensions import db, login_manager, csrf
 from flask_migrate import Migrate
 
 
@@ -92,11 +92,20 @@ print = _safe_cli_print  # type: ignore[assignment]
 
 # create the app
 app = Flask(__name__)
-app.secret_key = (
-    os.environ.get("SESSION_SECRET")
-    or os.environ.get("SECRET_KEY")
-    or "dev-secret-key-change-me"
-)
+
+# Security: Require SECRET_KEY in production
+secret_key = os.environ.get("SESSION_SECRET") or os.environ.get("SECRET_KEY")
+if not secret_key:
+    if os.environ.get("FLASK_ENV") == "production":
+        raise RuntimeError(
+            "SECRET_KEY environment variable must be set in production! "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+    # Development fallback with warning
+    secret_key = "dev-secret-key-change-me"
+    print("⚠️  WARNING: Using insecure default SECRET_KEY. Set SECRET_KEY environment variable!")
+
+app.secret_key = secret_key
 
 def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
@@ -106,46 +115,43 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-# configure logging
-logging.basicConfig(level=logging.DEBUG)
+# configure structured logging
+from config.logging_config import setup_logging
+setup_logging(app)
 
-# ---------------- DB CONFIG (con fallback a SQLite) ----------------
+# ---------------- POSTGRESQL DATABASE CONFIG ----------------
 database_url = os.environ.get("DATABASE_URL")
-base_dir = Path(__file__).resolve().parent
-default_sqlite_path = base_dir / "tmp" / "dev.db"
 
 if not database_url:
-    default_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-    database_url = f"sqlite:///{default_sqlite_path.as_posix()}"
-    print("⚠️  DATABASE_URL no disponible, usando SQLite fallback")
-else:
-    # Agregar SSL para Neon si falta
-    if "neon.tech" in database_url and "sslmode=" not in database_url:
-        database_url += ("&" if "?" in database_url else "?") + "sslmode=require"
-        print("🔒 SSL requerido agregado para Neon")
+    raise RuntimeError(
+        "ERROR: DATABASE_URL no está configurado. "
+        "Este sistema requiere PostgreSQL. "
+        "Por favor configure DATABASE_URL en su archivo .env"
+    )
 
-    # Normalizar rutas SQLite relativas
-    if database_url.startswith("sqlite:///"):
-        sqlite_path = database_url.replace("sqlite:///", "", 1)
-        sqlite_path_obj = Path(sqlite_path)
-        if not sqlite_path_obj.is_absolute():
-            sqlite_path_obj = (base_dir / sqlite_path_obj).resolve()
-            database_url = f"sqlite:///{sqlite_path_obj.as_posix()}"
-        sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
+# Agregar SSL para Neon si falta
+if "neon.tech" in database_url and "sslmode=" not in database_url:
+    database_url += ("&" if "?" in database_url else "?") + "sslmode=require"
+    print("🔒 SSL requerido agregado para Neon")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+
+# PostgreSQL-optimized connection pooling
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 5,
-    "max_overflow": 0,
-    "pool_timeout": 30,
-    "pool_pre_ping": True,
+    "pool_size": 10,           # Conexiones en el pool
+    "max_overflow": 20,        # Conexiones adicionales si el pool está lleno
+    "pool_timeout": 30,        # Timeout para obtener conexión del pool
+    "pool_recycle": 1800,      # Reciclar conexiones cada 30 min
+    "pool_pre_ping": True,     # Verificar conexión antes de usarla
     "connect_args": {
+        "application_name": "obyra_app",  # Identificar en pg_stat_activity
+        "options": "-c statement_timeout=30000",  # 30s timeout por query
         "connect_timeout": 10,
         "keepalives": 1,
         "keepalives_idle": 600,
         "keepalives_interval": 30,
         "keepalives_count": 3,
-    },
+    }
 }
 
 # Feature flags
@@ -174,7 +180,17 @@ else:
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+csrf.init_app(app)
 migrate = Migrate(app, db)
+
+# Setup rate limiter
+from config.rate_limiter_config import setup_rate_limiter
+import extensions
+extensions.limiter = setup_rate_limiter(app)
+
+# Setup request timing middleware
+from middleware.request_timing import setup_request_timing
+setup_request_timing(app)
 
 # ---------------- Login dynamic resolution ----------------
 def _resolve_login_endpoint() -> Optional[str]:
@@ -237,33 +253,10 @@ def db_upgrade():
     logger.info("Running Alembic upgrade...")
     alembic_upgrade()
     logger.info("Alembic upgrade → OK")
-    logger.info("Running post-upgrade runtime ensures...")
 
-    from migrations_runtime import (
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-        ensure_wizard_budget_tables,
-    )
-
-    ensure_avance_audit_columns()
-    ensure_presupuesto_state_columns()
-    ensure_item_presupuesto_stage_columns()
-    ensure_presupuesto_validity_columns()
-    ensure_exchange_currency_columns()
-    ensure_inventory_package_columns()
-    ensure_inventory_location_columns()
-    ensure_geocode_columns()
-    ensure_org_memberships_table()
-    ensure_work_certification_tables()
-    ensure_wizard_budget_tables()
+    # Runtime migrations have been converted to Alembic migrations (Phase 4)
+    # All schema changes are now managed via: migrations/versions/*.py
+    # Run: alembic upgrade head
 
     click.echo('[OK] Database upgraded successfully.')
 
@@ -394,9 +387,9 @@ def verificar_periodo_prueba():
         request.endpoint not in rutas_excluidas and 
         not request.endpoint.startswith('static')):
         
-        # ✨ EXCEPCIÓN ESPECIAL: Administradores tienen acceso completo sin restricciones
-        emails_admin_completo = ['brenda@gmail.com', 'admin@obyra.com', 'obyra.servicios@gmail.com']
-        if current_user.email in emails_admin_completo:
+        # Super admin bypass - uses is_super_admin flag instead of hardcoded emails
+        if current_user.is_super_admin:
+            app.logger.info(f"Super admin access granted for: {current_user.email}")
             return  # Acceso completo sin restricciones de plan
         
         # Verificar si el usuario está en periodo de prueba y ya expiró
@@ -602,44 +595,26 @@ with app.app_context():
     # Import models tardíamente
     from models import Usuario, Organizacion
 
-    # Migraciones de runtime
-    from migrations_runtime import (
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    )
+    # ============================================================================
+    # PHASE 4 REFACTORING (Nov 2025):
+    # Runtime migrations have been converted to Alembic migrations.
+    # All schema changes are now in migrations/versions/*.py
+    #
+    # To apply pending migrations:
+    #   docker-compose exec app alembic upgrade head
+    #
+    # Legacy file: migrations_runtime.py → _migrations_runtime_old.py
+    # ============================================================================
 
-    runtime_migrations = [
-        ensure_avance_audit_columns,
-        ensure_presupuesto_state_columns,
-        ensure_item_presupuesto_stage_columns,
-        ensure_presupuesto_validity_columns,
-        ensure_exchange_currency_columns,
-        ensure_inventory_package_columns,
-        ensure_inventory_location_columns,
-        ensure_geocode_columns,
-        ensure_org_memberships_table,
-        ensure_work_certification_tables,
-    ]
-
-    for migration in runtime_migrations:
-        try:
-            migration()
-        except Exception as exc:
-            logging.getLogger(__name__).warning(
-                "Runtime migration %s failed: %s", migration.__name__, exc
-            )
-
-    # RBAC
+    # RBAC tables and seeding
     try:
-        from models import seed_default_role_permissions
+        from models import RoleModule, UserModule, seed_default_role_permissions
+
+        # Create RBAC tables if they don't exist
+        RoleModule.__table__.create(db.engine, checkfirst=True)
+        UserModule.__table__.create(db.engine, checkfirst=True)
+
+        # Seed default permissions
         seed_default_role_permissions()
         print("[OK] RBAC permissions seeded successfully")
     except Exception as e:
@@ -708,6 +683,7 @@ with app.app_context():
                 email=admin_email,
                 rol='administrador',
                 role='administrador',
+                is_super_admin=True,
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=admin_org.id,
@@ -728,6 +704,9 @@ with app.app_context():
             if admin.auth_provider != 'manual':
                 admin.auth_provider = 'manual'
                 updated = True
+            if not admin.is_super_admin:
+                admin.is_super_admin = True
+                updated = True
             if not admin.organizacion:
                 admin_org = Organizacion(nombre='OBYRA - Administración Central')
                 db.session.add(admin_org)
@@ -743,12 +722,8 @@ with app.app_context():
         db.session.rollback()
         print(f"[WARN] No se pudo garantizar el usuario admin@obyra.com: {ensure_admin_exc}")
 
-    # Ejecutar migraciones de runtime otra vez por seguridad
-    for migration in runtime_migrations:
-        try:
-            migration()
-        except Exception as runtime_exc:
-            print(f"[WARN] Runtime migration failed: {migration.__name__}: {runtime_exc}")
+    # Runtime migrations removed in Phase 4 - now using Alembic migrations
+    # See: MIGRATIONS_GUIDE.md
 
 def _import_blueprint(module_name, attr_name):
     """Importa un blueprint de manera segura sin interrumpir el resto."""
@@ -933,13 +908,21 @@ def serve_media(relpath):
     media_dir = Path(app.instance_path) / "media"
     return send_from_directory(media_dir, relpath)
 
+# === HEALTH CHECK ENDPOINT ===
+@app.route("/health")
+def health_check():
+    """Health check endpoint for Docker and monitoring"""
+    return {"status": "healthy", "app": "obyra"}, 200
+
 # Error handlers
 @app.errorhandler(403)
 def forbidden(error):
+    app.logger.warning(f'403 Forbidden: {request.url} - User: {current_user.email if current_user.is_authenticated else "anonymous"}')
     return render_template('errors/403.html'), 403
 
 @app.errorhandler(401)
 def unauthorized_error(error):
+    app.logger.warning(f'401 Unauthorized: {request.url} - User: {current_user.email if current_user.is_authenticated else "anonymous"}')
     if request.path.startswith('/obras/api/') or request.path.startswith('/api/'):
         from flask import jsonify
         return jsonify({"ok": False, "error": "Authentication required"}), 401
@@ -947,6 +930,7 @@ def unauthorized_error(error):
 
 @app.errorhandler(404)
 def not_found(error):
+    app.logger.warning(f'404 Not Found: {request.url}')
     try:
         dashboard_url = url_for('reportes.dashboard')
     except BuildError:
@@ -956,13 +940,17 @@ def not_found(error):
             dashboard_url = url_for('index')
     return render_template('errors/404.html', dashboard_url=dashboard_url), 404
 
-def maybe_create_sqlite_schema():
-    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if os.getenv("AUTO_CREATE_DB", "0") == "1" and uri.startswith("sqlite:"):
-        with app.app_context():
-            db.create_all()
+@app.errorhandler(500)
+def internal_error(error):
+    app.logger.error(f'500 Internal Server Error: {request.url}', exc_info=True)
+    db.session.rollback()
+    try:
+        return render_template('errors/500.html'), 500
+    except Exception:
+        # Fallback si el template falla
+        return 'Error interno del servidor', 500
 
 if __name__ == '__main__':
-    maybe_create_sqlite_schema()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5002))  # Use port 5002 by default (5000 conflicts with macOS AirPlay)
+    app.run(host='0.0.0.0', port=port, debug=True)
 

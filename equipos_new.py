@@ -2,12 +2,13 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from app import db, _login_redirect
 from models import (
-    Equipment, EquipmentAssignment, EquipmentUsage, MaintenanceTask, 
+    Equipment, EquipmentAssignment, EquipmentUsage, MaintenanceTask,
     MaintenanceAttachment, Obra, Usuario
 )
 from datetime import date, datetime
 import os
 from werkzeug.utils import secure_filename
+from utils import safe_float
 
 equipos_new_bp = Blueprint('equipos_new', __name__, url_prefix='/equipos')
 
@@ -119,7 +120,7 @@ def nuevo():
                 marca=request.form.get('marca'),
                 modelo=request.form.get('modelo'),
                 nro_serie=request.form.get('nro_serie'),
-                costo_hora=float(request.form.get('costo_hora', 0))
+                costo_hora=safe_float(request.form.get('costo_hora', 0))
             )
             
             db.session.add(equipo)
@@ -285,9 +286,9 @@ def crear_uso(id):
             equipment_id=id,
             project_id=equipo.current_assignment.project_id,
             fecha=datetime.strptime(request.form.get('fecha'), '%Y-%m-%d').date(),
-            horas=float(request.form.get('horas')),
-            avance_m2=float(request.form.get('avance_m2', 0)) or None,
-            avance_m3=float(request.form.get('avance_m3', 0)) or None,
+            horas=safe_float(request.form.get('horas')),
+            avance_m2=safe_float(request.form.get('avance_m2', 0)) or None,
+            avance_m3=safe_float(request.form.get('avance_m3', 0)) or None,
             notas=request.form.get('notas'),
             user_id=current_user.id
         )

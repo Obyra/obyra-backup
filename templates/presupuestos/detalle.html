@@ -4,8 +4,8 @@
 
 {% block content %}
 {% set obra = presupuesto.obra %}
-{% set obra_nombre = obra.nombre if obra else 'Sin obra asociada' %}
-{% set obra_cliente = obra.cliente if obra and obra.cliente else 'Sin especificar' %}
+{% set obra_nombre = obra.nombre if obra else (datos_proyecto.get('nombre_obra', 'Sin obra asociada') if datos_proyecto else 'Sin obra asociada') %}
+{% set obra_cliente = obra.cliente if obra and obra.cliente else (datos_proyecto.get('cliente_nombre', 'Sin especificar') if datos_proyecto else 'Sin especificar') %}
 <div class="container-fluid mt-4">
     <!-- Header -->
     <div class="row">
@@ -138,11 +138,11 @@
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Nombre:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ obra.nombre if obra else '' }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ obra.nombre if obra else (datos_proyecto.get('nombre_obra', '') if datos_proyecto else '') }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Cliente:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ obra.cliente if obra else '' }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ obra.cliente if obra else (datos_proyecto.get('cliente_nombre', '') if datos_proyecto else '') }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Descripción:</label>
@@ -522,6 +522,7 @@
                                             </button>
                                             <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}"
                                                   style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
@@ -631,6 +632,7 @@
                                             </button>
                                             <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}"
                                                   style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
@@ -733,6 +735,7 @@
                                             </button>
                                             <form method="POST" action="{{ url_for('presupuestos.eliminar_item', id=item.id) }}"
                                                   style="display: inline;" onsubmit="return confirm('¿Eliminar este item?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
@@ -775,6 +778,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('presupuestos.agregar_item', id=presupuesto.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Agregar <span id="tipoItemTexto"></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -844,6 +848,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('presupuestos.cambiar_estado', id=presupuesto.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Cambiar Estado del Presupuesto</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -1179,6 +1184,7 @@ function getActionCellHtml(row, itemId) {
     const deleteButton = (canDelete && deleteUrl)
         ? `<form method="POST" action="${deleteUrl}"
                  style="display: inline;" onsubmit="return confirm(${JSON.stringify(confirmMessage)});">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="fas fa-trash"></i>
                 </button>

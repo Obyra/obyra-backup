@@ -13,6 +13,7 @@
                 <div class="card-body">
                     <p class="text-muted">Tu cuenta está asociada a múltiples organizaciones. Elegí con cuál querés trabajar en esta sesión.</p>
                     <form method="POST" action="{{ url_for('auth.seleccionar_organizacion') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <input type="hidden" name="next" value="{{ next_url }}">
                         <div class="list-group">
                             {% for membership in memberships %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Límite de Peticiones Excedido - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-hourglass-half fa-4x text-warning mb-4"></i>
+                    <h1 class="display-4 mb-3">Demasiadas Peticiones</h1>
+                    <p class="lead text-muted mb-4">
+                        Has excedido el límite de peticiones permitidas.
+                    </p>
+
+                    {% if retry_after %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Por favor espera <strong>{{ retry_after }}</strong> antes de intentar nuevamente.
+                    </div>
+                    {% endif %}
+
+                    <p class="text-muted">
+                        Este límite existe para proteger el sistema y garantizar un servicio estable para todos los usuarios.
+                    </p>
+
+                    <div class="mt-4">
+                        <a href="{{ url_for('index') if has_endpoint('index') else '/' }}" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>Volver al Inicio
+                        </a>
+                        <button onclick="history.back()" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Regresar
+                        </button>
+                    </div>
+
+                    <div class="mt-4 small text-muted">
+                        <p class="mb-1"><strong>Límites actuales:</strong></p>
+                        <ul class="list-unstyled">
+                            <li>200 peticiones por minuto</li>
+                            <li>1000 peticiones por hora</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-reload después del retry_after si está disponible
+{% if retry_after %}
+setTimeout(function() {
+    location.reload();
+}, {{ retry_after | int }} * 1000);
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración de Tipos de Documento - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-cog me-2 text-secondary"></i>Configuración de Tipos de Documento
+                </h1>
+                <div class="d-flex gap-2">
+                    {% if has_endpoint('documentos.dashboard') %}
+                    <a href="{{ url_for('documentos.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    {% endif %}
+                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#nuevoTipoModal">
+                        <i class="fas fa-plus me-1"></i>Nuevo Tipo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Tipos de Documento -->
+    {% if tipos %}
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Descripción</th>
+                                <th>Requiere Aprobación</th>
+                                <th>Días de Retención</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tipo in tipos %}
+                            <tr>
+                                <td>
+                                    <strong>{{ tipo.nombre }}</strong>
+                                    {% if tipo.icono %}
+                                    <i class="fas fa-{{ tipo.icono }} ms-1 text-muted"></i>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if tipo.descripcion %}
+                                    {{ tipo.descripcion|truncate(50) }}
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if tipo.requiere_aprobacion %}
+                                    <span class="badge bg-warning">Sí</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">No</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if tipo.dias_retencion %}
+                                    {{ tipo.dias_retencion }} días
+                                    {% else %}
+                                    <span class="text-muted">Indefinido</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if tipo.activo %}
+                                    <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button class="btn btn-outline-secondary"
+                                                onclick="editarTipo({{ tipo.id }}, '{{ tipo.nombre }}', '{{ tipo.descripcion or '' }}', {{ 'true' if tipo.requiere_aprobacion else 'false' }}, {{ tipo.dias_retencion or 'null' }})"
+                                                title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-outline-{{ 'danger' if tipo.activo else 'success' }}"
+                                                onclick="toggleTipoEstado({{ tipo.id }}, {{ 'true' if tipo.activo else 'false' }})"
+                                                title="{{ 'Desactivar' if tipo.activo else 'Activar' }}">
+                                            <i class="fas fa-{{ 'toggle-off' if tipo.activo else 'toggle-on' }}"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
+                <h4>No hay tipos de documento configurados</h4>
+                <p class="text-muted">Crea tipos de documento para organizar tu biblioteca.</p>
+                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#nuevoTipoModal">
+                    <i class="fas fa-plus me-1"></i>Crear Primer Tipo
+                </button>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Información -->
+    <div class="card mt-4">
+        <div class="card-body">
+            <h6 class="card-title"><i class="fas fa-info-circle me-2"></i>Acerca de los Tipos de Documento</h6>
+            <ul class="mb-0">
+                <li><strong>Requiere Aprobación:</strong> Los documentos de este tipo necesitarán ser aprobados por un administrador antes de estar disponibles</li>
+                <li><strong>Días de Retención:</strong> Tiempo durante el cual los documentos deben ser conservados (opcional)</li>
+                <li><strong>Estado Activo:</strong> Solo los tipos activos aparecerán al subir nuevos documentos</li>
+                <li>Los tipos desactivados no se eliminan, solo se ocultan de las opciones de carga</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nuevo Tipo -->
+<div class="modal fade" id="nuevoTipoModal" tabindex="-1" aria-labelledby="nuevoTipoModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('documentos.crear_tipo_documento') if has_endpoint('documentos.crear_tipo_documento') else '#' }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="nuevoTipoModalLabel">
+                        <i class="fas fa-plus me-2"></i>Nuevo Tipo de Documento
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre" name="nombre" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="descripcion" name="descripcion" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="requiere_aprobacion" name="requiere_aprobacion">
+                        <label class="form-check-label" for="requiere_aprobacion">
+                            Requiere aprobación de administrador
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dias_retencion" class="form-label">Días de Retención</label>
+                        <input type="number" class="form-control" id="dias_retencion" name="dias_retencion" min="0" placeholder="Opcional">
+                        <div class="form-text">Dejar vacío para retención indefinida</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Crear Tipo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Tipo -->
+<div class="modal fade" id="editarTipoModal" tabindex="-1" aria-labelledby="editarTipoModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="editarTipoForm" action="#">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" id="edit_tipo_id" name="tipo_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editarTipoModalLabel">
+                        <i class="fas fa-edit me-2"></i>Editar Tipo de Documento
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_nombre" name="nombre" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="edit_descripcion" name="descripcion" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="edit_requiere_aprobacion" name="requiere_aprobacion">
+                        <label class="form-check-label" for="edit_requiere_aprobacion">
+                            Requiere aprobación de administrador
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_dias_retencion" class="form-label">Días de Retención</label>
+                        <input type="number" class="form-control" id="edit_dias_retencion" name="dias_retencion" min="0">
+                        <div class="form-text">Dejar vacío para retención indefinida</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editarTipo(id, nombre, descripcion, requiereAprobacion, diasRetencion) {
+    document.getElementById('edit_tipo_id').value = id;
+    document.getElementById('edit_nombre').value = nombre;
+    document.getElementById('edit_descripcion').value = descripcion;
+    document.getElementById('edit_requiere_aprobacion').checked = requiereAprobacion;
+    document.getElementById('edit_dias_retencion').value = diasRetencion || '';
+
+    // Actualizar action del form
+    const form = document.getElementById('editarTipoForm');
+    {% if has_endpoint('documentos.editar_tipo_documento') %}
+    form.action = `{{ url_for('documentos.editar_tipo_documento', tipo_id=0) }}`.replace('/0', `/${id}`);
+    {% endif %}
+
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('editarTipoModal'));
+    modal.show();
+}
+
+function toggleTipoEstado(tipoId, isActive) {
+    const action = isActive ? 'desactivar' : 'activar';
+    if (confirm(`¿Estás seguro de que quieres ${action} este tipo de documento?`)) {
+        fetch(`/documentos/tipo/${tipoId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo cambiar el estado'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al cambiar el estado del tipo');
+        });
+    }
+}
+</script>
+{% endblock %}

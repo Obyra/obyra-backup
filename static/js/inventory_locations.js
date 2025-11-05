@@ -321,11 +321,15 @@
             }
 
             try {
+                // Obtener token CSRF
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         Accept: 'application/json',
+                        ...(csrfToken && { 'X-CSRFToken': csrfToken }),
                     },
                     body: JSON.stringify({
                         nombre,

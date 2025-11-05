@@ -140,7 +140,21 @@ function initWizard() {
   }
 
   function fetchJSON(url, options) {
-    return fetch(url, { credentials: 'same-origin', ...options })
+    // Obtener token CSRF
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    // Agregar headers con CSRF token
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRFToken': csrfToken }),
+      ...(options?.headers || {})
+    };
+
+    return fetch(url, {
+      credentials: 'same-origin',
+      ...options,
+      headers
+    })
       .then(async (response) => {
         const text = await response.text();
         const contentType = response.headers.get('content-type') || '';
@@ -545,21 +559,9 @@ function initWizard() {
       options = variantsMap.get('*') || [];
     }
 
+    // Si no hay variantes configuradas, retornar array vacío (no mostrar "Baseline")
     if (!options.length) {
-      const coeff = slugKey && state.stageCoefficients instanceof Map ? state.stageCoefficients.get(slugKey) : null;
-      const defaultVariantKey = coeff?.default_variant_key || 'baseline';
-      const defaultName = coeff?.variant_name || 'Baseline';
-      const defaultDescription = coeff?.description || 'Valores estándar';
-      const isEstimated = Boolean(coeff?.estimated);
-      return [
-        {
-          key: defaultVariantKey,
-          name: defaultName,
-          description: defaultDescription,
-          is_default: true,
-          estimated: isEstimated,
-        },
-      ];
+      return [];
     }
 
     return options.map((variant) => ({
@@ -606,36 +608,6 @@ function initWizard() {
           <option value="${user.id}">${user.nombre}</option>
         `)].join('');
 
-        const variantOptionsList = showVariants ? buildVariantOptions(meta) : [];
-        const selectedVariantKey = (() => {
-          if (!showVariants) {
-            return '';
-          }
-          if (task.variant_key) {
-            return task.variant_key;
-          }
-          const defaultVariant = variantOptionsList.find((variant) => variant.is_default);
-          return defaultVariant?.key ?? (variantOptionsList[0]?.key ?? '');
-        })();
-
-        const variantOptionsHtml = variantOptionsList.map((variant) => {
-          const value = variant.key ?? '';
-          const estimatedLabel = variant.estimated ? ' (estimado)' : '';
-          const selectedAttr = value === selectedVariantKey ? 'selected' : '';
-          const descriptionAttr = variant.description ? ` title="${variant.description}"` : '';
-          return `<option value="${value}" ${selectedAttr}${descriptionAttr}>${variant.name}${estimatedLabel}</option>`;
-        }).join('');
-
-        const variantCell = showVariants
-          ? `
-            <td class="wizard-budget-col" data-budget-col="variant">
-              ${variantOptionsList.length
-                ? `<select class="form-select form-select-sm variant-select">${variantOptionsHtml}</select>`
-                : '<span class="text-muted small">Sin variantes</span>'}
-            </td>
-          `
-          : '';
-
         return `
           <tr data-index="${index}" data-etapa-slug="${slug}" data-etapa-id="${etapaId || ''}" data-etapa-nombre="${etapaNombre}">
             <td class="small text-muted">${etapaNombre || slug || 'Sin etapa'}</td>
@@ -647,7 +619,6 @@ function initWizard() {
             <td>
               <select class="form-select form-select-sm unidad">${unidadesOpts}</select>
             </td>
-            ${variantCell}
             <td>
               <select class="form-select form-select-sm asignado">${usuariosOpts}</select>
             </td>
@@ -1167,6 +1138,31 @@ function initWizard() {
     if (btnFinish) {
       btnFinish.addEventListener('click', handleFinish);
     }
+
+    // Event listener for Etapa 1 toggle checkbox
+    const toggleAllEtapas = modal.querySelector('#wzToggleAllEtapas');
+    if (toggleAllEtapas) {
+      toggleAllEtapas.addEventListener('change', function() {
+        if (this.checked) {
+          seleccionarTodasLasEtapas();
+        } else {
+          deseleccionarTodasLasEtapas();
+        }
+      });
+    }
+
+    // Event listener for Etapa 2 toggle checkbox
+    const toggleAllTareas = modal.querySelector('#wzToggleAllTareas');
+    if (toggleAllTareas) {
+      toggleAllTareas.addEventListener('change', function() {
+        if (this.checked) {
+          seleccionarTodasLasTareas();
+        } else {
+          deseleccionarTodasLasTareas();
+        }
+      });
+    }
+
     modal.addEventListener('show.bs.modal', handleModalShow);
     modal.addEventListener('hide.bs.modal', handleModalHide);
     modal.addEventListener('hidden.bs.modal', handleModalHidden);
@@ -1199,6 +1195,20 @@ function initWizard() {
     });
     updateEtapasSeleccionadas();
     rehydrateChecksFromState();
+  }
+
+  function seleccionarTodasLasTareas() {
+    modal.querySelectorAll('.tarea-checkbox:not(:disabled)').forEach((checkbox) => {
+      checkbox.checked = true;
+    });
+    handleTaskSelectionChange();
+  }
+
+  function deseleccionarTodasLasTareas() {
+    modal.querySelectorAll('.tarea-checkbox:not(:disabled)').forEach((checkbox) => {
+      checkbox.checked = false;
+    });
+    handleTaskSelectionChange();
   }
 
   function updateEtapasBadge() {
@@ -1252,6 +1262,8 @@ function initWizard() {
   window.loadTareasWizard = loadTareas;
   window.seleccionarTodasLasEtapas = seleccionarTodasLasEtapas;
   window.deseleccionarTodasLasEtapas = deseleccionarTodasLasEtapas;
+  window.seleccionarTodasLasTareas = seleccionarTodasLasTareas;
+  window.deseleccionarTodasLasTareas = deseleccionarTodasLasTareas;
   window.bindCatalogEvents = () => bindCatalogEvents();
   window.gotoPaso = setStep;
   window.nextStep = handleNext;

@@ -40,6 +40,7 @@
             </a>
             {% if not categorias %}
             <form method="post" action="{{ url_for('inventario.crear_categoria') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-seedling me-1"></i>Sembrar catálogo
                 </button>

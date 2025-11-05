@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Subir Documento - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-upload me-2 text-success"></i>Subir Nuevo Documento
+                </h1>
+                <div class="d-flex gap-2">
+                    {% if has_endpoint('documentos.dashboard') %}
+                    <a href="{{ url_for('documentos.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    {% endif %}
+                    {% if has_endpoint('documentos.biblioteca') %}
+                    <a href="{{ url_for('documentos.biblioteca') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-book me-1"></i>Biblioteca
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                        <!-- Nombre del documento -->
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label">Nombre del Documento <span class="text-danger">*</span></label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="nombre"
+                                   name="nombre"
+                                   required
+                                   placeholder="Ej: Plano de planta baja">
+                        </div>
+
+                        <!-- Descripción -->
+                        <div class="mb-3">
+                            <label for="descripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control"
+                                      id="descripcion"
+                                      name="descripcion"
+                                      rows="3"
+                                      placeholder="Descripción detallada del documento..."></textarea>
+                            <div class="form-text">Descripción opcional del contenido del documento</div>
+                        </div>
+
+                        <!-- Obra -->
+                        <div class="mb-3">
+                            <label for="obra_id" class="form-label">Obra <span class="text-danger">*</span></label>
+                            <select class="form-select" id="obra_id" name="obra_id" required>
+                                <option value="">Seleccionar obra...</option>
+                                {% for obra in obras %}
+                                <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Tipo de documento -->
+                        <div class="mb-3">
+                            <label for="tipo_documento_id" class="form-label">Tipo de Documento <span class="text-danger">*</span></label>
+                            <select class="form-select" id="tipo_documento_id" name="tipo_documento_id" required>
+                                <option value="">Seleccionar tipo...</option>
+                                {% for tipo in tipos_documento %}
+                                <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                {% if current_user.rol == 'administrador' and has_endpoint('documentos.configuracion_tipos') %}
+                                <a href="{{ url_for('documentos.configuracion_tipos') }}" target="_blank">
+                                    Configurar tipos de documento
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Archivo -->
+                        <div class="mb-3">
+                            <label for="archivo" class="form-label">Archivo <span class="text-danger">*</span></label>
+                            <input type="file"
+                                   class="form-control"
+                                   id="archivo"
+                                   name="archivo"
+                                   required
+                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.dwg,.jpg,.jpeg,.png">
+                            <div class="form-text">
+                                Formatos permitidos: PDF, Word, Excel, AutoCAD (DWG), imágenes (JPG, PNG)
+                                <br>Tamaño máximo: 50 MB
+                            </div>
+                        </div>
+
+                        <!-- Número de versión -->
+                        <div class="mb-3">
+                            <label for="numero_version" class="form-label">Número de Versión</label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="numero_version"
+                                   name="numero_version"
+                                   placeholder="Ej: v1.0, Rev A, etc.">
+                            <div class="form-text">Opcional: Indicador de versión del documento</div>
+                        </div>
+
+                        <!-- Estado inicial -->
+                        <div class="mb-3">
+                            <label for="estado" class="form-label">Estado Inicial</label>
+                            <select class="form-select" id="estado" name="estado">
+                                <option value="revision" selected>En Revisión</option>
+                                {% if current_user.rol == 'administrador' %}
+                                <option value="aprobado">Aprobado</option>
+                                {% endif %}
+                            </select>
+                        </div>
+
+                        <!-- Etiquetas/Tags -->
+                        <div class="mb-3">
+                            <label for="tags" class="form-label">Etiquetas</label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="tags"
+                                   name="tags"
+                                   placeholder="Ej: arquitectura, planos, estructural">
+                            <div class="form-text">Etiquetas separadas por comas para facilitar la búsqueda</div>
+                        </div>
+
+                        <!-- Botones de acción -->
+                        <div class="d-flex gap-2 justify-content-end">
+                            {% if has_endpoint('documentos.dashboard') %}
+                            <a href="{{ url_for('documentos.dashboard') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancelar
+                            </a>
+                            {% endif %}
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-upload me-1"></i>Subir Documento
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Información adicional -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-info-circle me-2"></i>Información Importante</h6>
+                    <ul class="mb-0">
+                        <li>Los documentos subidos serán almacenados de forma segura</li>
+                        <li>Por defecto, los documentos quedarán en estado "En Revisión"</li>
+                        <li>Los administradores pueden aprobar o rechazar documentos</li>
+                        <li>Puedes versionar documentos usando el campo de número de versión</li>
+                        <li>Las etiquetas facilitan la búsqueda y organización</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Validar tamaño del archivo antes de enviar
+document.querySelector('form').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('archivo');
+    const file = fileInput.files[0];
+
+    if (file) {
+        const maxSize = 50 * 1024 * 1024; // 50 MB
+        if (file.size > maxSize) {
+            e.preventDefault();
+            alert('El archivo es demasiado grande. El tamaño máximo es 50 MB.');
+            return false;
+        }
+    }
+});
+
+// Auto-llenar nombre del documento basado en el archivo
+document.getElementById('archivo').addEventListener('change', function(e) {
+    const nombreInput = document.getElementById('nombre');
+    if (!nombreInput.value && this.files.length > 0) {
+        const fileName = this.files[0].name;
+        const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.')) || fileName;
+        nombreInput.value = nameWithoutExt;
+    }
+});
+</script>
+{% endblock %}
