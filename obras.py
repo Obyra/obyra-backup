@@ -129,51 +129,120 @@ def buscar_direcciones():
         return jsonify({'ok': False, 'error': 'Query is required'}), 400
 
     try:
+        # Configuración de Nominatim
         url = "https://nominatim.openstreetmap.org/search"
-        params = {
-            'q': query,
-            'format': 'json',
-            'limit': 10,  # Aumentado para más opciones
-            'addressdetails': 1,
-            'countrycodes': 'ar',  # Limitar a Argentina
-            'bounded': 1,  # Búsqueda acotada
-            'viewbox': '-73.5,-55,-53,-21.5',  # Bounds de Argentina
-            'dedupe': 1  # Eliminar duplicados
-        }
         headers = {
             'User-Agent': 'OBYRA-IA-Construction-Management/1.0',
-            'Accept-Language': 'es-AR,es;q=0.9'  # Preferir resultados en español
+            'Accept-Language': 'es-AR,es;q=0.9'
         }
 
-        response = requests.get(url, params=params, headers=headers, timeout=8)
+        # Preparar múltiples búsquedas para mejorar resultados
+        all_results = []
+        seen_place_ids = set()
 
+        # 1. Búsqueda normal con query original
+        params_normal = {
+            'q': query,
+            'format': 'json',
+            'limit': 20,  # Aumentado significativamente
+            'addressdetails': 1,
+            'countrycodes': 'ar',
+            'dedupe': 1,
+            'polygon_threshold': 0.0
+        }
+
+        response = requests.get(url, params=params_normal, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            # Filtrar y ordenar resultados por relevancia
-            filtered = []
             for item in data:
-                # Priorizar resultados en Buenos Aires y ciudades principales
-                item['relevance'] = 0
-                if 'address' in item:
-                    addr = item.get('address', {})
-                    # Boost para Buenos Aires y CABA
-                    if 'Buenos Aires' in str(addr) or 'CABA' in str(addr):
-                        item['relevance'] += 2
-                    # Boost si tiene calle + número
-                    if 'road' in addr and 'house_number' in addr:
+                place_id = item.get('place_id')
+                if place_id and place_id not in seen_place_ids:
+                    seen_place_ids.add(place_id)
+                    all_results.append(item)
+
+        # 2. Si hay pocos resultados, hacer búsqueda estructurada (ciudad + calle)
+        if len(all_results) < 5:
+            # Agregar ", Argentina" si no está
+            query_with_country = query if 'argentina' in query.lower() else f"{query}, Argentina"
+            params_structured = {
+                'q': query_with_country,
+                'format': 'json',
+                'limit': 15,
+                'addressdetails': 1,
+                'countrycodes': 'ar',
+                'dedupe': 0,  # No deduplicar para obtener más variedad
+                'extratags': 1
+            }
+
+            response2 = requests.get(url, params=params_structured, headers=headers, timeout=10)
+            if response2.status_code == 200:
+                data2 = response2.json()
+                for item in data2:
+                    place_id = item.get('place_id')
+                    if place_id and place_id not in seen_place_ids:
+                        seen_place_ids.add(place_id)
+                        all_results.append(item)
+
+        # Calcular relevancia mejorada para cada resultado
+        for item in all_results:
+            item['relevance'] = 0
+            display_name = item.get('display_name', '').lower()
+            query_lower = query.lower()
+
+            # Boost por coincidencia exacta o parcial
+            if query_lower in display_name:
+                item['relevance'] += 10
+
+            # Boost por coincidencia de palabras individuales
+            query_words = set(query_lower.split())
+            display_words = set(display_name.split(','))
+            matching_words = len(query_words.intersection(display_words))
+            item['relevance'] += matching_words * 2
+
+            if 'address' in item:
+                addr = item.get('address', {})
+
+                # Priorizar direcciones completas (calle + número)
+                if addr.get('road') and addr.get('house_number'):
+                    item['relevance'] += 8
+                elif addr.get('road'):
+                    item['relevance'] += 4
+
+                # Boost para ciudades principales
+                city = addr.get('city', '') or addr.get('town', '') or addr.get('village', '')
+                if city:
+                    item['relevance'] += 3
+                    # Extra boost para Buenos Aires, Córdoba, Rosario, etc.
+                    if any(c in city.lower() for c in ['buenos aires', 'córdoba', 'cordoba', 'rosario', 'mendoza', 'la plata']):
                         item['relevance'] += 3
-                    # Penalizar si es solo provincia o país
-                    if addr.get('type') in ['state', 'country']:
-                        item['relevance'] -= 5
-                filtered.append(item)
 
-            # Ordenar por relevancia
-            filtered.sort(key=lambda x: x.get('relevance', 0), reverse=True)
+                # Boost si menciona provincia
+                if addr.get('state'):
+                    item['relevance'] += 2
 
-            return jsonify({'ok': True, 'results': filtered[:10]})
-        else:
-            current_app.logger.warning(f"Nominatim returned status {response.status_code}")
-            return jsonify({'ok': False, 'error': 'Search service unavailable'}), 503
+                # Penalizar si es solo provincia o país sin detalle
+                if item.get('type') in ['state', 'country']:
+                    item['relevance'] -= 10
+
+                # Penalizar si es algo muy genérico
+                if item.get('type') in ['administrative']:
+                    item['relevance'] -= 3
+
+            # Boost por clase específica
+            osm_class = item.get('class', '')
+            if osm_class in ['building', 'highway', 'place']:
+                item['relevance'] += 2
+
+        # Ordenar por relevancia y eliminar duplicados
+        all_results.sort(key=lambda x: x.get('relevance', 0), reverse=True)
+
+        # Tomar los mejores 15 resultados
+        top_results = all_results[:15]
+
+        if not top_results:
+            return jsonify({'ok': True, 'results': []})
+
+        return jsonify({'ok': True, 'results': top_results})
 
     except requests.exceptions.Timeout:
         current_app.logger.warning(f"Nominatim timeout for query: {query}")

@@ -69,12 +69,6 @@
                                 <i class="fas fa-plus me-2"></i>Nuevo Presupuesto
                             </a></li>
                             {% endif %}
-                            {% if has_endpoint('cotizacion.calculadora_inteligente') %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('cotizacion.calculadora_inteligente') }}">
-                                <i class="fas fa-brain me-2"></i>Calculadora IA
-                            </a></li>
-                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}

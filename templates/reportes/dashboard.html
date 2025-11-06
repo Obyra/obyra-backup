@@ -167,9 +167,6 @@
                         <div class="text-center py-4">
                             <i class="fas fa-building text-muted fa-3x mb-3"></i>
                             <p class="text-muted">No hay obras activas en este momento</p>
-                            <a href="{{ url_for('obras.crear') }}" class="btn btn-primary">
-                                <i class="fas fa-plus me-1"></i>Crear Nueva Obra
-                            </a>
                         </div>
                     {% endif %}
                 </div>
@@ -293,24 +290,22 @@
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-3">
-                        <a href="{{ url_for('obras.crear') }}" class="btn btn-primary d-flex align-items-center">
-                            <i class="fas fa-plus me-3"></i>
+                        <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-success d-flex align-items-center">
+                            <i class="fas fa-file-invoice-dollar me-3"></i>
                             <div class="text-start">
-                                <div class="fw-bold">Nueva Obra</div>
-                                <small>Crear proyecto</small>
+                                <div class="fw-bold">Presupuestos</div>
+                                <small>Ver presupuestos</small>
                             </div>
                         </a>
-                        
-                        {% if has_endpoint('cotizacion.calculadora_inteligente') %}
-                        <a href="{{ url_for('cotizacion.calculadora_inteligente') }}" class="btn btn-success d-flex align-items-center">
-                            <i class="fas fa-calculator me-3"></i>
+
+                        <a href="{{ url_for('equipos.lista') }}" class="btn btn-primary d-flex align-items-center">
+                            <i class="fas fa-users me-3"></i>
                             <div class="text-start">
-                                <div class="fw-bold">Calcular Cómputo</div>
-                                <small>Estimar materiales</small>
+                                <div class="fw-bold">Equipos</div>
+                                <small>Gestionar equipos</small>
                             </div>
                         </a>
-                        {% endif %}
-                        
+
                         <a href="{{ url_for('marketplaces.index') }}" class="btn btn-warning d-flex align-items-center">
                             <i class="fas fa-store me-3"></i>
                             <div class="text-start">
@@ -318,8 +313,8 @@
                                 <small>Buscar proveedores</small>
                             </div>
                         </a>
-                        
-                        <button type="button" class="btn btn-warning d-flex align-items-center" 
+
+                        <button type="button" class="btn btn-warning d-flex align-items-center"
                                 data-bs-toggle="modal" data-bs-target="#reportModal">
                             <i class="fas fa-file-pdf me-3"></i>
                             <div class="text-start">

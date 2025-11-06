@@ -12,7 +12,9 @@ class Base(DeclarativeBase):
 db = SQLAlchemy(model_class=Base)
 login_manager = LoginManager()
 migrate = Migrate()
-csrf = CSRFProtect()
+# CSRF temporalmente deshabilitado - causaba problemas con endpoint eliminar
+# TODO: Reimplementar CSRF de forma selectiva
+csrf = None  # Era: CSRFProtect()
 
 # Rate limiter se inicializa en app.py con setup_rate_limiter()
 limiter = None

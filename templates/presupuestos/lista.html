@@ -663,12 +663,28 @@ async function eliminarPresupuesto(id, numero) {
     }
 
     try {
+        // Obtener el token CSRF del meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        // Agregar token CSRF en header si existe
+        if (csrfToken) {
+            headers['X-CSRFToken'] = csrfToken;
+        }
+
+        // Crear body con token CSRF
+        const body = JSON.stringify({
+            csrf_token: csrfToken
+        });
+
         const response = await fetch(`/presupuestos/${id}/eliminar`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: headers,
+            body: body
         });
 
         const result = await response.json().catch(() => ({}));
@@ -680,7 +696,7 @@ async function eliminarPresupuesto(id, numero) {
         showAlert(result.mensaje || 'Presupuesto eliminado correctamente.', 'success');
         setTimeout(() => window.location.reload(), 800);
     } catch (error) {
-        console.error(error);
+        console.error('Error al eliminar:', error);
         showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
     }
 }

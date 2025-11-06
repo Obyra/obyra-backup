@@ -126,9 +126,9 @@
                                 <strong>Descripción:</strong> <span id="obra-descripcion">{{ obra.descripcion if obra and obra.descripcion else 'Sin descripción' }}</span><br>
                             </div>
                             <div class="col-md-6">
-                                <strong>Dirección:</strong> <span id="obra-direccion">{{ obra.direccion if obra and obra.direccion else 'Sin especificar' }}</span><br>
-                                <strong>Fecha Inicio:</strong> <span id="obra-fecha-inicio">{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra and obra.fecha_inicio else 'Sin definir' }}</span><br>
-                                <strong>Fecha Fin Est.:</strong> <span id="obra-fecha-fin">{{ obra.fecha_fin_estimada.strftime('%d/%m/%Y') if obra and obra.fecha_fin_estimada else 'Sin definir' }}</span><br>
+                                <strong>Dirección:</strong> <span id="obra-direccion">{{ obra.direccion if obra and obra.direccion else (datos_proyecto.get('ubicacion', 'Sin especificar') if datos_proyecto else 'Sin especificar') }}</span><br>
+                                <strong>Tipo de Obra:</strong> <span id="obra-tipo">{{ datos_proyecto.get('tipo_obra', 'Sin especificar') if datos_proyecto else 'Sin especificar' }}</span><br>
+                                <strong>Superficie:</strong> <span id="obra-superficie">{{ datos_proyecto.get('superficie_m2', 'Sin especificar') if datos_proyecto else 'Sin especificar' }} m²</span><br>
                             </div>
                         </div>
                     </div>
@@ -406,15 +406,15 @@
                     
                     <div class="row text-center mb-3">
                         <div class="col-4">
-                            <strong class="text-info d-block">{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}</strong>
+                            <strong class="text-info d-block">{{ subtotal_materiales|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Materiales</small>
                         </div>
                         <div class="col-4">
-                            <strong class="text-warning d-block">{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}</strong>
+                            <strong class="text-warning d-block">{{ subtotal_mano_obra|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Mano de Obra</small>
                         </div>
                         <div class="col-4">
-                            <strong class="text-secondary d-block">{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}</strong>
+                            <strong class="text-secondary d-block">{{ subtotal_equipos|moneda(presupuesto.currency) }}</strong>
                             <small class="text-muted">Equipos</small>
                         </div>
                     </div>
@@ -476,7 +476,10 @@
                                     <th>Unidad</th>
                                     <th class="text-end">Cantidad</th>
                                     <th class="text-end">P. Unitario</th>
-                                    <th class="text-end">Total</th>
+                                    <th class="text-end">Total {{ presupuesto.currency }}</th>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <th class="text-end">Total ARS</th>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th width="50"></th>
                                     {% endif %}
@@ -510,10 +513,16 @@
                                     </td>
                                     <td class="text-end fw-bold">
                                         {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
-                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                    </td>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <td class="text-end fw-bold text-muted">
+                                        {% if item.total_ars %}
+                                            {{ item.total_ars|moneda('ARS') }}
+                                        {% else %}
+                                            -
                                         {% endif %}
                                     </td>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td class="text-end">
                                         <div class="d-flex gap-2 justify-content-end">
@@ -536,7 +545,10 @@
                             <tfoot>
                                 <tr class="table-info">
                                     <th colspan="4" class="text-end">Subtotal Materiales:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}</th>
+                                    <th class="text-end">{{ subtotal_materiales|moneda(presupuesto.currency) }}</th>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <th class="text-end">-</th>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -581,7 +593,10 @@
                                     <th class="text-end">Jornales</th>
                                     <th>Unidad</th>
                                     <th class="text-end">P. Unitario</th>
-                                    <th class="text-end">Total</th>
+                                    <th class="text-end">Total {{ presupuesto.currency }}</th>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <th class="text-end">Total ARS</th>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th width="50"></th>
                                     {% endif %}
@@ -620,10 +635,16 @@
                                     </td>
                                     <td class="text-end fw-bold">
                                         {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
-                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                    </td>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <td class="text-end fw-bold text-muted">
+                                        {% if item.total_ars %}
+                                            {{ item.total_ars|moneda('ARS') }}
+                                        {% else %}
+                                            -
                                         {% endif %}
                                     </td>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td class="text-end">
                                         <div class="d-flex gap-2 justify-content-end">
@@ -646,7 +667,10 @@
                             <tfoot>
                                 <tr class="table-warning">
                                     <th colspan="6" class="text-end">Subtotal Mano de Obra:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}</th>
+                                    <th class="text-end">{{ subtotal_mano_obra|moneda(presupuesto.currency) }}</th>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <th class="text-end">-</th>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -689,7 +713,10 @@
                                     <th>Unidad</th>
                                     <th class="text-end">Cantidad</th>
                                     <th class="text-end">P. Unitario</th>
-                                    <th class="text-end">Total</th>
+                                    <th class="text-end">Total {{ presupuesto.currency }}</th>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <th class="text-end">Total ARS</th>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th width="50"></th>
                                     {% endif %}
@@ -723,10 +750,16 @@
                                     </td>
                                     <td class="text-end fw-bold">
                                         {{ (item.total_currency or item.total)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.total_ars %}
-                                            <div class="small text-muted">≈ {{ item.total_ars|moneda('ARS') }}</div>
+                                    </td>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <td class="text-end fw-bold text-muted">
+                                        {% if item.total_ars %}
+                                            {{ item.total_ars|moneda('ARS') }}
+                                        {% else %}
+                                            -
                                         {% endif %}
                                     </td>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td class="text-end">
                                         <div class="d-flex gap-2 justify-content-end">
@@ -749,7 +782,10 @@
                             <tfoot>
                                 <tr class="table-secondary">
                                     <th colspan="4" class="text-end">Subtotal Equipos:</th>
-                                    <th class="text-end">{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}</th>
+                                    <th class="text-end">{{ subtotal_equipos|moneda(presupuesto.currency) }}</th>
+                                    {% if presupuesto.currency == 'USD' %}
+                                    <th class="text-end">-</th>
+                                    {% endif %}
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <th></th>
                                     {% endif %}
@@ -821,12 +857,25 @@
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label class="form-label">Precio Unitario</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input type="number" class="form-control" name="precio_unitario" 
-                                   placeholder="0.00" step="0.01" min="0" required>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Moneda</label>
+                                <select class="form-select" name="currency" required>
+                                    <option value="ARS" {{ 'selected' if presupuesto.currency == 'ARS' else '' }}>Pesos (ARS)</option>
+                                    <option value="USD" {{ 'selected' if presupuesto.currency == 'USD' else '' }}>Dólares (USD)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Precio Unitario</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" name="precio_unitario"
+                                           placeholder="0.00" step="0.01" min="0" required>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -978,12 +1027,28 @@ async function eliminarPresupuesto(id, numero) {
     }
 
     try {
+        // Obtener el token CSRF del meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        // Agregar token CSRF en header si existe
+        if (csrfToken) {
+            headers['X-CSRFToken'] = csrfToken;
+        }
+
+        // Crear body con token CSRF
+        const body = JSON.stringify({
+            csrf_token: csrfToken
+        });
+
         const response = await fetch(`/presupuestos/${id}/eliminar`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: headers,
+            body: body
         });
 
         const result = await response.json().catch(() => ({}));
@@ -993,9 +1058,9 @@ async function eliminarPresupuesto(id, numero) {
         }
 
         showAlert(result.mensaje || 'Presupuesto eliminado correctamente.', 'success');
-        setTimeout(() => window.location.reload(), 800);
+        setTimeout(() => window.location.href = '/presupuestos', 800);
     } catch (error) {
-        console.error(error);
+        console.error('Error al eliminar:', error);
         showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
     }
 }
@@ -1230,8 +1295,15 @@ function renderItemDisplay(row) {
             `<td class="text-end">${formatNumber(jornales, 1)}</td>`,
             `<td>${unidad}</td>`,
             `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`,
-            `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}${approxTotalHtml}</td>`
+            `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}</td>`
         ];
+        // Add ARS column if presupuesto is in USD
+        if (resumenCurrency === 'USD') {
+            const arsCell = Number.isFinite(totalArs)
+                ? `<td class="text-end fw-bold text-muted">${formatCurrencyValue(totalArs, 'ARS')}</td>`
+                : `<td class="text-end fw-bold text-muted">-</td>`;
+            cells.push(arsCell);
+        }
         const actionCell = getActionCellHtml(row, itemId);
         row.innerHTML = cells.join('') + actionCell;
         return;
@@ -1239,7 +1311,7 @@ function renderItemDisplay(row) {
 
     const quantityCell = `<td class="text-end">${formatNumber(cantidad, 2)}</td>`;
     const priceCell = `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`;
-    const totalCell = `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}${approxTotalHtml}</td>`;
+    const totalCell = `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}</td>`;
     const cells = [
         `<td>${descripcion}</td>`,
         `<td>${unidad}</td>`,
@@ -1247,6 +1319,13 @@ function renderItemDisplay(row) {
         priceCell,
         totalCell
     ];
+    // Add ARS column if presupuesto is in USD
+    if (resumenCurrency === 'USD') {
+        const arsCell = Number.isFinite(totalArs)
+            ? `<td class="text-end fw-bold text-muted">${formatCurrencyValue(totalArs, 'ARS')}</td>`
+            : `<td class="text-end fw-bold text-muted">-</td>`;
+        cells.push(arsCell);
+    }
     const actionCell = getActionCellHtml(row, itemId);
     row.innerHTML = cells.join('') + actionCell;
 }
@@ -1261,6 +1340,7 @@ function editarItem(itemId) {
     const unidad = row.dataset.itemUnidad || (tipo === 'mano_obra' ? 'jornal' : '');
     const cantidad = parseDecimalString(row.dataset.itemCantidad, 0);
     const precioUnitario = parseDecimalString(row.dataset.itemPrecio, 0);
+    const currency = row.dataset.itemCurrency || 'ARS';
     const personas = parseInt(row.dataset.itemPersonas || '1', 10) || 1;
     const dias = parseDecimalString(row.dataset.itemDias, 1);
     const jornales = parseDecimalString(row.dataset.itemJornales, personas * dias);
@@ -1273,7 +1353,15 @@ function editarItem(itemId) {
             <td><input type="number" min="0.5" step="0.1" class="form-control form-control-sm text-center" value="${dias.toFixed(1)}" id="edit-dias-${itemId}" onchange="actualizarEdicionJornales(${itemId})"></td>
             <td class="text-end"><span id="edit-jornales-${itemId}">${(personas * dias).toFixed(1)}</span></td>
             <td>${escapeHtml(unidad)}</td>
-            <td><input type="number" class="form-control form-control-sm text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionJornales(${itemId})"></td>
+            <td>
+                <div class="input-group input-group-sm">
+                    <select class="form-select" id="edit-currency-${itemId}" style="max-width: 70px;">
+                        <option value="ARS" ${currency === 'ARS' ? 'selected' : ''}>ARS</option>
+                        <option value="USD" ${currency === 'USD' ? 'selected' : ''}>USD</option>
+                    </select>
+                    <input type="number" class="form-control text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionJornales(${itemId})">
+                </div>
+            </td>
             <td class="text-end"><span id="edit-total-${itemId}">${totalEstimado.toFixed(2)}</span></td>
             <td class="text-end">
                 <div class="d-flex gap-2 justify-content-end">
@@ -1306,7 +1394,15 @@ function editarItem(itemId) {
             </select>
         </td>
         <td><input type="number" class="form-control form-control-sm text-end" value="${cantidad.toFixed(2)}" step="0.01" id="edit-cant-${itemId}" oninput="actualizarEdicionTotalSimple(${itemId})"></td>
-        <td><input type="number" class="form-control form-control-sm text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionTotalSimple(${itemId})"></td>
+        <td>
+            <div class="input-group input-group-sm">
+                <select class="form-select" id="edit-currency-${itemId}" style="max-width: 70px;">
+                    <option value="ARS" ${currency === 'ARS' ? 'selected' : ''}>ARS</option>
+                    <option value="USD" ${currency === 'USD' ? 'selected' : ''}>USD</option>
+                </select>
+                <input type="number" class="form-control text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionTotalSimple(${itemId})">
+            </div>
+        </td>
         <td class="text-end"><span id="edit-total-${itemId}">${totalEstimado.toFixed(2)}</span></td>
         <td class="text-end">
             <div class="d-flex gap-2 justify-content-end">
@@ -1332,9 +1428,11 @@ async function guardarItem(itemId) {
     if (!row) return;
 
     const tipo = (row.dataset.itemTipo || '').toLowerCase();
+    const currencySelect = document.getElementById(`edit-currency-${itemId}`);
     const data = {
         descripcion: document.getElementById(`edit-desc-${itemId}`).value,
-        precio_unitario: parseFloat(document.getElementById(`edit-precio-${itemId}`).value)
+        precio_unitario: parseFloat(document.getElementById(`edit-precio-${itemId}`).value),
+        currency: currencySelect ? currencySelect.value : 'ARS'
     };
 
     if (!Number.isFinite(data.precio_unitario)) {
@@ -1379,6 +1477,7 @@ async function guardarItem(itemId) {
 
         if (result.exito) {
             row.dataset.itemDescripcion = data.descripcion || row.dataset.itemDescripcion || '';
+            row.dataset.itemCurrency = data.currency || row.dataset.itemCurrency || 'ARS';
             if (tipo === 'mano_obra') {
                 row.dataset.itemUnidad = row.dataset.itemUnidad || 'jornal';
                 row.dataset.itemCantidad = data.cantidad;
@@ -1398,14 +1497,16 @@ async function guardarItem(itemId) {
                 row.dataset.itemTotalCurrency = data.cantidad * data.precio_unitario;
             }
 
-            const fxRate = parseDecimalString(row.dataset.itemFxRate, NaN);
-            if (row.dataset.itemCurrency && row.dataset.itemCurrency !== 'ARS' && Number.isFinite(fxRate) && fxRate > 0) {
-                const precioVal = parseDecimalString(row.dataset.itemPrecio, 0);
-                const totalVal = parseDecimalString(row.dataset.itemTotalCurrency, precioVal);
-                row.dataset.itemPrecioArs = (precioVal * fxRate).toFixed(2);
-                row.dataset.itemTotalArs = (totalVal * fxRate).toFixed(2);
+            // Update ARS values from backend response
+            if (result.price_unit_ars !== null && result.price_unit_ars !== undefined) {
+                row.dataset.itemPrecioArs = result.price_unit_ars;
             } else {
                 row.dataset.itemPrecioArs = '';
+            }
+
+            if (result.total_ars !== null && result.total_ars !== undefined) {
+                row.dataset.itemTotalArs = result.total_ars;
+            } else {
                 row.dataset.itemTotalArs = '';
             }
 

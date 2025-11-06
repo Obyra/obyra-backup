@@ -124,7 +124,19 @@ def crear():
                 'cliente_nombre': cliente_nombre,
             }
 
-            # Crear presupuesto
+            # Procesar datos de IA antes de crear el presupuesto
+            ia_payload_str = request.form.get('ia_etapas_payload', '').strip()
+            moneda_presupuesto = 'ARS'  # Default
+
+            if ia_payload_str:
+                try:
+                    ia_payload = json.loads(ia_payload_str)
+                    # Obtener la moneda del payload de IA
+                    moneda_presupuesto = ia_payload.get('moneda', 'ARS')
+                except Exception as e:
+                    current_app.logger.error(f"Error parseando payload IA para obtener moneda: {str(e)}")
+
+            # Crear presupuesto con la moneda correcta
             presupuesto = Presupuesto(
                 organizacion_id=org_id,
                 numero=numero,
@@ -134,7 +146,7 @@ def crear():
                 datos_proyecto=json.dumps(datos_proyecto),
                 ubicacion_texto=request.form.get('ubicacion', '').strip(),
                 estado='borrador',
-                currency='ARS',
+                currency=moneda_presupuesto,
                 iva_porcentaje=Decimal('21.0'),
                 vigencia_bloqueada=True
             )
@@ -143,33 +155,43 @@ def crear():
             db.session.flush()  # Get presupuesto.id before commit
 
             # Procesar items calculados por IA si existen
-            ia_payload_str = request.form.get('ia_etapas_payload', '').strip()
             if ia_payload_str:
                 try:
                     ia_payload = json.loads(ia_payload_str)
                     etapas_ia = ia_payload.get('etapas', [])
+                    moneda_ia = ia_payload.get('moneda', 'ARS')
 
                     for etapa in etapas_ia:
                         items_etapa = etapa.get('items', [])
                         for item in items_etapa:
+                            # Obtener precios en la moneda correcta
+                            precio_unit = Decimal(str(item.get('precio_unit', 0)))
+                            subtotal = Decimal(str(item.get('subtotal', 0)))
+
+                            # Si hay precio en ARS, usarlo, sino usar el precio_unit
+                            precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
+                            total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
+
                             item_presupuesto = ItemPresupuesto(
                                 presupuesto_id=presupuesto.id,
                                 tipo=item.get('tipo', 'material'),
                                 descripcion=item.get('descripcion', ''),
                                 unidad=item.get('unidad', 'unidades'),
                                 cantidad=Decimal(str(item.get('cantidad', 0))),
-                                precio_unitario=Decimal(str(item.get('precio_unit', 0))),
-                                total=Decimal(str(item.get('subtotal', 0))),
+                                precio_unitario=precio_unit,
+                                total=subtotal,
                                 origen='ia',
-                                currency=ia_payload.get('moneda', 'ARS'),
-                                price_unit_ars=Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0)))),
-                                total_ars=Decimal(str(item.get('subtotal', 0)))
+                                currency=moneda_ia,
+                                price_unit_ars=precio_unit_ars,
+                                total_ars=total_ars
                             )
                             db.session.add(item_presupuesto)
 
-                    current_app.logger.info(f"Guardados {sum(len(e.get('items', [])) for e in etapas_ia)} items de IA para presupuesto {numero}")
+                    current_app.logger.info(f"Guardados {sum(len(e.get('items', [])) for e in etapas_ia)} items de IA en {moneda_ia} para presupuesto {numero}")
                 except Exception as e:
                     current_app.logger.error(f"Error procesando items de IA: {str(e)}")
+                    import traceback
+                    current_app.logger.error(traceback.format_exc())
                     # No fallar la creación del presupuesto por este error
 
             db.session.commit()
@@ -227,7 +249,7 @@ def detalle(id):
             organizacion_id=org_id
         ).first_or_404()
 
-        # Obtener items agrupados por tipo
+        # Obtener items agrupados por tipo y origen
         items = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(
             ItemPresupuesto.tipo,
             ItemPresupuesto.id
@@ -238,6 +260,31 @@ def detalle(id):
         items_mano_obra = [i for i in items if i.tipo == 'mano_obra']
         items_equipos = [i for i in items if i.tipo == 'equipo']
 
+        # Separar items de IA
+        ia_materiales = [i for i in items if i.tipo == 'material' and i.origen == 'ia']
+        ia_mano_obra = [i for i in items if i.tipo == 'mano_obra' and i.origen == 'ia']
+        ia_equipos = [i for i in items if i.tipo == 'equipo' and i.origen == 'ia']
+        ia_herramientas = [i for i in items if i.tipo == 'herramienta' and i.origen == 'ia']
+
+        # Calcular totales de IA
+        totales_ia = {
+            'materiales': sum(i.total for i in ia_materiales),
+            'mano_obra': sum(i.total for i in ia_mano_obra),
+            'equipos': sum(i.total for i in ia_equipos),
+            'herramientas': sum(i.total for i in ia_herramientas),
+        }
+        totales_ia['general'] = sum(totales_ia.values())
+
+        # Calcular subtotales por categoría
+        subtotal_materiales = sum(i.total for i in items_materiales)
+        subtotal_mano_obra = sum(i.total for i in items_mano_obra)
+        subtotal_equipos = sum(i.total for i in items_equipos)
+
+        # Calcular total general del presupuesto
+        subtotal = sum(i.total for i in items)
+        iva_monto = subtotal * (presupuesto.iva_porcentaje / Decimal('100'))
+        total_con_iva = subtotal + iva_monto
+
         # Parsear datos_proyecto para obtener información del cliente y obra
         import json
         datos_proyecto = {}
@@ -247,11 +294,26 @@ def detalle(id):
             except:
                 pass
 
+        # Pasar subtotales como variables separadas al template
         return render_template('presupuestos/detalle.html',
                              presupuesto=presupuesto,
+                             materiales=items_materiales,
+                             mano_obra=items_mano_obra,
+                             equipos=items_equipos,
                              items_materiales=items_materiales,
                              items_mano_obra=items_mano_obra,
                              items_equipos=items_equipos,
+                             ia_materiales=ia_materiales,
+                             ia_mano_obra=ia_mano_obra,
+                             ia_equipos=ia_equipos,
+                             ia_herramientas=ia_herramientas,
+                             totales_ia=totales_ia,
+                             subtotal_materiales=subtotal_materiales,
+                             subtotal_mano_obra=subtotal_mano_obra,
+                             subtotal_equipos=subtotal_equipos,
+                             subtotal=subtotal,
+                             iva_monto=iva_monto,
+                             total_con_iva=total_con_iva,
                              datos_proyecto=datos_proyecto)
 
     except Exception as e:
@@ -371,10 +433,22 @@ def agregar_item(id):
         cantidad = Decimal(request.form.get('cantidad', '0'))
         unidad = request.form.get('unidad', 'un')
         precio_unitario = Decimal(request.form.get('precio_unitario', '0'))
+        currency = request.form.get('currency', presupuesto.currency or 'ARS')
 
         if not descripcion or cantidad <= 0 or precio_unitario <= 0:
             flash('Datos inválidos para el item', 'danger')
             return redirect(url_for('presupuestos.detalle', id=id))
+
+        # Calcular total
+        total = cantidad * precio_unitario
+
+        # Si la moneda es USD, calcular equivalente en ARS (usando tasa si existe)
+        price_unit_ars = precio_unitario
+        total_ars = total
+
+        if currency == 'USD' and presupuesto.tasa_usd_venta:
+            price_unit_ars = precio_unitario * presupuesto.tasa_usd_venta
+            total_ars = total * presupuesto.tasa_usd_venta
 
         # Crear item
         item = ItemPresupuesto(
@@ -384,8 +458,11 @@ def agregar_item(id):
             cantidad=cantidad,
             unidad=unidad,
             precio_unitario=precio_unitario,
-            subtotal=cantidad * precio_unitario,
-            orden=0  # Se ordenará después
+            total=total,
+            currency=currency,
+            price_unit_ars=price_unit_ars,
+            total_ars=total_ars,
+            origen='manual'
         )
 
         db.session.add(item)
@@ -399,6 +476,85 @@ def agregar_item(id):
         db.session.rollback()
         flash('Error al agregar el item', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route('/item/<int:id>/editar', methods=['POST'])
+@login_required
+def editar_item(id):
+    """Editar item de presupuesto"""
+    if current_user.role not in ['admin', 'pm']:
+        return jsonify({'exito': False, 'error': 'No tienes permisos'}), 403
+
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'exito': False, 'error': 'Sin organización activa'}), 400
+
+        item = ItemPresupuesto.query.get_or_404(id)
+        presupuesto = item.presupuesto
+
+        if presupuesto.organizacion_id != org_id:
+            return jsonify({'exito': False, 'error': 'No autorizado'}), 403
+
+        if presupuesto.estado != 'borrador':
+            return jsonify({'exito': False, 'error': 'Solo se pueden editar items de presupuestos en borrador'}), 400
+
+        # Obtener datos del JSON
+        data = request.get_json()
+
+        # Actualizar campos básicos
+        if 'descripcion' in data:
+            item.descripcion = data['descripcion']
+        if 'unidad' in data:
+            item.unidad = data['unidad']
+        if 'cantidad' in data:
+            item.cantidad = Decimal(str(data['cantidad']))
+        if 'precio_unitario' in data:
+            item.precio_unitario = Decimal(str(data['precio_unitario']))
+        if 'currency' in data:
+            item.currency = data['currency']
+
+        # Recalcular total
+        item.total = item.cantidad * item.precio_unitario
+
+        # Calcular equivalente en ARS según la moneda
+        if item.currency == 'USD' and presupuesto.tasa_usd_venta:
+            item.price_unit_ars = item.precio_unitario * presupuesto.tasa_usd_venta
+            item.total_ars = item.total * presupuesto.tasa_usd_venta
+        else:
+            # Si es ARS, copiar los valores directamente
+            item.price_unit_ars = item.precio_unitario
+            item.total_ars = item.total
+
+        db.session.commit()
+
+        # Calcular totales actualizados
+        items = ItemPresupuesto.query.filter_by(presupuesto_id=presupuesto.id).all()
+        subtotal_materiales = sum(i.total for i in items if i.tipo == 'material')
+        subtotal_mano_obra = sum(i.total for i in items if i.tipo == 'mano_obra')
+        subtotal_equipos = sum(i.total for i in items if i.tipo == 'equipo')
+        total_sin_iva = sum(i.total for i in items)
+        iva_monto = total_sin_iva * (presupuesto.iva_porcentaje / Decimal('100'))
+        total_con_iva = total_sin_iva + iva_monto
+
+        return jsonify({
+            'exito': True,
+            'nuevo_total': float(item.total),
+            'price_unit_ars': float(item.price_unit_ars) if item.price_unit_ars else None,
+            'total_ars': float(item.total_ars) if item.total_ars else None,
+            'currency': item.currency,
+            'subtotal_materiales': float(subtotal_materiales),
+            'subtotal_mano_obra': float(subtotal_mano_obra),
+            'subtotal_equipos': float(subtotal_equipos),
+            'total_sin_iva': float(total_sin_iva),
+            'iva_monto': float(iva_monto),
+            'total_con_iva': float(total_con_iva)
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.editar_item: {e}")
+        db.session.rollback()
+        return jsonify({'exito': False, 'error': 'Error al editar el item'}), 500
 
 
 @presupuestos_bp.route('/items/<int:id>/eliminar', methods=['POST'])
@@ -434,6 +590,65 @@ def eliminar_item(id):
         db.session.rollback()
         flash('Error al eliminar el item', 'danger')
         return redirect(url_for('index'))
+
+
+@presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar(id):
+    """Eliminar (archivar) presupuesto"""
+    try:
+        # Log para debugging
+        current_app.logger.info(f'Usuario {current_user.id} intentando eliminar presupuesto {id}')
+        current_app.logger.info(f'Usuario rol: {getattr(current_user, "rol", None)}, role: {getattr(current_user, "role", None)}')
+
+        # Verificar permisos usando ambos sistemas de roles
+        es_admin = (getattr(current_user, 'rol', None) == 'administrador' or
+                    getattr(current_user, 'role', None) == 'admin' or
+                    getattr(current_user, 'is_super_admin', False))
+
+        if not es_admin:
+            current_app.logger.warning(f'Usuario {current_user.id} sin permisos de admin')
+            return jsonify({'error': 'No tienes permisos para eliminar presupuestos'}), 403
+
+        org_id = get_current_org_id()
+        current_app.logger.info(f'Org ID obtenido: {org_id}')
+
+        if not org_id:
+            # Intentar obtener de usuario directamente
+            org_id = getattr(current_user, 'organizacion_id', None)
+            current_app.logger.info(f'Org ID de usuario: {org_id}')
+
+        if not org_id:
+            current_app.logger.warning('No se pudo obtener organización activa')
+            return jsonify({'error': 'Sin organización activa'}), 400
+
+        presupuesto = Presupuesto.query.get(id)
+        if not presupuesto:
+            current_app.logger.warning(f'Presupuesto {id} no encontrado')
+            return jsonify({'error': 'Presupuesto no encontrado'}), 404
+
+        if presupuesto.organizacion_id != org_id:
+            current_app.logger.warning(f'Usuario sin autorización para presupuesto {id}')
+            return jsonify({'error': 'No autorizado'}), 403
+
+        # Solo permitir eliminar presupuestos en borrador o perdidos
+        if presupuesto.estado not in ['borrador', 'perdido']:
+            current_app.logger.warning(f'Intento de eliminar presupuesto {id} en estado {presupuesto.estado}')
+            return jsonify({'error': f'Solo se pueden eliminar presupuestos en borrador o perdidos. Estado actual: {presupuesto.estado}'}), 400
+
+        # Marcar como eliminado en lugar de borrar
+        presupuesto.estado = 'eliminado'
+        db.session.commit()
+
+        current_app.logger.info(f'Presupuesto {presupuesto.numero} eliminado correctamente')
+        return jsonify({
+            'mensaje': f'Presupuesto {presupuesto.numero} eliminado correctamente'
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.eliminar: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar el presupuesto: {str(e)}'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/cambiar-estado', methods=['POST'])

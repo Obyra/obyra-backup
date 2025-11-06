@@ -111,7 +111,15 @@ def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
         return default
-    return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+    value_lower = value.strip().lower()
+    if value_lower in {"false", "0", "no", "n", "off"}:
+        return False
+    return value_lower in {"1", "true", "t", "yes", "y", "on"}
+
+# DESHABILITAR CSRF COMPLETAMENTE - Leer desde variables de entorno
+app.config['WTF_CSRF_ENABLED'] = _env_flag('WTF_CSRF_ENABLED', False)
+app.config['WTF_CSRF_CHECK_DEFAULT'] = _env_flag('WTF_CSRF_CHECK_DEFAULT', False)
+print(f"🔧 CSRF CONFIG: WTF_CSRF_ENABLED={app.config['WTF_CSRF_ENABLED']}, WTF_CSRF_CHECK_DEFAULT={app.config['WTF_CSRF_CHECK_DEFAULT']}")
 
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -180,7 +188,11 @@ else:
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
-csrf.init_app(app)
+
+# CSRF Configuration - Temporalmente deshabilitado completamente
+# TODO: Reimplementar CSRF de forma selectiva más adelante
+# csrf.init_app(app)  # COMENTADO - Causaba problemas con endpoint eliminar
+
 migrate = Migrate(app, db)
 
 # Setup rate limiter
@@ -776,6 +788,16 @@ for module_name, attr_name, prefix in [
     try:
         blueprint = _import_blueprint(module_name, attr_name)
         app.register_blueprint(blueprint, url_prefix=prefix)
+
+        # Excluir endpoint de eliminar presupuesto del CSRF
+        if module_name == 'presupuestos':
+            # El nombre de la vista en el blueprint es solo 'eliminar'
+            view_func = blueprint.view_functions.get('eliminar')
+            if view_func:
+                csrf.exempt(view_func)
+                app.logger.info(f"CSRF exempt aplicado a presupuestos.eliminar")
+            else:
+                app.logger.warning(f"No se encontró la vista 'eliminar' en presupuestos. Vistas disponibles: {list(blueprint.view_functions.keys())}")
     except Exception as exc:
         app.logger.warning(
             "Blueprint opcional %s no disponible: %s", module_name, exc

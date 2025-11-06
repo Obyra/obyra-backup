@@ -42,10 +42,10 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     # Run Alembic migrations
     if [ -f "migrations/env.py" ]; then
         echo "Running: flask db upgrade"
-        flask db upgrade || {
-            echo "ERROR: Database migration failed!"
+        if ! flask db upgrade 2>&1; then
+            echo "ERROR: Database migration failed! See error above."
             exit 1
-        }
+        fi
         echo "✓ Migrations completed successfully!"
     else
         echo "WARNING: No migrations directory found, skipping..."

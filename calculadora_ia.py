@@ -246,8 +246,10 @@ ETAPAS_CONSTRUCCION = {
             },
             "herramientas": {
                 "rodillos_pintura_18cm": {"cantidad": 8, "dias": 25},
+                "rodillos_pintura_10cm": {"cantidad": 6, "dias": 25},
                 "pinceles_1_pulgada": {"cantidad": 6, "dias": 25},
                 "pinceles_2_pulgadas": {"cantidad": 4, "dias": 25},
+                "pinceles_3_pulgadas": {"cantidad": 3, "dias": 25},
                 "pinceles_detalle": {"cantidad": 8, "dias": 25},
                 "bandejas_pintura": {"cantidad": 6, "dias": 25},
                 "espatulas_masilla": {"cantidad": 4, "dias": 20},
@@ -256,6 +258,9 @@ ETAPAS_CONSTRUCCION = {
                 "cortadora_ceramico_manual": {"cantidad": 1, "dias": 12},
                 "regla_cortaceramico": {"cantidad": 1, "dias": 12},
                 "esponja_limpieza": {"cantidad": 12, "dias": 15},
+                "trapos_limpieza": {"cantidad": 20, "dias": 25},
+                "baldes_limpieza": {"cantidad": 6, "dias": 25},
+                "cepillos_limpieza": {"cantidad": 4, "dias": 20},
                 "nivel_pequeno_20cm": {"cantidad": 4, "dias": 20}
             }
         }
@@ -312,12 +317,24 @@ ETAPAS_CONSTRUCCION = {
             },
             "herramientas": {
                 "pistola_pintura_electrica": {"cantidad": 2, "dias": 20},
+                "rodillos_pintura_23cm": {"cantidad": 10, "dias": 20},
+                "rodillos_pintura_15cm": {"cantidad": 8, "dias": 20},
+                "rodillos_textura": {"cantidad": 4, "dias": 15},
+                "pinceles_profesionales_1": {"cantidad": 8, "dias": 20},
+                "pinceles_profesionales_2": {"cantidad": 6, "dias": 20},
+                "pinceles_profesionales_3": {"cantidad": 4, "dias": 20},
+                "pinceles_angulares": {"cantidad": 6, "dias": 18},
+                "bandejas_pintura_profesional": {"cantidad": 8, "dias": 20},
                 "lijadora_orbital": {"cantidad": 2, "dias": 15},
                 "taladro_mezclador": {"cantidad": 1, "dias": 15},
                 "nivel_laser_pequeno": {"cantidad": 2, "dias": 20},
                 "aspiradora_seco_humedo": {"cantidad": 1, "dias": 20},
                 "esmeril_angular": {"cantidad": 1, "dias": 15},
-                "caladora_profesional": {"cantidad": 1, "dias": 10}
+                "caladora_profesional": {"cantidad": 1, "dias": 10},
+                "esponjas_limpieza_prof": {"cantidad": 15, "dias": 18},
+                "trapos_microfibra": {"cantidad": 25, "dias": 20},
+                "baldes_profesionales": {"cantidad": 8, "dias": 20},
+                "cepillos_limpieza_prof": {"cantidad": 6, "dias": 18}
             }
         }
     },
@@ -368,6 +385,7 @@ ETAPAS_CONSTRUCCION = {
             "materiales_etapa": ["pintura", "pintura_exterior", "yeso", "porcelanato", "azulejos"],
             "maquinaria": {
                 "robot_pintura_automatico": {"cantidad": 1, "dias": 10},
+                "maquina_proyectora_pintura_airless": {"cantidad": 1, "dias": 12},
                 "sistema_proyeccion_yeso_robotico": {"cantidad": 1, "dias": 8},
                 "cortadora_porcelanato_CNC": {"cantidad": 1, "dias": 10},
                 "pulidora_pisos_robotica": {"cantidad": 1, "dias": 8},
@@ -377,12 +395,22 @@ ETAPAS_CONSTRUCCION = {
             },
             "herramientas": {
                 "pistola_pintura_electrostatica": {"cantidad": 2, "dias": 12},
+                "rodillos_premium_25cm": {"cantidad": 12, "dias": 15},
+                "rodillos_microf fibra": {"cantidad": 10, "dias": 15},
+                "pinceles_premium_profesional": {"cantidad": 12, "dias": 15},
+                "pinceles_detalle_premium": {"cantidad": 8, "dias": 15},
+                "brochas_premium": {"cantidad": 6, "dias": 15},
+                "bandejas_pintura_premium": {"cantidad": 10, "dias": 15},
                 "medidor_laser_3D": {"cantidad": 2, "dias": 15},
                 "sistema_control_humedad": {"cantidad": 1, "dias": 15},
                 "aspiradora_HEPA_profesional": {"cantidad": 1, "dias": 15},
                 "cepillo_pulidora_diamante": {"cantidad": 2, "dias": 10},
                 "nivel_laser_autonivelante": {"cantidad": 3, "dias": 20},
-                "compresor_silencioso_premium": {"cantidad": 1, "dias": 15}
+                "compresor_silencioso_premium": {"cantidad": 1, "dias": 15},
+                "esponjas_premium": {"cantidad": 20, "dias": 15},
+                "trapos_profesionales_premium": {"cantidad": 30, "dias": 15},
+                "kit_limpieza_profesional": {"cantidad": 3, "dias": 15},
+                "baldes_premium_graduados": {"cantidad": 10, "dias": 15}
             }
         }
     }
@@ -951,6 +979,81 @@ def calcular_etapa_por_reglas(
             'moneda': currency,
             'subtotal': float(_quantize_currency(dias * precio_moneda)),
         })
+
+    # Agregar herramientas y maquinaria adicional de ETAPAS_CONSTRUCCION según tipo
+    # Mapear etapa_slug a nombre de etapa en ETAPAS_CONSTRUCCION
+    etapa_mapping = {
+        'pintura': 'terminaciones',
+        'terminaciones': 'terminaciones',
+        'cimentacion': 'cimentacion_estructura',
+        'fundaciones': 'cimentacion_estructura',
+        'estructura': 'cimentacion_estructura',
+        'mamposteria': 'albanileria',
+        'albanileria': 'albanileria'
+    }
+
+    etapa_key = etapa_mapping.get(etapa_slug.lower())
+    if etapa_key and tipo_construccion in ETAPAS_CONSTRUCCION:
+        etapas_config = ETAPAS_CONSTRUCCION[tipo_construccion]
+        if etapa_key in etapas_config:
+            etapa_data = etapas_config[etapa_key]
+
+            # Escala de días según superficie
+            if superficie_dec <= Decimal('100'):
+                factor_dias = Decimal('1.0')
+            elif superficie_dec <= Decimal('200'):
+                factor_dias = Decimal('1.2')
+            elif superficie_dec <= Decimal('500'):
+                factor_dias = Decimal('1.5')
+            else:
+                factor_dias = Decimal('2.0')
+
+            # Agregar maquinaria adicional
+            for maquina, specs in etapa_data.get('maquinaria', {}).items():
+                cantidad = specs['cantidad']
+                dias = int(Decimal(str(specs['dias'])) * factor_dias)
+                # Precio estimado para maquinaria (40-60% del precio de equipos estándar)
+                precio_base = _precio_referencia('EQ-MEZCLADORA', cac_context)
+                precio_moneda = _convert_currency(precio_base * Decimal('0.5'), currency, tasa)
+                subtotal_equipos += _quantize_currency(Decimal(str(dias)) * precio_moneda)
+                items.append({
+                    'tipo': 'equipo',
+                    'codigo': f'EQ-{maquina[:20].upper()}',
+                    'descripcion': maquina.replace('_', ' ').title(),
+                    'unidad': 'día',
+                    'cantidad': float(dias),
+                    'precio_unit': float(precio_moneda),
+                    'precio_unit_ars': float(precio_base * Decimal('0.5')),
+                    'origen': 'ia',
+                    'just': f'Maquinaria {tipo_legible}',
+                    'moneda': currency,
+                    'subtotal': float(_quantize_currency(Decimal(str(dias)) * precio_moneda)),
+                })
+
+            # Agregar herramientas
+            for herramienta, specs in etapa_data.get('herramientas', {}).items():
+                cantidad_herr = specs['cantidad']
+                if superficie_dec > Decimal('300'):
+                    cantidad_herr = int(cantidad_herr * 1.2)
+                dias_herr = int(Decimal(str(specs['dias'])) * factor_dias)
+                # Precio estimado para herramientas (menor que maquinaria)
+                precio_base_herr = _precio_referencia('EQ-MEZCLADORA', cac_context) * Decimal('0.15')
+                precio_moneda_herr = _convert_currency(precio_base_herr, currency, tasa)
+                costo_herr = Decimal(str(cantidad_herr)) * precio_moneda_herr
+                subtotal_equipos += _quantize_currency(costo_herr)
+                items.append({
+                    'tipo': 'equipo',
+                    'codigo': f'HERR-{herramienta[:15].upper()}',
+                    'descripcion': herramienta.replace('_', ' ').title(),
+                    'unidad': 'unidades',
+                    'cantidad': float(cantidad_herr),
+                    'precio_unit': float(precio_moneda_herr),
+                    'precio_unit_ars': float(precio_base_herr),
+                    'origen': 'ia',
+                    'just': f'Herramientas {tipo_legible}',
+                    'moneda': currency,
+                    'subtotal': float(_quantize_currency(costo_herr)),
+                })
 
     subtotal_total = subtotal_materiales + subtotal_mano_obra + subtotal_equipos
     confianza = min(0.6 + 0.03 * len(items), 0.9)
