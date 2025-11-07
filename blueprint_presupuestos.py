@@ -354,12 +354,16 @@ def generar_pdf(id):
             'presupuestos/pdf_template.html',
             presupuesto=presupuesto,
             organizacion=organizacion,
+            usuario=current_user,
             now=datetime.now()
         )
 
-        # Generar PDF con WeasyPrint
+        # Generar PDF con WeasyPrint (ignorar warnings de fontconfig)
         pdf_buffer = io.BytesIO()
-        HTML(string=html_string).write_pdf(pdf_buffer)
+        HTML(string=html_string, base_url=request.url_root).write_pdf(
+            pdf_buffer,
+            presentational_hints=True
+        )
         pdf_buffer.seek(0)
 
         return send_file(
@@ -371,7 +375,7 @@ def generar_pdf(id):
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.generar_pdf: {e}", exc_info=True)
-        flash('Error al generar el PDF', 'danger')
+        flash(f'Error al generar el PDF: {str(e)}', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 
 
@@ -427,11 +431,15 @@ Saludos cordiales,
             'presupuestos/pdf_template.html',
             presupuesto=presupuesto,
             organizacion=organizacion,
+            usuario=current_user,
             now=datetime.now()
         )
 
         pdf_buffer = io.BytesIO()
-        HTML(string=html_string).write_pdf(pdf_buffer)
+        HTML(string=html_string, base_url=request.url_root).write_pdf(
+            pdf_buffer,
+            presentational_hints=True
+        )
         pdf_buffer.seek(0)
         pdf_bytes = pdf_buffer.read()
 
