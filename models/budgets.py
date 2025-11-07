@@ -220,6 +220,13 @@ class Presupuesto(db.Model):
         }
         return mapping.get(estado, 'bg-secondary text-white')
 
+    @property
+    def cliente_nombre(self):
+        """Retorna el nombre del cliente asociado al presupuesto"""
+        if self.cliente:
+            return self.cliente.nombre_completo
+        return None
+
     def registrar_tipo_cambio(self, snapshot):
         """Actualiza los metadatos de tipo de cambio según el snapshot recibido."""
 
