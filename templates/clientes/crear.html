@@ -122,38 +122,118 @@ function cerrarVentana() {
 
 // Detectar si el formulario fue enviado exitosamente
 {% if success %}
-    // Cliente creado exitosamente
-    if (window.opener) {
-        try {
-            // Notificar a la ventana padre que se creó un cliente
-            const clienteData = {
-                id: {{ cliente_creado.id if cliente_creado else 'null' }},
-                nombre_completo: "{{ cliente_creado.nombre_completo if cliente_creado else '' }}",
-                email: "{{ cliente_creado.email if cliente_creado else '' }}",
-                telefono: "{{ cliente_creado.telefono if cliente_creado else '' }}"
-            };
+    document.addEventListener('DOMContentLoaded', function() {
+        // Mostrar mensaje visual al usuario
+        const container = document.querySelector('.container');
+        if (container) {
+            container.innerHTML = `
+                <div class="row justify-content-center mt-5">
+                    <div class="col-md-6">
+                        <div class="card border-success">
+                            <div class="card-body text-center py-5">
+                                <div class="mb-4">
+                                    <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+                                </div>
+                                <h3 class="text-success mb-3">¡Cliente Creado Exitosamente!</h3>
+                                <p class="lead mb-4">{{ cliente_creado.nombre_completo }}</p>
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Cerrando...</span>
+                                </div>
+                                <p class="text-muted mt-3">Cerrando ventana y regresando al formulario...</p>
+                                <button onclick="cerrarManualmente()" class="btn btn-outline-secondary mt-3">
+                                    Cerrar Manualmente
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
-            // Llamar función en ventana padre para actualizar selector
-            if (window.opener.actualizarSelectorCliente) {
-                window.opener.actualizarSelectorCliente(clienteData);
+        // Cliente creado exitosamente
+        if (window.opener && !window.opener.closed) {
+            try {
+                // Notificar a la ventana padre que se creó un cliente
+                const clienteData = {
+                    id: {{ cliente_creado.id if cliente_creado else 'null' }},
+                    nombre_completo: "{{ cliente_creado.nombre_completo if cliente_creado else '' }}",
+                    email: "{{ cliente_creado.email if cliente_creado else '' }}",
+                    telefono: "{{ cliente_creado.telefono if cliente_creado else '' }}"
+                };
+
+                console.log('Enviando datos del cliente a ventana padre:', clienteData);
+
+                // Llamar función en ventana padre para actualizar selector
+                if (typeof window.opener.actualizarSelectorCliente === 'function') {
+                    window.opener.actualizarSelectorCliente(clienteData);
+                    console.log('Función actualizarSelectorCliente ejecutada');
+                } else {
+                    console.error('Función actualizarSelectorCliente no encontrada en ventana padre');
+                }
+
+                // Intentar cerrar esta ventana después de 2 segundos
+                setTimeout(function() {
+                    try {
+                        window.close();
+
+                        // Si window.close() no funciona (algunos navegadores lo bloquean)
+                        // intentar redirigir
+                        setTimeout(function() {
+                            if (!window.closed) {
+                                console.log('No se pudo cerrar automáticamente, mostrando instrucciones');
+                                const container = document.querySelector('.container');
+                                if (container) {
+                                    container.innerHTML = `
+                                        <div class="row justify-content-center mt-5">
+                                            <div class="col-md-6">
+                                                <div class="card border-info">
+                                                    <div class="card-body text-center py-5">
+                                                        <div class="mb-4">
+                                                            <i class="fas fa-info-circle text-info" style="font-size: 4rem;"></i>
+                                                        </div>
+                                                        <h3 class="text-info mb-3">Cliente Agregado</h3>
+                                                        <p class="lead mb-4">{{ cliente_creado.nombre_completo }}</p>
+                                                        <p class="text-muted">Por favor, cierra esta ventana manualmente para continuar.</p>
+                                                        <button onclick="window.close()" class="btn btn-primary mt-3">
+                                                            <i class="fas fa-times"></i> Cerrar Ventana
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                            }
+                        }, 500);
+                    } catch (e) {
+                        console.error('Error al cerrar ventana:', e);
+                    }
+                }, 2000);
+            } catch (e) {
+                console.error('Error al comunicar con ventana padre:', e);
+                // Si hay error, redirigir a lista
+                setTimeout(function() {
+                    window.location.href = "{{ url_for('clientes.lista') }}";
+                }, 2000);
             }
-
-            // Cerrar esta ventana después de 1 segundo
-            setTimeout(function() {
-                window.close();
-            }, 1000);
-        } catch (e) {
-            console.error('Error al comunicar con ventana padre:', e);
-            // Si hay error, redirigir a lista
+        } else {
+            // Si no hay ventana padre, redirigir a lista
+            console.log('No hay ventana padre, redirigiendo a lista');
             setTimeout(function() {
                 window.location.href = "{{ url_for('clientes.lista') }}";
-            }, 1500);
+            }, 2000);
         }
-    } else {
-        // Si no hay ventana padre, redirigir a lista
+    });
+
+    // Función para cerrar manualmente
+    function cerrarManualmente() {
+        window.close();
+        // Si no se cierra, redirigir
         setTimeout(function() {
-            window.location.href = "{{ url_for('clientes.lista') }}";
-        }, 1500);
+            if (!window.closed) {
+                window.location.href = "{{ url_for('clientes.lista') }}";
+            }
+        }, 100);
     }
 {% endif %}
 </script>
