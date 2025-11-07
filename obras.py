@@ -27,6 +27,7 @@ from models import (
     TareaAvanceFoto,
     WorkCertification,
     WorkPayment,
+    Cliente,
 )
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import (
@@ -462,6 +463,7 @@ def crear():
         nombre = request.form.get('nombre')
         descripcion = request.form.get('descripcion')  # FIX: antes no existía la variable
         direccion = request.form.get('direccion')
+        cliente_id = request.form.get('cliente_id')  # ID del cliente seleccionado
         cliente = request.form.get('cliente')
         telefono_cliente = request.form.get('telefono_cliente')
         email_cliente = request.form.get('email_cliente')
@@ -511,6 +513,7 @@ def crear():
             direccion_normalizada=direccion_normalizada,
             latitud=latitud,
             longitud=longitud,
+            cliente_id=int(cliente_id) if cliente_id else None,  # Relación con tabla clientes
             cliente=cliente,
             telefono_cliente=telefono_cliente,
             email_cliente=email_cliente,
@@ -539,7 +542,17 @@ def crear():
             db.session.rollback()
             flash(f'Error al crear la obra: {str(e)}', 'danger')
             current_app.logger.exception("Error creating obra")
-    return render_template('obras/crear.html')
+
+    # Obtener lista de clientes activos de la organización
+    org_id = get_current_org_id()
+    clientes = []
+    if org_id:
+        clientes = Cliente.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).order_by(Cliente.nombre, Cliente.apellido).all()
+
+    return render_template('obras/crear.html', clientes=clientes)
 
 @obras_bp.route('/<int:id>')
 @login_required

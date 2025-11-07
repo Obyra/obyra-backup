@@ -226,9 +226,16 @@ def crear():
         else:
             numero_sugerido = f"PRES-{fecha_hoy}-001"
 
+        # Obtener lista de clientes activos de la organización
+        clientes = Cliente.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).order_by(Cliente.nombre, Cliente.apellido).all()
+
         return render_template('presupuestos/crear.html',
                              obras=obras,
-                             numero_sugerido=numero_sugerido)
+                             numero_sugerido=numero_sugerido,
+                             clientes=clientes)
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.crear: {e}")

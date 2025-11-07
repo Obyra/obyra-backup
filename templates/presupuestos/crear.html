@@ -161,13 +161,26 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label for="cliente_nombre" class="form-label fw-bold">
+                                <label for="cliente_id" class="form-label fw-bold">
                                     <i class="fas fa-user text-secondary"></i> Cliente
                                 </label>
-                                <input type="text" class="form-control form-control-lg" 
-                                       id="cliente_nombre" name="cliente_nombre" 
-                                       placeholder="Nombre del cliente">
-                                <div class="form-text">Persona o empresa contratante</div>
+                                <div class="input-group input-group-lg">
+                                    <select class="form-select" id="cliente_id" name="cliente_id">
+                                        <option value="">Sin cliente asignado</option>
+                                        {% for cliente in clientes %}
+                                        <option value="{{ cliente.id }}">
+                                            {{ cliente.nombre_completo }} - {{ cliente.email }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <a href="{{ url_for('clientes.crear') }}" class="btn btn-outline-primary" target="_blank" title="Crear nuevo cliente">
+                                        <i class="fas fa-plus"></i>
+                                    </a>
+                                    <a href="{{ url_for('clientes.lista') }}" class="btn btn-outline-secondary" target="_blank" title="Ver todos los clientes">
+                                        <i class="fas fa-users"></i>
+                                    </a>
+                                </div>
+                                <div class="form-text">Selecciona el cliente o créalo haciendo clic en +</div>
                         </div>
                     </div>
 

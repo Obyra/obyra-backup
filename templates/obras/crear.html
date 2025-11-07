@@ -64,29 +64,50 @@
                         
                         <!-- Información del cliente -->
                         <h5 class="border-bottom pb-2 mb-3 mt-4">Información del Cliente</h5>
-                        
+
+                        <div class="mb-3">
+                            <label for="cliente_id" class="form-label">Cliente *</label>
+                            <div class="input-group">
+                                <select class="form-select" id="cliente_id" name="cliente_id" required>
+                                    <option value="">Seleccionar cliente...</option>
+                                    {% for cliente in clientes %}
+                                    <option value="{{ cliente.id }}"
+                                            data-telefono="{{ cliente.telefono or '' }}"
+                                            data-email="{{ cliente.email }}">
+                                        {{ cliente.nombre_completo }} - {{ cliente.email }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <a href="{{ url_for('clientes.crear') }}" class="btn btn-outline-primary" target="_blank" title="Crear nuevo cliente">
+                                    <i class="fas fa-plus"></i>
+                                </a>
+                                <a href="{{ url_for('clientes.lista') }}" class="btn btn-outline-secondary" target="_blank" title="Ver todos los clientes">
+                                    <i class="fas fa-users"></i>
+                                </a>
+                            </div>
+                            <div class="form-text">Selecciona el cliente de la obra o créalo haciendo clic en +</div>
+                        </div>
+
+                        <!-- Campos de solo lectura que se llenan automáticamente -->
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="cliente" class="form-label">Nombre del Cliente *</label>
-                                    <input type="text" class="form-control" id="cliente" name="cliente" 
-                                           placeholder="Empresa o persona" required>
+                                    <label for="cliente_nombre_display" class="form-label">Nombre (automático)</label>
+                                    <input type="text" class="form-control" id="cliente_nombre_display" readonly disabled>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="telefono_cliente" class="form-label">Teléfono</label>
-                                    <input type="tel" class="form-control" id="telefono_cliente" name="telefono_cliente" 
-                                           placeholder="11 1234-5678">
+                                    <label for="cliente_telefono_display" class="form-label">Teléfono (automático)</label>
+                                    <input type="text" class="form-control" id="cliente_telefono_display" readonly disabled>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="mb-3">
-                            <label for="email_cliente" class="form-label">Email del Cliente</label>
-                            <input type="email" class="form-control" id="email_cliente" name="email_cliente" 
-                                   placeholder="cliente@empresa.com">
-                        </div>
+
+                        <!-- Campos hidden para compatibilidad con backend -->
+                        <input type="hidden" id="cliente" name="cliente">
+                        <input type="hidden" id="telefono_cliente" name="telefono_cliente">
+                        <input type="hidden" id="email_cliente" name="email_cliente">
                         
                         <!-- Fechas -->
                         <h5 class="border-bottom pb-2 mb-3 mt-4">Cronograma</h5>
@@ -291,19 +312,50 @@ document.querySelector('form').addEventListener('submit', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     const fechaInicio = document.getElementById('fecha_inicio');
     const fechaFin = document.getElementById('fecha_fin_estimada');
-    
+
     fechaInicio.addEventListener('change', function() {
         if (fechaInicio.value) {
             fechaFin.min = fechaInicio.value;
         }
     });
-    
+
     fechaFin.addEventListener('change', function() {
         if (fechaInicio.value && fechaFin.value && fechaFin.value <= fechaInicio.value) {
             alert('La fecha de fin debe ser posterior a la fecha de inicio');
             fechaFin.value = '';
         }
     });
+
+    // Manejar selección de cliente
+    const clienteSelect = document.getElementById('cliente_id');
+    if (clienteSelect) {
+        clienteSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+
+            if (selectedOption.value) {
+                // Obtener datos del cliente desde los atributos data-*
+                const nombreCompleto = selectedOption.text.split(' - ')[0];
+                const telefono = selectedOption.dataset.telefono || '';
+                const email = selectedOption.dataset.email || '';
+
+                // Llenar campos de display
+                document.getElementById('cliente_nombre_display').value = nombreCompleto;
+                document.getElementById('cliente_telefono_display').value = telefono;
+
+                // Llenar campos hidden para backend
+                document.getElementById('cliente').value = nombreCompleto;
+                document.getElementById('telefono_cliente').value = telefono;
+                document.getElementById('email_cliente').value = email;
+            } else {
+                // Limpiar campos si no hay selección
+                document.getElementById('cliente_nombre_display').value = '';
+                document.getElementById('cliente_telefono_display').value = '';
+                document.getElementById('cliente').value = '';
+                document.getElementById('telefono_cliente').value = '';
+                document.getElementById('email_cliente').value = '';
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
