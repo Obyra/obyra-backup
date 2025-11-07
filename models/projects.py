@@ -32,8 +32,9 @@ class Obra(db.Model):
     progreso = db.Column(db.Integer, default=0)  # Porcentaje de avance
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)  # Nuevo: relación con tabla clientes
 
-    # Datos de cliente adicionales (según especificaciones)
+    # Datos de cliente adicionales (según especificaciones) - LEGACY, mantener por compatibilidad
     cliente_nombre = db.Column(db.String(120))
     cliente_email = db.Column(db.String(120))
     cliente_telefono = db.Column(db.String(50))
@@ -50,6 +51,7 @@ class Obra(db.Model):
 
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='obras')
+    cliente_rel = db.relationship('Cliente', back_populates='obras')  # Nuevo: relación con Cliente
     etapas = db.relationship('EtapaObra', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     asignaciones = db.relationship('AsignacionObra', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     presupuestos = db.relationship('Presupuesto', back_populates='obra', lazy='dynamic')

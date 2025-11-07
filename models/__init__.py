@@ -60,6 +60,9 @@ from models.budgets import (
     WizardStageCoefficient,
 )
 
+# Client models
+from models.clients import Cliente
+
 # Inventory models
 from models.inventory import (
     # Legacy
@@ -226,6 +229,8 @@ __all__ = [
     'GeocodeCache',
     'WizardStageVariant',
     'WizardStageCoefficient',
+    # Clients
+    'Cliente',
     # Inventory
     'CategoriaInventario',
     'ItemInventario',

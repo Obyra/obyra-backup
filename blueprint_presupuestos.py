@@ -6,9 +6,9 @@ from flask import (Blueprint, render_template, request, flash, redirect,
 from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from extensions import db
+from extensions import db, csrf
 from sqlalchemy import desc, or_
-from models import Presupuesto, ItemPresupuesto, Obra, Organizacion
+from models import Presupuesto, ItemPresupuesto, Obra, Organizacion, Cliente
 from services.memberships import get_current_org_id, get_current_membership
 from utils.pagination import Pagination
 from utils import safe_int
@@ -34,8 +34,10 @@ def lista():
         vigencia = request.args.get('vigencia', '')
         obra_id = request.args.get('obra_id', type=int)
 
-        # Query base
-        query = Presupuesto.query.filter_by(organizacion_id=org_id)
+        # Query base - excluir presupuestos eliminados
+        query = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
+            Presupuesto.estado != 'eliminado'
+        )
 
         # Aplicar filtros
         if estado:
@@ -593,6 +595,7 @@ def eliminar_item(id):
 
 
 @presupuestos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@csrf.exempt  # Exentar CSRF para este endpoint que usa AJAX
 @login_required
 def eliminar(id):
     """Eliminar (archivar) presupuesto"""

@@ -106,8 +106,10 @@ if not secret_key:
     print("⚠️  WARNING: Using insecure default SECRET_KEY. Set SECRET_KEY environment variable!")
 
 app.secret_key = secret_key
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 def _env_flag(name: str, default: bool = False) -> bool:
+    """Helper to parse boolean environment variables"""
     value = os.environ.get(name)
     if value is None:
         return default
@@ -115,13 +117,6 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value_lower in {"false", "0", "no", "n", "off"}:
         return False
     return value_lower in {"1", "true", "t", "yes", "y", "on"}
-
-# DESHABILITAR CSRF COMPLETAMENTE - Leer desde variables de entorno
-app.config['WTF_CSRF_ENABLED'] = _env_flag('WTF_CSRF_ENABLED', False)
-app.config['WTF_CSRF_CHECK_DEFAULT'] = _env_flag('WTF_CSRF_CHECK_DEFAULT', False)
-print(f"🔧 CSRF CONFIG: WTF_CSRF_ENABLED={app.config['WTF_CSRF_ENABLED']}, WTF_CSRF_CHECK_DEFAULT={app.config['WTF_CSRF_CHECK_DEFAULT']}")
-
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # configure structured logging
 from config.logging_config import setup_logging
@@ -189,9 +184,8 @@ else:
 db.init_app(app)
 login_manager.init_app(app)
 
-# CSRF Configuration - Temporalmente deshabilitado completamente
-# TODO: Reimplementar CSRF de forma selectiva más adelante
-# csrf.init_app(app)  # COMENTADO - Causaba problemas con endpoint eliminar
+# CSRF Protection
+csrf.init_app(app)
 
 migrate = Migrate(app, db)
 
@@ -783,6 +777,7 @@ else:
 
 for module_name, attr_name, prefix in [
     ('presupuestos', 'presupuestos_bp', '/presupuestos'),
+    ('blueprint_clientes', 'clientes_bp', None),  # usa el prefijo definido en el blueprint
     ('agent_local', 'agent_bp', None),
 ]:
     try:

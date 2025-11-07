@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Clientes{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-users"></i> Gestión de Clientes</h2>
+        <a href="{{ url_for('clientes.crear') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Nuevo Cliente
+        </a>
+    </div>
+
+    <!-- Filtros de búsqueda -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('clientes.lista') }}" class="row g-3">
+                <div class="col-md-6">
+                    <input type="text" class="form-control" name="buscar"
+                           placeholder="Buscar por nombre, email, documento..."
+                           value="{{ buscar }}">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" name="activo">
+                        <option value="">Todos los estados</option>
+                        <option value="true" {% if activo == 'true' %}selected{% endif %}>Activos</option>
+                        <option value="false" {% if activo == 'false' %}selected{% endif %}>Inactivos</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i> Buscar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de clientes -->
+    <div class="card">
+        <div class="card-body">
+            {% if clientes %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Documento</th>
+                            <th>Email</th>
+                            <th>Teléfono</th>
+                            <th>Empresa</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cliente in clientes %}
+                        <tr>
+                            <td>
+                                <strong>{{ cliente.nombre }} {{ cliente.apellido }}</strong>
+                            </td>
+                            <td>{{ cliente.tipo_documento }}: {{ cliente.numero_documento }}</td>
+                            <td>
+                                <a href="mailto:{{ cliente.email }}">{{ cliente.email }}</a>
+                            </td>
+                            <td>
+                                {% if cliente.telefono %}
+                                <a href="tel:{{ cliente.telefono }}">{{ cliente.telefono }}</a>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>{{ cliente.empresa or '-' }}</td>
+                            <td>
+                                {% if cliente.activo %}
+                                <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('clientes.editar', id=cliente.id) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button onclick="eliminarCliente({{ cliente.id }}, '{{ cliente.nombre }} {{ cliente.apellido }}')"
+                                        class="btn btn-sm btn-outline-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginación -->
+            {% if pagination.pages > 1 %}
+            <nav>
+                <ul class="pagination">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ pagination.prev_num }}&buscar={{ buscar }}&activo={{ activo }}">Anterior</a>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                        {% if page_num %}
+                            {% if page_num == pagination.page %}
+                            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ page_num }}&buscar={{ buscar }}&activo={{ activo }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ pagination.next_num }}&buscar={{ buscar }}&activo={{ activo }}">Siguiente</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No se encontraron clientes</p>
+                <a href="{{ url_for('clientes.crear') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Crear primer cliente
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function eliminarCliente(id, nombre) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar al cliente "${nombre}"?\n\nSi tiene presupuestos asociados, solo se desactivará.`)) {
+        return;
+    }
+
+    fetch(`/clientes/${id}/eliminar`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.mensaje);
+            window.location.reload();
+        }
+    })
+    .catch(error => {
+        alert('Error al eliminar el cliente');
+        console.error(error);
+    });
+}
+</script>
+{% endblock %}
