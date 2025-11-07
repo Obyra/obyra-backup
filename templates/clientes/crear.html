@@ -123,35 +123,35 @@ function cerrarVentana() {
 // Detectar si el formulario fue enviado exitosamente
 {% if success %}
     document.addEventListener('DOMContentLoaded', function() {
-        // Mostrar mensaje visual al usuario
-        const container = document.querySelector('.container');
-        if (container) {
-            container.innerHTML = `
-                <div class="row justify-content-center mt-5">
-                    <div class="col-md-6">
-                        <div class="card border-success">
-                            <div class="card-body text-center py-5">
-                                <div class="mb-4">
-                                    <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
-                                </div>
-                                <h3 class="text-success mb-3">¡Cliente Creado Exitosamente!</h3>
-                                <p class="lead mb-4">{{ cliente_creado.nombre_completo }}</p>
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Cerrando...</span>
-                                </div>
-                                <p class="text-muted mt-3">Cerrando ventana y regresando al formulario...</p>
-                                <button onclick="cerrarManualmente()" class="btn btn-outline-secondary mt-3">
-                                    Cerrar Manualmente
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
+        console.log('=== CLIENTE CREADO - INICIANDO CIERRE ===');
+        console.log('window.opener existe:', !!window.opener);
+        console.log('window.opener.closed:', window.opener ? window.opener.closed : 'N/A');
 
         // Cliente creado exitosamente
         if (window.opener && !window.opener.closed) {
+            // Mostrar mensaje visual al usuario
+            const container = document.querySelector('.container');
+            if (container) {
+                container.innerHTML = `
+                    <div class="row justify-content-center mt-5">
+                        <div class="col-md-6">
+                            <div class="card border-success">
+                                <div class="card-body text-center py-5">
+                                    <div class="mb-4">
+                                        <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+                                    </div>
+                                    <h3 class="text-success mb-3">¡Cliente Creado!</h3>
+                                    <p class="lead mb-4">{{ cliente_creado.nombre_completo }}</p>
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Cerrando...</span>
+                                    </div>
+                                    <p class="text-muted mt-3">Regresando al presupuesto...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
             try {
                 // Notificar a la ventana padre que se creó un cliente
                 const clienteData = {
@@ -166,49 +166,24 @@ function cerrarVentana() {
                 // Llamar función en ventana padre para actualizar selector
                 if (typeof window.opener.actualizarSelectorCliente === 'function') {
                     window.opener.actualizarSelectorCliente(clienteData);
-                    console.log('Función actualizarSelectorCliente ejecutada');
+                    console.log('Función actualizarSelectorCliente ejecutada exitosamente');
                 } else {
                     console.error('Función actualizarSelectorCliente no encontrada en ventana padre');
                 }
 
-                // Intentar cerrar esta ventana después de 2 segundos
+                // Cerrar ventana inmediatamente después de comunicar
                 setTimeout(function() {
-                    try {
-                        window.close();
+                    console.log('Intentando cerrar ventana...');
+                    window.close();
 
-                        // Si window.close() no funciona (algunos navegadores lo bloquean)
-                        // intentar redirigir
-                        setTimeout(function() {
-                            if (!window.closed) {
-                                console.log('No se pudo cerrar automáticamente, mostrando instrucciones');
-                                const container = document.querySelector('.container');
-                                if (container) {
-                                    container.innerHTML = `
-                                        <div class="row justify-content-center mt-5">
-                                            <div class="col-md-6">
-                                                <div class="card border-info">
-                                                    <div class="card-body text-center py-5">
-                                                        <div class="mb-4">
-                                                            <i class="fas fa-info-circle text-info" style="font-size: 4rem;"></i>
-                                                        </div>
-                                                        <h3 class="text-info mb-3">Cliente Agregado</h3>
-                                                        <p class="lead mb-4">{{ cliente_creado.nombre_completo }}</p>
-                                                        <p class="text-muted">Por favor, cierra esta ventana manualmente para continuar.</p>
-                                                        <button onclick="window.close()" class="btn btn-primary mt-3">
-                                                            <i class="fas fa-times"></i> Cerrar Ventana
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                }
-                            }
-                        }, 500);
-                    } catch (e) {
-                        console.error('Error al cerrar ventana:', e);
-                    }
-                }, 2000);
+                    // Verificar si se cerró
+                    setTimeout(function() {
+                        if (!window.closed) {
+                            console.log('Ventana no se cerró automáticamente');
+                            alert('Por favor, cierra esta ventana manualmente');
+                        }
+                    }, 300);
+                }, 800);
             } catch (e) {
                 console.error('Error al comunicar con ventana padre:', e);
                 // Si hay error, redirigir a lista
@@ -221,7 +196,7 @@ function cerrarVentana() {
             console.log('No hay ventana padre, redirigiendo a lista');
             setTimeout(function() {
                 window.location.href = "{{ url_for('clientes.lista') }}";
-            }, 2000);
+            }, 1500);
         }
     });
 
