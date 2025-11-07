@@ -575,6 +575,7 @@ def agregar_item(id):
 
 @presupuestos_bp.route('/item/<int:id>/editar', methods=['POST'])
 @login_required
+@csrf.exempt
 def editar_item(id):
     """Editar item de presupuesto"""
     if current_user.rol not in ['administrador', 'tecnico']:
