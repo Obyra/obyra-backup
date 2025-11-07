@@ -1465,11 +1465,22 @@ async function guardarItem(itemId) {
     }
 
     try {
+        // Obtener el token CSRF del meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        // Agregar token CSRF en header si existe
+        if (csrfToken) {
+            headers['X-CSRFToken'] = csrfToken;
+        }
+
         const response = await fetch(`/presupuestos/item/${itemId}/editar`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: headers,
             body: JSON.stringify(data)
         });
 
