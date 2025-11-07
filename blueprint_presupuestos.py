@@ -258,6 +258,10 @@ def detalle(id):
             organizacion_id=org_id
         ).first_or_404()
 
+        # Recalcular totales del presupuesto para asegurar que estén actualizados
+        presupuesto.calcular_totales()
+        db.session.commit()
+
         # Obtener items agrupados por tipo y origen
         items = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(
             ItemPresupuesto.tipo,
