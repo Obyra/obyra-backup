@@ -63,6 +63,11 @@ def lista():
 
         presupuestos = query.paginate(page=page, per_page=per_page, error_out=False)
 
+        # Recalcular totales de todos los presupuestos en la página actual
+        for presupuesto in presupuestos.items:
+            presupuesto.calcular_totales()
+        db.session.commit()
+
         # Obras disponibles para filtro
         obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
 
