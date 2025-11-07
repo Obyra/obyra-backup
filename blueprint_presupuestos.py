@@ -378,8 +378,11 @@ def generar_pdf(id):
         )
 
     except Exception as e:
-        current_app.logger.error(f"Error en presupuestos.generar_pdf: {e}", exc_info=True)
-        flash(f'Error al generar el PDF: {str(e)}', 'danger')
+        import traceback
+        error_msg = str(e)
+        traceback_str = traceback.format_exc()
+        current_app.logger.error(f"Error en presupuestos.generar_pdf: {error_msg}\n{traceback_str}")
+        flash(f'Error al generar el PDF: {error_msg}', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 
 
