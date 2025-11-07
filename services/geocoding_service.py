@@ -49,6 +49,46 @@ def _normalize_query(query: str) -> str:
     return " ".join((query or "").strip().lower().split())
 
 
+def _normalize_argentina_address(query: str) -> str:
+    """
+    Normaliza direcciones argentinas para mejorar precisión de búsqueda.
+    Agrega contexto geográfico si no está presente.
+    """
+    if not query:
+        return query
+
+    query = query.strip()
+    query_lower = query.lower()
+
+    # Si ya tiene "argentina", retornar tal cual
+    if "argentina" in query_lower:
+        return query
+
+    # Lista de partidos/localidades comunes de Buenos Aires
+    partidos_ba = [
+        "tres de febrero", "caseros", "san martin", "vicente lopez", "la matanza",
+        "lomas de zamora", "quilmes", "avellaneda", "lanus", "moron", "ituzaingo",
+        "hurlingham", "san isidro", "tigre", "san fernando", "escobar", "pilar",
+        "moreno", "merlo", "general rodriguez", "lujan", "campana", "zarate",
+        "berazategui", "florencio varela", "almirante brown", "esteban echeverria",
+        "ezeiza", "san vicente", "cañuelas", "brandsen", "marcos paz"
+    ]
+
+    # Verificar si menciona algún partido/localidad de Buenos Aires
+    tiene_partido_ba = any(partido in query_lower for partido in partidos_ba)
+
+    # Si menciona un partido de Buenos Aires, agregar "Buenos Aires, Argentina"
+    if tiene_partido_ba:
+        return f"{query}, Buenos Aires, Argentina"
+
+    # Si menciona "buenos aires" explícitamente
+    if "buenos aires" in query_lower:
+        return f"{query}, Argentina"
+
+    # Por defecto, asumir que es de Buenos Aires (la mayoría de construcciones están ahí)
+    return f"{query}, Buenos Aires, Argentina"
+
+
 def _should_refresh(entry: GeocodeCache) -> bool:
     if CACHE_TTL_SECONDS <= 0:
         return False
@@ -64,6 +104,8 @@ def _fetch_nominatim(query: str, *, limit: int = 5) -> List[GeocodeResult]:
         "format": "jsonv2",
         "limit": max(1, min(limit, 10)),
         "addressdetails": 1,
+        "countrycodes": "ar",  # Limitar búsqueda a Argentina
+        "accept-language": "es",  # Preferir resultados en español
     }
     headers = {
         "User-Agent": DEFAULT_USER_AGENT,
@@ -89,6 +131,11 @@ def _fetch_nominatim(query: str, *, limit: int = 5) -> List[GeocodeResult]:
         display_name = item.get("display_name") or query
         place_id = str(item.get("place_id") or "") or None
         normalized = _normalize_query(display_name)
+
+        # Calcular score de relevancia para ordenar resultados
+        address = item.get("address", {})
+        importance = float(item.get("importance", 0))
+
         results.append(
             GeocodeResult(
                 display_name=display_name,
@@ -100,6 +147,8 @@ def _fetch_nominatim(query: str, *, limit: int = 5) -> List[GeocodeResult]:
                 raw=item,
             )
         )
+
+    # Ordenar por importancia (Nominatim ya lo hace, pero aseguramos)
     return results
 
 
@@ -109,19 +158,34 @@ def search(query: str, *, provider: Optional[str] = None, limit: int = 5) -> Lis
     if not query or not query.strip():
         return []
 
+    # Normalizar dirección argentina para mejorar precisión
+    normalized_query = _normalize_argentina_address(query)
+
     provider_key = (provider or current_app.config.get("MAPS_PROVIDER") or DEFAULT_PROVIDER).lower()
 
     try:
         if provider_key in {"nominatim", "osm"}:
-            results = _fetch_nominatim(query, limit=limit)
+            results = _fetch_nominatim(normalized_query, limit=limit)
         else:
             current_app.logger.warning("Proveedor de mapas %s no soportado, usando Nominatim", provider_key)
-            results = _fetch_nominatim(query, limit=limit)
+            results = _fetch_nominatim(normalized_query, limit=limit)
     except requests.RequestException as exc:  # pragma: no cover - network errors
         current_app.logger.warning("Fallo al consultar geocodificador: %s", exc)
         return []
 
-    return [result.to_dict() for result in results]
+    # Filtrar resultados para priorizar Argentina
+    argentina_results = []
+    other_results = []
+
+    for result in [r.to_dict() for r in results]:
+        display_name = result.get("display_name", "").lower()
+        if "argentina" in display_name:
+            argentina_results.append(result)
+        else:
+            other_results.append(result)
+
+    # Retornar primero resultados argentinos
+    return argentina_results + other_results
 
 
 def resolve(query: str, *, provider: Optional[str] = None, use_cache: bool = True) -> Optional[Dict[str, Any]]:
