@@ -19,6 +19,11 @@ class Organizacion(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.String(500), nullable=True)  # Descripción o tagline de la empresa
+    cuit = db.Column(db.String(20), nullable=True)  # CUIT de la organización
+    direccion = db.Column(db.String(255), nullable=True)  # Dirección fiscal
+    telefono = db.Column(db.String(50), nullable=True)  # Teléfono de contacto
+    email = db.Column(db.String(120), nullable=True)  # Email de contacto
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     token_invitacion = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     activa = db.Column(db.Boolean, default=True)

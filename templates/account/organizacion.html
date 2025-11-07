@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Configuración de Organización | OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="h4 mb-0">Configuración de Organización</h1>
+                        <small>Datos de tu empresa que aparecerán en los presupuestos y PDFs</small>
+                    </div>
+                    <i class="fas fa-building fa-2x"></i>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label for="nombre" class="form-label">Nombre de la Organización *</label>
+                                <input type="text" class="form-control" id="nombre" name="nombre" required
+                                       value="{{ organizacion.nombre }}">
+                                <div class="form-text">Nombre comercial o razón social de tu empresa</div>
+                            </div>
+
+                            <div class="col-12">
+                                <label for="descripcion" class="form-label">Descripción / Tagline</label>
+                                <input type="text" class="form-control" id="descripcion" name="descripcion"
+                                       placeholder="Ej: Construcciones de calidad en Buenos Aires"
+                                       value="{{ organizacion.descripcion or '' }}">
+                                <div class="form-text">Slogan o descripción breve de tu empresa</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="cuit" class="form-label">CUIT</label>
+                                <input type="text" class="form-control" id="cuit" name="cuit"
+                                       placeholder="XX-XXXXXXXX-X"
+                                       value="{{ organizacion.cuit or '' }}">
+                                <div class="form-text">CUIT de la empresa (aparecerá en los PDFs)</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="telefono" class="form-label">Teléfono</label>
+                                <input type="tel" class="form-control" id="telefono" name="telefono"
+                                       placeholder="+54 11 XXXX-XXXX"
+                                       value="{{ organizacion.telefono or '' }}">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="email" class="form-label">Email de contacto</label>
+                                <input type="email" class="form-control" id="email" name="email"
+                                       placeholder="contacto@empresa.com"
+                                       value="{{ organizacion.email or '' }}">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="direccion" class="form-label">Dirección</label>
+                                <input type="text" class="form-control" id="direccion" name="direccion"
+                                       placeholder="Calle, Ciudad, Provincia"
+                                       value="{{ organizacion.direccion or '' }}">
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="{{ url_for('account.perfil') }}" class="btn btn-outline-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Guardar Cambios
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted mb-3">
+                        <i class="fas fa-info-circle me-2"></i>Información
+                    </h2>
+                    <p class="small text-muted">
+                        Los datos de tu organización aparecerán en:
+                    </p>
+                    <ul class="small text-muted">
+                        <li>Encabezados de presupuestos PDF</li>
+                        <li>Pie de página con información de contacto</li>
+                        <li>Emails enviados a clientes</li>
+                        <li>Documentos oficiales</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted mb-3">
+                        <i class="fas fa-lightbulb me-2"></i>Consejo
+                    </h2>
+                    <p class="small text-muted mb-0">
+                        Completa todos los campos para que tus presupuestos se vean más profesionales.
+                        El CUIT es especialmente importante para la facturación.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -44,4 +44,109 @@
         </div>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+// Seguridad de tarjetas de crédito
+(function() {
+    'use strict';
+
+    const cardInput = document.getElementById('card_number');
+    if (!cardInput) return;
+
+    // Variables para almacenar el valor real
+    let actualValue = '';
+
+    // Formatear número de tarjeta con espacios
+    function formatCardNumber(value) {
+        return value.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim();
+    }
+
+    // Enmascarar todo excepto los últimos 4 dígitos
+    function maskCardNumber(value) {
+        const digits = value.replace(/\s/g, '');
+        if (digits.length <= 4) return formatCardNumber(digits);
+
+        const masked = '•'.repeat(digits.length - 4) + digits.slice(-4);
+        return formatCardNumber(masked);
+    }
+
+    // Evento de input
+    cardInput.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/[^\d]/g, '');
+
+        // Limitar a 16 dígitos
+        if (value.length > 16) {
+            value = value.slice(0, 16);
+        }
+
+        actualValue = value;
+
+        // Mostrar formateado pero SIN enmascarar durante la escritura
+        e.target.value = formatCardNumber(value);
+    });
+
+    // Cuando pierde el foco, enmascarar
+    cardInput.addEventListener('blur', function(e) {
+        if (actualValue.length > 0) {
+            e.target.value = maskCardNumber(actualValue);
+        }
+    });
+
+    // Cuando recupera el foco, mostrar los últimos 4 dígitos
+    cardInput.addEventListener('focus', function(e) {
+        if (actualValue.length > 4) {
+            // Mostrar solo los últimos 4 dígitos
+            e.target.value = formatCardNumber(actualValue.slice(-4));
+            actualValue = actualValue.slice(-4);
+        }
+    });
+
+    // Antes de enviar el formulario, asegurar que solo se envíen dígitos
+    const form = cardInput.closest('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Crear un campo oculto con el valor real
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'card_number';
+            hiddenInput.value = actualValue;
+
+            // Deshabilitar el campo visible para que no se envíe
+            cardInput.disabled = true;
+
+            // Agregar el campo oculto
+            form.appendChild(hiddenInput);
+        });
+    }
+
+    // Validación de marca de tarjeta en tiempo real
+    cardInput.addEventListener('input', function(e) {
+        const value = actualValue;
+        let brand = '';
+
+        if (value.startsWith('4')) brand = 'Visa';
+        else if (/^5[1-5]/.test(value)) brand = 'Mastercard';
+        else if (/^3[47]/.test(value)) brand = 'American Express';
+        else if (value.startsWith('6')) brand = 'Discover';
+
+        // Mostrar indicador visual de la marca
+        const formText = cardInput.nextElementSibling;
+        if (formText && brand) {
+            formText.innerHTML = '<i class="fas fa-lock text-success me-1"></i> ' + brand + ' detectada. Guardamos únicamente los últimos 4 dígitos.';
+        }
+    });
+
+    // Prevenir copiar/pegar del número de tarjeta
+    cardInput.addEventListener('copy', function(e) {
+        e.preventDefault();
+        return false;
+    });
+
+    cardInput.addEventListener('cut', function(e) {
+        e.preventDefault();
+        return false;
+    });
+})();
+</script>
 {% endblock %}

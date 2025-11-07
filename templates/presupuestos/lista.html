@@ -202,21 +202,16 @@
                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                             </a>
                             {% if presupuesto.items.count() > 0 %}
-                            <div class="btn-group w-100" role="group">
-                                <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
-                                   class="btn btn-outline-success btn-sm" target="_blank">
-                                    <i class="fas fa-file-pdf me-1"></i>Descargar PDF
-                                </a>
-                                {% if presupuesto.cliente and presupuesto.cliente.email %}
-                                <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}"
-                                   class="btn btn-outline-info btn-sm">
-                                    <i class="fas fa-envelope me-1"></i>Enviar Email
-                                </a>
-                                {% endif %}
-                            </div>
+                            <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
+                               class="btn btn-outline-success btn-sm w-100" target="_blank">
+                                <i class="fas fa-file-pdf me-1"></i>Descargar PDF
+                            </a>
+                            <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-outline-info btn-sm w-100">
+                                <i class="fas fa-envelope me-1"></i>Enviar por correo
+                            </a>
                             {% endif %}
                             {% endif %}
-                            
+
                             {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                             <button class="btn btn-outline-warning btn-sm" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-archive me-1"></i>Marcar como perdido
@@ -340,14 +335,8 @@
                             <label class="form-check-label" for="confirmNormalizarSlugs">
                                 Asignar slug y etapa normalizada automáticamente
                             </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="confirmNotificar" checked>
-                            <label class="form-check-label" for="confirmNotificar">
-                                Notificar por email al confirmar
-                            </label>
                             <div class="form-text">
-                                Las notificaciones se enviarán cuando el canal esté configurado.
+                                Esto organiza las tareas en etapas estándar (ej: "Estructura", "Terminaciones") facilitando el seguimiento del proyecto.
                             </div>
                         </div>
                     </div>
@@ -391,7 +380,6 @@ const campoTotalGeneral = document.getElementById('confirmTotalGeneral');
 const campoUbicacionEstado = document.getElementById('confirmUbicacionEstado');
 const checkboxCrearTareas = document.getElementById('confirmCrearTareas');
 const checkboxNormalizarSlugs = document.getElementById('confirmNormalizarSlugs');
-const checkboxNotificar = document.getElementById('confirmNotificar');
 let presupuestoSeleccionadoConfirmacion = null;
 
 const confirmButtons = document.querySelectorAll('.btn-confirmar-presupuesto');
@@ -438,7 +426,6 @@ function abrirModalConfirmacion(button) {
     }
     if (checkboxCrearTareas) checkboxCrearTareas.checked = true;
     if (checkboxNormalizarSlugs) checkboxNormalizarSlugs.checked = true;
-    if (checkboxNotificar) checkboxNotificar.checked = true;
 
     confirmModal.show();
 }
@@ -464,7 +451,6 @@ if (confirmForm) {
         const payload = {
             crear_tareas: checkboxCrearTareas ? checkboxCrearTareas.checked : true,
             normalizar_slugs: checkboxNormalizarSlugs ? checkboxNormalizarSlugs.checked : true,
-            notificar: checkboxNotificar ? checkboxNotificar.checked : true,
         };
 
         const headers = {

@@ -1576,6 +1576,8 @@ function actualizarTotales(result) {
         return;
     }
     const currency = resumenCurrency || 'ARS';
+
+    // Actualizar el resumen en el card superior
     const materialesEl = document.querySelector('.text-info.d-block');
     const manoObraEl = document.querySelector('.text-warning.d-block');
     const equiposEl = document.querySelector('.text-secondary.d-block');
@@ -1587,6 +1589,17 @@ function actualizarTotales(result) {
     if (equiposEl) equiposEl.textContent = formatCurrencyValue(result.subtotal_equipos, currency);
     if (sinIvaEl) sinIvaEl.textContent = formatCurrencyValue(result.total_sin_iva, currency);
     if (totalEl) totalEl.textContent = formatCurrencyValue(result.total_con_iva, currency);
+
+    // Actualizar los subtotales en las tablas de Materiales, Mano de Obra y Equipos
+    // Seleccionamos el segundo <th> de cada fila, que es donde está el valor del subtotal
+    const materialesFooter = document.querySelector('.table-info th.text-end:nth-of-type(2)');
+    if (materialesFooter) materialesFooter.textContent = formatCurrencyValue(result.subtotal_materiales, currency);
+
+    const manoObraFooter = document.querySelector('.table-warning th.text-end:nth-of-type(2)');
+    if (manoObraFooter) manoObraFooter.textContent = formatCurrencyValue(result.subtotal_mano_obra, currency);
+
+    const equiposFooter = document.querySelector('.table-secondary th.text-end:nth-of-type(2)');
+    if (equiposFooter) equiposFooter.textContent = formatCurrencyValue(result.subtotal_equipos, currency);
 }
 
 function showAlert(message, type) {

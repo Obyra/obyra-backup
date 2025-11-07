@@ -145,8 +145,18 @@ def update_billing_from_form(usuario: Usuario, form, *, require_card: bool = Fal
         exp_valida, mes_normalizado, año_normalizado = _validar_expiracion(exp_month, exp_year)
         if not exp_valida:
             return False, 'La fecha de vencimiento de la tarjeta no es válida.'
-        profile.card_last4 = card_number[-4:]
-        profile.card_brand = _detectar_marca_tarjeta(card_number)
+
+        # SEGURIDAD CRÍTICA: Solo guardar los últimos 4 dígitos
+        # Sobrescribir inmediatamente la variable para evitar que quede en memoria
+        last_four = card_number[-4:]
+        card_brand = _detectar_marca_tarjeta(card_number)
+
+        # Eliminar el número completo de la memoria
+        card_number = None
+
+        # Guardar solo los datos seguros
+        profile.card_last4 = last_four
+        profile.card_brand = card_brand
         profile.card_exp_month = mes_normalizado
         profile.card_exp_year = año_normalizado
         profile.cardholder_name = cardholder_name or profile.cardholder_name
@@ -210,4 +220,37 @@ def facturacion():
         billing_profile=billing_profile,
         onboarding_status=onboarding_status,
         perfil=current_user.perfil,
+    )
+
+
+@account_bp.route('/organizacion', methods=['GET', 'POST'])
+@login_required
+def organizacion():
+    """Configuración de la organización"""
+    from helpers import get_current_org_id
+    from models import Organizacion
+
+    org_id = get_current_org_id()
+    organizacion = Organizacion.query.get_or_404(org_id)
+
+    if request.method == 'POST':
+        organizacion.nombre = request.form.get('nombre', '').strip()
+        organizacion.descripcion = request.form.get('descripcion', '').strip()
+        organizacion.cuit = request.form.get('cuit', '').strip()
+        organizacion.direccion = request.form.get('direccion', '').strip()
+        organizacion.telefono = request.form.get('telefono', '').strip()
+        organizacion.email = request.form.get('email', '').strip()
+
+        try:
+            db.session.commit()
+            flash('Información de la organización actualizada correctamente', 'success')
+            return redirect(url_for('account.organizacion'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al actualizar la organización: {str(e)}', 'danger')
+
+    return render_template(
+        'account/organizacion.html',
+        organizacion=organizacion,
+        usuario=current_user
     )

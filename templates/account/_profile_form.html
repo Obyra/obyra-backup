@@ -1,4 +1,6 @@
 <form method="post" novalidate class="needs-validation">
+    {{ form.hidden_tag() if form else '' }}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="row g-3">
         <div class="col-md-6">
             <label for="nombre" class="form-label">Nombre</label>

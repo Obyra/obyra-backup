@@ -6,7 +6,7 @@
     <style>
         @page {
             size: A4;
-            margin: 1.5cm 2cm;
+            margin: 0;
         }
 
         * {
@@ -16,430 +16,421 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Arial', 'Helvetica', sans-serif;
             font-size: 10pt;
-            color: #1a1a1a;
+            color: #2c2c2c;
             line-height: 1.5;
         }
 
-        /* Header minimalista */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #e0e0e0;
+        /* Header con diseño diagonal */
+        .header-wrapper {
+            position: relative;
+            height: 180px;
+            background: linear-gradient(135deg, #ff8c00 0%, #ff8c00 65%, #1a1a1a 65%, #1a1a1a 100%);
+            padding: 30px 40px;
+            margin-bottom: 30px;
         }
 
-        .header-left h1 {
-            font-size: 24pt;
-            font-weight: 600;
-            color: #000;
-            margin-bottom: 5px;
-            letter-spacing: -0.5px;
+        .header-content {
+            position: relative;
+            z-index: 2;
         }
 
-        .header-left .org-name {
-            font-size: 11pt;
-            color: #666;
-            font-weight: 400;
-        }
-
-        .header-right {
-            text-align: right;
-        }
-
-        .header-right .presupuesto-numero {
+        .company-logo {
             font-size: 14pt;
-            font-weight: 600;
-            color: #000;
-            margin-bottom: 8px;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 5px;
         }
 
-        .header-right .fecha {
+        .company-tagline {
             font-size: 9pt;
-            color: #666;
-        }
-
-        /* Grid de información */
-        .info-section {
-            display: flex;
-            gap: 30px;
-            margin-bottom: 35px;
-        }
-
-        .info-box {
-            flex: 1;
-        }
-
-        .info-box h3 {
-            font-size: 9pt;
-            font-weight: 600;
-            color: #999;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 12px;
-        }
-
-        .info-box p {
-            font-size: 10pt;
-            color: #333;
-            margin-bottom: 6px;
-            line-height: 1.6;
-        }
-
-        .info-box .label {
-            color: #666;
-            font-size: 9pt;
-        }
-
-        .info-box .value {
-            color: #000;
-            font-weight: 500;
-        }
-
-        /* Tabla minimalista */
-        .items-section {
-            margin: 35px 0;
-        }
-
-        .items-section h2 {
-            font-size: 11pt;
-            font-weight: 600;
-            color: #000;
+            color: white;
             margin-bottom: 20px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
-        table {
+        .header-title {
+            font-size: 32pt;
+            font-weight: bold;
+            color: white;
+            margin-top: 15px;
+        }
+
+        /* Información del cliente y fecha */
+        .info-bar {
+            background: #f5f5f5;
+            padding: 15px 40px;
+            margin-bottom: 30px;
+        }
+
+        .info-bar table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 25px;
         }
 
-        table thead tr {
-            border-bottom: 2px solid #000;
-        }
-
-        table th {
-            padding: 10px 8px;
-            text-align: left;
-            font-size: 8pt;
-            font-weight: 600;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        table th.right {
-            text-align: right;
-        }
-
-        table td {
-            padding: 12px 8px;
-            border-bottom: 1px solid #f0f0f0;
+        .info-bar td {
+            padding: 3px 0;
             font-size: 9pt;
-            color: #333;
         }
 
-        table td.right {
-            text-align: right;
-        }
-
-        table tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        .tipo-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 8pt;
-            font-weight: 500;
-            letter-spacing: 0.3px;
-        }
-
-        .tipo-material {
-            background: #f5f5f5;
-            color: #333;
-        }
-
-        .tipo-mano_obra {
-            background: #f5f5f5;
-            color: #333;
-        }
-
-        .tipo-equipo {
-            background: #f5f5f5;
-            color: #333;
-        }
-
-        /* Totales minimalistas */
-        .totals-section {
-            float: right;
-            width: 280px;
-            margin-top: 20px;
-        }
-
-        .totals-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            font-size: 10pt;
-        }
-
-        .totals-row.subtotal {
-            border-top: 1px solid #e0e0e0;
-            margin-top: 10px;
-            padding-top: 12px;
-        }
-
-        .totals-row.total {
-            border-top: 2px solid #000;
-            margin-top: 10px;
-            padding-top: 12px;
-            font-weight: 600;
-            font-size: 12pt;
-        }
-
-        .totals-label {
+        .info-bar .label {
+            font-weight: bold;
             color: #666;
+            width: 120px;
         }
 
-        .totals-value {
-            color: #000;
-            font-weight: 500;
-            text-align: right;
+        .info-bar .value {
+            color: #2c2c2c;
         }
 
-        .totals-row.total .totals-value {
-            font-weight: 600;
+        /* Contenido principal */
+        .content {
+            padding: 0 40px;
         }
 
-        /* Observaciones */
-        .observaciones {
-            clear: both;
-            margin-top: 40px;
-            padding: 20px;
-            background: #fafafa;
-            border-left: 3px solid #000;
+        /* Secciones de servicios */
+        .service-section {
+            margin-bottom: 30px;
         }
 
-        .observaciones h3 {
-            font-size: 9pt;
-            font-weight: 600;
-            color: #999;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .service-header {
+            background: #ff8c00;
+            color: white;
+            padding: 8px 15px;
+            font-weight: bold;
+            font-size: 11pt;
             margin-bottom: 10px;
         }
 
-        .observaciones p {
+        .service-item {
+            border-bottom: 1px solid #e0e0e0;
+            padding: 12px 15px;
+        }
+
+        .service-item:last-child {
+            border-bottom: none;
+        }
+
+        .service-name {
+            font-weight: bold;
+            color: #2c2c2c;
+            margin-bottom: 5px;
+        }
+
+        .service-description {
             font-size: 9pt;
-            color: #333;
-            line-height: 1.7;
-            white-space: pre-wrap;
-        }
-
-        /* Footer minimalista */
-        .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
-            font-size: 8pt;
-            color: #999;
-            text-align: center;
-        }
-
-        .footer p {
-            margin: 3px 0;
-        }
-
-        .footer .elaborado-por {
-            margin-top: 10px;
-            font-weight: 500;
             color: #666;
+            line-height: 1.4;
+        }
+
+        .service-price {
+            text-align: right;
+            font-size: 16pt;
+            font-weight: bold;
+            color: #2c2c2c;
+            margin-top: 8px;
+        }
+
+        /* Tabla de items */
+        table.items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        table.items-table thead {
+            background: #f8f8f8;
+        }
+
+        table.items-table th {
+            padding: 10px;
+            text-align: left;
+            font-size: 9pt;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            border-bottom: 2px solid #ff8c00;
+        }
+
+        table.items-table th.right {
+            text-align: right;
+        }
+
+        table.items-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 10pt;
+        }
+
+        table.items-table td.right {
+            text-align: right;
+        }
+
+        /* Total */
+        .total-section {
+            margin-top: 30px;
+            text-align: right;
+        }
+
+        .total-row {
+            padding: 8px 0;
+            font-size: 11pt;
+        }
+
+        .total-label {
+            display: inline-block;
+            width: 150px;
+            text-align: right;
+            color: #666;
+        }
+
+        .total-value {
+            display: inline-block;
+            width: 150px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .final-total {
+            background: #1a1a1a;
+            color: white;
+            padding: 15px 20px;
+            margin-top: 10px;
+            font-size: 16pt;
+            font-weight: bold;
+        }
+
+        .final-total .total-label {
+            color: white;
+        }
+
+        .final-total .total-value {
+            color: #ff8c00;
+            font-size: 20pt;
+        }
+
+        /* Footer */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #2c2c2c;
+            color: white;
+            padding: 20px 40px;
+            font-size: 8pt;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .footer-section {
+            flex: 1;
+        }
+
+        .footer-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .page-content {
+            padding-bottom: 120px;
         }
 
         /* Estado badge */
         .estado-badge {
             display: inline-block;
-            padding: 4px 10px;
-            border-radius: 3px;
+            padding: 5px 15px;
+            background: #f0f0f0;
+            color: #666;
+            border-radius: 20px;
             font-size: 9pt;
-            font-weight: 500;
+            font-weight: bold;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            position: absolute;
+            top: 30px;
+            right: 40px;
         }
 
-        .estado-borrador { background: #f5f5f5; color: #666; }
         .estado-enviado { background: #e3f2fd; color: #1976d2; }
         .estado-aprobado { background: #e8f5e9; color: #388e3c; }
         .estado-rechazado { background: #ffebee; color: #d32f2f; }
-
-        /* Vigencia */
-        .vigencia-box {
-            display: inline-block;
-            padding: 8px 12px;
-            background: #fffbeb;
-            border-left: 3px solid #fbbf24;
-            font-size: 9pt;
-            color: #92400e;
-            margin: 15px 0;
-        }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <div class="header">
-        <div class="header-left">
-            <h1>Presupuesto</h1>
-            <div class="org-name">{{ organizacion.nombre }}</div>
-        </div>
-        <div class="header-right">
-            <div class="presupuesto-numero">{{ presupuesto.numero }}</div>
-            <div class="fecha">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</div>
-            <div style="margin-top: 8px;">
-                <span class="estado-badge estado-{{ presupuesto.estado }}">
-                    {{ presupuesto.estado|title }}
-                </span>
+    <!-- Header con diseño diagonal -->
+    <div class="header-wrapper">
+        <div class="header-content">
+            <div class="company-logo">
+                <svg width="30" height="30" viewBox="0 0 30 30" style="vertical-align: middle; margin-right: 8px;">
+                    <circle cx="15" cy="15" r="15" fill="white"/>
+                    <text x="15" y="20" font-size="16" font-weight="bold" text-anchor="middle" fill="#ff8c00">{{ organizacion.nombre[0] if organizacion.nombre else 'O' }}</text>
+                </svg>
+                {{ organizacion.nombre }}
             </div>
+            <div class="company-tagline">{{ organizacion.descripcion or 'Administración Central' }}</div>
+            <div class="header-title">Presupuesto</div>
         </div>
+        <span class="estado-badge estado-{{ presupuesto.estado }}">{{ presupuesto.estado|title }}</span>
     </div>
 
-    <!-- Información del presupuesto y cliente -->
-    <div class="info-section">
-        <div class="info-box">
-            <h3>Información del Presupuesto</h3>
-            {% if presupuesto.ubicacion_texto %}
-            <p><span class="label">Ubicación:</span> <span class="value">{{ presupuesto.ubicacion_texto }}</span></p>
-            {% endif %}
-            <p><span class="label">Moneda:</span> <span class="value">{{ presupuesto.currency }}</span></p>
-            {% if presupuesto.fecha_vigencia %}
-            <p><span class="label">Vigencia hasta:</span> <span class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}</span></p>
-            {% endif %}
-            {% if presupuesto.iva_porcentaje %}
-            <p><span class="label">IVA:</span> <span class="value">{{ presupuesto.iva_porcentaje }}%</span></p>
-            {% endif %}
+    <div class="page-content">
+        <!-- Barra de información -->
+        <div class="info-bar">
+            <table>
+                <tr>
+                    <td class="label">Cliente:</td>
+                    <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
+                    <td class="label">Presupuesto:</td>
+                    <td class="value">{{ presupuesto.numero }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Fecha:</td>
+                    <td class="value">{{ presupuesto.fecha.strftime('%d de %B de %Y') }}</td>
+                    <td class="label">Vigencia hasta:</td>
+                    <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d de %B de %Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
+                </tr>
+            </table>
         </div>
 
-        <div class="info-box">
-            <h3>Cliente</h3>
-            {% if presupuesto.cliente %}
-            <p class="value">{{ presupuesto.cliente.nombre_completo }}</p>
-            <p><span class="label">Email:</span> <span class="value">{{ presupuesto.cliente.email }}</span></p>
-            {% if presupuesto.cliente.telefono %}
-            <p><span class="label">Teléfono:</span> <span class="value">{{ presupuesto.cliente.telefono }}</span></p>
+        <!-- Contenido principal -->
+        <div class="content">
+            {% if items %}
+            <!-- Agrupar items por tipo -->
+            {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
+            {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
+            {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
+
+            {% if materiales %}
+            <div class="service-section">
+                <div class="service-header">Materiales</div>
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50%;">Descripción</th>
+                            <th class="right" style="width: 15%;">Cantidad</th>
+                            <th style="width: 10%;">Unidad</th>
+                            <th class="right" style="width: 25%;">Precio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in materiales %}
+                        <tr>
+                            <td>{{ item.descripcion }}</td>
+                            <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                            <td>{{ item.unidad }}</td>
+                            <td class="right">{{ presupuesto.currency }} {{ "{:,.2f}".format(item.total|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% endif %}
-            {% if presupuesto.cliente.documento_formateado %}
-            <p><span class="label">Documento:</span> <span class="value">{{ presupuesto.cliente.documento_formateado }}</span></p>
+
+            {% if mano_obra %}
+            <div class="service-section">
+                <div class="service-header">Mano de Obra</div>
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50%;">Descripción</th>
+                            <th class="right" style="width: 15%;">Jornales</th>
+                            <th style="width: 10%;">Unidad</th>
+                            <th class="right" style="width: 25%;">Precio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in mano_obra %}
+                        <tr>
+                            <td>{{ item.descripcion }}</td>
+                            <td class="right">{{ "%.1f"|format(item.cantidad) }}</td>
+                            <td>{{ item.unidad }}</td>
+                            <td class="right">{{ presupuesto.currency }} {{ "{:,.2f}".format(item.total|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% endif %}
-            {% if presupuesto.cliente.direccion %}
-            <p><span class="label">Dirección:</span> <span class="value">{{ presupuesto.cliente.direccion }}</span></p>
+
+            {% if equipos %}
+            <div class="service-section">
+                <div class="service-header">Equipos</div>
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50%;">Descripción</th>
+                            <th class="right" style="width: 15%;">Cantidad</th>
+                            <th style="width: 10%;">Unidad</th>
+                            <th class="right" style="width: 25%;">Precio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in equipos %}
+                        <tr>
+                            <td>{{ item.descripcion }}</td>
+                            <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                            <td>{{ item.unidad }}</td>
+                            <td class="right">{{ presupuesto.currency }} {{ "{:,.2f}".format(item.total|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% endif %}
+
+            <!-- Total -->
+            <div class="total-section">
+                <div class="total-row">
+                    <span class="total-label">Subtotal:</span>
+                    <span class="total-value">{{ presupuesto.currency }} {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</span>
+                </div>
+                <div class="total-row">
+                    <span class="total-label">IVA ({{ presupuesto.iva_porcentaje }}%):</span>
+                    <span class="total-value">{{ presupuesto.currency }} {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</span>
+                </div>
+                <div class="final-total">
+                    <span class="total-label">Total</span>
+                    <span class="total-value">{{ presupuesto.currency }} {{ "{:,.0f}".format(presupuesto.total_con_iva|float) }}</span>
+                </div>
+            </div>
+
+            {% if presupuesto.observaciones %}
+            <div style="margin-top: 30px; padding: 15px; background: #f8f8f8; border-left: 4px solid #ff8c00;">
+                <div style="font-weight: bold; margin-bottom: 8px; color: #666;">Observaciones:</div>
+                <div style="font-size: 9pt; line-height: 1.6;">{{ presupuesto.observaciones }}</div>
+            </div>
+            {% endif %}
+
             {% else %}
-            <p style="color: #999; font-style: italic;">Sin cliente asignado</p>
+            <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
             {% endif %}
         </div>
     </div>
-
-    {% if presupuesto.fecha_vigencia and not presupuesto.esta_vencido %}
-    <div class="vigencia-box">
-        Este presupuesto es válido hasta el {{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') }}
-        {% if presupuesto.dias_restantes_vigencia %}
-        ({{ presupuesto.dias_restantes_vigencia }} días restantes)
-        {% endif %}
-    </div>
-    {% endif %}
-
-    <!-- Items del presupuesto -->
-    <div class="items-section">
-        <h2>Detalle</h2>
-
-        {% set items = presupuesto.items.order_by('tipo', 'orden').all() %}
-        {% if items %}
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 12%;">Tipo</th>
-                    <th style="width: 38%;">Descripción</th>
-                    <th class="right" style="width: 10%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 15%;">Precio Unit.</th>
-                    <th class="right" style="width: 15%;">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in items %}
-                <tr>
-                    <td>
-                        <span class="tipo-badge tipo-{{ item.tipo }}">
-                            {% if item.tipo == 'material' %}Material
-                            {% elif item.tipo == 'mano_obra' %}Mano de Obra
-                            {% elif item.tipo == 'equipo' %}Equipo
-                            {% else %}{{ item.tipo|title }}
-                            {% endif %}
-                        </span>
-                    </td>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">$ {{ "{:,.2f}".format(item.precio_unitario|float) }}</td>
-                    <td class="right">$ {{ "{:,.2f}".format(item.total|float) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p style="color: #999; font-style: italic; padding: 20px 0;">No hay items en este presupuesto</p>
-        {% endif %}
-    </div>
-
-    <!-- Totales -->
-    <div class="totals-section">
-        <div class="totals-row">
-            <span class="totals-label">Materiales</span>
-            <span class="totals-value">$ {{ "{:,.2f}".format(presupuesto.subtotal_materiales|float) }}</span>
-        </div>
-        <div class="totals-row">
-            <span class="totals-label">Mano de Obra</span>
-            <span class="totals-value">$ {{ "{:,.2f}".format(presupuesto.subtotal_mano_obra|float) }}</span>
-        </div>
-        <div class="totals-row">
-            <span class="totals-label">Equipos</span>
-            <span class="totals-value">$ {{ "{:,.2f}".format(presupuesto.subtotal_equipos|float) }}</span>
-        </div>
-        <div class="totals-row subtotal">
-            <span class="totals-label">Subtotal</span>
-            <span class="totals-value">$ {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</span>
-        </div>
-        <div class="totals-row">
-            <span class="totals-label">IVA ({{ presupuesto.iva_porcentaje }}%)</span>
-            <span class="totals-value">$ {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</span>
-        </div>
-        <div class="totals-row total">
-            <span class="totals-label">TOTAL</span>
-            <span class="totals-value">$ {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</span>
-        </div>
-    </div>
-
-    <!-- Observaciones -->
-    {% if presupuesto.observaciones %}
-    <div class="observaciones">
-        <h3>Observaciones</h3>
-        <p>{{ presupuesto.observaciones }}</p>
-    </div>
-    {% endif %}
 
     <!-- Footer -->
     <div class="footer">
-        <p>Presupuesto generado el {{ now.strftime('%d/%m/%Y a las %H:%M') }}</p>
-        {% if usuario %}
-        <p class="elaborado-por">Elaborado por: {{ usuario.nombre }} {{ usuario.apellido }} ({{ usuario.email }})</p>
-        {% endif %}
-        <p style="margin-top: 15px; color: #ccc;">{{ organizacion.nombre }}</p>
+        <div class="footer-content">
+            <div class="footer-section">
+                <div class="footer-title">{{ organizacion.nombre }}</div>
+                {% if organizacion.cuit %}
+                <div>CUIT: {{ organizacion.cuit }}</div>
+                {% endif %}
+                <div>{{ organizacion.direccion or 'Dirección no especificada' }}</div>
+            </div>
+            <div class="footer-section" style="text-align: center;">
+                <div class="footer-title">Contacto</div>
+                <div>{{ organizacion.telefono or 'Tel: -' }}</div>
+                <div>{{ organizacion.email or 'Email: -' }}</div>
+            </div>
+            <div class="footer-section" style="text-align: right;">
+                <div class="footer-title">Medios de pago</div>
+                <div>Transferencia bancaria</div>
+                <div>Efectivo</div>
+            </div>
+        </div>
     </div>
 </body>
 </html>
