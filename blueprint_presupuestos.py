@@ -358,22 +358,30 @@ def generar_pdf(id):
         # Obtener organización
         organizacion = Organizacion.query.get(org_id)
 
-        # Renderizar HTML
-        html_string = render_template(
-            'presupuestos/pdf_template.html',
-            presupuesto=presupuesto,
-            organizacion=organizacion,
-            usuario=current_user,
-            now=datetime.now()
-        )
+        try:
+            # Renderizar HTML
+            html_string = render_template(
+                'presupuestos/pdf_template.html',
+                presupuesto=presupuesto,
+                organizacion=organizacion,
+                usuario=current_user,
+                now=datetime.now()
+            )
+        except Exception as render_error:
+            current_app.logger.error(f"Error al renderizar template PDF: {render_error}", exc_info=True)
+            raise Exception(f"Error al renderizar template: {str(render_error)}")
 
-        # Generar PDF con WeasyPrint (ignorar warnings de fontconfig)
-        pdf_buffer = io.BytesIO()
-        HTML(string=html_string, base_url=request.url_root).write_pdf(
-            pdf_buffer,
-            presentational_hints=True
-        )
-        pdf_buffer.seek(0)
+        try:
+            # Generar PDF con WeasyPrint (ignorar warnings de fontconfig)
+            pdf_buffer = io.BytesIO()
+            HTML(string=html_string, base_url=request.url_root).write_pdf(
+                pdf_buffer,
+                presentational_hints=True
+            )
+            pdf_buffer.seek(0)
+        except Exception as pdf_error:
+            current_app.logger.error(f"Error al generar PDF con WeasyPrint: {pdf_error}", exc_info=True)
+            raise Exception(f"Error al generar PDF: {str(pdf_error)}")
 
         return send_file(
             pdf_buffer,
