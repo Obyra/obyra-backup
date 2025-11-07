@@ -28,7 +28,8 @@
       "Bash(RUN_MIGRATIONS=true docker-compose up:*)",
       "Bash(RUN_MIGRATIONS=false docker-compose up:*)",
       "Bash(git commit:*)",
-      "Bash(docker builder prune:*)"
+      "Bash(docker builder prune:*)",
+      "Bash(timeout 30 bash:*)"
     ],
     "deny": [],
     "ask": []

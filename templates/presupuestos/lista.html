@@ -229,6 +229,12 @@
                             </button>
                             {% endif %}
 
+                            {% if current_user.rol == 'administrador' and presupuesto.estado in ['enviado', 'aprobado', 'rechazado'] %}
+                            <button class="btn btn-outline-warning btn-sm" onclick="revertirABorrador({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
+                                <i class="fas fa-undo-alt me-1"></i>Revertir a Borrador
+                            </button>
+                            {% endif %}
+
                             {% if current_user.rol == 'administrador' and presupuesto.estado in ['borrador', 'perdido'] %}
                             <button class="btn btn-outline-danger btn-sm" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-trash me-1"></i>Eliminar
@@ -658,6 +664,34 @@ async function restaurarPresupuesto(id) {
         }
 
         showAlert(result.mensaje || 'Presupuesto restaurado a borrador.', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        console.error(error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+async function revertirABorrador(id, numero) {
+    if (!confirm(`¿Revertir el presupuesto ${numero} a estado BORRADOR?\n\nEsto permitirá editarlo y eliminarlo nuevamente. Si ya fue confirmado como obra, deberás manejar eso por separado.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/presupuestos/${id}/revertir-borrador`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showAlert(result.error || 'Error al revertir el presupuesto.', 'danger');
+            return;
+        }
+
+        showAlert(result.mensaje || 'Presupuesto revertido a borrador exitosamente.', 'success');
         setTimeout(() => window.location.reload(), 800);
     } catch (error) {
         console.error(error);

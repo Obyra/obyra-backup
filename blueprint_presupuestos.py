@@ -530,6 +530,9 @@ def agregar_item(id):
         )
 
         db.session.add(item)
+
+        # Actualizar totales del presupuesto
+        presupuesto.calcular_totales()
         db.session.commit()
 
         flash('Item agregado exitosamente', 'success')
@@ -590,29 +593,23 @@ def editar_item(id):
             item.price_unit_ars = item.precio_unitario
             item.total_ars = item.total
 
+        # Actualizar totales del presupuesto
+        presupuesto.calcular_totales()
         db.session.commit()
 
-        # Calcular totales actualizados
-        items = ItemPresupuesto.query.filter_by(presupuesto_id=presupuesto.id).all()
-        subtotal_materiales = sum(i.total for i in items if i.tipo == 'material')
-        subtotal_mano_obra = sum(i.total for i in items if i.tipo == 'mano_obra')
-        subtotal_equipos = sum(i.total for i in items if i.tipo == 'equipo')
-        total_sin_iva = sum(i.total for i in items)
-        iva_monto = total_sin_iva * (presupuesto.iva_porcentaje / Decimal('100'))
-        total_con_iva = total_sin_iva + iva_monto
-
+        # Devolver totales actualizados
         return jsonify({
             'exito': True,
             'nuevo_total': float(item.total),
             'price_unit_ars': float(item.price_unit_ars) if item.price_unit_ars else None,
             'total_ars': float(item.total_ars) if item.total_ars else None,
             'currency': item.currency,
-            'subtotal_materiales': float(subtotal_materiales),
-            'subtotal_mano_obra': float(subtotal_mano_obra),
-            'subtotal_equipos': float(subtotal_equipos),
-            'total_sin_iva': float(total_sin_iva),
-            'iva_monto': float(iva_monto),
-            'total_con_iva': float(total_con_iva)
+            'subtotal_materiales': float(presupuesto.subtotal_materiales),
+            'subtotal_mano_obra': float(presupuesto.subtotal_mano_obra),
+            'subtotal_equipos': float(presupuesto.subtotal_equipos),
+            'total_sin_iva': float(presupuesto.total_sin_iva),
+            'iva_monto': float(presupuesto.total_con_iva - presupuesto.total_sin_iva),
+            'total_con_iva': float(presupuesto.total_con_iva)
         })
 
     except Exception as e:
@@ -644,6 +641,9 @@ def eliminar_item(id):
             return redirect(url_for('presupuestos.detalle', id=presupuesto.id))
 
         db.session.delete(item)
+
+        # Actualizar totales del presupuesto después de eliminar
+        presupuesto.calcular_totales()
         db.session.commit()
 
         flash('Item eliminado exitosamente', 'success')
@@ -753,6 +753,84 @@ def cambiar_estado(id):
         db.session.rollback()
         flash('Error al cambiar el estado', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route('/<int:id>/revertir-borrador', methods=['POST'])
+@login_required
+def revertir_borrador(id):
+    """Revertir presupuesto a estado borrador (solo administradores)"""
+    try:
+        # Solo administradores
+        if current_user.role != 'admin':
+            return jsonify({'error': 'Solo administradores pueden revertir presupuestos'}), 403
+
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'error': 'Sin organización activa'}), 400
+
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first_or_404()
+
+        # Verificar que el presupuesto esté en un estado que permita revertir
+        if presupuesto.estado not in ['enviado', 'aprobado', 'rechazado', 'perdido']:
+            return jsonify({'error': f'No se puede revertir un presupuesto en estado {presupuesto.estado}'}), 400
+
+        # Revertir a borrador
+        estado_anterior = presupuesto.estado
+        presupuesto.estado = 'borrador'
+
+        # Si estaba marcado como perdido, limpiar esos datos
+        if estado_anterior == 'perdido':
+            presupuesto.perdido_motivo = None
+            presupuesto.perdido_fecha = None
+
+        db.session.commit()
+
+        return jsonify({
+            'mensaje': f'Presupuesto {presupuesto.numero} revertido a borrador exitosamente',
+            'estado_anterior': estado_anterior,
+            'estado_nuevo': 'borrador'
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.revertir_borrador: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': 'Error al revertir el presupuesto'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/restaurar', methods=['POST'])
+@login_required
+def restaurar(id):
+    """Restaurar presupuesto perdido a borrador"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'error': 'Sin organización activa'}), 400
+
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first_or_404()
+
+        # Solo se pueden restaurar presupuestos perdidos
+        if presupuesto.estado != 'perdido':
+            return jsonify({'error': 'Solo se pueden restaurar presupuestos marcados como perdidos'}), 400
+
+        presupuesto.estado = 'borrador'
+        presupuesto.perdido_motivo = None
+        presupuesto.perdido_fecha = None
+        db.session.commit()
+
+        return jsonify({
+            'mensaje': f'Presupuesto {presupuesto.numero} restaurado a borrador'
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.restaurar: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': 'Error al restaurar el presupuesto'}), 500
 
 
 @presupuestos_bp.route('/guardar', methods=['POST'])
