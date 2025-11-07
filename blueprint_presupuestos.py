@@ -13,8 +13,8 @@ from services.memberships import get_current_org_id, get_current_membership
 from utils.pagination import Pagination
 from utils import safe_int
 import io
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from weasyprint import HTML
+from flask_mail import Message
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
@@ -334,7 +334,7 @@ def detalle(id):
 @presupuestos_bp.route('/<int:id>/pdf')
 @login_required
 def generar_pdf(id):
-    """Generar PDF del presupuesto"""
+    """Generar PDF del presupuesto con WeasyPrint"""
     try:
         org_id = get_current_org_id()
         if not org_id:
@@ -346,72 +346,127 @@ def generar_pdf(id):
             organizacion_id=org_id
         ).first_or_404()
 
-        # Crear PDF en memoria
-        buffer = io.BytesIO()
-        p = canvas.Canvas(buffer, pagesize=letter)
-        width, height = letter
+        # Obtener organización
+        organizacion = Organizacion.query.get(org_id)
 
-        # Título
-        p.setFont("Helvetica-Bold", 16)
-        p.drawString(100, height - 50, f"Presupuesto {presupuesto.numero}")
+        # Renderizar HTML
+        html_string = render_template(
+            'presupuestos/pdf_template.html',
+            presupuesto=presupuesto,
+            organizacion=organizacion,
+            now=datetime.now()
+        )
 
-        # Información básica
-        p.setFont("Helvetica", 12)
-        y = height - 100
-        p.drawString(100, y, f"Fecha: {presupuesto.fecha.strftime('%d/%m/%Y')}")
-        y -= 20
-        if presupuesto.cliente_nombre:
-            p.drawString(100, y, f"Cliente: {presupuesto.cliente_nombre}")
-            y -= 20
-        if presupuesto.obra:
-            p.drawString(100, y, f"Obra: {presupuesto.obra.nombre}")
-            y -= 20
-
-        p.drawString(100, y, f"Estado: {presupuesto.estado}")
-        y -= 40
-
-        # Items
-        items = ItemPresupuesto.query.filter_by(presupuesto_id=id).order_by(
-            ItemPresupuesto.tipo,
-            ItemPresupuesto.orden
-        ).all()
-
-        p.setFont("Helvetica-Bold", 14)
-        p.drawString(100, y, "Items:")
-        y -= 25
-
-        p.setFont("Helvetica", 10)
-        for item in items:
-            if y < 100:
-                p.showPage()
-                y = height - 50
-
-            texto = f"{item.descripcion} - {item.cantidad} {item.unidad} x ${item.precio_unitario} = ${item.subtotal}"
-            p.drawString(120, y, texto)
-            y -= 20
-
-        # Total
-        y -= 20
-        p.setFont("Helvetica-Bold", 12)
-        p.drawString(100, y, f"Subtotal: ${presupuesto.total_sin_iva}")
-        y -= 20
-        p.drawString(100, y, f"IVA ({presupuesto.iva_porcentaje}%): ${presupuesto.total_iva}")
-        y -= 20
-        p.drawString(100, y, f"TOTAL: ${presupuesto.total_con_iva}")
-
-        p.save()
-        buffer.seek(0)
+        # Generar PDF con WeasyPrint
+        pdf_buffer = io.BytesIO()
+        HTML(string=html_string).write_pdf(pdf_buffer)
+        pdf_buffer.seek(0)
 
         return send_file(
-            buffer,
+            pdf_buffer,
             mimetype='application/pdf',
             as_attachment=True,
             download_name=f'presupuesto_{presupuesto.numero}.pdf'
         )
 
     except Exception as e:
-        current_app.logger.error(f"Error en presupuestos.generar_pdf: {e}")
+        current_app.logger.error(f"Error en presupuestos.generar_pdf: {e}", exc_info=True)
         flash('Error al generar el PDF', 'danger')
+        return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route('/<int:id>/enviar-email', methods=['GET', 'POST'])
+@login_required
+def enviar_email(id):
+    """Enviar presupuesto por email"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            flash('No tienes una organización activa', 'warning')
+            return redirect(url_for('index'))
+
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first_or_404()
+
+        organizacion = Organizacion.query.get(org_id)
+
+        if request.method == 'GET':
+            # Mostrar formulario de envío
+            email_destino = presupuesto.cliente.email if presupuesto.cliente else ''
+            mensaje_default = f"""Estimado/a,
+
+Adjunto encontrará el presupuesto Nº {presupuesto.numero} solicitado.
+
+Este presupuesto tiene una vigencia hasta el {presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'consultar'}.
+
+Quedamos a su disposición ante cualquier consulta.
+
+Saludos cordiales,
+{organizacion.nombre}"""
+
+            return render_template(
+                'presupuestos/enviar_email.html',
+                presupuesto=presupuesto,
+                email_destino=email_destino,
+                mensaje_default=mensaje_default
+            )
+
+        # POST: Enviar email
+        email_destino = request.form.get('email', '').strip()
+        asunto = request.form.get('asunto', f'Presupuesto {presupuesto.numero}').strip()
+        mensaje = request.form.get('mensaje', '').strip()
+
+        if not email_destino:
+            flash('Debe ingresar un email de destino', 'danger')
+            return redirect(url_for('presupuestos.enviar_email', id=id))
+
+        # Generar PDF
+        html_string = render_template(
+            'presupuestos/pdf_template.html',
+            presupuesto=presupuesto,
+            organizacion=organizacion,
+            now=datetime.now()
+        )
+
+        pdf_buffer = io.BytesIO()
+        HTML(string=html_string).write_pdf(pdf_buffer)
+        pdf_buffer.seek(0)
+        pdf_bytes = pdf_buffer.read()
+
+        # Enviar email usando Flask-Mail si está configurado, sino informar
+        try:
+            from extensions import mail
+            msg = Message(
+                asunto,
+                recipients=[email_destino],
+                body=mensaje,
+                sender=current_app.config.get('MAIL_DEFAULT_SENDER', organizacion.email)
+            )
+            msg.attach(
+                f'presupuesto_{presupuesto.numero}.pdf',
+                'application/pdf',
+                pdf_bytes
+            )
+            mail.send(msg)
+
+            # Actualizar estado si está en borrador
+            if presupuesto.estado == 'borrador':
+                presupuesto.estado = 'enviado'
+                db.session.commit()
+
+            flash(f'Presupuesto enviado exitosamente a {email_destino}', 'success')
+            return redirect(url_for('presupuestos.detalle', id=id))
+
+        except ImportError:
+            flash('El sistema de envío de emails no está configurado. Por favor contacte al administrador.', 'warning')
+            current_app.logger.warning("Flask-Mail no está configurado")
+            return redirect(url_for('presupuestos.detalle', id=id))
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.enviar_email: {e}", exc_info=True)
+        flash('Error al enviar el email', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 
 

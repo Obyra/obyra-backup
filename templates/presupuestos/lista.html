@@ -202,10 +202,18 @@
                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                             </a>
                             {% if presupuesto.items.count() > 0 %}
-                            <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
-                               class="btn btn-outline-success btn-sm" target="_blank">
-                                <i class="fas fa-file-pdf me-1"></i>Descargar PDF
-                            </a>
+                            <div class="btn-group w-100" role="group">
+                                <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
+                                   class="btn btn-outline-success btn-sm" target="_blank">
+                                    <i class="fas fa-file-pdf me-1"></i>Descargar PDF
+                                </a>
+                                {% if presupuesto.cliente and presupuesto.cliente.email %}
+                                <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}"
+                                   class="btn btn-outline-info btn-sm">
+                                    <i class="fas fa-envelope me-1"></i>Enviar Email
+                                </a>
+                                {% endif %}
+                            </div>
                             {% endif %}
                             {% endif %}
                             

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Enviar Presupuesto por Email{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-envelope"></i> Enviar Presupuesto por Email</h2>
+                <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </a>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-file-invoice"></i> Presupuesto {{ presupuesto.numero }}
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Cliente:</strong> {{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente' }}</p>
+                            <p><strong>Fecha:</strong> {{ presupuesto.fecha.strftime('%d/%m/%Y') }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Total:</strong> $ {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</p>
+                            <p><strong>Estado:</strong> <span class="badge bg-info">{{ presupuesto.estado|title }}</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                        <div class="mb-3">
+                            <label class="form-label">Email de Destino <span class="text-danger">*</span></label>
+                            <input type="email"
+                                   class="form-control"
+                                   name="email"
+                                   value="{{ email_destino }}"
+                                   required
+                                   placeholder="ejemplo@email.com">
+                            <small class="form-text text-muted">
+                                El presupuesto se enviará en formato PDF a este email
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Asunto <span class="text-danger">*</span></label>
+                            <input type="text"
+                                   class="form-control"
+                                   name="asunto"
+                                   value="Presupuesto {{ presupuesto.numero }}"
+                                   required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Mensaje <span class="text-danger">*</span></label>
+                            <textarea class="form-control"
+                                      name="mensaje"
+                                      rows="10"
+                                      required>{{ mensaje_default }}</textarea>
+                            <small class="form-text text-muted">
+                                Puede editar el mensaje según necesite
+                            </small>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            El presupuesto será adjuntado como archivo PDF al email.
+                            {% if presupuesto.estado == 'borrador' %}
+                            Al enviar el email, el estado del presupuesto cambiará automáticamente a "Enviado".
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}"
+                               class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Enviar Email
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

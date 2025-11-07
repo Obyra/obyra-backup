@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker run:*)",
+      "Bash(python -c:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker volume ls:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose run:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker logs:*)",
+      "Bash(rm:*)",
+      "Bash(echo:*)",
+      "Bash(export RUN_MIGRATIONS=true)",
+      "Bash(export RUN_MIGRATIONS=false)",
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat(presupuestos): agregar columnas USD/ARS, mejorar IA y fix CSRF\n\n- Agregar columnas separadas para USD y ARS en tablas de presupuestos\n- Mejorar calculadora IA con maquinaria y herramientas específicas por tipo de construcción (Económica/Estándar/Premium)\n- Deshabilitar CSRF mediante variables de entorno para solucionar error 400 en endpoint eliminar\n- Actualizar templates de detalle y lista de presupuestos con nueva estructura de columnas\n- Mejorar visualización de obras y reportes\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(RUN_MIGRATIONS=true docker-compose up:*)",
+      "Bash(RUN_MIGRATIONS=false docker-compose up:*)",
+      "Bash(git commit:*)",
+      "Bash(docker builder prune:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
