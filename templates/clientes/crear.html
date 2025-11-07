@@ -97,7 +97,7 @@
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 mt-4">
-                            <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary">Cancelar</a>
+                            <button type="button" class="btn btn-secondary" onclick="cerrarVentana()">Cancelar</button>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save"></i> Guardar Cliente
                             </button>
@@ -108,4 +108,54 @@
         </div>
     </div>
 </div>
+
+<script>
+function cerrarVentana() {
+    // Si fue abierta desde otro formulario, cerrar ventana
+    if (window.opener) {
+        window.close();
+    } else {
+        // Si no, ir a lista de clientes
+        window.location.href = "{{ url_for('clientes.lista') }}";
+    }
+}
+
+// Detectar si el formulario fue enviado exitosamente
+{% if success %}
+    // Cliente creado exitosamente
+    if (window.opener) {
+        try {
+            // Notificar a la ventana padre que se creó un cliente
+            const clienteData = {
+                id: {{ cliente_creado.id if cliente_creado else 'null' }},
+                nombre_completo: "{{ cliente_creado.nombre_completo if cliente_creado else '' }}",
+                email: "{{ cliente_creado.email if cliente_creado else '' }}",
+                telefono: "{{ cliente_creado.telefono if cliente_creado else '' }}"
+            };
+
+            // Llamar función en ventana padre para actualizar selector
+            if (window.opener.actualizarSelectorCliente) {
+                window.opener.actualizarSelectorCliente(clienteData);
+            }
+
+            // Cerrar esta ventana después de 1 segundo
+            setTimeout(function() {
+                window.close();
+            }, 1000);
+        } catch (e) {
+            console.error('Error al comunicar con ventana padre:', e);
+            // Si hay error, redirigir a lista
+            setTimeout(function() {
+                window.location.href = "{{ url_for('clientes.lista') }}";
+            }, 1500);
+        }
+    } else {
+        // Si no hay ventana padre, redirigir a lista
+        setTimeout(function() {
+            window.location.href = "{{ url_for('clientes.lista') }}";
+        }, 1500);
+    }
+{% endif %}
+</script>
+
 {% endblock %}

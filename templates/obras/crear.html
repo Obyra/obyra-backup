@@ -356,6 +356,41 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Función global para actualizar selector cuando se crea un cliente desde ventana popup
+    window.actualizarSelectorCliente = function(clienteData) {
+        const selector = document.getElementById('cliente_id');
+        if (selector && clienteData && clienteData.id) {
+            // Crear nueva opción con los datos del cliente
+            const option = document.createElement('option');
+            option.value = clienteData.id;
+            option.textContent = clienteData.nombre_completo + ' - ' + clienteData.email;
+            option.setAttribute('data-telefono', clienteData.telefono || '');
+            option.setAttribute('data-email', clienteData.email);
+            option.selected = true;
+
+            // Agregar al selector
+            selector.appendChild(option);
+
+            // Trigger del evento change para llenar campos automáticamente
+            const event = new Event('change');
+            selector.dispatchEvent(event);
+
+            // Mostrar mensaje de éxito
+            const mensaje = document.createElement('div');
+            mensaje.className = 'alert alert-success alert-dismissible fade show mt-2';
+            mensaje.innerHTML = `
+                <strong>¡Éxito!</strong> Cliente "${clienteData.nombre_completo}" agregado y seleccionado.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            selector.parentElement.parentElement.appendChild(mensaje);
+
+            // Remover mensaje después de 5 segundos
+            setTimeout(function() {
+                mensaje.remove();
+            }, 5000);
+        }
+    };
 });
 </script>
 {% endblock %}

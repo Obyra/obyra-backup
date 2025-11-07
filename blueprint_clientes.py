@@ -139,7 +139,11 @@ def crear():
             db.session.commit()
 
             flash(f'Cliente {cliente.nombre_completo} creado exitosamente', 'success')
-            return redirect(url_for('clientes.lista'))
+
+            # Redirigir con parámetro success para comunicación con ventana padre
+            return render_template('clientes/crear.html',
+                                 cliente_creado=cliente,
+                                 success=True)
 
         return render_template('clientes/crear.html')
 
