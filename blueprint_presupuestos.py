@@ -577,7 +577,7 @@ def agregar_item(id):
 @login_required
 def editar_item(id):
     """Editar item de presupuesto"""
-    if current_user.role not in ['admin', 'pm']:
+    if current_user.rol not in ['administrador', 'tecnico']:
         return jsonify({'exito': False, 'error': 'No tienes permisos'}), 403
 
     try:
