@@ -111,7 +111,8 @@
                     <hr>
                     <h6 class="text-primary mb-3">
                         <i class="fas fa-building me-2"></i>Información de la Obra
-                        {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                        {% set es_admin = tiene_rol('admin') or (current_user.is_authenticated and current_user.es_admin()) %}
+                        {% if (es_admin or tiene_rol('tecnico')) and presupuesto.estado in ['borrador', 'enviado'] and not presupuesto.confirmado_como_obra %}
                         <button class="btn btn-outline-primary btn-sm ms-2" onclick="toggleEditarObra()">
                             <i class="fas fa-edit"></i> Editar
                         </button>

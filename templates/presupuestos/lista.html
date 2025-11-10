@@ -86,8 +86,8 @@
                     </div>
                     {% set datos_raw = presupuesto.datos_proyecto %}
                     {% set proyecto_json = datos_raw|from_json if datos_raw else {} %}
-                    {# Prioridad: obra > datos_proyecto > ubicacion_texto #}
-                    {% set nombre_proyecto = presupuesto.obra.nombre if presupuesto.obra else (proyecto_json.nombre if proyecto_json and proyecto_json.nombre else (presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or 'Sin ubicación definida')) %}
+                    {# Prioridad: obra > datos_proyecto.nombre_obra > datos_proyecto.nombre > ubicacion_texto #}
+                    {% set nombre_proyecto = presupuesto.obra.nombre if presupuesto.obra else (proyecto_json.nombre_obra if proyecto_json and proyecto_json.nombre_obra else (proyecto_json.nombre if proyecto_json and proyecto_json.nombre else (presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or 'Sin ubicación definida'))) %}
                     {# Prioridad: obra > cliente relacion > datos_proyecto.cliente_nombre > datos_proyecto.cliente #}
                     {% set cliente_proyecto = presupuesto.obra.cliente if presupuesto.obra else (presupuesto.cliente.nombre if presupuesto.cliente else (proyecto_json.cliente_nombre if proyecto_json and proyecto_json.cliente_nombre else (proyecto_json.cliente if proyecto_json and proyecto_json.cliente else 'Cliente por confirmar'))) %}
                     {% set ubicacion_proyecto = presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or (proyecto_json.ubicacion if proyecto_json and proyecto_json.ubicacion else None) %}
@@ -217,25 +217,25 @@
                             {% endif %}
                             {% endif %}
 
-                            {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
+                            {% if (es_admin or tiene_rol('tecnico')) and presupuesto.estado == 'borrador' %}
                             <button class="btn btn-outline-warning btn-sm" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-archive me-1"></i>Marcar como perdido
                             </button>
                             {% endif %}
 
-                            {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'perdido' %}
+                            {% if (es_admin or tiene_rol('tecnico')) and presupuesto.estado == 'perdido' %}
                             <button class="btn btn-outline-secondary btn-sm" onclick="restaurarPresupuesto({{ presupuesto.id }})">
                                 <i class="fas fa-undo me-1"></i>Restaurar a borrador
                             </button>
                             {% endif %}
 
-                            {% if current_user.rol == 'administrador' and presupuesto.estado in ['enviado', 'aprobado', 'rechazado'] %}
+                            {% if es_admin and presupuesto.estado in ['enviado', 'aprobado', 'rechazado'] %}
                             <button class="btn btn-outline-warning btn-sm" onclick="revertirABorrador({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-undo-alt me-1"></i>Revertir a Borrador
                             </button>
                             {% endif %}
 
-                            {% if current_user.rol == 'administrador' and presupuesto.estado in ['borrador', 'enviado', 'perdido'] and not presupuesto.confirmado_como_obra %}
+                            {% if es_admin and presupuesto.estado in ['borrador', 'enviado', 'perdido'] and not presupuesto.confirmado_como_obra %}
                             <button class="btn btn-outline-danger btn-sm" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-trash me-1"></i>Eliminar
                             </button>

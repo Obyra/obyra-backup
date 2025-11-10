@@ -103,7 +103,8 @@ def crear():
             # Obtener datos del formulario
             numero = request.form.get('numero', '').strip()
             obra_id = request.form.get('obra_id', type=int)
-            cliente_nombre = request.form.get('cliente_nombre', '').strip()
+            cliente_id = request.form.get('cliente_id', type=int)  # ID del cliente seleccionado
+            cliente_nombre = request.form.get('cliente_nombre', '').strip()  # Nombre (para retrocompatibilidad)
             vigencia_dias = request.form.get('vigencia_dias', 30, type=int)
 
             # Validaciones
@@ -120,6 +121,13 @@ def crear():
             if existing:
                 flash(f'Ya existe un presupuesto con el número {numero}', 'danger')
                 return redirect(url_for('presupuestos.crear'))
+
+            # Si se seleccionó un cliente, obtener su nombre de la base de datos
+            if cliente_id:
+                from models.core import Cliente
+                cliente = Cliente.query.filter_by(id=cliente_id, organizacion_id=org_id).first()
+                if cliente:
+                    cliente_nombre = cliente.nombre
 
             # Preparar datos del proyecto como JSON
             import json
@@ -149,6 +157,7 @@ def crear():
                 organizacion_id=org_id,
                 numero=numero,
                 obra_id=obra_id if obra_id else None,
+                cliente_id=cliente_id if cliente_id else None,  # Asignar el cliente seleccionado
                 fecha=date.today(),
                 vigencia_dias=vigencia_dias,
                 datos_proyecto=json.dumps(datos_proyecto),
@@ -569,7 +578,17 @@ def confirmar_como_obra(id):
         obra = Obra()
 
         # Datos básicos de la obra
-        obra.nombre = presupuesto.datos_proyecto or f"Obra {presupuesto.numero}"
+        # Extraer el nombre del JSON datos_proyecto si existe
+        nombre_obra = f"Obra {presupuesto.numero}"
+        if presupuesto.datos_proyecto:
+            try:
+                import json
+                proyecto_data = json.loads(presupuesto.datos_proyecto) if isinstance(presupuesto.datos_proyecto, str) else presupuesto.datos_proyecto
+                nombre_obra = proyecto_data.get('nombre_obra') or proyecto_data.get('nombre') or nombre_obra
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        obra.nombre = nombre_obra[:200]  # Limitar a 200 caracteres
         obra.organizacion_id = presupuesto.organizacion_id
 
         # Cliente
@@ -623,6 +642,62 @@ def confirmar_como_obra(id):
         db.session.rollback()
         current_app.logger.error(f"Error en presupuestos.confirmar_como_obra: {e}", exc_info=True)
         return jsonify({'error': 'Error al confirmar el presupuesto'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/editar-obra', methods=['POST'])
+@login_required
+def editar_obra(id):
+    """Editar información de la obra/proyecto del presupuesto"""
+    try:
+        org_id = get_current_org_id()
+        presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+        # Solo técnicos y administradores pueden editar
+        if not (current_user.role in ['admin', 'tecnico'] or current_user.es_admin()):
+            return jsonify({'error': 'No tiene permisos para editar presupuestos'}), 403
+
+        # No se puede editar si ya está confirmado como obra
+        if presupuesto.confirmado_como_obra:
+            return jsonify({'error': 'No se puede editar un presupuesto ya confirmado como obra'}), 400
+
+        data = request.get_json() or {}
+
+        # Obtener datos del proyecto actual
+        import json
+        if presupuesto.datos_proyecto:
+            try:
+                proyecto_data = json.loads(presupuesto.datos_proyecto) if isinstance(presupuesto.datos_proyecto, str) else presupuesto.datos_proyecto
+            except (json.JSONDecodeError, TypeError):
+                proyecto_data = {}
+        else:
+            proyecto_data = {}
+
+        # Actualizar campos del proyecto
+        if 'nombre' in data:
+            proyecto_data['nombre_obra'] = data['nombre'].strip()
+
+        if 'cliente' in data:
+            proyecto_data['cliente_nombre'] = data['cliente'].strip()
+
+        if 'descripcion' in data:
+            proyecto_data['descripcion'] = data['descripcion'].strip()
+
+        # Guardar el JSON actualizado
+        presupuesto.datos_proyecto = json.dumps(proyecto_data, ensure_ascii=False)
+
+        db.session.commit()
+
+        current_app.logger.info(f"Información del presupuesto {presupuesto.numero} actualizada")
+
+        return jsonify({
+            'exito': True,
+            'message': 'Información actualizada correctamente'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en presupuestos.editar_obra: {e}", exc_info=True)
+        return jsonify({'error': 'Error al actualizar la información'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/items/agregar', methods=['POST'])
