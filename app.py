@@ -180,12 +180,30 @@ else:
         "MP_WEBHOOK_PUBLIC_URL is not configured; expected path: /api/payments/mp/webhook"
     )
 
+# Flask-Mail Configuration
+app.config["MAIL_SERVER"] = os.getenv("SMTP_HOST", "smtp.gmail.com")
+app.config["MAIL_PORT"] = int(os.getenv("SMTP_PORT", "587"))
+app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USE_SSL"] = False
+app.config["MAIL_USERNAME"] = os.getenv("SMTP_USER", "")
+app.config["MAIL_PASSWORD"] = os.getenv("SMTP_PASSWORD", "")
+app.config["MAIL_DEFAULT_SENDER"] = os.getenv("SMTP_USER", "")
+
+if app.config["MAIL_USERNAME"]:
+    app.logger.info(f"Email configured: {app.config['MAIL_USERNAME']}")
+else:
+    app.logger.warning("Email (SMTP) is not configured; email sending will not work.")
+
 # initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
 
 # CSRF Protection
 csrf.init_app(app)
+
+# Flask-Mail
+from extensions import mail
+mail.init_app(app)
 
 migrate = Migrate(app, db)
 
