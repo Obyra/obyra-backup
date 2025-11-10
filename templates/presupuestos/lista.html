@@ -86,8 +86,10 @@
                     </div>
                     {% set datos_raw = presupuesto.datos_proyecto %}
                     {% set proyecto_json = datos_raw|from_json if datos_raw else {} %}
-                    {% set nombre_proyecto = presupuesto.obra.nombre if presupuesto.obra else (proyecto_json.nombre if proyecto_json and proyecto_json.nombre else 'Presupuesto sin obra') %}
-                    {% set cliente_proyecto = presupuesto.obra.cliente if presupuesto.obra else (proyecto_json.cliente if proyecto_json and proyecto_json.cliente else 'Cliente por confirmar') %}
+                    {# Prioridad: obra > datos_proyecto > ubicacion_texto #}
+                    {% set nombre_proyecto = presupuesto.obra.nombre if presupuesto.obra else (proyecto_json.nombre if proyecto_json and proyecto_json.nombre else (presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or 'Sin ubicación definida')) %}
+                    {# Prioridad: obra > cliente relacion > datos_proyecto.cliente_nombre > datos_proyecto.cliente #}
+                    {% set cliente_proyecto = presupuesto.obra.cliente if presupuesto.obra else (presupuesto.cliente.nombre if presupuesto.cliente else (proyecto_json.cliente_nombre if proyecto_json and proyecto_json.cliente_nombre else (proyecto_json.cliente if proyecto_json and proyecto_json.cliente else 'Cliente por confirmar'))) %}
                     {% set ubicacion_proyecto = presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or (proyecto_json.ubicacion if proyecto_json and proyecto_json.ubicacion else None) %}
                     <div class="card-body">
                         <h6 class="card-title">{{ nombre_proyecto }}</h6>
@@ -165,7 +167,7 @@
                     <div class="card-footer bg-transparent" data-presupuesto-footer="{{ presupuesto.id }}">
                         <div class="d-grid gap-2" data-confirm-container="{{ presupuesto.id }}">
                             {% set es_admin = tiene_rol('admin') or (current_user.is_authenticated and current_user.es_admin()) %}
-                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and es_admin and presupuesto.estado == 'borrador' %}
+                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and es_admin and presupuesto.estado in ['borrador', 'enviado'] %}
                             <button type="button" class="btn btn-success btn-sm btn-confirmar-presupuesto"
                                     data-action="abrir-confirmar"
                                     data-presupuesto-id="{{ presupuesto.id }}"
@@ -206,9 +208,12 @@
                                class="btn btn-outline-success btn-sm w-100" target="_blank">
                                 <i class="fas fa-file-pdf me-1"></i>Descargar PDF
                             </a>
+                            {# El botón de enviar por correo aparece si el presupuesto NO está confirmado como obra #}
+                            {% if not presupuesto.confirmado_como_obra %}
                             <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-outline-info btn-sm w-100">
                                 <i class="fas fa-envelope me-1"></i>Enviar por correo
                             </a>
+                            {% endif %}
                             {% endif %}
                             {% endif %}
 
@@ -230,7 +235,7 @@
                             </button>
                             {% endif %}
 
-                            {% if current_user.rol == 'administrador' and presupuesto.estado in ['borrador', 'perdido'] %}
+                            {% if current_user.rol == 'administrador' and presupuesto.estado in ['borrador', 'enviado', 'perdido'] and not presupuesto.confirmado_como_obra %}
                             <button class="btn btn-outline-danger btn-sm" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-trash me-1"></i>Eliminar
                             </button>
@@ -330,15 +335,8 @@
                                 Crear tareas sugeridas para cada etapa
                             </label>
                         </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="confirmNormalizarSlugs" checked>
-                            <label class="form-check-label" for="confirmNormalizarSlugs">
-                                Asignar slug y etapa normalizada automáticamente
-                            </label>
-                            <div class="form-text">
-                                Esto organiza las tareas en etapas estándar (ej: "Estructura", "Terminaciones") facilitando el seguimiento del proyecto.
-                            </div>
-                        </div>
+                        {# Slug y etapa normalizada se asignan automáticamente - no mostrar como opción #}
+                        <input type="hidden" id="confirmNormalizarSlugs" value="true">
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between">

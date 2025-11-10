@@ -182,12 +182,13 @@ else:
 
 # Flask-Mail Configuration
 app.config["MAIL_SERVER"] = os.getenv("SMTP_HOST", "smtp.gmail.com")
-app.config["MAIL_PORT"] = int(os.getenv("SMTP_PORT", "587"))
-app.config["MAIL_USE_TLS"] = True
-app.config["MAIL_USE_SSL"] = False
+app.config["MAIL_PORT"] = int(os.getenv("SMTP_PORT", "465"))
+app.config["MAIL_USE_TLS"] = False
+app.config["MAIL_USE_SSL"] = True
 app.config["MAIL_USERNAME"] = os.getenv("SMTP_USER", "")
 app.config["MAIL_PASSWORD"] = os.getenv("SMTP_PASSWORD", "")
 app.config["MAIL_DEFAULT_SENDER"] = os.getenv("SMTP_USER", "")
+app.config["MAIL_SUPPRESS_SEND"] = False
 
 if app.config["MAIL_USERNAME"]:
     app.logger.info(f"Email configured: {app.config['MAIL_USERNAME']}")

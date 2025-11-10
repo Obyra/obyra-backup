@@ -34,9 +34,10 @@ def lista():
         vigencia = request.args.get('vigencia', '')
         obra_id = request.args.get('obra_id', type=int)
 
-        # Query base - excluir presupuestos eliminados
+        # Query base - excluir presupuestos eliminados y presupuestos confirmados como obras
         query = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
-            Presupuesto.estado != 'eliminado'
+            Presupuesto.estado != 'eliminado',
+            Presupuesto.confirmado_como_obra != True
         )
 
         # Aplicar filtros
@@ -431,13 +432,14 @@ def enviar_email(id):
         if request.method == 'GET':
             # Mostrar formulario de envío
             email_destino = presupuesto.cliente.email if presupuesto.cliente else ''
+            user_name = f"{current_user.nombre} {current_user.apellido}" if current_user.is_authenticated else "nuestro equipo"
             mensaje_default = f"""Estimado/a,
 
 Adjunto encontrará el presupuesto Nº {presupuesto.numero} solicitado.
 
 Este presupuesto tiene una vigencia hasta el {presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'consultar'}.
 
-Quedamos a su disposición ante cualquier consulta.
+Para cualquier consulta, puede responder directamente este email y su mensaje llegará a {user_name}.
 
 Saludos cordiales,
 {organizacion.nombre}"""
@@ -457,6 +459,11 @@ Saludos cordiales,
         if not email_destino:
             flash('Debe ingresar un email de destino', 'danger')
             return redirect(url_for('presupuestos.enviar_email', id=id))
+
+        # Verificar que el presupuesto tenga ítems
+        if presupuesto.items.count() == 0:
+            flash('No se puede enviar un presupuesto sin ítems. Por favor agregue ítems al presupuesto primero.', 'warning')
+            return redirect(url_for('presupuestos.detalle', id=id))
 
         # Generar PDF
         html_string = render_template(
@@ -478,18 +485,41 @@ Saludos cordiales,
         # Enviar email usando Flask-Mail si está configurado, sino informar
         try:
             from extensions import mail
+
+            # NOTA: Gmail no permite cambiar el remitente (FROM) cuando se envía a través de su SMTP.
+            # Usamos Reply-To para que las respuestas vayan al usuario actual que envía el presupuesto.
+            user_email = current_user.email if current_user.is_authenticated else None
+            user_name = f"{current_user.nombre} {current_user.apellido}" if current_user.is_authenticated else "OBYRA"
+
+            # El FROM será siempre obyra.servicios@gmail.com (configurado en MAIL_DEFAULT_SENDER)
+            # Pero incluimos el nombre del usuario en el display name
+            sender_email = f"{user_name} - OBYRA <{current_app.config.get('MAIL_DEFAULT_SENDER')}>"
+
+            # Log para debugging
+            current_app.logger.info(f"Intentando enviar email desde {sender_email} hacia {email_destino}")
+            if user_email:
+                current_app.logger.info(f"Reply-To: {user_email}")
+            current_app.logger.info(f"SMTP Config: {current_app.config.get('MAIL_SERVER')}:{current_app.config.get('MAIL_PORT')}")
+
             msg = Message(
                 asunto,
                 recipients=[email_destino],
                 body=mensaje,
-                sender=current_app.config.get('MAIL_DEFAULT_SENDER', organizacion.email)
+                sender=sender_email
             )
+
+            # Si el usuario tiene email, configurar Reply-To para que las respuestas vayan a él
+            if user_email:
+                msg.reply_to = f"{user_name} <{user_email}>"
             msg.attach(
                 f'presupuesto_{presupuesto.numero}.pdf',
                 'application/pdf',
                 pdf_bytes
             )
+
+            current_app.logger.info("Enviando email...")
             mail.send(msg)
+            current_app.logger.info("Email enviado exitosamente!")
 
             # Actualizar estado si está en borrador
             if presupuesto.estado == 'borrador':
@@ -508,6 +538,91 @@ Saludos cordiales,
         current_app.logger.error(f"Error en presupuestos.enviar_email: {e}", exc_info=True)
         flash('Error al enviar el email', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
+
+
+@presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
+@login_required
+def confirmar_como_obra(id):
+    """Confirmar presupuesto y convertirlo en obra"""
+    try:
+        org_id = get_current_org_id()
+        presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
+
+        # Solo administradores pueden confirmar presupuestos
+        if not (current_user.role == 'admin' or current_user.es_admin()):
+            return jsonify({'error': 'No tiene permisos para confirmar presupuestos'}), 403
+
+        # Verificar que el presupuesto no esté ya confirmado
+        if presupuesto.confirmado_como_obra:
+            return jsonify({'error': 'Este presupuesto ya fue confirmado como obra'}), 400
+
+        # Verificar que tenga ítems
+        if presupuesto.items.count() == 0:
+            return jsonify({'error': 'No se puede confirmar un presupuesto sin ítems'}), 400
+
+        # Obtener datos del formulario
+        data = request.get_json() or {}
+        crear_tareas = data.get('crear_tareas', True)
+        normalizar_slugs = data.get('normalizar_slugs', True)
+
+        # Crear la obra desde el presupuesto
+        obra = Obra()
+
+        # Datos básicos de la obra
+        obra.nombre = presupuesto.datos_proyecto or f"Obra {presupuesto.numero}"
+        obra.organizacion_id = presupuesto.organizacion_id
+
+        # Cliente
+        if presupuesto.cliente:
+            obra.cliente_id = presupuesto.cliente_id
+            obra.cliente = presupuesto.cliente.nombre
+            obra.telefono_cliente = presupuesto.cliente.telefono
+            obra.email_cliente = presupuesto.cliente.email
+        else:
+            obra.cliente = "Sin cliente asignado"
+
+        # Ubicación
+        obra.direccion = presupuesto.ubicacion_texto
+        obra.direccion_normalizada = presupuesto.ubicacion_normalizada
+        obra.latitud = presupuesto.geo_latitud
+        obra.longitud = presupuesto.geo_longitud
+        obra.geocode_place_id = presupuesto.geocode_place_id
+        obra.geocode_provider = presupuesto.geocode_provider
+        obra.geocode_status = presupuesto.geocode_status
+        obra.geocode_raw = presupuesto.geocode_raw
+        obra.geocode_actualizado = presupuesto.geocode_actualizado
+
+        # Presupuesto y fechas
+        obra.presupuesto_total = presupuesto.total_con_iva
+        obra.fecha_inicio = date.today()
+        obra.fecha_fin_estimada = presupuesto.fecha_vigencia
+        obra.estado = 'planificacion'
+        obra.progreso = 0
+
+        db.session.add(obra)
+        db.session.flush()  # Para obtener el ID de la obra
+
+        # Marcar el presupuesto como confirmado
+        presupuesto.confirmado_como_obra = True
+        presupuesto.obra_id = obra.id
+        presupuesto.estado = 'aprobado'
+
+        db.session.commit()
+
+        current_app.logger.info(f"Presupuesto {presupuesto.numero} confirmado como obra {obra.id}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Presupuesto confirmado exitosamente. Obra creada: {obra.nombre}',
+            'obra_id': obra.id,
+            'obra_url': url_for('obras.detalle', id=obra.id),
+            'redirect_url': url_for('obras.detalle', id=obra.id)
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en presupuestos.confirmar_como_obra: {e}", exc_info=True)
+        return jsonify({'error': 'Error al confirmar el presupuesto'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/items/agregar', methods=['POST'])

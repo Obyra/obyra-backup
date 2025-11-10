@@ -59,6 +59,8 @@ services:
       target: runtime
     container_name: obyra-app
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Flask
       FLASK_APP: app.py
@@ -76,12 +78,7 @@ services:
       # Application
       BASE_URL: ${BASE_URL:-http://localhost}
 
-      # Email
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      FROM_EMAIL: ${FROM_EMAIL:-noreply@obyra.com}
+      # Email configuration loaded from .env file via env_file directive
 
       # Payments
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
