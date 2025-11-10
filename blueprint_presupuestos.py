@@ -350,13 +350,24 @@ def generar_pdf(id):
             flash('No tienes una organización activa', 'warning')
             return redirect(url_for('index'))
 
-        presupuesto = Presupuesto.query.filter_by(
+        # Obtener presupuesto con eager loading para evitar queries dentro del template
+        from sqlalchemy.orm import joinedload
+        presupuesto = Presupuesto.query.options(
+            joinedload(Presupuesto.cliente)
+        ).filter_by(
             id=id,
             organizacion_id=org_id
         ).first_or_404()
 
         # Obtener organización
         organizacion = Organizacion.query.get(org_id)
+
+        # Obtener items ordenados usando sintaxis SQLAlchemy 2.0
+        from models.budgets import ItemPresupuesto
+        from extensions import db
+        items_ordenados = db.session.query(ItemPresupuesto).filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id
+        ).order_by(ItemPresupuesto.tipo, ItemPresupuesto.id).all()
 
         try:
             # Renderizar HTML
@@ -365,7 +376,8 @@ def generar_pdf(id):
                 presupuesto=presupuesto,
                 organizacion=organizacion,
                 usuario=current_user,
-                now=datetime.now()
+                now=datetime.now(),
+                items=items_ordenados
             )
         except Exception as render_error:
             current_app.logger.error(f"Error al renderizar template PDF: {render_error}", exc_info=True)
