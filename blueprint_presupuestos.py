@@ -474,13 +474,20 @@ Saludos cordiales,
             flash('No se puede enviar un presupuesto sin ítems. Por favor agregue ítems al presupuesto primero.', 'warning')
             return redirect(url_for('presupuestos.detalle', id=id))
 
+        # Obtener items ordenados (igual que en generar_pdf)
+        from models.budgets import ItemPresupuesto
+        items_ordenados = db.session.query(ItemPresupuesto).filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id
+        ).order_by(ItemPresupuesto.tipo, ItemPresupuesto.id).all()
+
         # Generar PDF
         html_string = render_template(
             'presupuestos/pdf_template.html',
             presupuesto=presupuesto,
             organizacion=organizacion,
             usuario=current_user,
-            now=datetime.now()
+            now=datetime.now(),
+            items=items_ordenados
         )
 
         pdf_buffer = io.BytesIO()
