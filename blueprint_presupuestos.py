@@ -633,6 +633,54 @@ def confirmar_como_obra(id):
         presupuesto.obra_id = obra.id
         presupuesto.estado = 'aprobado'
 
+        # Crear tareas desde los ítems del presupuesto si se solicitó
+        if crear_tareas:
+            from models.budgets import ItemPresupuesto
+            from models.projects import Etapa, Tarea
+
+            # Obtener todos los ítems del presupuesto agrupados por etapa
+            items = db.session.query(ItemPresupuesto).filter(
+                ItemPresupuesto.presupuesto_id == presupuesto.id
+            ).order_by(ItemPresupuesto.etapa, ItemPresupuesto.tipo).all()
+
+            # Agrupar ítems por etapa
+            etapas_dict = {}
+            for item in items:
+                etapa_nombre = item.etapa or 'Sin etapa'
+                if etapa_nombre not in etapas_dict:
+                    etapas_dict[etapa_nombre] = []
+                etapas_dict[etapa_nombre].append(item)
+
+            # Crear etapas y tareas
+            orden_etapa = 1
+            for etapa_nombre, items_etapa in etapas_dict.items():
+                # Crear etapa
+                etapa = Etapa(
+                    obra_id=obra.id,
+                    nombre=etapa_nombre,
+                    orden=orden_etapa,
+                    estado='pendiente',
+                    progreso=0
+                )
+                db.session.add(etapa)
+                db.session.flush()  # Para obtener etapa.id
+
+                # Crear tareas para cada ítem de la etapa
+                orden_tarea = 1
+                for item in items_etapa:
+                    tarea = Tarea(
+                        etapa_id=etapa.id,
+                        nombre=item.descripcion,
+                        orden=orden_tarea,
+                        estado='pendiente',
+                        cantidad=float(item.cantidad) if item.cantidad else 0,
+                        unidad=item.unidad or 'unidad'
+                    )
+                    db.session.add(tarea)
+                    orden_tarea += 1
+
+                orden_etapa += 1
+
         db.session.commit()
 
         current_app.logger.info(f"Presupuesto {presupuesto.numero} confirmado como obra {obra.id}")
