@@ -713,6 +713,9 @@ window.addEventListener('resize', function() {
     }
 });
 
+// CSRF Token para formularios dinámicos
+const CSRF_TOKEN = "{{ csrf_token() }}";
+
 // Función para confirmar eliminación de obra
 function confirmarEliminarObra(obraId, obraNombre) {
     if (confirm(`¿Estás seguro de que deseas eliminar la obra "${obraNombre}"?\n\nEsta acción eliminará:\n• La obra y todos sus datos\n• Todas las etapas y tareas asociadas\n• Todas las asignaciones de personal\n• Todas las certificaciones\n\nEsta acción NO se puede deshacer.`)) {
@@ -722,14 +725,11 @@ function confirmarEliminarObra(obraId, obraNombre) {
         form.action = `/obras/eliminar/${obraId}`;
 
         // Agregar token CSRF
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        if (csrfToken) {
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            csrfInput.value = csrfToken;
-            form.appendChild(csrfInput);
-        }
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = CSRF_TOKEN;
+        form.appendChild(csrfInput);
 
         document.body.appendChild(form);
         form.submit();
