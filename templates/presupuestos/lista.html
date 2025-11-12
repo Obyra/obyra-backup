@@ -89,7 +89,7 @@
                     {# Prioridad: obra > datos_proyecto.nombre_obra > datos_proyecto.nombre > ubicacion_texto #}
                     {% set nombre_proyecto = presupuesto.obra.nombre if presupuesto.obra else (proyecto_json.nombre_obra if proyecto_json and proyecto_json.nombre_obra else (proyecto_json.nombre if proyecto_json and proyecto_json.nombre else (presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or 'Sin ubicación definida'))) %}
                     {# Prioridad: obra > cliente relacion > datos_proyecto.cliente_nombre > datos_proyecto.cliente #}
-                    {% set cliente_proyecto = presupuesto.obra.cliente if presupuesto.obra else (presupuesto.cliente.nombre if presupuesto.cliente else (proyecto_json.cliente_nombre if proyecto_json and proyecto_json.cliente_nombre else (proyecto_json.cliente if proyecto_json and proyecto_json.cliente else 'Cliente por confirmar'))) %}
+                    {% set cliente_proyecto = presupuesto.obra.cliente if presupuesto.obra else (presupuesto.cliente.nombre_completo if presupuesto.cliente else (proyecto_json.cliente_nombre if proyecto_json and proyecto_json.cliente_nombre else (proyecto_json.cliente if proyecto_json and proyecto_json.cliente else 'Cliente por confirmar'))) %}
                     {% set ubicacion_proyecto = presupuesto.ubicacion_normalizada or presupuesto.ubicacion_texto or (proyecto_json.ubicacion if proyecto_json and proyecto_json.ubicacion else None) %}
                     <div class="card-body">
                         <h6 class="card-title">{{ nombre_proyecto }}</h6>

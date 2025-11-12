@@ -603,7 +603,7 @@ def confirmar_como_obra(id):
         # Cliente
         if presupuesto.cliente:
             obra.cliente_id = presupuesto.cliente_id
-            obra.cliente = presupuesto.cliente.nombre
+            obra.cliente = presupuesto.cliente.nombre_completo
             obra.telefono_cliente = presupuesto.cliente.telefono
             obra.email_cliente = presupuesto.cliente.email
         else:
