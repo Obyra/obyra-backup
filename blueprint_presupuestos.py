@@ -89,7 +89,11 @@ def lista():
 @login_required
 def crear():
     """Crear nuevo presupuesto"""
-    if current_user.role not in ['admin', 'pm']:
+    # Roles permitidos: admin y PM
+    roles_permitidos = ['admin', 'pm', 'administrador']
+    user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
+
+    if user_role not in roles_permitidos:
         flash('No tienes permisos para crear presupuestos', 'danger')
         return redirect(url_for('presupuestos.lista'))
 
@@ -709,8 +713,10 @@ def editar_obra(id):
         org_id = get_current_org_id()
         presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
 
-        # Solo técnicos y administradores pueden editar
-        if not (current_user.role in ['admin', 'tecnico'] or current_user.es_admin()):
+        # Admin, PM y técnicos pueden editar
+        user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
+        roles_edicion = ['admin', 'pm', 'administrador', 'tecnico']
+        if not (user_role in roles_edicion or current_user.es_admin()):
             return jsonify({'error': 'No tiene permisos para editar presupuestos'}), 403
 
         # No se puede editar si ya está confirmado como obra
@@ -837,7 +843,10 @@ def agregar_item(id):
 @csrf.exempt
 def editar_item(id):
     """Editar item de presupuesto"""
-    if current_user.rol not in ['administrador', 'tecnico']:
+    # Admin, PM y técnicos pueden editar items
+    user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
+    roles_edicion = ['admin', 'pm', 'administrador', 'tecnico']
+    if user_role not in roles_edicion:
         return jsonify({'exito': False, 'error': 'No tienes permisos'}), 403
 
     try:
@@ -984,10 +993,14 @@ def eliminar(id):
             current_app.logger.warning(f'Usuario sin autorización para presupuesto {id}')
             return jsonify({'error': 'No autorizado'}), 403
 
-        # Solo permitir eliminar presupuestos en borrador o perdidos
-        if presupuesto.estado not in ['borrador', 'perdido']:
-            current_app.logger.warning(f'Intento de eliminar presupuesto {id} en estado {presupuesto.estado}')
-            return jsonify({'error': f'Solo se pueden eliminar presupuestos en borrador o perdidos. Estado actual: {presupuesto.estado}'}), 400
+        # Verificar si el presupuesto está confirmado como obra
+        if presupuesto.confirmado_como_obra:
+            current_app.logger.warning(f'Intento de eliminar presupuesto {id} confirmado como obra')
+            return jsonify({'error': 'No se puede eliminar un presupuesto que ya fue confirmado como obra'}), 400
+
+        # Administradores pueden eliminar presupuestos en cualquier estado
+        # (excepto confirmados como obra)
+        current_app.logger.info(f'Admin eliminando presupuesto {id} en estado {presupuesto.estado}')
 
         # Marcar como eliminado en lugar de borrar
         presupuesto.estado = 'eliminado'

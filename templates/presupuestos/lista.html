@@ -235,7 +235,7 @@
                             </button>
                             {% endif %}
 
-                            {% if es_admin and presupuesto.estado in ['borrador', 'enviado', 'perdido'] and not presupuesto.confirmado_como_obra %}
+                            {% if es_admin and not presupuesto.confirmado_como_obra %}
                             <button class="btn btn-outline-danger btn-sm" onclick="eliminarPresupuesto({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-trash me-1"></i>Eliminar
                             </button>
