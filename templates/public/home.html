@@ -66,18 +66,14 @@
                                     ¿Olvidaste tu contraseña?
                                 </a>
                             </div>
+                            {% if google_available %}
                             <div class="text-center text-muted mb-3">o</div>
                             <div class="d-grid gap-2">
-                                {% if google_available %}
                                 <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-danger btn-lg">
                                     <i class="fab fa-google me-2"></i>Iniciar sesión con Google
                                 </a>
-                                {% else %}
-                                <button type="button" class="btn btn-outline-secondary btn-lg" disabled>
-                                    <i class="fab fa-google me-2"></i>Google OAuth no configurado
-                                </button>
-                                {% endif %}
                             </div>
+                            {% endif %}
                         </form>
                         <div class="mt-4 text-center small">
                             ¿Aún no tienes una cuenta? <a href="{{ url_for('auth.register') }}" class="fw-semibold">Regístrate</a>
