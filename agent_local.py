@@ -87,21 +87,33 @@ def procesar_consulta():
         org_id = current_user.organizacion_id
         
         # Consultar obras activas
-        obras_activas = Obra.query.filter_by(
+        # Usar eager loading para prevenir N+1 queries
+        from sqlalchemy.orm import joinedload
+
+        obras_activas = Obra.query.options(
+            joinedload(Obra.cliente),
+            joinedload(Obra.responsable)
+        ).filter_by(
             organizacion_id=org_id,
             estado='en_progreso'
         ).all()
-        
+
         obras_total = Obra.query.filter_by(organizacion_id=org_id).count()
-        
+
         # Consultar presupuestos
-        presupuestos_aprobados = Presupuesto.query.filter_by(
+        presupuestos_aprobados = Presupuesto.query.options(
+            joinedload(Presupuesto.cliente),
+            joinedload(Presupuesto.obra)
+        ).filter_by(
             organizacion_id=org_id,
             estado='aprobado'
         ).all()
-        
+
         # Consultar inventario con stock bajo
-        items_stock_bajo = ItemInventario.query.filter(
+        items_stock_bajo = ItemInventario.query.options(
+            joinedload(ItemInventario.organizacion),
+            joinedload(ItemInventario.categoria)
+        ).filter(
             ItemInventario.organizacion_id == org_id,
             ItemInventario.stock_actual <= ItemInventario.stock_minimo
         ).all()
@@ -429,9 +441,10 @@ def auditoria_consultas():
                 fecha_obj = fecha_item
             else:
                 fecha_obj = datetime.now().date()
-        except:
+        except (ValueError, TypeError, AttributeError) as e:
+            current_app.logger.warning(f"Error al convertir fecha en consultas_por_dia: {e}, usando fecha actual")
             fecha_obj = datetime.now().date()
-        
+
         consultas_por_dia.append((fecha_obj, total))
     
     # Construir consulta base para auditoría
@@ -553,9 +566,10 @@ def exportar_excel(consultas):
         column_letter = column[0].column_letter
         for cell in column:
             try:
-                if len(str(cell.value)) > max_length:
+                if cell.value and len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
-            except:
+            except (AttributeError, TypeError):
+                # Celda sin valor o error al convertir a string
                 pass
         adjusted_width = min(max_length + 2, 50)
         ws.column_dimensions[column_letter].width = adjusted_width

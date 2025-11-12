@@ -569,6 +569,7 @@ async function cargarDatosClima(lat, lng, nombreObra, direccion) {
             `;
         }
         
+        // Crear elementos de forma segura sin usar interpolación directa
         contenidoDiv.innerHTML = `
             <div class="row">
                 <!-- Información de la obra -->
@@ -576,10 +577,10 @@ async function cargarDatosClima(lat, lng, nombreObra, direccion) {
                     <div class="card border-0 bg-light">
                         <div class="card-body">
                             <h6 class="card-title text-primary mb-2">
-                                <i class="fas fa-building me-2"></i>${nombreObra}
+                                <i class="fas fa-building me-2"></i><span class="obra-nombre"></span>
                             </h6>
                             <p class="mb-0 small text-muted">
-                                <i class="fas fa-map-marker-alt me-1"></i>${direccion || 'Sin dirección especificada'}
+                                <i class="fas fa-map-marker-alt me-1"></i><span class="obra-direccion"></span>
                             </p>
                         </div>
                     </div>
@@ -591,30 +592,38 @@ async function cargarDatosClima(lat, lng, nombreObra, direccion) {
                         <div class="card-body text-center p-4">
                             <h5 class="card-title fw-bold mb-3">Clima Actual</h5>
                             <div class="mb-3">
-                                <i class="${iconoClima}" style="font-size: 48px;"></i>
+                                <i class="icono-clima" style="font-size: 48px;"></i>
                             </div>
-                            <div class="h2 fw-bold mb-2">${clima.temperature}°C</div>
-                            <p class="mb-2">${descripcionClima}</p>
+                            <div class="h2 fw-bold mb-2"><span class="temperatura"></span>°C</div>
+                            <p class="mb-2 descripcion-clima"></p>
                             <p class="small mb-0">
-                                <i class="fas fa-wind me-1"></i>Viento: ${clima.windspeed} km/h
+                                <i class="fas fa-wind me-1"></i>Viento: <span class="velocidad-viento"></span> km/h
                             </p>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Pronóstico 7 días -->
                 <div class="col-12">
                     <h5 class="mb-3 fw-bold text-center">
                         <i class="fas fa-calendar-week me-2"></i>Pronóstico 7 días
                     </h5>
-                    <div class="row">
-                        ${pronosticoHTML}
+                    <div class="row pronostico-container">
                     </div>
                 </div>
             </div>
         `;
-        
-        console.log(`✅ Clima completo cargado para ${nombreObra}`);
+
+        // Insertar datos de forma segura usando textContent
+        contenidoDiv.querySelector('.obra-nombre').textContent = nombreObra;
+        contenidoDiv.querySelector('.obra-direccion').textContent = direccion || 'Sin dirección especificada';
+        contenidoDiv.querySelector('.icono-clima').className = iconoClima;
+        contenidoDiv.querySelector('.temperatura').textContent = clima.temperature;
+        contenidoDiv.querySelector('.descripcion-clima').textContent = descripcionClima;
+        contenidoDiv.querySelector('.velocidad-viento').textContent = clima.windspeed;
+        contenidoDiv.querySelector('.pronostico-container').innerHTML = pronosticoHTML;
+
+        console.log(`✅ Clima completo cargado para obra`);
         
     } catch (error) {
         console.error('❌ Error al cargar clima:', error);

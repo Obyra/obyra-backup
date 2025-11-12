@@ -180,6 +180,22 @@ else:
         "MP_WEBHOOK_PUBLIC_URL is not configured; expected path: /api/payments/mp/webhook"
     )
 
+# Session Security Configuration
+from datetime import timedelta
+app.config["SESSION_COOKIE_SECURE"] = _env_flag("SESSION_COOKIE_SECURE", default=False)  # True en producción con HTTPS
+app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevenir acceso desde JavaScript
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Protección CSRF básica
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=int(os.getenv("SESSION_LIFETIME_HOURS", "24")))
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True  # Renovar sesión en cada request
+
+# File Upload Configuration
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_SIZE_MB", "16")) * 1024 * 1024  # Default 16MB
+app.config["UPLOAD_ALLOWED_EXTENSIONS"] = {
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt',
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp',
+    'zip', 'rar', '7z'
+}
+
 # Flask-Mail Configuration
 app.config["MAIL_SERVER"] = os.getenv("SMTP_HOST", "smtp.gmail.com")
 app.config["MAIL_PORT"] = int(os.getenv("SMTP_PORT", "465"))
@@ -602,8 +618,9 @@ def obtener_nombre_rol_filter(codigo_rol):
     try:
         from roles_construccion import obtener_nombre_rol
         return obtener_nombre_rol(codigo_rol)
-    except:
-        return codigo_rol.replace('_', ' ').title()
+    except (ImportError, AttributeError, KeyError) as e:
+        current_app.logger.warning(f"No se pudo obtener nombre de rol para '{codigo_rol}': {e}")
+        return codigo_rol.replace('_', ' ').title() if codigo_rol else 'Sin rol'
 
 @app.template_filter('from_json')
 def from_json_filter(json_str):
@@ -612,7 +629,8 @@ def from_json_filter(json_str):
     try:
         import json
         return json.loads(json_str)
-    except:
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        current_app.logger.error(f"Error al parsear JSON en filtro: {e}")
         return {}
 
 # ---------------- Startup tasks & blueprints ----------------
@@ -702,6 +720,9 @@ with app.app_context():
             db.session.add(admin_org)
             db.session.flush()
 
+            # Obtener contraseña desde variable de entorno (más seguro que hardcodear)
+            admin_password = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
+
             admin = Usuario(
                 nombre='Administrador',
                 apellido='OBYRA',
@@ -714,10 +735,10 @@ with app.app_context():
                 organizacion_id=admin_org.id,
                 primary_org_id=admin_org.id,
             )
-            admin.set_password('admin123')
+            admin.set_password(admin_password)
             db.session.add(admin)
             db.session.commit()
-            print('[ADMIN] Usuario administrador creado: admin@obyra.com / admin123')
+            print(f'[ADMIN] Usuario administrador creado: {admin_email} (password desde variable de entorno)')
         else:
             updated = False
             hashed_markers = ('pbkdf2:', 'scrypt:', 'argon2:', 'bcrypt')

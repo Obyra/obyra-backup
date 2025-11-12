@@ -79,6 +79,9 @@ def crear():
             return redirect(url_for('index'))
 
         if request.method == 'POST':
+            # Importar validadores
+            from utils.validators import validate_email, validate_string_length, validate_phone, sanitize_string
+
             # Obtener datos del formulario
             nombre = request.form.get('nombre', '').strip()
             apellido = request.form.get('apellido', '').strip()
@@ -94,18 +97,46 @@ def crear():
             empresa = request.form.get('empresa', '').strip()
             notas = request.form.get('notas', '').strip()
 
-            # Validaciones
-            if not nombre or not apellido:
-                flash('El nombre y apellido son requeridos', 'danger')
+            # Validaciones mejoradas
+            valid, error = validate_string_length(nombre, "Nombre", min_length=2, max_length=100)
+            if not valid:
+                flash(error, 'danger')
                 return redirect(url_for('clientes.crear'))
 
-            if not email:
-                flash('El email es requerido', 'danger')
+            valid, error = validate_string_length(apellido, "Apellido", min_length=2, max_length=100)
+            if not valid:
+                flash(error, 'danger')
                 return redirect(url_for('clientes.crear'))
 
-            if not numero_documento:
-                flash('El número de documento es requerido', 'danger')
+            valid, error = validate_email(email)
+            if not valid:
+                flash(error, 'danger')
                 return redirect(url_for('clientes.crear'))
+
+            valid, error = validate_string_length(numero_documento, "Número de documento", min_length=5, max_length=20)
+            if not valid:
+                flash(error, 'danger')
+                return redirect(url_for('clientes.crear'))
+
+            # Validar teléfonos si están presentes
+            if telefono:
+                valid, error = validate_phone(telefono)
+                if not valid:
+                    flash(f"Teléfono: {error}", 'danger')
+                    return redirect(url_for('clientes.crear'))
+
+            if telefono_alternativo:
+                valid, error = validate_phone(telefono_alternativo)
+                if not valid:
+                    flash(f"Teléfono alternativo: {error}", 'danger')
+                    return redirect(url_for('clientes.crear'))
+
+            # Sanitizar strings para prevenir problemas
+            nombre = sanitize_string(nombre, 100)
+            apellido = sanitize_string(apellido, 100)
+            direccion = sanitize_string(direccion, 255)
+            ciudad = sanitize_string(ciudad, 100)
+            provincia = sanitize_string(provincia, 100)
 
             # Verificar si ya existe un cliente con ese documento
             existing = Cliente.query.filter_by(

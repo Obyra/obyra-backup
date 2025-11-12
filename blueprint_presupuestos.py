@@ -236,7 +236,8 @@ def crear():
                     numero_sugerido = f"PRES-{fecha_hoy}-{num:03d}"
                 else:
                     numero_sugerido = f"PRES-{fecha_hoy}-001"
-            except:
+            except (IndexError, ValueError, AttributeError) as e:
+                current_app.logger.warning(f"Error al generar número de presupuesto: {e}")
                 numero_sugerido = f"PRES-{fecha_hoy}-001"
         else:
             numero_sugerido = f"PRES-{fecha_hoy}-001"
@@ -319,8 +320,9 @@ def detalle(id):
         if presupuesto.datos_proyecto:
             try:
                 datos_proyecto = json.loads(presupuesto.datos_proyecto)
-            except:
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                current_app.logger.error(f"Error al parsear datos_proyecto para presupuesto {presupuesto.id}: {e}")
+                datos_proyecto = {}
 
         # Pasar subtotales como variables separadas al template
         return render_template('presupuestos/detalle.html',

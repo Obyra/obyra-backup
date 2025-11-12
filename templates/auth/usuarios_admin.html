@@ -351,13 +351,17 @@ function cambiarRol(usuarioId, nuevoRol) {
     };
 
     if (modalConfirmacionBody) {
+        // Sanitizar el rol para prevenir XSS
+        const rolSanitizado = document.createTextNode(nuevoRol.replace('_', ' ')).textContent;
         modalConfirmacionBody.innerHTML = `
-            <p>¿Estás seguro de que quieres cambiar el rol de este usuario a <strong>${nuevoRol.replace('_', ' ')}</strong>?</p>
+            <p>¿Estás seguro de que quieres cambiar el rol de este usuario a <strong></strong>?</p>
             <div class="alert alert-warning">
                 <i class="fas fa-exclamation-triangle me-1"></i>
                 Esta acción cambiará los permisos del usuario en el sistema.
             </div>
         `;
+        // Insertar el texto sanitizado de forma segura
+        modalConfirmacionBody.querySelector('strong').textContent = rolSanitizado;
     }
 
     modalConfirmacion?.show();
@@ -374,13 +378,18 @@ function toggleUsuario(button, usuarioId, nuevoEstado) {
     };
 
     if (modalConfirmacionBody) {
+        const accion = deseaActivar ? 'activar' : 'desactivar';
+        const descripcion = deseaActivar ? 'El usuario podrá acceder al sistema.' : 'El usuario no podrá acceder al sistema.';
         modalConfirmacionBody.innerHTML = `
-            <p>¿Estás seguro de que quieres <strong>${deseaActivar ? 'activar' : 'desactivar'}</strong> este usuario?</p>
+            <p>¿Estás seguro de que quieres <strong></strong> este usuario?</p>
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-1"></i>
-                ${deseaActivar ? 'El usuario podrá acceder al sistema.' : 'El usuario no podrá acceder al sistema.'}
+                <span class="descripcion-accion"></span>
             </div>
         `;
+        // Insertar texto de forma segura
+        modalConfirmacionBody.querySelector('strong').textContent = accion;
+        modalConfirmacionBody.querySelector('.descripcion-accion').textContent = descripcion;
     }
 
     modalConfirmacion?.show();
