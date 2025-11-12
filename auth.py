@@ -94,12 +94,15 @@ def _env_flag(name: str, default: bool = False) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
-# Solo configurar Google OAuth si las variables están disponibles
-if os.environ.get('GOOGLE_OAUTH_CLIENT_ID') and os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'):
+# Solo configurar Google OAuth si las variables están disponibles Y NO VACÍAS
+google_client_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
+google_client_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
+
+if google_client_id and google_client_secret:
     google = oauth.register(
         name='google',
-        client_id=os.environ.get('GOOGLE_OAUTH_CLIENT_ID'),
-        client_secret=os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET'),
+        client_id=google_client_id,
+        client_secret=google_client_secret,
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid email profile'}
     )
