@@ -71,21 +71,17 @@
                 </button>
             </div>
 
+            {% if google_available %}
             <div class="auth-divider">
                 <span>o</span>
             </div>
 
             <div class="d-grid gap-2 mb-3">
-                {% if google_available %}
                 <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-danger btn-lg">
                     <i class="fab fa-google me-2"></i>Registrarse con Google
                 </a>
-                {% else %}
-                <button type="button" class="btn btn-outline-secondary btn-lg" disabled>
-                    <i class="fab fa-google me-2"></i>Google OAuth no configurado
-                </button>
-                {% endif %}
             </div>
+            {% endif %}
 
             <div class="text-center">
                 <p class="mb-0">¿Ya tienes una cuenta?

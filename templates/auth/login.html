@@ -57,35 +57,36 @@
                 <a href="{{ url_for('auth.forgot_password') }}" class="auth-link">¿Olvidaste tu contraseña?</a>
             </div>
 
+            {% if google_available %}
             <div class="auth-divider">
                 <span>o</span>
             </div>
 
             <div class="d-grid gap-2 mb-3">
-                {% if google_available %}
                 <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-danger btn-lg">
                     <i class="fab fa-google me-2"></i>Iniciar sesión con Google
                 </a>
-                {% else %}
-                <button type="button" class="btn btn-outline-secondary btn-lg" disabled>
-                    <i class="fab fa-google me-2"></i>Google OAuth no configurado
-                </button>
-                {% endif %}
             </div>
+            {% endif %}
 
             <div class="text-center">
-                <p class="mb-0">¿No tienes una cuenta? 
+                <p class="mb-2">¿No tienes una cuenta?
                     <a href="{{ url_for('auth.register') }}" class="auth-link">Registrarse</a>
+                </p>
+                <p class="mb-0">¿Quieres vender tus servicios?
+                    <a href="{{ url_for('supplier_auth.register') }}" class="auth-link">Registra tu empresa</a>
                 </p>
             </div>
         </form>
 
+        {% if config.get('FLASK_ENV') == 'development' or config.get('FLASK_DEBUG') %}
         <div class="mt-4 text-center">
             <small class="text-muted">
-                Credenciales por defecto:<br>
+                <i class="fas fa-info-circle me-1"></i>Desarrollo - Credenciales por defecto:<br>
                 <strong>admin@obyra.com</strong> / <strong>admin123</strong>
             </small>
         </div>
+        {% endif %}
     </div>
 </div>
 
