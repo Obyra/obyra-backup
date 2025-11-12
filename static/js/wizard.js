@@ -314,6 +314,15 @@ function initWizard() {
     const data = await fetchJSON(`/obras/api/wizard-tareas/etapas?obra_id=${obraId}`);
     state.catalogo = data.etapas_catalogo || [];
     state.etapasCreadas = data.etapas_creadas || [];
+    const etapasPreseleccionadas = data.etapas_preseleccionadas || [];
+
+    // Pre-seleccionar etapas del presupuesto
+    etapasPreseleccionadas.forEach((etapa) => {
+      const key = etapa.slug || String(etapa.id);
+      if (key) {
+        window.WZ_STATE.etapasSel.add(key);
+      }
+    });
 
     renderCatalog(state.catalogo, state.etapasCreadas);
   }

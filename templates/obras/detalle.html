@@ -62,17 +62,19 @@
                                 </div>
                                 <h6 class="mb-0 text-primary">Contacto</h6>
                             </div>
-                            {% if obra.telefono_cliente or obra.email_cliente %}
-                                {% if obra.telefono_cliente %}
+                            {% set telefono = obra.telefono_cliente or (obra.cliente_rel.telefono if obra.cliente_rel else None) %}
+                            {% set email = obra.email_cliente or (obra.cliente_rel.email if obra.cliente_rel else None) %}
+                            {% if telefono or email %}
+                                {% if telefono %}
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-phone me-2"></i>
-                                    <span>{{ obra.telefono_cliente }}</span>
+                                    <i class="fas fa-phone text-muted me-2"></i>
+                                    <a href="tel:{{ telefono }}" class="text-decoration-none">{{ telefono }}</a>
                                 </div>
                                 {% endif %}
-                                {% if obra.email_cliente %}
+                                {% if email %}
                                 <div class="d-flex align-items-center">
-                                    <i class="fas fa-envelope me-2"></i>
-                                    <span>{{ obra.email_cliente }}</span>
+                                    <i class="fas fa-envelope text-muted me-2"></i>
+                                    <a href="mailto:{{ email }}" class="text-decoration-none">{{ email }}</a>
                                 </div>
                                 {% endif %}
                             {% else %}

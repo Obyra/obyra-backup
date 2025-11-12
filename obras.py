@@ -2519,7 +2519,34 @@ def get_wizard_etapas():
             if etapa_catalogo:
                 etapa_creada['slug'] = etapa_catalogo['slug']
 
-        response = jsonify({"ok": True, "etapas_catalogo": catalogo, "etapas_creadas": etapas_creadas_data})
+        # Pre-seleccionar etapas del presupuesto si la obra proviene de uno
+        etapas_preseleccionadas = []
+        from models.budgets import Presupuesto, ItemPresupuesto
+        presupuesto = Presupuesto.query.filter_by(obra_id=obra_id, confirmado_como_obra=True).first()
+
+        if presupuesto and not etapas_creadas:  # Solo pre-seleccionar si no hay etapas creadas aún
+            # Obtener etapas únicas del presupuesto
+            etapas_presupuesto = db.session.query(ItemPresupuesto.etapa).filter(
+                ItemPresupuesto.presupuesto_id == presupuesto.id,
+                ItemPresupuesto.etapa.isnot(None)
+            ).distinct().all()
+
+            # Encontrar coincidencias en el catálogo
+            for (etapa_nombre,) in etapas_presupuesto:
+                etapa_catalogo = next((c for c in catalogo if c['nombre'] == etapa_nombre), None)
+                if etapa_catalogo:
+                    etapas_preseleccionadas.append({
+                        "id": etapa_catalogo['id'],
+                        "slug": etapa_catalogo['slug'],
+                        "nombre": etapa_catalogo['nombre']
+                    })
+
+        response = jsonify({
+            "ok": True,
+            "etapas_catalogo": catalogo,
+            "etapas_creadas": etapas_creadas_data,
+            "etapas_preseleccionadas": etapas_preseleccionadas
+        })
         response.headers['Content-Type'] = 'application/json'
         return response, 200
 
