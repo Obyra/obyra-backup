@@ -641,7 +641,7 @@ def confirmar_como_obra(id):
         # Crear tareas desde los ítems del presupuesto si se solicitó
         if crear_tareas:
             from models.budgets import ItemPresupuesto
-            from models.projects import Etapa, Tarea
+            from models.projects import EtapaObra, TareaEtapa
 
             # Obtener todos los ítems del presupuesto agrupados por etapa
             items = db.session.query(ItemPresupuesto).filter(
@@ -660,7 +660,7 @@ def confirmar_como_obra(id):
             orden_etapa = 1
             for etapa_nombre, items_etapa in etapas_dict.items():
                 # Crear etapa
-                etapa = Etapa(
+                etapa = EtapaObra(
                     obra_id=obra.id,
                     nombre=etapa_nombre,
                     orden=orden_etapa,
@@ -673,7 +673,7 @@ def confirmar_como_obra(id):
                 # Crear tareas para cada ítem de la etapa
                 orden_tarea = 1
                 for item in items_etapa:
-                    tarea = Tarea(
+                    tarea = TareaEtapa(
                         etapa_id=etapa.id,
                         nombre=item.descripcion,
                         orden=orden_tarea,
