@@ -2525,7 +2525,7 @@ def get_wizard_etapas():
         from models.projects import EtapaObra
         presupuesto = Presupuesto.query.filter_by(obra_id=obra_id, confirmado_como_obra=True).first()
 
-        if presupuesto and not etapas_creadas:  # Solo pre-seleccionar si no hay etapas creadas aún
+        if presupuesto:
             # Obtener etapas únicas del presupuesto usando la relación etapa_id
             etapas_ids = db.session.query(ItemPresupuesto.etapa_id).filter(
                 ItemPresupuesto.presupuesto_id == presupuesto.id,
@@ -2546,6 +2546,7 @@ def get_wizard_etapas():
                             "slug": etapa_catalogo['slug'],
                             "nombre": etapa_catalogo['nombre']
                         })
+                        current_app.logger.info(f"Wizard: Pre-seleccionando etapa '{etapa_catalogo['nombre']}' (slug: {etapa_catalogo['slug']})")
 
         response = jsonify({
             "ok": True,
