@@ -671,18 +671,15 @@ def confirmar_como_obra(id):
                 db.session.flush()  # Para obtener etapa.id
 
                 # Crear tareas para cada ítem de la etapa
-                orden_tarea = 1
                 for item in items_etapa:
                     tarea = TareaEtapa(
                         etapa_id=etapa.id,
                         nombre=item.descripcion,
-                        orden=orden_tarea,
                         estado='pendiente',
-                        cantidad=float(item.cantidad) if item.cantidad else 0,
-                        unidad=item.unidad or 'unidad'
+                        cantidad_planificada=float(item.cantidad) if item.cantidad else 0,
+                        unidad=item.unidad or 'un'
                     )
                     db.session.add(tarea)
-                    orden_tarea += 1
 
                 orden_etapa += 1
 
