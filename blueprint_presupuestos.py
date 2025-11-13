@@ -177,12 +177,33 @@ def crear():
             # Procesar items calculados por IA si existen
             if ia_payload_str:
                 try:
+                    from models.projects import EtapaObra
                     ia_payload = json.loads(ia_payload_str)
                     etapas_ia = ia_payload.get('etapas', [])
                     moneda_ia = ia_payload.get('moneda', 'ARS')
 
-                    for etapa in etapas_ia:
+                    # Mapa para guardar etapas creadas por nombre
+                    etapas_map = {}
+
+                    for orden, etapa in enumerate(etapas_ia, start=1):
+                        etapa_nombre = etapa.get('nombre', f'Etapa {orden}')
+
+                        # Crear etapa si no existe en el mapa
+                        if etapa_nombre not in etapas_map:
+                            etapa_obra = EtapaObra(
+                                obra_id=None,  # Aún no está asociada a obra
+                                nombre=etapa_nombre,
+                                orden=orden,
+                                estado='pendiente',
+                                progreso=0
+                            )
+                            db.session.add(etapa_obra)
+                            db.session.flush()  # Para obtener etapa_obra.id
+                            etapas_map[etapa_nombre] = etapa_obra
+
+                        etapa_obj = etapas_map[etapa_nombre]
                         items_etapa = etapa.get('items', [])
+
                         for item in items_etapa:
                             # Obtener precios en la moneda correcta
                             precio_unit = Decimal(str(item.get('precio_unit', 0)))
@@ -203,7 +224,8 @@ def crear():
                                 origen='ia',
                                 currency=moneda_ia,
                                 price_unit_ars=precio_unit_ars,
-                                total_ars=total_ars
+                                total_ars=total_ars,
+                                etapa_id=etapa_obj.id  # Asignar la etapa creada
                             )
                             db.session.add(item_presupuesto)
 
@@ -638,16 +660,28 @@ def confirmar_como_obra(id):
         presupuesto.obra_id = obra.id
         presupuesto.estado = 'aprobado'
 
+        # Asociar etapas del presupuesto a la obra
+        from models.budgets import ItemPresupuesto
+        from models.projects import EtapaObra, TareaEtapa
+
+        # Obtener todos los ítems del presupuesto
+        items = db.session.query(ItemPresupuesto).filter(
+            ItemPresupuesto.presupuesto_id == presupuesto.id
+        ).order_by(ItemPresupuesto.etapa_id, ItemPresupuesto.tipo).all()
+
+        # Obtener etapas únicas asociadas a los ítems
+        etapas_ids = set([item.etapa_id for item in items if item.etapa_id is not None])
+
+        if etapas_ids:
+            # Asociar las etapas existentes a la obra
+            etapas_obj = EtapaObra.query.filter(EtapaObra.id.in_(etapas_ids)).all()
+            for etapa in etapas_obj:
+                etapa.obra_id = obra.id
+
+            db.session.flush()
+
         # Crear tareas desde los ítems del presupuesto si se solicitó
         if crear_tareas:
-            from models.budgets import ItemPresupuesto
-            from models.projects import EtapaObra, TareaEtapa
-
-            # Obtener todos los ítems del presupuesto agrupados por etapa
-            items = db.session.query(ItemPresupuesto).filter(
-                ItemPresupuesto.presupuesto_id == presupuesto.id
-            ).order_by(ItemPresupuesto.etapa_id, ItemPresupuesto.tipo).all()
-
             # Agrupar ítems por etapa
             etapas_dict = {}
             for item in items:
@@ -656,19 +690,23 @@ def confirmar_como_obra(id):
                     etapas_dict[etapa_nombre] = []
                 etapas_dict[etapa_nombre].append(item)
 
-            # Crear etapas y tareas
+            # Crear tareas para cada etapa existente o nueva
             orden_etapa = 1
             for etapa_nombre, items_etapa in etapas_dict.items():
-                # Crear etapa
-                etapa = EtapaObra(
-                    obra_id=obra.id,
-                    nombre=etapa_nombre,
-                    orden=orden_etapa,
-                    estado='pendiente',
-                    progreso=0
-                )
-                db.session.add(etapa)
-                db.session.flush()  # Para obtener etapa.id
+                # Buscar si ya existe una etapa con ese nombre en la obra
+                etapa = EtapaObra.query.filter_by(obra_id=obra.id, nombre=etapa_nombre).first()
+
+                if not etapa:
+                    # Crear nueva etapa si no existe
+                    etapa = EtapaObra(
+                        obra_id=obra.id,
+                        nombre=etapa_nombre,
+                        orden=orden_etapa,
+                        estado='pendiente',
+                        progreso=0
+                    )
+                    db.session.add(etapa)
+                    db.session.flush()  # Para obtener etapa.id
 
                 # Crear tareas para cada ítem de la etapa
                 for item in items_etapa:

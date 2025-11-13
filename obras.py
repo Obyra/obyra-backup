@@ -2522,24 +2522,30 @@ def get_wizard_etapas():
         # Pre-seleccionar etapas del presupuesto si la obra proviene de uno
         etapas_preseleccionadas = []
         from models.budgets import Presupuesto, ItemPresupuesto
+        from models.projects import EtapaObra
         presupuesto = Presupuesto.query.filter_by(obra_id=obra_id, confirmado_como_obra=True).first()
 
         if presupuesto and not etapas_creadas:  # Solo pre-seleccionar si no hay etapas creadas aún
-            # Obtener etapas únicas del presupuesto
-            etapas_presupuesto = db.session.query(ItemPresupuesto.etapa).filter(
+            # Obtener etapas únicas del presupuesto usando la relación etapa_id
+            etapas_ids = db.session.query(ItemPresupuesto.etapa_id).filter(
                 ItemPresupuesto.presupuesto_id == presupuesto.id,
-                ItemPresupuesto.etapa.isnot(None)
+                ItemPresupuesto.etapa_id.isnot(None)
             ).distinct().all()
 
-            # Encontrar coincidencias en el catálogo
-            for (etapa_nombre,) in etapas_presupuesto:
-                etapa_catalogo = next((c for c in catalogo if c['nombre'] == etapa_nombre), None)
-                if etapa_catalogo:
-                    etapas_preseleccionadas.append({
-                        "id": etapa_catalogo['id'],
-                        "slug": etapa_catalogo['slug'],
-                        "nombre": etapa_catalogo['nombre']
-                    })
+            # Obtener objetos EtapaObra completos
+            etapa_ids_list = [e[0] for e in etapas_ids if e[0] is not None]
+            if etapa_ids_list:
+                etapas_objs = EtapaObra.query.filter(EtapaObra.id.in_(etapa_ids_list)).all()
+
+                # Encontrar coincidencias en el catálogo por nombre
+                for etapa_obj in etapas_objs:
+                    etapa_catalogo = next((c for c in catalogo if c['nombre'] == etapa_obj.nombre), None)
+                    if etapa_catalogo:
+                        etapas_preseleccionadas.append({
+                            "id": etapa_catalogo['id'],
+                            "slug": etapa_catalogo['slug'],
+                            "nombre": etapa_catalogo['nombre']
+                        })
 
         response = jsonify({
             "ok": True,
