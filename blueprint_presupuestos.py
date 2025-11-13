@@ -128,10 +128,9 @@ def crear():
 
             # Si se seleccionó un cliente, obtener su nombre de la base de datos
             if cliente_id:
-                from models.core import Cliente
                 cliente = Cliente.query.filter_by(id=cliente_id, organizacion_id=org_id).first()
                 if cliente:
-                    cliente_nombre = cliente.nombre
+                    cliente_nombre = cliente.nombre_completo
 
             # Preparar datos del proyecto como JSON
             import json
