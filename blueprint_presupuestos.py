@@ -646,12 +646,12 @@ def confirmar_como_obra(id):
             # Obtener todos los ítems del presupuesto agrupados por etapa
             items = db.session.query(ItemPresupuesto).filter(
                 ItemPresupuesto.presupuesto_id == presupuesto.id
-            ).order_by(ItemPresupuesto.etapa, ItemPresupuesto.tipo).all()
+            ).order_by(ItemPresupuesto.etapa_id, ItemPresupuesto.tipo).all()
 
             # Agrupar ítems por etapa
             etapas_dict = {}
             for item in items:
-                etapa_nombre = item.etapa or 'Sin etapa'
+                etapa_nombre = item.etapa.nombre if item.etapa else 'Sin etapa'
                 if etapa_nombre not in etapas_dict:
                     etapas_dict[etapa_nombre] = []
                 etapas_dict[etapa_nombre].append(item)
