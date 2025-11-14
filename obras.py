@@ -2051,13 +2051,24 @@ def eliminar_obra(obra_id):
     nombre_obra = obra.nombre
 
     try:
+        # Eliminar presupuestos asociados (marcarlos como no confirmados)
+        from models.budgets import Presupuesto
+        presupuestos_asociados = Presupuesto.query.filter_by(obra_id=obra_id).all()
+        for presupuesto in presupuestos_asociados:
+            presupuesto.confirmado_como_obra = False
+            presupuesto.obra_id = None
+
+        # Eliminar asignaciones
         AsignacionObra.query.filter_by(obra_id=obra_id).delete()
 
+        # Eliminar tareas de cada etapa
         for etapa in obra.etapas:
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
+        # Eliminar etapas
         EtapaObra.query.filter_by(obra_id=obra_id).delete()
 
+        # Eliminar la obra
         db.session.delete(obra)
         db.session.commit()
 
@@ -2065,8 +2076,9 @@ def eliminar_obra(obra_id):
         current_app.logger.warning(f'Obra eliminada: {obra_id} - {nombre_obra} por usuario {current_user.email}')
 
         flash(f'La obra "{nombre_obra}" ha sido eliminada exitosamente.', 'success')
-    except Exception:
+    except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f'Error al eliminar obra {obra_id}: {str(e)}', exc_info=True)
         flash('Error al eliminar la obra. Inténtalo nuevamente.', 'danger')
 
     return redirect(url_for('obras.lista'))
