@@ -2051,12 +2051,13 @@ def eliminar_obra(obra_id):
     nombre_obra = obra.nombre
 
     try:
-        # Eliminar presupuestos asociados (marcarlos como no confirmados)
+        # Eliminar presupuestos asociados (marcarlos como no confirmados y revertir a borrador)
         from models.budgets import Presupuesto
         presupuestos_asociados = Presupuesto.query.filter_by(obra_id=obra_id).all()
         for presupuesto in presupuestos_asociados:
             presupuesto.confirmado_como_obra = False
             presupuesto.obra_id = None
+            presupuesto.estado = 'borrador'  # Revertir a borrador para que se pueda volver a confirmar
 
         # Eliminar todas las relaciones con la obra en orden inverso de dependencias
 
