@@ -318,9 +318,12 @@ function initWizard() {
 
     // Pre-seleccionar etapas del presupuesto
     etapasPreseleccionadas.forEach((etapa) => {
-      const key = etapa.slug || String(etapa.id);
-      if (key) {
-        window.WZ_STATE.etapasSel.add(key);
+      // Agregar tanto slug como id para asegurar coincidencia con checkboxes
+      if (etapa.slug) {
+        window.WZ_STATE.etapasSel.add(etapa.slug);
+      }
+      if (etapa.id) {
+        window.WZ_STATE.etapasSel.add(String(etapa.id));
       }
     });
 
