@@ -2519,34 +2519,10 @@ def get_wizard_etapas():
             if etapa_catalogo:
                 etapa_creada['slug'] = etapa_catalogo['slug']
 
-        # Pre-seleccionar etapas del presupuesto si la obra proviene de uno
+        # Las etapas ya fueron creadas automáticamente al confirmar el presupuesto
+        # Ahora el wizard solo sirve para agregar tareas adicionales a las etapas existentes
+        # Por lo tanto, NO necesitamos pre-seleccionar nada, solo mostrar las etapas ya creadas
         etapas_preseleccionadas = []
-        from models.budgets import Presupuesto, ItemPresupuesto
-        from models.projects import EtapaObra
-        presupuesto = Presupuesto.query.filter_by(obra_id=obra_id, confirmado_como_obra=True).first()
-
-        if presupuesto:
-            # Obtener etapas únicas del presupuesto usando la relación etapa_id
-            etapas_ids = db.session.query(ItemPresupuesto.etapa_id).filter(
-                ItemPresupuesto.presupuesto_id == presupuesto.id,
-                ItemPresupuesto.etapa_id.isnot(None)
-            ).distinct().all()
-
-            # Obtener objetos EtapaObra completos
-            etapa_ids_list = [e[0] for e in etapas_ids if e[0] is not None]
-            if etapa_ids_list:
-                etapas_objs = EtapaObra.query.filter(EtapaObra.id.in_(etapa_ids_list)).all()
-
-                # Encontrar coincidencias en el catálogo por nombre
-                for etapa_obj in etapas_objs:
-                    etapa_catalogo = next((c for c in catalogo if c['nombre'] == etapa_obj.nombre), None)
-                    if etapa_catalogo:
-                        etapas_preseleccionadas.append({
-                            "id": etapa_catalogo['id'],
-                            "slug": etapa_catalogo['slug'],
-                            "nombre": etapa_catalogo['nombre']
-                        })
-                        current_app.logger.info(f"Wizard: Pre-seleccionando etapa '{etapa_catalogo['nombre']}' (slug: {etapa_catalogo['slug']})")
 
         response = jsonify({
             "ok": True,

@@ -314,18 +314,10 @@ function initWizard() {
     const data = await fetchJSON(`/obras/api/wizard-tareas/etapas?obra_id=${obraId}`);
     state.catalogo = data.etapas_catalogo || [];
     state.etapasCreadas = data.etapas_creadas || [];
-    const etapasPreseleccionadas = data.etapas_preseleccionadas || [];
 
-    // Pre-seleccionar etapas del presupuesto
-    etapasPreseleccionadas.forEach((etapa) => {
-      // Agregar tanto slug como id para asegurar coincidencia con checkboxes
-      if (etapa.slug) {
-        window.WZ_STATE.etapasSel.add(etapa.slug);
-      }
-      if (etapa.id) {
-        window.WZ_STATE.etapasSel.add(String(etapa.id));
-      }
-    });
+    // Las etapas ya fueron creadas automáticamente al confirmar el presupuesto
+    // El wizard ahora solo sirve para agregar tareas adicionales
+    // No necesitamos pre-seleccionar etapas
 
     renderCatalog(state.catalogo, state.etapasCreadas);
   }

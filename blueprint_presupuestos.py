@@ -583,6 +583,51 @@ Saludos cordiales,
         return redirect(url_for('presupuestos.detalle', id=id))
 
 
+def identificar_etapa_por_tipo(item):
+    """
+    Identifica la etapa correspondiente basándose en el tipo y descripción del ítem.
+    Utilizado para items sin etapa_id asignada.
+    """
+    # Mapeo de palabras clave a etapas
+    ETAPA_KEYWORDS = {
+        'Excavación': ['excavacion', 'movimiento', 'suelo', 'terreno', 'nivelacion'],
+        'Fundaciones': ['fundacion', 'cimiento', 'zapata', 'viga de fundacion', 'hormigon armado'],
+        'Estructura': ['estructura', 'columna', 'viga', 'losa', 'hormigon', 'acero', 'hierro'],
+        'Mampostería': ['muro', 'pared', 'tabique', 'ladrillo', 'bloque'],
+        'Techos': ['techo', 'cubierta', 'teja', 'chapa', 'impermeabilizacion'],
+        'Instalaciones Eléctricas': ['electric', 'cable', 'tablero', 'luminaria', 'tomacorriente'],
+        'Instalaciones Sanitarias': ['sanitari', 'agua', 'desague', 'cañeria', 'inodoro', 'lavabo'],
+        'Instalaciones de Gas': ['gas', 'gasoducto', 'artefacto a gas'],
+        'Revoque Grueso': ['revoque grueso', 'azotado', 'jaharro'],
+        'Revoque Fino': ['revoque fino', 'enlucido', 'terminacion'],
+        'Pisos': ['piso', 'ceramica', 'porcelanato', 'carpeta', 'contrapiso'],
+        'Carpintería': ['puerta', 'ventana', 'marco', 'madera', 'carpinteria'],
+        'Pintura': ['pintura', 'latex', 'esmalte', 'barniz'],
+        'Instalaciones Complementarias': ['aire acondicionado', 'calefaccion', 'ventilacion'],
+        'Limpieza Final': ['limpieza', 'acondicionamiento final'],
+    }
+
+    descripcion_lower = item.descripcion.lower() if item.descripcion else ''
+
+    # Buscar coincidencias por palabras clave
+    for etapa_nombre, keywords in ETAPA_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in descripcion_lower:
+                return etapa_nombre
+
+    # Identificación por tipo de ítem
+    if item.tipo == 'material':
+        if 'cemento' in descripcion_lower or 'hormigon' in descripcion_lower:
+            return 'Fundaciones'
+        return 'Materiales Generales'
+    elif item.tipo == 'mano_obra':
+        return 'Mano de Obra General'
+    elif item.tipo == 'maquinaria':
+        return 'Maquinaria y Equipos'
+    else:
+        return 'Otros'
+
+
 @presupuestos_bp.route('/<int:id>/confirmar-obra', methods=['POST'])
 @login_required
 def confirmar_como_obra(id):
@@ -660,7 +705,7 @@ def confirmar_como_obra(id):
         presupuesto.obra_id = obra.id
         presupuesto.estado = 'aprobado'
 
-        # Asociar etapas del presupuesto a la obra
+        # SIEMPRE crear/asociar etapas del presupuesto a la obra automáticamente
         from models.budgets import ItemPresupuesto
         from models.projects import EtapaObra, TareaEtapa
 
@@ -669,35 +714,44 @@ def confirmar_como_obra(id):
             ItemPresupuesto.presupuesto_id == presupuesto.id
         ).order_by(ItemPresupuesto.etapa_id, ItemPresupuesto.tipo).all()
 
-        # Obtener etapas únicas asociadas a los ítems
-        etapas_ids = set([item.etapa_id for item in items if item.etapa_id is not None])
+        # Agrupar ítems por etapa (usando etapa_id si existe, o por tipo/descripción)
+        etapas_dict = {}
+        etapas_obj_map = {}  # Para mapear nombre -> objeto EtapaObra
 
-        if etapas_ids:
-            # Asociar las etapas existentes a la obra
-            etapas_obj = EtapaObra.query.filter(EtapaObra.id.in_(etapas_ids)).all()
-            for etapa in etapas_obj:
-                etapa.obra_id = obra.id
+        for item in items:
+            if item.etapa_id and item.etapa:
+                # Item ya tiene etapa asignada
+                etapa_nombre = item.etapa.nombre
+                etapa_obj = item.etapa
+            else:
+                # Item sin etapa: identificar por tipo o usar genérica
+                etapa_nombre = identificar_etapa_por_tipo(item)
+                etapa_obj = None
 
-            db.session.flush()
+            if etapa_nombre not in etapas_dict:
+                etapas_dict[etapa_nombre] = []
+                if etapa_obj:
+                    etapas_obj_map[etapa_nombre] = etapa_obj
 
-        # Crear tareas desde los ítems del presupuesto si se solicitó
-        if crear_tareas:
-            # Agrupar ítems por etapa
-            etapas_dict = {}
-            for item in items:
-                etapa_nombre = item.etapa.nombre if item.etapa else 'Sin etapa'
-                if etapa_nombre not in etapas_dict:
-                    etapas_dict[etapa_nombre] = []
-                etapas_dict[etapa_nombre].append(item)
+            etapas_dict[etapa_nombre].append(item)
 
-            # Crear tareas para cada etapa existente o nueva
-            orden_etapa = 1
-            for etapa_nombre, items_etapa in etapas_dict.items():
-                # Buscar si ya existe una etapa con ese nombre en la obra
-                etapa = EtapaObra.query.filter_by(obra_id=obra.id, nombre=etapa_nombre).first()
+        # Crear/asociar todas las etapas a la obra
+        orden_etapa = 1
+        etapas_creadas = {}  # Mapeo nombre -> id de etapa en la obra
 
-                if not etapa:
-                    # Crear nueva etapa si no existe
+        for etapa_nombre, items_etapa in etapas_dict.items():
+            # Buscar si ya existe una etapa con ese nombre en la obra
+            etapa = EtapaObra.query.filter_by(obra_id=obra.id, nombre=etapa_nombre).first()
+
+            if not etapa:
+                # Verificar si hay una etapa existente (del presupuesto) que podemos asociar
+                if etapa_nombre in etapas_obj_map:
+                    etapa_existente = etapas_obj_map[etapa_nombre]
+                    etapa_existente.obra_id = obra.id
+                    etapa = etapa_existente
+                    current_app.logger.info(f"Asociando etapa existente '{etapa_nombre}' (ID: {etapa.id}) a obra {obra.id}")
+                else:
+                    # Crear nueva etapa
                     etapa = EtapaObra(
                         obra_id=obra.id,
                         nombre=etapa_nombre,
@@ -707,11 +761,28 @@ def confirmar_como_obra(id):
                     )
                     db.session.add(etapa)
                     db.session.flush()  # Para obtener etapa.id
+                    current_app.logger.info(f"Creada nueva etapa '{etapa_nombre}' (ID: {etapa.id}) para obra {obra.id}")
+
+            etapas_creadas[etapa_nombre] = etapa.id
+
+            # Actualizar etapa_id en los items si no lo tenían
+            for item in items_etapa:
+                if not item.etapa_id:
+                    item.etapa_id = etapa.id
+
+            orden_etapa += 1
+
+        db.session.flush()
+
+        # Opcionalmente crear tareas desde los ítems del presupuesto
+        if crear_tareas:
+            for etapa_nombre, items_etapa in etapas_dict.items():
+                etapa_id = etapas_creadas[etapa_nombre]
 
                 # Crear tareas para cada ítem de la etapa
                 for item in items_etapa:
                     tarea = TareaEtapa(
-                        etapa_id=etapa.id,
+                        etapa_id=etapa_id,
                         nombre=item.descripcion,
                         estado='pendiente',
                         cantidad_planificada=float(item.cantidad) if item.cantidad else 0,
@@ -719,7 +790,7 @@ def confirmar_como_obra(id):
                     )
                     db.session.add(tarea)
 
-                orden_etapa += 1
+            current_app.logger.info(f"Creadas tareas para {len(etapas_dict)} etapas en obra {obra.id}")
 
         db.session.commit()
 
