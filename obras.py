@@ -2060,17 +2060,23 @@ def eliminar_obra(obra_id):
 
         # Eliminar todas las relaciones con la obra en orden inverso de dependencias
 
-        # 1. Eliminar tareas de cada etapa (dependen de etapas)
+        # 1. Primero, desasociar items_presupuesto que referencian a las etapas de esta obra
+        from models.budgets import ItemPresupuesto
+        for etapa in obra.etapas:
+            # Poner etapa_id = NULL en items que referencian esta etapa
+            ItemPresupuesto.query.filter_by(etapa_id=etapa.id).update({ItemPresupuesto.etapa_id: None})
+
+        # 2. Eliminar tareas de cada etapa (dependen de etapas)
         for etapa in obra.etapas:
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
-        # 2. Eliminar etapas
+        # 3. Eliminar etapas
         EtapaObra.query.filter_by(obra_id=obra_id).delete()
 
-        # 3. Eliminar asignaciones
+        # 4. Eliminar asignaciones
         AsignacionObra.query.filter_by(obra_id=obra_id).delete()
 
-        # 4. Eliminar otras relaciones usando SQL directo para tablas que pueden no tener modelo
+        # 5. Eliminar otras relaciones usando SQL directo para tablas que pueden no tener modelo
         db.session.execute(db.text("DELETE FROM certificaciones_avance WHERE obra_id = :obra_id"), {"obra_id": obra_id})
         db.session.execute(db.text("DELETE FROM documentos_obra WHERE obra_id = :obra_id"), {"obra_id": obra_id})
         db.session.execute(db.text("DELETE FROM work_certifications WHERE obra_id = :obra_id"), {"obra_id": obra_id})
@@ -2087,7 +2093,7 @@ def eliminar_obra(obra_id):
         db.session.execute(db.text("DELETE FROM stock_movement WHERE project_id = :obra_id"), {"obra_id": obra_id})
         db.session.execute(db.text("DELETE FROM stock_reservation WHERE project_id = :obra_id"), {"obra_id": obra_id})
 
-        # 5. Finalmente eliminar la obra
+        # 6. Finalmente eliminar la obra
         db.session.delete(obra)
         db.session.commit()
 
