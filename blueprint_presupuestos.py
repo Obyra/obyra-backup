@@ -200,9 +200,11 @@ def crear():
                             db.session.add(etapa_obra)
                             db.session.flush()  # Para obtener etapa_obra.id
                             etapas_map[etapa_nombre] = etapa_obra
+                            current_app.logger.info(f"📌 Creada etapa '{etapa_nombre}' (ID: {etapa_obra.id}) para presupuesto {numero}")
 
                         etapa_obj = etapas_map[etapa_nombre]
                         items_etapa = etapa.get('items', [])
+                        current_app.logger.info(f"📌 Procesando {len(items_etapa)} items para etapa '{etapa_nombre}' (ID: {etapa_obj.id})")
 
                         for item in items_etapa:
                             # Obtener precios en la moneda correcta
@@ -227,6 +229,7 @@ def crear():
                                 total_ars=total_ars,
                                 etapa_id=etapa_obj.id  # Asignar la etapa creada
                             )
+                            current_app.logger.info(f"📌 Item '{item.get('descripcion', '')}' asignado a etapa_id={etapa_obj.id}")
                             db.session.add(item_presupuesto)
 
                     current_app.logger.info(f"Guardados {sum(len(e.get('items', [])) for e in etapas_ia)} items de IA en {moneda_ia} para presupuesto {numero}")
