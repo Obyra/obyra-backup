@@ -1114,6 +1114,14 @@ function solicitarCalculoEtapas(etapas) {
             }
             data.parametros_contexto = payload.parametros_contexto;
             resultadoEtapasIA = data;
+
+            // AUTOMÁTICAMENTE guardar el payload en el campo hidden
+            const hidden = document.getElementById('iaEtapasPayload');
+            if (hidden) {
+                hidden.value = JSON.stringify(data);
+                console.log('✅ Payload IA guardado automáticamente:', data);
+            }
+
             renderResultadoEtapasIA(data);
         })
         .catch(error => {

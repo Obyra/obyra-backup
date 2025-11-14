@@ -145,6 +145,7 @@ def crear():
 
             # Procesar datos de IA antes de crear el presupuesto
             ia_payload_str = request.form.get('ia_etapas_payload', '').strip()
+            current_app.logger.info(f"🔍 DEBUG: ia_etapas_payload recibido: {ia_payload_str[:200] if ia_payload_str else 'VACIO'}")
             moneda_presupuesto = 'ARS'  # Default
 
             if ia_payload_str:

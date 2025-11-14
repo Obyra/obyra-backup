@@ -1037,14 +1037,43 @@ function initWizard() {
       btnFinish.disabled = false;
     }
 
-    loadCatalog().catch((error) => {
-      const container = modal.querySelector('#catalogoEtapas');
-      if (container) {
-        container.innerHTML = `<div class="text-danger">${error.message}</div>`;
-      }
-    });
+    loadCatalog()
+      .then(() => {
+        // Si hay etapas ya creadas, saltar directamente al Paso 2
+        if (state.etapasCreadas && state.etapasCreadas.length > 0) {
+          console.log('✅ Etapas ya creadas detectadas, saltando al Paso 2:', state.etapasCreadas);
 
-    setStep(1);
+          // Pre-seleccionar todas las etapas creadas
+          state.etapasCreadas.forEach((etapa) => {
+            const catalogId = normalizeCatalogId(etapa.catalog_id || etapa.id);
+            const slug = etapa.slug || slugify(etapa.nombre);
+            state.selectedEtapas.set(catalogId, {
+              catalogId: catalogId,
+              slug: slug,
+              nombre: etapa.nombre,
+            });
+            window.WZ_STATE.etapasSel.add(slug);
+            window.WZ_STATE.etapasSel.add(catalogId);
+          });
+
+          // Cargar tareas y saltar al Paso 2
+          loadTareas()
+            .then(() => setStep(2))
+            .catch((error) => {
+              console.error('Error cargando tareas:', error);
+              setStep(1);
+            });
+        } else {
+          setStep(1);
+        }
+      })
+      .catch((error) => {
+        const container = modal.querySelector('#catalogoEtapas');
+        if (container) {
+          container.innerHTML = `<div class="text-danger">${error.message}</div>`;
+        }
+        setStep(1);
+      });
   }
 
   function handlePrev() {
