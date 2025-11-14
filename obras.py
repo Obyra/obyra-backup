@@ -2058,17 +2058,36 @@ def eliminar_obra(obra_id):
             presupuesto.confirmado_como_obra = False
             presupuesto.obra_id = None
 
-        # Eliminar asignaciones
-        AsignacionObra.query.filter_by(obra_id=obra_id).delete()
+        # Eliminar todas las relaciones con la obra en orden inverso de dependencias
 
-        # Eliminar tareas de cada etapa
+        # 1. Eliminar tareas de cada etapa (dependen de etapas)
         for etapa in obra.etapas:
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
-        # Eliminar etapas
+        # 2. Eliminar etapas
         EtapaObra.query.filter_by(obra_id=obra_id).delete()
 
-        # Eliminar la obra
+        # 3. Eliminar asignaciones
+        AsignacionObra.query.filter_by(obra_id=obra_id).delete()
+
+        # 4. Eliminar otras relaciones usando SQL directo para tablas que pueden no tener modelo
+        db.session.execute(db.text("DELETE FROM certificaciones_avance WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM documentos_obra WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM work_certifications WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM work_payments WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM incidentes_seguridad WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM checklists_seguridad WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM auditorias_seguridad WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM configuraciones_inteligentes WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM obra_miembros WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM uso_inventario WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM events WHERE project_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM equipment_assignment WHERE project_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM equipment_usage WHERE project_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM stock_movement WHERE project_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM stock_reservation WHERE project_id = :obra_id"), {"obra_id": obra_id})
+
+        # 5. Finalmente eliminar la obra
         db.session.delete(obra)
         db.session.commit()
 
@@ -2079,7 +2098,7 @@ def eliminar_obra(obra_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f'Error al eliminar obra {obra_id}: {str(e)}', exc_info=True)
-        flash('Error al eliminar la obra. Inténtalo nuevamente.', 'danger')
+        flash(f'Error al eliminar la obra: {str(e)}', 'danger')
 
     return redirect(url_for('obras.lista'))
 
