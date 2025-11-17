@@ -584,20 +584,33 @@ def detalle(id):
                 .order_by(Usuario.nombre.asc())
                 .all())
 
-    # Usar AsignacionObra para responsables (en lugar de ObraMiembro)
-    responsables_query = asignaciones  # Ya tenemos asignaciones en línea 577
+    # Obtener TODOS los operarios de la organización para el selector de responsables
+    # (no solo los asignados a esta obra)
+    todos_operarios = Usuario.query.filter_by(
+        activo=True,
+        organizacion_id=org_id
+    ).filter(
+        db.or_(
+            Usuario.rol == 'operario',
+            Usuario.role == 'operario',
+            Usuario.rol == 'jefe_obra',
+            Usuario.role == 'pm'
+        )
+    ).order_by(Usuario.nombre, Usuario.apellido).all()
 
     responsables = [
         {
             'usuario': {
-                'id': r.usuario.id,
-                'nombre_completo': r.usuario.nombre_completo,
-                'rol': r.usuario.rol
+                'id': u.id,
+                'nombre_completo': u.nombre_completo,
+                'rol': u.rol
             },
-            'rol_en_obra': r.rol_en_obra
+            'rol_en_obra': 'operario'  # Rol por defecto
         }
-        for r in responsables_query
+        for u in todos_operarios
     ]
+
+    responsables_query = responsables
 
     from tareas_predefinidas import TAREAS_POR_ETAPA
 
