@@ -64,18 +64,37 @@ def _normalize_argentina_address(query: str) -> str:
     if "argentina" in query_lower:
         return query
 
-    # Lista de partidos/localidades comunes de Buenos Aires
+    # Lista de partidos/localidades comunes de Buenos Aires (expandida)
     partidos_ba = [
         "tres de febrero", "caseros", "san martin", "vicente lopez", "la matanza",
         "lomas de zamora", "quilmes", "avellaneda", "lanus", "moron", "ituzaingo",
         "hurlingham", "san isidro", "tigre", "san fernando", "escobar", "pilar",
         "moreno", "merlo", "general rodriguez", "lujan", "campana", "zarate",
         "berazategui", "florencio varela", "almirante brown", "esteban echeverria",
-        "ezeiza", "san vicente", "cañuelas", "brandsen", "marcos paz"
+        "ezeiza", "san vicente", "cañuelas", "brandsen", "marcos paz", "ciudadela",
+        "ramos mejia", "haedo", "castelar", "villa luzuriaga", "villa sarmiento",
+        "santos lugares", "saenz peña", "martin coronado", "villa bosch", "pablo podesta",
+        "villa ballester", "villa adelina", "munro", "florida", "olivos", "martinez",
+        "beccar", "san isidro", "villa martelli", "villa lynch", "don torcuato",
+        "boulogne", "san miguel", "bella vista", "jose c paz", "malvinas argentinas",
+        "grand bourg", "pablo nogues", "tortuguitas", "la reja", "ciudadela",
+        "benavidez", "pacheco", "carapachay", "muniz", "derqui"
+    ]
+
+    # Provincias y ciudades importantes
+    provincias_ciudades = [
+        "cordoba", "rosario", "santa fe", "mendoza", "tucuman", "salta",
+        "la plata", "mar del plata", "neuquen", "parana", "resistencia",
+        "corrientes", "posadas", "formosa", "rio gallegos", "ushuaia",
+        "san juan", "san luis", "catamarca", "la rioja", "santiago del estero",
+        "jujuy", "santa rosa", "rawson", "viedma", "bahia blanca"
     ]
 
     # Verificar si menciona algún partido/localidad de Buenos Aires
     tiene_partido_ba = any(partido in query_lower for partido in partidos_ba)
+
+    # Verificar si menciona provincia/ciudad
+    tiene_provincia = any(provincia in query_lower for provincia in provincias_ciudades)
 
     # Si menciona un partido de Buenos Aires, agregar "Buenos Aires, Argentina"
     if tiene_partido_ba:
@@ -85,8 +104,48 @@ def _normalize_argentina_address(query: str) -> str:
     if "buenos aires" in query_lower:
         return f"{query}, Argentina"
 
+    # Si menciona una provincia/ciudad, agregar solo "Argentina"
+    if tiene_provincia:
+        return f"{query}, Argentina"
+
     # Por defecto, asumir que es de Buenos Aires (la mayoría de construcciones están ahí)
     return f"{query}, Buenos Aires, Argentina"
+
+
+def _generate_search_variants(query: str) -> List[str]:
+    """
+    Genera variantes de búsqueda para mejorar la tasa de éxito.
+    Por ejemplo, si una dirección completa falla, intenta sin número de puerta.
+    """
+    variants = [query]  # Siempre incluir la original
+
+    # Si tiene número de puerta al inicio (ej: "1234 Calle Principal"), invertir
+    import re
+    match = re.match(r'^(\d+)\s+(.+)$', query.strip())
+    if match:
+        numero = match.group(1)
+        resto = match.group(2)
+        # Agregar variante sin número
+        variants.append(resto)
+        # Agregar variante con formato argentino (Calle Numero)
+        if not resto.startswith(resto.split()[0] + ' ' + numero):
+            variants.append(f"{resto} {numero}")
+
+    # Si tiene formato "Calle Numero, Localidad", probar solo "Calle, Localidad"
+    match = re.match(r'^(.+?)\s+\d+\s*,\s*(.+)$', query.strip())
+    if match:
+        calle = match.group(1)
+        localidad = match.group(2)
+        variants.append(f"{calle}, {localidad}")
+
+    # Si tiene altura (números al final), probar sin ellos
+    match = re.match(r'^(.+?)\s+\d+\s*$', query.strip())
+    if match:
+        sin_altura = match.group(1)
+        if sin_altura not in variants:
+            variants.append(sin_altura)
+
+    return variants
 
 
 def _should_refresh(entry: GeocodeCache) -> bool:
@@ -161,16 +220,37 @@ def search(query: str, *, provider: Optional[str] = None, limit: int = 5) -> Lis
     # Normalizar dirección argentina para mejorar precisión
     normalized_query = _normalize_argentina_address(query)
 
+    # Generar variantes de búsqueda
+    variants = _generate_search_variants(normalized_query)
+
+    current_app.logger.info(f"🔍 Buscando dirección con {len(variants)} variantes: {variants}")
+
     provider_key = (provider or current_app.config.get("MAPS_PROVIDER") or DEFAULT_PROVIDER).lower()
 
-    try:
-        if provider_key in {"nominatim", "osm"}:
-            results = _fetch_nominatim(normalized_query, limit=limit)
-        else:
-            current_app.logger.warning("Proveedor de mapas %s no soportado, usando Nominatim", provider_key)
-            results = _fetch_nominatim(normalized_query, limit=limit)
-    except requests.RequestException as exc:  # pragma: no cover - network errors
-        current_app.logger.warning("Fallo al consultar geocodificador: %s", exc)
+    results = []
+    # Intentar cada variante hasta obtener resultados
+    for i, variant in enumerate(variants, 1):
+        try:
+            current_app.logger.info(f"🔍 Intentando variante {i}/{len(variants)}: {variant}")
+            if provider_key in {"nominatim", "osm"}:
+                variant_results = _fetch_nominatim(variant, limit=limit)
+            else:
+                current_app.logger.warning("Proveedor de mapas %s no soportado, usando Nominatim", provider_key)
+                variant_results = _fetch_nominatim(variant, limit=limit)
+
+            if variant_results:
+                current_app.logger.info(f"✅ Variante {i} encontró {len(variant_results)} resultados")
+                results = variant_results
+                break  # Si encontramos resultados, usarlos y detener búsqueda
+            else:
+                current_app.logger.info(f"⚠️ Variante {i} no encontró resultados")
+
+        except requests.RequestException as exc:  # pragma: no cover - network errors
+            current_app.logger.warning(f"Fallo al consultar geocodificador con variante {i}: {exc}")
+            continue  # Intentar siguiente variante
+
+    if not results:
+        current_app.logger.warning(f"❌ No se encontraron resultados para ninguna variante de: {query}")
         return []
 
     # Filtrar resultados para priorizar Argentina

@@ -34,7 +34,15 @@
       "Bash(python -m py_compile:*)",
       "Bash(docker exec:*)",
       "Bash(cat:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(nul)",
+      "Bash(cd:*)",
+      "Bash(docker cp:*)",
+      "Bash(timeout 40 bash -c 'while ! docker-compose logs app 2>&1 | grep -q \"\"Booting worker\"\"; do sleep 1; done; echo \"\"✅ App reiniciada y lista\"\"')",
+      "Bash(timeout 40 bash -c 'while ! docker-compose logs app 2>&1 | grep -q \"\"Booting worker\"\"; do sleep 1; done; echo \"\"✅ App lista con código actualizado\"\"')",
+      "Bash(timeout 40 bash:*)",
+      "Bash(winpty docker exec obyra-app cat //app//templates//presupuestos//crear.html)"
     ],
     "deny": [],
     "ask": []
