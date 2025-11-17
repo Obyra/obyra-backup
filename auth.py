@@ -1306,6 +1306,20 @@ def crear_operario_rapido():
             status='active'
         )
         db.session.add(membership)
+
+        # Si se proporciona obra_id, asignar el operario a la obra
+        obra_id = request.form.get('obra_id', type=int)
+        if obra_id:
+            from models.projects import AsignacionObra
+            asignacion_obra = AsignacionObra(
+                obra_id=obra_id,
+                usuario_id=nuevo_usuario.id,
+                rol_en_obra='operario',
+                activo=True
+            )
+            db.session.add(asignacion_obra)
+            current_app.logger.info(f"Operario {nombre_completo} asignado a obra ID {obra_id}")
+
         db.session.commit()
 
         current_app.logger.info(f"Operario creado rápidamente: {nombre_completo} (ID: {nuevo_usuario.id}) por usuario {current_user.email}")

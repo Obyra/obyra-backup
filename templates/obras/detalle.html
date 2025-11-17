@@ -688,6 +688,7 @@
             </div>
             <form id="formNuevoOperario">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="obra_id" value="{{ obra.id }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Nombre completo *</label>
@@ -1187,19 +1188,12 @@ document.getElementById('formNuevoOperario')?.addEventListener('submit', async f
         const data = await response.json();
 
         if (data.ok) {
-            // Agregar el nuevo operario al select
-            const select = document.getElementById('responsableSelectTarea');
-            const option = document.createElement('option');
-            option.value = data.usuario_id;
-            option.text = data.nombre_completo;
-            option.selected = true;
-            select.appendChild(option);
-
-            // Cerrar modal y limpiar formulario
+            // Cerrar modal
             bootstrap.Modal.getInstance(document.getElementById('modalNuevoOperario')).hide();
-            this.reset();
 
-            alert('¡Operario creado exitosamente!');
+            // Recargar la página para actualizar el equipo asignado y el selector
+            alert('¡Operario creado exitosamente y asignado a la obra!');
+            location.reload();
         } else {
             alert('Error: ' + (data.error || 'No se pudo crear el operario'));
         }
