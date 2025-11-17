@@ -586,12 +586,17 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label class="form-label">Responsable</label>
-                                <select class="form-select" name="responsable_id">
-                                    <option value="">Sin asignar</option>
-                                    {% for responsable in responsables %}
-                                    <option value="{{ responsable.usuario.id }}">{{ responsable.usuario.nombre_completo }}</option>
-                                    {% endfor %}
-                                </select>
+                                <div class="input-group">
+                                    <select class="form-select" name="responsable_id" id="responsableSelectTarea">
+                                        <option value="">Sin asignar</option>
+                                        {% for responsable in responsables %}
+                                        <option value="{{ responsable.usuario.id }}">{{ responsable.usuario.nombre_completo }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="btn btn-outline-primary" type="button" onclick="mostrarModalNuevoOperario()" title="Agregar nuevo operario">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
                                 <div class="form-text">Responsable titular de la tarea</div>
                             </div>
                         </div>
@@ -666,6 +671,44 @@
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-user-plus me-1"></i>
                         Asignar Usuarios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nuevo Operario -->
+<div class="modal fade" id="modalNuevoOperario" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Agregar Nuevo Operario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formNuevoOperario">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre completo *</label>
+                        <input type="text" class="form-control" name="nombre_completo" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                        <div class="form-text">Opcional</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control" name="telefono">
+                        <div class="form-text">Opcional</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Crear Operario
                     </button>
                 </div>
             </form>
@@ -1120,6 +1163,54 @@ function deseleccionarTodas() {
     document.querySelectorAll('input[name="etapas[]"]').forEach(cb => cb.checked = false);
 }
 
+// Modal Nuevo Operario
+function mostrarModalNuevoOperario() {
+    const modal = new bootstrap.Modal(document.getElementById('modalNuevoOperario'));
+    modal.show();
+}
+
+document.getElementById('formNuevoOperario')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creando...';
+
+    try {
+        const response = await fetch('/auth/crear-operario-rapido', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            // Agregar el nuevo operario al select
+            const select = document.getElementById('responsableSelectTarea');
+            const option = document.createElement('option');
+            option.value = data.usuario_id;
+            option.text = data.nombre_completo;
+            option.selected = true;
+            select.appendChild(option);
+
+            // Cerrar modal y limpiar formulario
+            bootstrap.Modal.getInstance(document.getElementById('modalNuevoOperario')).hide();
+            this.reset();
+
+            alert('¡Operario creado exitosamente!');
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo crear el operario'));
+        }
+    } catch (error) {
+        alert('Error de conexión: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+
 function actualizarEstadoTarea(tareaId, nuevoEstado) {
     if (!confirm(`¿Cambiar estado de la tarea a "${nuevoEstado}"?`)) return;
     const form = document.createElement('form');
@@ -1215,6 +1306,42 @@ function actualizarSeleccionSugeridas() {
         tareasInput.placeholder = `${n} tareas seleccionadas`;
     }
 }
+
+// Handler para formulario de nueva tarea (AJAX)
+document.getElementById('formNuevaTarea')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creando...';
+
+    try {
+        const response = await fetch('/obras/tareas/crear', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            // Cerrar modal
+            bootstrap.Modal.getInstance(document.getElementById('nuevaTareaModal')).hide();
+
+            // Recargar la página para mostrar las nuevas tareas
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo crear la tarea'));
+        }
+    } catch (error) {
+        alert('Error de conexión: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
 
 /* -------- Certificación: validación simple -------- */
 document.addEventListener('DOMContentLoaded', function() {

@@ -178,41 +178,22 @@ def crear():
             # Procesar items calculados por IA si existen
             if ia_payload_str:
                 try:
-                    from models.projects import EtapaObra
                     ia_payload = json.loads(ia_payload_str)
                     etapas_ia = ia_payload.get('etapas', [])
                     moneda_ia = ia_payload.get('moneda', 'ARS')
 
-                    # Mapa para guardar etapas creadas por nombre
-                    etapas_map = {}
+                    # Guardar el payload de IA en datos_proyecto para usarlo al confirmar como obra
+                    datos_proyecto_dict = json.loads(datos_proyecto) if isinstance(datos_proyecto, str) else datos_proyecto
+                    datos_proyecto_dict['ia_payload'] = ia_payload
+                    presupuesto.datos_proyecto = json.dumps(datos_proyecto_dict)
 
-                    for orden, etapa in enumerate(etapas_ia, start=1):
-                        etapa_nombre = etapa.get('nombre', f'Etapa {orden}')
-
-                        # Crear etapa si no existe en el mapa
-                        if etapa_nombre not in etapas_map:
-                            etapa_obra = EtapaObra(
-                                obra_id=None,  # Aún no está asociada a obra
-                                nombre=etapa_nombre,
-                                orden=orden,
-                                estado='pendiente',
-                                progreso=0
-                            )
-                            db.session.add(etapa_obra)
-                            db.session.flush()  # Para obtener etapa_obra.id
-                            etapas_map[etapa_nombre] = etapa_obra
-                            current_app.logger.info(f"📌 Creada etapa '{etapa_nombre}' (ID: {etapa_obra.id}) para presupuesto {numero}")
-
-                        etapa_obj = etapas_map[etapa_nombre]
+                    # Crear items SIN etapa_id (las etapas se crearán al confirmar como obra)
+                    for etapa in etapas_ia:
                         items_etapa = etapa.get('items', [])
-                        current_app.logger.info(f"📌 Procesando {len(items_etapa)} items para etapa '{etapa_nombre}' (ID: {etapa_obj.id})")
-
                         for item in items_etapa:
                             # Obtener precios en la moneda correcta
                             precio_unit = Decimal(str(item.get('precio_unit', 0)))
                             subtotal = Decimal(str(item.get('subtotal', 0)))
-
-                            # Si hay precio en ARS, usarlo, sino usar el precio_unit
                             precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
                             total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
 
@@ -228,12 +209,11 @@ def crear():
                                 currency=moneda_ia,
                                 price_unit_ars=precio_unit_ars,
                                 total_ars=total_ars,
-                                etapa_id=etapa_obj.id  # Asignar la etapa creada
+                                etapa_id=None  # Se asignará al confirmar como obra
                             )
-                            current_app.logger.info(f"📌 Item '{item.get('descripcion', '')}' asignado a etapa_id={etapa_obj.id}")
                             db.session.add(item_presupuesto)
 
-                    current_app.logger.info(f"Guardados {sum(len(e.get('items', [])) for e in etapas_ia)} items de IA en {moneda_ia} para presupuesto {numero}")
+                    current_app.logger.info(f"✅ Guardados {sum(len(e.get('items', [])) for e in etapas_ia)} items de IA en {moneda_ia} para presupuesto {numero} (etapas se crearán al confirmar como obra)")
                 except Exception as e:
                     current_app.logger.error(f"Error procesando items de IA: {str(e)}")
                     import traceback
@@ -718,26 +698,72 @@ def confirmar_como_obra(id):
             ItemPresupuesto.presupuesto_id == presupuesto.id
         ).order_by(ItemPresupuesto.etapa_id, ItemPresupuesto.tipo).all()
 
-        # Agrupar ítems por etapa (usando etapa_id si existe, o por tipo/descripción)
+        # Verificar si hay payload de IA guardado en datos_proyecto
+        ia_payload = None
+        if presupuesto.datos_proyecto:
+            try:
+                proyecto_data = json.loads(presupuesto.datos_proyecto) if isinstance(presupuesto.datos_proyecto, str) else presupuesto.datos_proyecto
+                ia_payload = proyecto_data.get('ia_payload')
+                if ia_payload:
+                    current_app.logger.info(f"📌 Payload de IA encontrado para presupuesto {presupuesto.numero}, creando etapas desde IA")
+            except (json.JSONDecodeError, TypeError) as e:
+                current_app.logger.error(f"Error parseando datos_proyecto: {str(e)}")
+
+        # Agrupar ítems por etapa
         etapas_dict = {}
         etapas_obj_map = {}  # Para mapear nombre -> objeto EtapaObra
 
-        for item in items:
-            if item.etapa_id and item.etapa:
-                # Item ya tiene etapa asignada
-                etapa_nombre = item.etapa.nombre
-                etapa_obj = item.etapa
-            else:
-                # Item sin etapa: identificar por tipo o usar genérica
-                etapa_nombre = identificar_etapa_por_tipo(item)
-                etapa_obj = None
+        if ia_payload and ia_payload.get('etapas'):
+            # Usar el payload de IA para crear etapas
+            etapas_ia = ia_payload.get('etapas', [])
+            items_list = list(items)  # Convertir a lista para iterar
+            item_index = 0
 
-            if etapa_nombre not in etapas_dict:
+            for orden, etapa_ia in enumerate(etapas_ia, start=1):
+                etapa_nombre = etapa_ia.get('nombre', f'Etapa {orden}')
+                num_items_etapa = len(etapa_ia.get('items', []))
+
+                # Crear EtapaObra
+                etapa_obj = EtapaObra(
+                    obra_id=obra.id,
+                    nombre=etapa_nombre,
+                    orden=orden,
+                    estado='pendiente',
+                    progreso=0
+                )
+                db.session.add(etapa_obj)
+                db.session.flush()  # Para obtener el ID
+
+                etapas_obj_map[etapa_nombre] = etapa_obj
                 etapas_dict[etapa_nombre] = []
-                if etapa_obj:
-                    etapas_obj_map[etapa_nombre] = etapa_obj
 
-            etapas_dict[etapa_nombre].append(item)
+                current_app.logger.info(f"📌 Creada etapa '{etapa_nombre}' (ID: {etapa_obj.id}) para obra {obra.id}")
+
+                # Asignar items a esta etapa
+                for _ in range(num_items_etapa):
+                    if item_index < len(items_list):
+                        item = items_list[item_index]
+                        item.etapa_id = etapa_obj.id
+                        etapas_dict[etapa_nombre].append(item)
+                        item_index += 1
+                        current_app.logger.info(f"📌 Item '{item.descripcion}' asignado a etapa '{etapa_nombre}' (ID: {etapa_obj.id})")
+
+        else:
+            # Fallback: agrupar por identificación automática
+            for item in items:
+                if item.etapa_id and item.etapa:
+                    etapa_nombre = item.etapa.nombre
+                    etapa_obj = item.etapa
+                else:
+                    etapa_nombre = identificar_etapa_por_tipo(item)
+                    etapa_obj = None
+
+                if etapa_nombre not in etapas_dict:
+                    etapas_dict[etapa_nombre] = []
+                    if etapa_obj:
+                        etapas_obj_map[etapa_nombre] = etapa_obj
+
+                etapas_dict[etapa_nombre].append(item)
 
         # Crear/asociar todas las etapas a la obra
         orden_etapa = 1

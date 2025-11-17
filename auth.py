@@ -1231,3 +1231,85 @@ def _deliver_reset_link(account: ResettableAccount, reset_url: str, portal: str)
     else:
         current_app.logger.info('Password reset link for %s via %s pending integration: %s', email, delivery_mode, reset_url)
 
+
+@auth_bp.route('/crear-operario-rapido', methods=['POST'])
+@login_required
+def crear_operario_rapido():
+    """
+    Endpoint para crear rápidamente un operario/responsable desde el wizard de tareas.
+    Solo crea el usuario con rol 'operario' en la organización actual.
+    """
+    try:
+        from models.user import User, AsignacionOrganizacion
+        from extensions import db
+        import secrets
+
+        nombre_completo = request.form.get('nombre_completo', '').strip()
+        email = request.form.get('email', '').strip()
+        telefono = request.form.get('telefono', '').strip()
+
+        if not nombre_completo:
+            return jsonify({'ok': False, 'error': 'El nombre completo es requerido'}), 400
+
+        org_id = current_user.organizacion_id
+        if not org_id:
+            return jsonify({'ok': False, 'error': 'No tienes una organización activa'}), 400
+
+        # Generar email temporal si no se proporcionó
+        if not email:
+            # Usar timestamp y random para email único
+            import time
+            timestamp = int(time.time())
+            random_str = secrets.token_hex(4)
+            email = f"operario_{timestamp}_{random_str}@temp.obyra.local"
+
+        # Verificar si el email ya existe
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            # Si el usuario ya existe y está en la misma organización, retornar error
+            asignacion = AsignacionOrganizacion.query.filter_by(
+                usuario_id=existing_user.id,
+                organizacion_id=org_id
+            ).first()
+            if asignacion:
+                return jsonify({
+                    'ok': False,
+                    'error': f'Ya existe un usuario con el email {email} en esta organización'
+                }), 400
+
+        # Crear nuevo usuario
+        password_temporal = secrets.token_urlsafe(12)
+        nuevo_usuario = User(
+            email=email,
+            nombre_completo=nombre_completo,
+            telefono=telefono or None,
+            rol='operario',
+            organizacion_id=org_id
+        )
+        nuevo_usuario.set_password(password_temporal)
+        db.session.add(nuevo_usuario)
+        db.session.flush()
+
+        # Asignar a la organización
+        asignacion = AsignacionOrganizacion(
+            usuario_id=nuevo_usuario.id,
+            organizacion_id=org_id,
+            rol_asignado='operario'
+        )
+        db.session.add(asignacion)
+        db.session.commit()
+
+        current_app.logger.info(f"Operario creado rápidamente: {nombre_completo} (ID: {nuevo_usuario.id}) por usuario {current_user.email}")
+
+        return jsonify({
+            'ok': True,
+            'usuario_id': nuevo_usuario.id,
+            'nombre_completo': nuevo_usuario.nombre_completo,
+            'email': nuevo_usuario.email
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creando operario rápido: {str(e)}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
