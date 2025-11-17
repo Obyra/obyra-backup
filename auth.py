@@ -1277,13 +1277,20 @@ def crear_operario_rapido():
                     'error': f'Ya existe un usuario con el email {email} en esta organización'
                 }), 400
 
+        # Separar nombre completo en nombre y apellido
+        partes_nombre = nombre_completo.strip().split(maxsplit=1)
+        nombre = partes_nombre[0] if partes_nombre else 'Operario'
+        apellido = partes_nombre[1] if len(partes_nombre) > 1 else ''
+
         # Crear nuevo usuario
         password_temporal = secrets.token_urlsafe(12)
         nuevo_usuario = Usuario(
             email=email,
-            nombre_completo=nombre_completo,
+            nombre=nombre,
+            apellido=apellido,
             telefono=telefono or None,
             rol='operario',
+            role='operario',
             organizacion_id=org_id,
             primary_org_id=org_id
         )
