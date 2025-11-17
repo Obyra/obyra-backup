@@ -959,6 +959,26 @@ def crear_tareas():
         if etapa.obra.organizacion_id != current_user.organizacion_id:
             return jsonify(ok=False, error="Sin permisos"), 403
 
+        # Si hay responsable, asegurarse de que esté asignado a la obra
+        if resp_id:
+            from models.projects import AsignacionObra
+            asignacion_existente = AsignacionObra.query.filter_by(
+                obra_id=obra_id,
+                usuario_id=resp_id,
+                activo=True
+            ).first()
+
+            if not asignacion_existente:
+                # Crear asignación automáticamente
+                nueva_asignacion = AsignacionObra(
+                    obra_id=obra_id,
+                    usuario_id=resp_id,
+                    rol_en_obra='operario',
+                    activo=True
+                )
+                db.session.add(nueva_asignacion)
+                current_app.logger.info(f"Operario ID {resp_id} asignado automáticamente a obra ID {obra_id}")
+
         if not sugeridas:
             nombre = request.form.get("nombre", "").strip()
             if not nombre:
