@@ -64,6 +64,69 @@ def _normalize_argentina_address(query: str) -> str:
     if "argentina" in query_lower:
         return query
 
+    # Mapa de abreviaturas comunes a nombres completos
+    abreviaturas = {
+        "hur": "hurlingham",
+        "hurli": "hurlingham",
+        "san mar": "san martin",
+        "vic lop": "vicente lopez",
+        "v lop": "vicente lopez",
+        "v lopez": "vicente lopez",
+        "la mat": "la matanza",
+        "lomas": "lomas de zamora",
+        "avel": "avellaneda",
+        "quilm": "quilmes",
+        "lan": "lanus",
+        "mor": "moron",
+        "itu": "ituzaingo",
+        "s isid": "san isidro",
+        "san isi": "san isidro",
+        "tig": "tigre",
+        "s fer": "san fernando",
+        "san fer": "san fernando",
+        "esc": "escobar",
+        "pil": "pilar",
+        "mor": "moreno",
+        "merl": "merlo",
+        "bera": "berazategui",
+        "f var": "florencio varela",
+        "flo var": "florencio varela",
+        "ez": "ezeiza",
+        "ciud": "ciudadela",
+        "ram": "ramos mejia",
+        "r mejia": "ramos mejia",
+        "cast": "castelar",
+        "hae": "haedo",
+        "mart": "martinez",
+        "mun": "munro",
+        "flo": "florida",
+        "oli": "olivos",
+        "bou": "boulogne",
+        "s mig": "san miguel",
+        "san mig": "san miguel",
+        "bell vist": "bella vista",
+        "b vista": "bella vista",
+        "cord": "cordoba",
+        "ros": "rosario",
+        "mdq": "mar del plata",
+        "mza": "mendoza",
+        "tuc": "tucuman",
+        "lp": "la plata",
+    }
+
+    # Expandir abreviaturas
+    for abrev, completo in abreviaturas.items():
+        # Buscar abreviatura como palabra completa o al final después de coma
+        import re
+        # Patrón: abreviatura al final, posiblemente después de coma/espacio
+        pattern = r'(.*?)[\s,]+(' + re.escape(abrev) + r')[\s,]*$'
+        match = re.search(pattern, query_lower)
+        if match:
+            parte_antes = match.group(1)
+            query = f"{parte_antes}, {completo}"
+            query_lower = query.lower()
+            break
+
     # Lista de partidos/localidades comunes de Buenos Aires (expandida)
     partidos_ba = [
         "tres de febrero", "caseros", "san martin", "vicente lopez", "la matanza",
@@ -117,35 +180,87 @@ def _generate_search_variants(query: str) -> List[str]:
     Genera variantes de búsqueda para mejorar la tasa de éxito.
     Por ejemplo, si una dirección completa falla, intenta sin número de puerta.
     """
+    import re
     variants = [query]  # Siempre incluir la original
 
-    # Si tiene número de puerta al inicio (ej: "1234 Calle Principal"), invertir
-    import re
-    match = re.match(r'^(\d+)\s+(.+)$', query.strip())
-    if match:
-        numero = match.group(1)
-        resto = match.group(2)
-        # Agregar variante sin número
-        variants.append(resto)
-        # Agregar variante con formato argentino (Calle Numero)
-        if not resto.startswith(resto.split()[0] + ' ' + numero):
-            variants.append(f"{resto} {numero}")
+    # Normalizar "Gral." a "General" y variantes similares
+    query_normalized = query
+    abreviaturas_calles = {
+        r'\bGral\.?\s': 'General ',
+        r'\bGte\.?\s': 'General ',
+        r'\bAv\.?\s': 'Avenida ',
+        r'\bBv\.?\s': 'Boulevard ',
+        r'\bBlvd\.?\s': 'Boulevard ',
+        r'\bCte\.?\s': 'Coronel ',
+        r'\bCnel\.?\s': 'Coronel ',
+        r'\bCap\.?\s': 'Capitan ',
+        r'\bDr\.?\s': 'Doctor ',
+        r'\bPte\.?\s': 'Presidente ',
+        r'\bSta\.?\s': 'Santa ',
+        r'\bSto\.?\s': 'Santo ',
+        r'\bSan\s': 'San ',
+    }
 
-    # Si tiene formato "Calle Numero, Localidad", probar solo "Calle, Localidad"
-    match = re.match(r'^(.+?)\s+\d+\s*,\s*(.+)$', query.strip())
-    if match:
-        calle = match.group(1)
-        localidad = match.group(2)
-        variants.append(f"{calle}, {localidad}")
+    for abrev_pattern, completo in abreviaturas_calles.items():
+        query_normalized = re.sub(abrev_pattern, completo, query_normalized, flags=re.IGNORECASE)
 
-    # Si tiene altura (números al final), probar sin ellos
-    match = re.match(r'^(.+?)\s+\d+\s*$', query.strip())
-    if match:
-        sin_altura = match.group(1)
-        if sin_altura not in variants:
-            variants.append(sin_altura)
+    if query_normalized != query:
+        variants.append(query_normalized)
 
-    return variants
+    # Trabajar con ambas versiones (original y normalizada)
+    for base_query in [query, query_normalized]:
+        # Si tiene número de puerta al inicio (ej: "1234 Calle Principal"), invertir
+        match = re.match(r'^(\d+)\s+(.+)$', base_query.strip())
+        if match:
+            numero = match.group(1)
+            resto = match.group(2)
+            # Agregar variante sin número
+            if resto not in variants:
+                variants.append(resto)
+            # Agregar variante con formato argentino (Calle Numero)
+            variante_argentina = f"{resto} {numero}"
+            if variante_argentina not in variants:
+                variants.append(variante_argentina)
+
+        # Si tiene formato "Calle Numero, Localidad", probar variantes
+        match = re.match(r'^(.+?)\s+(\d+)\s*,\s*(.+)$', base_query.strip())
+        if match:
+            calle = match.group(1)
+            numero = match.group(2)
+            localidad = match.group(3)
+
+            # Sin número
+            variante = f"{calle}, {localidad}"
+            if variante not in variants:
+                variants.append(variante)
+
+            # Calle con localidad, sin coma
+            variante = f"{calle} {localidad}"
+            if variante not in variants:
+                variants.append(variante)
+
+            # Número al final en lugar de en medio
+            variante = f"{calle}, {numero}, {localidad}"
+            if variante not in variants:
+                variants.append(variante)
+
+        # Si tiene altura (números al final), probar sin ellos
+        match = re.match(r'^(.+?)\s+\d+\s*$', base_query.strip())
+        if match:
+            sin_altura = match.group(1)
+            if sin_altura not in variants:
+                variants.append(sin_altura)
+
+    # Eliminar duplicados manteniendo el orden
+    seen = set()
+    unique_variants = []
+    for v in variants:
+        v_lower = v.lower().strip()
+        if v_lower not in seen:
+            seen.add(v_lower)
+            unique_variants.append(v)
+
+    return unique_variants
 
 
 def _should_refresh(entry: GeocodeCache) -> bool:
