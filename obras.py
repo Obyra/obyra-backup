@@ -584,10 +584,8 @@ def detalle(id):
                 .order_by(Usuario.nombre.asc())
                 .all())
 
-    responsables_query = (ObraMiembro.query
-                         .filter_by(obra_id=obra.id)
-                         .join(Usuario)
-                         .all())
+    # Usar AsignacionObra para responsables (en lugar de ObraMiembro)
+    responsables_query = asignaciones  # Ya tenemos asignaciones en línea 577
 
     responsables = [
         {
