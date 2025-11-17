@@ -1240,7 +1240,7 @@ def crear_operario_rapido():
     Solo crea el usuario con rol 'operario' en la organización actual.
     """
     try:
-        from models.user import User, AsignacionOrganizacion
+        from models.core import Usuario, OrgMembership
         from extensions import db
         import secrets
 
@@ -1264,14 +1264,14 @@ def crear_operario_rapido():
             email = f"operario_{timestamp}_{random_str}@temp.obyra.local"
 
         # Verificar si el email ya existe
-        existing_user = User.query.filter_by(email=email).first()
+        existing_user = Usuario.query.filter_by(email=email).first()
         if existing_user:
             # Si el usuario ya existe y está en la misma organización, retornar error
-            asignacion = AsignacionOrganizacion.query.filter_by(
-                usuario_id=existing_user.id,
-                organizacion_id=org_id
+            membership = OrgMembership.query.filter_by(
+                user_id=existing_user.id,
+                org_id=org_id
             ).first()
-            if asignacion:
+            if membership:
                 return jsonify({
                     'ok': False,
                     'error': f'Ya existe un usuario con el email {email} en esta organización'
@@ -1279,24 +1279,26 @@ def crear_operario_rapido():
 
         # Crear nuevo usuario
         password_temporal = secrets.token_urlsafe(12)
-        nuevo_usuario = User(
+        nuevo_usuario = Usuario(
             email=email,
             nombre_completo=nombre_completo,
             telefono=telefono or None,
             rol='operario',
-            organizacion_id=org_id
+            organizacion_id=org_id,
+            primary_org_id=org_id
         )
         nuevo_usuario.set_password(password_temporal)
         db.session.add(nuevo_usuario)
         db.session.flush()
 
-        # Asignar a la organización
-        asignacion = AsignacionOrganizacion(
-            usuario_id=nuevo_usuario.id,
-            organizacion_id=org_id,
-            rol_asignado='operario'
+        # Asignar a la organización usando OrgMembership
+        membership = OrgMembership(
+            user_id=nuevo_usuario.id,
+            org_id=org_id,
+            role='operario',
+            status='active'
         )
-        db.session.add(asignacion)
+        db.session.add(membership)
         db.session.commit()
 
         current_app.logger.info(f"Operario creado rápidamente: {nombre_completo} (ID: {nuevo_usuario.id}) por usuario {current_user.email}")
@@ -1311,5 +1313,7 @@ def crear_operario_rapido():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error creando operario rápido: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
         return jsonify({'ok': False, 'error': str(e)}), 500
 
