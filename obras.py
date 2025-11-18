@@ -28,6 +28,7 @@ from models import (
     WorkCertification,
     WorkPayment,
     Cliente,
+    ItemPresupuesto,
 )
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import (
@@ -622,6 +623,12 @@ def detalle(id):
         .all()
     )
 
+    # Obtener el presupuesto asociado y sus items (materiales/mano de obra)
+    presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
+    items_presupuesto = []
+    if presupuesto:
+        items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
@@ -637,6 +644,8 @@ def detalle(id):
                          current_user_id=current_user.id,
                          certificaciones_resumen=cert_resumen,
                          certificaciones_recientes=cert_recientes,
+                         presupuesto=presupuesto,
+                         items_presupuesto=items_presupuesto,
                          wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
                          wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
 
