@@ -29,6 +29,8 @@ from models import (
     WorkPayment,
     Cliente,
     ItemPresupuesto,
+    ItemInventario,
+    UsoInventario,
 )
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import (
@@ -1296,8 +1298,57 @@ def crear_avance(tarea_id):
                 )
                 db.session.add(adjunto)
 
+        # Procesar materiales consumidos y descontar del stock
+        material_ids = request.form.getlist("material_id[]")
+        material_cantidades = request.form.getlist("material_cantidad[]")
+
+        if material_ids and len(material_ids) > 0:
+            for i, material_id_str in enumerate(material_ids):
+                if not material_id_str or material_id_str == '':
+                    continue
+
+                try:
+                    material_id = int(material_id_str)
+                    cantidad_consumida = float(material_cantidades[i]) if i < len(material_cantidades) else 0
+
+                    if cantidad_consumida <= 0:
+                        continue
+
+                    # Obtener el item del inventario
+                    item = ItemInventario.query.get(material_id)
+                    if not item:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Material ID {material_id} no encontrado"), 400
+
+                    # Verificar stock disponible
+                    if item.stock_actual < cantidad_consumida:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Stock insuficiente para {item.descripcion}. Disponible: {item.stock_actual}, Requerido: {cantidad_consumida}"), 400
+
+                    # Descontar del stock
+                    item.stock_actual -= cantidad_consumida
+
+                    # Registrar el uso de inventario
+                    uso = UsoInventario(
+                        obra_id=tarea.etapa.obra_id,
+                        item_id=item.id,
+                        cantidad=cantidad_consumida,
+                        fecha=datetime.utcnow(),
+                        usuario_id=current_user.id,
+                        tarea_id=tarea.id,
+                        avance_id=av.id,
+                        notas=f"Consumido en tarea: {tarea.nombre}"
+                    )
+                    db.session.add(uso)
+
+                    current_app.logger.info(f"Material {item.descripcion} descontado: {cantidad_consumida} {item.unidad}. Stock restante: {item.stock_actual}")
+
+                except (ValueError, IndexError) as e:
+                    db.session.rollback()
+                    return jsonify(ok=False, error=f"Error procesando material: {str(e)}"), 400
+
         db.session.commit()
-        return jsonify(ok=True)
+        return jsonify(ok=True, mensaje="Avance registrado y materiales descontados del stock")
 
     except Exception as e:
         db.session.rollback()

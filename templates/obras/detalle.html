@@ -805,35 +805,77 @@
                     <div class="mb-3">
                         <label for="cantidad" class="form-label">Cantidad ejecutada *</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="cantidad" name="cantidad" 
-                                   step="0.01" min="0" required>
-                            <select id="unidad_ingresada" name="unidad_ingresada" class="form-select" style="max-width:120px">
-                                <option value="m2">m²</option>
-                                <option value="ml">ml</option>
-                                <option value="m3">m³</option>
-                                <option value="un">un</option>
-                                <option value="kg">kg</option>
+                            <input type="number" class="form-control" id="cantidad" name="cantidad"
+                                   step="0.01" min="0.01" required>
+                            <select id="unidad_ingresada" name="unidad_ingresada" class="form-select" style="max-width:120px" required>
+                                <option value="">Seleccionar...</option>
+                                <option value="m2">m² (metros cuadrados)</option>
+                                <option value="ml">ml (metros lineales)</option>
+                                <option value="m3">m³ (metros cúbicos)</option>
+                                <option value="un">un (unidades)</option>
+                                <option value="kg">kg (kilogramos)</option>
+                                <option value="tn">tn (toneladas)</option>
+                                <option value="lt">lt (litros)</option>
+                                <option value="gl">gl (global)</option>
+                                <option value="hrs">hrs (horas)</option>
+                                <option value="jor">jor (jornales)</option>
+                                <option value="pza">pza (piezas)</option>
+                                <option value="bol">bol (bolsas)</option>
                             </select>
                         </div>
+                        <small class="text-muted">Debe seleccionar la unidad de medición correcta</small>
                     </div>
-                    
+
                     <div class="mb-3">
-                        <label for="horas" class="form-label">Horas trabajadas (opcional)</label>
+                        <label for="horas" class="form-label">Horas trabajadas *</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="horas" name="horas" 
-                                   step="0.01" min="0">
+                            <input type="number" class="form-control" id="horas" name="horas"
+                                   step="0.25" min="0.25" required>
                             <span class="input-group-text">h</span>
                         </div>
+                        <small class="text-muted">Campo obligatorio para el registro</small>
                     </div>
                     
                     <input type="hidden" id="unidad_base" value="">
                     <input type="hidden" id="tarea_id" name="tarea_id" value="">
                     <input type="hidden" id="rendimiento" value="">
-                    
+
+                    <!-- Materiales Consumidos -->
                     <div class="mb-3">
-                        <label for="notas" class="form-label">Notas (opcional)</label>
-                        <textarea class="form-control" id="notas" name="notas" rows="3" 
-                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc."></textarea>
+                        <label class="form-label">Materiales consumidos *</label>
+                        <div id="materiales-consumidos-container">
+                            <div class="material-item mb-2">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <select class="form-select material-select" name="material_id[]" required>
+                                            <option value="">Seleccionar material...</option>
+                                            <!-- Se llenará dinámicamente con items del inventario -->
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <input type="number" class="form-control" name="material_cantidad[]"
+                                               placeholder="Cantidad" step="0.01" min="0.01" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-sm btn-outline-danger w-100"
+                                                onclick="eliminarMaterial(this)" style="display:none;">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="agregarMaterial()">
+                            <i class="fas fa-plus me-1"></i>Agregar otro material
+                        </button>
+                        <small class="text-muted d-block mt-1">Debe registrar al menos un material consumido</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notas" class="form-label">Notas *</label>
+                        <textarea class="form-control" id="notas" name="notas" rows="3"
+                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc." required></textarea>
+                        <small class="text-muted">Campo obligatorio para documentar el trabajo</small>
                     </div>
                     
                     <div class="mb-3">
@@ -1607,19 +1649,150 @@ function eliminarTarea(tareaId) {
   updateBtn();
 })();
 
-/* -------- Envío de avance -------- */
+/* -------- Gestión de Materiales Consumidos -------- */
+let materialesDisponibles = [];
+
+// Cargar materiales del inventario al abrir el modal
+document.getElementById('modalAvanceDetalle')?.addEventListener('show.bs.modal', async function() {
+    try {
+        const response = await fetch('/inventario/items-disponibles?obra_id={{ obra.id }}');
+        const data = await response.json();
+        if (data.ok) {
+            materialesDisponibles = data.items || [];
+            actualizarSelectoresMateriales();
+        }
+    } catch (error) {
+        console.error('Error cargando materiales:', error);
+    }
+});
+
+function actualizarSelectoresMateriales() {
+    const selects = document.querySelectorAll('.material-select');
+    selects.forEach(select => {
+        const valorActual = select.value;
+        select.innerHTML = '<option value="">Seleccionar material...</option>';
+        materialesDisponibles.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = `${item.descripcion} (Stock: ${item.stock_actual} ${item.unidad})`;
+            option.dataset.stock = item.stock_actual;
+            option.dataset.unidad = item.unidad;
+            select.appendChild(option);
+        });
+        if (valorActual) select.value = valorActual;
+    });
+}
+
+function agregarMaterial() {
+    const container = document.getElementById('materiales-consumidos-container');
+    const newItem = document.createElement('div');
+    newItem.className = 'material-item mb-2';
+    newItem.innerHTML = `
+        <div class="row g-2">
+            <div class="col-md-6">
+                <select class="form-select material-select" name="material_id[]" required>
+                    <option value="">Seleccionar material...</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="number" class="form-control" name="material_cantidad[]"
+                       placeholder="Cantidad" step="0.01" min="0.01" required>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-sm btn-outline-danger w-100"
+                        onclick="eliminarMaterial(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    container.appendChild(newItem);
+    actualizarSelectoresMateriales();
+    actualizarBotonesEliminar();
+}
+
+function eliminarMaterial(btn) {
+    btn.closest('.material-item').remove();
+    actualizarBotonesEliminar();
+}
+
+function actualizarBotonesEliminar() {
+    const items = document.querySelectorAll('.material-item');
+    items.forEach((item, index) => {
+        const btn = item.querySelector('.btn-outline-danger');
+        if (items.length > 1) {
+            btn.style.display = '';
+        } else {
+            btn.style.display = 'none';
+        }
+    });
+}
+
+/* -------- Envío de avance con validación -------- */
 document.getElementById('formAvanceDetalle')?.addEventListener('submit', async function(e) {
     e.preventDefault();
+
+    // Validar que todos los campos obligatorios estén completos
+    const cantidad = document.getElementById('cantidad').value;
+    const unidad = document.getElementById('unidad_ingresada').value;
+    const horas = document.getElementById('horas').value;
+    const notas = document.getElementById('notas').value.trim();
+
+    if (!cantidad || !unidad || !horas || !notas) {
+        alert('Debe completar todos los campos obligatorios: cantidad, unidad, horas y notas.');
+        return;
+    }
+
+    // Validar que haya al menos un material seleccionado
+    const materiales = document.querySelectorAll('.material-select');
+    let materialValido = false;
+    materiales.forEach(select => {
+        if (select.value) materialValido = true;
+    });
+
+    if (!materialValido) {
+        alert('Debe seleccionar al menos un material consumido.');
+        return;
+    }
+
+    // Validar cantidades de materiales vs stock disponible
+    let stockInsuficiente = false;
+    let mensajeStock = '';
+    document.querySelectorAll('.material-item').forEach(item => {
+        const select = item.querySelector('.material-select');
+        const cantidadInput = item.querySelector('input[name="material_cantidad[]"]');
+        if (select.value && cantidadInput.value) {
+            const option = select.options[select.selectedIndex];
+            const stockDisponible = parseFloat(option.dataset.stock || 0);
+            const cantidadRequerida = parseFloat(cantidadInput.value);
+            if (cantidadRequerida > stockDisponible) {
+                stockInsuficiente = true;
+                mensajeStock += `\n- ${option.textContent.split('(')[0]}: requiere ${cantidadRequerida}, disponible ${stockDisponible}`;
+            }
+        }
+    });
+
+    if (stockInsuficiente) {
+        alert('Stock insuficiente para los siguientes materiales:' + mensajeStock);
+        return;
+    }
+
     const tareaId = document.getElementById('tarea_id').value;
     const formData = new FormData(this);
+
     try {
         const response = await fetch(`/obras/tareas/${tareaId}/avances`, { method: 'POST', body: formData });
         const result = await response.json();
         if (result.ok) {
             bootstrap.Modal.getInstance(document.getElementById('modalAvanceDetalle')).hide();
+            alert('Avance registrado exitosamente. Los materiales han sido descontados del stock.');
             location.reload();
-        } else { alert(result.error || 'Error al registrar el avance'); }
-    } catch (error) { alert('Error de conexión al registrar el avance'); }
+        } else {
+            alert(result.error || 'Error al registrar el avance');
+        }
+    } catch (error) {
+        alert('Error de conexión al registrar el avance');
+    }
 });
 
 /* -------- Avances pendientes (aprobar / rechazar) -------- */

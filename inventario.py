@@ -399,3 +399,46 @@ def crear_categoria():
 
     flash(message, 'success' if created else 'info')
     return redirect(url_for('inventario.categorias'))
+
+@inventario_bp.route('/items-disponibles', methods=['GET'])
+@login_required
+def items_disponibles():
+    """
+    Endpoint para obtener items del inventario disponibles para una obra.
+    Retorna lista de materiales con stock actual para selector de consumo.
+    """
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        org_id = get_current_org_id() or current_user.organizacion_id
+
+        if not org_id:
+            return jsonify({'ok': False, 'error': 'No tienes una organización activa'}), 400
+
+        # Obtener todos los items del inventario de la organización con stock > 0
+        items = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).filter(
+            ItemInventario.stock_actual > 0
+        ).order_by(ItemInventario.descripcion).all()
+
+        items_data = []
+        for item in items:
+            items_data.append({
+                'id': item.id,
+                'descripcion': item.descripcion,
+                'stock_actual': float(item.stock_actual or 0),
+                'unidad': item.unidad or 'un',
+                'categoria': item.categoria.nombre if item.categoria else 'Sin categoría'
+            })
+
+        return jsonify({
+            'ok': True,
+            'items': items_data
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo items disponibles: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'ok': False, 'error': str(e)}), 500
