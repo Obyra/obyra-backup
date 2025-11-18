@@ -1260,8 +1260,17 @@ document.getElementById('formNuevoOperario')?.addEventListener('submit', async f
             // Cerrar modal
             bootstrap.Modal.getInstance(document.getElementById('modalNuevoOperario')).hide();
 
-            // Recargar la página para actualizar el equipo asignado y el selector
-            alert('¡Operario creado exitosamente y asignado a la obra!');
+            // Mensaje personalizado según si se envió email o no
+            let mensaje = '¡Operario creado exitosamente y asignado a la obra!';
+            if (data.email_enviado) {
+                mensaje += '\n\nSe envió un email a ' + data.email + ' con instrucciones para establecer su contraseña.';
+            } else if (data.email && !data.email.includes('@temp.obyra.local')) {
+                mensaje += '\n\nNo se pudo enviar el email de bienvenida. Por favor, contacta al operario manualmente.';
+            } else {
+                mensaje += '\n\nEl operario fue creado sin email. Deberás proporcionarle acceso manualmente.';
+            }
+
+            alert(mensaje);
             location.reload();
         } else {
             alert('Error: ' + (data.error || 'No se pudo crear el operario'));

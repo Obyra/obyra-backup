@@ -1324,11 +1324,26 @@ def crear_operario_rapido():
 
         current_app.logger.info(f"Operario creado rápidamente: {nombre_completo} (ID: {nuevo_usuario.id}) por usuario {current_user.email}")
 
+        # Enviar email con link de blanqueo de contraseña
+        reset_url = None
+        email_sent = False
+        if email and not email.endswith('@temp.obyra.local'):
+            # Solo enviar email si tiene un email real (no temporal)
+            try:
+                reset_url = send_new_member_invitation(nuevo_usuario, membership, temp_password=None)
+                email_sent = True
+                current_app.logger.info(f"Email de bienvenida enviado a {email} con link de blanqueo")
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo enviar email a {email}: {str(e)}")
+                email_sent = False
+
         return jsonify({
             'ok': True,
             'usuario_id': nuevo_usuario.id,
             'nombre_completo': nuevo_usuario.nombre_completo,
-            'email': nuevo_usuario.email
+            'email': nuevo_usuario.email,
+            'email_enviado': email_sent,
+            'reset_url': reset_url if reset_url else None
         })
 
     except Exception as e:
