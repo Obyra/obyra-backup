@@ -83,9 +83,8 @@ def crear():
             from utils.validators import validate_email, validate_string_length, validate_phone, sanitize_string
 
             # Obtener datos del formulario
-            nombre = request.form.get('nombre', '').strip()
-            apellido = request.form.get('apellido', '').strip()
-            tipo_documento = request.form.get('tipo_documento', 'DNI').strip()
+            empresa = request.form.get('empresa', '').strip()
+            tipo_documento = request.form.get('tipo_documento', 'CUIT').strip()
             numero_documento = request.form.get('numero_documento', '').strip()
             email = request.form.get('email', '').strip()
             telefono = request.form.get('telefono', '').strip()
@@ -94,21 +93,34 @@ def crear():
             ciudad = request.form.get('ciudad', '').strip()
             provincia = request.form.get('provincia', '').strip()
             codigo_postal = request.form.get('codigo_postal', '').strip()
-            empresa = request.form.get('empresa', '').strip()
             notas = request.form.get('notas', '').strip()
 
+            # Procesar contactos/empleados
+            contactos_nombres = request.form.getlist('contacto_nombre[]')
+            contactos_apellidos = request.form.getlist('contacto_apellido[]')
+            contactos_emails = request.form.getlist('contacto_email[]')
+            contactos_telefonos = request.form.getlist('contacto_telefono[]')
+            contactos_roles = request.form.getlist('contacto_rol[]')
+
+            contactos = []
+            for i in range(len(contactos_nombres)):
+                # Solo agregar si al menos hay nombre o apellido
+                if contactos_nombres[i].strip() or contactos_apellidos[i].strip():
+                    contacto = {
+                        'nombre': contactos_nombres[i].strip() if i < len(contactos_nombres) else '',
+                        'apellido': contactos_apellidos[i].strip() if i < len(contactos_apellidos) else '',
+                        'email': contactos_emails[i].strip() if i < len(contactos_emails) else '',
+                        'telefono': contactos_telefonos[i].strip() if i < len(contactos_telefonos) else '',
+                        'rol': contactos_roles[i].strip() if i < len(contactos_roles) else ''
+                    }
+                    contactos.append(contacto)
+
+            # Para mantener compatibilidad, usar primer contacto como datos principales si existen
+            nombre = contactos[0]['nombre'] if contactos and contactos[0]['nombre'] else empresa
+            apellido = contactos[0]['apellido'] if contactos and contactos[0]['apellido'] else ''
+
             # Validaciones mejoradas
-            valid, error = validate_string_length(nombre, "Nombre", min_length=2, max_length=100)
-            if not valid:
-                flash(error, 'danger')
-                return redirect(url_for('clientes.crear'))
-
-            valid, error = validate_string_length(apellido, "Apellido", min_length=2, max_length=100)
-            if not valid:
-                flash(error, 'danger')
-                return redirect(url_for('clientes.crear'))
-
-            valid, error = validate_email(email)
+            valid, error = validate_string_length(empresa, "Razón Social / Nombre de la Empresa", min_length=2, max_length=150)
             if not valid:
                 flash(error, 'danger')
                 return redirect(url_for('clientes.crear'))
@@ -117,6 +129,13 @@ def crear():
             if not valid:
                 flash(error, 'danger')
                 return redirect(url_for('clientes.crear'))
+
+            # Validar email de la empresa si está presente
+            if email:
+                valid, error = validate_email(email)
+                if not valid:
+                    flash(error, 'danger')
+                    return redirect(url_for('clientes.crear'))
 
             # Validar teléfonos si están presentes
             if telefono:
@@ -155,14 +174,15 @@ def crear():
                 apellido=apellido,
                 tipo_documento=tipo_documento,
                 numero_documento=numero_documento,
-                email=email,
+                email=email or None,
                 telefono=telefono or None,
                 telefono_alternativo=telefono_alternativo or None,
                 direccion=direccion or None,
                 ciudad=ciudad or None,
                 provincia=provincia or None,
                 codigo_postal=codigo_postal or None,
-                empresa=empresa or None,
+                empresa=empresa,
+                contactos=contactos if contactos else None,
                 notas=notas or None
             )
 
