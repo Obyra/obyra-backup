@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis de Inventario{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-chart-line me-2"></i>Análisis de Inventario</h2>
+            <p class="text-muted mb-0">Consumo de materiales, costos reales y estadísticas</p>
+        </div>
+        <div>
+            <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Volver al Inventario
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('inventario.analisis') }}" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label"><i class="fas fa-calendar me-1"></i>Desde</label>
+                    <input type="date" class="form-control" name="fecha_desde" value="{{ fecha_desde }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label"><i class="fas fa-calendar me-1"></i>Hasta</label>
+                    <input type="date" class="form-control" name="fecha_hasta" value="{{ fecha_hasta }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label"><i class="fas fa-building me-1"></i>Filtrar por Obra</label>
+                    <select class="form-select" name="obra_id">
+                        <option value="">Todas las obras</option>
+                        {% for obra in todas_obras %}
+                        <option value="{{ obra.id }}" {% if obra_id == obra.id %}selected{% endif %}>
+                            {{ obra.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Resumen -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="card-body text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Items Activos</h6>
+                            <h3 class="mb-0">{{ total_items_activos }}</h3>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="fas fa-boxes fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="card-body text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Valor Total Stock</h6>
+                            <h3 class="mb-0">$ {{ "{:,.2f}".format(valor_total_inventario) }}</h3>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="fas fa-dollar-sign fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="card-body text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Consumos (Período)</h6>
+                            <h3 class="mb-0">{{ total_consumos_periodo }}</h3>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="fas fa-exchange-alt fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                <div class="card-body text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-white-50 mb-1">Costo Total (Período)</h6>
+                            <h3 class="mb-0">$ {{ "{:,.2f}".format(costo_total_periodo) }}</h3>
+                        </div>
+                        <div class="opacity-75">
+                            <i class="fas fa-chart-line fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Top 10 Artículos Más Consumidos -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-trophy me-2"></i>Top 10 Artículos Más Consumidos</h5>
+                </div>
+                <div class="card-body">
+                    {% if top_items %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Artículo</th>
+                                    <th class="text-center">Consumido</th>
+                                    <th class="text-end">Costo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_items %}
+                                <tr>
+                                    <td><span class="badge bg-primary">{{ loop.index }}</span></td>
+                                    <td>
+                                        <strong>{{ item.descripcion }}</strong>
+                                        <br><small class="text-muted">{{ item.num_usos }} usos</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ "{:,.2f}".format(item.total_consumido) }} {{ item.unidad }}</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-success">$ {{ "{:,.2f}".format(item.costo_total) }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No hay consumos registrados en el período seleccionado</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Consumo por Obra -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-building me-2"></i>Consumo por Obra</h5>
+                </div>
+                <div class="card-body">
+                    {% if consumo_obras %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Obra</th>
+                                    <th class="text-center">Consumos</th>
+                                    <th class="text-end">Costo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for obra in consumo_obras %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ obra.nombre }}</strong>
+                                        {% if obra.direccion %}
+                                        <br><small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">{{ obra.num_consumos }}</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-success">$ {{ "{:,.2f}".format(obra.costo_total) }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="2" class="text-end">Total General:</th>
+                                    <th class="text-end text-success">
+                                        $ {{ "{:,.2f}".format(consumo_obras|sum(attribute='costo_total')) }}
+                                    </th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No hay consumos registrados en obras para el período seleccionado</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas de Stock Bajo -->
+    {% if items_stock_bajo %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Alertas de Stock Bajo ({{ items_stock_bajo|length }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Artículo</th>
+                                    <th>Categoría</th>
+                                    <th class="text-center">Stock Actual</th>
+                                    <th class="text-center">Stock Mínimo</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-end">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items_stock_bajo %}
+                                <tr {% if item.stock_actual == 0 %}class="table-danger"{% endif %}>
+                                    <td>
+                                        <strong>{{ item.descripcion }}</strong>
+                                        {% if item.codigo %}
+                                        <br><small class="text-muted">Código: {{ item.codigo }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if item.categoria %}
+                                        <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">Sin categoría</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if item.stock_actual == 0 %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                            {{ item.stock_actual }} {{ item.unidad }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ item.stock_minimo }} {{ item.unidad }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if item.stock_actual == 0 %}
+                                        <span class="badge bg-danger">SIN STOCK</span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark">STOCK BAJO</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="{{ url_for('inventario.detalle', id=item.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye me-1"></i>Ver
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Botones de Exportación -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h6 class="mb-3">Exportar Reportes</h6>
+                    <button class="btn btn-success me-2" onclick="exportarExcel()">
+                        <i class="fas fa-file-excel me-2"></i>Exportar a Excel
+                    </button>
+                    <button class="btn btn-danger" onclick="exportarPDF()">
+                        <i class="fas fa-file-pdf me-2"></i>Exportar a PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function exportarExcel() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('export', 'excel');
+    alert('Función de exportación a Excel - En desarrollo');
+    // window.location.href = "{{ url_for('inventario.analisis') }}?" + params.toString();
+}
+
+function exportarPDF() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('export', 'pdf');
+    alert('Función de exportación a PDF - En desarrollo');
+    // window.location.href = "{{ url_for('inventario.analisis') }}?" + params.toString();
+}
+</script>
+{% endblock %}

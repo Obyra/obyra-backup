@@ -442,3 +442,176 @@ def items_disponibles():
         import traceback
         current_app.logger.error(traceback.format_exc())
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@inventario_bp.route('/analisis', methods=['GET'])
+@login_required
+def analisis():
+    """
+    Análisis de consumo de inventario:
+    - Artículos más consumidos
+    - Consumo por obra
+    - Costos reales de materiales
+    - Tendencias de consumo
+    """
+    if not current_user.puede_acceder_modulo('inventario'):
+        flash('No tienes permisos para acceder a este módulo.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    try:
+        from datetime import datetime, timedelta
+        from sqlalchemy import func, desc
+
+        org_id = get_current_org_id() or current_user.organizacion_id
+
+        if not org_id:
+            flash('No tienes una organización activa', 'warning')
+            return redirect(url_for('index'))
+
+        # Filtros de fecha (por defecto últimos 30 días)
+        fecha_desde = request.args.get('fecha_desde')
+        fecha_hasta = request.args.get('fecha_hasta')
+        obra_id = request.args.get('obra_id', type=int)
+
+        if not fecha_desde:
+            fecha_desde = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        if not fecha_hasta:
+            fecha_hasta = datetime.now().strftime('%Y-%m-%d')
+
+        fecha_desde_dt = datetime.strptime(fecha_desde, '%Y-%m-%d')
+        fecha_hasta_dt = datetime.strptime(fecha_hasta, '%Y-%m-%d')
+
+        # 1. ARTÍCULOS MÁS CONSUMIDOS (Top 10)
+        query_top_items = db.session.query(
+            ItemInventario.id,
+            ItemInventario.descripcion,
+            ItemInventario.unidad,
+            func.sum(UsoInventario.cantidad).label('total_consumido'),
+            func.count(UsoInventario.id).label('num_usos'),
+            func.avg(ItemInventario.precio_promedio).label('precio_promedio')
+        ).join(
+            UsoInventario, ItemInventario.id == UsoInventario.item_id
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        )
+
+        if obra_id:
+            query_top_items = query_top_items.filter(UsoInventario.obra_id == obra_id)
+
+        top_items = query_top_items.group_by(
+            ItemInventario.id,
+            ItemInventario.descripcion,
+            ItemInventario.unidad
+        ).order_by(desc('total_consumido')).limit(10).all()
+
+        # Calcular costo total de cada item
+        top_items_data = []
+        for item in top_items:
+            costo_total = float(item.total_consumido) * (float(item.precio_promedio) if item.precio_promedio else 0)
+            top_items_data.append({
+                'id': item.id,
+                'descripcion': item.descripcion,
+                'unidad': item.unidad,
+                'total_consumido': float(item.total_consumido),
+                'num_usos': item.num_usos,
+                'precio_promedio': float(item.precio_promedio) if item.precio_promedio else 0,
+                'costo_total': costo_total
+            })
+
+        # 2. CONSUMO POR OBRA
+        query_obras = db.session.query(
+            Obra.id,
+            Obra.nombre,
+            Obra.direccion,
+            func.count(UsoInventario.id).label('num_consumos'),
+            func.sum(UsoInventario.cantidad * ItemInventario.precio_promedio).label('costo_total')
+        ).join(
+            UsoInventario, Obra.id == UsoInventario.obra_id
+        ).join(
+            ItemInventario, UsoInventario.item_id == ItemInventario.id
+        ).filter(
+            Obra.organizacion_id == org_id,
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        )
+
+        if obra_id:
+            query_obras = query_obras.filter(Obra.id == obra_id)
+
+        consumo_obras = query_obras.group_by(
+            Obra.id,
+            Obra.nombre,
+            Obra.direccion
+        ).order_by(desc('costo_total')).all()
+
+        consumo_obras_data = []
+        for obra in consumo_obras:
+            consumo_obras_data.append({
+                'id': obra.id,
+                'nombre': obra.nombre,
+                'direccion': obra.direccion,
+                'num_consumos': obra.num_consumos,
+                'costo_total': float(obra.costo_total) if obra.costo_total else 0
+            })
+
+        # 3. ITEMS CON STOCK BAJO (alertas)
+        items_stock_bajo = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True,
+            ItemInventario.stock_actual <= ItemInventario.stock_minimo
+        ).order_by(ItemInventario.stock_actual).all()
+
+        # 4. RESUMEN GENERAL
+        total_items_activos = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).count()
+
+        valor_total_inventario = db.session.query(
+            func.sum(ItemInventario.stock_actual * ItemInventario.precio_promedio)
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True
+        ).scalar() or 0
+
+        total_consumos_periodo = UsoInventario.query.filter(
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        ).join(ItemInventario).filter(
+            ItemInventario.organizacion_id == org_id
+        ).count()
+
+        costo_total_periodo = db.session.query(
+            func.sum(UsoInventario.cantidad * ItemInventario.precio_promedio)
+        ).join(
+            ItemInventario, UsoInventario.item_id == ItemInventario.id
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        ).scalar() or 0
+
+        # Obtener todas las obras para el filtro
+        todas_obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+
+        return render_template('inventario/analisis.html',
+                             top_items=top_items_data,
+                             consumo_obras=consumo_obras_data,
+                             items_stock_bajo=items_stock_bajo,
+                             total_items_activos=total_items_activos,
+                             valor_total_inventario=float(valor_total_inventario),
+                             total_consumos_periodo=total_consumos_periodo,
+                             costo_total_periodo=float(costo_total_periodo),
+                             fecha_desde=fecha_desde,
+                             fecha_hasta=fecha_hasta,
+                             obra_id=obra_id,
+                             todas_obras=todas_obras)
+
+    except Exception as e:
+        current_app.logger.error(f"Error en análisis de inventario: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        flash('Error al generar el análisis de inventario', 'danger')
+        return redirect(url_for('inventario.lista'))
