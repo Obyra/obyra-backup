@@ -2221,13 +2221,15 @@ def eliminar_obra(obra_id):
     nombre_obra = obra.nombre
 
     try:
-        # Eliminar presupuestos asociados (marcarlos como no confirmados y revertir a borrador)
+        # Desasociar presupuestos de la obra pero mantenerlos ocultos
+        # NO revertir confirmado_como_obra para que no vuelvan a aparecer en el módulo de presupuestos
         from models.budgets import Presupuesto
         presupuestos_asociados = Presupuesto.query.filter_by(obra_id=obra_id).all()
         for presupuesto in presupuestos_asociados:
-            presupuesto.confirmado_como_obra = False
+            # Mantener confirmado_como_obra = True para que siga oculto
+            # Solo desasociar la obra
             presupuesto.obra_id = None
-            presupuesto.estado = 'borrador'  # Revertir a borrador para que se pueda volver a confirmar
+            # Mantener el estado como 'confirmado' para que no aparezca en la lista de presupuestos
 
         # Eliminar todas las relaciones con la obra en orden inverso de dependencias
 
