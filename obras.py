@@ -1884,8 +1884,19 @@ def api_listar_tareas(etapa_id):
         return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
 
     if is_pm_global():
+        # Solo mostrar tareas que fueron realmente seleccionadas por el usuario
+        # (las que tienen responsable, fechas planificadas, o cantidad planificada)
         q = (TareaEtapa.query
              .filter(TareaEtapa.etapa_id == etapa_id)
+             .filter(
+                 db.or_(
+                     TareaEtapa.responsable_id.isnot(None),
+                     TareaEtapa.fecha_inicio_plan.isnot(None),
+                     TareaEtapa.fecha_fin_plan.isnot(None),
+                     TareaEtapa.cantidad_planificada.isnot(None),
+                     TareaEtapa.cantidad_planificada > 0
+                 )
+             )
              .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
     else:
         if not es_miembro_obra(etapa.obra_id, current_user.id):
@@ -1895,6 +1906,15 @@ def api_listar_tareas(etapa_id):
              .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
              .filter(TareaEtapa.etapa_id == etapa_id,
                      TareaMiembro.user_id == current_user.id)
+             .filter(
+                 db.or_(
+                     TareaEtapa.responsable_id.isnot(None),
+                     TareaEtapa.fecha_inicio_plan.isnot(None),
+                     TareaEtapa.fecha_fin_plan.isnot(None),
+                     TareaEtapa.cantidad_planificada.isnot(None),
+                     TareaEtapa.cantidad_planificada > 0
+                 )
+             )
              .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
 
     try:
