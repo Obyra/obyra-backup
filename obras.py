@@ -289,53 +289,16 @@ def D(x):
 
 
 def seed_tareas_para_etapa(nueva_etapa, auto_commit=True, slug=None):
-    """Función idempotente para crear tareas predefinidas en una etapa"""
-    try:
-        slug_normalizado = slugify_nombre_etapa(slug or nueva_etapa.nombre)
-        tareas = obtener_tareas_por_etapa(nueva_etapa.nombre, slug_normalizado)
-        tareas_creadas = 0
+    """
+    Función idempotente para crear tareas predefinidas en una etapa.
 
-        for t in tareas:
-            if isinstance(t, str):
-                nombre_tarea = t
-                descripcion_tarea = ""
-                horas_tarea = 0
-                unidad = "un"
-            elif isinstance(t, dict):
-                nombre_tarea = t.get("nombre", "")
-                descripcion_tarea = t.get("descripcion", "")
-                horas_tarea = t.get("horas", 0)
-                unidad = t.get("unidad", "un")
-            else:
-                current_app.logger.warning(f"Formato de tarea no reconocido: {t}")
-                continue
-
-            if not nombre_tarea:
-                continue
-
-            ya = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id, nombre=nombre_tarea).first()
-            if ya:
-                continue
-
-            nueva_tarea = TareaEtapa(
-                etapa_id=nueva_etapa.id,
-                nombre=nombre_tarea,
-                descripcion=descripcion_tarea,
-                horas_estimadas=horas_tarea,
-                unidad=unidad,
-                estado="pendiente"
-            )
-            db.session.add(nueva_tarea)
-            tareas_creadas += 1
-
-        if auto_commit:
-            db.session.commit()
-        return tareas_creadas
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception(f"ERROR en seed_tareas_para_etapa: {str(e)}")
-        return 0
+    DESHABILITADA: Las tareas ahora solo se crean mediante el Wizard.
+    Los materiales y mano de obra vienen del presupuesto confirmado,
+    no como tareas en etapas.
+    """
+    # NO crear tareas automáticamente del catálogo
+    # Las tareas deben venir del wizard de configuración de obra
+    return 0
 
 
 # ==== Rutas principales ====
