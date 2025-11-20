@@ -593,6 +593,9 @@ def detalle(id):
     items_presupuesto = []
     if presupuesto:
         items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        current_app.logger.info(f"[DEBUG] Obra {obra.id} - Presupuesto {presupuesto.id} - Items: {len(items_presupuesto)}")
+    else:
+        current_app.logger.warning(f"[DEBUG] Obra {obra.id} - NO tiene presupuesto confirmado")
 
     return render_template('obras/detalle.html',
                          obra=obra,
@@ -1882,6 +1885,103 @@ def api_listar_tareas(etapa_id):
         return jsonify({'ok': True, 'html': html})
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/reservar-materiales', methods=['POST'])
+@login_required
+def api_reservar_materiales(obra_id):
+    """
+    Genera reservas de stock en inventario para los materiales del presupuesto de la obra.
+    Si no hay stock suficiente, genera alertas de compra.
+    """
+    try:
+        from models.inventory import InventoryItem, Stock, StockReservation, Warehouse
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        # Obtener presupuesto confirmado
+        presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
+        if not presupuesto:
+            return jsonify({'ok': False, 'error': 'Esta obra no tiene presupuesto confirmado'}), 400
+
+        # Obtener materiales del presupuesto
+        materiales = [item for item in presupuesto.items if item.tipo == 'material']
+
+        if not materiales:
+            return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
+
+        reservas_creadas = []
+        alertas_compra = []
+        materiales_sin_match = []
+
+        for material in materiales:
+            # Intentar vincular con item de inventario por nombre similar
+            item_inventario = InventoryItem.query.filter(
+                InventoryItem.company_id == obra.organizacion_id,
+                InventoryItem.nombre.ilike(f'%{material.descripcion}%')
+            ).first()
+
+            if not item_inventario:
+                materiales_sin_match.append({
+                    'descripcion': material.descripcion,
+                    'cantidad': float(material.cantidad),
+                    'unidad': material.unidad
+                })
+                continue
+
+            # Calcular stock disponible
+            stock_total = sum(s.cantidad for s in item_inventario.stocks)
+            stock_reservado = sum(r.qty for r in item_inventario.reservations if r.estado == 'activa')
+            stock_disponible = stock_total - stock_reservado
+
+            cantidad_necesaria = float(material.cantidad)
+
+            if stock_disponible >= cantidad_necesaria:
+                # Hay stock suficiente, crear reserva
+                reserva = StockReservation(
+                    item_id=item_inventario.id,
+                    project_id=obra.id,
+                    qty=cantidad_necesaria,
+                    estado='activa',
+                    created_by=current_user.id
+                )
+                db.session.add(reserva)
+                reservas_creadas.append({
+                    'material': item_inventario.nombre,
+                    'cantidad': cantidad_necesaria,
+                    'unidad': item_inventario.unidad
+                })
+            else:
+                # No hay stock suficiente, generar alerta
+                alertas_compra.append({
+                    'material': item_inventario.nombre,
+                    'cantidad_necesaria': cantidad_necesaria,
+                    'stock_disponible': float(stock_disponible),
+                    'faltante': cantidad_necesaria - float(stock_disponible),
+                    'unidad': item_inventario.unidad
+                })
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'reservas_creadas': len(reservas_creadas),
+            'alertas_compra': len(alertas_compra),
+            'materiales_sin_match': len(materiales_sin_match),
+            'detalle': {
+                'reservas': reservas_creadas,
+                'alertas': alertas_compra,
+                'sin_match': materiales_sin_match
+            }
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al reservar materiales: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @obras_bp.route('/api/tareas/<int:tarea_id>/curva-s')

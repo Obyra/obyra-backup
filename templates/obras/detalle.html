@@ -376,7 +376,15 @@
                                 <i class="fas fa-list me-1"></i>Todos
                             </button>
                         </li>
+                        <li class="nav-item ms-auto" role="presentation">
+                            <button class="btn btn-warning btn-sm" onclick="reservarMateriales({{ obra.id }})" title="Reservar materiales en inventario">
+                                <i class="fas fa-shopping-cart me-1"></i>Reservar Stock
+                            </button>
+                        </li>
                     </ul>
+
+                    <!-- Alertas de reservas y compras -->
+                    <div id="alertasReservas" class="mb-3" style="display: none;"></div>
 
                     <div class="tab-content" id="materialesTabContent">
                         <!-- Tab: Solo Materiales -->
@@ -2088,6 +2096,103 @@ async function confirmarRechazo() {
 
 /* HOTFIX: Sin preventDefault global — dejamos que los forms tradicionales funcionen si no hay JS específico. */
 console.log('🔧 HOTFIX activo: envíos tradicionales permitidos cuando corresponde.');
+
+// ========== RESERVA DE MATERIALES ==========
+async function reservarMateriales(obraId) {
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/reservar-materiales`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            mostrarAlertasReservas(data);
+        } else {
+            throw new Error(data.error || 'Error al reservar materiales');
+        }
+    } catch (error) {
+        alert('Error al reservar materiales: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
+function mostrarAlertasReservas(data) {
+    const container = document.getElementById('alertasReservas');
+    container.style.display = 'block';
+
+    let html = '';
+
+    // Mostrar reservas creadas exitosamente
+    if (data.reservas_creadas > 0) {
+        html += `
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <strong><i class="fas fa-check-circle me-2"></i>¡Reservas creadas exitosamente!</strong>
+                <p class="mb-2 mt-2">Se reservaron ${data.reservas_creadas} materiales en el inventario:</p>
+                <ul class="mb-0">
+                    ${data.detalle.reservas.map(r => `
+                        <li>${r.material}: ${r.cantidad} ${r.unidad}</li>
+                    `).join('')}
+                </ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    }
+
+    // Mostrar alertas de compra (stock insuficiente)
+    if (data.alertas_compra > 0) {
+        html += `
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <strong><i class="fas fa-exclamation-triangle me-2"></i>¡Stock insuficiente!</strong>
+                <p class="mb-2 mt-2">Los siguientes materiales requieren compra:</p>
+                <ul class="mb-0">
+                    ${data.detalle.alertas.map(a => `
+                        <li>
+                            <strong>${a.material}</strong>:
+                            Necesario: ${a.cantidad_necesaria} ${a.unidad} |
+                            Disponible: ${a.stock_disponible} ${a.unidad} |
+                            <span class="text-danger">Faltante: ${a.faltante} ${a.unidad}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    }
+
+    // Mostrar materiales sin coincidencia en inventario
+    if (data.materiales_sin_match > 0) {
+        html += `
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <strong><i class="fas fa-info-circle me-2"></i>Materiales no encontrados en inventario</strong>
+                <p class="mb-2 mt-2">Estos materiales del presupuesto no están en el inventario:</p>
+                <ul class="mb-0">
+                    ${data.detalle.sin_match.map(m => `
+                        <li>${m.descripcion}: ${m.cantidad} ${m.unidad} -
+                            <a href="{{ url_for('inventario.crear') }}" class="alert-link">Agregar al inventario</a>
+                        </li>
+                    `).join('')}
+                </ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+
+    // Scroll suave hasta las alertas
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 </script>
 {% endblock %}
 
