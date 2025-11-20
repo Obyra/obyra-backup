@@ -124,8 +124,99 @@ def crear():
         flash('No tienes permisos para crear items de inventario.', 'danger')
         return redirect(url_for('inventario.lista'))
 
-    # TODO: Implement crear functionality
-    return render_template('inventario/crear.html')
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    if not org_id:
+        flash('No tienes una organización activa', 'warning')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        try:
+            # Obtener datos del formulario
+            categoria_id = request.form.get('categoria_id')
+            codigo = request.form.get('codigo', '').strip().upper()
+            nombre = request.form.get('nombre', '').strip()
+            descripcion = request.form.get('descripcion', '').strip()
+            unidad = request.form.get('unidad', '').strip()
+            stock_actual = request.form.get('stock_actual', 0)
+            stock_minimo = request.form.get('stock_minimo', 0)
+            precio_promedio = request.form.get('precio_promedio', 0)
+            precio_promedio_usd = request.form.get('precio_promedio_usd', 0)
+
+            # Validaciones
+            if not all([categoria_id, codigo, nombre, unidad]):
+                flash('Categoría, código, nombre y unidad son campos obligatorios.', 'danger')
+                categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+                return render_template('inventario/crear.html', categorias=categorias)
+
+            # Verificar si el código ya existe
+            existing = ItemInventario.query.filter_by(codigo=codigo).first()
+            if existing:
+                flash(f'Ya existe un item con el código {codigo}', 'warning')
+                categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+                return render_template('inventario/crear.html', categorias=categorias)
+
+            # Convertir valores numéricos
+            stock_actual = float(stock_actual)
+            stock_minimo = float(stock_minimo)
+            precio_promedio = float(precio_promedio)
+            precio_promedio_usd = float(precio_promedio_usd)
+
+            # Crear el item
+            nuevo_item = ItemInventario(
+                organizacion_id=org_id,
+                categoria_id=categoria_id,
+                codigo=codigo,
+                nombre=nombre,
+                descripcion=descripcion or None,
+                unidad=unidad,
+                stock_actual=stock_actual,
+                stock_minimo=stock_minimo,
+                precio_promedio=precio_promedio,
+                precio_promedio_usd=precio_promedio_usd,
+                activo=True
+            )
+
+            db.session.add(nuevo_item)
+            db.session.flush()  # Para obtener el ID
+
+            # Si hay stock inicial, crear movimiento de entrada
+            if stock_actual > 0:
+                movimiento = MovimientoInventario(
+                    item_id=nuevo_item.id,
+                    tipo='entrada',
+                    cantidad=stock_actual,
+                    precio_unitario=precio_promedio,
+                    motivo='Inventario inicial',
+                    observaciones='Stock inicial al crear el item',
+                    usuario_id=current_user.id
+                )
+                db.session.add(movimiento)
+
+            db.session.commit()
+
+            flash(f'Item {nuevo_item.nombre} creado exitosamente', 'success')
+            return redirect(url_for('inventario.lista'))
+
+        except ValueError as e:
+            db.session.rollback()
+            flash('Error: Los valores numéricos no son válidos', 'danger')
+            categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+            return render_template('inventario/crear.html', categorias=categorias)
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error al crear item de inventario: {str(e)}")
+            flash('Error al crear el item de inventario', 'danger')
+            categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+            return render_template('inventario/crear.html', categorias=categorias)
+
+    # GET request
+    categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).order_by(InventoryCategory.nombre).all()
+    can_manage_categories = user_can_manage_inventory_categories(current_user)
+
+    return render_template('inventario/crear.html',
+                         categorias=categorias,
+                         can_manage_categories=can_manage_categories)
 
 @inventario_bp.route('/<int:id>')
 @login_required
