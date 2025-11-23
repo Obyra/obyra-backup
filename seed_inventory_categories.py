@@ -19,6 +19,10 @@ from models import InventoryCategory, Organizacion
 from sqlalchemy import func, or_
 
 ROOT_CATEGORY_NAMES: List[str] = [
+    "Material de Construcción",
+    "Maquinarias",
+    "Encofrados",
+    "Indumentaria",
     "Materiales de Obra",
     "Instalaciones",
     "Maquinarias y Equipos",

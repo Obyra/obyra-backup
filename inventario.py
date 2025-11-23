@@ -83,23 +83,21 @@ def lista():
     
     categoria_id = request.args.get('categoria', '')
     buscar = request.args.get('buscar', '')
-    tipo = request.args.get('tipo', '')
     stock_bajo = request.args.get('stock_bajo', '')
-    
+
     query = ItemInventario.query.join(CategoriaInventario)
-    
+
     if categoria_id:
         query = query.filter(ItemInventario.categoria_id == categoria_id)
-    
-    if tipo:
-        query = query.filter(CategoriaInventario.tipo == tipo)
-    
+
     if buscar:
+        # Búsqueda flexible: permite búsqueda parcial case-insensitive en código, nombre y descripción
+        buscar_pattern = f'%{buscar}%'
         query = query.filter(
             db.or_(
-                ItemInventario.codigo.contains(buscar),
-                ItemInventario.nombre.contains(buscar),
-                ItemInventario.descripcion.contains(buscar)
+                ItemInventario.codigo.ilike(buscar_pattern),
+                ItemInventario.nombre.ilike(buscar_pattern),
+                ItemInventario.descripcion.ilike(buscar_pattern)
             )
         )
     
@@ -107,15 +105,59 @@ def lista():
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
     
     items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
+
+    # Obtener categorías del nuevo sistema InventoryCategory
+    company_id = _resolve_company_id()
+    if company_id:
+        from models import InventoryCategory
+        categorias_nuevas = InventoryCategory.query.filter_by(
+            company_id=company_id,
+            is_active=True,
+            parent_id=None  # Solo categorías raíz
+        ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
+    else:
+        categorias_nuevas = []
+
+    # Mantener compatibilidad con categorías antiguas
     categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
-    
-    return render_template('inventario/lista.html', 
-                         items=items, 
+
+    # Obtener obras confirmadas para cada item
+    from models.projects import Obra
+    from models.budgets import Presupuesto
+
+    items_con_obras = []
+    for item in items:
+        # Buscar usos del item en obras con presupuestos confirmados
+        obras_confirmadas = db.session.query(Obra).join(
+            UsoInventario, Obra.id == UsoInventario.obra_id
+        ).join(
+            Presupuesto, Obra.id == Presupuesto.obra_id
+        ).filter(
+            UsoInventario.item_id == item.id,
+            db.or_(
+                Presupuesto.confirmado_como_obra == True,
+                Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
+            )
+        ).distinct().all()
+
+        items_con_obras.append({
+            'item': item,
+            'obras': obras_confirmadas
+        })
+
+    # Obtener obras disponibles para traslados
+    obras_disponibles = Obra.query.filter(
+        Obra.estado.in_(['planificacion', 'en_curso', 'finalizado'])
+    ).order_by(Obra.nombre).all()
+
+    return render_template('inventario/lista.html',
+                         items_con_obras=items_con_obras,
                          categorias=categorias,
+                         categorias_nuevas=categorias_nuevas,
                          categoria_id=categoria_id,
                          buscar=buscar,
-                         tipo=tipo,
-                         stock_bajo=stock_bajo)
+                         stock_bajo=stock_bajo,
+                         obras_disponibles=obras_disponibles)
 
 @inventario_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
@@ -124,8 +166,108 @@ def crear():
         flash('No tienes permisos para crear items de inventario.', 'danger')
         return redirect(url_for('inventario.lista'))
 
-    # TODO: Implement crear functionality
-    return render_template('inventario/crear.html')
+    # Get categories for the form
+    company_id = _resolve_company_id()
+    if company_id:
+        from models import InventoryCategory
+        categorias = InventoryCategory.query.filter_by(
+            organizacion_id=company_id,
+            activo=True
+        ).order_by(InventoryCategory.nombre).all()
+    else:
+        categorias = []
+
+    can_manage_categories = user_can_manage_inventory_categories(current_user)
+
+    if request.method == 'POST':
+        # Get form data
+        categoria_id = request.form.get('categoria_id')
+        codigo = request.form.get('codigo', '').strip().upper()
+        nombre = request.form.get('nombre', '').strip()
+        descripcion = request.form.get('descripcion', '').strip()
+        unidad = request.form.get('unidad')
+        stock_actual = request.form.get('stock_actual', 0)
+        stock_minimo = request.form.get('stock_minimo', 0)
+        precio_promedio = request.form.get('precio_promedio', 0)
+
+        # Validate required fields
+        if not all([categoria_id, codigo, nombre, unidad]):
+            flash('Categoría, código, nombre y unidad son obligatorios.', 'danger')
+            return render_template('inventario/crear.html',
+                                 categorias=categorias,
+                                 can_manage_categories=can_manage_categories)
+
+        try:
+            # Convert numeric fields
+            stock_actual = float(stock_actual)
+            stock_minimo = float(stock_minimo)
+            precio_promedio = float(precio_promedio)
+
+            # Validate numeric values
+            if stock_actual < 0 or stock_minimo < 0 or precio_promedio < 0:
+                flash('Los valores numéricos no pueden ser negativos.', 'danger')
+                return render_template('inventario/crear.html',
+                                     categorias=categorias,
+                                     can_manage_categories=can_manage_categories)
+
+            # Check if codigo already exists
+            existing_item = ItemInventario.query.filter_by(codigo=codigo).first()
+            if existing_item:
+                flash(f'Ya existe un item con el código {codigo}.', 'danger')
+                return render_template('inventario/crear.html',
+                                     categorias=categorias,
+                                     can_manage_categories=can_manage_categories)
+
+            # Create new item
+            nuevo_item = ItemInventario(
+                categoria_id=categoria_id,
+                codigo=codigo,
+                nombre=nombre,
+                descripcion=descripcion if descripcion else None,
+                unidad=unidad,
+                stock_actual=stock_actual,
+                stock_minimo=stock_minimo,
+                precio_promedio=precio_promedio,
+                activo=True
+            )
+
+            db.session.add(nuevo_item)
+            db.session.flush()  # Get the item ID
+
+            # Create initial stock movement if stock_actual > 0
+            if stock_actual > 0:
+                movimiento_inicial = MovimientoInventario(
+                    item_id=nuevo_item.id,
+                    tipo='entrada',
+                    cantidad=stock_actual,
+                    precio_unitario=precio_promedio,
+                    motivo='Inventario inicial',
+                    observaciones='Stock inicial al crear el item',
+                    usuario_id=current_user.id
+                )
+                db.session.add(movimiento_inicial)
+
+            db.session.commit()
+
+            flash(f'Item "{nombre}" creado exitosamente.', 'success')
+            return redirect(url_for('inventario.lista'))
+
+        except ValueError:
+            flash('Los valores de stock y precio deben ser números válidos.', 'danger')
+            return render_template('inventario/crear.html',
+                                 categorias=categorias,
+                                 can_manage_categories=can_manage_categories)
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al crear el item de inventario.', 'danger')
+            current_app.logger.error(f'Error creating inventory item: {str(e)}')
+            return render_template('inventario/crear.html',
+                                 categorias=categorias,
+                                 can_manage_categories=can_manage_categories)
+
+    return render_template('inventario/crear.html',
+                         categorias=categorias,
+                         can_manage_categories=can_manage_categories)
 
 @inventario_bp.route('/<int:id>')
 @login_required
@@ -399,3 +541,135 @@ def crear_categoria():
 
     flash(message, 'success' if created else 'info')
     return redirect(url_for('inventario.categorias'))
+
+@inventario_bp.route('/dar-baja', methods=['POST'])
+@login_required
+def dar_baja():
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para dar de baja items.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    item_id = request.form.get('item_id')
+    cantidad = request.form.get('cantidad')
+    tipo_baja = request.form.get('tipo_baja')
+    observaciones = request.form.get('observaciones')
+
+    if not all([item_id, cantidad, tipo_baja]):
+        flash('Todos los campos son obligatorios.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    try:
+        cantidad = float(cantidad)
+        item = ItemInventario.query.get_or_404(item_id)
+
+        if cantidad <= 0:
+            flash('La cantidad debe ser mayor a cero.', 'danger')
+            return redirect(url_for('inventario.lista'))
+
+        stock_actual = item.stock_actual if item.stock_actual is not None else 0
+        if cantidad > stock_actual:
+            flash('Stock insuficiente para dar de baja.', 'danger')
+            return redirect(url_for('inventario.lista'))
+
+        # Determinar el motivo según el tipo de baja
+        if tipo_baja == 'uso':
+            motivo = f'Baja por uso/consumo'
+        elif tipo_baja == 'rotura':
+            motivo = f'Baja por rotura/daño'
+        else:
+            motivo = f'Baja de inventario'
+
+        # Crear movimiento de salida
+        movimiento = MovimientoInventario(
+            item_id=item_id,
+            tipo='salida',
+            cantidad=cantidad,
+            motivo=motivo,
+            observaciones=observaciones,
+            usuario_id=current_user.id
+        )
+
+        # Actualizar stock
+        item.stock_actual = stock_actual - cantidad
+
+        db.session.add(movimiento)
+        db.session.commit()
+
+        flash(f'Item dado de baja exitosamente. Stock actualizado: {item.stock_actual:.3f} {item.unidad}', 'success')
+
+    except ValueError:
+        flash('La cantidad debe ser un número válido.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al dar de baja el item.', 'danger')
+        current_app.logger.error(f'Error en dar_baja: {str(e)}')
+
+    return redirect(url_for('inventario.lista'))
+
+@inventario_bp.route('/trasladar', methods=['POST'])
+@login_required
+def trasladar():
+    if current_user.rol not in ['administrador', 'tecnico']:
+        flash('No tienes permisos para trasladar items.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    item_id = request.form.get('item_id')
+    obra_destino_id = request.form.get('obra_destino_id')
+    cantidad = request.form.get('cantidad')
+    observaciones = request.form.get('observaciones')
+
+    if not all([item_id, obra_destino_id, cantidad]):
+        flash('Todos los campos son obligatorios.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    try:
+        cantidad = float(cantidad)
+        item = ItemInventario.query.get_or_404(item_id)
+        obra_destino = Obra.query.get_or_404(obra_destino_id)
+
+        if cantidad <= 0:
+            flash('La cantidad debe ser mayor a cero.', 'danger')
+            return redirect(url_for('inventario.lista'))
+
+        stock_actual = item.stock_actual if item.stock_actual is not None else 0
+        if cantidad > stock_actual:
+            flash('Stock insuficiente para trasladar.', 'danger')
+            return redirect(url_for('inventario.lista'))
+
+        # Crear movimiento de salida del depósito actual
+        movimiento_salida = MovimientoInventario(
+            item_id=item_id,
+            tipo='salida',
+            cantidad=cantidad,
+            motivo=f'Traslado a: {obra_destino.nombre}',
+            observaciones=observaciones,
+            usuario_id=current_user.id
+        )
+
+        # Crear registro de uso en la obra destino
+        uso_obra = UsoInventario(
+            obra_id=obra_destino_id,
+            item_id=item_id,
+            cantidad_usada=cantidad,
+            fecha_uso=date.today(),
+            observaciones=f'Traslado desde depósito. {observaciones or ""}',
+            usuario_id=current_user.id
+        )
+
+        # Actualizar stock del item
+        item.stock_actual = stock_actual - cantidad
+
+        db.session.add(movimiento_salida)
+        db.session.add(uso_obra)
+        db.session.commit()
+
+        flash(f'Item trasladado exitosamente a {obra_destino.nombre}. Stock actualizado: {item.stock_actual:.3f} {item.unidad}', 'success')
+
+    except ValueError:
+        flash('La cantidad debe ser un número válido.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al trasladar el item.', 'danger')
+        current_app.logger.error(f'Error en trasladar: {str(e)}')
+
+    return redirect(url_for('inventario.lista'))
