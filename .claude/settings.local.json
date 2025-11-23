@@ -42,7 +42,8 @@
       "Bash(timeout 40 bash -c 'while ! docker-compose logs app 2>&1 | grep -q \"\"Booting worker\"\"; do sleep 1; done; echo \"\"✅ App reiniciada y lista\"\"')",
       "Bash(timeout 40 bash -c 'while ! docker-compose logs app 2>&1 | grep -q \"\"Booting worker\"\"; do sleep 1; done; echo \"\"✅ App lista con código actualizado\"\"')",
       "Bash(timeout 40 bash:*)",
-      "Bash(winpty docker exec obyra-app cat //app//templates//presupuestos//crear.html)"
+      "Bash(winpty docker exec obyra-app cat //app//templates//presupuestos//crear.html)",
+      "Bash(docker ps:*)"
     ],
     "deny": [],
     "ask": []

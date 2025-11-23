@@ -76,7 +76,7 @@
                                            class="form-control"
                                            id="fecha_uso"
                                            name="fecha_uso"
-                                           value="{{ request.form.get('fecha_uso') or today|strftime('%Y-%m-%d') }}">
+                                           value="{{ request.form.get('fecha_uso') or today.strftime('%Y-%m-%d') }}">
                                     <div class="form-text">Si no indicas una fecha se usará la fecha actual.</div>
                                 </div>
                             </div>

@@ -33,6 +33,7 @@ class Cliente(db.Model):
 
     # Información adicional
     empresa = db.Column(db.String(150))  # Razón social si es empresa
+    contactos = db.Column(db.JSON)  # Array de contactos/empleados [{nombre, apellido, email, telefono, rol}]
     notas = db.Column(db.Text)
 
     # Metadata

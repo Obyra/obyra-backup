@@ -18,50 +18,37 @@
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-                        <h5 class="mb-3">Información Personal</h5>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Nombre <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="nombre" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Apellido <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="apellido" required>
-                            </div>
+                        <h5 class="mb-3">Información de la Empresa</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Razón Social / Nombre de la Empresa <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="empresa" required placeholder="Ej: Constructora ABC S.A.">
                         </div>
 
-                        <h5 class="mb-3 mt-4">Identificación</h5>
                         <div class="row mb-3">
                             <div class="col-md-4">
                                 <label class="form-label">Tipo de Documento <span class="text-danger">*</span></label>
                                 <select class="form-select" name="tipo_documento" required>
-                                    <option value="DNI" selected>DNI</option>
-                                    <option value="CUIT">CUIT</option>
+                                    <option value="CUIT" selected>CUIT</option>
+                                    <option value="DNI">DNI</option>
                                     <option value="CUIL">CUIL</option>
                                     <option value="Pasaporte">Pasaporte</option>
                                 </select>
                             </div>
                             <div class="col-md-8">
                                 <label class="form-label">Número de Documento <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="numero_documento" required>
+                                <input type="text" class="form-control" name="numero_documento" required placeholder="Ej: 20-12345678-9">
                             </div>
                         </div>
 
-                        <h5 class="mb-3 mt-4">Contacto</h5>
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label">Email <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" name="email" required>
+                                <label class="form-label">Email de la Empresa</label>
+                                <input type="email" class="form-control" name="email" placeholder="info@empresa.com">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Teléfono</label>
-                                <input type="text" class="form-control" name="telefono">
+                                <label class="form-label">Teléfono Principal</label>
+                                <input type="text" class="form-control" name="telefono" placeholder="Ej: 11 1234-5678">
                             </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Teléfono Alternativo</label>
-                            <input type="text" class="form-control" name="telefono_alternativo">
                         </div>
 
                         <h5 class="mb-3 mt-4">Dirección</h5>
@@ -85,15 +72,53 @@
                             </div>
                         </div>
 
-                        <h5 class="mb-3 mt-4">Información Adicional</h5>
-                        <div class="mb-3">
-                            <label class="form-label">Empresa / Razón Social</label>
-                            <input type="text" class="form-control" name="empresa">
+                        <h5 class="mb-3 mt-4">Contactos / Empleados</h5>
+                        <p class="text-muted small">Agregue los contactos de la empresa con sus roles y datos de contacto.</p>
+
+                        <div id="contactos-container">
+                            <div class="contacto-item card mb-3 border">
+                                <div class="card-body">
+                                    <div class="row g-2">
+                                        <div class="col-md-3">
+                                            <label class="form-label small">Nombre</label>
+                                            <input type="text" class="form-control" name="contacto_nombre[]" placeholder="Juan">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small">Apellido</label>
+                                            <input type="text" class="form-control" name="contacto_apellido[]" placeholder="Pérez">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small">Email</label>
+                                            <input type="email" class="form-control" name="contacto_email[]" placeholder="juan@empresa.com">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small">Teléfono</label>
+                                            <input type="text" class="form-control" name="contacto_telefono[]" placeholder="11 1234-5678">
+                                        </div>
+                                        <div class="col-md-1 d-flex align-items-end">
+                                            <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="eliminarContacto(this)" style="display:none;">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 mt-2">
+                                        <div class="col-md-11">
+                                            <label class="form-label small">Rol dentro de la empresa</label>
+                                            <input type="text" class="form-control" name="contacto_rol[]" placeholder="Ej: Gerente General, Responsable de Compras, etc.">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
+                        <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="agregarContacto()">
+                            <i class="fas fa-plus me-1"></i>Agregar otro contacto
+                        </button>
+
+                        <h5 class="mb-3 mt-4">Notas Adicionales</h5>
                         <div class="mb-3">
                             <label class="form-label">Notas</label>
-                            <textarea class="form-control" name="notas" rows="3"></textarea>
+                            <textarea class="form-control" name="notas" rows="3" placeholder="Información adicional sobre la empresa..."></textarea>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 mt-4">
@@ -117,6 +142,77 @@ function cerrarVentana() {
     } else {
         // Si no, ir a lista de clientes
         window.location.href = "{{ url_for('clientes.lista') }}";
+    }
+}
+
+// Función para agregar un nuevo contacto
+function agregarContacto() {
+    const container = document.getElementById('contactos-container');
+    const contactoItem = document.createElement('div');
+    contactoItem.className = 'contacto-item card mb-3 border';
+    contactoItem.innerHTML = `
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label small">Nombre</label>
+                    <input type="text" class="form-control" name="contacto_nombre[]" placeholder="Juan">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Apellido</label>
+                    <input type="text" class="form-control" name="contacto_apellido[]" placeholder="Pérez">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Email</label>
+                    <input type="email" class="form-control" name="contacto_email[]" placeholder="juan@empresa.com">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Teléfono</label>
+                    <input type="text" class="form-control" name="contacto_telefono[]" placeholder="11 1234-5678">
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="eliminarContacto(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="row g-2 mt-2">
+                <div class="col-md-11">
+                    <label class="form-label small">Rol dentro de la empresa</label>
+                    <input type="text" class="form-control" name="contacto_rol[]" placeholder="Ej: Gerente General, Responsable de Compras, etc.">
+                </div>
+            </div>
+        </div>
+    `;
+    container.appendChild(contactoItem);
+
+    // Actualizar botones de eliminar: mostrar todos excepto el primero si hay más de uno
+    actualizarBotonesEliminarContacto();
+}
+
+// Función para eliminar un contacto
+function eliminarContacto(button) {
+    const contactoItem = button.closest('.contacto-item');
+    contactoItem.remove();
+
+    // Actualizar botones de eliminar
+    actualizarBotonesEliminarContacto();
+}
+
+// Función para actualizar visibilidad de botones de eliminar
+function actualizarBotonesEliminarContacto() {
+    const container = document.getElementById('contactos-container');
+    const contactos = container.querySelectorAll('.contacto-item');
+
+    // Si solo hay un contacto, ocultar el botón de eliminar
+    if (contactos.length === 1) {
+        const btn = contactos[0].querySelector('button[onclick*="eliminarContacto"]');
+        if (btn) btn.style.display = 'none';
+    } else {
+        // Si hay más de uno, mostrar todos los botones de eliminar
+        contactos.forEach(item => {
+            const btn = item.querySelector('button[onclick*="eliminarContacto"]');
+            if (btn) btn.style.display = 'block';
+        });
     }
 }
 

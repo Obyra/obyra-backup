@@ -80,7 +80,7 @@ def lista():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     categoria_id = request.args.get('categoria', '')
     buscar = request.args.get('buscar', '')
     stock_bajo = request.args.get('stock_bajo', '')
@@ -90,8 +90,8 @@ def lista():
     if categoria_id:
         query = query.filter(ItemInventario.categoria_id == categoria_id)
 
+    # Improved search with case-insensitive partial matching
     if buscar:
-        # Búsqueda flexible: permite búsqueda parcial case-insensitive en código, nombre y descripción
         buscar_pattern = f'%{buscar}%'
         query = query.filter(
             db.or_(
@@ -100,34 +100,18 @@ def lista():
                 ItemInventario.descripcion.ilike(buscar_pattern)
             )
         )
-    
+
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
-    
+
     items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
 
-    # Obtener categorías del nuevo sistema InventoryCategory
-    company_id = _resolve_company_id()
-    if company_id:
-        from models import InventoryCategory
-        categorias_nuevas = InventoryCategory.query.filter_by(
-            company_id=company_id,
-            is_active=True,
-            parent_id=None  # Solo categorías raíz
-        ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
-    else:
-        categorias_nuevas = []
-
-    # Mantener compatibilidad con categorías antiguas
-    categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
-
-    # Obtener obras confirmadas para cada item
+    # Get confirmed obras for each item
     from models.projects import Obra
     from models.budgets import Presupuesto
 
     items_con_obras = []
     for item in items:
-        # Buscar usos del item en obras con presupuestos confirmados
         obras_confirmadas = db.session.query(Obra).join(
             UsoInventario, Obra.id == UsoInventario.obra_id
         ).join(
@@ -145,10 +129,25 @@ def lista():
             'obras': obras_confirmadas
         })
 
-    # Obtener obras disponibles para traslados
-    obras_disponibles = Obra.query.filter(
-        Obra.estado.in_(['planificacion', 'en_curso', 'finalizado'])
-    ).order_by(Obra.nombre).all()
+    # Load new inventory categories
+    org_id = get_current_org_id() or current_user.organizacion_id
+    categorias_nuevas = []
+    if org_id:
+        categorias_nuevas = InventoryCategory.query.filter_by(
+            company_id=org_id,
+            is_active=True,
+            parent_id=None
+        ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
+
+    categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
+
+    # Get all obras for dropdowns
+    obras_disponibles = Obra.query.join(Presupuesto).filter(
+        db.or_(
+            Presupuesto.confirmado_como_obra == True,
+            Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
+        )
+    ).distinct().all()
 
     return render_template('inventario/lista.html',
                          items_con_obras=items_con_obras,
@@ -166,77 +165,65 @@ def crear():
         flash('No tienes permisos para crear items de inventario.', 'danger')
         return redirect(url_for('inventario.lista'))
 
-    # Get categories for the form
-    company_id = _resolve_company_id()
-    if company_id:
-        from models import InventoryCategory
-        categorias = InventoryCategory.query.filter_by(
-            organizacion_id=company_id,
-            activo=True
-        ).order_by(InventoryCategory.nombre).all()
-    else:
-        categorias = []
+    org_id = get_current_org_id() or current_user.organizacion_id
 
-    can_manage_categories = user_can_manage_inventory_categories(current_user)
+    if not org_id:
+        flash('No tienes una organización activa', 'warning')
+        return redirect(url_for('index'))
 
     if request.method == 'POST':
-        # Get form data
-        categoria_id = request.form.get('categoria_id')
-        codigo = request.form.get('codigo', '').strip().upper()
-        nombre = request.form.get('nombre', '').strip()
-        descripcion = request.form.get('descripcion', '').strip()
-        unidad = request.form.get('unidad')
-        stock_actual = request.form.get('stock_actual', 0)
-        stock_minimo = request.form.get('stock_minimo', 0)
-        precio_promedio = request.form.get('precio_promedio', 0)
-
-        # Validate required fields
-        if not all([categoria_id, codigo, nombre, unidad]):
-            flash('Categoría, código, nombre y unidad son obligatorios.', 'danger')
-            return render_template('inventario/crear.html',
-                                 categorias=categorias,
-                                 can_manage_categories=can_manage_categories)
-
         try:
-            # Convert numeric fields
+            # Obtener datos del formulario
+            categoria_id = request.form.get('categoria_id')
+            codigo = request.form.get('codigo', '').strip().upper()
+            nombre = request.form.get('nombre', '').strip()
+            descripcion = request.form.get('descripcion', '').strip()
+            unidad = request.form.get('unidad', '').strip()
+            stock_actual = request.form.get('stock_actual', 0)
+            stock_minimo = request.form.get('stock_minimo', 0)
+            precio_promedio = request.form.get('precio_promedio', 0)
+            precio_promedio_usd = request.form.get('precio_promedio_usd', 0)
+
+            # Validaciones
+            if not all([categoria_id, codigo, nombre, unidad]):
+                flash('Categoría, código, nombre y unidad son campos obligatorios.', 'danger')
+                categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+                return render_template('inventario/crear.html', categorias=categorias)
+
+            # Verificar si el código ya existe
+            existing = ItemInventario.query.filter_by(codigo=codigo).first()
+            if existing:
+                flash(f'Ya existe un item con el código {codigo}', 'warning')
+                categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+                return render_template('inventario/crear.html', categorias=categorias)
+
+            # Convertir valores numéricos
             stock_actual = float(stock_actual)
             stock_minimo = float(stock_minimo)
             precio_promedio = float(precio_promedio)
+            precio_promedio_usd = float(precio_promedio_usd)
 
-            # Validate numeric values
-            if stock_actual < 0 or stock_minimo < 0 or precio_promedio < 0:
-                flash('Los valores numéricos no pueden ser negativos.', 'danger')
-                return render_template('inventario/crear.html',
-                                     categorias=categorias,
-                                     can_manage_categories=can_manage_categories)
-
-            # Check if codigo already exists
-            existing_item = ItemInventario.query.filter_by(codigo=codigo).first()
-            if existing_item:
-                flash(f'Ya existe un item con el código {codigo}.', 'danger')
-                return render_template('inventario/crear.html',
-                                     categorias=categorias,
-                                     can_manage_categories=can_manage_categories)
-
-            # Create new item
+            # Crear el item
             nuevo_item = ItemInventario(
+                organizacion_id=org_id,
                 categoria_id=categoria_id,
                 codigo=codigo,
                 nombre=nombre,
-                descripcion=descripcion if descripcion else None,
+                descripcion=descripcion or None,
                 unidad=unidad,
                 stock_actual=stock_actual,
                 stock_minimo=stock_minimo,
                 precio_promedio=precio_promedio,
+                precio_promedio_usd=precio_promedio_usd,
                 activo=True
             )
 
             db.session.add(nuevo_item)
-            db.session.flush()  # Get the item ID
+            db.session.flush()  # Para obtener el ID
 
-            # Create initial stock movement if stock_actual > 0
+            # Si hay stock inicial, crear movimiento de entrada
             if stock_actual > 0:
-                movimiento_inicial = MovimientoInventario(
+                movimiento = MovimientoInventario(
                     item_id=nuevo_item.id,
                     tipo='entrada',
                     cantidad=stock_actual,
@@ -245,25 +232,28 @@ def crear():
                     observaciones='Stock inicial al crear el item',
                     usuario_id=current_user.id
                 )
-                db.session.add(movimiento_inicial)
+                db.session.add(movimiento)
 
             db.session.commit()
 
-            flash(f'Item "{nombre}" creado exitosamente.', 'success')
+            flash(f'Item {nuevo_item.nombre} creado exitosamente', 'success')
             return redirect(url_for('inventario.lista'))
 
-        except ValueError:
-            flash('Los valores de stock y precio deben ser números válidos.', 'danger')
-            return render_template('inventario/crear.html',
-                                 categorias=categorias,
-                                 can_manage_categories=can_manage_categories)
+        except ValueError as e:
+            db.session.rollback()
+            flash('Error: Los valores numéricos no son válidos', 'danger')
+            categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+            return render_template('inventario/crear.html', categorias=categorias)
         except Exception as e:
             db.session.rollback()
-            flash('Error al crear el item de inventario.', 'danger')
-            current_app.logger.error(f'Error creating inventory item: {str(e)}')
-            return render_template('inventario/crear.html',
-                                 categorias=categorias,
-                                 can_manage_categories=can_manage_categories)
+            current_app.logger.error(f"Error al crear item de inventario: {str(e)}")
+            flash('Error al crear el item de inventario', 'danger')
+            categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+            return render_template('inventario/crear.html', categorias=categorias)
+
+    # GET request
+    categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).order_by(InventoryCategory.nombre).all()
+    can_manage_categories = user_can_manage_inventory_categories(current_user)
 
     return render_template('inventario/crear.html',
                          categorias=categorias,
@@ -542,134 +532,335 @@ def crear_categoria():
     flash(message, 'success' if created else 'info')
     return redirect(url_for('inventario.categorias'))
 
-@inventario_bp.route('/dar-baja', methods=['POST'])
+@inventario_bp.route('/items-disponibles', methods=['GET'])
 @login_required
-def dar_baja():
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para dar de baja items.', 'danger')
-        return redirect(url_for('inventario.lista'))
+def items_disponibles():
+    """
+    Endpoint para obtener items del inventario disponibles para una obra.
+    Retorna lista de materiales con stock actual para selector de consumo.
+    """
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        org_id = get_current_org_id() or current_user.organizacion_id
 
-    item_id = request.form.get('item_id')
-    cantidad = request.form.get('cantidad')
-    tipo_baja = request.form.get('tipo_baja')
-    observaciones = request.form.get('observaciones')
+        if not org_id:
+            return jsonify({'ok': False, 'error': 'No tienes una organización activa'}), 400
 
-    if not all([item_id, cantidad, tipo_baja]):
-        flash('Todos los campos son obligatorios.', 'danger')
-        return redirect(url_for('inventario.lista'))
+        # Obtener todos los items del inventario de la organización con stock > 0
+        items = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).filter(
+            ItemInventario.stock_actual > 0
+        ).order_by(ItemInventario.descripcion).all()
+
+        items_data = []
+        for item in items:
+            items_data.append({
+                'id': item.id,
+                'descripcion': item.descripcion,
+                'stock_actual': float(item.stock_actual or 0),
+                'unidad': item.unidad or 'un',
+                'categoria': item.categoria.nombre if item.categoria else 'Sin categoría'
+            })
+
+        return jsonify({
+            'ok': True,
+            'items': items_data
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo items disponibles: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@inventario_bp.route('/analisis', methods=['GET'])
+@login_required
+def analisis():
+    """
+    Análisis de consumo de inventario:
+    - Artículos más consumidos
+    - Consumo por obra
+    - Costos reales de materiales
+    - Tendencias de consumo
+    """
+    if not current_user.puede_acceder_modulo('inventario'):
+        flash('No tienes permisos para acceder a este módulo.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
 
     try:
-        cantidad = float(cantidad)
-        item = ItemInventario.query.get_or_404(item_id)
+        from datetime import datetime, timedelta
+        from sqlalchemy import func, desc
+
+        org_id = get_current_org_id() or current_user.organizacion_id
+
+        if not org_id:
+            flash('No tienes una organización activa', 'warning')
+            return redirect(url_for('index'))
+
+        # Filtros de fecha (por defecto últimos 30 días)
+        fecha_desde = request.args.get('fecha_desde')
+        fecha_hasta = request.args.get('fecha_hasta')
+        obra_id = request.args.get('obra_id', type=int)
+
+        if not fecha_desde:
+            fecha_desde = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        if not fecha_hasta:
+            fecha_hasta = datetime.now().strftime('%Y-%m-%d')
+
+        fecha_desde_dt = datetime.strptime(fecha_desde, '%Y-%m-%d')
+        fecha_hasta_dt = datetime.strptime(fecha_hasta, '%Y-%m-%d')
+
+        # 1. ARTÍCULOS MÁS CONSUMIDOS (Top 10)
+        query_top_items = db.session.query(
+            ItemInventario.id,
+            ItemInventario.descripcion,
+            ItemInventario.unidad,
+            func.sum(UsoInventario.cantidad).label('total_consumido'),
+            func.count(UsoInventario.id).label('num_usos'),
+            func.avg(ItemInventario.precio_promedio).label('precio_promedio')
+        ).join(
+            UsoInventario, ItemInventario.id == UsoInventario.item_id
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        )
+
+        if obra_id:
+            query_top_items = query_top_items.filter(UsoInventario.obra_id == obra_id)
+
+        top_items = query_top_items.group_by(
+            ItemInventario.id,
+            ItemInventario.descripcion,
+            ItemInventario.unidad
+        ).order_by(desc('total_consumido')).limit(10).all()
+
+        # Calcular costo total de cada item
+        top_items_data = []
+        for item in top_items:
+            costo_total = float(item.total_consumido) * (float(item.precio_promedio) if item.precio_promedio else 0)
+            top_items_data.append({
+                'id': item.id,
+                'descripcion': item.descripcion,
+                'unidad': item.unidad,
+                'total_consumido': float(item.total_consumido),
+                'num_usos': item.num_usos,
+                'precio_promedio': float(item.precio_promedio) if item.precio_promedio else 0,
+                'costo_total': costo_total
+            })
+
+        # 2. CONSUMO POR OBRA
+        query_obras = db.session.query(
+            Obra.id,
+            Obra.nombre,
+            Obra.direccion,
+            func.count(UsoInventario.id).label('num_consumos'),
+            func.sum(UsoInventario.cantidad * ItemInventario.precio_promedio).label('costo_total')
+        ).join(
+            UsoInventario, Obra.id == UsoInventario.obra_id
+        ).join(
+            ItemInventario, UsoInventario.item_id == ItemInventario.id
+        ).filter(
+            Obra.organizacion_id == org_id,
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        )
+
+        if obra_id:
+            query_obras = query_obras.filter(Obra.id == obra_id)
+
+        consumo_obras = query_obras.group_by(
+            Obra.id,
+            Obra.nombre,
+            Obra.direccion
+        ).order_by(desc('costo_total')).all()
+
+        consumo_obras_data = []
+        for obra in consumo_obras:
+            consumo_obras_data.append({
+                'id': obra.id,
+                'nombre': obra.nombre,
+                'direccion': obra.direccion,
+                'num_consumos': obra.num_consumos,
+                'costo_total': float(obra.costo_total) if obra.costo_total else 0
+            })
+
+        # 3. ITEMS CON STOCK BAJO (alertas)
+        items_stock_bajo = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True,
+            ItemInventario.stock_actual <= ItemInventario.stock_minimo
+        ).order_by(ItemInventario.stock_actual).all()
+
+        # 4. RESUMEN GENERAL
+        total_items_activos = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).count()
+
+        valor_total_inventario = db.session.query(
+            func.sum(ItemInventario.stock_actual * ItemInventario.precio_promedio)
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True
+        ).scalar() or 0
+
+        total_consumos_periodo = UsoInventario.query.filter(
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        ).join(ItemInventario).filter(
+            ItemInventario.organizacion_id == org_id
+        ).count()
+
+        costo_total_periodo = db.session.query(
+            func.sum(UsoInventario.cantidad * ItemInventario.precio_promedio)
+        ).join(
+            ItemInventario, UsoInventario.item_id == ItemInventario.id
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            UsoInventario.fecha >= fecha_desde_dt,
+            UsoInventario.fecha <= fecha_hasta_dt
+        ).scalar() or 0
+
+        # Obtener todas las obras para el filtro
+        todas_obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
+
+        return render_template('inventario/analisis.html',
+                             top_items=top_items_data,
+                             consumo_obras=consumo_obras_data,
+                             items_stock_bajo=items_stock_bajo,
+                             total_items_activos=total_items_activos,
+                             valor_total_inventario=float(valor_total_inventario),
+                             total_consumos_periodo=total_consumos_periodo,
+                             costo_total_periodo=float(costo_total_periodo),
+                             fecha_desde=fecha_desde,
+                             fecha_hasta=fecha_hasta,
+                             obra_id=obra_id,
+                             todas_obras=todas_obras)
+
+    except Exception as e:
+        current_app.logger.error(f"Error en análisis de inventario: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        flash('Error al generar el análisis de inventario', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+
+@inventario_bp.route('/dar_baja/<int:id>', methods=['POST'])
+@login_required
+def dar_baja(id):
+    """Da de baja un item de inventario por uso o rotura"""
+    if not current_user.puede_acceder_modulo('inventario'):
+        return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
+
+    try:
+        item = ItemInventario.query.get_or_404(id)
+
+        cantidad = float(request.form.get('cantidad', 0))
+        motivo = request.form.get('motivo', '')
+        obra_id = request.form.get('obra_id')
+        observaciones = request.form.get('observaciones', '')
 
         if cantidad <= 0:
-            flash('La cantidad debe ser mayor a cero.', 'danger')
-            return redirect(url_for('inventario.lista'))
+            return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
 
-        stock_actual = item.stock_actual if item.stock_actual is not None else 0
-        if cantidad > stock_actual:
-            flash('Stock insuficiente para dar de baja.', 'danger')
-            return redirect(url_for('inventario.lista'))
+        if cantidad > float(item.stock_actual):
+            return jsonify({'success': False, 'message': 'No hay suficiente stock disponible'}), 400
 
-        # Determinar el motivo según el tipo de baja
-        if tipo_baja == 'uso':
-            motivo = f'Baja por uso/consumo'
-        elif tipo_baja == 'rotura':
-            motivo = f'Baja por rotura/daño'
-        else:
-            motivo = f'Baja de inventario'
-
-        # Crear movimiento de salida
+        # Create movement record
         movimiento = MovimientoInventario(
-            item_id=item_id,
+            item_id=item.id,
             tipo='salida',
             cantidad=cantidad,
             motivo=motivo,
             observaciones=observaciones,
             usuario_id=current_user.id
         )
-
-        # Actualizar stock
-        item.stock_actual = stock_actual - cantidad
-
         db.session.add(movimiento)
+
+        # Update stock
+        item.stock_actual -= cantidad
+
+        # If it's usage on an obra, record it
+        if obra_id and motivo == 'Uso en obra':
+            uso = UsoInventario(
+                obra_id=int(obra_id),
+                item_id=item.id,
+                cantidad_usada=cantidad,
+                fecha_uso=date.today(),
+                observaciones=observaciones,
+                usuario_id=current_user.id
+            )
+            db.session.add(uso)
+
         db.session.commit()
+        flash(f'Se dio de baja {cantidad} {item.unidad} de {item.nombre}', 'success')
+        return jsonify({'success': True})
 
-        flash(f'Item dado de baja exitosamente. Stock actualizado: {item.stock_actual:.3f} {item.unidad}', 'success')
-
-    except ValueError:
-        flash('La cantidad debe ser un número válido.', 'danger')
     except Exception as e:
         db.session.rollback()
-        flash('Error al dar de baja el item.', 'danger')
-        current_app.logger.error(f'Error en dar_baja: {str(e)}')
+        current_app.logger.error(f"Error en dar_baja: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-    return redirect(url_for('inventario.lista'))
 
-@inventario_bp.route('/trasladar', methods=['POST'])
+@inventario_bp.route('/trasladar/<int:id>', methods=['POST'])
 @login_required
-def trasladar():
-    if current_user.rol not in ['administrador', 'tecnico']:
-        flash('No tienes permisos para trasladar items.', 'danger')
-        return redirect(url_for('inventario.lista'))
-
-    item_id = request.form.get('item_id')
-    obra_destino_id = request.form.get('obra_destino_id')
-    cantidad = request.form.get('cantidad')
-    observaciones = request.form.get('observaciones')
-
-    if not all([item_id, obra_destino_id, cantidad]):
-        flash('Todos los campos son obligatorios.', 'danger')
-        return redirect(url_for('inventario.lista'))
+def trasladar(id):
+    """Traslada un item de inventario a otro depósito"""
+    if not current_user.puede_acceder_modulo('inventario'):
+        return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
 
     try:
-        cantidad = float(cantidad)
-        item = ItemInventario.query.get_or_404(item_id)
-        obra_destino = Obra.query.get_or_404(obra_destino_id)
+        item = ItemInventario.query.get_or_404(id)
+
+        cantidad = float(request.form.get('cantidad', 0))
+        obra_destino_id = request.form.get('obra_destino_id')
+        observaciones = request.form.get('observaciones', '')
 
         if cantidad <= 0:
-            flash('La cantidad debe ser mayor a cero.', 'danger')
-            return redirect(url_for('inventario.lista'))
+            return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
 
-        stock_actual = item.stock_actual if item.stock_actual is not None else 0
-        if cantidad > stock_actual:
-            flash('Stock insuficiente para trasladar.', 'danger')
-            return redirect(url_for('inventario.lista'))
+        if cantidad > float(item.stock_actual):
+            return jsonify({'success': False, 'message': 'No hay suficiente stock disponible'}), 400
 
-        # Crear movimiento de salida del depósito actual
-        movimiento_salida = MovimientoInventario(
-            item_id=item_id,
+        if not obra_destino_id:
+            return jsonify({'success': False, 'message': 'Debe seleccionar un depósito destino'}), 400
+
+        # Create movement record for transfer
+        movimiento = MovimientoInventario(
+            item_id=item.id,
             tipo='salida',
             cantidad=cantidad,
-            motivo=f'Traslado a: {obra_destino.nombre}',
+            motivo=f'Traslado a obra',
             observaciones=observaciones,
             usuario_id=current_user.id
         )
+        db.session.add(movimiento)
 
-        # Crear registro de uso en la obra destino
-        uso_obra = UsoInventario(
-            obra_id=obra_destino_id,
-            item_id=item_id,
+        # Update stock (subtract from current location)
+        item.stock_actual -= cantidad
+
+        # Record usage in destination obra
+        uso = UsoInventario(
+            obra_id=int(obra_destino_id),
+            item_id=item.id,
             cantidad_usada=cantidad,
             fecha_uso=date.today(),
-            observaciones=f'Traslado desde depósito. {observaciones or ""}',
+            observaciones=f'Traslado desde depósito. {observaciones}',
             usuario_id=current_user.id
         )
+        db.session.add(uso)
 
-        # Actualizar stock del item
-        item.stock_actual = stock_actual - cantidad
-
-        db.session.add(movimiento_salida)
-        db.session.add(uso_obra)
         db.session.commit()
 
-        flash(f'Item trasladado exitosamente a {obra_destino.nombre}. Stock actualizado: {item.stock_actual:.3f} {item.unidad}', 'success')
+        obra_destino = Obra.query.get(obra_destino_id)
+        flash(f'Se trasladaron {cantidad} {item.unidad} de {item.nombre} a {obra_destino.nombre}', 'success')
+        return jsonify({'success': True})
 
-    except ValueError:
-        flash('La cantidad debe ser un número válido.', 'danger')
     except Exception as e:
         db.session.rollback()
-        flash('Error al trasladar el item.', 'danger')
-        current_app.logger.error(f'Error en trasladar: {str(e)}')
-
-    return redirect(url_for('inventario.lista'))
+        current_app.logger.error(f"Error en trasladar: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500

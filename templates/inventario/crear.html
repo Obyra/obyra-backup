@@ -111,14 +111,29 @@
                             </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <label for="precio_promedio" class="form-label">Precio Promedio</label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                <input type="number" class="form-control" id="precio_promedio" name="precio_promedio" 
-                                       placeholder="0.00" step="0.01" min="0" value="0">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="precio_promedio" class="form-label">Precio Promedio (ARS)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" class="form-control" id="precio_promedio" name="precio_promedio"
+                                               placeholder="0.00" step="0.01" min="0" value="0">
+                                    </div>
+                                    <div class="form-text">Precio promedio en pesos argentinos</div>
+                                </div>
                             </div>
-                            <div class="form-text">Precio promedio de compra para cálculos de costos</div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="precio_promedio_usd" class="form-label">Precio Promedio (USD)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">US$</span>
+                                        <input type="number" class="form-control" id="precio_promedio_usd" name="precio_promedio_usd"
+                                               placeholder="0.00" step="0.01" min="0" value="0">
+                                    </div>
+                                    <div class="form-text">Precio promedio en dólares</div>
+                                </div>
+                            </div>
                         </div>
                         
                         <!-- Alertas -->

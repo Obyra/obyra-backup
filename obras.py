@@ -29,6 +29,8 @@ from models import (
     WorkPayment,
     Cliente,
     ItemPresupuesto,
+    ItemInventario,
+    UsoInventario,
 )
 from etapas_predefinidas import obtener_etapas_disponibles, crear_etapas_para_obra
 from tareas_predefinidas import (
@@ -287,53 +289,16 @@ def D(x):
 
 
 def seed_tareas_para_etapa(nueva_etapa, auto_commit=True, slug=None):
-    """Función idempotente para crear tareas predefinidas en una etapa"""
-    try:
-        slug_normalizado = slugify_nombre_etapa(slug or nueva_etapa.nombre)
-        tareas = obtener_tareas_por_etapa(nueva_etapa.nombre, slug_normalizado)
-        tareas_creadas = 0
+    """
+    Función idempotente para crear tareas predefinidas en una etapa.
 
-        for t in tareas:
-            if isinstance(t, str):
-                nombre_tarea = t
-                descripcion_tarea = ""
-                horas_tarea = 0
-                unidad = "un"
-            elif isinstance(t, dict):
-                nombre_tarea = t.get("nombre", "")
-                descripcion_tarea = t.get("descripcion", "")
-                horas_tarea = t.get("horas", 0)
-                unidad = t.get("unidad", "un")
-            else:
-                current_app.logger.warning(f"Formato de tarea no reconocido: {t}")
-                continue
-
-            if not nombre_tarea:
-                continue
-
-            ya = TareaEtapa.query.filter_by(etapa_id=nueva_etapa.id, nombre=nombre_tarea).first()
-            if ya:
-                continue
-
-            nueva_tarea = TareaEtapa(
-                etapa_id=nueva_etapa.id,
-                nombre=nombre_tarea,
-                descripcion=descripcion_tarea,
-                horas_estimadas=horas_tarea,
-                unidad=unidad,
-                estado="pendiente"
-            )
-            db.session.add(nueva_tarea)
-            tareas_creadas += 1
-
-        if auto_commit:
-            db.session.commit()
-        return tareas_creadas
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception(f"ERROR en seed_tareas_para_etapa: {str(e)}")
-        return 0
+    DESHABILITADA: Las tareas ahora solo se crean mediante el Wizard.
+    Los materiales y mano de obra vienen del presupuesto confirmado,
+    no como tareas en etapas.
+    """
+    # NO crear tareas automáticamente del catálogo
+    # Las tareas deben venir del wizard de configuración de obra
+    return 0
 
 
 # ==== Rutas principales ====
@@ -628,6 +593,9 @@ def detalle(id):
     items_presupuesto = []
     if presupuesto:
         items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
+        current_app.logger.info(f"[DEBUG] Obra {obra.id} - Presupuesto {presupuesto.id} - Items: {len(items_presupuesto)}")
+    else:
+        current_app.logger.warning(f"[DEBUG] Obra {obra.id} - NO tiene presupuesto confirmado")
 
     return render_template('obras/detalle.html',
                          obra=obra,
@@ -1296,8 +1264,57 @@ def crear_avance(tarea_id):
                 )
                 db.session.add(adjunto)
 
+        # Procesar materiales consumidos y descontar del stock
+        material_ids = request.form.getlist("material_id[]")
+        material_cantidades = request.form.getlist("material_cantidad[]")
+
+        if material_ids and len(material_ids) > 0:
+            for i, material_id_str in enumerate(material_ids):
+                if not material_id_str or material_id_str == '':
+                    continue
+
+                try:
+                    material_id = int(material_id_str)
+                    cantidad_consumida = float(material_cantidades[i]) if i < len(material_cantidades) else 0
+
+                    if cantidad_consumida <= 0:
+                        continue
+
+                    # Obtener el item del inventario
+                    item = ItemInventario.query.get(material_id)
+                    if not item:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Material ID {material_id} no encontrado"), 400
+
+                    # Verificar stock disponible
+                    if item.stock_actual < cantidad_consumida:
+                        db.session.rollback()
+                        return jsonify(ok=False, error=f"Stock insuficiente para {item.descripcion}. Disponible: {item.stock_actual}, Requerido: {cantidad_consumida}"), 400
+
+                    # Descontar del stock
+                    item.stock_actual -= cantidad_consumida
+
+                    # Registrar el uso de inventario
+                    uso = UsoInventario(
+                        obra_id=tarea.etapa.obra_id,
+                        item_id=item.id,
+                        cantidad=cantidad_consumida,
+                        fecha=datetime.utcnow(),
+                        usuario_id=current_user.id,
+                        tarea_id=tarea.id,
+                        avance_id=av.id,
+                        notas=f"Consumido en tarea: {tarea.nombre}"
+                    )
+                    db.session.add(uso)
+
+                    current_app.logger.info(f"Material {item.descripcion} descontado: {cantidad_consumida} {item.unidad}. Stock restante: {item.stock_actual}")
+
+                except (ValueError, IndexError) as e:
+                    db.session.rollback()
+                    return jsonify(ok=False, error=f"Error procesando material: {str(e)}"), 400
+
         db.session.commit()
-        return jsonify(ok=True)
+        return jsonify(ok=True, mensaje="Avance registrado y materiales descontados del stock")
 
     except Exception as e:
         db.session.rollback()
@@ -1833,8 +1850,17 @@ def api_listar_tareas(etapa_id):
         return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
 
     if is_pm_global():
+        # Solo mostrar tareas que fueron realmente seleccionadas por el usuario desde el wizard
+        # Estas tareas tienen responsable O fechas planificadas (no materiales con solo cantidad)
         q = (TareaEtapa.query
              .filter(TareaEtapa.etapa_id == etapa_id)
+             .filter(
+                 db.or_(
+                     TareaEtapa.responsable_id.isnot(None),
+                     TareaEtapa.fecha_inicio_plan.isnot(None),
+                     TareaEtapa.fecha_fin_plan.isnot(None)
+                 )
+             )
              .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
     else:
         if not es_miembro_obra(etapa.obra_id, current_user.id):
@@ -1844,6 +1870,13 @@ def api_listar_tareas(etapa_id):
              .join(TareaMiembro, TareaMiembro.tarea_id == TareaEtapa.id)
              .filter(TareaEtapa.etapa_id == etapa_id,
                      TareaMiembro.user_id == current_user.id)
+             .filter(
+                 db.or_(
+                     TareaEtapa.responsable_id.isnot(None),
+                     TareaEtapa.fecha_inicio_plan.isnot(None),
+                     TareaEtapa.fecha_fin_plan.isnot(None)
+                 )
+             )
              .options(db.joinedload(TareaEtapa.miembros).joinedload(TareaMiembro.usuario)))
 
     try:
@@ -1852,6 +1885,103 @@ def api_listar_tareas(etapa_id):
         return jsonify({'ok': True, 'html': html})
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Error al cargar tareas: {str(e)}'}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/reservar-materiales', methods=['POST'])
+@login_required
+def api_reservar_materiales(obra_id):
+    """
+    Genera reservas de stock en inventario para los materiales del presupuesto de la obra.
+    Si no hay stock suficiente, genera alertas de compra.
+    """
+    try:
+        from models.inventory import InventoryItem, Stock, StockReservation, Warehouse
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        # Obtener presupuesto confirmado
+        presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
+        if not presupuesto:
+            return jsonify({'ok': False, 'error': 'Esta obra no tiene presupuesto confirmado'}), 400
+
+        # Obtener materiales del presupuesto
+        materiales = [item for item in presupuesto.items if item.tipo == 'material']
+
+        if not materiales:
+            return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
+
+        reservas_creadas = []
+        alertas_compra = []
+        materiales_sin_match = []
+
+        for material in materiales:
+            # Intentar vincular con item de inventario por nombre similar
+            item_inventario = InventoryItem.query.filter(
+                InventoryItem.company_id == obra.organizacion_id,
+                InventoryItem.nombre.ilike(f'%{material.descripcion}%')
+            ).first()
+
+            if not item_inventario:
+                materiales_sin_match.append({
+                    'descripcion': material.descripcion,
+                    'cantidad': float(material.cantidad),
+                    'unidad': material.unidad
+                })
+                continue
+
+            # Calcular stock disponible
+            stock_total = sum(s.cantidad for s in item_inventario.stocks)
+            stock_reservado = sum(r.qty for r in item_inventario.reservations if r.estado == 'activa')
+            stock_disponible = stock_total - stock_reservado
+
+            cantidad_necesaria = float(material.cantidad)
+
+            if stock_disponible >= cantidad_necesaria:
+                # Hay stock suficiente, crear reserva
+                reserva = StockReservation(
+                    item_id=item_inventario.id,
+                    project_id=obra.id,
+                    qty=cantidad_necesaria,
+                    estado='activa',
+                    created_by=current_user.id
+                )
+                db.session.add(reserva)
+                reservas_creadas.append({
+                    'material': item_inventario.nombre,
+                    'cantidad': cantidad_necesaria,
+                    'unidad': item_inventario.unidad
+                })
+            else:
+                # No hay stock suficiente, generar alerta
+                alertas_compra.append({
+                    'material': item_inventario.nombre,
+                    'cantidad_necesaria': cantidad_necesaria,
+                    'stock_disponible': float(stock_disponible),
+                    'faltante': cantidad_necesaria - float(stock_disponible),
+                    'unidad': item_inventario.unidad
+                })
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'reservas_creadas': len(reservas_creadas),
+            'alertas_compra': len(alertas_compra),
+            'materiales_sin_match': len(materiales_sin_match),
+            'detalle': {
+                'reservas': reservas_creadas,
+                'alertas': alertas_compra,
+                'sin_match': materiales_sin_match
+            }
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al reservar materiales: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @obras_bp.route('/api/tareas/<int:tarea_id>/curva-s')

@@ -31,7 +31,8 @@ class ItemInventario(db.Model):
     unidad = db.Column(db.String(20), nullable=False)
     stock_actual = db.Column(db.Numeric(10, 3), default=0)
     stock_minimo = db.Column(db.Numeric(10, 3), default=0)
-    precio_promedio = db.Column(db.Numeric(10, 2), default=0)
+    precio_promedio = db.Column(db.Numeric(10, 2), default=0)  # Precio en ARS
+    precio_promedio_usd = db.Column(db.Numeric(10, 2), default=0)  # Precio en USD
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
