@@ -57,10 +57,23 @@
                                 </label>
                                 <select class="form-select form-select-lg" id="tipo_obra" name="tipo_obra" required>
                                     <option value="">Seleccionar tipo...</option>
-                                    <option value="casa_1_planta">Casa 1 planta</option>
-                                    <option value="casa_2_plantas">Casa 2 plantas</option>
-                                    <option value="edificio_3_5_pisos">Edificio de 3 a 5 pisos</option>
-                                    <option value="edificio_5_10_pisos">Edificio de 5 a 10 pisos</option>
+                                    <optgroup label="Casa">
+                                        <option value="casa_1_planta">Casa - 1 Planta</option>
+                                        <option value="casa_2_plantas">Casa - 2 Plantas</option>
+                                        <option value="casa_3_plantas">Casa - 3 Plantas</option>
+                                    </optgroup>
+                                    <optgroup label="Edificio">
+                                        <option value="edificio_3_5_pisos">Edificio de 3 a 5 pisos</option>
+                                        <option value="edificio_6_10_pisos">Edificio de 6 a 10 pisos</option>
+                                        <option value="edificio_11_15_pisos">Edificio de 11 a 15 pisos</option>
+                                        <option value="edificio_16_30_pisos">Edificio de 16 a 30 pisos</option>
+                                    </optgroup>
+                                    <optgroup label="Otros">
+                                        <option value="galpon">Galpones</option>
+                                        <option value="planta_industrial">Plantas Industriales</option>
+                                        <option value="obra_vial">Obras Viales</option>
+                                        <option value="infraestructura">Infraestructura</option>
+                                    </optgroup>
                                 </select>
                             </div>
                         </div>
