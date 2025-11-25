@@ -257,6 +257,10 @@ class ProjectSharedService:
             db.session.add(avance)
             db.session.flush()
 
+            # Cambiar estado automáticamente al registrar el primer avance
+            if tarea.estado == 'pendiente':
+                tarea.estado = 'en_curso'
+
             if not tarea.fecha_inicio_real and avance.status == "aprobado":
                 tarea.fecha_inicio_real = datetime.utcnow()
 

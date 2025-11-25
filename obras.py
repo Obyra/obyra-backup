@@ -1567,7 +1567,12 @@ def mis_tareas_detalle(tarea_id):
         return redirect(url_for('obras.mis_tareas'))
 
     payload = _serialize_tarea_detalle(tarea)
-    puede_actualizar_estado = es_responsable or es_miembro
+
+    # Los operarios NO ven la sección de actualizar estado manualmente
+    # El estado se actualiza automáticamente al registrar avances
+    roles = ProjectSharedService.get_roles_usuario(current_user)
+    es_operario = 'operario' in roles
+    puede_actualizar_estado = (es_responsable or es_miembro) and not es_operario
 
     return render_template(
         'obras/mis_tareas_detalle.html',
