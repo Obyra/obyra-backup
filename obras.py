@@ -1407,11 +1407,11 @@ def _serialize_tarea_detalle(tarea):
                 total += v
         return total
 
-    cantidad_plan = _to_float(tarea.cantidad_planificada)
+    cantidad_plan = _to_float(tarea.cantidad_planificada) or 0.0
     cantidad_ejecutada = _safe_sum(aprobados)
 
-    cantidad_restante = None
-    if cantidad_plan is not None:
+    cantidad_restante = 0.0
+    if cantidad_plan > 0:
         cantidad_restante = max(cantidad_plan - cantidad_ejecutada, 0.0)
 
     status_labels = {'aprobado': 'Aprobado', 'pendiente': 'Pendiente', 'rechazado': 'Rechazado'}
