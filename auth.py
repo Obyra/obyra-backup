@@ -1327,7 +1327,9 @@ def crear_operario_rapido():
         # Enviar email con link de blanqueo de contraseña
         reset_url = None
         email_sent = False
-        if email and not email.endswith('@temp.obyra.local'):
+        is_temp_email = email.endswith('@temp.obyra.local')
+
+        if email and not is_temp_email:
             # Solo enviar email si tiene un email real (no temporal)
             try:
                 reset_url = send_new_member_invitation(nuevo_usuario, membership, temp_password=None)
@@ -1337,14 +1339,23 @@ def crear_operario_rapido():
                 current_app.logger.warning(f"No se pudo enviar email a {email}: {str(e)}")
                 email_sent = False
 
-        return jsonify({
+        # Preparar respuesta
+        response_data = {
             'ok': True,
             'usuario_id': nuevo_usuario.id,
             'nombre_completo': nuevo_usuario.nombre_completo,
             'email': nuevo_usuario.email,
             'email_enviado': email_sent,
-            'reset_url': reset_url if reset_url else None
-        })
+            'reset_url': reset_url if reset_url else None,
+            'es_email_temporal': is_temp_email
+        }
+
+        # Si es email temporal, incluir la contraseña en la respuesta
+        if is_temp_email:
+            response_data['password_temporal'] = password_temporal
+            response_data['mensaje'] = 'Usuario creado. Guarda estas credenciales para compartir con el operario.'
+
+        return jsonify(response_data)
 
     except Exception as e:
         db.session.rollback()
