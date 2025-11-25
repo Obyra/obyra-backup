@@ -7,6 +7,7 @@ import os
 import base64
 import json
 import logging
+import math
 from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
@@ -106,7 +107,8 @@ COEFICIENTES_CONSTRUCCION = {
         "pintura_exterior": 0.1,
         "sellador": 0.03,
 
-        "factor_precio": 1.3
+        # Factor basado en investigación mercado 2025: US$1600 vs US$1300 = 1.23x
+        "factor_precio": 1.23
     },
     "Premium": {
         # Materiales estructurales premium
@@ -140,7 +142,8 @@ COEFICIENTES_CONSTRUCCION = {
         "pintura_exterior": 0.15,
         "sellador": 0.05,
 
-        "factor_precio": 1.8
+        # Factor basado en investigación mercado 2025: US$2000 vs US$1300 = 1.54x
+        "factor_precio": 1.54
     }
 }
 
@@ -480,7 +483,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-PIEDRA', 'material_key': 'piedra', 'descripcion': 'Piedra partida 3/4"', 'unidad': 'm³', 'coef_por_m2': 0.03}
         ],
         'mano_obra': [
-            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos', 'unidad': 'jornal', 'coef_por_m2': 0.06}
+            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos', 'unidad': 'jornal', 'coef_por_m2': 0.18}
         ],
         'equipos': [
             {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora con operador', 'unidad': 'día', 'dias_por_m2': 0.008, 'min_dias': 1}
@@ -495,7 +498,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-HORMIGON', 'material_key': 'hormigon', 'descripcion': 'Hormigón elaborado H21', 'unidad': 'm³', 'coef_por_m2': 0.12}
         ],
         'mano_obra': [
-            {'codigo': 'MO-FUND', 'descripcion': 'Cuadrilla de fundaciones', 'unidad': 'jornal', 'coef_por_m2': 0.065}
+            {'codigo': 'MO-FUND', 'descripcion': 'Cuadrilla de fundaciones', 'unidad': 'jornal', 'coef_por_m2': 0.22}
         ],
         'equipos': [
             {'codigo': 'EQ-HORMIG', 'descripcion': 'Hormigonera o bomba de hormigón', 'unidad': 'día', 'dias_por_m2': 0.004, 'min_dias': 1}
@@ -510,7 +513,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-MADERA', 'material_key': 'madera_estructural', 'descripcion': 'Madera para encofrado', 'unidad': 'm³', 'coef_por_m2': 0.06}
         ],
         'mano_obra': [
-            {'codigo': 'MO-ESTR', 'descripcion': 'Cuadrilla de estructura', 'unidad': 'jornal', 'coef_por_m2': 0.075}
+            {'codigo': 'MO-ESTR', 'descripcion': 'Cuadrilla de estructura', 'unidad': 'jornal', 'coef_por_m2': 0.28}
         ],
         'equipos': [
             {'codigo': 'EQ-PLUMA', 'descripcion': 'Grúa/pluma o elevador', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
@@ -524,7 +527,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-CEMENTO', 'material_key': 'cemento', 'descripcion': 'Cemento para mortero', 'unidad': 'bolsa', 'coef_por_m2': 0.26}
         ],
         'mano_obra': [
-            {'codigo': 'MO-MAMPO', 'descripcion': 'Oficial + ayudante de albañilería', 'unidad': 'jornal', 'coef_por_m2': 0.07}
+            {'codigo': 'MO-MAMPO', 'descripcion': 'Oficial + ayudante de albañilería', 'unidad': 'jornal', 'coef_por_m2': 0.25}
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios tubulares', 'unidad': 'día', 'dias_por_m2': 0.0045, 'min_dias': 2}
@@ -538,7 +541,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-IMPER', 'material_key': 'membrana', 'descripcion': 'Membrana asfáltica', 'unidad': 'm²', 'coef_por_m2': 1.05}
         ],
         'mano_obra': [
-            {'codigo': 'MO-TECH', 'descripcion': 'Equipo montaje de cubiertas', 'unidad': 'jornal', 'coef_por_m2': 0.055}
+            {'codigo': 'MO-TECH', 'descripcion': 'Equipo montaje de cubiertas', 'unidad': 'jornal', 'coef_por_m2': 0.20}
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios y líneas de vida', 'unidad': 'día', 'dias_por_m2': 0.0035, 'min_dias': 2}
@@ -552,7 +555,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-ABERTURAS', 'material_key': 'aberturas_metal', 'descripcion': 'Tableros y cajas de distribución', 'unidad': 'unidades', 'coef_por_m2': 0.12}
         ],
         'mano_obra': [
-            {'codigo': 'MO-ELEC', 'descripcion': 'Electricista matriculado + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.045}
+            {'codigo': 'MO-ELEC', 'descripcion': 'Electricista matriculado + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.16}
         ],
         'equipos': [
             {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Herramienta eléctrica especializada', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1}
@@ -566,7 +569,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-CAÑO-CLOACA', 'material_key': 'caños_cloacas', 'descripcion': 'Desagües cloacales y pluviales', 'unidad': 'm', 'coef_por_m2': 3.2}
         ],
         'mano_obra': [
-            {'codigo': 'MO-SANIT', 'descripcion': 'Instalador sanitario', 'unidad': 'jornal', 'coef_por_m2': 0.042}
+            {'codigo': 'MO-SANIT', 'descripcion': 'Instalador sanitario', 'unidad': 'jornal', 'coef_por_m2': 0.15}
         ],
         'equipos': [
             {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Herramientas rotativas y prensado', 'unidad': 'día', 'dias_por_m2': 0.0015, 'min_dias': 1}
@@ -579,7 +582,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-CAÑO-GAS', 'material_key': 'caños_gas', 'descripcion': 'Caños de gas y conexiones', 'unidad': 'm', 'coef_por_m2': 2.2}
         ],
         'mano_obra': [
-            {'codigo': 'MO-GAS', 'descripcion': 'Gasista matriculado', 'unidad': 'jornal', 'coef_por_m2': 0.028}
+            {'codigo': 'MO-GAS', 'descripcion': 'Gasista matriculado', 'unidad': 'jornal', 'coef_por_m2': 0.12}
         ],
         'equipos': [
             {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Herramientas de calibración y prueba', 'unidad': 'día', 'dias_por_m2': 0.001, 'min_dias': 1}
@@ -593,7 +596,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena fina seleccionada', 'unidad': 'm³', 'coef_por_m2': 0.055}
         ],
         'mano_obra': [
-            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador', 'unidad': 'jornal', 'coef_por_m2': 0.05}
+            {'codigo': 'MO-REV', 'descripcion': 'Oficial revocador', 'unidad': 'jornal', 'coef_por_m2': 0.19}
         ],
         'equipos': [
             {'codigo': 'EQ-ANDAMIOS', 'descripcion': 'Andamios y fratasadoras', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
@@ -606,7 +609,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-YESO', 'material_key': 'yeso', 'descripcion': 'Yeso de terminación', 'unidad': 'kg', 'coef_por_m2': 3.4}
         ],
         'mano_obra': [
-            {'codigo': 'MO-REV', 'descripcion': 'Terminación de yeseros', 'unidad': 'jornal', 'coef_por_m2': 0.038}
+            {'codigo': 'MO-REV', 'descripcion': 'Terminación de yeseros', 'unidad': 'jornal', 'coef_por_m2': 0.15}
         ],
         'equipos': [],
         'notas': 'Alisado y terminación fina interior.'
@@ -617,7 +620,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-REVESTIMIENTO', 'material_key': 'porcelanato', 'descripcion': 'Revestimiento cerámico/porcelanato', 'unidad': 'm²', 'coef_por_m2': 1.05}
         ],
         'mano_obra': [
-            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador especializado', 'unidad': 'jornal', 'coef_por_m2': 0.05}
+            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador especializado', 'unidad': 'jornal', 'coef_por_m2': 0.18}
         ],
         'equipos': [],
         'notas': 'Colocación de pisos y zócalos principales.'
@@ -629,7 +632,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-VIDRIO', 'material_key': 'vidrios', 'descripcion': 'DVH / vidrio templado', 'unidad': 'm²', 'coef_por_m2': 0.14}
         ],
         'mano_obra': [
-            {'codigo': 'MO-CARP', 'descripcion': 'Carpintero instalador', 'unidad': 'jornal', 'coef_por_m2': 0.04}
+            {'codigo': 'MO-CARP', 'descripcion': 'Carpintero instalador', 'unidad': 'jornal', 'coef_por_m2': 0.14}
         ],
         'equipos': [
             {'codigo': 'EQ-ELEVADOR', 'descripcion': 'Elevador/ventosas para cristales', 'unidad': 'día', 'dias_por_m2': 0.0025, 'min_dias': 1}
@@ -644,7 +647,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-SELLADOR', 'material_key': 'sellador', 'descripcion': 'Sellador acrílico', 'unidad': 'litros', 'coef_por_m2': 0.04}
         ],
         'mano_obra': [
-            {'codigo': 'MO-PINT', 'descripcion': 'Equipo de pintores', 'unidad': 'jornal', 'coef_por_m2': 0.045}
+            {'codigo': 'MO-PINT', 'descripcion': 'Equipo de pintores', 'unidad': 'jornal', 'coef_por_m2': 0.16}
         ],
         'equipos': [
             {'codigo': 'EQ-HIDROLAVADORA', 'descripcion': 'Hidrolavadora y compresor', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1}
@@ -657,7 +660,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-AISLACION', 'material_key': 'aislacion_termica', 'descripcion': 'Aislación adicional HVAC', 'unidad': 'm²', 'coef_por_m2': 0.4}
         ],
         'mano_obra': [
-            {'codigo': 'MO-SERV', 'descripcion': 'Técnicos especializados', 'unidad': 'jornal', 'coef_por_m2': 0.03}
+            {'codigo': 'MO-SERV', 'descripcion': 'Técnicos especializados', 'unidad': 'jornal', 'coef_por_m2': 0.12}
         ],
         'equipos': [],
         'notas': 'Climatización, domótica y sistemas especiales.'
@@ -668,7 +671,7 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-LIMPIEZA', 'material_key': 'limpieza', 'descripcion': 'Insumos de limpieza y protección', 'unidad': 'kit', 'coef_por_m2': 0.015}
         ],
         'mano_obra': [
-            {'codigo': 'MO-LIM', 'descripcion': 'Equipo de limpieza profesional', 'unidad': 'jornal', 'coef_por_m2': 0.02}
+            {'codigo': 'MO-LIM', 'descripcion': 'Equipo de limpieza profesional', 'unidad': 'jornal', 'coef_por_m2': 0.08}
         ],
         'equipos': [],
         'notas': 'Limpieza fina, sellado y entrega de obra.'
@@ -779,6 +782,7 @@ def analizar_plano_con_ia(archivo_pdf_base64, metros_cuadrados_manual=None):
 def calcular_materiales(superficie_m2, tipo_construccion):
     """
     Calcula la cantidad de materiales necesarios.
+    Aplica 10% de desperdicio y redondea hacia arriba a números enteros.
     """
     if tipo_construccion not in COEFICIENTES_CONSTRUCCION:
         raise ValueError(f"Tipo de construcción '{tipo_construccion}' no válido")
@@ -788,7 +792,9 @@ def calcular_materiales(superficie_m2, tipo_construccion):
     for material, coef_por_m2 in coef.items():
         if material != "factor_precio":
             cantidad = superficie_m2 * coef_por_m2
-            materiales[material] = round(cantidad, 2)
+            # Aplicar 10% de desperdicio y redondear hacia arriba
+            cantidad_con_desperdicio = cantidad * 1.10
+            materiales[material] = math.ceil(cantidad_con_desperdicio)
 
     return materiales
 
@@ -817,14 +823,16 @@ def calcular_por_etapas(superficie_m2, tipo_construccion):
     herramientas_total: Dict[str, Dict[str, int]] = {}
 
     for etapa_nombre, etapa_data in etapas_config.items():
-        # Materiales
+        # Materiales (con 10% desperdicio y redondeado a enteros)
         materiales_etapa = {}
         coef = COEFICIENTES_CONSTRUCCION[tipo_construccion]
         for material in etapa_data["materiales_etapa"]:
             if material in coef:
                 cantidad = superficie_m2 * coef[material]
                 if cantidad > 0:
-                    materiales_etapa[material] = round(cantidad, 2)
+                    # Aplicar 10% de desperdicio y redondear hacia arriba
+                    cantidad_con_desperdicio = cantidad * 1.10
+                    materiales_etapa[material] = math.ceil(cantidad_con_desperdicio)
 
         # Maquinaria (cantidad fija, sólo varían días)
         maquinaria_etapa = {}
@@ -885,6 +893,7 @@ def calcular_etapa_por_reglas(
     etapa_id=None,
     currency: str = 'ARS',
     fx_rate: Optional[Decimal] = None,
+    aplicar_desperdicio: bool = True,
 ):
     reglas = ETAPA_REGLAS_BASE.get(etapa_slug)
     nombre = etiqueta or (reglas['nombre'] if reglas else etapa_slug.replace('-', ' ').title())
@@ -917,29 +926,63 @@ def calcular_etapa_por_reglas(
 
     for material in reglas.get('materiales', []):
         coef = _to_decimal(material['coef_por_m2'], '0')
-        cantidad = _quantize_quantity(superficie_dec * coef * multiplicador_dec)
+        cantidad_base = superficie_dec * coef * multiplicador_dec
+        cantidad_base_redondeada = Decimal(str(math.ceil(float(cantidad_base))))
+
         precio = _precio_referencia(material['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
-        subtotal_materiales += _quantize_currency(cantidad * precio_moneda)
+
+        # Item principal con cantidad base
+        subtotal_base = _quantize_currency(cantidad_base_redondeada * precio_moneda)
+        subtotal_materiales += subtotal_base
         items.append({
             'tipo': 'material',
             'codigo': material['codigo'],
             'descripcion': material['descripcion'],
             'unidad': material.get('unidad', 'unidades'),
-            'cantidad': float(cantidad),
+            'cantidad': float(cantidad_base_redondeada),
             'precio_unit': float(precio_moneda),
             'precio_unit_ars': float(precio),
             'origen': 'ia',
-            'just': 'Coeficiente por m² ajustado por tipología',
+            'just': 'Coeficiente por m² (cantidad neta)',
             'material_key': material.get('material_key'),
             'moneda': currency,
-            'subtotal': float(_quantize_currency(cantidad * precio_moneda)),
+            'subtotal': float(subtotal_base),
         })
+
+        # Si desperdicio está habilitado, agregar línea adicional del 10%
+        if aplicar_desperdicio:
+            cantidad_desperdicio = Decimal(str(math.ceil(float(cantidad_base_redondeada) * 0.10)))
+            subtotal_desperdicio = _quantize_currency(cantidad_desperdicio * precio_moneda)
+            subtotal_materiales += subtotal_desperdicio
+            items.append({
+                'tipo': 'material',
+                'codigo': material['codigo'] + '-DESP',
+                'descripcion': f"⚠️ Desperdicio 10% - {material['descripcion']}",
+                'unidad': material.get('unidad', 'unidades'),
+                'cantidad': float(cantidad_desperdicio),
+                'precio_unit': float(precio_moneda),
+                'precio_unit_ars': float(precio),
+                'origen': 'ia',
+                'just': 'Reserva para desperdicio y ajustes',
+                'material_key': material.get('material_key'),
+                'moneda': currency,
+                'subtotal': float(subtotal_desperdicio),
+            })
 
     for mano_obra in reglas.get('mano_obra', []):
         coef = _to_decimal(mano_obra['coef_por_m2'], '0')
-        cantidad = superficie_dec * coef * multiplicador_dec
-        cantidad = _quantize_quantity(max(_to_decimal(1, '1'), cantidad))
+        cantidad_base = superficie_dec * coef * multiplicador_dec
+
+        # Aplicar margen extra si está habilitado
+        if aplicar_desperdicio:
+            cantidad_con_extra = float(cantidad_base) * 1.10
+            cantidad = Decimal(str(max(1, math.ceil(cantidad_con_extra))))
+            justificacion = 'Escala de jornales por m² + 10% margen'
+        else:
+            cantidad = Decimal(str(max(1, math.ceil(float(cantidad_base)))))
+            justificacion = 'Escala de jornales por m² (sin margen)'
+
         precio = _precio_referencia(mano_obra['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_mano_obra += _quantize_currency(cantidad * precio_moneda)
@@ -952,7 +995,7 @@ def calcular_etapa_por_reglas(
             'precio_unit': float(precio_moneda),
             'precio_unit_ars': float(precio),
             'origen': 'ia',
-            'just': 'Escala de jornales por m²',
+            'just': justificacion,
             'moneda': currency,
             'subtotal': float(_quantize_currency(cantidad * precio_moneda)),
         })
@@ -1088,6 +1131,7 @@ def calcular_etapas_seleccionadas(
     presupuesto_id=None,
     currency: str = 'ARS',
     fx_snapshot: Optional[ExchangeRateSnapshot] = None,
+    aplicar_desperdicio: bool = True,
 ):
     if superficie_m2 is None:
         raise ValueError('superficie_m2 es obligatoria')
@@ -1140,6 +1184,7 @@ def calcular_etapas_seleccionadas(
             etapa_id=etapa.get('id'),
             currency=currency,
             fx_rate=fx_rate,
+            aplicar_desperdicio=aplicar_desperdicio,
         )
         etapas_resultado.append(resultado)
         total_parcial += _to_decimal(resultado.get('subtotal_total'), '0')

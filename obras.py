@@ -1202,24 +1202,24 @@ def crear_avance(tarea_id):
 
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'pm', 'operario', 'administrador', 'tecnico', 'project_manager'}):
-        return jsonify(ok=False, error="Solo operarios pueden registrar avances"), 403
+        return jsonify(ok=False, error="⛔ Solo usuarios con rol de operario, PM o administrador pueden registrar avances. Contactá a tu administrador para cambiar tu rol."), 403
 
     if 'operario' in roles:
         is_responsible = tarea.responsable_id == current_user.id
         is_assigned = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=current_user.id).first()
         if not (is_responsible or is_assigned):
-            return jsonify(ok=False, error="No estás asignado a esta tarea"), 403
+            return jsonify(ok=False, error="⛔ No estás asignado a esta tarea. Pedí al PM o administrador que te asigne para poder registrar avances."), 403
 
     if not can_log_avance(tarea):
-        return jsonify(ok=False, error="Sin permisos para registrar avances en esta tarea"), 403
+        return jsonify(ok=False, error="⛔ No podés registrar avances en esta tarea. Verificá que la tarea esté en estado activo."), 403
 
     cantidad_str = str(request.form.get("cantidad", "")).replace(",", ".")
     try:
         cantidad = float(cantidad_str)
         if cantidad <= 0:
-            return jsonify(ok=False, error="La cantidad debe ser mayor a 0"), 400
+            return jsonify(ok=False, error="❌ La cantidad debe ser mayor a 0. Ingresá un valor positivo para el avance."), 400
     except (ValueError, TypeError):
-        return jsonify(ok=False, error="Cantidad inválida"), 400
+        return jsonify(ok=False, error="❌ Cantidad inválida. Ingresá un número válido (ej: 10 o 10.5)."), 400
 
     unidad = normalize_unit(tarea.unidad)
     horas = request.form.get("horas", type=float)
@@ -1284,14 +1284,18 @@ def crear_avance(tarea_id):
                     item = ItemInventario.query.get(material_id)
                     if not item:
                         db.session.rollback()
-                        return jsonify(ok=False, error=f"Material ID {material_id} no encontrado"), 400
+                        return jsonify(ok=False, error=f"❌ Material ID {material_id} no encontrado en inventario. Verificá que el material esté cargado correctamente."), 400
 
-                    # Verificar stock disponible
-                    if item.stock_actual < cantidad_consumida:
-                        db.session.rollback()
-                        return jsonify(ok=False, error=f"Stock insuficiente para {item.descripcion}. Disponible: {item.stock_actual}, Requerido: {cantidad_consumida}"), 400
+                    # Verificar stock disponible (ALERTA pero NO bloquear)
+                    stock_insuficiente = item.stock_actual < cantidad_consumida
+                    if stock_insuficiente:
+                        current_app.logger.warning(
+                            f"⚠️ Stock insuficiente para {item.descripcion}. "
+                            f"Disponible: {item.stock_actual}, Requerido: {cantidad_consumida}. "
+                            f"Permitiendo registro con stock negativo."
+                        )
 
-                    # Descontar del stock
+                    # Descontar del stock (puede quedar negativo)
                     item.stock_actual -= cantidad_consumida
 
                     # Registrar el uso de inventario
@@ -1311,7 +1315,7 @@ def crear_avance(tarea_id):
 
                 except (ValueError, IndexError) as e:
                     db.session.rollback()
-                    return jsonify(ok=False, error=f"Error procesando material: {str(e)}"), 400
+                    return jsonify(ok=False, error=f"❌ Error procesando material: {str(e)}. Verificá que la cantidad sea un número válido."), 400
 
         db.session.commit()
         return jsonify(ok=True, mensaje="Avance registrado y materiales descontados del stock")

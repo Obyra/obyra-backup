@@ -113,6 +113,8 @@ services:
       - ./templates:/app/templates:ro  # Mount templates for development
       - ./obras.py:/app/obras.py:ro  # Mount obras.py for development
       - ./services:/app/services:ro  # Mount services for development
+      - ./calculadora_ia.py:/app/calculadora_ia.py:ro  # Mount calculadora_ia for development
+      - ./blueprint_presupuestos.py:/app/blueprint_presupuestos.py:ro  # Mount presupuestos blueprint for development
     ports:
       - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
     depends_on:

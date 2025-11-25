@@ -45,7 +45,13 @@
       "Bash(winpty docker exec obyra-app cat //app//templates//presupuestos//crear.html)",
       "Bash(docker ps:*)",
       "Bash(git pull:*)",
-      "Bash(winpty docker exec obyra-app grep -n \"Materiales y Recursos\" //app//templates//obras//detalle.html)"
+      "Bash(winpty docker exec obyra-app grep -n \"Materiales y Recursos\" //app//templates//obras//detalle.html)",
+      "Bash(winpty docker exec obyra-app grep -n \"select class=\"\"form-select\"\" id=\"\"unidad_ingresada\"\"\" //app//templates//obras//mis_tareas.html)",
+      "Bash(pkill -f \"docker-compose build\")",
+      "Bash(winpty docker exec obyra-app ls -lh //app//instance//media//avances//1//)",
+      "Bash(winpty docker exec obyra-app python -m py_compile //app//calculadora_ia.py)",
+      "Bash(winpty docker exec obyra-app python -m py_compile //app//blueprint_presupuestos.py)",
+      "Bash(winpty docker exec obyra-app python -m py_compile //app//obras.py)"
     ],
     "deny": [],
     "ask": []

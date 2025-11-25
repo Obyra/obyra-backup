@@ -63,10 +63,10 @@
                                         <option value="casa_3_plantas">Casa - 3 Plantas</option>
                                     </optgroup>
                                     <optgroup label="Edificio">
-                                        <option value="edificio_3_5_pisos">Edificio de 3 a 5 pisos</option>
-                                        <option value="edificio_6_10_pisos">Edificio de 6 a 10 pisos</option>
-                                        <option value="edificio_11_15_pisos">Edificio de 11 a 15 pisos</option>
-                                        <option value="edificio_16_30_pisos">Edificio de 16 a 30 pisos</option>
+                                        <option value="edificio_3_5_pisos" data-min-pisos="3" data-max-pisos="5">Edificio de 3 a 5 pisos</option>
+                                        <option value="edificio_6_10_pisos" data-min-pisos="6" data-max-pisos="10">Edificio de 6 a 10 pisos</option>
+                                        <option value="edificio_11_15_pisos" data-min-pisos="11" data-max-pisos="15">Edificio de 11 a 15 pisos</option>
+                                        <option value="edificio_16_30_pisos" data-min-pisos="16" data-max-pisos="30">Edificio de 16 a 30 pisos</option>
                                     </optgroup>
                                     <optgroup label="Otros">
                                         <option value="galpon">Galpones</option>
@@ -76,22 +76,34 @@
                                     </optgroup>
                                 </select>
                             </div>
+                            <div class="col-md-6" id="campo_cantidad_pisos" style="display: none;">
+                                <label for="cantidad_pisos" class="form-label fw-bold">
+                                    <i class="fas fa-building text-primary"></i> Cantidad de Pisos *
+                                </label>
+                                <input type="number" class="form-control form-control-lg"
+                                       id="cantidad_pisos" name="cantidad_pisos"
+                                       min="1" max="50" step="1"
+                                       placeholder="Ej: 4">
+                                <div class="form-text" id="rango_pisos_text">Especifica la cantidad exacta de pisos</div>
+                            </div>
                         </div>
 
                         <!-- Segunda fila: Ubicación y Tipo de Construcción -->
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <label for="ubicacion" class="form-label fw-bold">
-                                    <i class="fas fa-map-marker-alt text-danger"></i> Ubicación *
+                                    <i class="fas fa-map-marker-alt text-muted"></i> Ubicación (opcional)
                                 </label>
                                 <div class="input-group input-group-lg">
-                                    <input type="text" class="form-control" id="ubicacion" name="ubicacion" required
-                                           placeholder="Dirección completa o zona">
+                                    <input type="text" class="form-control" id="ubicacion" name="ubicacion"
+                                           placeholder="Dirección completa o zona (opcional)">
                                     <button class="btn btn-outline-secondary" type="button" id="btnValidarUbicacion">
                                         <i class="fas fa-search-location"></i>
                                     </button>
                                 </div>
-                                <div class="form-text" id="ubicacion_feedback">Ciudad, provincia o dirección específica</div>
+                                <div class="form-text text-info" id="ubicacion_feedback">
+                                    <i class="fas fa-info-circle"></i> Recomendamos agregar ubicación para visualización en mapa
+                                </div>
                                 <div id="ubicacion_sugerencias" class="list-group shadow-sm mt-2 d-none"></div>
                                 <div id="ubicacion_mapa_wrapper" class="mt-3 d-none">
                                     <div id="ubicacion_mapa" style="height: 220px; border-radius: 12px;"></div>
@@ -130,11 +142,17 @@
                                 <label for="superficie_m2" class="form-label fw-bold">
                                     <i class="fas fa-ruler-combined text-success"></i> Superficie (m²) *
                                 </label>
-                                <input type="number" class="form-control form-control-lg" 
-                                       id="superficie_m2" name="superficie_m2" 
+                                <input type="number" class="form-control form-control-lg"
+                                       id="superficie_m2" name="superficie_m2"
                                        step="0.01" min="1" required
                                        placeholder="120.50">
                                 <div class="form-text">Metros cuadrados totales</div>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="aplicar_desperdicio" checked>
+                                    <label class="form-check-label" for="aplicar_desperdicio">
+                                        <i class="fas fa-percent text-warning"></i> Aplicar 10% de desperdicio en materiales
+                                    </label>
+                                </div>
                             </div>
                             <div class="col-md-4">
                                 <label for="fecha_inicio" class="form-label fw-bold">
@@ -383,7 +401,15 @@
             <div class="modal-body">
                 <div class="row">
                     <div class="col-md-8">
-                        <h6 class="mb-3"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="seleccionarTodasEtapas">
+                                <label class="form-check-label" for="seleccionarTodasEtapas">
+                                    Seleccionar todas
+                                </label>
+                            </div>
+                        </div>
                         <div class="row" id="etapasPredefinidas">
                             <!-- Se cargarán con JavaScript -->
                         </div>
@@ -527,6 +553,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ocultarSugerencias();
     });
+
+    // Event listener para checkbox "Seleccionar todas"
+    const checkboxSeleccionarTodas = document.getElementById('seleccionarTodasEtapas');
+    if (checkboxSeleccionarTodas) {
+        checkboxSeleccionarTodas.addEventListener('change', function() {
+            const checkboxesEtapas = document.querySelectorAll('.etapa-predefinida-checkbox');
+            const marcar = this.checked;
+
+            checkboxesEtapas.forEach(checkbox => {
+                if (checkbox.checked !== marcar) {
+                    checkbox.checked = marcar;
+                    // Extraer el slug del ID del checkbox (formato: etapa_{slug})
+                    const slug = checkbox.id.replace('etapa_', '');
+                    toggleEtapaPredefinida(slug);
+                }
+            });
+        });
+    }
+
+    // Event listener para mostrar campo de cantidad de pisos en edificios
+    const tipoObraSelect = document.getElementById('tipo_obra');
+    const campoCantidadPisos = document.getElementById('campo_cantidad_pisos');
+    const cantidadPisosInput = document.getElementById('cantidad_pisos');
+    const rangoPisosText = document.getElementById('rango_pisos_text');
+
+    if (tipoObraSelect && campoCantidadPisos) {
+        tipoObraSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const minPisos = selectedOption.dataset.minPisos;
+            const maxPisos = selectedOption.dataset.maxPisos;
+
+            if (minPisos && maxPisos) {
+                // Es un edificio, mostrar campo
+                campoCantidadPisos.style.display = 'block';
+                cantidadPisosInput.min = minPisos;
+                cantidadPisosInput.max = maxPisos;
+                cantidadPisosInput.required = true;
+                // Sugerir valor medio del rango
+                const valorMedio = Math.round((parseInt(minPisos) + parseInt(maxPisos)) / 2);
+                cantidadPisosInput.value = valorMedio;
+                cantidadPisosInput.placeholder = `Entre ${minPisos} y ${maxPisos} pisos`;
+                rangoPisosText.textContent = `Rango permitido: ${minPisos} a ${maxPisos} pisos`;
+            } else {
+                // No es edificio, ocultar campo
+                campoCantidadPisos.style.display = 'none';
+                cantidadPisosInput.required = false;
+                cantidadPisosInput.value = '';
+            }
+        });
+    }
 });
 
 function actualizarFeedbackUbicacion(texto, tipo = 'muted') {
@@ -881,7 +957,7 @@ function cargarEtapasPredefinidas() {
         const etapaHTML = `
             <div class="col-md-6 mb-2">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="${checkboxId}" ${yaSeleccionada ? 'checked' : ''}
+                    <input class="form-check-input etapa-predefinida-checkbox" type="checkbox" id="${checkboxId}" ${yaSeleccionada ? 'checked' : ''}
                            onchange="toggleEtapaPredefinida('${etapa.slug}')">
                     <label class="form-check-label" for="${checkboxId}">
                         <strong>${etapa.nombre}</strong>
@@ -892,6 +968,21 @@ function cargarEtapasPredefinidas() {
         `;
         container.insertAdjacentHTML('beforeend', etapaHTML);
     });
+
+    // Actualizar el estado del checkbox "Seleccionar todas"
+    actualizarCheckboxSeleccionarTodas();
+}
+
+function actualizarCheckboxSeleccionarTodas() {
+    const checkboxTodas = document.getElementById('seleccionarTodasEtapas');
+    if (!checkboxTodas) return;
+
+    const checkboxesEtapas = document.querySelectorAll('.etapa-predefinida-checkbox');
+    const todasMarcadas = Array.from(checkboxesEtapas).every(cb => cb.checked);
+    const algunaMarcada = Array.from(checkboxesEtapas).some(cb => cb.checked);
+
+    checkboxTodas.checked = todasMarcadas;
+    checkboxTodas.indeterminate = algunaMarcada && !todasMarcadas;
 }
 
 function toggleEtapaPredefinida(slug) {
@@ -909,6 +1000,7 @@ function toggleEtapaPredefinida(slug) {
         etapasSeleccionadasIA.delete(slug);
     }
     limpiarResultadosEtapasIA();
+    actualizarCheckboxSeleccionarTodas();
     console.log(`📋 Etapas seleccionadas: ${etapasSeleccionadasArray.length}`);
 }
 
@@ -1081,6 +1173,8 @@ function solicitarCalculoEtapas(etapas) {
     const currency = monedaSelectEl ? monedaSelectEl.value : 'ARS';
     updateCurrencyFormatter(currency);
 
+    const aplicarDesperdicio = document.getElementById('aplicar_desperdicio')?.checked ?? true;
+
     const payload = {
         etapa_ids: etapas.map(etapa => ({
             slug: etapa.slug || slugifyEtapa(etapa.nombre),
@@ -1092,7 +1186,8 @@ function solicitarCalculoEtapas(etapas) {
         parametros_contexto: contexto,
         presupuesto_id: presupuestoId,
         currency: currency,
-        moneda: currency
+        moneda: currency,
+        aplicar_desperdicio: aplicarDesperdicio
     };
 
     const modalEl = document.getElementById('modalResultadoEtapasIA');

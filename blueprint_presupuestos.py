@@ -44,13 +44,19 @@ def lista():
         if estado:
             query = query.filter_by(estado=estado)
 
+        # Filtro de vigencia basado en fecha_vigencia
         if vigencia == 'vigentes':
             query = query.filter(
                 Presupuesto.estado.in_(['borrador', 'enviado', 'aprobado']),
-                Presupuesto.vigente == True
+                or_(
+                    Presupuesto.fecha_vigencia.is_(None),
+                    Presupuesto.fecha_vigencia >= datetime.utcnow()
+                )
             )
         elif vigencia == 'vencidos':
-            query = query.filter(Presupuesto.vigente == False)
+            query = query.filter(
+                Presupuesto.fecha_vigencia < datetime.utcnow()
+            )
 
         if obra_id:
             query = query.filter_by(obra_id=obra_id)
@@ -622,15 +628,15 @@ def confirmar_como_obra(id):
 
         # Solo administradores pueden confirmar presupuestos
         if not (current_user.role == 'admin' or current_user.es_admin()):
-            return jsonify({'error': 'No tiene permisos para confirmar presupuestos'}), 403
+            return jsonify({'error': '⛔ Solo administradores pueden confirmar presupuestos como obras. Contactá a tu administrador.'}), 403
 
         # Verificar que el presupuesto no esté ya confirmado
         if presupuesto.confirmado_como_obra:
-            return jsonify({'error': 'Este presupuesto ya fue confirmado como obra'}), 400
+            return jsonify({'error': '❌ Este presupuesto ya fue confirmado como obra. No se puede confirmar dos veces.'}), 400
 
         # Verificar que tenga ítems
         if presupuesto.items.count() == 0:
-            return jsonify({'error': 'No se puede confirmar un presupuesto sin ítems'}), 400
+            return jsonify({'error': '❌ No se puede confirmar un presupuesto sin ítems. Agregá al menos un ítem o usá la calculadora IA primero.'}), 400
 
         # Obtener datos del formulario
         data = request.get_json() or {}
@@ -816,7 +822,8 @@ def confirmar_como_obra(id):
                         nombre=item.descripcion,
                         estado='pendiente',
                         cantidad_planificada=float(item.cantidad) if item.cantidad else 0,
-                        unidad=item.unidad or 'un'
+                        unidad=item.unidad or 'un',
+                        item_presupuesto_id=item.id  # Vincular tarea con item del presupuesto
                     )
                     db.session.add(tarea)
 
@@ -852,11 +859,11 @@ def editar_obra(id):
         user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
         roles_edicion = ['admin', 'pm', 'administrador', 'tecnico']
         if not (user_role in roles_edicion or current_user.es_admin()):
-            return jsonify({'error': 'No tiene permisos para editar presupuestos'}), 403
+            return jsonify({'error': '⛔ Solo administradores, PM y técnicos pueden editar presupuestos. Contactá a tu administrador.'}), 403
 
         # No se puede editar si ya está confirmado como obra
         if presupuesto.confirmado_como_obra:
-            return jsonify({'error': 'No se puede editar un presupuesto ya confirmado como obra'}), 400
+            return jsonify({'error': '❌ No se puede editar un presupuesto ya confirmado como obra. Si necesitás hacer cambios, contactá al administrador para revertir la confirmación.'}), 400
 
         data = request.get_json() or {}
 
@@ -1105,7 +1112,7 @@ def eliminar(id):
 
         if not es_admin:
             current_app.logger.warning(f'Usuario {current_user.id} sin permisos de admin')
-            return jsonify({'error': 'No tienes permisos para eliminar presupuestos'}), 403
+            return jsonify({'error': '⛔ Solo administradores pueden eliminar presupuestos. Contactá a tu administrador.'}), 403
 
         org_id = get_current_org_id()
         current_app.logger.info(f'Org ID obtenido: {org_id}')
@@ -1131,7 +1138,7 @@ def eliminar(id):
         # Verificar si el presupuesto está confirmado como obra
         if presupuesto.confirmado_como_obra:
             current_app.logger.warning(f'Intento de eliminar presupuesto {id} confirmado como obra')
-            return jsonify({'error': 'No se puede eliminar un presupuesto que ya fue confirmado como obra'}), 400
+            return jsonify({'error': '❌ No se puede eliminar un presupuesto que ya fue confirmado como obra. Primero debés revertir la confirmación.'}), 400
 
         # Administradores pueden eliminar presupuestos en cualquier estado
         # (excepto confirmados como obra)
@@ -1269,6 +1276,90 @@ def restaurar(id):
         return jsonify({'error': 'Error al restaurar el presupuesto'}), 500
 
 
+@presupuestos_bp.route('/<int:id>/revertir-confirmacion', methods=['POST'])
+@login_required
+def revertir_confirmacion_obra(id):
+    """Revertir confirmación de obra - SOLO ADMINISTRADORES
+
+    Esta función permite a los administradores deshacer la confirmación de un
+    presupuesto como obra. ATENCIÓN: Esto puede causar inconsistencias si la
+    obra ya tiene avances registrados.
+    """
+    try:
+        # Solo administradores pueden revertir confirmaciones
+        if not (current_user.role == 'admin' or current_user.es_admin()):
+            return jsonify({
+                'error': '⛔ Solo administradores pueden revertir confirmaciones de obra. Esta operación requiere privilegios especiales.'
+            }), 403
+
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'error': '❌ Sin organización activa'}), 400
+
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first_or_404()
+
+        # Verificar que el presupuesto esté confirmado como obra
+        if not presupuesto.confirmado_como_obra:
+            return jsonify({
+                'error': '❌ Este presupuesto no está confirmado como obra. No hay nada que revertir.'
+            }), 400
+
+        # Obtener la obra asociada
+        from models import Obra, TareaEtapa, TareaAvance, Etapa
+        obra = None
+        if presupuesto.obra_id:
+            obra = Obra.query.get(presupuesto.obra_id)
+
+        # Verificar si hay avances registrados en la obra (esto es una operación delicada)
+        tiene_avances = False
+        mensaje_advertencia = ""
+
+        if obra:
+            # Contar avances en todas las tareas de la obra
+            avances_count = db.session.query(TareaAvance).join(TareaEtapa).filter(
+                TareaEtapa.etapa_id.in_(
+                    db.session.query(Etapa.id).filter(Etapa.obra_id == obra.id)
+                )
+            ).count()
+
+            tiene_avances = avances_count > 0
+
+            if tiene_avances:
+                mensaje_advertencia = f"⚠️ ADVERTENCIA: La obra tiene {avances_count} avance(s) registrado(s). "
+
+        # Revertir la confirmación
+        presupuesto.confirmado_como_obra = False
+        presupuesto.obra_id = None
+        presupuesto.estado = 'borrador'  # Volver a borrador para permitir edición
+
+        # NO eliminamos la obra porque puede tener datos importantes
+        # El administrador debe manejar eso manualmente si es necesario
+
+        db.session.commit()
+
+        current_app.logger.info(
+            f"Admin {current_user.id} revirtió confirmación de obra para presupuesto {presupuesto.numero}"
+        )
+
+        return jsonify({
+            'exito': True,
+            'mensaje': f'{mensaje_advertencia}Confirmación revertida exitosamente. El presupuesto {presupuesto.numero} volvió a estado borrador.',
+            'presupuesto_numero': presupuesto.numero,
+            'tenia_avances': tiene_avances,
+            'obra_id': obra.id if obra else None
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.revertir_confirmacion_obra: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({
+            'error': f'❌ Error al revertir la confirmación: {str(e)}'
+        }), 500
+
+
 @presupuestos_bp.route('/guardar', methods=['POST'])
 @login_required
 def guardar_presupuesto():
@@ -1365,6 +1456,7 @@ def calcular_etapas_ia():
         parametros_contexto = data.get('parametros_contexto', {})
         presupuesto_id = data.get('presupuesto_id')
         currency = (data.get('currency') or data.get('moneda', 'ARS')).upper()
+        aplicar_desperdicio = data.get('aplicar_desperdicio', True)  # Por defecto True
 
         # Obtener tipo de cambio si es necesario
         fx_snapshot = None
@@ -1394,7 +1486,8 @@ def calcular_etapas_ia():
             contexto=parametros_contexto,
             presupuesto_id=presupuesto_id,
             currency=currency,
-            fx_snapshot=fx_snapshot
+            fx_snapshot=fx_snapshot,
+            aplicar_desperdicio=aplicar_desperdicio
         )
 
         return jsonify(resultado), 200

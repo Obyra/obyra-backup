@@ -118,7 +118,8 @@
                     </li>
                     {% endif %}
 
-                    <!-- Marketplaces -->
+                    <!-- Marketplaces - DESHABILITADO TEMPORALMENTE -->
+                    <!-- TODO: Reactivar cuando esté listo para desarrollo
                     {% if current_user.puede_acceder_modulo('marketplaces') and has_endpoint('marketplaces.index') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarMarketplaces" role="button" data-bs-toggle="dropdown">
@@ -143,6 +144,7 @@
                         </ul>
                     </li>
                     {% endif %}
+                    -->
                     
                     {% if current_user.puede_acceder_modulo('reportes') and has_endpoint('reportes.reporte_obras') %}
                     <li class="nav-item dropdown">

@@ -112,6 +112,8 @@
                                 <tr>
                                     <th scope="col">Fecha</th>
                                     <th scope="col">Cantidad</th>
+                                    <th scope="col">% Avance</th>
+                                    <th scope="col">Fotos</th>
                                     <th scope="col">Notas</th>
                                     <th scope="col">Estado</th>
                                     <th scope="col">Registrado por</th>
@@ -129,6 +131,23 @@
                                         {% endif %}
                                         {% if avance.horas %}
                                             <div class="text-muted small">{{ avance.horas|round(2) }} h</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if detalle.cantidad_planificada and detalle.cantidad_planificada > 0 and avance.cantidad %}
+                                            {% set porcentaje = (avance.cantidad / detalle.cantidad_planificada * 100)|round(1) %}
+                                            <span class="badge bg-primary">{{ porcentaje }}%</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if avance.fotos %}
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="verFotosAvance({{ avance.id }})">
+                                                <i class="fas fa-camera me-1"></i>{{ avance.fotos|length }}
+                                            </button>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
                                         {% endif %}
                                     </td>
                                     <td style="max-width: 260px;">
@@ -357,5 +376,61 @@ document.getElementById('formRegistrarAvance').addEventListener('submit', async 
         submitBtn.disabled = false;
     }
 });
+
+// Función para ver fotos de un avance específico en modal
+function verFotosAvance(avanceId) {
+    // Buscar el avance en los datos
+    const avances = {{ avances|tojson }};
+    const avance = avances.find(a => a.id === avanceId);
+
+    if (!avance || !avance.fotos || avance.fotos.length === 0) {
+        alert('No hay fotos disponibles para este avance.');
+        return;
+    }
+
+    // Construir el contenido del modal con las fotos
+    const modalBody = document.getElementById('modalFotosBody');
+    modalBody.innerHTML = '';
+
+    avance.fotos.forEach((foto, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-6 col-lg-4 mb-3';
+        col.innerHTML = `
+            <div class="card">
+                <img src="${foto.url}" class="card-img-top" alt="Foto ${index + 1}"
+                     style="height: 200px; object-fit: cover; cursor: pointer;"
+                     onclick="window.open('${foto.url}', '_blank')">
+                <div class="card-body p-2">
+                    <small class="text-muted">Foto ${index + 1}</small>
+                </div>
+            </div>
+        `;
+        modalBody.appendChild(col);
+    });
+
+    // Mostrar el modal
+    const modal = new bootstrap.Modal(document.getElementById('modalFotos'));
+    modal.show();
+}
 </script>
+
+<!-- Modal para ver fotos de avances -->
+<div class="modal fade" id="modalFotos" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-camera me-2"></i>Fotos del Avance</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row" id="modalFotosBody">
+                    <!-- Las fotos se cargan dinámicamente aquí -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
