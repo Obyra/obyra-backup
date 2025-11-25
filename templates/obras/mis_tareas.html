@@ -229,6 +229,8 @@
 </div>
 
 <script>
+const CSRF_TOKEN = "{{ csrf_token() }}";
+
 // Simple modal setup - preselect unit and setup auto-conversion
 (() => {
   const modal = document.getElementById('modalAvance');
@@ -284,7 +286,8 @@ document.getElementById('formAvance').addEventListener('submit', async function(
         const response = await fetch(`/obras/api/tareas/${tareaId}/avances`, {
             method: 'POST',
             headers: {
-                'X-From-Dashboard': '1'  // Required header for operarios
+                'X-From-Dashboard': '1',  // Required header for operarios
+                'X-CSRFToken': CSRF_TOKEN
             },
             body: formData
         });
