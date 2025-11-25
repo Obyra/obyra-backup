@@ -179,12 +179,19 @@
                     <div class="mb-3">
                         <label for="cantidad_ingresada" class="form-label">Cantidad ejecutada *</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="cantidad_ingresada" name="cantidad_ingresada" 
+                            <input type="number" class="form-control" id="cantidad_ingresada" name="cantidad_ingresada"
                                    step="0.01" min="0" required>
-                            <input type="text" id="unidad_display" class="form-control" style="max-width:120px" readonly>
-                            <input type="hidden" id="unidad_ingresada" name="unidad_ingresada">
+                            <select class="form-select" id="unidad_ingresada" name="unidad_ingresada" style="max-width:150px" required>
+                                <option value="m2">m² (metros cuadrados)</option>
+                                <option value="m3">m³ (metros cúbicos)</option>
+                                <option value="ml">ml (metros lineales)</option>
+                                <option value="un">un (unidades)</option>
+                                <option value="kg">kg (kilogramos)</option>
+                                <option value="h">h (horas)</option>
+                                <option value="lt">lt (litros)</option>
+                            </select>
                         </div>
-                        <div class="form-text">Unidad fija según la tarea (no se puede cambiar)</div>
+                        <div class="form-text">Selecciona la unidad de medida correspondiente a la tarea</div>
                     </div>
                     
                     <div class="mb-3">
@@ -237,11 +244,9 @@
     document.getElementById('rendimiento').value = r;
     document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
 
-    // Set readonly unit display and hidden value
-    const unitDisplay = document.getElementById('unidad_display');
-    const unitHidden = document.getElementById('unidad_ingresada');
-    unitDisplay.value = base;
-    unitHidden.value = base;
+    // Preselect the unit in the dropdown
+    const unitSelect = document.getElementById('unidad_ingresada');
+    unitSelect.value = base;
 
     // autoconversión cantidad↔horas si hay rendimiento
     const qty = document.getElementById('cantidad_ingresada');
