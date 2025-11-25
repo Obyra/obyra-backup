@@ -80,42 +80,83 @@ def lista():
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     categoria_id = request.args.get('categoria', '')
     buscar = request.args.get('buscar', '')
-    tipo = request.args.get('tipo', '')
     stock_bajo = request.args.get('stock_bajo', '')
-    
+
     query = ItemInventario.query.join(CategoriaInventario)
-    
+
     if categoria_id:
         query = query.filter(ItemInventario.categoria_id == categoria_id)
-    
-    if tipo:
-        query = query.filter(CategoriaInventario.tipo == tipo)
-    
+
+    # Improved search with case-insensitive partial matching
     if buscar:
+        buscar_pattern = f'%{buscar}%'
         query = query.filter(
             db.or_(
-                ItemInventario.codigo.contains(buscar),
-                ItemInventario.nombre.contains(buscar),
-                ItemInventario.descripcion.contains(buscar)
+                ItemInventario.codigo.ilike(buscar_pattern),
+                ItemInventario.nombre.ilike(buscar_pattern),
+                ItemInventario.descripcion.ilike(buscar_pattern)
             )
         )
-    
+
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
-    
+
     items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
+
+    # Get confirmed obras for each item
+    from models.projects import Obra
+    from models.budgets import Presupuesto
+
+    items_con_obras = []
+    for item in items:
+        obras_confirmadas = db.session.query(Obra).join(
+            UsoInventario, Obra.id == UsoInventario.obra_id
+        ).join(
+            Presupuesto, Obra.id == Presupuesto.obra_id
+        ).filter(
+            UsoInventario.item_id == item.id,
+            db.or_(
+                Presupuesto.confirmado_como_obra == True,
+                Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
+            )
+        ).distinct().all()
+
+        items_con_obras.append({
+            'item': item,
+            'obras': obras_confirmadas
+        })
+
+    # Load new inventory categories
+    org_id = get_current_org_id() or current_user.organizacion_id
+    categorias_nuevas = []
+    if org_id:
+        categorias_nuevas = InventoryCategory.query.filter_by(
+            company_id=org_id,
+            is_active=True,
+            parent_id=None
+        ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
+
     categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
-    
-    return render_template('inventario/lista.html', 
-                         items=items, 
+
+    # Get all obras for dropdowns
+    obras_disponibles = Obra.query.join(Presupuesto).filter(
+        db.or_(
+            Presupuesto.confirmado_como_obra == True,
+            Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
+        )
+    ).distinct().all()
+
+    return render_template('inventario/lista.html',
+                         items_con_obras=items_con_obras,
                          categorias=categorias,
+                         categorias_nuevas=categorias_nuevas,
                          categoria_id=categoria_id,
                          buscar=buscar,
-                         tipo=tipo,
-                         stock_bajo=stock_bajo)
+                         stock_bajo=stock_bajo,
+                         obras_disponibles=obras_disponibles)
 
 @inventario_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
@@ -706,3 +747,120 @@ def analisis():
         current_app.logger.error(traceback.format_exc())
         flash('Error al generar el análisis de inventario', 'danger')
         return redirect(url_for('inventario.lista'))
+
+
+@inventario_bp.route('/dar_baja/<int:id>', methods=['POST'])
+@login_required
+def dar_baja(id):
+    """Da de baja un item de inventario por uso o rotura"""
+    if not current_user.puede_acceder_modulo('inventario'):
+        return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
+
+    try:
+        item = ItemInventario.query.get_or_404(id)
+
+        cantidad = float(request.form.get('cantidad', 0))
+        motivo = request.form.get('motivo', '')
+        obra_id = request.form.get('obra_id')
+        observaciones = request.form.get('observaciones', '')
+
+        if cantidad <= 0:
+            return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
+
+        if cantidad > float(item.stock_actual):
+            return jsonify({'success': False, 'message': 'No hay suficiente stock disponible'}), 400
+
+        # Create movement record
+        movimiento = MovimientoInventario(
+            item_id=item.id,
+            tipo='salida',
+            cantidad=cantidad,
+            motivo=motivo,
+            observaciones=observaciones,
+            usuario_id=current_user.id
+        )
+        db.session.add(movimiento)
+
+        # Update stock
+        item.stock_actual -= cantidad
+
+        # If it's usage on an obra, record it
+        if obra_id and motivo == 'Uso en obra':
+            uso = UsoInventario(
+                obra_id=int(obra_id),
+                item_id=item.id,
+                cantidad_usada=cantidad,
+                fecha_uso=date.today(),
+                observaciones=observaciones,
+                usuario_id=current_user.id
+            )
+            db.session.add(uso)
+
+        db.session.commit()
+        flash(f'Se dio de baja {cantidad} {item.unidad} de {item.nombre}', 'success')
+        return jsonify({'success': True})
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en dar_baja: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@inventario_bp.route('/trasladar/<int:id>', methods=['POST'])
+@login_required
+def trasladar(id):
+    """Traslada un item de inventario a otro depósito"""
+    if not current_user.puede_acceder_modulo('inventario'):
+        return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
+
+    try:
+        item = ItemInventario.query.get_or_404(id)
+
+        cantidad = float(request.form.get('cantidad', 0))
+        obra_destino_id = request.form.get('obra_destino_id')
+        observaciones = request.form.get('observaciones', '')
+
+        if cantidad <= 0:
+            return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
+
+        if cantidad > float(item.stock_actual):
+            return jsonify({'success': False, 'message': 'No hay suficiente stock disponible'}), 400
+
+        if not obra_destino_id:
+            return jsonify({'success': False, 'message': 'Debe seleccionar un depósito destino'}), 400
+
+        # Create movement record for transfer
+        movimiento = MovimientoInventario(
+            item_id=item.id,
+            tipo='salida',
+            cantidad=cantidad,
+            motivo=f'Traslado a obra',
+            observaciones=observaciones,
+            usuario_id=current_user.id
+        )
+        db.session.add(movimiento)
+
+        # Update stock (subtract from current location)
+        item.stock_actual -= cantidad
+
+        # Record usage in destination obra
+        uso = UsoInventario(
+            obra_id=int(obra_destino_id),
+            item_id=item.id,
+            cantidad_usada=cantidad,
+            fecha_uso=date.today(),
+            observaciones=f'Traslado desde depósito. {observaciones}',
+            usuario_id=current_user.id
+        )
+        db.session.add(uso)
+
+        db.session.commit()
+
+        obra_destino = Obra.query.get(obra_destino_id)
+        flash(f'Se trasladaron {cantidad} {item.unidad} de {item.nombre} a {obra_destino.nombre}', 'success')
+        return jsonify({'success': True})
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en trasladar: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500

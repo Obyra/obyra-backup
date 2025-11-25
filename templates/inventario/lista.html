@@ -13,16 +13,19 @@
                         <i class="fas fa-chart-line me-1"></i>Análisis y Reportes
                     </a>
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-outline-warning me-2">
-                        <i class="fas fa-tools me-1"></i>Uso en Obra
+                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-shopping-cart me-1"></i>Compras
                     </a>
-                    <a href="{{ url_for('inventario.crear') }}" class="btn btn-primary">
+                    <a href="{{ url_for('inventario.crear') }}" class="btn btn-primary me-2">
                         <i class="fas fa-plus me-1"></i>Nuevo Item
                     </a>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalGestionCategorias">
+                        <i class="fas fa-tags me-1"></i>Categorías
+                    </button>
                     {% endif %}
                     {% if current_user.rol == 'administrador' %}
                     <a href="{{ url_for('inventario.categorias') }}" class="btn btn-outline-secondary ms-1">
-                        <i class="fas fa-tags me-1"></i>Categorías
+                        <i class="fas fa-cog me-1"></i>Gestión Global
                     </a>
                     {% endif %}
                 </div>
@@ -34,19 +37,17 @@
     <div class="card mb-4">
         <div class="card-body">
             <form method="GET" class="row g-3">
-                <div class="col-md-2">
-                    <label for="tipo" class="form-label">Tipo</label>
-                    <select class="form-select" id="tipo" name="tipo">
-                        <option value="">Todos</option>
-                        <option value="material" {{ 'selected' if tipo == 'material' }}>Material</option>
-                        <option value="herramienta" {{ 'selected' if tipo == 'herramienta' }}>Herramienta</option>
-                        <option value="maquinaria" {{ 'selected' if tipo == 'maquinaria' }}>Maquinaria</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label for="categoria" class="form-label">Categoría</label>
                     <select class="form-select" id="categoria" name="categoria">
                         <option value="">Todas las categorías</option>
+                        {% if categorias_nuevas %}
+                            {% for categoria in categorias_nuevas %}
+                            <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id|string }}>
+                                {{ categoria.nombre }}
+                            </option>
+                            {% endfor %}
+                        {% endif %}
                         {% for categoria in categorias %}
                         <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id|string }}>
                             {{ categoria.nombre }}
@@ -54,10 +55,13 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <label for="buscar" class="form-label">Buscar</label>
-                    <input type="text" class="form-control" id="buscar" name="buscar" 
-                           value="{{ buscar }}" placeholder="Código, nombre o descripción...">
+                    <input type="text" class="form-control" id="buscar" name="buscar"
+                           value="{{ buscar }}" placeholder="Buscar por código, nombre o descripción (ej: cemento, MAT, arena)...">
+                    <div class="form-text text-muted">
+                        <i class="fas fa-info-circle me-1"></i>Busca coincidencias parciales en cualquier parte del texto
+                    </div>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
                     <div class="form-check me-3">
@@ -78,77 +82,114 @@
         </div>
     </div>
     
-    <!-- Lista de items -->
+    <!-- Tabla de items -->
     <div class="row">
-        {% if items %}
-            {% for item in items %}
-            <div class="col-lg-6 col-xl-4 mb-4">
-                <div class="card h-100 shadow-sm {{ 'border-warning' if item.necesita_reposicion }}">
-                    {% if item.necesita_reposicion %}
-                    <div class="card-header bg-warning text-dark">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="fw-bold">{{ item.codigo }}</span>
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="card-header">
-                        <h6 class="mb-0 fw-bold">{{ item.codigo }}</h6>
-                    </div>
-                    {% endif %}
-                    
-                    <div class="card-body">
-                        <h6 class="card-title">{{ item.nombre }}</h6>
-                        <p class="text-muted mb-2">
-                            <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
-                            <span class="badge bg-info">{{ item.categoria.tipo.title() }}</span>
-                        </p>
-                        
-                        {% if item.descripcion %}
-                        <p class="text-muted mb-3 small">
-                            {{ item.descripcion[:80] }}{% if item.descripcion|length > 80 %}...{% endif %}
-                        </p>
-                        {% endif %}
-                        
-                        <div class="row text-center mb-3">
-                            <div class="col-4">
-                                <strong class="d-block {{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">
+        <div class="col-12">
+            {% if items_con_obras %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th class="text-center">Stock Actual</th>
+                            <th class="text-center">Stock Mínimo</th>
+                            <th>Depósito</th>
+                            <th class="text-center" style="width: 200px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item_data in items_con_obras %}
+                        {% set item = item_data.item %}
+                        {% set obras = item_data.obras %}
+                        <tr class="{{ 'table-warning' if item.necesita_reposicion }}" id="item-row-{{ item.id }}">
+                            <td>
+                                <strong>{{ item.codigo }}</strong>
+                                {% if item.necesita_reposicion %}
+                                <i class="fas fa-exclamation-triangle text-warning ms-1" title="Necesita reposición"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div>{{ item.nombre }}</div>
+                                {% if item.descripcion %}
+                                <small class="text-muted">{{ item.descripcion[:60] }}{% if item.descripcion|length > 60 %}...{% endif %}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                                <br>
+                                <span class="badge bg-info mt-1">{{ item.categoria.tipo.title() }}</span>
+                            </td>
+                            <td class="text-center">
+                                <strong class="{{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">
                                     {{ item.stock_actual|numero(2) }}
                                 </strong>
-                                <small class="text-muted">Stock Actual</small>
-                            </div>
-                            <div class="col-4">
-                                <strong class="text-warning d-block">{{ item.stock_minimo|numero(2) }}</strong>
-                                <small class="text-muted">Stock Mínimo</small>
-                            </div>
-                            <div class="col-4">
-                                <strong class="text-primary d-block">{{ item.precio_promedio|moneda }}</strong>
-                                <small class="text-muted">Precio Prom.</small>
-                            </div>
-                        </div>
-                        
-                        <p class="text-muted mb-0">
-                            <i class="fas fa-ruler me-1"></i>Unidad: {{ item.unidad }}
-                        </p>
-                        
-                        {% if item.necesita_reposicion %}
-                        <div class="alert alert-warning mt-2 mb-0 py-2">
-                            <small><i class="fas fa-exclamation-triangle me-1"></i>Necesita reposición</small>
-                        </div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="card-footer bg-transparent">
-                        <div class="d-grid">
-                            <a href="{{ url_for('inventario.detalle', id=item.id) }}" class="btn btn-outline-primary">
-                                <i class="fas fa-eye me-1"></i>Ver Detalles
-                            </a>
-                        </div>
-                    </div>
-                </div>
+                                <br>
+                                <small class="text-muted">{{ item.unidad }}</small>
+                            </td>
+                            <td class="text-center">
+                                <strong class="text-warning">{{ item.stock_minimo|numero(2) }}</strong>
+                            </td>
+                            <td>
+                                {% if obras %}
+                                    <div class="d-flex flex-column gap-1">
+                                        {% for obra in obras %}
+                                        <a href="{{ url_for('obras.ver_obra', id=obra.id) }}"
+                                           class="badge bg-primary text-decoration-none"
+                                           title="{{ obra.nombre }}">
+                                            <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion or 'Sin dirección' }}
+                                        </a>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{{ url_for('inventario.detalle', id=item.id) }}"
+                                       class="btn btn-outline-primary btn-sm"
+                                       title="Ver detalles">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if current_user.rol in ['administrador', 'tecnico'] %}
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="fas fa-tools"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li>
+                                                <a class="dropdown-item" href="#"
+                                                   onclick="abrirModalBaja('{{ item.id }}', '{{ item.nombre }}', 'uso'); return false;">
+                                                    <i class="fas fa-wrench text-primary me-2"></i>Dar de baja por uso
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="#"
+                                                   onclick="abrirModalBaja('{{ item.id }}', '{{ item.nombre }}', 'rotura'); return false;">
+                                                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>Dar de baja por rotura
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item" href="#"
+                                                   onclick="abrirModalTraslado('{{ item.id }}', '{{ item.nombre }}', {{ item.stock_actual|float }}); return false;">
+                                                    <i class="fas fa-exchange-alt text-success me-2"></i>Trasladar a otro depósito
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            {% endfor %}
-        {% else %}
+            {% else %}
             <div class="col-12">
                 <div class="text-center py-5">
                     <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
@@ -167,7 +208,359 @@
                     {% endif %}
                 </div>
             </div>
-        {% endif %}
+            {% endif %}
+        </div>
     </div>
 </div>
+
+<!-- Modal para dar de baja -->
+<div class="modal fade" id="modalBaja" tabindex="-1" aria-labelledby="modalBajaLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalBajaLabel">
+                    <i class="fas fa-minus-circle me-2"></i>Dar de Baja Item
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="formBaja" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" id="baja_item_id" name="item_id">
+                <input type="hidden" id="baja_tipo" name="tipo_baja">
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong id="baja_mensaje"></strong>
+                    </div>
+                    <p><strong>Item:</strong> <span id="baja_item_nombre"></span></p>
+
+                    <div class="mb-3">
+                        <label for="baja_cantidad" class="form-label">Cantidad *</label>
+                        <input type="number" class="form-control" id="baja_cantidad" name="cantidad"
+                               step="0.001" min="0.001" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="baja_observaciones" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="baja_observaciones" name="observaciones"
+                                  rows="3" placeholder="Describe el motivo de la baja..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-check me-1"></i>Confirmar Baja
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para traslado -->
+<div class="modal fade" id="modalTraslado" tabindex="-1" aria-labelledby="modalTrasladoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTrasladoLabel">
+                    <i class="fas fa-exchange-alt me-2"></i>Trasladar a Otro Depósito
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="formTraslado" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" id="traslado_item_id" name="item_id">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        El stock se restará del depósito actual y se sumará al depósito destino.
+                    </div>
+                    <p><strong>Item:</strong> <span id="traslado_item_nombre"></span></p>
+                    <p><strong>Stock disponible:</strong> <span id="traslado_stock_actual"></span></p>
+
+                    <div class="mb-3">
+                        <label for="traslado_obra_destino" class="form-label">Depósito/Obra Destino *</label>
+                        <select class="form-select" id="traslado_obra_destino" name="obra_destino_id" required>
+                            <option value="">Seleccionar destino...</option>
+                            {% for obra in obras_disponibles %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }} - {{ obra.direccion }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Selecciona la obra o depósito donde se trasladará el item</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="traslado_cantidad" class="form-label">Cantidad a Trasladar *</label>
+                        <input type="number" class="form-control" id="traslado_cantidad" name="cantidad"
+                               step="0.001" min="0.001" required>
+                        <div class="form-text">Máximo: <span id="traslado_max_cantidad"></span></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="traslado_observaciones" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="traslado_observaciones" name="observaciones"
+                                  rows="2" placeholder="Notas adicionales sobre el traslado..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check me-1"></i>Confirmar Traslado
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para gestionar categorías visibles -->
+<div class="modal fade" id="modalGestionCategorias" tabindex="-1" aria-labelledby="modalGestionCategoriasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalGestionCategoriasLabel">
+                    <i class="fas fa-tags me-2"></i>Gestionar Categorías Visibles
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Selecciona las categorías que deseas ver en el filtro. Los cambios se aplican inmediatamente.
+                </div>
+
+                <div class="mb-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="seleccionarTodas()">
+                        <i class="fas fa-check-square me-1"></i>Seleccionar todas
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deseleccionarTodas()">
+                        <i class="fas fa-square me-1"></i>Deseleccionar todas
+                    </button>
+                </div>
+
+                <div class="row">
+                    {% if categorias_nuevas %}
+                    <div class="col-12 mb-3">
+                        <h6 class="border-bottom pb-2 mb-3">Categorías Principales</h6>
+                        <div class="row">
+                            {% for categoria in categorias_nuevas %}
+                            <div class="col-md-6 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input categoria-checkbox"
+                                           type="checkbox"
+                                           value="{{ categoria.id }}"
+                                           id="cat_{{ categoria.id }}"
+                                           data-nombre="{{ categoria.nombre }}"
+                                           checked>
+                                    <label class="form-check-label" for="cat_{{ categoria.id }}">
+                                        {{ categoria.nombre }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if categorias %}
+                    <div class="col-12">
+                        <h6 class="border-bottom pb-2 mb-3">Otras Categorías</h6>
+                        <div class="row">
+                            {% for categoria in categorias %}
+                            <div class="col-md-6 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input categoria-checkbox"
+                                           type="checkbox"
+                                           value="{{ categoria.id }}"
+                                           id="cat_old_{{ categoria.id }}"
+                                           data-nombre="{{ categoria.nombre }}"
+                                           checked>
+                                    <label class="form-check-label" for="cat_old_{{ categoria.id }}">
+                                        {{ categoria.nombre }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarCategorias()">
+                    <i class="fas fa-save me-1"></i>Guardar y Aplicar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Modal de baja
+function abrirModalBaja(itemId, itemNombre, tipoBaja) {
+    document.getElementById('baja_item_id').value = itemId;
+    document.getElementById('baja_item_nombre').textContent = itemNombre;
+    document.getElementById('baja_tipo').value = tipoBaja;
+
+    const formBaja = document.getElementById('formBaja');
+    formBaja.action = "{{ url_for('inventario.dar_baja') }}";
+
+    if (tipoBaja === 'uso') {
+        document.getElementById('baja_mensaje').textContent =
+            'Vas a dar de baja este item por uso/consumo. Esta acción reducirá el stock actual.';
+    } else if (tipoBaja === 'rotura') {
+        document.getElementById('baja_mensaje').textContent =
+            'Vas a dar de baja este item por rotura/daño. Esta acción reducirá el stock actual.';
+    }
+
+    document.getElementById('baja_cantidad').value = '';
+    document.getElementById('baja_observaciones').value = '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalBaja'));
+    modal.show();
+}
+
+// Modal de traslado
+function abrirModalTraslado(itemId, itemNombre, stockActual) {
+    document.getElementById('traslado_item_id').value = itemId;
+    document.getElementById('traslado_item_nombre').textContent = itemNombre;
+    document.getElementById('traslado_stock_actual').textContent = stockActual.toFixed(3);
+    document.getElementById('traslado_max_cantidad').textContent = stockActual.toFixed(3);
+
+    const formTraslado = document.getElementById('formTraslado');
+    formTraslado.action = "{{ url_for('inventario.trasladar') }}";
+
+    document.getElementById('traslado_cantidad').value = '';
+    document.getElementById('traslado_cantidad').max = stockActual;
+    document.getElementById('traslado_observaciones').value = '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalTraslado'));
+    modal.show();
+}
+
+// Validación del formulario de traslado
+document.getElementById('formTraslado').addEventListener('submit', function(e) {
+    const cantidad = parseFloat(document.getElementById('traslado_cantidad').value);
+    const max = parseFloat(document.getElementById('traslado_cantidad').max);
+
+    if (cantidad > max) {
+        e.preventDefault();
+        alert('La cantidad a trasladar no puede ser mayor al stock disponible (' + max.toFixed(3) + ')');
+        return false;
+    }
+});
+
+// ===== Gestión de Categorías Visibles =====
+const STORAGE_KEY = 'inventario_categorias_visibles';
+
+// Cargar categorías guardadas del localStorage
+function cargarCategoriasGuardadas() {
+    const guardadas = localStorage.getItem(STORAGE_KEY);
+    if (!guardadas) {
+        return null; // Todas seleccionadas por defecto
+    }
+    try {
+        return JSON.parse(guardadas);
+    } catch (e) {
+        console.error('Error al parsear categorías guardadas:', e);
+        return null;
+    }
+}
+
+// Aplicar categorías guardadas a los checkboxes
+function aplicarCategoriasGuardadas() {
+    const guardadas = cargarCategoriasGuardadas();
+    if (!guardadas) return; // Si no hay guardadas, dejar todas marcadas
+
+    document.querySelectorAll('.categoria-checkbox').forEach(checkbox => {
+        const categoriaId = checkbox.value;
+        checkbox.checked = guardadas.includes(categoriaId);
+    });
+}
+
+// Aplicar filtro al dropdown de categorías
+function aplicarFiltroDropdown() {
+    const guardadas = cargarCategoriasGuardadas();
+    if (!guardadas) return; // Si no hay guardadas, mostrar todas
+
+    const dropdown = document.getElementById('categoria');
+    if (!dropdown) return;
+
+    Array.from(dropdown.options).forEach(option => {
+        if (option.value === '') return; // Mantener "Todas las categorías"
+
+        if (!guardadas.includes(option.value)) {
+            option.style.display = 'none';
+        } else {
+            option.style.display = '';
+        }
+    });
+}
+
+// Seleccionar todas las categorías
+function seleccionarTodas() {
+    document.querySelectorAll('.categoria-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+// Deseleccionar todas las categorías
+function deseleccionarTodas() {
+    document.querySelectorAll('.categoria-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+// Guardar categorías seleccionadas
+function guardarCategorias() {
+    const seleccionadas = [];
+    document.querySelectorAll('.categoria-checkbox:checked').forEach(checkbox => {
+        seleccionadas.push(checkbox.value);
+    });
+
+    if (seleccionadas.length === 0) {
+        alert('Debes seleccionar al menos una categoría');
+        return;
+    }
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seleccionadas));
+
+    // Aplicar el filtro inmediatamente
+    aplicarFiltroDropdown();
+
+    // Cerrar el modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalGestionCategorias'));
+    if (modal) {
+        modal.hide();
+    }
+
+    // Mostrar mensaje de éxito
+    const mensaje = document.createElement('div');
+    mensaje.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+    mensaje.style.zIndex = '9999';
+    mensaje.innerHTML = `
+        <i class="fas fa-check-circle me-2"></i>
+        Categorías actualizadas: ${seleccionadas.length} seleccionadas
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(mensaje);
+
+    setTimeout(() => {
+        mensaje.remove();
+    }, 3000);
+}
+
+// Inicializar cuando se abre el modal
+document.getElementById('modalGestionCategorias').addEventListener('show.bs.modal', function() {
+    aplicarCategoriasGuardadas();
+});
+
+// Aplicar filtro al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    aplicarFiltroDropdown();
+});
+</script>
 {% endblock %}
