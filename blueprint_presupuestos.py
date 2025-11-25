@@ -203,6 +203,34 @@ def crear():
                             precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
                             total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
 
+                            # Auto-vinculación con inventario (match por código)
+                            item_inventario_id = None
+                            codigo_material = item.get('codigo', '')
+
+                            if item.get('tipo') == 'material' and codigo_material:
+                                # Buscar en inventario por código exacto
+                                from models import ItemInventario
+                                item_inv = ItemInventario.query.filter_by(
+                                    organizacion_id=org_id,
+                                    codigo=codigo_material
+                                ).first()
+
+                                if item_inv:
+                                    item_inventario_id = item_inv.id
+                                    current_app.logger.info(f"✅ Material '{item.get('descripcion')}' vinculado con inventario ID {item_inv.id}")
+                                else:
+                                    # Si no existe, buscar por nombre similar (fallback)
+                                    descripcion = item.get('descripcion', '')
+                                    if descripcion and not descripcion.startswith('⚠️'):
+                                        item_inv = ItemInventario.query.filter(
+                                            ItemInventario.organizacion_id == org_id,
+                                            ItemInventario.nombre.ilike(f'%{descripcion[:30]}%')
+                                        ).first()
+
+                                        if item_inv:
+                                            item_inventario_id = item_inv.id
+                                            current_app.logger.info(f"⚠️ Material '{descripcion}' vinculado por nombre similar con inventario ID {item_inv.id}")
+
                             item_presupuesto = ItemPresupuesto(
                                 presupuesto_id=presupuesto.id,
                                 tipo=item.get('tipo', 'material'),
@@ -215,7 +243,8 @@ def crear():
                                 currency=moneda_ia,
                                 price_unit_ars=precio_unit_ars,
                                 total_ars=total_ars,
-                                etapa_id=None  # Se asignará al confirmar como obra
+                                etapa_id=None,  # Se asignará al confirmar como obra
+                                item_inventario_id=item_inventario_id  # Vinculación automática
                             )
                             db.session.add(item_presupuesto)
 

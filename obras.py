@@ -1927,11 +1927,24 @@ def api_reservar_materiales(obra_id):
         materiales_sin_match = []
 
         for material in materiales:
-            # Intentar vincular con item de inventario por nombre similar
-            item_inventario = InventoryItem.query.filter(
-                InventoryItem.company_id == obra.organizacion_id,
-                InventoryItem.nombre.ilike(f'%{material.descripcion}%')
-            ).first()
+            # Usar vinculación directa si existe (PRECISA)
+            item_inventario = None
+
+            if material.item_inventario_id:
+                # Match directo por ID (100% preciso)
+                item_inventario = InventoryItem.query.get(material.item_inventario_id)
+                if item_inventario:
+                    current_app.logger.info(f"✅ Material '{material.descripcion}' vinculado directo por ID {material.item_inventario_id}")
+
+            # Fallback: buscar por nombre similar (menos preciso)
+            if not item_inventario:
+                item_inventario = InventoryItem.query.filter(
+                    InventoryItem.company_id == obra.organizacion_id,
+                    InventoryItem.nombre.ilike(f'%{material.descripcion}%')
+                ).first()
+
+                if item_inventario:
+                    current_app.logger.warning(f"⚠️ Material '{material.descripcion}' encontrado por nombre similar. Recomendado: vincular por ID.")
 
             if not item_inventario:
                 materiales_sin_match.append({
