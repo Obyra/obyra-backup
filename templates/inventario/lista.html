@@ -406,7 +406,7 @@ function abrirModalBaja(itemId, itemNombre, tipoBaja) {
     document.getElementById('baja_tipo').value = tipoBaja;
 
     const formBaja = document.getElementById('formBaja');
-    formBaja.action = "{{ url_for('inventario.dar_baja') }}";
+    formBaja.action = `/inventario/dar_baja/${itemId}`;
 
     if (tipoBaja === 'uso') {
         document.getElementById('baja_mensaje').textContent =
@@ -431,7 +431,7 @@ function abrirModalTraslado(itemId, itemNombre, stockActual) {
     document.getElementById('traslado_max_cantidad').textContent = stockActual.toFixed(3);
 
     const formTraslado = document.getElementById('formTraslado');
-    formTraslado.action = "{{ url_for('inventario.trasladar') }}";
+    formTraslado.action = `/inventario/trasladar/${itemId}`;
 
     document.getElementById('traslado_cantidad').value = '';
     document.getElementById('traslado_cantidad').max = stockActual;
