@@ -51,7 +51,8 @@
       "Bash(winpty docker exec obyra-app ls -lh //app//instance//media//avances//1//)",
       "Bash(winpty docker exec obyra-app python -m py_compile //app//calculadora_ia.py)",
       "Bash(winpty docker exec obyra-app python -m py_compile //app//blueprint_presupuestos.py)",
-      "Bash(winpty docker exec obyra-app python -m py_compile //app//obras.py)"
+      "Bash(winpty docker exec obyra-app python -m py_compile //app//obras.py)",
+      "Bash(winpty docker exec obyra-app grep -n \"url_for\" /app/templates/inventario/categorias.html)"
     ],
     "deny": [],
     "ask": []

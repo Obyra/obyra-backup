@@ -545,6 +545,223 @@ def api_categorias():
 
     return jsonify(payload)
 
+
+@inventario_bp.route('/api/generar-codigo', methods=['POST'])
+@login_required
+def api_generar_codigo():
+    """
+    API para generar código automático único basado en categoría, nombre y variantes.
+    """
+    from models import GlobalMaterialCatalog, InventoryCategory
+
+    data = request.get_json() or {}
+
+    categoria_id = data.get('categoria_id')
+    nombre = data.get('nombre', '').strip()
+    marca = data.get('marca', '').strip() or None
+    especificaciones = data.get('especificaciones') or None
+
+    if not nombre:
+        return jsonify({'error': 'El nombre es requerido'}), 400
+
+    # Obtener nombre de categoría
+    categoria_nombre = 'MATERIAL'  # Default
+    if categoria_id:
+        categoria = InventoryCategory.query.get(categoria_id)
+        if categoria:
+            categoria_nombre = categoria.nombre
+
+    # Generar código automático
+    try:
+        codigo = GlobalMaterialCatalog.generar_codigo_automatico(
+            categoria_nombre=categoria_nombre,
+            nombre=nombre,
+            marca=marca,
+            especificaciones=especificaciones
+        )
+
+        return jsonify({
+            'codigo': codigo,
+            'categoria_nombre': categoria_nombre,
+            'mensaje': f'Código generado automáticamente: {codigo}'
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error generando código: {str(e)}")
+        return jsonify({'error': 'Error al generar código automático'}), 500
+
+
+@inventario_bp.route('/api/buscar-similares', methods=['POST'])
+@login_required
+def api_buscar_similares():
+    """
+    API para buscar materiales similares en el catálogo global.
+    Retorna sugerencias de materiales existentes.
+    """
+    from models import GlobalMaterialCatalog, InventoryCategory
+
+    data = request.get_json() or {}
+
+    nombre = data.get('nombre', '').strip()
+    categoria_id = data.get('categoria_id')
+    marca = data.get('marca', '').strip() or None
+    limit = int(data.get('limit', 10))
+
+    if not nombre:
+        return jsonify({'similares': []})
+
+    # Obtener nombre de categoría si se especifica
+    categoria_nombre = None
+    if categoria_id:
+        categoria = InventoryCategory.query.get(categoria_id)
+        if categoria:
+            categoria_nombre = categoria.nombre
+
+    # Buscar materiales similares
+    try:
+        similares = GlobalMaterialCatalog.buscar_similares(
+            nombre=nombre,
+            categoria_nombre=categoria_nombre,
+            marca=marca,
+            limit=limit
+        )
+
+        resultados = []
+        for material in similares:
+            resultados.append({
+                'id': material.id,
+                'codigo': material.codigo,
+                'nombre': material.nombre,
+                'descripcion_completa': material.descripcion_completa,
+                'categoria': material.categoria_nombre,
+                'marca': material.marca,
+                'unidad': material.unidad,
+                'veces_usado': material.veces_usado,
+                'precio_promedio_ars': float(material.precio_promedio_ars) if material.precio_promedio_ars else None,
+                'precio_promedio_usd': float(material.precio_promedio_usd) if material.precio_promedio_usd else None,
+            })
+
+        return jsonify({
+            'similares': resultados,
+            'total': len(resultados),
+            'mensaje': f'Se encontraron {len(resultados)} materiales similares en el catálogo global'
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error buscando similares: {str(e)}")
+        return jsonify({'error': 'Error al buscar materiales similares', 'similares': []}), 500
+
+
+@inventario_bp.route('/api/usar-material-global/<int:material_id>', methods=['POST'])
+@login_required
+def api_usar_material_global(material_id):
+    """
+    API para usar un material del catálogo global.
+    Crea un item de inventario local y registra el uso.
+    """
+    from models import GlobalMaterialCatalog, GlobalMaterialUsage, ItemInventario, MovimientoInventario
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    if not org_id:
+        return jsonify({'error': 'No tienes una organización activa'}), 400
+
+    # Obtener material del catálogo global
+    material = GlobalMaterialCatalog.query.get(material_id)
+    if not material:
+        return jsonify({'error': 'Material no encontrado en el catálogo global'}), 404
+
+    data = request.get_json() or {}
+    stock_inicial = float(data.get('stock_inicial', 0))
+    precio_ars = float(data.get('precio_ars', 0))
+    precio_usd = float(data.get('precio_usd', 0))
+
+    try:
+        # Verificar si ya existe un item con este código
+        existing = ItemInventario.query.filter_by(
+            codigo=material.codigo,
+            organizacion_id=org_id
+        ).first()
+
+        if existing:
+            return jsonify({
+                'error': f'Ya tienes un material con código {material.codigo} en tu inventario',
+                'item_id': existing.id
+            }), 409
+
+        # Buscar categoría correspondiente
+        categoria = InventoryCategory.query.filter_by(
+            company_id=org_id,
+            nombre=material.categoria_nombre,
+            is_active=True
+        ).first()
+
+        if not categoria:
+            # Crear categoría si no existe
+            categoria = InventoryCategory(
+                company_id=org_id,
+                nombre=material.categoria_nombre,
+                is_active=True
+            )
+            db.session.add(categoria)
+            db.session.flush()
+
+        # Crear item de inventario local
+        nuevo_item = ItemInventario(
+            organizacion_id=org_id,
+            categoria_id=categoria.id,
+            codigo=material.codigo,
+            nombre=material.nombre,
+            descripcion=material.descripcion_completa,
+            unidad=material.unidad,
+            stock_actual=stock_inicial,
+            stock_minimo=0,
+            precio_promedio=precio_ars or material.precio_promedio_ars or 0,
+            precio_promedio_usd=precio_usd or material.precio_promedio_usd or 0,
+            activo=True
+        )
+
+        db.session.add(nuevo_item)
+        db.session.flush()
+
+        # Registrar uso del material global
+        uso = GlobalMaterialUsage(
+            material_id=material.id,
+            organizacion_id=org_id,
+            item_inventario_id=nuevo_item.id
+        )
+        db.session.add(uso)
+
+        # Actualizar contador de usos
+        material.veces_usado = (material.veces_usado or 0) + 1
+
+        # Si hay stock inicial, crear movimiento
+        if stock_inicial > 0:
+            movimiento = MovimientoInventario(
+                item_id=nuevo_item.id,
+                tipo='entrada',
+                cantidad=stock_inicial,
+                precio_unitario=precio_ars,
+                motivo='Inventario inicial desde catálogo global',
+                observaciones=f'Material importado del catálogo global: {material.codigo}',
+                usuario_id=current_user.id
+            )
+            db.session.add(movimiento)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'item_id': nuevo_item.id,
+            'codigo': nuevo_item.codigo,
+            'mensaje': f'Material {material.nombre} agregado a tu inventario exitosamente'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error usando material global: {str(e)}")
+        return jsonify({'error': 'Error al agregar material a tu inventario'}), 500
+
+
 @inventario_bp.route('/categoria', methods=['POST'])
 @login_required
 def crear_categoria():

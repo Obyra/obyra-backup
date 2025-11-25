@@ -79,6 +79,9 @@ from models.inventory import (
     Stock,
     StockMovement,
     StockReservation,
+    # Global Catalog
+    GlobalMaterialCatalog,
+    GlobalMaterialUsage,
 )
 
 # Equipment models

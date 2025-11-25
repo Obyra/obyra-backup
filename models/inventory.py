@@ -2,6 +2,7 @@
 
 from datetime import datetime, date
 from extensions import db
+from sqlalchemy.dialects.postgresql import JSONB
 import json
 
 
@@ -374,3 +375,166 @@ class StockReservation(db.Model):
 
     def __repr__(self):
         return f'<StockReservation {self.item.nombre} - {self.project.nombre}>'
+
+
+class GlobalMaterialCatalog(db.Model):
+    """
+    Catálogo global de materiales compartido entre todas las organizaciones.
+    Permite estandarización de códigos y comparación de precios.
+    """
+    __tablename__ = 'global_material_catalog'
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    categoria_nombre = db.Column(db.String(100), nullable=False, index=True)
+    descripcion = db.Column(db.Text)
+    unidad = db.Column(db.String(20), nullable=False)
+
+    # Metadatos para variantes
+    marca = db.Column(db.String(100), index=True)
+    peso_cantidad = db.Column(db.Numeric(10, 3))
+    peso_unidad = db.Column(db.String(20))
+    especificaciones = db.Column(JSONB)
+
+    # Estadísticas de uso
+    veces_usado = db.Column(db.Integer, default=0)
+    precio_promedio_ars = db.Column(db.Numeric(10, 2))
+    precio_promedio_usd = db.Column(db.Numeric(10, 2))
+
+    # Auditoría
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by_org_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'))
+
+    # Relaciones
+    created_by_org = db.relationship('Organizacion', foreign_keys=[created_by_org_id])
+    usages = db.relationship('GlobalMaterialUsage', back_populates='material', cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<GlobalMaterialCatalog {self.codigo} - {self.nombre}>'
+
+    @property
+    def descripcion_completa(self):
+        """Genera descripción completa incluyendo marca y especificaciones"""
+        parts = [self.nombre]
+
+        if self.marca:
+            parts.append(f"marca {self.marca}")
+
+        if self.peso_cantidad and self.peso_unidad:
+            parts.append(f"{self.peso_cantidad}{self.peso_unidad}")
+
+        if self.descripcion:
+            parts.append(self.descripcion)
+
+        return ", ".join(parts)
+
+    @classmethod
+    def generar_codigo_automatico(cls, categoria_nombre, nombre, marca=None, especificaciones=None):
+        """
+        Genera código automático único basado en categoría, nombre y variantes.
+
+        Formato: CATEGORIA-NOMBRE-VARIANTES
+        Ejemplo: CEM-PORT-50KG-LN (Cemento Portland 50kg Loma Negra)
+        """
+        import re
+
+        # Prefijo de categoría (primeras 3 letras)
+        cat_prefix = re.sub(r'[^A-Z]', '', categoria_nombre.upper())[:3]
+
+        # Nombre abreviado (primeras 4 letras significativas)
+        nombre_words = nombre.upper().split()
+        nombre_prefix = ''.join([w[:4] for w in nombre_words[:2]])[:4]
+
+        # Construir código base
+        codigo_base = f"{cat_prefix}-{nombre_prefix}"
+
+        # Agregar variantes si existen
+        if especificaciones:
+            if isinstance(especificaciones, str):
+                try:
+                    especificaciones = json.loads(especificaciones)
+                except:
+                    especificaciones = {}
+
+            # Extraer peso/medida
+            if 'peso' in especificaciones or 'medidas' in especificaciones:
+                medida = especificaciones.get('peso') or especificaciones.get('medidas', '')
+                if medida:
+                    medida_clean = re.sub(r'[^A-Z0-9]', '', str(medida).upper())
+                    codigo_base += f"-{medida_clean[:5]}"
+
+        # Agregar marca si existe
+        if marca:
+            marca_prefix = re.sub(r'[^A-Z]', '', marca.upper())[:2]
+            codigo_base += f"-{marca_prefix}"
+
+        # Verificar si ya existe y agregar sufijo numérico si es necesario
+        codigo_final = codigo_base
+        contador = 1
+
+        while cls.query.filter_by(codigo=codigo_final).first():
+            codigo_final = f"{codigo_base}-{contador}"
+            contador += 1
+
+        return codigo_final
+
+    @classmethod
+    def buscar_similares(cls, nombre, categoria_nombre=None, marca=None, limit=10):
+        """
+        Busca materiales similares en el catálogo global.
+        Usa búsqueda por similitud de texto.
+        """
+        from sqlalchemy import func, or_
+
+        query = cls.query
+
+        # Filtrar por categoría si se especifica
+        if categoria_nombre:
+            query = query.filter(cls.categoria_nombre.ilike(f'%{categoria_nombre}%'))
+
+        # Búsqueda por similitud de nombre usando trigram
+        if nombre:
+            search_term = f'%{nombre}%'
+            query = query.filter(
+                or_(
+                    cls.nombre.ilike(search_term),
+                    cls.descripcion.ilike(search_term)
+                )
+            )
+
+        # Filtrar por marca si se especifica
+        if marca:
+            query = query.filter(cls.marca.ilike(f'%{marca}%'))
+
+        # Ordenar por veces usado (más popular primero)
+        query = query.order_by(cls.veces_usado.desc())
+
+        return query.limit(limit).all()
+
+
+class GlobalMaterialUsage(db.Model):
+    """
+    Trackea qué organizaciones usan cada material del catálogo global.
+    Permite análisis de mercado y estadísticas.
+    """
+    __tablename__ = 'global_material_usage'
+
+    id = db.Column(db.Integer, primary_key=True)
+    material_id = db.Column(db.Integer, db.ForeignKey('global_material_catalog.id', ondelete='CASCADE'), nullable=False)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id', ondelete='CASCADE'), nullable=False)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id', ondelete='CASCADE'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    material = db.relationship('GlobalMaterialCatalog', back_populates='usages')
+    organizacion = db.relationship('Organizacion')
+    item_inventario = db.relationship('ItemInventario')
+
+    __table_args__ = (
+        db.UniqueConstraint('material_id', 'organizacion_id', 'item_inventario_id'),
+    )
+
+    def __repr__(self):
+        return f'<GlobalMaterialUsage {self.material.codigo} by org {self.organizacion_id}>'
