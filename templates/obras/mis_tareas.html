@@ -274,7 +274,10 @@ document.getElementById('formAvance').addEventListener('submit', async function(
     
     // Crear FormData con todos los campos
     const formData = new FormData(this);
-    
+
+    // Agregar CSRF token al FormData
+    formData.append('csrf_token', CSRF_TOKEN);
+
     // Mostrar loading
     const submitBtn = this.querySelector('button[type="submit"]');
     const originalText = submitBtn.innerHTML;
