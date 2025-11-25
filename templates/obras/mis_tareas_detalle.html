@@ -93,11 +93,16 @@
             {% endif %}
 
             <div class="card shadow-sm">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="mb-0"><i class="fas fa-clipboard-list me-1 text-primary"></i>Avances registrados</h5>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="abrirGaleriaCompleta({{ tarea.id }})">
-                        <i class="fas fa-images me-1"></i>Ver galería
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalRegistrarAvance">
+                            <i class="fas fa-plus me-1"></i>Registrar Avance
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="abrirGaleriaCompleta({{ tarea.id }})">
+                            <i class="fas fa-images me-1"></i>Ver galería
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     {% if avances %}
@@ -160,11 +165,81 @@
     </div>
 </div>
 
+<!-- Modal Registrar Avance -->
+<div class="modal fade" id="modalRegistrarAvance" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Registrar Avance</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formRegistrarAvance" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" id="tarea_id_modal" value="{{ tarea.id }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Tarea</label>
+                        <p class="form-control-plaintext text-muted">{{ detalle.nombre }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="cantidad_modal" class="form-label">Cantidad ejecutada *</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="cantidad_modal" name="cantidad_ingresada"
+                                   step="0.01" min="0" required>
+                            <select class="form-select" id="unidad_modal" name="unidad_ingresada" style="max-width:150px" required>
+                                <option value="m2" {% if detalle.unidad == 'm2' %}selected{% endif %}>m² (metros cuadrados)</option>
+                                <option value="m3" {% if detalle.unidad == 'm3' %}selected{% endif %}>m³ (metros cúbicos)</option>
+                                <option value="ml" {% if detalle.unidad == 'ml' %}selected{% endif %}>ml (metros lineales)</option>
+                                <option value="un" {% if detalle.unidad == 'un' %}selected{% endif %}>un (unidades)</option>
+                                <option value="kg" {% if detalle.unidad == 'kg' %}selected{% endif %}>kg (kilogramos)</option>
+                                <option value="h" {% if detalle.unidad == 'h' %}selected{% endif %}>h (horas)</option>
+                                <option value="lt" {% if detalle.unidad == 'lt' %}selected{% endif %}>lt (litros)</option>
+                            </select>
+                        </div>
+                        <div class="form-text">Selecciona la unidad de medida correspondiente a la tarea</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="horas_modal" class="form-label">Horas trabajadas (opcional)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="horas_modal" name="horas_trabajadas"
+                                   step="0.01" min="0">
+                            <span class="input-group-text">h</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="nota_modal" class="form-label">Notas (opcional)</label>
+                        <textarea class="form-control" id="nota_modal" name="nota" rows="3"
+                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="fotos_modal" class="form-label">Fotos del avance (opcional)</label>
+                        <input type="file" class="form-control" id="fotos_modal" name="fotos"
+                               multiple accept="image/*">
+                        <div class="form-text">Puedes seleccionar múltiples fotos del progreso.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Registrar Avance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
+const CSRF_TOKEN = "{{ csrf_token() }}";
+
 (function() {
     const tareaId = {{ tarea.id }};
     const buttons = document.querySelectorAll('[data-action="cambiar-estado"]');
@@ -191,10 +266,16 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': CSRF_TOKEN
                     },
                     body: JSON.stringify({ estado })
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const data = await response.json();
                 if (!data.ok) {
                     throw new Error(data.error || 'No se pudo actualizar la tarea');
@@ -211,5 +292,67 @@
         });
     });
 })();
+
+// Manejar envío del formulario de registro de avance
+document.getElementById('formRegistrarAvance').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const tareaId = document.getElementById('tarea_id_modal').value;
+    if (!tareaId) {
+        alert('Error: No se pudo identificar la tarea');
+        return;
+    }
+
+    // Crear FormData con todos los campos
+    const formData = new FormData(this);
+
+    // Mostrar loading
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardando...';
+    submitBtn.disabled = true;
+
+    try {
+        // Use new API endpoint with required header for operarios
+        const response = await fetch(`/obras/api/tareas/${tareaId}/avances`, {
+            method: 'POST',
+            headers: {
+                'X-From-Dashboard': '1',  // Required header for operarios
+                'X-CSRFToken': CSRF_TOKEN
+            },
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+            // Show success with percentage update
+            let mensaje = '✅ Avance registrado exitosamente';
+            if (result.porcentaje_actualizado !== undefined) {
+                mensaje += `\n📊 Porcentaje de tarea actualizado: ${result.porcentaje_actualizado}%`;
+            }
+
+            // Cerrar modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalRegistrarAvance'));
+            modal.hide();
+
+            // Limpiar formulario
+            this.reset();
+
+            // Mostrar éxito con porcentaje y recargar
+            alert(mensaje);
+            window.location.reload();
+        } else {
+            alert('❌ Error: ' + (result.error || 'Error al registrar el avance'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error al registrar el avance. Inténtalo nuevamente.');
+    } finally {
+        // Restaurar botón
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+});
 </script>
 {% endblock %}
