@@ -110,6 +110,7 @@ services:
       - app_reports:/app/reports
       - app_logs:/app/logs
       - app_instance:/app/instance
+      - ./templates:/app/templates:ro  # Mount templates for development
     ports:
       - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
     depends_on:
