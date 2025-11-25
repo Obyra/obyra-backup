@@ -75,23 +75,35 @@ def dashboard():
         Presupuesto.organizacion_id == org_id
     ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
 
+    # Buscar presupuestos que necesitan actualización de estado a "vencido"
     presupuestos_expirados = Presupuesto.query.filter(
         Presupuesto.organizacion_id == org_id,
         Presupuesto.deleted_at.is_(None),
         Presupuesto.fecha_vigencia.isnot(None),
         Presupuesto.fecha_vigencia < date.today(),
+        # Solo buscar presupuestos en estados que necesitan actualización
+        Presupuesto.estado.in_(['borrador', 'enviado', 'rechazado'])
     ).all()
 
     cambios_estado = 0
     for presupuesto in presupuestos_expirados:
-        if presupuesto.estado not in ['vencido', 'convertido', 'confirmado', 'eliminado']:
-            presupuesto.estado = 'vencido'
-            cambios_estado += 1
+        presupuesto.estado = 'vencido'
+        cambios_estado += 1
 
     if cambios_estado:
         db.session.commit()
 
-    presupuestos_vencidos = len(presupuestos_expirados)
+    # SOLO mostrar alerta si hay presupuestos que realmente están vencidos Y necesitan atención
+    # No contar presupuestos ya confirmados como obra, aprobados, o en estados finales
+    presupuestos_vencidos_activos = Presupuesto.query.filter(
+        Presupuesto.organizacion_id == org_id,
+        Presupuesto.deleted_at.is_(None),
+        Presupuesto.estado == 'vencido',
+        # Excluir presupuestos que ya fueron confirmados como obra
+        Presupuesto.confirmado_como_obra == False
+    ).count()
+
+    presupuestos_vencidos = presupuestos_vencidos_activos
 
     presupuestos_monitoreo = Presupuesto.query.filter(
         Presupuesto.organizacion_id == org_id,
