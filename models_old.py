@@ -1356,7 +1356,7 @@ class MovimientoInventario(db.Model):
 
 class UsoInventario(db.Model):
     __tablename__ = 'uso_inventario'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=False)
@@ -1364,6 +1364,11 @@ class UsoInventario(db.Model):
     fecha_uso = db.Column(db.Date, default=date.today)
     observaciones = db.Column(db.Text)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    # Precio histórico - guarda el precio al momento del uso (NO el promedio actual)
+    precio_unitario_al_uso = db.Column(db.Numeric(10, 2), nullable=True)
+    # Para diferenciar: ARS o USD
+    moneda = db.Column(db.String(3), default='ARS')
     
     # Relaciones
     obra = db.relationship('Obra', back_populates='uso_inventario')

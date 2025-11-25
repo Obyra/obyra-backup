@@ -265,9 +265,14 @@ class ItemPresupuesto(db.Model):
     price_unit_ars = db.Column(db.Numeric(15, 2))
     total_ars = db.Column(db.Numeric(15, 2))
 
+    # Vinculación directa con inventario (elimina match impreciso por nombre)
+    # Si el material existe en inventario, se vincula directamente por ID
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')
+    item_inventario = db.relationship('ItemInventario', foreign_keys=[item_inventario_id])
 
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'

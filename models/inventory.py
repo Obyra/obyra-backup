@@ -83,6 +83,11 @@ class UsoInventario(db.Model):
     observaciones = db.Column(db.Text)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
 
+    # Precio histórico - guarda el precio al momento del uso (NO el promedio actual)
+    # Esto permite calcular costos reales sin que varíen por cambios futuros de precio
+    precio_unitario_al_uso = db.Column(db.Numeric(10, 2), nullable=True)
+    moneda = db.Column(db.String(3), default='ARS')  # ARS o USD
+
     # Relaciones
     obra = db.relationship('Obra', back_populates='uso_inventario')
     item = db.relationship('ItemInventario', back_populates='usos')

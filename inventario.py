@@ -332,6 +332,35 @@ def registrar_movimiento(id):
         elif tipo == 'salida':
             item.stock_actual -= cantidad
         elif tipo == 'ajuste':
+            # Validaciones mejoradas para ajustes
+            if not motivo or motivo.strip() == '':
+                flash('⚠️ El motivo es OBLIGATORIO para ajustes de inventario. Especificá la razón (ej: conteo físico, merma, error sistema).', 'danger')
+                return redirect(url_for('inventario.detalle', id=id))
+
+            # Calcular diferencia porcentual
+            stock_anterior = float(item.stock_actual) if item.stock_actual else 0
+            diferencia = cantidad - stock_anterior
+            if stock_anterior > 0:
+                diferencia_porcentual = abs(diferencia / stock_anterior * 100)
+            else:
+                diferencia_porcentual = 100 if cantidad > 0 else 0
+
+            # Alerta si el ajuste es mayor al 20%
+            if diferencia_porcentual > 20:
+                current_app.logger.warning(
+                    f"⚠️ AJUSTE SIGNIFICATIVO: {item.nombre} - "
+                    f"Stock anterior: {stock_anterior}, Nuevo: {cantidad}, "
+                    f"Diferencia: {diferencia_porcentual:.1f}% - "
+                    f"Usuario: {current_user.email}, Motivo: {motivo}"
+                )
+                flash(
+                    f'⚠️ ALERTA: Ajuste significativo de {diferencia_porcentual:.1f}%. '
+                    f'Stock anterior: {stock_anterior}, Nuevo stock: {cantidad}. '
+                    f'Este ajuste ha sido registrado para auditoría.',
+                    'warning'
+                )
+
+            # Aplicar ajuste
             item.stock_actual = cantidad
         
         db.session.add(movimiento)
@@ -382,9 +411,24 @@ def uso_obra():
                 return render_template('inventario/uso_obra.html', **context)
 
             stock_actual = item.stock_actual if item.stock_actual is not None else 0
-            if cantidad_usada > stock_actual:
-                flash('Stock insuficiente.', 'danger')
-                return render_template('inventario/uso_obra.html', **context)
+
+            # Validación flexible de stock - permite negativo con alerta
+            stock_insuficiente = cantidad_usada > stock_actual
+            if stock_insuficiente:
+                stock_resultante = stock_actual - cantidad_usada
+                current_app.logger.warning(
+                    f"⚠️ Stock insuficiente para {item.nombre}. "
+                    f"Disponible: {stock_actual}, Requerido: {cantidad_usada}, "
+                    f"Resultante: {stock_resultante}. "
+                    f"Permitiendo operación con stock negativo."
+                )
+                flash(
+                    f'⚠️ ALERTA: Stock insuficiente para {item.nombre}. '
+                    f'Disponible: {stock_actual}, solicitado: {cantidad_usada}. '
+                    f'El stock quedará en {stock_resultante}. '
+                    f'Registrá la entrada de material pendiente.',
+                    'warning'
+                )
 
             # Convertir fecha
             fecha_uso_obj = date.today()
@@ -392,14 +436,17 @@ def uso_obra():
                 from datetime import datetime
                 fecha_uso_obj = datetime.strptime(fecha_uso, '%Y-%m-%d').date()
 
-            # Crear uso
+            # Crear uso con precio histórico
             uso = UsoInventario(
                 obra_id=obra_id,
                 item_id=item_id,
                 cantidad_usada=cantidad_usada,
                 fecha_uso=fecha_uso_obj,
                 observaciones=observaciones,
-                usuario_id=current_user.id
+                usuario_id=current_user.id,
+                # Guardar precio al momento del uso (NO el promedio futuro)
+                precio_unitario_al_uso=item.precio_promedio,
+                moneda='ARS'  # Por defecto ARS, ajustar según configuración
             )
 
             # Crear movimiento de salida
@@ -823,11 +870,19 @@ def trasladar(id):
         if cantidad <= 0:
             return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
 
-        if cantidad > float(item.stock_actual):
-            return jsonify({'success': False, 'message': 'No hay suficiente stock disponible'}), 400
-
         if not obra_destino_id:
             return jsonify({'success': False, 'message': 'Debe seleccionar un depósito destino'}), 400
+
+        # Validación flexible de stock - permite negativo con alerta
+        stock_actual = float(item.stock_actual)
+        stock_insuficiente = cantidad > stock_actual
+        if stock_insuficiente:
+            stock_resultante = stock_actual - cantidad
+            current_app.logger.warning(
+                f"⚠️ Traslado con stock insuficiente para {item.nombre}. "
+                f"Disponible: {stock_actual}, Trasladar: {cantidad}, "
+                f"Resultante: {stock_resultante}"
+            )
 
         # Create movement record for transfer
         movimiento = MovimientoInventario(
