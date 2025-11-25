@@ -174,6 +174,9 @@ class TareaEtapa(db.Model):
     fecha_fin = db.Column(db.Date)                 # Fecha de fin planificada
     presupuesto_mo = db.Column(db.Numeric)         # Presupuesto de mano de obra para EV/PV
 
+    # Vínculo con presupuesto para certificaciones
+    item_presupuesto_id = db.Column(db.Integer, db.ForeignKey('items_presupuesto.id'), nullable=True)
+
     # Relaciones
     etapa = db.relationship('EtapaObra', back_populates='tareas')
     miembros = db.relationship('TareaMiembro', back_populates='tarea', cascade='all, delete-orphan')
@@ -182,6 +185,7 @@ class TareaEtapa(db.Model):
     responsable = db.relationship('Usuario')
     registros_tiempo = db.relationship('RegistroTiempo', back_populates='tarea', lazy='dynamic')
     asignaciones = db.relationship('TareaResponsables', back_populates='tarea', lazy='dynamic', cascade='all, delete-orphan')
+    item_presupuesto = db.relationship('ItemPresupuesto', foreign_keys=[item_presupuesto_id])
 
     # EVM relationships
     plan_semanal = db.relationship('TareaPlanSemanal', back_populates='tarea', cascade='all, delete-orphan')
@@ -271,6 +275,10 @@ class TareaAvance(db.Model):
     confirmed_by = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
     confirmed_at = db.Column(db.DateTime)
     reject_reason = db.Column(db.Text)
+
+    # Certificación
+    certificado = db.Column(db.Boolean, default=False)  # Si ya fue incluido en una certificación
+    certificacion_id = db.Column(db.Integer, db.ForeignKey('work_certifications.id'), nullable=True)
 
     # Relaciones
     tarea = db.relationship('TareaEtapa', back_populates='avances')
@@ -437,3 +445,121 @@ def resumen_tarea(t):
     restante = max(plan - ejec, 0.0)
     atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
     return {"plan": plan, "ejec": ejec, "pct": pct, "restante": restante, "atrasada": atrasada}
+
+
+def calcular_avance_tarea(tarea_id):
+    """
+    Calcula el % de avance y monto certificable de una tarea basado en cantidad completada.
+
+    Returns:
+        dict: {
+            'porcentaje': float,
+            'cantidad_completada': Decimal,
+            'cantidad_total': Decimal,
+            'costo_acordado': Decimal,
+            'monto_certificable': Decimal,
+            'unidad': str
+        }
+    """
+    from decimal import Decimal
+
+    tarea = TareaEtapa.query.get(tarea_id)
+    if not tarea:
+        return None
+
+    # Sumar todas las cantidades reportadas en avances aprobados y NO certificados
+    cantidad_completada = db.session.query(
+        func.coalesce(func.sum(TareaAvance.cantidad), 0)
+    ).filter(
+        TareaAvance.tarea_id == tarea_id,
+        TareaAvance.status == 'aprobado',
+        TareaAvance.certificado == False
+    ).scalar() or Decimal('0')
+
+    cantidad_total = tarea.cantidad_planificada or Decimal('0')
+
+    # Calcular porcentaje
+    if cantidad_total > 0:
+        porcentaje = (float(cantidad_completada) / float(cantidad_total)) * 100
+        porcentaje = min(porcentaje, 100)  # Cap at 100%
+    else:
+        porcentaje = 0
+
+    # Obtener costo acordado de mano de obra
+    costo_acordado = Decimal('0')
+
+    # Opción 1: Si tiene item_presupuesto vinculado
+    if tarea.item_presupuesto_id and tarea.item_presupuesto:
+        costo_acordado = tarea.item_presupuesto.subtotal_ars or Decimal('0')
+    # Opción 2: Si tiene presupuesto_mo directo
+    elif tarea.presupuesto_mo:
+        costo_acordado = tarea.presupuesto_mo
+
+    # Calcular monto certificable
+    monto_certificable = (Decimal(str(porcentaje)) / Decimal('100')) * costo_acordado
+
+    return {
+        'porcentaje': round(porcentaje, 2),
+        'cantidad_completada': cantidad_completada,
+        'cantidad_total': cantidad_total,
+        'costo_acordado': costo_acordado,
+        'monto_certificable': monto_certificable,
+        'unidad': tarea.unidad or 'un'
+    }
+
+
+def calcular_avance_etapa(etapa_id):
+    """
+    Calcula el % de avance de una etapa ponderado por costo de mano de obra de las tareas.
+
+    Returns:
+        dict: {
+            'porcentaje': float,
+            'costo_total': Decimal,
+            'costo_completado': Decimal,
+            'tareas_total': int,
+            'tareas_completadas': int
+        }
+    """
+    from decimal import Decimal
+
+    etapa = EtapaObra.query.get(etapa_id)
+    if not etapa:
+        return None
+
+    tareas = etapa.tareas.all()
+
+    costo_total = Decimal('0')
+    costo_completado = Decimal('0')
+    tareas_completadas = 0
+
+    for tarea in tareas:
+        # Obtener costo acordado de mano de obra
+        costo_tarea = Decimal('0')
+        if tarea.item_presupuesto_id and tarea.item_presupuesto:
+            costo_tarea = tarea.item_presupuesto.subtotal_ars or Decimal('0')
+        elif tarea.presupuesto_mo:
+            costo_tarea = tarea.presupuesto_mo
+
+        costo_total += costo_tarea
+
+        # Calcular avance de la tarea
+        avance = calcular_avance_tarea(tarea.id)
+        if avance:
+            costo_completado += avance['monto_certificable']
+            if avance['porcentaje'] >= 100:
+                tareas_completadas += 1
+
+    # Calcular porcentaje de la etapa
+    if costo_total > 0:
+        porcentaje_etapa = (float(costo_completado) / float(costo_total)) * 100
+    else:
+        porcentaje_etapa = 0
+
+    return {
+        'porcentaje': round(porcentaje_etapa, 2),
+        'costo_total': costo_total,
+        'costo_completado': costo_completado,
+        'tareas_total': len(tareas),
+        'tareas_completadas': tareas_completadas
+    }

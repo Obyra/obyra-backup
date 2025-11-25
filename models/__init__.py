@@ -46,6 +46,8 @@ from models.projects import (
     AsignacionObra,
     ObraMiembro,
     resumen_tarea,
+    calcular_avance_tarea,
+    calcular_avance_etapa,
 )
 
 # Budget models - Presupuestos y pricing

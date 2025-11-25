@@ -2105,10 +2105,14 @@ async function reservarMateriales(obraId) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
 
     try {
+        // Obtener CSRF token de cualquier input hidden en la página
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+
         const response = await fetch(`/obras/api/obras/${obraId}/reservar-materiales`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
             }
         });
 
@@ -2178,9 +2182,7 @@ function mostrarAlertasReservas(data) {
                 <p class="mb-2 mt-2">Estos materiales del presupuesto no están en el inventario:</p>
                 <ul class="mb-0">
                     ${data.detalle.sin_match.map(m => `
-                        <li>${m.descripcion}: ${m.cantidad} ${m.unidad} -
-                            <a href="{{ url_for('inventario.crear') }}" class="alert-link">Agregar al inventario</a>
-                        </li>
+                        <li>${m.descripcion}: ${m.cantidad} ${m.unidad}</li>
                     `).join('')}
                 </ul>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
