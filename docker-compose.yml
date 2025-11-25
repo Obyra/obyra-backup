@@ -111,6 +111,8 @@ services:
       - app_logs:/app/logs
       - app_instance:/app/instance
       - ./templates:/app/templates:ro  # Mount templates for development
+      - ./obras.py:/app/obras.py:ro  # Mount obras.py for development
+      - ./services:/app/services:ro  # Mount services for development
     ports:
       - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
     depends_on:
