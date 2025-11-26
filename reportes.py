@@ -334,45 +334,119 @@ def reporte_obras():
     if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     estado = request.args.get('estado', '')
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
-    
-    query = Obra.query
-    
+
+    # Base query con filtro de organización
+    query = Obra.query.filter(Obra.organizacion_id == org_id)
+
     if estado:
         query = query.filter(Obra.estado == estado)
-    
+
     if fecha_desde:
         try:
             fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
             query = query.filter(Obra.fecha_inicio >= fecha_desde_obj)
         except ValueError:
             pass
-    
+
     if fecha_hasta:
         try:
             fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
             query = query.filter(Obra.fecha_inicio <= fecha_hasta_obj)
         except ValueError:
             pass
-    
+
     obras = query.order_by(desc(Obra.fecha_creacion)).all()
-    
-    # Calcular estadísticas
+
+    # Calcular estadísticas básicas
     total_obras = len(obras)
-    total_presupuesto = sum(obra.presupuesto_total for obra in obras if obra.presupuesto_total)
-    progreso_promedio = sum(obra.progreso for obra in obras) / total_obras if total_obras > 0 else 0
-    
+    total_presupuesto = sum(float(obra.presupuesto_total or 0) for obra in obras)
+    total_costo_real = sum(float(obra.costo_real or 0) for obra in obras)
+    progreso_promedio = sum(obra.progreso or 0 for obra in obras) / total_obras if total_obras > 0 else 0
+
+    # Calcular estadísticas avanzadas por obra
+    obras_data = []
+    for obra in obras:
+        presupuesto = float(obra.presupuesto_total or 0)
+        costo_real = float(obra.costo_real or 0)
+
+        # Calcular costo de inventario usado en esta obra
+        costo_inventario = db.session.query(
+            func.coalesce(func.sum(
+                UsoInventario.cantidad_usada *
+                func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
+            ), 0)
+        ).join(ItemInventario).filter(
+            UsoInventario.obra_id == obra.id
+        ).scalar() or 0
+
+        # Calcular desvío presupuestario
+        desvio = ((costo_real / presupuesto) - 1) * 100 if presupuesto > 0 else 0
+
+        # Calcular rentabilidad estimada
+        rentabilidad = presupuesto - costo_real if presupuesto > 0 else 0
+
+        # Calcular días de obra
+        dias_transcurridos = 0
+        dias_estimados = 0
+        if obra.fecha_inicio:
+            fecha_fin = obra.fecha_fin_real or date.today()
+            dias_transcurridos = (fecha_fin - obra.fecha_inicio).days
+
+            if obra.fecha_fin_estimada:
+                dias_estimados = (obra.fecha_fin_estimada - obra.fecha_inicio).days
+
+        # Estado del cronograma
+        if obra.estado == 'finalizada':
+            estado_cronograma = 'completada'
+        elif dias_estimados > 0 and dias_transcurridos > dias_estimados:
+            estado_cronograma = 'retrasada'
+        elif (obra.progreso or 0) > 0 and dias_estimados > 0:
+            avance_esperado = (dias_transcurridos / dias_estimados) * 100
+            if (obra.progreso or 0) >= avance_esperado - 5:
+                estado_cronograma = 'en_tiempo'
+            else:
+                estado_cronograma = 'retrasada'
+        else:
+            estado_cronograma = 'sin_datos'
+
+        obras_data.append({
+            'obra': obra,
+            'presupuesto': presupuesto,
+            'costo_real': costo_real,
+            'costo_inventario': float(costo_inventario),
+            'desvio': desvio,
+            'rentabilidad': rentabilidad,
+            'dias_transcurridos': dias_transcurridos,
+            'dias_estimados': dias_estimados,
+            'estado_cronograma': estado_cronograma
+        })
+
+    # Estadísticas globales
+    obras_con_sobrecosto = len([o for o in obras_data if o['desvio'] > 0])
+    obras_retrasadas = len([o for o in obras_data if o['estado_cronograma'] == 'retrasada'])
+    rentabilidad_total = sum(o['rentabilidad'] for o in obras_data)
+
     estadisticas = {
         'total_obras': total_obras,
-        'total_presupuesto': float(total_presupuesto),
-        'progreso_promedio': progreso_promedio
+        'total_presupuesto': total_presupuesto,
+        'total_costo_real': total_costo_real,
+        'progreso_promedio': progreso_promedio,
+        'desvio_promedio': ((total_costo_real / total_presupuesto) - 1) * 100 if total_presupuesto > 0 else 0,
+        'obras_con_sobrecosto': obras_con_sobrecosto,
+        'obras_retrasadas': obras_retrasadas,
+        'rentabilidad_total': rentabilidad_total,
+        'obras_en_curso': len([o for o in obras if o.estado == 'en_curso']),
+        'obras_finalizadas': len([o for o in obras if o.estado == 'finalizada']),
     }
-    
+
     return render_template('reportes/obras.html',
                          obras=obras,
+                         obras_data=obras_data,
                          estadisticas=estadisticas,
                          estado=estado,
                          fecha_desde=fecha_desde,
@@ -381,58 +455,169 @@ def reporte_obras():
 @reportes_bp.route('/costos')
 @login_required
 def reporte_costos():
-    if current_user.rol not in ['administrador', 'tecnico']:
+    if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes de costos.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     obra_id = request.args.get('obra_id', '')
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
-    
-    obras = Obra.query.order_by(Obra.nombre).all()
-    
+    agrupar_por = request.args.get('agrupar', 'obra')  # obra, categoria, mes
+
+    # Obtener obras de la organización
+    obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
+
     # Base query para uso de inventario
-    query = UsoInventario.query.join(ItemInventario)
-    
+    query = UsoInventario.query.join(ItemInventario).join(Obra).filter(
+        Obra.organizacion_id == org_id
+    )
+
     if obra_id:
         query = query.filter(UsoInventario.obra_id == obra_id)
-    
+
+    fecha_desde_obj = None
+    fecha_hasta_obj = None
+
     if fecha_desde:
         try:
             fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
             query = query.filter(UsoInventario.fecha_uso >= fecha_desde_obj)
         except ValueError:
             pass
-    
+
     if fecha_hasta:
         try:
             fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
             query = query.filter(UsoInventario.fecha_uso <= fecha_hasta_obj)
         except ValueError:
             pass
-    
+
     usos = query.order_by(desc(UsoInventario.fecha_uso)).all()
-    
-    # Calcular costos
-    costo_total = 0
+
+    # Calcular costos detallados
+    costo_total_ars = 0
+    costo_total_usd = 0
     costos_por_obra = {}
-    
+    costos_por_categoria = {}
+    costos_por_mes = {}
+    materiales_mas_usados = {}
+
     for uso in usos:
-        costo_item = float(uso.cantidad_usada) * float(uso.item.precio_promedio)
-        costo_total += costo_item
-        
-        if uso.obra.nombre not in costos_por_obra:
-            costos_por_obra[uso.obra.nombre] = 0
-        costos_por_obra[uso.obra.nombre] += costo_item
-    
+        # Usar precio histórico si existe, si no usar precio actual
+        precio = float(uso.precio_unitario_al_uso or uso.item.precio_promedio or 0)
+        cantidad = float(uso.cantidad_usada or 0)
+        costo_item = cantidad * precio
+
+        # Determinar moneda
+        moneda = uso.moneda or 'ARS'
+        if moneda == 'USD':
+            costo_total_usd += costo_item
+        else:
+            costo_total_ars += costo_item
+
+        # Agrupar por obra
+        obra_nombre = uso.obra.nombre if uso.obra else 'Sin obra'
+        if obra_nombre not in costos_por_obra:
+            costos_por_obra[obra_nombre] = {
+                'ars': 0, 'usd': 0, 'items': 0,
+                'presupuesto': float(uso.obra.presupuesto_total or 0) if uso.obra else 0,
+                'obra_id': uso.obra.id if uso.obra else None
+            }
+        if moneda == 'USD':
+            costos_por_obra[obra_nombre]['usd'] += costo_item
+        else:
+            costos_por_obra[obra_nombre]['ars'] += costo_item
+        costos_por_obra[obra_nombre]['items'] += 1
+
+        # Agrupar por categoría
+        categoria_nombre = uso.item.categoria.nombre if uso.item.categoria else 'Sin categoría'
+        if categoria_nombre not in costos_por_categoria:
+            costos_por_categoria[categoria_nombre] = {'ars': 0, 'usd': 0, 'items': 0}
+        if moneda == 'USD':
+            costos_por_categoria[categoria_nombre]['usd'] += costo_item
+        else:
+            costos_por_categoria[categoria_nombre]['ars'] += costo_item
+        costos_por_categoria[categoria_nombre]['items'] += 1
+
+        # Agrupar por mes
+        if uso.fecha_uso:
+            mes_key = uso.fecha_uso.strftime('%Y-%m')
+            mes_display = uso.fecha_uso.strftime('%B %Y')
+            if mes_key not in costos_por_mes:
+                costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
+            if moneda == 'USD':
+                costos_por_mes[mes_key]['usd'] += costo_item
+            else:
+                costos_por_mes[mes_key]['ars'] += costo_item
+            costos_por_mes[mes_key]['items'] += 1
+
+        # Top materiales más usados
+        material_nombre = uso.item.nombre
+        if material_nombre not in materiales_mas_usados:
+            materiales_mas_usados[material_nombre] = {
+                'cantidad': 0, 'costo_ars': 0, 'costo_usd': 0,
+                'unidad': uso.item.unidad, 'codigo': uso.item.codigo
+            }
+        materiales_mas_usados[material_nombre]['cantidad'] += cantidad
+        if moneda == 'USD':
+            materiales_mas_usados[material_nombre]['costo_usd'] += costo_item
+        else:
+            materiales_mas_usados[material_nombre]['costo_ars'] += costo_item
+
+    # Ordenar top materiales por costo
+    top_materiales = sorted(
+        materiales_mas_usados.items(),
+        key=lambda x: x[1]['costo_ars'] + x[1]['costo_usd'],
+        reverse=True
+    )[:10]
+
+    # Ordenar meses cronológicamente
+    costos_por_mes_ordenado = dict(sorted(costos_por_mes.items()))
+
+    # Calcular comparativa con presupuestos
+    analisis_obras = []
+    for obra_nombre, datos in costos_por_obra.items():
+        presupuesto = datos['presupuesto']
+        costo_total_obra = datos['ars']  # Por ahora solo ARS para comparación
+        desvio = ((costo_total_obra / presupuesto) - 1) * 100 if presupuesto > 0 else 0
+
+        analisis_obras.append({
+            'nombre': obra_nombre,
+            'obra_id': datos['obra_id'],
+            'presupuesto': presupuesto,
+            'costo_real': costo_total_obra,
+            'costo_usd': datos['usd'],
+            'desvio': desvio,
+            'items_usados': datos['items'],
+            'estado': 'sobrecosto' if desvio > 10 else 'alerta' if desvio > 0 else 'ok'
+        })
+
+    # Ordenar por desvío (peores primero)
+    analisis_obras.sort(key=lambda x: x['desvio'], reverse=True)
+
+    estadisticas = {
+        'costo_total_ars': costo_total_ars,
+        'costo_total_usd': costo_total_usd,
+        'total_usos': len(usos),
+        'obras_con_costos': len(costos_por_obra),
+        'categorias': len(costos_por_categoria),
+        'promedio_diario': costo_total_ars / 30 if costo_total_ars > 0 else 0,
+    }
+
     return render_template('reportes/costos.html',
                          usos=usos,
                          obras=obras,
-                         costo_total=costo_total,
+                         estadisticas=estadisticas,
                          costos_por_obra=costos_por_obra,
+                         costos_por_categoria=costos_por_categoria,
+                         costos_por_mes=costos_por_mes_ordenado,
+                         top_materiales=top_materiales,
+                         analisis_obras=analisis_obras,
                          obra_id=obra_id,
                          fecha_desde=fecha_desde,
-                         fecha_hasta=fecha_hasta)
+                         fecha_hasta=fecha_hasta,
+                         agrupar_por=agrupar_por)
 
 @reportes_bp.route('/inventario')
 @login_required
@@ -440,34 +625,164 @@ def reporte_inventario():
     if not current_user.puede_acceder_modulo('reportes'):
         flash('No tienes permisos para ver reportes de inventario.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     tipo = request.args.get('tipo', '')
     stock_bajo = request.args.get('stock_bajo', '')
-    
-    query = ItemInventario.query.join(CategoriaInventario)
-    
+    ordenar_por = request.args.get('ordenar', 'nombre')  # nombre, valor, rotacion, stock
+
+    # Base query con filtro de organización
+    query = ItemInventario.query.filter(ItemInventario.organizacion_id == org_id)
+
     if tipo:
-        query = query.filter(CategoriaInventario.tipo == tipo)
-    
+        query = query.join(CategoriaInventario).filter(CategoriaInventario.tipo == tipo)
+
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
 
-    items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
-    
-    # Calcular valor total del inventario
-    valor_total = sum(float(item.stock_actual) * float(item.precio_promedio) for item in items)
-    
-    # Items críticos
-    items_criticos = len([item for item in items if item.necesita_reposicion])
-    
+    items = query.filter(ItemInventario.activo == True).all()
+
+    # Calcular métricas por item
+    items_data = []
+    valor_total_ars = 0
+    valor_total_usd = 0
+    items_criticos = 0
+    items_sin_movimiento = 0
+
+    # Período para análisis de rotación (últimos 90 días)
+    fecha_90_dias = date.today() - timedelta(days=90)
+
+    for item in items:
+        stock = float(item.stock_actual or 0)
+        precio_ars = float(item.precio_promedio or 0)
+        precio_usd = float(item.precio_promedio_usd or 0)
+
+        valor_ars = stock * precio_ars
+        valor_usd = stock * precio_usd
+
+        valor_total_ars += valor_ars
+        valor_total_usd += valor_usd
+
+        # Verificar si necesita reposición
+        necesita_reposicion = item.necesita_reposicion
+        if necesita_reposicion:
+            items_criticos += 1
+
+        # Calcular rotación de inventario (usos en últimos 90 días)
+        usos_90_dias = db.session.query(
+            func.coalesce(func.sum(UsoInventario.cantidad_usada), 0)
+        ).filter(
+            UsoInventario.item_id == item.id,
+            UsoInventario.fecha_uso >= fecha_90_dias
+        ).scalar() or 0
+
+        # Calcular índice de rotación
+        if stock > 0 and float(usos_90_dias) > 0:
+            rotacion = (float(usos_90_dias) / stock) * 4  # Anualizado
+        else:
+            rotacion = 0
+
+        # Items sin movimiento
+        ultimo_movimiento = db.session.query(
+            func.max(MovimientoInventario.fecha)
+        ).filter(
+            MovimientoInventario.item_id == item.id
+        ).scalar()
+
+        dias_sin_movimiento = None
+        if ultimo_movimiento:
+            dias_sin_movimiento = (datetime.now() - ultimo_movimiento).days
+            if dias_sin_movimiento > 90:
+                items_sin_movimiento += 1
+        else:
+            items_sin_movimiento += 1
+            dias_sin_movimiento = 999
+
+        # Clasificación ABC basada en valor
+        items_data.append({
+            'item': item,
+            'stock': stock,
+            'precio_ars': precio_ars,
+            'precio_usd': precio_usd,
+            'valor_ars': valor_ars,
+            'valor_usd': valor_usd,
+            'usos_90_dias': float(usos_90_dias),
+            'rotacion': rotacion,
+            'dias_sin_movimiento': dias_sin_movimiento,
+            'necesita_reposicion': necesita_reposicion,
+            'categoria': item.categoria.nombre if item.categoria else 'Sin categoría'
+        })
+
+    # Ordenar según criterio
+    if ordenar_por == 'valor':
+        items_data.sort(key=lambda x: x['valor_ars'], reverse=True)
+    elif ordenar_por == 'rotacion':
+        items_data.sort(key=lambda x: x['rotacion'], reverse=True)
+    elif ordenar_por == 'stock':
+        items_data.sort(key=lambda x: x['stock'], reverse=True)
+    else:
+        items_data.sort(key=lambda x: x['item'].nombre.lower())
+
+    # Clasificación ABC (80-15-5)
+    items_sorted_by_value = sorted(items_data, key=lambda x: x['valor_ars'], reverse=True)
+    valor_acumulado = 0
+    for i, item_data in enumerate(items_sorted_by_value):
+        valor_acumulado += item_data['valor_ars']
+        porcentaje_acumulado = (valor_acumulado / valor_total_ars * 100) if valor_total_ars > 0 else 0
+
+        if porcentaje_acumulado <= 80:
+            item_data['clasificacion_abc'] = 'A'
+        elif porcentaje_acumulado <= 95:
+            item_data['clasificacion_abc'] = 'B'
+        else:
+            item_data['clasificacion_abc'] = 'C'
+
+    # Agrupar por categoría
+    por_categoria = {}
+    for item_data in items_data:
+        cat = item_data['categoria']
+        if cat not in por_categoria:
+            por_categoria[cat] = {'items': 0, 'valor_ars': 0, 'valor_usd': 0}
+        por_categoria[cat]['items'] += 1
+        por_categoria[cat]['valor_ars'] += item_data['valor_ars']
+        por_categoria[cat]['valor_usd'] += item_data['valor_usd']
+
+    # Ordenar categorías por valor
+    por_categoria = dict(sorted(por_categoria.items(), key=lambda x: x[1]['valor_ars'], reverse=True))
+
+    # Top items más valiosos
+    top_valor = sorted(items_data, key=lambda x: x['valor_ars'], reverse=True)[:10]
+
+    # Top items más rotados
+    top_rotacion = sorted(items_data, key=lambda x: x['rotacion'], reverse=True)[:10]
+
+    # Items críticos (stock bajo)
+    items_criticos_lista = [i for i in items_data if i['necesita_reposicion']]
+
+    # Items sin movimiento (posible obsolescencia)
+    items_obsoletos = [i for i in items_data if i['dias_sin_movimiento'] and i['dias_sin_movimiento'] > 90]
+
     estadisticas = {
         'total_items': len(items),
-        'valor_total': valor_total,
-        'items_criticos': items_criticos
+        'valor_total_ars': valor_total_ars,
+        'valor_total_usd': valor_total_usd,
+        'items_criticos': items_criticos,
+        'items_sin_movimiento': items_sin_movimiento,
+        'items_clase_a': len([i for i in items_data if i.get('clasificacion_abc') == 'A']),
+        'items_clase_b': len([i for i in items_data if i.get('clasificacion_abc') == 'B']),
+        'items_clase_c': len([i for i in items_data if i.get('clasificacion_abc') == 'C']),
+        'categorias': len(por_categoria),
     }
-    
+
     return render_template('reportes/inventario.html',
                          items=items,
+                         items_data=items_data,
                          estadisticas=estadisticas,
+                         por_categoria=por_categoria,
+                         top_valor=top_valor,
+                         top_rotacion=top_rotacion,
+                         items_criticos_lista=items_criticos_lista,
+                         items_obsoletos=items_obsoletos,
                          tipo=tipo,
-                         stock_bajo=stock_bajo)
+                         stock_bajo=stock_bajo,
+                         ordenar_por=ordenar_por)

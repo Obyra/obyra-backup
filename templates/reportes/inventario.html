@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de Inventario - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-warehouse me-2 text-primary"></i>Reporte de Inventario
+                </h1>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Dashboard
+                    </a>
+                    <button class="btn btn-success" onclick="exportarReporte()">
+                        <i class="fas fa-file-excel me-1"></i>Exportar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs Principales -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold text-primary">${{ '{:,.0f}'.format(estadisticas.valor_total_ars) }}</h3>
+                            <p class="mb-0 text-muted">Valor Total (ARS)</p>
+                            {% if estadisticas.valor_total_usd > 0 %}
+                            <small class="text-info">US$ {{ '{:,.0f}'.format(estadisticas.valor_total_usd) }}</small>
+                            {% endif %}
+                        </div>
+                        <i class="fas fa-dollar-sign fa-2x text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold">{{ estadisticas.total_items }}</h3>
+                            <p class="mb-0 text-muted">Items en Inventario</p>
+                            <small class="text-muted">{{ estadisticas.categorias }} categorías</small>
+                        </div>
+                        <i class="fas fa-boxes fa-2x text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 {% if estadisticas.items_criticos > 0 %}border-warning{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold {% if estadisticas.items_criticos > 0 %}text-warning{% endif %}">
+                                {{ estadisticas.items_criticos }}
+                            </h3>
+                            <p class="mb-0 text-muted">Stock Bajo</p>
+                            <small class="text-muted">Requieren reposición</small>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-2x {% if estadisticas.items_criticos > 0 %}text-warning{% else %}text-muted{% endif %} opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0 fw-bold {% if estadisticas.items_sin_movimiento > 0 %}text-danger{% endif %}">
+                                {{ estadisticas.items_sin_movimiento }}
+                            </h3>
+                            <p class="mb-0 text-muted">Sin Movimiento</p>
+                            <small class="text-muted">+90 días inactivos</small>
+                        </div>
+                        <i class="fas fa-clock fa-2x {% if estadisticas.items_sin_movimiento > 0 %}text-danger{% else %}text-muted{% endif %} opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clasificación ABC -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Clasificación ABC</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center p-3 border rounded bg-success bg-opacity-10">
+                                <h2 class="text-success mb-0">{{ estadisticas.items_clase_a }}</h2>
+                                <strong>Clase A</strong>
+                                <p class="small text-muted mb-0">80% del valor</p>
+                                <span class="badge bg-success">Alta prioridad</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 border rounded bg-warning bg-opacity-10">
+                                <h2 class="text-warning mb-0">{{ estadisticas.items_clase_b }}</h2>
+                                <strong>Clase B</strong>
+                                <p class="small text-muted mb-0">15% del valor</p>
+                                <span class="badge bg-warning">Media prioridad</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 border rounded bg-secondary bg-opacity-10">
+                                <h2 class="text-secondary mb-0">{{ estadisticas.items_clase_c }}</h2>
+                                <strong>Clase C</strong>
+                                <p class="small text-muted mb-0">5% del valor</p>
+                                <span class="badge bg-secondary">Baja prioridad</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Tipo</label>
+                    <select name="tipo" class="form-select">
+                        <option value="">Todos los tipos</option>
+                        <option value="material" {% if tipo == 'material' %}selected{% endif %}>Materiales</option>
+                        <option value="herramienta" {% if tipo == 'herramienta' %}selected{% endif %}>Herramientas</option>
+                        <option value="maquinaria" {% if tipo == 'maquinaria' %}selected{% endif %}>Maquinaria</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Stock</label>
+                    <select name="stock_bajo" class="form-select">
+                        <option value="">Todos los items</option>
+                        <option value="1" {% if stock_bajo %}selected{% endif %}>Solo stock bajo</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Ordenar por</label>
+                    <select name="ordenar" class="form-select">
+                        <option value="nombre" {% if ordenar_por == 'nombre' %}selected{% endif %}>Nombre</option>
+                        <option value="valor" {% if ordenar_por == 'valor' %}selected{% endif %}>Valor (mayor primero)</option>
+                        <option value="rotacion" {% if ordenar_por == 'rotacion' %}selected{% endif %}>Rotación (mayor primero)</option>
+                        <option value="stock" {% if ordenar_por == 'stock' %}selected{% endif %}>Stock (mayor primero)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabs de contenido -->
+    <ul class="nav nav-tabs mb-4" id="reporteTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabListado" type="button">
+                <i class="fas fa-list me-1"></i>Listado Completo
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCategoria" type="button">
+                <i class="fas fa-folder me-1"></i>Por Categoría
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if items_criticos_lista %}text-warning{% endif %}" data-bs-toggle="tab" data-bs-target="#tabCriticos" type="button">
+                <i class="fas fa-exclamation-triangle me-1"></i>Stock Bajo
+                {% if items_criticos_lista %}<span class="badge bg-warning">{{ items_criticos_lista|length }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabTop" type="button">
+                <i class="fas fa-trophy me-1"></i>Top 10
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="reporteTabContent">
+        <!-- Tab Listado Completo -->
+        <div class="tab-pane fade show active" id="tabListado" role="tabpanel">
+            {% if items_data %}
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ABC</th>
+                                    <th>Código</th>
+                                    <th>Item</th>
+                                    <th>Categoría</th>
+                                    <th class="text-end">Stock</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Valor Total</th>
+                                    <th class="text-center">Rotación</th>
+                                    <th class="text-center">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in items_data %}
+                                <tr class="{% if data.necesita_reposicion %}table-warning{% endif %}">
+                                    <td>
+                                        <span class="badge {% if data.clasificacion_abc == 'A' %}bg-success{% elif data.clasificacion_abc == 'B' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ data.clasificacion_abc or '-' }}
+                                        </span>
+                                    </td>
+                                    <td><code>{{ data.item.codigo }}</code></td>
+                                    <td>
+                                        <strong>{{ data.item.nombre }}</strong>
+                                        {% if data.item.descripcion %}
+                                        <div class="small text-muted">{{ data.item.descripcion|truncate(40) }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ data.categoria }}</td>
+                                    <td class="text-end">
+                                        <strong>{{ '{:,.1f}'.format(data.stock) }}</strong>
+                                        <small class="text-muted">{{ data.item.unidad }}</small>
+                                    </td>
+                                    <td class="text-end">
+                                        ${{ '{:,.0f}'.format(data.precio_ars) }}
+                                        {% if data.precio_usd > 0 %}
+                                        <div class="small text-info">US$ {{ '{:,.2f}'.format(data.precio_usd) }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-primary">${{ '{:,.0f}'.format(data.valor_ars) }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if data.rotacion > 0 %}
+                                        <span class="badge {% if data.rotacion > 4 %}bg-success{% elif data.rotacion > 1 %}bg-info{% else %}bg-warning{% endif %}">
+                                            {{ '{:.1f}'.format(data.rotacion) }}x
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if data.necesita_reposicion %}
+                                        <span class="badge bg-warning"><i class="fas fa-exclamation-triangle"></i> Stock bajo</span>
+                                        {% elif data.dias_sin_movimiento and data.dias_sin_movimiento > 90 %}
+                                        <span class="badge bg-danger"><i class="fas fa-clock"></i> Sin mov.</span>
+                                        {% else %}
+                                        <span class="badge bg-success"><i class="fas fa-check"></i> OK</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-warehouse fa-3x text-muted mb-3"></i>
+                    <h4>No hay items en inventario</h4>
+                    <p class="text-muted">Agregá items desde el módulo de Inventario</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Tab Por Categoría -->
+        <div class="tab-pane fade" id="tabCategoria" role="tabpanel">
+            <div class="row">
+                {% for categoria, datos in por_categoria.items() %}
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h5 class="card-title mb-1">{{ categoria }}</h5>
+                                    <p class="text-muted mb-2">{{ datos.items }} items</p>
+                                </div>
+                                <div class="text-end">
+                                    <h4 class="text-primary mb-0">${{ '{:,.0f}'.format(datos.valor_ars) }}</h4>
+                                    {% if datos.valor_usd > 0 %}
+                                    <small class="text-info">US$ {{ '{:,.0f}'.format(datos.valor_usd) }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="progress mt-2" style="height: 8px;">
+                                {% set porcentaje = (datos.valor_ars / estadisticas.valor_total_ars * 100) if estadisticas.valor_total_ars > 0 else 0 %}
+                                <div class="progress-bar bg-primary" style="width: {{ porcentaje }}%"></div>
+                            </div>
+                            <small class="text-muted">{{ '{:.1f}'.format(porcentaje) }}% del valor total</small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Tab Stock Crítico -->
+        <div class="tab-pane fade" id="tabCriticos" role="tabpanel">
+            {% if items_criticos_lista %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>{{ items_criticos_lista|length }} items</strong> requieren reposición urgente
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="text-end">Stock Actual</th>
+                                    <th class="text-end">Stock Mínimo</th>
+                                    <th class="text-end">Faltante</th>
+                                    <th class="text-end">Costo Reposición</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in items_criticos_lista %}
+                                {% set faltante = (data.item.stock_minimo or 0) - data.stock %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ data.item.nombre }}</strong>
+                                        <div class="small text-muted">{{ data.item.codigo }}</div>
+                                    </td>
+                                    <td class="text-end text-danger">
+                                        <strong>{{ '{:,.1f}'.format(data.stock) }}</strong> {{ data.item.unidad }}
+                                    </td>
+                                    <td class="text-end">
+                                        {{ '{:,.1f}'.format(data.item.stock_minimo or 0) }} {{ data.item.unidad }}
+                                    </td>
+                                    <td class="text-end text-danger">
+                                        <strong>{{ '{:,.1f}'.format(faltante if faltante > 0 else 0) }}</strong> {{ data.item.unidad }}
+                                    </td>
+                                    <td class="text-end">
+                                        ${{ '{:,.0f}'.format(faltante * data.precio_ars if faltante > 0 else 0) }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <h4>Sin items críticos</h4>
+                    <p class="text-muted">Todos los items tienen stock adecuado</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Tab Top 10 -->
+        <div class="tab-pane fade" id="tabTop" role="tabpanel">
+            <div class="row">
+                <!-- Top por Valor -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Top 10 por Valor</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush">
+                                {% for data in top_valor %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ data.item.nombre }}</strong>
+                                        <div class="small text-muted">{{ '{:,.1f}'.format(data.stock) }} {{ data.item.unidad }}</div>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">${{ '{:,.0f}'.format(data.valor_ars) }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top por Rotación -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0"><i class="fas fa-sync-alt me-2"></i>Top 10 por Rotación</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush">
+                                {% for data in top_rotacion %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ data.item.nombre }}</strong>
+                                        <div class="small text-muted">{{ '{:,.1f}'.format(data.usos_90_dias) }} usados (90 días)</div>
+                                    </div>
+                                    <span class="badge bg-success rounded-pill">{{ '{:.1f}'.format(data.rotacion) }}x</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Items Sin Movimiento -->
+            {% if items_obsoletos %}
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>Items Sin Movimiento (+90 días)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger mb-3">
+                        <strong>{{ items_obsoletos|length }} items</strong> no han tenido movimiento en más de 90 días.
+                        Considerá revisar si son obsoletos o requieren acción.
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="text-end">Stock</th>
+                                    <th class="text-end">Valor</th>
+                                    <th class="text-center">Días sin mov.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in items_obsoletos[:10] %}
+                                <tr>
+                                    <td>{{ data.item.nombre }}</td>
+                                    <td class="text-end">{{ '{:,.1f}'.format(data.stock) }}</td>
+                                    <td class="text-end">${{ '{:,.0f}'.format(data.valor_ars) }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger">{{ data.dias_sin_movimiento if data.dias_sin_movimiento < 999 else '+999' }} días</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportarReporte() {
+    const params = new URLSearchParams(window.location.search);
+    params.append('export', 'excel');
+    const exportUrl = `{{ url_for('reportes.reporte_inventario') }}?${params.toString()}`;
+    window.location.href = exportUrl;
+}
+</script>
+{% endblock %}
