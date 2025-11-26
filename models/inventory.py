@@ -25,7 +25,7 @@ class ItemInventario(db.Model):
     __tablename__ = 'items_inventario'
 
     id = db.Column(db.Integer, primary_key=True)
-    categoria_id = db.Column(db.Integer, db.ForeignKey('categorias_inventario.id'), nullable=False)
+    categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=False)
     codigo = db.Column(db.String(50), unique=True, nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text)
@@ -39,7 +39,7 @@ class ItemInventario(db.Model):
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
 
     # Relaciones
-    categoria = db.relationship('CategoriaInventario', back_populates='items')
+    categoria = db.relationship('InventoryCategory', backref='items_inventario')
     organizacion = db.relationship('Organizacion', back_populates='inventario')
     movimientos = db.relationship('MovimientoInventario', back_populates='item', lazy='dynamic')
     usos = db.relationship('UsoInventario', back_populates='item', lazy='dynamic')

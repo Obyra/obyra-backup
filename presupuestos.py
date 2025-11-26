@@ -1839,7 +1839,14 @@ def eliminar_obra(obra_id):
     try:
         AsignacionObra.query.filter_by(obra_id=obra_id).delete()
 
+        # Eliminar dependencias de tareas y luego las tareas de cada etapa
         for etapa in obra.etapas:
+            tareas_etapa = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
+            for tarea in tareas_etapa:
+                # Eliminar miembros asignados a la tarea
+                db.session.execute(db.text("DELETE FROM tarea_miembros WHERE tarea_id = :tarea_id"), {"tarea_id": tarea.id})
+                # Eliminar avances de la tarea
+                db.session.execute(db.text("DELETE FROM tarea_avances WHERE tarea_id = :tarea_id"), {"tarea_id": tarea.id})
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
         EtapaObra.query.filter_by(obra_id=obra_id).delete()
@@ -1848,9 +1855,10 @@ def eliminar_obra(obra_id):
         db.session.commit()
 
         flash(f'La obra "{nombre_obra}" ha sido eliminada exitosamente.', 'success')
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-        flash('Error al eliminar la obra. Inténtalo nuevamente.', 'danger')
+        current_app.logger.error(f'Error al eliminar obra {obra_id}: {str(e)}', exc_info=True)
+        flash(f'Error al eliminar la obra: {str(e)}', 'danger')
 
     return redirect(url_for('obras.lista'))
 

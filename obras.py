@@ -38,6 +38,11 @@ from tareas_predefinidas import (
     obtener_tareas_por_etapa,
     slugify_nombre_etapa,
 )
+from calculadora_ia import (
+    calcular_superficie_etapa,
+    obtener_factores_todas_etapas,
+    FACTORES_SUPERFICIE_ETAPA,
+)
 from geocoding import normalizar_direccion_argentina
 from services.geocoding_service import resolve as resolve_geocode
 from roles_construccion import obtener_roles_por_categoria, obtener_nombre_rol
@@ -926,6 +931,7 @@ def crear_tareas():
         resp_id = request.form.get("responsable_id", type=int) or None
         fi = parse_date(request.form.get("fecha_inicio_plan"))
         ff = parse_date(request.form.get("fecha_fin_plan"))
+        cantidad_total = request.form.get("cantidad_total", type=float) or None
 
         sugeridas = request.form.getlist("sugeridas[]")
 
@@ -972,7 +978,9 @@ def crear_tareas():
                 horas_estimadas=horas,
                 fecha_inicio_plan=fi,
                 fecha_fin_plan=ff,
-                unidad=unidad
+                unidad=unidad,
+                cantidad_planificada=cantidad_total,
+                objetivo=cantidad_total  # También seteamos objetivo para cálculo de avance
             )
             db.session.add(t)
             db.session.commit()
@@ -1009,7 +1017,9 @@ def crear_tareas():
                     horas_estimadas=horas,
                     fecha_inicio_plan=fi,
                     fecha_fin_plan=ff,
-                    unidad=tarea_unidad
+                    unidad=tarea_unidad,
+                    cantidad_planificada=cantidad_total,
+                    objetivo=cantidad_total
                 )
                 db.session.add(t)
                 created += 1
@@ -2261,8 +2271,15 @@ def eliminar_obra(obra_id):
             # Poner etapa_id = NULL en items que referencian esta etapa
             ItemPresupuesto.query.filter_by(etapa_id=etapa.id).update({ItemPresupuesto.etapa_id: None})
 
-        # 2. Eliminar tareas de cada etapa (dependen de etapas)
+        # 2. Eliminar dependencias de tareas y luego las tareas de cada etapa
         for etapa in obra.etapas:
+            tareas_etapa = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
+            for tarea in tareas_etapa:
+                # Eliminar miembros asignados a la tarea
+                db.session.execute(db.text("DELETE FROM tarea_miembros WHERE tarea_id = :tarea_id"), {"tarea_id": tarea.id})
+                # Eliminar avances de la tarea
+                db.session.execute(db.text("DELETE FROM tarea_avances WHERE tarea_id = :tarea_id"), {"tarea_id": tarea.id})
+            # Luego eliminar las tareas
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
         # 3. Eliminar etapas
@@ -2770,6 +2787,112 @@ def get_wizard_etapas():
         response = jsonify({"ok": False, "error": str(e)})
         response.headers['Content-Type'] = 'application/json'
         return response, 400
+
+
+@obras_bp.route('/api/calcular-superficie-etapa', methods=['POST'])
+@login_required
+def api_calcular_superficie_etapa():
+    """
+    Calcula la superficie real de trabajo para una etapa específica.
+
+    Recibe:
+    - obra_id: ID de la obra (para obtener superficie cubierta)
+    - etapa_slug: Identificador de la etapa (ej: 'revoque-grueso')
+    - superficie_cubierta: (opcional) Si no se pasa, se obtiene de la obra
+
+    Retorna:
+    - superficie_calculada: m², m³, ml o unidades según corresponda
+    - unidad: Unidad de medida
+    - factor: Factor aplicado
+    - descripcion: Explicación del cálculo
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+
+        obra_id = data.get('obra_id')
+        etapa_slug = data.get('etapa_slug', '').strip()
+        superficie_cubierta = data.get('superficie_cubierta')
+
+        # Validaciones
+        if not etapa_slug:
+            return jsonify({"ok": False, "error": "etapa_slug es requerido"}), 400
+
+        # Si no se pasó superficie, obtenerla de la obra
+        if superficie_cubierta is None and obra_id:
+            obra = Obra.query.get(obra_id)
+            if obra and obra.superficie_cubierta:
+                superficie_cubierta = float(obra.superficie_cubierta)
+            else:
+                return jsonify({
+                    "ok": False,
+                    "error": "No se pudo obtener la superficie cubierta de la obra"
+                }), 400
+        elif superficie_cubierta is None:
+            return jsonify({
+                "ok": False,
+                "error": "Se requiere obra_id o superficie_cubierta"
+            }), 400
+
+        # Calcular superficie para la etapa
+        resultado = calcular_superficie_etapa(float(superficie_cubierta), etapa_slug)
+
+        return jsonify({
+            "ok": True,
+            "etapa_slug": etapa_slug,
+            "superficie_cubierta_obra": superficie_cubierta,
+            **resultado
+        }), 200
+
+    except Exception as e:
+        current_app.logger.exception("Error en api_calcular_superficie_etapa")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@obras_bp.route('/api/factores-superficie', methods=['GET'])
+@login_required
+def api_get_factores_superficie():
+    """
+    Devuelve todos los factores de superficie disponibles.
+    Útil para mostrar una tabla de referencia al usuario.
+    """
+    try:
+        obra_id = request.args.get('obra_id', type=int)
+        superficie_cubierta = request.args.get('superficie', type=float)
+
+        # Si se pasa obra_id, obtener superficie de la obra
+        if obra_id and not superficie_cubierta:
+            obra = Obra.query.get(obra_id)
+            if obra and obra.superficie_cubierta:
+                superficie_cubierta = float(obra.superficie_cubierta)
+
+        # Si hay superficie, calcular todas las etapas
+        if superficie_cubierta:
+            resultado = obtener_factores_todas_etapas(superficie_cubierta)
+            return jsonify({
+                "ok": True,
+                "superficie_cubierta": superficie_cubierta,
+                "factores": resultado
+            }), 200
+
+        # Si no hay superficie, devolver solo los factores base
+        factores_base = {}
+        for slug, config in FACTORES_SUPERFICIE_ETAPA.items():
+            factores_base[slug] = {
+                'nombre': slug.replace('-', ' ').title(),
+                'factor': config['factor'],
+                'unidad': config['unidad_default'],
+                'descripcion': config['descripcion'],
+                'notas': config.get('notas', '')
+            }
+
+        return jsonify({
+            "ok": True,
+            "factores": factores_base
+        }), 200
+
+    except Exception as e:
+        current_app.logger.exception("Error en api_get_factores_superficie")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @obras_bp.route('/api/wizard-tareas/tareas', methods=['POST','GET'])

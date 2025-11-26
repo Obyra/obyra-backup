@@ -50,9 +50,18 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="codigo" class="form-label">Código *</label>
-                                    <input type="text" class="form-control" id="codigo" name="codigo" 
-                                           placeholder="Ej: MAT001, HER002" required>
-                                    <div class="form-text">Código único para identificar el item</div>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="codigo" name="codigo"
+                                               placeholder="Se genera automáticamente" required readonly>
+                                        <button type="button" class="btn btn-outline-secondary" id="btn-regenerar-codigo"
+                                                title="Regenerar código" disabled>
+                                            <i class="fas fa-sync-alt"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="fas fa-magic text-primary me-1"></i>
+                                        <span id="codigo-help">Seleccioná una categoría para generar el código</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -119,6 +128,9 @@
                                         <span class="input-group-text">$</span>
                                         <input type="number" class="form-control" id="precio_promedio" name="precio_promedio"
                                                placeholder="0.00" step="0.01" min="0" value="0">
+                                        <button type="button" class="btn btn-outline-secondary" id="btn-convert-to-usd" title="Convertir a USD">
+                                            <i class="fas fa-arrow-right"></i>
+                                        </button>
                                     </div>
                                     <div class="form-text">Precio promedio en pesos argentinos</div>
                                 </div>
@@ -127,12 +139,25 @@
                                 <div class="mb-3">
                                     <label for="precio_promedio_usd" class="form-label">Precio Promedio (USD)</label>
                                     <div class="input-group">
+                                        <button type="button" class="btn btn-outline-secondary" id="btn-convert-to-ars" title="Convertir a ARS">
+                                            <i class="fas fa-arrow-left"></i>
+                                        </button>
                                         <span class="input-group-text">US$</span>
                                         <input type="number" class="form-control" id="precio_promedio_usd" name="precio_promedio_usd"
                                                placeholder="0.00" step="0.01" min="0" value="0">
                                     </div>
                                     <div class="form-text">Precio promedio en dólares</div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Indicador de tipo de cambio -->
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <small class="text-muted" id="tipo-cambio-info">
+                                    <i class="fas fa-exchange-alt me-1"></i>
+                                    Tipo de cambio: <span id="tipo-cambio-valor">Cargando...</span>
+                                </small>
                             </div>
                         </div>
                         
@@ -169,6 +194,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const categoryWarning = document.querySelector('[data-category-empty]');
     const categoriesEndpoint = categoriaSelect ? categoriaSelect.dataset.categoriesEndpoint : null;
     const initialCategoryOptions = {{ category_options|default([], true)|tojson }};
+    const btnRegenerar = document.getElementById('btn-regenerar-codigo');
+    const codigoHelp = document.getElementById('codigo-help');
 
     const toggleCategoryWarning = (show) => {
         if (!categoryWarning) {
@@ -256,31 +283,71 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('obyra:org-changed', refreshCategories);
     document.addEventListener('obyra:inventory-categories:refresh', refreshCategories);
 
-    function generarCodigo() {
-        if (!categoriaSelect) {
+    // Función para generar código automático via API
+    async function generarCodigoAutomatico() {
+        if (!categoriaSelect || !categoriaSelect.value) {
+            codigoInput.value = '';
+            codigoHelp.textContent = 'Seleccioná una categoría para generar el código';
+            btnRegenerar.disabled = true;
             return;
         }
-        const categoria = categoriaSelect.options[categoriaSelect.selectedIndex];
-        const nombre = nombreInput.value;
 
-        if (categoria && categoria.value && nombre) {
-            const categoriaNombre = categoria.text.split('(')[0].trim();
-            const prefijo = categoriaNombre.substring(0, 3).toUpperCase();
-            const sufijo = nombre.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
+        try {
+            // Mostrar loading
+            codigoInput.value = 'Generando...';
+            codigoInput.classList.add('text-muted');
+            btnRegenerar.disabled = true;
 
-            if (sufijo) {
-                const timestamp = Date.now().toString().slice(-3);
-                codigoInput.value = prefijo + sufijo + timestamp;
+            // Obtener CSRF token
+            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value ||
+                              document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+            const response = await fetch('{{ url_for("inventario.api_generar_codigo") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    categoria_id: categoriaSelect.value
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
             }
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Mostrar código generado
+            codigoInput.value = data.codigo;
+            codigoInput.classList.remove('text-muted');
+            codigoHelp.innerHTML = `<span class="text-success"><i class="fas fa-check-circle me-1"></i>Código generado: ${data.prefijo} + correlativo</span>`;
+            btnRegenerar.disabled = false;
+
+        } catch (error) {
+            console.error('Error generando código:', error);
+            codigoInput.value = '';
+            codigoInput.classList.remove('text-muted');
+            codigoHelp.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Error al generar código</span>';
+            btnRegenerar.disabled = true;
         }
     }
 
+    // Event listeners
     if (categoriaSelect) {
-        categoriaSelect.addEventListener('change', generarCodigo);
         categoriaSelect.addEventListener('change', function() {
+            // Generar código automáticamente al cambiar categoría
+            generarCodigoAutomatico();
+
+            // Actualizar placeholder de descripción según tipo
             const selectedOption = this.options[this.selectedIndex];
             const tipo = selectedOption ? selectedOption.getAttribute('data-tipo') : null;
-
             const descripcionInput = document.getElementById('descripcion');
             let placeholder = '';
 
@@ -295,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     placeholder = 'Ej: Mezcladora de concreto 120L, motor 2HP, marca Stark...';
                     break;
                 default:
-                    placeholder = '';
+                    placeholder = 'Descripción detallada del item, especificaciones técnicas, marca, modelo...';
                     break;
             }
 
@@ -303,22 +370,106 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    nombreInput.addEventListener('blur', function() {
-        if (!codigoInput.value) {
-            generarCodigo();
-        }
-    });
+    // Botón regenerar código
+    if (btnRegenerar) {
+        btnRegenerar.addEventListener('click', function() {
+            generarCodigoAutomatico();
+        });
+    }
 
-    codigoInput.addEventListener('blur', function() {
-        const codigo = this.value;
-        if (codigo) {
-            if (!/^[A-Z0-9]{6,10}$/.test(codigo)) {
-                this.setCustomValidity('El código debe tener entre 6-10 caracteres alfanuméricos en mayúsculas');
-            } else {
-                this.setCustomValidity('');
+    // ========================================
+    // CONVERSIÓN AUTOMÁTICA DE MONEDA
+    // ========================================
+    const precioArsInput = document.getElementById('precio_promedio');
+    const precioUsdInput = document.getElementById('precio_promedio_usd');
+    const btnConvertToUsd = document.getElementById('btn-convert-to-usd');
+    const btnConvertToArs = document.getElementById('btn-convert-to-ars');
+    const tipoCambioValor = document.getElementById('tipo-cambio-valor');
+
+    let tipoCambio = 1150; // Valor por defecto
+    let isConverting = false; // Flag para evitar loops
+
+    // Cargar tipo de cambio al iniciar
+    async function cargarTipoCambio() {
+        try {
+            const response = await fetch('{{ url_for("inventario.api_tipo_cambio") }}');
+            const data = await response.json();
+
+            if (data.tipo_cambio) {
+                tipoCambio = data.tipo_cambio;
+                tipoCambioValor.innerHTML = `<strong>$${tipoCambio.toLocaleString('es-AR')} ARS/USD</strong>`;
+                if (data.provider && data.provider !== 'default') {
+                    tipoCambioValor.innerHTML += ` <small>(${data.provider})</small>`;
+                }
             }
+        } catch (error) {
+            console.warn('Error cargando tipo de cambio:', error);
+            tipoCambioValor.innerHTML = `<strong>$${tipoCambio.toLocaleString('es-AR')} ARS/USD</strong> <small>(por defecto)</small>`;
         }
-    });
+    }
+
+    // Convertir ARS a USD
+    function convertirArsAUsd() {
+        if (isConverting) return;
+        const ars = parseFloat(precioArsInput.value) || 0;
+        if (ars > 0 && tipoCambio > 0) {
+            isConverting = true;
+            const usd = (ars / tipoCambio).toFixed(2);
+            precioUsdInput.value = usd;
+            // Efecto visual
+            precioUsdInput.classList.add('bg-light');
+            setTimeout(() => precioUsdInput.classList.remove('bg-light'), 300);
+            isConverting = false;
+        }
+    }
+
+    // Convertir USD a ARS
+    function convertirUsdAArs() {
+        if (isConverting) return;
+        const usd = parseFloat(precioUsdInput.value) || 0;
+        if (usd > 0 && tipoCambio > 0) {
+            isConverting = true;
+            const ars = (usd * tipoCambio).toFixed(2);
+            precioArsInput.value = ars;
+            // Efecto visual
+            precioArsInput.classList.add('bg-light');
+            setTimeout(() => precioArsInput.classList.remove('bg-light'), 300);
+            isConverting = false;
+        }
+    }
+
+    // Event listeners para conversión automática al salir del campo
+    if (precioArsInput) {
+        precioArsInput.addEventListener('blur', convertirArsAUsd);
+        precioArsInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                convertirArsAUsd();
+            }
+        });
+    }
+
+    if (precioUsdInput) {
+        precioUsdInput.addEventListener('blur', convertirUsdAArs);
+        precioUsdInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                convertirUsdAArs();
+            }
+        });
+    }
+
+    // Botones de conversión manual
+    if (btnConvertToUsd) {
+        btnConvertToUsd.addEventListener('click', convertirArsAUsd);
+    }
+
+    if (btnConvertToArs) {
+        btnConvertToArs.addEventListener('click', convertirUsdAArs);
+    }
+
+    // Cargar tipo de cambio al iniciar
+    cargarTipoCambio();
 });
 </script>
 {% endblock %}

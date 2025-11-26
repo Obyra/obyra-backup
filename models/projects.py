@@ -76,7 +76,10 @@ class Obra(db.Model):
         return None
 
     def calcular_progreso_automatico(self):
-        """Calcula el progreso automático basado en etapas, tareas y certificaciones"""
+        """
+        Calcula el progreso automático basado en mediciones por etapa.
+        Fórmula: (metros realizados / metros totales) * 100 por cada etapa
+        """
         from decimal import Decimal, ROUND_HALF_UP
 
         total_etapas = self.etapas.count()
@@ -84,14 +87,31 @@ class Obra(db.Model):
             return 0
 
         progreso_etapas = Decimal('0')
+        total_planificado_obra = Decimal('0')
+        total_ejecutado_obra = Decimal('0')
+
         for etapa in self.etapas:
-            total_tareas = etapa.tareas.count()
-            if total_tareas > 0:
-                tareas_completadas = etapa.tareas.filter_by(estado='completada').count()
-                porcentaje_etapa = (Decimal(str(tareas_completadas)) / Decimal(str(total_tareas))) * (Decimal('100') / Decimal(str(total_etapas)))
+            # Prioridad 1: Usar mediciones de la etapa si están definidas
+            if etapa.cantidad_total_planificada and float(etapa.cantidad_total_planificada) > 0:
+                # Calcular avance por medición para esta etapa
+                etapa.calcular_avance_por_medicion()
+
+                total_planificado_obra += Decimal(str(etapa.cantidad_total_planificada))
+                total_ejecutado_obra += Decimal(str(etapa.cantidad_total_ejecutada or 0))
+
+                # Contribución ponderada de esta etapa al progreso total
+                porcentaje_etapa = Decimal(str(etapa.porcentaje_avance_medicion)) / Decimal(str(total_etapas))
                 progreso_etapas += porcentaje_etapa
-            elif etapa.estado == 'finalizada':
-                progreso_etapas += (Decimal('100') / Decimal(str(total_etapas)))
+
+            # Prioridad 2: Fallback a tareas completadas
+            else:
+                total_tareas = etapa.tareas.count()
+                if total_tareas > 0:
+                    tareas_completadas = etapa.tareas.filter_by(estado='completada').count()
+                    porcentaje_etapa = (Decimal(str(tareas_completadas)) / Decimal(str(total_tareas))) * (Decimal('100') / Decimal(str(total_etapas)))
+                    progreso_etapas += porcentaje_etapa
+                elif etapa.estado == 'finalizada':
+                    progreso_etapas += (Decimal('100') / Decimal(str(total_etapas)))
 
         # Agregar progreso de certificaciones - convertir a Decimal
         progreso_certificaciones = Decimal('0')
@@ -138,12 +158,33 @@ class EtapaObra(db.Model):
     estado = db.Column(db.String(20), default='pendiente')  # pendiente, en_curso, finalizada
     progreso = db.Column(db.Integer, default=0)
 
+    # Campos de medición por etapa
+    unidad_medida = db.Column(db.String(10), default='m2')  # m2, m3, ml, u, hrs
+    cantidad_total_planificada = db.Column(db.Numeric(15, 3), default=0)  # Total a ejecutar
+    cantidad_total_ejecutada = db.Column(db.Numeric(15, 3), default=0)  # Total ejecutado
+    porcentaje_avance_medicion = db.Column(db.Integer, default=0)  # Avance por medición (0-100)
+
     # Relaciones
     obra = db.relationship('Obra', back_populates='etapas')
     tareas = db.relationship('TareaEtapa', back_populates='etapa', cascade='all, delete-orphan', lazy='dynamic')
 
     def __repr__(self):
         return f'<EtapaObra {self.nombre}>'
+
+    def calcular_avance_por_medicion(self):
+        """Calcula avance como: (cantidad_ejecutada / cantidad_planificada) * 100"""
+        if self.cantidad_total_planificada and float(self.cantidad_total_planificada) > 0:
+            avance = (float(self.cantidad_total_ejecutada or 0) / float(self.cantidad_total_planificada)) * 100
+            self.porcentaje_avance_medicion = min(100, int(avance))
+            self.progreso = self.porcentaje_avance_medicion  # Sincronizar con progreso general
+        else:
+            self.porcentaje_avance_medicion = 0
+        return self.porcentaje_avance_medicion
+
+    def registrar_avance_medicion(self, cantidad_ejecutada):
+        """Registra avance en metros/unidades y recalcula porcentaje"""
+        self.cantidad_total_ejecutada = (self.cantidad_total_ejecutada or 0) + cantidad_ejecutada
+        return self.calcular_avance_por_medicion()
 
 
 class TareaEtapa(db.Model):

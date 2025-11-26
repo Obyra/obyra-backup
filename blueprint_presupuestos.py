@@ -203,34 +203,6 @@ def crear():
                             precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
                             total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
 
-                            # Auto-vinculación con inventario (match por código)
-                            item_inventario_id = None
-                            codigo_material = item.get('codigo', '')
-
-                            if item.get('tipo') == 'material' and codigo_material:
-                                # Buscar en inventario por código exacto
-                                from models import ItemInventario
-                                item_inv = ItemInventario.query.filter_by(
-                                    organizacion_id=org_id,
-                                    codigo=codigo_material
-                                ).first()
-
-                                if item_inv:
-                                    item_inventario_id = item_inv.id
-                                    current_app.logger.info(f"✅ Material '{item.get('descripcion')}' vinculado con inventario ID {item_inv.id}")
-                                else:
-                                    # Si no existe, buscar por nombre similar (fallback)
-                                    descripcion = item.get('descripcion', '')
-                                    if descripcion and not descripcion.startswith('⚠️'):
-                                        item_inv = ItemInventario.query.filter(
-                                            ItemInventario.organizacion_id == org_id,
-                                            ItemInventario.nombre.ilike(f'%{descripcion[:30]}%')
-                                        ).first()
-
-                                        if item_inv:
-                                            item_inventario_id = item_inv.id
-                                            current_app.logger.info(f"⚠️ Material '{descripcion}' vinculado por nombre similar con inventario ID {item_inv.id}")
-
                             item_presupuesto = ItemPresupuesto(
                                 presupuesto_id=presupuesto.id,
                                 tipo=item.get('tipo', 'material'),
@@ -243,8 +215,7 @@ def crear():
                                 currency=moneda_ia,
                                 price_unit_ars=precio_unit_ars,
                                 total_ars=total_ars,
-                                etapa_id=None,  # Se asignará al confirmar como obra
-                                item_inventario_id=item_inventario_id  # Vinculación automática
+                                etapa_id=None  # Se asignará al confirmar como obra
                             )
                             db.session.add(item_presupuesto)
 
@@ -834,6 +805,24 @@ def confirmar_como_obra(id):
             for item in items_etapa:
                 if not item.etapa_id:
                     item.etapa_id = etapa.id
+
+            # Calcular mediciones totales para esta etapa
+            cantidad_total_etapa = 0
+            unidad_etapa = 'm2'  # Default
+
+            for item in items_etapa:
+                if item and item.cantidad:
+                    cantidad_total_etapa += float(item.cantidad)
+                    if item.unidad:
+                        unidad_etapa = item.unidad  # Tomar la unidad del último item
+
+            # Asignar mediciones a la etapa
+            etapa.unidad_medida = unidad_etapa
+            etapa.cantidad_total_planificada = cantidad_total_etapa
+            etapa.cantidad_total_ejecutada = 0
+            etapa.porcentaje_avance_medicion = 0
+
+            current_app.logger.info(f"📏 Etapa '{etapa_nombre}': {cantidad_total_etapa} {unidad_etapa} planificados")
 
             orden_etapa += 1
 

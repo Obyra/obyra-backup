@@ -377,8 +377,7 @@ def reporte_obras():
         # Calcular costo de inventario usado en esta obra
         costo_inventario = db.session.query(
             func.coalesce(func.sum(
-                UsoInventario.cantidad_usada *
-                func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
+                UsoInventario.cantidad_usada * ItemInventario.precio_promedio
             ), 0)
         ).join(ItemInventario).filter(
             UsoInventario.obra_id == obra.id
@@ -504,17 +503,13 @@ def reporte_costos():
     materiales_mas_usados = {}
 
     for uso in usos:
-        # Usar precio histórico si existe, si no usar precio actual
-        precio = float(uso.precio_unitario_al_uso or uso.item.precio_promedio or 0)
+        # Usar precio actual del item
+        precio = float(uso.item.precio_promedio or 0)
         cantidad = float(uso.cantidad_usada or 0)
         costo_item = cantidad * precio
 
-        # Determinar moneda
-        moneda = uso.moneda or 'ARS'
-        if moneda == 'USD':
-            costo_total_usd += costo_item
-        else:
-            costo_total_ars += costo_item
+        # Por ahora todo en ARS (moneda por defecto)
+        costo_total_ars += costo_item
 
         # Agrupar por obra
         obra_nombre = uso.obra.nombre if uso.obra else 'Sin obra'
@@ -524,20 +519,14 @@ def reporte_costos():
                 'presupuesto': float(uso.obra.presupuesto_total or 0) if uso.obra else 0,
                 'obra_id': uso.obra.id if uso.obra else None
             }
-        if moneda == 'USD':
-            costos_por_obra[obra_nombre]['usd'] += costo_item
-        else:
-            costos_por_obra[obra_nombre]['ars'] += costo_item
+        costos_por_obra[obra_nombre]['ars'] += costo_item
         costos_por_obra[obra_nombre]['items'] += 1
 
         # Agrupar por categoría
         categoria_nombre = uso.item.categoria.nombre if uso.item.categoria else 'Sin categoría'
         if categoria_nombre not in costos_por_categoria:
             costos_por_categoria[categoria_nombre] = {'ars': 0, 'usd': 0, 'items': 0}
-        if moneda == 'USD':
-            costos_por_categoria[categoria_nombre]['usd'] += costo_item
-        else:
-            costos_por_categoria[categoria_nombre]['ars'] += costo_item
+        costos_por_categoria[categoria_nombre]['ars'] += costo_item
         costos_por_categoria[categoria_nombre]['items'] += 1
 
         # Agrupar por mes
@@ -546,10 +535,7 @@ def reporte_costos():
             mes_display = uso.fecha_uso.strftime('%B %Y')
             if mes_key not in costos_por_mes:
                 costos_por_mes[mes_key] = {'display': mes_display, 'ars': 0, 'usd': 0, 'items': 0}
-            if moneda == 'USD':
-                costos_por_mes[mes_key]['usd'] += costo_item
-            else:
-                costos_por_mes[mes_key]['ars'] += costo_item
+            costos_por_mes[mes_key]['ars'] += costo_item
             costos_por_mes[mes_key]['items'] += 1
 
         # Top materiales más usados
@@ -560,10 +546,7 @@ def reporte_costos():
                 'unidad': uso.item.unidad, 'codigo': uso.item.codigo
             }
         materiales_mas_usados[material_nombre]['cantidad'] += cantidad
-        if moneda == 'USD':
-            materiales_mas_usados[material_nombre]['costo_usd'] += costo_item
-        else:
-            materiales_mas_usados[material_nombre]['costo_ars'] += costo_item
+        materiales_mas_usados[material_nombre]['costo_ars'] += costo_item
 
     # Ordenar top materiales por costo
     top_materiales = sorted(

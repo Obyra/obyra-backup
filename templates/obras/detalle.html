@@ -785,18 +785,26 @@
                         </div>
                     </div>
                     
+                    <!-- Cantidad planificada (calculada automáticamente según etapa) -->
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Horas Estimadas</label>
-                                <input type="number" class="form-control" name="horas_estimadas" 
-                                       placeholder="0" step="0.5">
+                                <label class="form-label">
+                                    Cantidad Total Planificada
+                                    <i class="fas fa-calculator text-info ms-1" id="iconCalculoAuto"
+                                       title="Calculado automáticamente según tipo de etapa" style="display: none;"></i>
+                                </label>
+                                <input type="number" class="form-control" name="cantidad_total" id="cantidadTotalInput"
+                                       placeholder="Ej: 500" step="0.01" min="0">
+                                <div class="form-text" id="cantidadHelpText">
+                                    Cantidad total a ejecutar en esta tarea
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label class="form-label">Unidad</label>
-                                <select name="unidad" class="form-select" required>
+                                <select name="unidad" class="form-select" required id="unidadSelect">
                                     <option value="m2">m²</option>
                                     <option value="ml">ml (metro lineal)</option>
                                     <option value="m3">m³</option>
@@ -804,6 +812,16 @@
                                     <option value="kg">kg</option>
                                 </select>
                                 <div class="form-text">Unidad para medir el progreso de esta tarea</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Horas Estimadas</label>
+                                <input type="number" class="form-control" name="horas_estimadas"
+                                       placeholder="0" step="0.5">
                             </div>
                         </div>
                     </div>
@@ -1380,6 +1398,8 @@
 <script>
   // Exponer obraId para wizard.js y otros scripts
   window.obraId = {{ obra.id }};
+  // Superficie cubierta de la obra para cálculos automáticos
+  window.superficieCubierta = {{ obra.superficie_cubierta or 0 }};
   // Datos de tareas predefinidas desde servidor (fallback a {} si no viene)
   const TAREAS_PREDEFINIDAS_DICT = {{ (TAREAS_POR_ETAPA or {})|tojson|safe }};
 </script>
@@ -1511,11 +1531,22 @@ function abrirModalTarea(etapaId, nombreEtapa) {
     const responsableSelect = form.querySelector('select[name="responsable_id"]');
     const fechaInicioInput = form.querySelector('input[name="fecha_inicio_plan"]');
     const fechaFinInput = form.querySelector('input[name="fecha_fin_plan"]');
+    const cantidadInput = document.getElementById('cantidadTotalInput');
+    const unidadSelect = document.getElementById('unidadSelect');
     if (tareasInput) { tareasInput.value=''; tareasInput.disabled=false; tareasInput.placeholder='Nombre de la tarea'; }
     if (horasInput) horasInput.value='';
     if (responsableSelect) responsableSelect.value='';
     if (fechaInicioInput) fechaInicioInput.value='';
     if (fechaFinInput) fechaFinInput.value='';
+    if (cantidadInput) cantidadInput.value='';
+    if (unidadSelect) unidadSelect.value='un';
+
+    // Guardar nombre de etapa para cálculo de superficie
+    window.etapaActualNombre = nombreEtapa;
+
+    // Calcular superficie automáticamente según etapa
+    calcularSuperficieEtapa(nombreEtapa);
+
     // sugeridas
     document.getElementById('listaTareasSugeridas').innerHTML = '';
     document.getElementById('tareasSuperidasContainer').style.display = 'none';
@@ -1525,6 +1556,74 @@ function abrirModalTarea(etapaId, nombreEtapa) {
         if (tareasInput) tareasInput.placeholder = `Ej: ${tareasDisponibles[0].nombre || 'Nueva tarea'}`;
     }
     new bootstrap.Modal(document.getElementById('nuevaTareaModal')).show();
+}
+
+/* -------- Cálculo automático de superficie por etapa -------- */
+async function calcularSuperficieEtapa(nombreEtapa) {
+    const cantidadInput = document.getElementById('cantidadTotalInput');
+    const unidadSelect = document.getElementById('unidadSelect');
+    const helpText = document.getElementById('cantidadHelpText');
+    const iconCalculo = document.getElementById('iconCalculoAuto');
+
+    // Si no hay superficie cubierta, no calcular
+    if (!window.superficieCubierta || window.superficieCubierta <= 0) {
+        helpText.innerHTML = 'Cantidad total a ejecutar en esta tarea';
+        iconCalculo.style.display = 'none';
+        return;
+    }
+
+    // Normalizar nombre a slug (ej: "Revoque Grueso" -> "revoque-grueso")
+    const etapaSlug = nombreEtapa
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')  // quitar acentos
+        .replace(/\s+/g, '-')              // espacios a guiones
+        .replace(/[^a-z0-9-]/g, '');       // solo alfanuméricos y guiones
+
+    try {
+        const response = await fetch('/obras/api/calcular-superficie-etapa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                obra_id: window.obraId,
+                etapa_slug: etapaSlug,
+                superficie_cubierta: window.superficieCubierta
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            // Mostrar cantidad calculada
+            cantidadInput.value = data.superficie_calculada;
+            cantidadInput.placeholder = `Sugerido: ${data.superficie_calculada}`;
+
+            // Mapear unidad de la API a valor del select
+            const unidadMap = {
+                'm²': 'm2',
+                'm³': 'm3',
+                'ml': 'ml',
+                'puntos': 'un',
+                'u': 'un'
+            };
+            const unidadValue = unidadMap[data.unidad] || 'un';
+            unidadSelect.value = unidadValue;
+
+            // Mostrar descripción del cálculo
+            helpText.innerHTML = `<i class="fas fa-info-circle text-info"></i> ${data.descripcion}
+                <br><small class="text-muted">Factor: ${data.factor}x sobre ${window.superficieCubierta} m² cubiertos</small>`;
+            iconCalculo.style.display = 'inline';
+            iconCalculo.title = data.notas || 'Calculado automáticamente';
+        } else {
+            // Sin cálculo disponible
+            helpText.innerHTML = 'Cantidad total a ejecutar en esta tarea';
+            iconCalculo.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error calculando superficie:', error);
+        helpText.innerHTML = 'Cantidad total a ejecutar en esta tarea';
+        iconCalculo.style.display = 'none';
+    }
 }
 
 function obtenerTareasPredefinidas(nombreEtapa) {

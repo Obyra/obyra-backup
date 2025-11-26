@@ -475,6 +475,234 @@ PRECIO_REFERENCIA = {
     'EQ-HIDROLAVADORA': 15500.0,
 }
 
+# ================================================================================
+# FACTORES DE CONVERSIÓN DE SUPERFICIE POR ETAPA
+# ================================================================================
+# Estos factores convierten la superficie cubierta (m² de construcción) a la
+# superficie real de trabajo para cada etapa.
+#
+# Ejemplo: Una casa de 500m² cubiertos tiene aproximadamente:
+# - 800m² de revoque (paredes internas + externas = factor 1.6)
+# - 900m² de pintura (paredes + cielorrasos = factor 1.8)
+# - 500m² de contrapiso (igual a superficie = factor 1.0)
+#
+# Factores calculados según estándares de arquitectura argentina:
+# - Altura de paredes estándar: 2.6m a 2.8m
+# - Relación perímetro/superficie: aprox 0.4 a 0.6 según forma
+# - Se considera construcción típica rectangular con tabiques internos
+# ================================================================================
+
+FACTORES_SUPERFICIE_ETAPA = {
+    # Etapas donde la superficie = superficie cubierta
+    'excavacion': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Movimiento de suelos en planta'
+    },
+    'fundaciones': {
+        'factor': 0.25,  # Solo área de zapatas y vigas (~25% del área)
+        'unidad_default': 'm³',
+        'descripcion': 'Volumen de fundación (aprox 25% del área × profundidad)',
+        'notas': 'Zapatas corridas y aisladas'
+    },
+    'estructura': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Columnas, vigas y losas'
+    },
+    'mamposteria': {
+        'factor': 1.4,  # Perímetro × altura + tabiques internos
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de muros (perímetro × altura + tabiques)',
+        'notas': 'Factor 1.4 considera muros perimetrales + divisorios internos'
+    },
+    'techos': {
+        'factor': 1.1,  # Superficie + pendientes
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de cubierta (incluye pendientes)',
+        'notas': 'Techos inclinados agregan ~10%'
+    },
+    'instalaciones-electricas': {
+        'factor': 1.0,
+        'unidad_default': 'puntos',
+        'descripcion': 'Basado en superficie cubierta',
+        'notas': 'Aprox 1 punto cada 4m² en zonas habitables'
+    },
+    'instalaciones-sanitarias': {
+        'factor': 0.15,  # Solo áreas húmedas (~15% de la superficie)
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de áreas húmedas (baños, cocina, lavadero)',
+        'notas': 'Típicamente 15% de la superficie total'
+    },
+    'instalaciones-gas': {
+        'factor': 0.1,  # Solo cocina y calefactores
+        'unidad_default': 'ml',
+        'descripcion': 'Metros lineales de cañería',
+        'notas': 'Depende de cantidad de artefactos'
+    },
+    'revoque-grueso': {
+        'factor': 1.6,  # Paredes internas + externas (ambas caras)
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de paredes a revocar',
+        'notas': 'Incluye ambas caras de muros + tabiques internos'
+    },
+    'revoque-fino': {
+        'factor': 1.6,  # Similar a revoque grueso
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de terminación fina',
+        'notas': 'Generalmente igual al revoque grueso'
+    },
+    'contrapiso': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Carpeta de nivelación en toda la planta'
+    },
+    'carpeta': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Carpeta de cemento alisado'
+    },
+    'pisos': {
+        'factor': 1.05,  # Superficie + desperdicio por cortes
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie + 5% desperdicio por cortes',
+        'notas': 'Cerámicos, porcelanato o similar'
+    },
+    'ceramicos': {
+        'factor': 0.2,  # Solo áreas húmedas (paredes)
+        'unidad_default': 'm²',
+        'descripcion': 'Revestimiento de paredes en áreas húmedas',
+        'notas': 'Baños y cocina hasta 1.8m de altura'
+    },
+    'cielorrasos': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Yeso o durlock en toda la planta'
+    },
+    'carpinteria': {
+        'factor': 0.08,  # Superficie de aberturas (~8% del área)
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de aberturas',
+        'notas': 'Puertas y ventanas (aprox 8% del área construida)'
+    },
+    'pintura': {
+        'factor': 1.8,  # Paredes + cielorrasos
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie total a pintar (paredes + cielorrasos)',
+        'notas': 'Incluye paredes internas y cielorrasos'
+    },
+    'pintura-exterior': {
+        'factor': 0.5,  # Solo fachadas externas
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de fachadas exteriores',
+        'notas': 'Perímetro externo × altura'
+    },
+    'instalaciones-complementarias': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Basado en superficie cubierta',
+        'notas': 'AA, calefacción, domótica'
+    },
+    'limpieza-final': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Limpieza de toda la obra'
+    },
+    # Aliases comunes
+    'albanileria': {
+        'factor': 1.4,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de muros',
+        'notas': 'Alias de mampostería'
+    },
+    'terminaciones': {
+        'factor': 1.5,
+        'unidad_default': 'm²',
+        'descripcion': 'Promedio de terminaciones varias',
+        'notas': 'Incluye varios rubros de terminación'
+    },
+}
+
+
+def calcular_superficie_etapa(superficie_cubierta: float, etapa_slug: str) -> dict:
+    """
+    Calcula la superficie real de trabajo para una etapa específica.
+
+    Args:
+        superficie_cubierta: Metros cuadrados de construcción cubierta
+        etapa_slug: Identificador de la etapa (ej: 'revoque-grueso')
+
+    Returns:
+        dict con:
+        - superficie_calculada: m², m³, ml o unidades según corresponda
+        - unidad: Unidad de medida
+        - factor: Factor aplicado
+        - descripcion: Explicación del cálculo
+    """
+    # Normalizar slug
+    slug_normalizado = etapa_slug.lower().strip()
+
+    # Buscar en factores definidos
+    if slug_normalizado in FACTORES_SUPERFICIE_ETAPA:
+        config = FACTORES_SUPERFICIE_ETAPA[slug_normalizado]
+        superficie_calculada = superficie_cubierta * config['factor']
+        return {
+            'superficie_calculada': round(superficie_calculada, 2),
+            'unidad': config['unidad_default'],
+            'factor': config['factor'],
+            'descripcion': config['descripcion'],
+            'notas': config['notas'],
+            'metodo': 'factor_definido'
+        }
+
+    # Buscar por coincidencia parcial
+    for key, config in FACTORES_SUPERFICIE_ETAPA.items():
+        if key in slug_normalizado or slug_normalizado in key:
+            superficie_calculada = superficie_cubierta * config['factor']
+            return {
+                'superficie_calculada': round(superficie_calculada, 2),
+                'unidad': config['unidad_default'],
+                'factor': config['factor'],
+                'descripcion': config['descripcion'],
+                'notas': f"Coincidencia con '{key}': {config['notas']}",
+                'metodo': 'coincidencia_parcial'
+            }
+
+    # Default: usar superficie cubierta sin modificar
+    return {
+        'superficie_calculada': round(superficie_cubierta, 2),
+        'unidad': 'm²',
+        'factor': 1.0,
+        'descripcion': 'Sin factor específico, se usa superficie cubierta',
+        'notas': 'Etapa no tiene factor definido',
+        'metodo': 'default'
+    }
+
+
+def obtener_factores_todas_etapas(superficie_cubierta: float) -> dict:
+    """
+    Calcula la superficie de todas las etapas para una obra dada.
+    Útil para mostrar al usuario un resumen de superficies por etapa.
+    """
+    resultado = {}
+    for slug, config in FACTORES_SUPERFICIE_ETAPA.items():
+        superficie_calc = superficie_cubierta * config['factor']
+        resultado[slug] = {
+            'nombre': slug.replace('-', ' ').title(),
+            'superficie': round(superficie_calc, 2),
+            'unidad': config['unidad_default'],
+            'factor': config['factor'],
+            'descripcion': config['descripcion']
+        }
+    return resultado
+
+
 ETAPA_REGLAS_BASE = {
     'excavacion': {
         'nombre': 'Excavación',
@@ -927,48 +1155,35 @@ def calcular_etapa_por_reglas(
     for material in reglas.get('materiales', []):
         coef = _to_decimal(material['coef_por_m2'], '0')
         cantidad_base = superficie_dec * coef * multiplicador_dec
-        cantidad_base_redondeada = Decimal(str(math.ceil(float(cantidad_base))))
+        # Si desperdicio está habilitado, sumar 10% a la cantidad base
+        if aplicar_desperdicio:
+            cantidad_con_desperdicio = float(cantidad_base) * 1.10
+            cantidad_final = Decimal(str(math.ceil(cantidad_con_desperdicio)))
+            justificacion = 'Coeficiente por m² + 10% desperdicio incluido'
+        else:
+            cantidad_final = Decimal(str(math.ceil(float(cantidad_base))))
+            justificacion = 'Coeficiente por m² (cantidad neta)'
 
         precio = _precio_referencia(material['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
 
-        # Item principal con cantidad base
-        subtotal_base = _quantize_currency(cantidad_base_redondeada * precio_moneda)
-        subtotal_materiales += subtotal_base
+        # Item con cantidad (incluye desperdicio si está habilitado)
+        subtotal = _quantize_currency(cantidad_final * precio_moneda)
+        subtotal_materiales += subtotal
         items.append({
             'tipo': 'material',
             'codigo': material['codigo'],
             'descripcion': material['descripcion'],
             'unidad': material.get('unidad', 'unidades'),
-            'cantidad': float(cantidad_base_redondeada),
+            'cantidad': float(cantidad_final),
             'precio_unit': float(precio_moneda),
             'precio_unit_ars': float(precio),
             'origen': 'ia',
-            'just': 'Coeficiente por m² (cantidad neta)',
+            'just': justificacion,
             'material_key': material.get('material_key'),
             'moneda': currency,
-            'subtotal': float(subtotal_base),
+            'subtotal': float(subtotal),
         })
-
-        # Si desperdicio está habilitado, agregar línea adicional del 10%
-        if aplicar_desperdicio:
-            cantidad_desperdicio = Decimal(str(math.ceil(float(cantidad_base_redondeada) * 0.10)))
-            subtotal_desperdicio = _quantize_currency(cantidad_desperdicio * precio_moneda)
-            subtotal_materiales += subtotal_desperdicio
-            items.append({
-                'tipo': 'material',
-                'codigo': material['codigo'] + '-DESP',
-                'descripcion': f"⚠️ Desperdicio 10% - {material['descripcion']}",
-                'unidad': material.get('unidad', 'unidades'),
-                'cantidad': float(cantidad_desperdicio),
-                'precio_unit': float(precio_moneda),
-                'precio_unit_ars': float(precio),
-                'origen': 'ia',
-                'just': 'Reserva para desperdicio y ajustes',
-                'material_key': material.get('material_key'),
-                'moneda': currency,
-                'subtotal': float(subtotal_desperdicio),
-            })
 
     for mano_obra in reglas.get('mano_obra', []):
         coef = _to_decimal(mano_obra['coef_por_m2'], '0')

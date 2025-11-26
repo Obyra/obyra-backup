@@ -147,12 +147,19 @@
                                        step="0.01" min="1" required
                                        placeholder="120.50">
                                 <div class="form-text">Metros cuadrados totales</div>
+                                {% if current_user.rol in ['administrador', 'tecnico'] or current_user.role in ['admin', 'pm'] %}
                                 <div class="form-check mt-2">
                                     <input class="form-check-input" type="checkbox" id="aplicar_desperdicio" checked>
                                     <label class="form-check-label" for="aplicar_desperdicio">
                                         <i class="fas fa-percent text-warning"></i> Aplicar 10% de desperdicio en materiales
                                     </label>
+                                    <div class="form-text text-muted small">
+                                        <i class="fas fa-info-circle"></i> Suma 10% adicional a las cantidades calculadas para cubrir desperdicios
+                                    </div>
                                 </div>
+                                {% else %}
+                                <input type="hidden" id="aplicar_desperdicio" value="true">
+                                {% endif %}
                             </div>
                             <div class="col-md-4">
                                 <label for="fecha_inicio" class="form-label fw-bold">
@@ -1173,7 +1180,10 @@ function solicitarCalculoEtapas(etapas) {
     const currency = monedaSelectEl ? monedaSelectEl.value : 'ARS';
     updateCurrencyFormatter(currency);
 
-    const aplicarDesperdicio = document.getElementById('aplicar_desperdicio')?.checked ?? true;
+    // Manejar tanto checkbox (para admin) como hidden input (para otros usuarios)
+    const desperdicioEl = document.getElementById('aplicar_desperdicio');
+    const aplicarDesperdicio = desperdicioEl ?
+        (desperdicioEl.type === 'checkbox' ? desperdicioEl.checked : desperdicioEl.value === 'true') : true;
 
     const payload = {
         etapa_ids: etapas.map(etapa => ({

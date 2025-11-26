@@ -77,7 +77,9 @@ inventario_bp = Blueprint('inventario', __name__, template_folder=INVENTARIO_TEM
 @inventario_bp.route('/')
 @login_required
 def lista():
+    current_app.logger.info(f"[INVENTARIO] Accediendo a lista. User: {current_user.email}")
     if not current_user.puede_acceder_modulo('inventario'):
+        current_app.logger.info(f"[INVENTARIO] Usuario sin permisos: {current_user.email}")
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
@@ -85,7 +87,19 @@ def lista():
     buscar = request.args.get('buscar', '')
     stock_bajo = request.args.get('stock_bajo', '')
 
-    query = ItemInventario.query.join(CategoriaInventario)
+    # Obtener org_id del usuario actual
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Debug log
+    current_app.logger.info(f"[INVENTARIO] org_id={org_id}, user.organizacion_id={current_user.organizacion_id}")
+
+    # Query base - usar outerjoin para incluir items aunque la categoría no exista
+    query = ItemInventario.query.outerjoin(ItemInventario.categoria)
+
+    # Filtrar por organización del usuario
+    if org_id:
+        query = query.filter(ItemInventario.organizacion_id == org_id)
+        current_app.logger.info(f"[INVENTARIO] Filtrando por org_id={org_id}")
 
     if categoria_id:
         query = query.filter(ItemInventario.categoria_id == categoria_id)
@@ -105,6 +119,7 @@ def lista():
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
 
     items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
+    current_app.logger.info(f"[INVENTARIO] Items encontrados: {len(items)}")
 
     # Get confirmed obras for each item
     from models.projects import Obra
@@ -558,45 +573,193 @@ def api_categorias():
 @login_required
 def api_generar_codigo():
     """
-    API para generar código automático único basado en categoría, nombre y variantes.
+    API para generar código automático correlativo único basado en categoría.
+    Formato: PREFIJO + NÚMERO CORRELATIVO (ej: MAT001, HER001, MAQ001)
     """
-    from models import GlobalMaterialCatalog, InventoryCategory
+    import re
 
     data = request.get_json() or {}
-
     categoria_id = data.get('categoria_id')
-    nombre = data.get('nombre', '').strip()
-    marca = data.get('marca', '').strip() or None
-    especificaciones = data.get('especificaciones') or None
 
-    if not nombre:
-        return jsonify({'error': 'El nombre es requerido'}), 400
+    org_id = get_current_org_id() or current_user.organizacion_id
 
-    # Obtener nombre de categoría
-    categoria_nombre = 'MATERIAL'  # Default
-    if categoria_id:
-        categoria = InventoryCategory.query.get(categoria_id)
-        if categoria:
-            categoria_nombre = categoria.nombre
+    if not categoria_id:
+        return jsonify({'error': 'La categoría es requerida'}), 400
 
-    # Generar código automático
     try:
-        codigo = GlobalMaterialCatalog.generar_codigo_automatico(
-            categoria_nombre=categoria_nombre,
-            nombre=nombre,
-            marca=marca,
-            especificaciones=especificaciones
-        )
+        # Obtener categoría
+        categoria = InventoryCategory.query.get(categoria_id)
+        if not categoria:
+            return jsonify({'error': 'Categoría no encontrada'}), 404
+
+        # Generar prefijo de 3 letras basado en el nombre de la categoría
+        categoria_nombre = categoria.nombre.upper()
+        # Remover caracteres especiales y quedarse con letras
+        prefijo = re.sub(r'[^A-Z]', '', categoria_nombre)[:3]
+
+        # Si el prefijo es muy corto, completar
+        if len(prefijo) < 3:
+            prefijo = prefijo.ljust(3, 'X')
+
+        # Buscar el último código con este prefijo en la organización
+        ultimo_item = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.codigo.like(f'{prefijo}%')
+        ).order_by(ItemInventario.codigo.desc()).first()
+
+        # Determinar siguiente número
+        siguiente_numero = 1
+        if ultimo_item and ultimo_item.codigo:
+            # Extraer número del código existente
+            match = re.search(r'(\d+)$', ultimo_item.codigo)
+            if match:
+                siguiente_numero = int(match.group(1)) + 1
+
+        # Generar código con formato PREFIJO + 3 dígitos
+        codigo = f"{prefijo}{siguiente_numero:03d}"
+
+        # Verificar que no exista (por si acaso)
+        while ItemInventario.query.filter_by(codigo=codigo, organizacion_id=org_id).first():
+            siguiente_numero += 1
+            codigo = f"{prefijo}{siguiente_numero:03d}"
 
         return jsonify({
             'codigo': codigo,
-            'categoria_nombre': categoria_nombre,
-            'mensaje': f'Código generado automáticamente: {codigo}'
+            'prefijo': prefijo,
+            'numero': siguiente_numero,
+            'categoria_nombre': categoria.nombre,
+            'mensaje': f'Código generado: {codigo}'
         })
 
     except Exception as e:
         current_app.logger.error(f"Error generando código: {str(e)}")
         return jsonify({'error': 'Error al generar código automático'}), 500
+
+
+@inventario_bp.route('/api/tipo-cambio', methods=['GET'])
+@login_required
+def api_tipo_cambio():
+    """
+    API para obtener el tipo de cambio actual USD/ARS.
+    Obtiene la cotización del Banco Nación Argentina (BNA).
+    """
+    from models import ExchangeRate
+    from datetime import date, datetime, timedelta
+    import requests
+    from bs4 import BeautifulSoup
+
+    def obtener_cotizacion_bna():
+        """Obtiene la cotización del dólar del Banco Nación Argentina"""
+        try:
+            url = "https://www.bna.com.ar/Personas"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Buscar la tabla de cotizaciones
+            tabla = soup.find('table', class_='table')
+            if not tabla:
+                return None
+
+            # Buscar la fila del dólar estadounidense (Billetes)
+            filas = tabla.find_all('tr')
+            for fila in filas:
+                celdas = fila.find_all('td')
+                if len(celdas) >= 3:
+                    moneda = celdas[0].get_text(strip=True).lower()
+                    # BNA usa "Dolar U.S.A" para el dólar estadounidense
+                    if 'dolar' in moneda and ('u.s.a' in moneda or 'estadounidense' in moneda):
+                        # Obtener precio de venta (tercera columna)
+                        venta_text = celdas[2].get_text(strip=True)
+                        # Limpiar y convertir: "1.480,00" -> 1480.00
+                        venta_text = venta_text.replace('.', '').replace(',', '.')
+                        return float(venta_text)
+
+            return None
+        except Exception as e:
+            current_app.logger.warning(f"Error obteniendo cotización BNA: {str(e)}")
+            return None
+
+    try:
+        # Primero intentar obtener cotización en tiempo real del BNA
+        cotizacion_bna = obtener_cotizacion_bna()
+
+        if cotizacion_bna:
+            # Guardar/actualizar en la base de datos
+            try:
+                rate = ExchangeRate.query.filter(
+                    ExchangeRate.base_currency == 'USD',
+                    ExchangeRate.quote_currency == 'ARS',
+                    ExchangeRate.provider == 'BNA'
+                ).first()
+
+                if rate:
+                    rate.value = cotizacion_bna
+                    rate.as_of_date = date.today()
+                    rate.fetched_at = datetime.utcnow()
+                else:
+                    rate = ExchangeRate(
+                        base_currency='USD',
+                        quote_currency='ARS',
+                        value=cotizacion_bna,
+                        provider='BNA',
+                        as_of_date=date.today(),
+                        fetched_at=datetime.utcnow()
+                    )
+                    db.session.add(rate)
+
+                db.session.commit()
+            except Exception as db_error:
+                current_app.logger.warning(f"Error guardando cotización: {str(db_error)}")
+                db.session.rollback()
+
+            return jsonify({
+                'success': True,
+                'tipo_cambio': cotizacion_bna,
+                'provider': 'BNA',
+                'fecha': date.today().isoformat(),
+                'actualizado': datetime.utcnow().isoformat()
+            })
+
+        # Si no se pudo obtener del BNA, buscar en BD
+        rate = ExchangeRate.query.filter(
+            ExchangeRate.base_currency == 'USD',
+            ExchangeRate.quote_currency == 'ARS'
+        ).order_by(
+            ExchangeRate.as_of_date.desc(),
+            ExchangeRate.fetched_at.desc()
+        ).first()
+
+        if rate:
+            return jsonify({
+                'success': True,
+                'tipo_cambio': float(rate.value),
+                'provider': rate.provider + ' (caché)',
+                'fecha': rate.as_of_date.isoformat() if rate.as_of_date else None,
+                'actualizado': rate.fetched_at.isoformat() if rate.fetched_at else None
+            })
+        else:
+            # Valor por defecto si todo falla
+            return jsonify({
+                'success': True,
+                'tipo_cambio': 1150.0,
+                'provider': 'default',
+                'fecha': date.today().isoformat(),
+                'actualizado': None,
+                'mensaje': 'Usando cotización por defecto - no se pudo conectar al BNA'
+            })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo tipo de cambio: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Error al obtener tipo de cambio',
+            'tipo_cambio': 1150.0
+        }), 500
 
 
 @inventario_bp.route('/api/buscar-similares', methods=['POST'])

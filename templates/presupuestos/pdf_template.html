@@ -6,7 +6,7 @@
     <style>
         @page {
             size: A4;
-            margin: 0;
+            margin: 10mm 15mm 15mm 15mm;
         }
 
         * {
@@ -17,18 +17,19 @@
 
         body {
             font-family: 'Arial', 'Helvetica', sans-serif;
-            font-size: 10pt;
+            font-size: 9pt;
             color: #2c2c2c;
-            line-height: 1.5;
+            line-height: 1.4;
         }
 
         /* Header con diseño diagonal */
         .header-wrapper {
             position: relative;
-            height: 180px;
+            height: 130px;
             background: linear-gradient(135deg, #ff8c00 0%, #ff8c00 65%, #1a1a1a 65%, #1a1a1a 100%);
-            padding: 30px 40px;
-            margin-bottom: 30px;
+            padding: 15px 25px;
+            margin: -10mm -15mm 15px -15mm;
+            width: calc(100% + 30mm);
         }
 
         .header-content {
@@ -40,27 +41,51 @@
             font-size: 14pt;
             font-weight: bold;
             color: white;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
         }
 
-        .company-tagline {
-            font-size: 9pt;
-            color: white;
-            margin-bottom: 20px;
+        .company-info {
+            font-size: 8pt;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 8px;
+        }
+
+        .company-info span {
+            margin-right: 15px;
         }
 
         .header-title {
-            font-size: 32pt;
+            font-size: 22pt;
             font-weight: bold;
             color: white;
-            margin-top: 15px;
+            margin-top: 5px;
         }
+
+        /* Estado badge */
+        .estado-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #f0f0f0;
+            color: #666;
+            border-radius: 15px;
+            font-size: 8pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            position: absolute;
+            top: 15px;
+            right: 25px;
+        }
+
+        .estado-enviado { background: #e3f2fd; color: #1976d2; }
+        .estado-aprobado { background: #e8f5e9; color: #388e3c; }
+        .estado-rechazado { background: #ffebee; color: #d32f2f; }
 
         /* Información del cliente y fecha */
         .info-bar {
             background: #f5f5f5;
-            padding: 15px 40px;
-            margin-bottom: 30px;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
         }
 
         .info-bar table {
@@ -69,73 +94,40 @@
         }
 
         .info-bar td {
-            padding: 3px 0;
-            font-size: 9pt;
+            padding: 2px 5px;
+            font-size: 8pt;
         }
 
         .info-bar .label {
             font-weight: bold;
             color: #666;
-            width: 120px;
+            width: 100px;
         }
 
         .info-bar .value {
             color: #2c2c2c;
         }
 
-        /* Contenido principal */
-        .content {
-            padding: 0 40px;
-        }
-
         /* Secciones de servicios */
         .service-section {
-            margin-bottom: 30px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
         }
 
         .service-header {
             background: #ff8c00;
             color: white;
-            padding: 8px 15px;
+            padding: 5px 12px;
             font-weight: bold;
-            font-size: 11pt;
-            margin-bottom: 10px;
-        }
-
-        .service-item {
-            border-bottom: 1px solid #e0e0e0;
-            padding: 12px 15px;
-        }
-
-        .service-item:last-child {
-            border-bottom: none;
-        }
-
-        .service-name {
-            font-weight: bold;
-            color: #2c2c2c;
-            margin-bottom: 5px;
-        }
-
-        .service-description {
             font-size: 9pt;
-            color: #666;
-            line-height: 1.4;
+            margin-bottom: 0;
         }
 
-        .service-price {
-            text-align: right;
-            font-size: 16pt;
-            font-weight: bold;
-            color: #2c2c2c;
-            margin-top: 8px;
-        }
-
-        /* Tabla de items */
+        /* Tabla de items - compacta */
         table.items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
         }
 
         table.items-table thead {
@@ -143,9 +135,9 @@
         }
 
         table.items-table th {
-            padding: 10px;
+            padding: 5px 8px;
             text-align: left;
-            font-size: 9pt;
+            font-size: 7pt;
             font-weight: bold;
             color: #666;
             text-transform: uppercase;
@@ -157,279 +149,390 @@
         }
 
         table.items-table td {
-            padding: 12px 10px;
+            padding: 5px 8px;
             border-bottom: 1px solid #eee;
-            font-size: 10pt;
+            font-size: 8pt;
         }
 
         table.items-table td.right {
             text-align: right;
         }
 
-        /* Total */
-        .total-section {
-            margin-top: 30px;
-            text-align: right;
+        table.items-table tr {
+            page-break-inside: avoid;
         }
 
-        .total-row {
-            padding: 8px 0;
-            font-size: 11pt;
-        }
-
-        .total-label {
-            display: inline-block;
-            width: 150px;
-            text-align: right;
-            color: #666;
-        }
-
-        .total-value {
-            display: inline-block;
-            width: 150px;
-            text-align: right;
-            font-weight: bold;
-        }
-
-        .final-total {
-            background: #1a1a1a;
-            color: white;
-            padding: 15px 20px;
-            margin-top: 10px;
-            font-size: 16pt;
-            font-weight: bold;
-        }
-
-        .final-total .total-label {
-            color: white;
-        }
-
-        .final-total .total-value {
-            color: #ff8c00;
-            font-size: 20pt;
-        }
-
-        /* Footer */
-        .footer {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #2c2c2c;
-            color: white;
-            padding: 20px 40px;
+        /* Observaciones */
+        .observaciones {
+            margin-top: 12px;
+            padding: 8px;
+            background: #f8f8f8;
+            border-left: 3px solid #ff8c00;
+            page-break-inside: avoid;
             font-size: 8pt;
         }
 
-        .footer-content {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .footer-section {
-            flex: 1;
-        }
-
-        .footer-title {
+        .observaciones-title {
             font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .page-content {
-            padding-bottom: 120px;
-        }
-
-        /* Estado badge */
-        .estado-badge {
-            display: inline-block;
-            padding: 5px 15px;
-            background: #f0f0f0;
+            margin-bottom: 4px;
             color: #666;
-            border-radius: 20px;
-            font-size: 9pt;
-            font-weight: bold;
-            text-transform: uppercase;
-            position: absolute;
-            top: 30px;
-            right: 40px;
+            font-size: 8pt;
         }
 
-        .estado-enviado { background: #e3f2fd; color: #1976d2; }
-        .estado-aprobado { background: #e8f5e9; color: #388e3c; }
-        .estado-rechazado { background: #ffebee; color: #d32f2f; }
+        /* Proyecto info */
+        .proyecto-info {
+            background: #fff8e1;
+            border: 1px solid #ffcc80;
+            padding: 6px 10px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 8pt;
+        }
+
+        .proyecto-info strong {
+            color: #e65100;
+        }
+
+        /* ========================================
+           FOOTER CON TOTALES - Siempre al final
+           ======================================== */
+        .footer-section {
+            margin-top: 60px;
+            page-break-inside: avoid;
+        }
+
+        /* Barra de totales */
+        .totals-bar {
+            background: #f5f5f5;
+            padding: 10px 15px;
+            border-top: 2px solid #ff8c00;
+            margin-bottom: 0;
+        }
+
+        .totals-bar table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .totals-bar td {
+            padding: 3px 10px;
+            font-size: 9pt;
+        }
+
+        .totals-bar .label-col {
+            text-align: right;
+            color: #666;
+            width: 70%;
+        }
+
+        .totals-bar .value-col {
+            text-align: right;
+            font-weight: bold;
+            width: 30%;
+        }
+
+        /* Total final destacado */
+        .total-final-bar {
+            background: #1a1a1a;
+            padding: 12px 15px;
+        }
+
+        .total-final-bar table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .total-final-bar td {
+            padding: 0;
+        }
+
+        .total-final-bar .label-col {
+            text-align: right;
+            color: white;
+            font-size: 14pt;
+            font-weight: bold;
+            width: 70%;
+            padding-right: 15px;
+        }
+
+        .total-final-bar .value-col {
+            text-align: right;
+            color: #ff8c00;
+            font-size: 18pt;
+            font-weight: bold;
+            width: 30%;
+        }
+
+        /* Datos de la empresa en el footer */
+        .empresa-footer {
+            background: #2c2c2c;
+            color: white;
+            padding: 12px 20px;
+            font-size: 7pt;
+        }
+
+        .empresa-footer table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .empresa-footer td {
+            vertical-align: top;
+            padding: 0 10px;
+        }
+
+        .empresa-footer .footer-title {
+            font-weight: bold;
+            margin-bottom: 3px;
+            font-size: 8pt;
+            color: #ff8c00;
+        }
+
+        .empresa-footer .footer-center {
+            text-align: center;
+        }
+
+        .empresa-footer .footer-right {
+            text-align: right;
+        }
     </style>
 </head>
 <body>
-    <!-- Header con diseño diagonal -->
+    <!-- Header con datos de la empresa -->
     <div class="header-wrapper">
         <div class="header-content">
             <div class="company-logo">
-                <svg width="30" height="30" viewBox="0 0 30 30" style="vertical-align: middle; margin-right: 8px;">
-                    <circle cx="15" cy="15" r="15" fill="white"/>
-                    <text x="15" y="20" font-size="16" font-weight="bold" text-anchor="middle" fill="#ff8c00">{{ organizacion.nombre[0] if organizacion.nombre else 'O' }}</text>
+                <svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 5px;">
+                    <circle cx="12" cy="12" r="12" fill="white"/>
+                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#ff8c00">{{ organizacion.nombre[0] if organizacion.nombre else 'O' }}</text>
                 </svg>
                 {{ organizacion.nombre }}
             </div>
-            <div class="company-tagline">{{ organizacion.descripcion or 'Administración Central' }}</div>
+            <div class="company-info">
+                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
+                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
+                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
+                {% if organizacion.email %}<span>{{ organizacion.email }}</span>{% endif %}
+            </div>
             <div class="header-title">Presupuesto</div>
         </div>
         <span class="estado-badge estado-{{ presupuesto.estado }}">{{ presupuesto.estado|title }}</span>
     </div>
 
-    <div class="page-content">
-        <!-- Barra de información -->
-        <div class="info-bar">
+    <!-- Barra de información del cliente -->
+    <div class="info-bar">
+        <table>
+            <tr>
+                <td class="label">Cliente:</td>
+                <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
+                <td class="label">Nº Presupuesto:</td>
+                <td class="value"><strong>{{ presupuesto.numero }}</strong></td>
+            </tr>
+            <tr>
+                <td class="label">Fecha:</td>
+                <td class="value">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</td>
+                <td class="label">Vigencia:</td>
+                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
+            </tr>
+            {% if presupuesto.nombre %}
+            <tr>
+                <td class="label">Proyecto:</td>
+                <td class="value" colspan="3"><strong>{{ presupuesto.nombre }}</strong></td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+
+    {% if presupuesto.tipo_construccion or presupuesto.superficie_m2 %}
+    <div class="proyecto-info">
+        {% if presupuesto.tipo_construccion %}<strong>Tipo:</strong> {{ presupuesto.tipo_construccion }} | {% endif %}
+        {% if presupuesto.superficie_m2 %}<strong>Superficie:</strong> {{ presupuesto.superficie_m2 }} m² | {% endif %}
+        <strong>Moneda:</strong> {{ presupuesto.currency or 'ARS' }}
+    </div>
+    {% endif %}
+
+    <!-- Contenido principal -->
+    {% if items %}
+    <!-- Agrupar items por tipo -->
+    {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
+    {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
+    {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
+    {% set otros = items|rejectattr('tipo', 'in', ['material', 'mano_obra', 'equipo'])|list %}
+
+    {% if materiales %}
+    <div class="service-section">
+        <div class="service-header">Materiales ({{ materiales|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Cantidad</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in materiales %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad }}</td>
+                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if mano_obra %}
+    <div class="service-section">
+        <div class="service-header">Mano de Obra ({{ mano_obra|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Jornales</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in mano_obra %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.1f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad }}</td>
+                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if equipos %}
+    <div class="service-section">
+        <div class="service-header">Equipos y Maquinaria ({{ equipos|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Cantidad</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in equipos %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad }}</td>
+                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if otros %}
+    <div class="service-section">
+        <div class="service-header">Otros ({{ otros|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Cantidad</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in otros %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad or '-' }}</td>
+                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if presupuesto.observaciones %}
+    <div class="observaciones">
+        <div class="observaciones-title">Observaciones:</div>
+        <div>{{ presupuesto.observaciones }}</div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
+    {% endif %}
+
+    <!-- FOOTER: Datos empresa + Totales (siempre al final) -->
+    <div class="footer-section">
+        <!-- Subtotales -->
+        <div class="totals-bar">
             <table>
                 <tr>
-                    <td class="label">Cliente:</td>
-                    <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
-                    <td class="label">Presupuesto:</td>
-                    <td class="value">{{ presupuesto.numero }}</td>
+                    <td class="label-col">Subtotal:</td>
+                    <td class="value-col">{{ presupuesto.currency }} {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</td>
                 </tr>
+                {% if presupuesto.iva_porcentaje and presupuesto.iva_porcentaje > 0 %}
                 <tr>
-                    <td class="label">Fecha:</td>
-                    <td class="value">{{ presupuesto.fecha.strftime('%d de %B de %Y') }}</td>
-                    <td class="label">Vigencia hasta:</td>
-                    <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d de %B de %Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
+                    <td class="label-col">IVA ({{ "%.2f"|format(presupuesto.iva_porcentaje) }}%):</td>
+                    <td class="value-col">{{ presupuesto.currency }} {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <!-- Datos de la empresa -->
+        <div class="empresa-footer">
+            <table>
+                <tr>
+                    <td style="width: 33%;">
+                        <div class="footer-title">{{ organizacion.nombre }}</div>
+                        {% if organizacion.cuit %}
+                        <div>CUIT: {{ organizacion.cuit }}</div>
+                        {% endif %}
+                        <div>{{ organizacion.direccion or 'Dirección no especificada' }}</div>
+                    </td>
+                    <td class="footer-center" style="width: 34%;">
+                        <div class="footer-title">Contacto</div>
+                        <div>Tel: {{ organizacion.telefono or '-' }}</div>
+                        <div>Email: {{ organizacion.email or '-' }}</div>
+                    </td>
+                    <td class="footer-right" style="width: 33%;">
+                        <div class="footer-title">Medios de pago</div>
+                        <div>Transferencia bancaria</div>
+                        <div>Efectivo</div>
+                    </td>
                 </tr>
             </table>
         </div>
 
-        <!-- Contenido principal -->
-        <div class="content">
-            {% if items %}
-            <!-- Agrupar items por tipo -->
-            {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
-            {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
-            {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
-
-            {% if materiales %}
-            <div class="service-section">
-                <div class="service-header">Materiales</div>
-                <table class="items-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 50%;">Descripción</th>
-                            <th class="right" style="width: 15%;">Cantidad</th>
-                            <th style="width: 10%;">Unidad</th>
-                            <th class="right" style="width: 25%;">Precio</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in materiales %}
-                        <tr>
-                            <td>{{ item.descripcion }}</td>
-                            <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                            <td>{{ item.unidad }}</td>
-                            <td class="right">{{ presupuesto.currency }} {{ "{:,.2f}".format(item.total|float) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% endif %}
-
-            {% if mano_obra %}
-            <div class="service-section">
-                <div class="service-header">Mano de Obra</div>
-                <table class="items-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 50%;">Descripción</th>
-                            <th class="right" style="width: 15%;">Jornales</th>
-                            <th style="width: 10%;">Unidad</th>
-                            <th class="right" style="width: 25%;">Precio</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in mano_obra %}
-                        <tr>
-                            <td>{{ item.descripcion }}</td>
-                            <td class="right">{{ "%.1f"|format(item.cantidad) }}</td>
-                            <td>{{ item.unidad }}</td>
-                            <td class="right">{{ presupuesto.currency }} {{ "{:,.2f}".format(item.total|float) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% endif %}
-
-            {% if equipos %}
-            <div class="service-section">
-                <div class="service-header">Equipos</div>
-                <table class="items-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 50%;">Descripción</th>
-                            <th class="right" style="width: 15%;">Cantidad</th>
-                            <th style="width: 10%;">Unidad</th>
-                            <th class="right" style="width: 25%;">Precio</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in equipos %}
-                        <tr>
-                            <td>{{ item.descripcion }}</td>
-                            <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                            <td>{{ item.unidad }}</td>
-                            <td class="right">{{ presupuesto.currency }} {{ "{:,.2f}".format(item.total|float) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% endif %}
-
-            <!-- Total -->
-            <div class="total-section">
-                <div class="total-row">
-                    <span class="total-label">Subtotal:</span>
-                    <span class="total-value">{{ presupuesto.currency }} {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</span>
-                </div>
-                <div class="total-row">
-                    <span class="total-label">IVA ({{ presupuesto.iva_porcentaje }}%):</span>
-                    <span class="total-value">{{ presupuesto.currency }} {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</span>
-                </div>
-                <div class="final-total">
-                    <span class="total-label">Total</span>
-                    <span class="total-value">{{ presupuesto.currency }} {{ "{:,.0f}".format(presupuesto.total_con_iva|float) }}</span>
-                </div>
-            </div>
-
-            {% if presupuesto.observaciones %}
-            <div style="margin-top: 30px; padding: 15px; background: #f8f8f8; border-left: 4px solid #ff8c00;">
-                <div style="font-weight: bold; margin-bottom: 8px; color: #666;">Observaciones:</div>
-                <div style="font-size: 9pt; line-height: 1.6;">{{ presupuesto.observaciones }}</div>
-            </div>
-            {% endif %}
-
-            {% else %}
-            <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <div class="footer">
-        <div class="footer-content">
-            <div class="footer-section">
-                <div class="footer-title">{{ organizacion.nombre }}</div>
-                {% if organizacion.cuit %}
-                <div>CUIT: {{ organizacion.cuit }}</div>
-                {% endif %}
-                <div>{{ organizacion.direccion or 'Dirección no especificada' }}</div>
-            </div>
-            <div class="footer-section" style="text-align: center;">
-                <div class="footer-title">Contacto</div>
-                <div>{{ organizacion.telefono or 'Tel: -' }}</div>
-                <div>{{ organizacion.email or 'Email: -' }}</div>
-            </div>
-            <div class="footer-section" style="text-align: right;">
-                <div class="footer-title">Medios de pago</div>
-                <div>Transferencia bancaria</div>
-                <div>Efectivo</div>
-            </div>
+        <!-- Total final destacado (AL FINAL DE TODO) -->
+        <div class="total-final-bar">
+            <table>
+                <tr>
+                    <td class="label-col">TOTAL</td>
+                    <td class="value-col">{{ presupuesto.currency }} {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</td>
+                </tr>
+            </table>
         </div>
     </div>
 </body>
