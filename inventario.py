@@ -383,7 +383,15 @@ def uso_obra():
         flash('No tienes permisos para registrar uso en obra.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    obras = Obra.query.filter(Obra.estado.in_(['planificacion', 'en_curso'])).order_by(Obra.nombre).all()
+    # Obtener obras de presupuestos aprobados
+    from models.budgets import Presupuesto
+    obras = Obra.query.join(Presupuesto).filter(
+        db.or_(
+            Presupuesto.confirmado_como_obra == True,
+            Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
+        )
+    ).distinct().order_by(Obra.nombre).all()
+
     items = ItemInventario.query.filter_by(activo=True).order_by(ItemInventario.nombre).all()
     context = {'obras': obras, 'items': items, 'today': date.today()}
 
