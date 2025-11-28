@@ -602,6 +602,30 @@ def detalle(id):
     else:
         current_app.logger.warning(f"[DEBUG] Obra {obra.id} - NO tiene presupuesto confirmado")
 
+    # Calcular avances de mano de obra por etapa (horas/jornales ejecutados)
+    avances_mano_obra = {}
+    for etapa in etapas:
+        tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else list(etapa.tareas)
+        horas_ejecutadas = Decimal('0')
+        jornales_ejecutados = Decimal('0')
+        for tarea in tareas:
+            # Sumar horas de avances aprobados o todos si no hay sistema de aprobación
+            avances = TareaAvance.query.filter_by(tarea_id=tarea.id).filter(
+                TareaAvance.status.in_(['aprobado', 'pendiente'])
+            ).all()
+            for avance in avances:
+                if avance.horas_trabajadas:
+                    horas_ejecutadas += Decimal(str(avance.horas_trabajadas or 0))
+                elif avance.horas:
+                    horas_ejecutadas += Decimal(str(avance.horas or 0))
+        # Convertir horas a jornales (8 horas = 1 jornal)
+        jornales_ejecutados = (horas_ejecutadas / Decimal('8')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        avances_mano_obra[etapa.id] = {
+            'horas_ejecutadas': float(horas_ejecutadas),
+            'jornales_ejecutados': float(jornales_ejecutados),
+            'etapa_nombre': etapa.nombre
+        }
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
@@ -619,6 +643,7 @@ def detalle(id):
                          certificaciones_recientes=cert_recientes,
                          presupuesto=presupuesto,
                          items_presupuesto=items_presupuesto,
+                         avances_mano_obra=avances_mano_obra,
                          wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
                          wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
 
@@ -1328,7 +1353,17 @@ def crear_avance(tarea_id):
                     return jsonify(ok=False, error=f"❌ Error procesando material: {str(e)}. Verificá que la cantidad sea un número válido."), 400
 
         db.session.commit()
-        return jsonify(ok=True, mensaje="Avance registrado y materiales descontados del stock")
+
+        # Recalcular porcentaje de avance de la tarea
+        nuevo_pct = recalc_tarea_pct(tarea_id)
+
+        return jsonify(
+            ok=True,
+            mensaje="Avance registrado y materiales descontados del stock",
+            porcentaje_avance=nuevo_pct,
+            cantidad_planificada=float(tarea.cantidad_planificada or 0),
+            cantidad_ejecutada=suma_ejecutado(tarea_id)
+        )
 
     except Exception as e:
         db.session.rollback()

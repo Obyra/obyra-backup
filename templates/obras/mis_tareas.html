@@ -126,6 +126,8 @@
                                                     data-tarea-nombre="{{ t.nombre }}"
                                                     data-unidad="{{ t.unidad or 'un' }}"
                                                     data-rendimiento="{{ t.rendimiento or '' }}"
+                                                    data-cantidad-planificada="{{ t.cantidad_planificada or 0 }}"
+                                                    data-porcentaje-avance="{{ t.porcentaje_avance or 0 }}"
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#modalAvance">
                                                 <i class="fas fa-plus me-1"></i>
@@ -175,9 +177,34 @@
                         <label class="form-label">Tarea</label>
                         <p id="avance_tarea_nombre" class="form-control-plaintext text-muted"></p>
                     </div>
-                    
+
+                    <!-- Info de progreso actual -->
+                    <div id="progreso_info" class="mb-3 p-3 bg-light rounded border">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted fw-bold">Progreso actual</small>
+                            <span id="progreso_pct_badge" class="badge bg-primary">0%</span>
+                        </div>
+                        <div class="progress mb-2" style="height: 10px;">
+                            <div id="progreso_bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div class="row text-center small">
+                            <div class="col-4">
+                                <div class="text-muted">Planificado</div>
+                                <div id="cant_planificada" class="fw-bold text-dark">0</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-muted">Ejecutado</div>
+                                <div id="cant_ejecutada" class="fw-bold text-success">0</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-muted">Restante</div>
+                                <div id="cant_restante" class="fw-bold text-warning">0</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
-                        <label for="cantidad_ingresada" class="form-label">Cantidad ejecutada *</label>
+                        <label for="cantidad_ingresada" class="form-label">Cantidad a registrar *</label>
                         <div class="input-group">
                             <input type="number" class="form-control" id="cantidad_ingresada" name="cantidad_ingresada"
                                    step="0.01" min="0" required>
@@ -231,6 +258,14 @@
 <script>
 const CSRF_TOKEN = "{{ csrf_token() }}";
 
+// Formateador de unidades para display
+function formatUnidad(unidad) {
+    const mapeo = {
+        'm2': 'm²', 'm3': 'm³', 'ml': 'ml', 'un': 'un', 'kg': 'kg', 'h': 'h', 'lt': 'lt'
+    };
+    return mapeo[unidad] || unidad;
+}
+
 // Simple modal setup - preselect unit and setup auto-conversion
 (() => {
   const modal = document.getElementById('modalAvance');
@@ -240,11 +275,47 @@ const CSRF_TOKEN = "{{ csrf_token() }}";
     const r    = btn?.dataset?.rendimiento || '';
     const id   = btn?.dataset?.tareaId || '';
     const tareaNombre = btn?.dataset?.tareaNombre || '';
+    const cantidadPlanificada = parseFloat(btn?.dataset?.cantidadPlanificada || 0);
+    const porcentajeAvance = parseFloat(btn?.dataset?.porcentajeAvance || 0);
 
     document.getElementById('unidad_base').value = base;
     document.getElementById('tarea_id').value    = id;
     document.getElementById('rendimiento').value = r;
     document.getElementById('avance_tarea_nombre').textContent = tareaNombre;
+
+    // Calcular cantidad ejecutada basada en porcentaje y planificada
+    // Formula: ejecutada = (porcentaje / 100) * planificada
+    const cantidadEjecutada = (porcentajeAvance / 100) * cantidadPlanificada;
+    const cantidadRestante = Math.max(0, cantidadPlanificada - cantidadEjecutada);
+    const unidadDisplay = formatUnidad(base);
+
+    // Actualizar info de progreso
+    document.getElementById('progreso_pct_badge').textContent = `${porcentajeAvance.toFixed(1)}%`;
+    document.getElementById('progreso_bar').style.width = `${Math.min(100, porcentajeAvance)}%`;
+
+    // Color de barra según progreso
+    const bar = document.getElementById('progreso_bar');
+    bar.className = 'progress-bar';
+    if (porcentajeAvance >= 100) {
+        bar.classList.add('bg-success');
+    } else if (porcentajeAvance >= 50) {
+        bar.classList.add('bg-primary');
+    } else if (porcentajeAvance > 0) {
+        bar.classList.add('bg-warning');
+    }
+
+    // Mostrar cantidades con unidad
+    document.getElementById('cant_planificada').textContent = `${cantidadPlanificada.toFixed(2)} ${unidadDisplay}`;
+    document.getElementById('cant_ejecutada').textContent = `${cantidadEjecutada.toFixed(2)} ${unidadDisplay}`;
+    document.getElementById('cant_restante').textContent = `${cantidadRestante.toFixed(2)} ${unidadDisplay}`;
+
+    // Ocultar sección de progreso si no hay cantidad planificada
+    const progresoInfo = document.getElementById('progreso_info');
+    if (cantidadPlanificada <= 0) {
+        progresoInfo.style.display = 'none';
+    } else {
+        progresoInfo.style.display = 'block';
+    }
 
     // Preselect the unit in the dropdown
     const unitSelect = document.getElementById('unidad_ingresada');

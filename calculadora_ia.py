@@ -1220,7 +1220,9 @@ def calcular_etapa_por_reglas(
         base = superficie_dec * dias_por_m2 * multiplicador_dec
         dias_min = _to_decimal(equipo.get('min_dias', 0), '0')
         dias = base if base > dias_min else dias_min
-        dias = _quantize_quantity(dias if dias > DECIMAL_ZERO else base)
+        dias = dias if dias > DECIMAL_ZERO else base
+        # Redondear días de equipos siempre hacia arriba (2.25 -> 3)
+        dias = Decimal(str(math.ceil(float(dias))))
         precio = _precio_referencia(equipo['codigo'], cac_context)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_equipos += _quantize_currency(dias * precio_moneda)

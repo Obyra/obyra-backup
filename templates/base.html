@@ -36,7 +36,7 @@
             
             <div class="collapse navbar-collapse justify-content-between" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    {# Enlace a Dashboard solo para admin/pm #}
+                    {# 1. Dashboard - solo para admin/pm #}
                     {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('reportes.dashboard') }}">
@@ -44,17 +44,8 @@
                         </a>
                     </li>
                     {% endif %}
-                    
 
-                    
-                    {% if current_user.puede_acceder_modulo('obras') %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('obras.lista') }}">
-                            <i class="fas fa-building me-1"></i>Obras
-                        </a>
-                    </li>
-                    {% endif %}
-                    
+                    {# 2. Presupuestos #}
                     {% if current_user.puede_acceder_modulo('presupuestos') and has_endpoint('presupuestos.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarPresupuestos" role="button" data-bs-toggle="dropdown">
@@ -78,25 +69,17 @@
                         </ul>
                     </li>
                     {% endif %}
-                    
-                    {% if current_user.puede_acceder_modulo('equipos') and has_endpoint('equipos.lista') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarEquipos" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-users me-1"></i>Equipos
+
+                    {# 3. Obras #}
+                    {% if current_user.puede_acceder_modulo('obras') %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('obras.lista') }}">
+                            <i class="fas fa-building me-1"></i>Obras
                         </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('equipos.lista') }}">Ver Equipo</a></li>
-                            {% if current_user.role in ['admin', 'pm'] %}
-                            <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_listar') }}">
-                                <i class="fas fa-users-cog me-2"></i>Gestión de Usuarios
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
-                            {% endif %}
-                        </ul>
                     </li>
                     {% endif %}
-                    
+
+                    {# 4. Inventario #}
                     {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarInventario" role="button" data-bs-toggle="dropdown">
@@ -113,6 +96,25 @@
                             {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    {# 5. Equipos #}
+                    {% if current_user.puede_acceder_modulo('equipos') and has_endpoint('equipos.lista') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarEquipos" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-users me-1"></i>Equipos
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('equipos.lista') }}">Ver Equipo</a></li>
+                            {% if current_user.role in ['admin', 'pm'] %}
+                            <li><a class="dropdown-item" href="{{ url_for('equipos.usuarios_listar') }}">
+                                <i class="fas fa-users-cog me-2"></i>Gestión de Usuarios
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
                             {% endif %}
                         </ul>
                     </li>

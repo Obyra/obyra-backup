@@ -454,20 +454,35 @@
                         <!-- Tab: Solo Mano de Obra -->
                         <div class="tab-pane fade" id="manoobra" role="tabpanel">
                             <div class="bg-white text-dark rounded p-3">
+                                <!-- Botón para ir a certificaciones -->
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0 text-muted">
+                                        <i class="fas fa-hard-hat me-1"></i> Avance de Mano de Obra por Etapa
+                                    </h6>
+                                    <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-certificate me-1"></i>Ver Certificaciones
+                                    </a>
+                                </div>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-hover mb-0">
                                         <thead class="table-light">
                                             <tr>
                                                 <th>Descripción</th>
-                                                <th class="text-center">Cantidad</th>
-                                                <th class="text-center">Unidad</th>
-                                                <th class="text-end">Costo</th>
+                                                <th class="text-center">Planificado</th>
+                                                <th class="text-center">Ejecutado</th>
+                                                <th class="text-center">% Avance</th>
+                                                <th class="text-end">Costo Presup.</th>
+                                                <th class="text-center">Estado</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {% set mano_obra = items_presupuesto | selectattr('tipo', 'equalto', 'mano_obra') | list %}
                                             {% if mano_obra %}
                                                 {% for item in mano_obra %}
+                                                {% set avance_etapa = avances_mano_obra.get(item.etapa_id, {'jornales_ejecutados': 0, 'horas_ejecutadas': 0}) if item.etapa_id else {'jornales_ejecutados': 0, 'horas_ejecutadas': 0} %}
+                                                {% set planificado = item.cantidad|float %}
+                                                {% set ejecutado = avance_etapa.jornales_ejecutados|float if item.unidad == 'jornal' else avance_etapa.horas_ejecutadas|float %}
+                                                {% set porcentaje = ((ejecutado / planificado) * 100)|round(1) if planificado > 0 else 0 %}
                                                 <tr>
                                                     <td>
                                                         <strong>{{ item.descripcion }}</strong>
@@ -475,8 +490,25 @@
                                                         <br><small class="text-muted"><i class="fas fa-layer-group me-1"></i>{{ item.etapa.nombre }}</small>
                                                         {% endif %}
                                                     </td>
-                                                    <td class="text-center">{{ item.cantidad }}</td>
-                                                    <td class="text-center">{{ item.unidad }}</td>
+                                                    <td class="text-center">
+                                                        <span class="badge bg-secondary">{{ item.cantidad }} {{ item.unidad }}</span>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        {% if ejecutado > 0 %}
+                                                        <span class="badge bg-success">{{ ejecutado|round(2) }} {{ item.unidad }}</span>
+                                                        {% else %}
+                                                        <span class="badge bg-light text-muted">0 {{ item.unidad }}</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <div class="progress" style="height: 20px; min-width: 80px;">
+                                                            <div class="progress-bar {% if porcentaje >= 100 %}bg-success{% elif porcentaje >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                                                                 role="progressbar"
+                                                                 style="width: {{ [porcentaje, 100]|min }}%">
+                                                                {{ porcentaje }}%
+                                                            </div>
+                                                        </div>
+                                                    </td>
                                                     <td class="text-end">
                                                         {% if presupuesto.currency == 'USD' %}
                                                             <strong>US$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
@@ -484,11 +516,20 @@
                                                             <strong>$ {{ (item.cantidad * item.precio_unitario)|round(2) }}</strong>
                                                         {% endif %}
                                                     </td>
+                                                    <td class="text-center">
+                                                        {% if porcentaje >= 100 %}
+                                                            <span class="badge bg-success"><i class="fas fa-check me-1"></i>Completo</span>
+                                                        {% elif porcentaje > 0 %}
+                                                            <span class="badge bg-info"><i class="fas fa-spinner me-1"></i>En curso</span>
+                                                        {% else %}
+                                                            <span class="badge bg-light text-muted">Pendiente</span>
+                                                        {% endif %}
+                                                    </td>
                                                 </tr>
                                                 {% endfor %}
                                             {% else %}
                                                 <tr>
-                                                    <td colspan="4" class="text-center text-muted py-3">
+                                                    <td colspan="6" class="text-center text-muted py-3">
                                                         <i class="fas fa-info-circle me-2"></i>No hay mano de obra en el presupuesto
                                                     </td>
                                                 </tr>
@@ -496,6 +537,18 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                {% if mano_obra %}
+                                <!-- Resumen de avances -->
+                                <div class="mt-3 p-2 bg-light rounded">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Los datos de "Ejecutado" se calculan automáticamente desde los avances reportados por los operarios en las tareas.
+                                        <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="text-primary">
+                                            Certificar avances →
+                                        </a>
+                                    </small>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -1637,12 +1690,25 @@ function mostrarTareasSugeridas(tareas, nombreEtapa) {
     const listaTareas = document.getElementById('listaTareasSugeridas');
     const etapaSpan = document.getElementById('etapaSeleccionada');
     etapaSpan.textContent = nombreEtapa;
+
+    // Checkbox "Seleccionar todas" al inicio
+    const selectAllHTML = `
+        <div class="form-check mb-3 pb-2 border-bottom">
+            <input class="form-check-input" type="checkbox"
+                   id="selectAllTareas"
+                   onchange="toggleSeleccionarTodas(this)">
+            <label class="form-check-label fw-bold text-primary" for="selectAllTareas">
+                <i class="fas fa-check-double me-1"></i> Seleccionar todas (${tareas.length})
+            </label>
+        </div>
+    `;
+
     const checkboxesHTML = tareas.map((tarea, index) => `
         <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" 
-                   name="sugeridas[]" 
-                   value="${index}" 
-                   id="tareaCheck${index}" 
+            <input class="form-check-input tarea-sugerida-check" type="checkbox"
+                   name="sugeridas[]"
+                   value="${index}"
+                   id="tareaCheck${index}"
                    data-nombre="${tarea.nombre}"
                    onchange="actualizarSeleccionSugeridas()">
             <label class="form-check-label" for="tareaCheck${index}">
@@ -1651,7 +1717,7 @@ function mostrarTareasSugeridas(tareas, nombreEtapa) {
             </label>
         </div>
     `).join('');
-    listaTareas.innerHTML = checkboxesHTML + `
+    listaTareas.innerHTML = selectAllHTML + checkboxesHTML + `
         <div class="form-text mt-2">
             <i class="fas fa-info-circle"></i> Si seleccionás varias sugeridas, se crearán varias tareas con el mismo responsable, horas y fechas.
         </div>`;
@@ -1659,10 +1725,29 @@ function mostrarTareasSugeridas(tareas, nombreEtapa) {
     window.tareasActuales = tareas;
 }
 
+// Función para seleccionar/deseleccionar todas las tareas sugeridas
+function toggleSeleccionarTodas(checkbox) {
+    const checks = document.querySelectorAll('.tarea-sugerida-check');
+    checks.forEach(check => {
+        check.checked = checkbox.checked;
+    });
+    actualizarSeleccionSugeridas();
+}
+
 function actualizarSeleccionSugeridas() {
     const checks = document.querySelectorAll('input[name="sugeridas[]"]:checked');
+    const allChecks = document.querySelectorAll('.tarea-sugerida-check');
+    const selectAllCheckbox = document.getElementById('selectAllTareas');
     const tareasInput = document.querySelector('#nuevaTareaModal input[name="nombre"]');
     const n = checks.length;
+    const total = allChecks.length;
+
+    // Actualizar estado del checkbox "Seleccionar todas"
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = (n === total && total > 0);
+        selectAllCheckbox.indeterminate = (n > 0 && n < total);
+    }
+
     if (!tareasInput) return;
     if (n === 0) {
         tareasInput.disabled = false; tareasInput.value = ''; tareasInput.placeholder = 'Nombre de la tarea';
