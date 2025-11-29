@@ -297,7 +297,7 @@ def detalle(id):
 @inventario_bp.route('/<int:id>/movimiento', methods=['POST'])
 @login_required
 def registrar_movimiento(id):
-    if current_user.rol not in ['administrador', 'tecnico']:
+    if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para registrar movimientos.', 'danger')
         return redirect(url_for('inventario.detalle', id=id))
     

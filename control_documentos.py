@@ -239,7 +239,7 @@ def aprobar_documento(documento_id):
     documento = DocumentoObra.query.get_or_404(documento_id)
     
     # Verificar permisos de aprobación
-    if not current_user.rol in ['administrador', 'tecnico']:
+    if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para aprobar documentos', 'danger')
         return redirect(url_for('documentos.ver_documento', documento_id=documento_id))
     
@@ -273,7 +273,7 @@ def control_versiones():
 @login_required
 def configuracion_tipos():
     """Configuración de tipos de documento"""
-    if current_user.rol != 'administrador':
+    if not current_user.es_admin():
         flash('Solo los administradores pueden configurar tipos de documento', 'danger')
         return redirect(url_for('documentos.dashboard'))
     
@@ -291,7 +291,7 @@ def verificar_permiso_documento(documento_id, usuario_id, tipo_permiso):
     """Verifica si un usuario tiene permiso específico sobre un documento"""
     # Administradores tienen acceso total
     usuario = Usuario.query.get(usuario_id)
-    if usuario.rol == 'administrador':
+    if usuario.es_admin():
         return True
     
     # Verificar permiso específico

@@ -132,7 +132,7 @@ def lista():
 def usuarios_nuevo():
     """Crear nuevo usuario desde Gestión de Usuarios con permisos RBAC"""
     # Admins siempre pasan - NO redirigir al dashboard en GET
-    if current_user.rol not in ['administrador', 'admin_empresa', 'superadmin']:
+    if not current_user.es_admin():
         flash('No tienes permisos para crear usuarios.', 'danger')
         return redirect(url_for('auth.usuarios_admin'))
     
@@ -229,7 +229,7 @@ def usuarios_nuevo():
 @equipos_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
 def crear():
-    if not current_user.puede_acceder_modulo('equipos') or current_user.rol != 'administrador':
+    if not current_user.puede_acceder_modulo('equipos') or not current_user.es_admin():
         flash('No tienes permisos para crear usuarios.', 'danger')
         return redirect(url_for('equipos.lista'))
     
@@ -415,8 +415,7 @@ def editar(id):
         if telefono is not None:
             telefono_limpio = telefono.strip()
             usuario.telefono = telefono_limpio or None
-        if rol_trabajo:
-            usuario.rol = rol_trabajo
+        # rol_trabajo ya no se usa - solo se actualiza 'role' más abajo
 
         if email:
             email_normalizado = email.strip().lower()
@@ -451,15 +450,9 @@ def editar(id):
 
             usuario.email = email_normalizado
 
+        # Actualizar solo el campo unificado 'role'
         miembro_objetivo.role = membership_role
         usuario.role = membership_role
-
-        if membership_role == 'admin':
-            usuario.rol = usuario.rol or 'administrador'
-        elif membership_role == 'project_manager' and not rol_trabajo:
-            usuario.rol = 'project_manager'
-        elif membership_role == 'operario' and not rol_trabajo:
-            usuario.rol = 'operario'
 
         try:
             db.session.commit()
@@ -524,7 +517,7 @@ def toggle_activo(id):
 @equipos_bp.route('/rendimiento')
 @login_required
 def rendimiento():
-    if current_user.rol not in ['administrador', 'tecnico']:
+    if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para ver reportes de rendimiento.', 'danger')
         return redirect(url_for('equipos.lista'))
     

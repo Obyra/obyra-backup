@@ -279,9 +279,10 @@ def send_new_member_invitation(
 
     if not email_sent:
         if temp_password:
+            # SECURITY: No loguear contraseña temporal - solo indicar que fue generada
             current_app.logger.info(
-                'Credenciales temporales generadas para %s | contraseña: %s | enlace: %s',
-                usuario.email, temp_password, reset_url or 'N/D',
+                'Credenciales temporales generadas para %s | enlace: %s (contraseña temporal creada, no logueada por seguridad)',
+                usuario.email, reset_url or 'N/D',
             )
         else:
             current_app.logger.info('Invitación registrada para %s | enlace: %s', usuario.email, reset_url or 'N/D')
@@ -733,7 +734,7 @@ def google_callback():
 @limiter.limit("10 per minute", methods=["POST"])
 def admin_register():
     """Registro administrativo - solo para administradores"""
-    if current_user.rol != 'administrador':
+    if not current_user.es_admin():
         flash('No tienes permisos para registrar usuarios administrativamente.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
@@ -942,8 +943,7 @@ def crear_integrante_desde_panel():
             usuario_objetivo.nombre = usuario_objetivo.nombre or nombre
             usuario_objetivo.apellido = usuario_objetivo.apellido or apellido
             usuario_objetivo.telefono = telefono_sanitizado
-            usuario_objetivo.rol = rol_interno
-            usuario_objetivo.role = role_front
+            usuario_objetivo.role = role_front  # Solo usar campo unificado 'role'
             usuario_objetivo.activo = True
             if not usuario_objetivo.organizacion_id:
                 usuario_objetivo.organizacion_id = org_id
@@ -965,8 +965,7 @@ def crear_integrante_desde_panel():
                 apellido=apellido,
                 email=email,
                 telefono=telefono_sanitizado,
-                rol=rol_interno,
-                role=role_front,
+                role=role_front,  # Solo usar campo unificado 'role'
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=org_id,
@@ -1045,8 +1044,7 @@ def cambiar_rol():
     try:
         old_role = objetivo.role
         objetivo.role = rol_map[nuevo_rol]
-        objetivo.usuario.rol = nuevo_rol
-        objetivo.usuario.role = rol_map[nuevo_rol]
+        objetivo.usuario.role = rol_map[nuevo_rol]  # Solo actualizar campo unificado
         db.session.commit()
 
         log_permission_change(objetivo.usuario.email, old_role, rol_map[nuevo_rol], current_user.email)
@@ -1137,7 +1135,7 @@ def unirse_organizacion():
 @login_required
 def invitar_usuario():
     """Invitar usuarios a la organización"""
-    if current_user.rol != 'administrador':
+    if not current_user.es_admin():
         flash('No tienes permisos para invitar usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     

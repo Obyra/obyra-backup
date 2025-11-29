@@ -161,7 +161,7 @@ def protocolos():
 @login_required
 def crear_protocolo():
     """Formulario para crear nuevo protocolo"""
-    if current_user.rol not in ['administrador', 'tecnico']:
+    if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para crear protocolos', 'danger')
         return redirect(url_for('seguridad.protocolos'))
     

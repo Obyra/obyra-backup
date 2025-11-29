@@ -67,7 +67,7 @@ class Organizacion(db.Model):
 
     @property
     def administradores(self):
-        return self.usuarios.filter_by(rol='administrador')
+        return self.usuarios.filter_by(role='admin')
 
     @property
     def link_invitacion(self):
@@ -84,8 +84,10 @@ class Usuario(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=True)  # Nullable para usuarios de Google
-    rol = db.Column(db.String(50), nullable=False, default='ayudante')  # Expandido para roles específicos de construcción
-    role = db.Column(db.String(20), nullable=False, default='operario')  # Nuevo sistema de roles: admin, pm, operario
+    # Sistema de roles unificado: admin, pm, tecnico, operario
+    # El campo 'rol' está DEPRECATED - usar siempre 'role'
+    rol = db.Column(db.String(50), nullable=True)  # DEPRECATED: mantener por compatibilidad temporal
+    role = db.Column(db.String(20), nullable=False, default='operario')  # Roles: admin, pm, tecnico, operario
     puede_pausar_obras = db.Column(db.Boolean, default=False)  # Permiso especial para pausar obras
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)  # Super administrador con acceso total al sistema
     activo = db.Column(db.Boolean, default=True)
@@ -156,56 +158,62 @@ class Usuario(UserMixin, db.Model):
         return None
 
     def tiene_rol(self, rol: str) -> bool:
-        """Determina si el usuario tiene el rol solicitado en la organización activa."""
+        """Determina si el usuario tiene el rol solicitado."""
         if not rol:
             return False
 
         objetivo = rol.strip().lower()
-        org_id = session.get('current_org_id')
-        membership = None
 
-        if org_id:
-            # Preferir membresía ya cargada en la sesión para evitar consultas extras
-            for candidate in self.memberships:
-                if candidate.org_id == org_id and not candidate.archived:
-                    membership = candidate
-                    break
+        # Mapeo de equivalencias para compatibilidad
+        equivalencias = {
+            'admin': ['admin', 'administrador'],
+            'administrador': ['admin', 'administrador'],
+            'pm': ['pm', 'project_manager', 'jefe_obra'],
+            'tecnico': ['tecnico', 'technical'],
+            'operario': ['operario', 'worker', 'ayudante'],
+        }
 
-            if membership is None:
-                membership = (
-                    OrgMembership.query
-                    .filter(
-                        OrgMembership.org_id == org_id,
-                        OrgMembership.user_id == self.id,
-                        db.or_(
-                            OrgMembership.archived.is_(False),
-                            OrgMembership.archived.is_(None),
-                        ),
-                    )
-                    .first()
-                )
+        roles_equivalentes = equivalencias.get(objetivo, [objetivo])
 
-            if membership:
-                return membership.status == 'active' and (membership.role or '').lower() == objetivo
-
-        # Compatibilidad hacia atrás: usar el rol global almacenado en el usuario
-        role_global = (getattr(self, 'role', None) or '').lower()
-        if role_global:
-            return role_global == objetivo
-
-        rol_legacy = (getattr(self, 'rol', None) or '').lower()
-        if rol_legacy in {'administrador', 'admin'} and objetivo == 'admin':
+        # 1. Super admin tiene todos los roles
+        if self.is_super_admin:
             return True
 
-        return False
+        # 2. Verificar membresía activa si hay organización en sesión
+        org_id = session.get('current_org_id')
+        if org_id:
+            for membership in self.memberships:
+                if membership.org_id == org_id and not membership.archived:
+                    if membership.status == 'active':
+                        membership_role = (membership.role or '').lower()
+                        if membership_role in roles_equivalentes:
+                            return True
+                    break
+
+        # 3. Verificar role global del usuario
+        user_role = (self.role or '').lower()
+        return user_role in roles_equivalentes
 
     def ensure_membership(self, org_id: int, *, role: str | None = None, status: str = 'active'):
         existing = self.membership_for_org(org_id)
         if existing:
             return existing
 
-        resolved_role = role or (self.role if getattr(self, 'role', None) else 'operario')
-        normalized_role = 'admin' if resolved_role in ('administrador', 'admin', 'administrador_general') else 'operario'
+        # Usar role del usuario o el pasado como parámetro
+        resolved_role = role or self.role or 'operario'
+
+        # Normalizar a roles válidos
+        role_mapping = {
+            'administrador': 'admin',
+            'administrador_general': 'admin',
+            'jefe_obra': 'pm',
+            'project_manager': 'pm',
+        }
+        normalized_role = role_mapping.get(resolved_role.lower(), resolved_role.lower())
+
+        # Validar que sea un rol conocido
+        if normalized_role not in ('admin', 'pm', 'tecnico', 'operario'):
+            normalized_role = 'operario'
 
         membership = OrgMembership(
             org_id=org_id,
@@ -287,83 +295,48 @@ class Usuario(UserMixin, db.Model):
 
     def puede_acceder_modulo(self, modulo):
         """Verifica si el usuario puede acceder a un módulo usando RBAC"""
+        # Super admin tiene acceso a todo
+        if self.is_super_admin:
+            return True
+
         # Primero verificar si hay override específico de usuario
         user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
         if user_override:
             return user_override.can_view
 
         # Si no hay override, usar permisos del rol
-        role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
+        role_perm = RoleModule.query.filter_by(role=self.role, module=modulo).first()
         if role_perm:
             return role_perm.can_view
 
-        # Fallback al sistema antiguo si no hay configuración RBAC
-        roles_direccion = [
-            'director_general', 'director_operaciones', 'director_proyectos',
-            'jefe_obra', 'jefe_produccion', 'coordinador_proyectos'
-        ]
-
-        roles_tecnicos = [
-            'ingeniero_civil', 'ingeniero_construcciones', 'arquitecto',
-            'ingeniero_seguridad', 'ingeniero_electrico', 'ingeniero_sanitario',
-            'ingeniero_mecanico', 'topografo', 'bim_manager', 'computo_presupuesto'
-        ]
-
-        roles_supervision = [
-            'encargado_obra', 'supervisor_obra', 'inspector_calidad',
-            'inspector_seguridad', 'supervisor_especialidades'
-        ]
-
-        roles_administrativos = [
-            'administrador_obra', 'comprador', 'logistica', 'recursos_humanos',
-            'contador_finanzas'
-        ]
-
-        roles_operativos = [
-            'capataz', 'maestro_mayor_obra', 'oficial_albanil', 'oficial_plomero',
-            'oficial_electricista', 'oficial_herrero', 'oficial_pintor', 'oficial_yesero',
-            'medio_oficial', 'ayudante', 'operador_maquinaria', 'chofer_camion'
-        ]
-
-        permisos = {}
-
-        for rol in roles_direccion:
-            permisos[rol] = ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
-
-        for rol in roles_tecnicos:
-            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad']
-
-        for rol in roles_supervision:
-            permisos[rol] = ['obras', 'inventario', 'marketplaces', 'reportes', 'asistente', 'documentos', 'seguridad']
-
-        for rol in roles_administrativos:
-            permisos[rol] = ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'cotizacion', 'documentos']
-
-        for rol in roles_operativos:
-            permisos[rol] = ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
-
-        permisos.update({
-            'administrador': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
+        # Permisos por defecto según role unificado
+        permisos = {
+            'admin': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
+            'pm': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
             'operario': ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
-        })
+        }
 
-        return modulo in permisos.get(self.rol, [])
+        return modulo in permisos.get(self.role, [])
 
     def puede_editar_modulo(self, modulo):
         """Verifica si el usuario puede editar en un módulo usando RBAC"""
+        # Super admin puede editar todo
+        if self.is_super_admin:
+            return True
+
         # Primero verificar si hay override específico de usuario
         user_override = UserModule.query.filter_by(user_id=self.id, module=modulo).first()
         if user_override:
             return user_override.can_edit
 
         # Si no hay override, usar permisos del rol
-        role_perm = RoleModule.query.filter_by(role=self.rol, module=modulo).first()
+        role_perm = RoleModule.query.filter_by(role=self.role, module=modulo).first()
         if role_perm:
             return role_perm.can_edit
 
-        # Fallback: admins y tecnicos pueden editar la mayoría
-        if self.rol in ['administrador', 'tecnico', 'jefe_obra']:
+        # Fallback: admin, pm y tecnico pueden editar
+        if self.role in ['admin', 'pm', 'tecnico']:
             return True
 
         return False
@@ -380,23 +353,13 @@ class Usuario(UserMixin, db.Model):
         return self.email in emails_admin_completo
 
     def es_admin(self):
-        """Compatibilidad para plantillas antiguas que consultan current_user.es_admin()."""
-        try:
-            if self.tiene_rol('admin'):
-                return True
-        except Exception:
-            # En caso de que la sesión aún no esté inicializada seguimos con los fallbacks legacy
-            pass
-
-        role_global = (getattr(self, 'role', None) or '').lower()
-        if role_global in {'admin', 'administrador', 'administrador_general'}:
+        """Verifica si el usuario es admin de su organización o super admin."""
+        # Super admin siempre es admin
+        if self.is_super_admin:
             return True
 
-        rol_legacy = (getattr(self, 'rol', None) or '').lower()
-        if rol_legacy in {'admin', 'administrador', 'administrador_general'}:
-            return True
-
-        return self.es_admin_completo()
+        # Verificar role unificado
+        return self.role == 'admin'
 
     def tiene_acceso_sin_restricciones(self):
         """Verifica si el usuario tiene acceso completo al sistema"""
@@ -589,7 +552,7 @@ class UserModule(db.Model):
 def get_allowed_modules(user):
     """Obtiene los módulos permitidos para un usuario"""
     role_map = {rm.module: {"view": rm.can_view, "edit": rm.can_edit}
-                for rm in RoleModule.query.filter_by(role=user.rol)}
+                for rm in RoleModule.query.filter_by(role=user.role)}
 
     # Overrides de usuario
     for um in UserModule.query.filter_by(user_id=user.id):

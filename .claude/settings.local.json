@@ -54,7 +54,10 @@
       "Bash(winpty docker exec obyra-app python -m py_compile //app//obras.py)",
       "Bash(winpty docker exec obyra-app grep -n \"url_for\" /app/templates/inventario/categorias.html)",
       "Bash(winpty docker exec obyra-app python -m py_compile //app//reportes.py)",
-      "Bash(timeout 35 bash:*)"
+      "Bash(timeout 35 bash:*)",
+      "Bash(dir:*)",
+      "Bash(powershell \"Get-ChildItem -Path . -Recurse -File | Where-Object {$_ame -match ''''\\.py$'''' -and $_ullName -notmatch ''''\\.venv\\''''} | Select-Object FullName\")",
+      "Bash(timeout 50 bash:*)"
     ],
     "deny": [],
     "ask": []

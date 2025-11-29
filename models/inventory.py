@@ -7,6 +7,8 @@ import json
 
 
 class CategoriaInventario(db.Model):
+    """DEPRECATED: Usar InventoryCategory en su lugar.
+    Mantenido por compatibilidad con datos existentes."""
     __tablename__ = 'categorias_inventario'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -14,8 +16,8 @@ class CategoriaInventario(db.Model):
     descripcion = db.Column(db.Text)
     tipo = db.Column(db.String(20), nullable=False)  # material, herramienta, maquinaria
 
-    # Relaciones
-    items = db.relationship('ItemInventario', back_populates='categoria', lazy='dynamic')
+    # Relaciones - sin back_populates porque ItemInventario ahora usa InventoryCategory
+    # items = db.relationship('ItemInventario', ...) - REMOVIDO para evitar conflicto
 
     def __repr__(self):
         return f'<CategoriaInventario {self.nombre}>'
@@ -25,7 +27,7 @@ class ItemInventario(db.Model):
     __tablename__ = 'items_inventario'
 
     id = db.Column(db.Integer, primary_key=True)
-    categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=False)
+    categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=True)
     codigo = db.Column(db.String(50), unique=True, nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text)

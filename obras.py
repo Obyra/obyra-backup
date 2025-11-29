@@ -2108,6 +2108,7 @@ def api_curva_s_tarea(tarea_id):
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
 @login_required
+@limiter.limit("20 per minute")
 def eliminar_tarea(tarea_id):
     tarea = TareaEtapa.query.get_or_404(tarea_id)
     obra = tarea.etapa.obra
@@ -2636,6 +2637,7 @@ def registrar_pago_certificacion(cert_id):
 
 @obras_bp.route('/<int:obra_id>/etapas/<int:etapa_id>/eliminar', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def eliminar_etapa(obra_id, etapa_id):
     roles = _get_roles_usuario(current_user)
     if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):

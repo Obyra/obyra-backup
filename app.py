@@ -233,6 +233,10 @@ extensions.limiter = setup_rate_limiter(app)
 from middleware.request_timing import setup_request_timing
 setup_request_timing(app)
 
+# Setup security headers middleware (CSP, X-Frame-Options, etc.)
+from middleware.security_headers import setup_security_headers
+setup_security_headers(app)
+
 # ---------------- Login dynamic resolution ----------------
 def _resolve_login_endpoint() -> Optional[str]:
     """Return the first available login endpoint, prioritising auth blueprints."""
