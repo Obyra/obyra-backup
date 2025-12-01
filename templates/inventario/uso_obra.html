@@ -25,20 +25,31 @@
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
-                            <label for="obra_id" class="form-label">Obra *</label>
+                            <label for="obra_id" class="form-label">Obra / Depósito *</label>
                             <select class="form-select" id="obra_id" name="obra_id" required>
-                                <option value="">Seleccionar obra...</option>
+                                <option value="">Seleccionar destino...</option>
                                 {% for obra in obras %}
                                 <option value="{{ obra.id }}" {% if request.form.get('obra_id') == obra.id|string %}selected{% endif %}>
                                     {{ obra.nombre }}
                                 </option>
                                 {% endfor %}
                             </select>
-                            <div class="form-text">Solo se listan las obras en planificación o en curso.</div>
+                            <div class="form-text">Seleccioná el destino donde se dará de alta el artículo.</div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="item_id" class="form-label">Ítem de inventario *</label>
+                            <label for="fecha_compra" class="form-label">Fecha *</label>
+                            <input type="date"
+                                   class="form-control"
+                                   id="fecha_compra"
+                                   name="fecha_compra"
+                                   value="{{ request.form.get('fecha_compra') or today.strftime('%Y-%m-%d') }}"
+                                   required>
+                            <div class="form-text">Fecha de la compra/registro</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="item_id" class="form-label">Artículo *</label>
                             <select class="form-select select2-search" id="item_id" name="item_id" required>
                                 <option value="">Buscar por código o nombre...</option>
                                 {% for item in items %}
@@ -46,60 +57,61 @@
                                         data-codigo="{{ item.codigo }}"
                                         data-nombre="{{ item.nombre }}"
                                         data-categoria="{{ item.categoria.nombre if item.categoria else '' }}"
-                                        data-stock="{{ item.stock_actual|numero(2) if item.stock_actual is not none else '0' }}"
+                                        data-unidad="{{ item.unidad }}"
                                         {% if request.form.get('item_id') == item.id|string %}selected{% endif %}>
-                                    [{{ item.codigo }}] {{ item.nombre }}{% if item.categoria %} - {{ item.categoria.nombre }}{% endif %} (Stock: {{ item.stock_actual|numero(2) if item.stock_actual is not none else '0' }})
+                                    [{{ item.codigo }}] {{ item.nombre }}{% if item.categoria %} - {{ item.categoria.nombre }}{% endif %}
                                 </option>
                                 {% endfor %}
                             </select>
                             <div class="form-text">
-                                <i class="fas fa-search me-1"></i>Podés buscar por código o nombre (total o parcial). El stock actual se muestra como referencia.
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="cantidad_usada" class="form-label">Cantidad utilizada *</label>
-                                    <div class="input-group">
-                                        <input type="number"
-                                               class="form-control"
-                                               id="cantidad_usada"
-                                               name="cantidad_usada"
-                                               step="0.01"
-                                               min="0"
-                                               value="{{ request.form.get('cantidad_usada', '') }}"
-                                               required>
-                                        <span class="input-group-text"><i class="fas fa-balance-scale"></i></span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="fecha_uso" class="form-label">Fecha de uso</label>
-                                    <input type="date"
-                                           class="form-control"
-                                           id="fecha_uso"
-                                           name="fecha_uso"
-                                           value="{{ request.form.get('fecha_uso') or today.strftime('%Y-%m-%d') }}">
-                                    <div class="form-text">Si no indicas una fecha se usará la fecha actual.</div>
-                                </div>
+                                <i class="fas fa-search me-1"></i>Buscá por código o nombre (total o parcial)
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="observaciones" class="form-label">Observaciones</label>
-                            <textarea class="form-control"
-                                      id="observaciones"
-                                      name="observaciones"
-                                      rows="3"
-                                      placeholder="Detalle adicional sobre el uso, responsable, ubicación en la obra, etc.">{{ request.form.get('observaciones', '') }}</textarea>
+                            <label for="cantidad" class="form-label">Cantidad *</label>
+                            <div class="input-group">
+                                <input type="number"
+                                       class="form-control"
+                                       id="cantidad"
+                                       name="cantidad"
+                                       step="0.01"
+                                       min="0.01"
+                                       value="{{ request.form.get('cantidad', '') }}"
+                                       required>
+                                <span class="input-group-text" id="unidad-display">
+                                    <i class="fas fa-balance-scale"></i>
+                                </span>
+                            </div>
+                            <div class="form-text">La cantidad se dará de alta automáticamente en el destino seleccionado.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="proveedor" class="form-label">Proveedor</label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="proveedor"
+                                   name="proveedor"
+                                   placeholder="Nombre del proveedor"
+                                   value="{{ request.form.get('proveedor', '') }}">
+                            <div class="form-text">Opcional: Registrá el proveedor de la compra</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="remito" class="form-label">Remito</label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="remito"
+                                   name="remito"
+                                   placeholder="Número de remito o factura"
+                                   value="{{ request.form.get('remito', '') }}">
+                            <div class="form-text">Opcional: Número de remito o factura</div>
                         </div>
 
                         <div class="alert alert-info d-flex align-items-start">
                             <i class="fas fa-info-circle me-2 mt-1"></i>
                             <div>
-                                Registrar un uso en obra descuenta automáticamente el stock del ítem seleccionado y crea un movimiento de salida asociado a la obra.
+                                Al registrar una compra, la cantidad ingresada se dará de alta automáticamente en el depósito u obra seleccionada.
                             </div>
                         </div>
 
@@ -108,7 +120,7 @@
                                 Cancelar
                             </a>
                             <button type="submit" class="btn btn-warning text-dark">
-                                <i class="fas fa-save me-1"></i>Guardar uso
+                                <i class="fas fa-save me-1"></i>Registrar compra
                             </button>
                         </div>
                     </form>
@@ -117,13 +129,13 @@
 
             <div class="card shadow-sm">
                 <div class="card-header">
-                    <strong><i class="fas fa-info me-2"></i>Consejos para el control de uso</strong>
+                    <strong><i class="fas fa-info me-2"></i>Consejos para el registro de compras</strong>
                 </div>
                 <div class="card-body">
                     <ul class="mb-0">
-                        <li>Verifica que el stock disponible alcance para la salida solicitada antes de confirmar.</li>
-                        <li>Utiliza las observaciones para registrar quién retira el equipo o material y en qué frente de obra se utilizará.</li>
-                        <li>Si necesitas devolver stock a bodega, regístralo como un movimiento de entrada desde el detalle del ítem.</li>
+                        <li>Seleccioná el depósito u obra donde se recibirá el material comprado.</li>
+                        <li>Utilizá los campos de proveedor y remito para llevar un mejor control de las compras.</li>
+                        <li>La cantidad ingresada se sumará automáticamente al stock del destino seleccionado.</li>
                     </ul>
                 </div>
             </div>
@@ -189,7 +201,7 @@ $(document).ready(function() {
     // También inicializar Select2 en el campo de obra para consistencia
     $('#obra_id').select2({
         theme: 'bootstrap-5',
-        placeholder: 'Seleccionar obra...',
+        placeholder: 'Seleccionar destino...',
         allowClear: true,
         width: '100%',
         language: {
@@ -198,6 +210,23 @@ $(document).ready(function() {
             }
         }
     });
+
+    // Actualizar la unidad de medida cuando se selecciona un artículo
+    $('#item_id').on('change', function() {
+        var selectedOption = $(this).find('option:selected');
+        var unidad = selectedOption.data('unidad');
+
+        if (unidad) {
+            $('#unidad-display').html(unidad);
+        } else {
+            $('#unidad-display').html('<i class="fas fa-balance-scale"></i>');
+        }
+    });
+
+    // Si hay un artículo preseleccionado, mostrar su unidad
+    if ($('#item_id').val()) {
+        $('#item_id').trigger('change');
+    }
 });
 </script>
 {% endblock %}

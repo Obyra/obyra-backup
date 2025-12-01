@@ -413,90 +413,82 @@ def uso_obra():
     if request.method == 'POST':
         obra_id = request.form.get('obra_id')
         item_id = request.form.get('item_id')
-        cantidad_usada = request.form.get('cantidad_usada')
-        fecha_uso = request.form.get('fecha_uso')
-        observaciones = request.form.get('observaciones')
+        cantidad = request.form.get('cantidad')
+        fecha_compra = request.form.get('fecha_compra')
+        proveedor = request.form.get('proveedor', '').strip()
+        remito = request.form.get('remito', '').strip()
 
-        if not all([obra_id, item_id, cantidad_usada]):
-            flash('Obra, item y cantidad son obligatorios.', 'danger')
+        if not all([obra_id, item_id, cantidad]):
+            flash('Obra/Depósito, artículo y cantidad son obligatorios.', 'danger')
             return render_template('inventario/uso_obra.html', **context)
 
         try:
-            cantidad_usada = float(cantidad_usada)
+            cantidad = float(cantidad)
             item = ItemInventario.query.get(item_id)
 
             if item is None:
-                flash('El ítem seleccionado no existe.', 'danger')
+                flash('El artículo seleccionado no existe.', 'danger')
                 return render_template('inventario/uso_obra.html', **context)
 
-            if cantidad_usada <= 0:
+            if cantidad <= 0:
                 flash('La cantidad debe ser mayor a cero.', 'danger')
                 return render_template('inventario/uso_obra.html', **context)
 
             stock_actual = item.stock_actual if item.stock_actual is not None else 0
 
-            # Validación flexible de stock - permite negativo con alerta
-            stock_insuficiente = cantidad_usada > stock_actual
-            if stock_insuficiente:
-                stock_resultante = stock_actual - cantidad_usada
-                current_app.logger.warning(
-                    f"⚠️ Stock insuficiente para {item.nombre}. "
-                    f"Disponible: {stock_actual}, Requerido: {cantidad_usada}, "
-                    f"Resultante: {stock_resultante}. "
-                    f"Permitiendo operación con stock negativo."
-                )
-                flash(
-                    f'⚠️ ALERTA: Stock insuficiente para {item.nombre}. '
-                    f'Disponible: {stock_actual}, solicitado: {cantidad_usada}. '
-                    f'El stock quedará en {stock_resultante}. '
-                    f'Registrá la entrada de material pendiente.',
-                    'warning'
-                )
-
             # Convertir fecha
-            fecha_uso_obj = date.today()
-            if fecha_uso:
+            fecha_compra_obj = date.today()
+            if fecha_compra:
                 from datetime import datetime
-                fecha_uso_obj = datetime.strptime(fecha_uso, '%Y-%m-%d').date()
+                fecha_compra_obj = datetime.strptime(fecha_compra, '%Y-%m-%d').date()
 
-            # Crear uso con precio histórico
+            # Construir observaciones con proveedor y remito
+            observaciones_parts = []
+            if proveedor:
+                observaciones_parts.append(f'Proveedor: {proveedor}')
+            if remito:
+                observaciones_parts.append(f'Remito: {remito}')
+            observaciones = ' | '.join(observaciones_parts) if observaciones_parts else None
+
+            # Crear uso/registro en obra con precio histórico
             uso = UsoInventario(
                 obra_id=obra_id,
                 item_id=item_id,
-                cantidad_usada=cantidad_usada,
-                fecha_uso=fecha_uso_obj,
+                cantidad_usada=cantidad,
+                fecha_uso=fecha_compra_obj,
                 observaciones=observaciones,
                 usuario_id=current_user.id,
-                # Guardar precio al momento del uso (NO el promedio futuro)
                 precio_unitario_al_uso=item.precio_promedio,
-                moneda='ARS'  # Por defecto ARS, ajustar según configuración
+                moneda='ARS'
             )
 
-            # Crear movimiento de salida
+            # Crear movimiento de ENTRADA (compra)
+            obra = Obra.query.get(obra_id)
             movimiento = MovimientoInventario(
                 item_id=item_id,
-                tipo='salida',
-                cantidad=cantidad_usada,
-                motivo=f'Uso en obra: {Obra.query.get(obra_id).nombre}',
+                tipo='entrada',
+                cantidad=cantidad,
+                motivo=f'Compra para {obra.nombre}',
                 observaciones=observaciones,
                 usuario_id=current_user.id
             )
 
-            # Actualizar stock
-            item.stock_actual = stock_actual - cantidad_usada
+            # SUMAR stock (es una compra, no una salida)
+            item.stock_actual = stock_actual + cantidad
 
             db.session.add(uso)
             db.session.add(movimiento)
             db.session.commit()
 
-            flash('Uso en obra registrado exitosamente.', 'success')
+            flash('Compra registrada exitosamente.', 'success')
             return redirect(url_for('inventario.lista'))
 
         except ValueError:
             flash('La cantidad debe ser un número válido.', 'danger')
         except Exception as e:
             db.session.rollback()
-            flash('Error al registrar el uso en obra.', 'danger')
+            current_app.logger.error(f"Error al registrar compra: {str(e)}")
+            flash('Error al registrar la compra.', 'danger')
 
     return render_template('inventario/uso_obra.html', **context)
 
