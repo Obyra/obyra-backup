@@ -86,7 +86,7 @@
     <div class="row">
         <div class="col-12">
             {% if items_con_obras %}
-            <div class="table-responsive">
+            <div class="table-responsive" style="overflow: visible;">
                 <table class="table table-hover table-striped align-middle">
                     <thead class="table-dark">
                         <tr>
@@ -103,6 +103,8 @@
                         {% for item_data in items_con_obras %}
                         {% set item = item_data.item %}
                         {% set obras = item_data.obras %}
+                        {% set reservas = item_data.reservas or [] %}
+                        {% set stock_reservado = item_data.stock_reservado or 0 %}
                         <tr class="{{ 'table-warning' if item.necesita_reposicion }}" id="item-row-{{ item.id }}">
                             <td>
                                 <strong>{{ item.codigo }}</strong>
@@ -117,12 +119,18 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                                <span class="badge bg-secondary">{{ item.categoria.nombre if item.categoria else 'Sin categoría' }}</span>
                             </td>
                             <td class="text-center">
                                 <strong class="{{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">
                                     {{ item.stock_actual|numero(2) }}
                                 </strong>
+                                {% if stock_reservado > 0 %}
+                                <br>
+                                <span class="badge bg-info" title="Stock reservado para obras">
+                                    <i class="fas fa-lock me-1"></i>{{ stock_reservado|numero(2) }} reservado
+                                </span>
+                                {% endif %}
                                 <br>
                                 <small class="text-muted">{{ item.unidad }}</small>
                             </td>
@@ -130,6 +138,15 @@
                                 <strong class="text-warning">{{ item.stock_minimo|numero(2) }}</strong>
                             </td>
                             <td>
+                                {% if reservas %}
+                                    <div class="d-flex flex-column gap-1 mb-1">
+                                        {% for reserva in reservas %}
+                                        <span class="badge bg-info text-dark" title="Reservado el {{ reserva.fecha }}">
+                                            <i class="fas fa-bookmark me-1"></i>{{ reserva.obra_nombre[:15] }}{% if reserva.obra_nombre|length > 15 %}...{% endif %}: {{ reserva.cantidad|numero(2) }}
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
                                 {% if obras %}
                                     <div class="d-flex flex-column gap-1">
                                         {% for obra in obras %}
@@ -145,19 +162,20 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">
-                                <div class="btn-group btn-group-sm" role="group">
+                                <div class="d-flex justify-content-center gap-1">
                                     <a href="{{ url_for('inventario.detalle', id=item.id) }}"
                                        class="btn btn-outline-primary btn-sm"
                                        title="Ver detalles">
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                    <div class="btn-group btn-group-sm" role="group">
+                                    <div class="dropdown">
                                         <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle"
-                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                                data-bs-toggle="dropdown" aria-expanded="false"
+                                                data-bs-boundary="viewport">
                                             <i class="fas fa-tools"></i>
                                         </button>
-                                        <ul class="dropdown-menu">
+                                        <ul class="dropdown-menu dropdown-menu-end shadow">
                                             <li>
                                                 <a class="dropdown-item" href="#"
                                                    onclick="abrirModalBaja('{{ item.id }}', '{{ item.nombre }}', 'uso'); return false;">
@@ -177,6 +195,15 @@
                                                     <i class="fas fa-exchange-alt text-success me-2"></i>Trasladar a otro depósito
                                                 </a>
                                             </li>
+                                            {% if current_user.rol in ['administrador'] %}
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="#"
+                                                   onclick="confirmarEliminar('{{ item.id }}', '{{ item.nombre }}', '{{ item.codigo }}', {{ item.stock_actual|float }}); return false;">
+                                                    <i class="fas fa-trash me-2"></i>Eliminar item
+                                                </a>
+                                            </li>
+                                            {% endif %}
                                         </ul>
                                     </div>
                                     {% endif %}
@@ -560,5 +587,29 @@ document.getElementById('modalGestionCategorias').addEventListener('show.bs.moda
 document.addEventListener('DOMContentLoaded', function() {
     aplicarFiltroDropdown();
 });
+
+// ===== Eliminar Item =====
+function confirmarEliminar(itemId, itemNombre, itemCodigo, stockActual) {
+    let mensaje = `¿Estás seguro de que deseas eliminar el item "${itemNombre}" (${itemCodigo})?`;
+
+    if (stockActual > 0) {
+        mensaje += `\n\n⚠️ ADVERTENCIA: Este item tiene ${stockActual.toFixed(2)} unidades en stock.`;
+        mensaje += `\nSi lo eliminas, el stock quedará registrado pero el item no aparecerá en la lista.`;
+    }
+
+    mensaje += `\n\nEsta acción no se puede deshacer.`;
+
+    if (confirm(mensaje)) {
+        // Enviar formulario de eliminación
+        const form = document.getElementById('formEliminar');
+        form.action = `/inventario/${itemId}/eliminar`;
+        form.submit();
+    }
+}
 </script>
+
+<!-- Formulario oculto para eliminar -->
+<form id="formEliminar" method="POST" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+</form>
 {% endblock %}

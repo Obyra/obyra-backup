@@ -204,6 +204,8 @@ def dashboard():
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,
                          presupuestos_vencidos=presupuestos_vencidos,
+                         items_stock_bajo=items_stock_bajo,
+                         obras_vencimiento=obras_vencimiento,
                          charts_enabled=CHARTS_ENABLED,
                          show_reports_banner=show_reports_banner)
 

@@ -361,6 +361,37 @@ class Usuario(UserMixin, db.Model):
         # Verificar role unificado
         return self.role == 'admin'
 
+    def puede_editar(self) -> bool:
+        """
+        Verifica si el usuario tiene permisos de edición (admin, pm, tecnico).
+
+        Roles con permiso de edición:
+        - admin: acceso completo
+        - pm: gestión de proyectos
+        - tecnico: edición técnica
+
+        Returns:
+            True si puede editar, False si no
+        """
+        if self.is_super_admin:
+            return True
+        return self.role in ('admin', 'pm', 'tecnico')
+
+    def puede_gestionar(self) -> bool:
+        """
+        Verifica si el usuario tiene permisos de gestión (admin, pm).
+
+        Roles con permiso de gestión:
+        - admin: acceso completo
+        - pm: gestión de proyectos
+
+        Returns:
+            True si puede gestionar, False si no
+        """
+        if self.is_super_admin:
+            return True
+        return self.role in ('admin', 'pm')
+
     def tiene_acceso_sin_restricciones(self):
         """Verifica si el usuario tiene acceso completo al sistema"""
         # Administradores especiales tienen acceso completo

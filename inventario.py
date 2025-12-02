@@ -139,9 +139,31 @@ def lista():
             )
         ).distinct().all()
 
+        # Buscar reservas activas para este item (en InventoryItem por nombre)
+        from models.inventory import InventoryItem, StockReservation
+        reservas_activas = []
+        inv_item = InventoryItem.query.filter(
+            InventoryItem.company_id == org_id,
+            InventoryItem.nombre.ilike(item.nombre)
+        ).first()
+
+        if inv_item:
+            reservas = StockReservation.query.filter_by(
+                item_id=inv_item.id,
+                estado='activa'
+            ).all()
+            for r in reservas:
+                reservas_activas.append({
+                    'obra_nombre': r.project.nombre if r.project else 'Sin obra',
+                    'cantidad': float(r.qty),
+                    'fecha': r.created_at.strftime('%d/%m') if r.created_at else ''
+                })
+
         items_con_obras.append({
             'item': item,
-            'obras': obras_confirmadas
+            'obras': obras_confirmadas,
+            'reservas': reservas_activas,
+            'stock_reservado': sum(r['cantidad'] for r in reservas_activas)
         })
 
     # Load new inventory categories
@@ -209,6 +231,42 @@ def crear():
             existing = ItemInventario.query.filter_by(codigo=codigo).first()
             if existing:
                 flash(f'Ya existe un item con el código {codigo}', 'warning')
+                categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
+                return render_template('inventario/crear.html', categorias=categorias)
+
+            # Verificar si ya existe un item con el mismo nombre + descripción en la organización
+            # Permite: Cemento (Avellaneda 50kg) y Cemento (Avellaneda 25kg)
+            # Bloquea: Dos items con exactamente el mismo nombre y descripción
+            descripcion_normalizada = (descripcion or '').strip().lower()
+
+            query_duplicado = ItemInventario.query.filter(
+                ItemInventario.organizacion_id == org_id,
+                ItemInventario.nombre.ilike(nombre),
+                ItemInventario.activo == True
+            )
+
+            # Si hay descripción, buscar coincidencia exacta de nombre + descripción
+            # Si no hay descripción, buscar items sin descripción con el mismo nombre
+            if descripcion_normalizada:
+                query_duplicado = query_duplicado.filter(
+                    db.func.lower(db.func.coalesce(ItemInventario.descripcion, '')).like(descripcion_normalizada)
+                )
+            else:
+                query_duplicado = query_duplicado.filter(
+                    db.or_(
+                        ItemInventario.descripcion.is_(None),
+                        ItemInventario.descripcion == ''
+                    )
+                )
+
+            existing_duplicado = query_duplicado.first()
+            if existing_duplicado:
+                if descripcion:
+                    flash(f'Ya existe "{nombre}" con descripción "{descripcion}" (código: {existing_duplicado.codigo}). '
+                          f'Usa una descripción diferente para distinguirlo.', 'warning')
+                else:
+                    flash(f'Ya existe "{nombre}" sin descripción (código: {existing_duplicado.codigo}). '
+                          f'Agrega una descripción (ej: marca, presentación) para crear un nuevo item.', 'warning')
                 categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all()
                 return render_template('inventario/crear.html', categorias=categorias)
 
@@ -289,10 +347,65 @@ def detalle(id):
     # Obtener uso en obras
     usos_obra = item.usos.join(Obra).order_by(UsoInventario.fecha_uso.desc()).limit(10).all()
     
-    return render_template('inventario/detalle.html', 
-                         item=item, 
+    return render_template('inventario/detalle.html',
+                         item=item,
                          movimientos=movimientos,
                          usos_obra=usos_obra)
+
+
+@inventario_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar(id):
+    """Elimina (desactiva) un item de inventario."""
+    if current_user.role not in ['admin', 'pm']:
+        flash('No tienes permisos para eliminar items de inventario.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    item = ItemInventario.query.get_or_404(id)
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Verificar que el item pertenece a la organización
+    if item.organizacion_id != org_id:
+        flash('No tienes permisos para eliminar este item.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
+    # Verificar si tiene stock actual
+    if item.stock_actual and float(item.stock_actual) > 0:
+        flash(f'No se puede eliminar "{item.nombre}" porque tiene stock ({item.stock_actual} {item.unidad}). '
+              f'Primero da de baja todo el stock.', 'warning')
+        return redirect(url_for('inventario.detalle', id=id))
+
+    # Verificar si tiene movimientos o usos recientes (últimos 30 días)
+    from datetime import timedelta
+    fecha_limite = datetime.utcnow() - timedelta(days=30)
+    movimientos_recientes = item.movimientos.filter(MovimientoInventario.fecha >= fecha_limite).count()
+    usos_recientes = item.usos.filter(UsoInventario.fecha_uso >= fecha_limite.date()).count()
+
+    if movimientos_recientes > 0 or usos_recientes > 0:
+        # Soft delete - solo desactivar
+        item.activo = False
+        db.session.commit()
+        flash(f'Item "{item.nombre}" desactivado (tiene historial reciente). El código {item.codigo} queda libre.', 'success')
+    else:
+        # Hard delete si no tiene historial reciente
+        codigo = item.codigo
+        nombre = item.nombre
+        try:
+            # Eliminar movimientos antiguos
+            item.movimientos.delete()
+            item.usos.delete()
+            db.session.delete(item)
+            db.session.commit()
+            flash(f'Item "{nombre}" eliminado completamente. El código {codigo} está disponible.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            # Si falla el hard delete, hacer soft delete
+            item.activo = False
+            db.session.commit()
+            flash(f'Item "{nombre}" desactivado. El código {codigo} queda libre.', 'success')
+
+    return redirect(url_for('inventario.lista'))
+
 
 @inventario_bp.route('/<int:id>/movimiento', methods=['POST'])
 @login_required
@@ -434,7 +547,22 @@ def uso_obra():
                 flash('La cantidad debe ser mayor a cero.', 'danger')
                 return render_template('inventario/uso_obra.html', **context)
 
-            stock_actual = item.stock_actual if item.stock_actual is not None else 0
+            stock_actual = float(item.stock_actual) if item.stock_actual is not None else 0
+
+            # Validación estricta de stock - NO permite stock negativo
+            if cantidad > stock_actual:
+                current_app.logger.warning(
+                    f"❌ Stock insuficiente para {item.nombre}. "
+                    f"Disponible: {stock_actual}, Requerido: {cantidad}. "
+                    f"Operación bloqueada."
+                )
+                flash(
+                    f'❌ Stock insuficiente para {item.nombre}. '
+                    f'Disponible: {stock_actual:.2f} {item.unidad}, solicitado: {cantidad:.2f} {item.unidad}. '
+                    f'Primero registrá una entrada de material.',
+                    'danger'
+                )
+                return render_template('inventario/uso_obra.html', **context)
 
             # Convertir fecha
             fecha_compra_obj = date.today()
@@ -851,6 +979,34 @@ def api_usar_material_global(material_id):
                 'item_id': existing.id
             }), 409
 
+        # Verificar si ya existe un item con el mismo nombre + descripción
+        descripcion_material = (material.descripcion_completa or '').strip().lower()
+
+        query_duplicado = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.nombre.ilike(material.nombre),
+            ItemInventario.activo == True
+        )
+
+        if descripcion_material:
+            query_duplicado = query_duplicado.filter(
+                db.func.lower(db.func.coalesce(ItemInventario.descripcion, '')).like(descripcion_material)
+            )
+        else:
+            query_duplicado = query_duplicado.filter(
+                db.or_(
+                    ItemInventario.descripcion.is_(None),
+                    ItemInventario.descripcion == ''
+                )
+            )
+
+        existing_duplicado = query_duplicado.first()
+        if existing_duplicado:
+            return jsonify({
+                'error': f'Ya tienes "{material.nombre}" con la misma descripción (código: {existing_duplicado.codigo})',
+                'item_id': existing_duplicado.id
+            }), 409
+
         # Buscar categoría correspondiente
         categoria = InventoryCategory.query.filter_by(
             company_id=org_id,
@@ -1253,16 +1409,17 @@ def trasladar(id):
         if not obra_destino_id:
             return jsonify({'success': False, 'message': 'Debe seleccionar un depósito destino'}), 400
 
-        # Validación flexible de stock - permite negativo con alerta
-        stock_actual = float(item.stock_actual)
-        stock_insuficiente = cantidad > stock_actual
-        if stock_insuficiente:
-            stock_resultante = stock_actual - cantidad
+        # Validación estricta de stock - NO permite stock negativo
+        stock_actual = float(item.stock_actual) if item.stock_actual else 0
+        if cantidad > stock_actual:
             current_app.logger.warning(
-                f"⚠️ Traslado con stock insuficiente para {item.nombre}. "
-                f"Disponible: {stock_actual}, Trasladar: {cantidad}, "
-                f"Resultante: {stock_resultante}"
+                f"❌ Traslado bloqueado: stock insuficiente para {item.nombre}. "
+                f"Disponible: {stock_actual}, Trasladar: {cantidad}"
             )
+            return jsonify({
+                'success': False,
+                'message': f'Stock insuficiente. Disponible: {stock_actual:.2f} {item.unidad}, solicitado: {cantidad:.2f} {item.unidad}'
+            }), 400
 
         # Create movement record for transfer
         movimiento = MovimientoInventario(

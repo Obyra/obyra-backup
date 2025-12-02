@@ -5,6 +5,8 @@ from extensions import db
 from sqlalchemy import inspect
 import json
 
+# NOTE: BudgetCalculator se importa dentro de los métodos para evitar import circular
+
 
 class ExchangeRate(db.Model):
     __tablename__ = 'exchange_rates'
@@ -97,7 +99,7 @@ class Presupuesto(db.Model):
     subtotal_mano_obra = db.Column(db.Numeric(15, 2), default=0)
     subtotal_equipos = db.Column(db.Numeric(15, 2), default=0)
     total_sin_iva = db.Column(db.Numeric(15, 2), default=0)
-    iva_porcentaje = db.Column(db.Numeric(5, 2), default=21)
+    iva_porcentaje = db.Column(db.Numeric(5, 2), default=21)  # Default IVA Argentina
     total_con_iva = db.Column(db.Numeric(15, 2), default=0)
     observaciones = db.Column(db.Text)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
@@ -128,40 +130,31 @@ class Presupuesto(db.Model):
         return f'<Presupuesto {self.numero}>'
 
     def calcular_totales(self):
+        """
+        Calcula todos los totales del presupuesto usando el calculador centralizado.
+
+        Actualiza:
+        - subtotal_materiales
+        - subtotal_mano_obra
+        - subtotal_equipos
+        - total_sin_iva
+        - total_con_iva
+        """
+        # Import local para evitar circular import
+        from services.calculation import BudgetCalculator, BudgetConstants
+
         items = self.items.all() if hasattr(self.items, 'all') else list(self.items)
-        cero = Decimal('0')
 
-        def _as_decimal(value):
-            if isinstance(value, Decimal):
-                return value
-            if value is None:
-                return Decimal('0')
-            try:
-                return Decimal(str(value))
-            except (InvalidOperation, ValueError, TypeError):
-                return Decimal('0')
+        # Usar calculadora centralizada
+        iva_rate = Decimal(self.iva_porcentaje) if self.iva_porcentaje else BudgetConstants.DEFAULT_IVA_RATE
+        totales = BudgetCalculator.calcular_totales_presupuesto(items, iva_rate)
 
-        def _item_total(item):
-            valor = getattr(item, 'total_currency', None)
-            if valor is not None:
-                return _as_decimal(valor)
-            return _as_decimal(getattr(item, 'total', None))
-
-        self.subtotal_materiales = sum((_item_total(item) for item in items if item.tipo == 'material'), cero)
-        self.subtotal_mano_obra = sum((_item_total(item) for item in items if item.tipo == 'mano_obra'), cero)
-        self.subtotal_equipos = sum((_item_total(item) for item in items if item.tipo == 'equipo'), cero)
-
-        self.subtotal_materiales = self.subtotal_materiales.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        self.subtotal_mano_obra = self.subtotal_mano_obra.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        self.subtotal_equipos = self.subtotal_equipos.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-        self.total_sin_iva = (self.subtotal_materiales + self.subtotal_mano_obra + self.subtotal_equipos).quantize(
-            Decimal('0.01'), rounding=ROUND_HALF_UP
-        )
-
-        iva = Decimal(self.iva_porcentaje or 0)
-        factor_iva = Decimal('1') + (iva / Decimal('100'))
-        self.total_con_iva = (self.total_sin_iva * factor_iva).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        # Actualizar campos del modelo
+        self.subtotal_materiales = totales['subtotal_materiales']
+        self.subtotal_mano_obra = totales['subtotal_mano_obra']
+        self.subtotal_equipos = totales['subtotal_equipos']
+        self.total_sin_iva = totales['total_sin_iva']
+        self.total_con_iva = totales['total_con_iva']
 
         self.asegurar_vigencia()
 

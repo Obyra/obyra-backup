@@ -386,6 +386,23 @@
                     <!-- Alertas de reservas y compras -->
                     <div id="alertasReservas" class="mb-3" style="display: none;"></div>
 
+                    <!-- Panel de Reservas Activas -->
+                    <div id="panelReservasActivas" class="mb-3">
+                        <div class="card border-info">
+                            <div class="card-header bg-info text-white py-2 d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-lock me-2"></i>Reservas de Stock Activas</span>
+                                <button class="btn btn-sm btn-light" onclick="cargarReservas({{ obra.id }})">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="card-body p-0" id="listaReservasActivas">
+                                <div class="text-center py-3 text-muted">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Cargando reservas...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="tab-content" id="materialesTabContent">
                         <!-- Tab: Solo Materiales -->
                         <div class="tab-pane fade show active" id="materiales" role="tabpanel">
@@ -2378,7 +2395,160 @@ function mostrarAlertasReservas(data) {
 
     // Scroll suave hasta las alertas
     container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Recargar la lista de reservas activas
+    cargarReservas({{ obra.id }});
 }
+
+// ========== GESTIÓN DE RESERVAS ACTIVAS ==========
+async function cargarReservas(obraId) {
+    const container = document.getElementById('listaReservasActivas');
+    container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Cargando reservas...</div>';
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/reservas`);
+        const data = await response.json();
+
+        if (data.ok) {
+            renderizarReservas(data.reservas, obraId);
+        } else {
+            throw new Error(data.error || 'Error al cargar reservas');
+        }
+    } catch (error) {
+        container.innerHTML = `
+            <div class="alert alert-danger m-2">
+                <i class="fas fa-exclamation-circle me-2"></i>${error.message}
+            </div>
+        `;
+    }
+}
+
+function renderizarReservas(reservas, obraId) {
+    const container = document.getElementById('listaReservasActivas');
+    const panel = document.getElementById('panelReservasActivas');
+
+    if (!reservas || reservas.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Material</th>
+                        <th class="text-center">Cantidad Reservada</th>
+                        <th class="text-center">Fecha</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    reservas.forEach(r => {
+        const fecha = new Date(r.fecha_reserva).toLocaleDateString('es-AR');
+        html += `
+            <tr>
+                <td>
+                    <strong>${r.item_nombre}</strong>
+                    <br><small class="text-muted">${r.unidad}</small>
+                </td>
+                <td class="text-center">
+                    <span class="badge bg-info">${r.cantidad.toFixed(2)} ${r.unidad}</span>
+                </td>
+                <td class="text-center">
+                    <small class="text-muted">${fecha}</small>
+                </td>
+                <td class="text-center">
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-success btn-sm" onclick="consumirMaterial(${obraId}, ${r.id})" title="Consumir este material">
+                            <i class="fas fa-check me-1"></i>Consumir
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="liberarReserva(${obraId}, ${r.id})" title="Liberar reserva (devolver al inventario)">
+                            <i class="fas fa-unlock me-1"></i>Liberar
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+async function consumirMaterial(obraId, reservaId) {
+    if (!confirm('¿Confirmas que quieres marcar este material como CONSUMIDO?\n\nEsto descontará el stock del inventario definitivamente.')) {
+        return;
+    }
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/consumir-material`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ reserva_id: reservaId })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            alert(`Material consumido exitosamente.\nSe descontaron ${data.cantidad_consumida} ${data.unidad} del inventario.`);
+            cargarReservas(obraId);
+        } else {
+            throw new Error(data.error || 'Error al consumir material');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function liberarReserva(obraId, reservaId) {
+    if (!confirm('¿Confirmas que quieres LIBERAR esta reserva?\n\nEl stock volverá a estar disponible en el inventario.')) {
+        return;
+    }
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/liberar-reserva`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ reserva_id: reservaId })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            alert(`Reserva liberada exitosamente.\nSe devolvieron ${data.cantidad_liberada} ${data.unidad} al inventario.`);
+            cargarReservas(obraId);
+        } else {
+            throw new Error(data.error || 'Error al liberar reserva');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+// Cargar reservas al iniciar la página
+document.addEventListener('DOMContentLoaded', function() {
+    cargarReservas({{ obra.id }});
+});
 </script>
 {% endblock %}
 

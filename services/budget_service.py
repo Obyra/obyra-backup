@@ -36,6 +36,7 @@ from services.wizard_budgeting import (
     calculate_budget_breakdown,
     get_stage_variant_payload,
 )
+from services.calculation import BudgetCalculator, BudgetConstants
 
 
 class BudgetService(BaseService[Presupuesto]):
@@ -89,7 +90,7 @@ class BudgetService(BaseService[Presupuesto]):
         data.setdefault('fecha', date.today())
         data.setdefault('estado', 'borrador')
         data.setdefault('currency', 'ARS')
-        data.setdefault('iva_porcentaje', Decimal('21'))
+        data.setdefault('iva_porcentaje', BudgetConstants.DEFAULT_IVA_RATE)
         data.setdefault('vigencia_dias', 30)
         data.setdefault('vigencia_bloqueada', True)
 
@@ -105,9 +106,7 @@ class BudgetService(BaseService[Presupuesto]):
         """
         Calcula los totales del presupuesto basándose en sus ítems.
 
-        Extrae la lógica de Presupuesto.calcular_totales() del modelo.
-        Calcula subtotales por tipo (materiales, mano de obra, equipos),
-        total sin IVA y total con IVA.
+        Usa la calculadora centralizada BudgetCalculator para todos los cálculos.
 
         Args:
             budget_id: ID del presupuesto
@@ -128,61 +127,17 @@ class BudgetService(BaseService[Presupuesto]):
         presupuesto = self.get_by_id_or_fail(budget_id)
 
         items = presupuesto.items.all() if hasattr(presupuesto.items, 'all') else list(presupuesto.items)
-        cero = Decimal('0')
 
-        def _as_decimal(value):
-            """Convierte un valor a Decimal de forma segura."""
-            if isinstance(value, Decimal):
-                return value
-            if value is None:
-                return Decimal('0')
-            try:
-                return Decimal(str(value))
-            except (InvalidOperation, ValueError, TypeError):
-                return Decimal('0')
-
-        def _item_total(item):
-            """Obtiene el total de un ítem, priorizando total_currency."""
-            valor = getattr(item, 'total_currency', None)
-            if valor is not None:
-                return _as_decimal(valor)
-            return _as_decimal(getattr(item, 'total', None))
-
-        # Calcular subtotales por tipo
-        subtotal_materiales = sum(
-            (_item_total(item) for item in items if item.tipo == 'material'),
-            cero
-        )
-        subtotal_mano_obra = sum(
-            (_item_total(item) for item in items if item.tipo == 'mano_obra'),
-            cero
-        )
-        subtotal_equipos = sum(
-            (_item_total(item) for item in items if item.tipo == 'equipo'),
-            cero
-        )
-
-        # Redondear subtotales
-        subtotal_materiales = subtotal_materiales.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        subtotal_mano_obra = subtotal_mano_obra.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        subtotal_equipos = subtotal_equipos.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-        # Calcular total sin IVA
-        total_sin_iva = (subtotal_materiales + subtotal_mano_obra + subtotal_equipos).quantize(
-            Decimal('0.01'), rounding=ROUND_HALF_UP
-        )
-
-        # Calcular total con IVA
-        iva = Decimal(presupuesto.iva_porcentaje or 0)
-        factor_iva = Decimal('1') + (iva / Decimal('100'))
-        total_con_iva = (total_sin_iva * factor_iva).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        # Usar calculadora centralizada
+        iva_rate = Decimal(presupuesto.iva_porcentaje) if presupuesto.iva_porcentaje else BudgetConstants.DEFAULT_IVA_RATE
+        totales = BudgetCalculator.calcular_totales_presupuesto(items, iva_rate)
 
         # Actualizar el presupuesto
-        presupuesto.subtotal_materiales = subtotal_materiales
-        presupuesto.subtotal_mano_obra = subtotal_mano_obra
-        presupuesto.subtotal_equipos = subtotal_equipos
-        presupuesto.total_sin_iva = total_sin_iva
-        presupuesto.total_con_iva = total_con_iva
+        presupuesto.subtotal_materiales = totales['subtotal_materiales']
+        presupuesto.subtotal_mano_obra = totales['subtotal_mano_obra']
+        presupuesto.subtotal_equipos = totales['subtotal_equipos']
+        presupuesto.total_sin_iva = totales['total_sin_iva']
+        presupuesto.total_con_iva = totales['total_con_iva']
 
         # Asegurar vigencia
         self.ensure_validity(budget_id)
@@ -191,11 +146,11 @@ class BudgetService(BaseService[Presupuesto]):
         self.commit()
 
         return {
-            'subtotal_materiales': subtotal_materiales,
-            'subtotal_mano_obra': subtotal_mano_obra,
-            'subtotal_equipos': subtotal_equipos,
-            'total_sin_iva': total_sin_iva,
-            'total_con_iva': total_con_iva,
+            'subtotal_materiales': totales['subtotal_materiales'],
+            'subtotal_mano_obra': totales['subtotal_mano_obra'],
+            'subtotal_equipos': totales['subtotal_equipos'],
+            'total_sin_iva': totales['total_sin_iva'],
+            'total_con_iva': totales['total_con_iva'],
         }
 
     def ensure_validity(

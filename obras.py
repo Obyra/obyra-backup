@@ -2051,6 +2051,212 @@ def api_reservar_materiales(obra_id):
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@obras_bp.route('/api/obras/<int:obra_id>/reservas', methods=['GET'])
+@login_required
+def api_obtener_reservas(obra_id):
+    """
+    Obtiene las reservas de stock activas para una obra.
+    """
+    try:
+        from models.inventory import StockReservation, InventoryItem
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        reservas = StockReservation.query.filter_by(
+            project_id=obra_id
+        ).join(InventoryItem).all()
+
+        reservas_data = []
+        for r in reservas:
+            reservas_data.append({
+                'id': r.id,
+                'item_id': r.item_id,
+                'item_nombre': r.item.nombre,
+                'item_sku': r.item.sku,
+                'cantidad': float(r.qty),
+                'unidad': r.item.unidad,
+                'estado': r.estado,
+                'fecha': r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else None
+            })
+
+        return jsonify({
+            'ok': True,
+            'reservas': reservas_data,
+            'total_activas': len([r for r in reservas_data if r['estado'] == 'activa']),
+            'total_consumidas': len([r for r in reservas_data if r['estado'] == 'consumida'])
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al obtener reservas: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/consumir-material', methods=['POST'])
+@login_required
+def api_consumir_material(obra_id):
+    """
+    Consume material de una reserva activa.
+    - Descuenta del stock real
+    - Marca la reserva como 'consumida' (total) o reduce cantidad (parcial)
+    - Registra el uso en UsoInventario
+    """
+    try:
+        from models.inventory import (
+            StockReservation, InventoryItem, Stock,
+            StockMovement, Warehouse
+        )
+        from models import UsoInventario
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        data = request.get_json() or {}
+        reserva_id = data.get('reserva_id')
+        cantidad_consumir = float(data.get('cantidad', 0))
+        observaciones = data.get('observaciones', '')
+
+        if not reserva_id or cantidad_consumir <= 0:
+            return jsonify({'ok': False, 'error': 'Reserva y cantidad son requeridos'}), 400
+
+        # Obtener reserva
+        reserva = StockReservation.query.get(reserva_id)
+        if not reserva or reserva.project_id != obra_id:
+            return jsonify({'ok': False, 'error': 'Reserva no encontrada'}), 404
+
+        if reserva.estado != 'activa':
+            return jsonify({'ok': False, 'error': f'La reserva no está activa (estado: {reserva.estado})'}), 400
+
+        cantidad_reservada = float(reserva.qty)
+        if cantidad_consumir > cantidad_reservada:
+            return jsonify({
+                'ok': False,
+                'error': f'No puedes consumir más de lo reservado ({cantidad_reservada} {reserva.item.unidad})'
+            }), 400
+
+        item = reserva.item
+
+        # Buscar el depósito principal o el primero disponible con stock
+        stock_record = Stock.query.filter(
+            Stock.item_id == item.id,
+            Stock.cantidad >= cantidad_consumir
+        ).first()
+
+        if not stock_record:
+            return jsonify({
+                'ok': False,
+                'error': f'No hay stock físico suficiente de {item.nombre}'
+            }), 400
+
+        # Descontar del stock físico
+        stock_record.cantidad -= Decimal(str(cantidad_consumir))
+
+        # Registrar movimiento de egreso
+        movimiento = StockMovement(
+            item_id=item.id,
+            tipo='egreso',
+            qty=cantidad_consumir,
+            origen_warehouse_id=stock_record.warehouse_id,
+            project_id=obra_id,
+            motivo=f'Consumo en obra: {obra.nombre}',
+            user_id=current_user.id
+        )
+        db.session.add(movimiento)
+
+        # Actualizar reserva
+        if cantidad_consumir >= cantidad_reservada:
+            # Consumo total
+            reserva.estado = 'consumida'
+        else:
+            # Consumo parcial - reducir cantidad reservada
+            reserva.qty = Decimal(str(cantidad_reservada - cantidad_consumir))
+
+        # Registrar uso en obra (para historial y costos)
+        # Nota: UsoInventario usa items_inventario (ItemInventario), no inventory_item (InventoryItem)
+        # Por ahora registramos sin precio, se puede vincular después
+        from models.inventory import ItemInventario
+        item_legacy = ItemInventario.query.filter_by(
+            organizacion_id=obra.organizacion_id,
+            nombre=item.nombre
+        ).first()
+
+        if item_legacy:
+            uso = UsoInventario(
+                obra_id=obra_id,
+                item_id=item_legacy.id,
+                cantidad_usada=cantidad_consumir,
+                observaciones=observaciones or f'Consumido de reserva #{reserva_id}',
+                usuario_id=current_user.id,
+                precio_unitario_al_uso=item_legacy.precio_promedio,
+                moneda='ARS'
+            )
+            db.session.add(uso)
+
+        db.session.commit()
+
+        # Verificar si queda stock bajo
+        stock_restante = sum(s.cantidad for s in item.stocks)
+        alerta_stock_bajo = stock_restante <= item.min_stock
+
+        return jsonify({
+            'ok': True,
+            'mensaje': f'Consumidos {cantidad_consumir} {item.unidad} de {item.nombre}',
+            'reserva_estado': reserva.estado,
+            'stock_restante': float(stock_restante),
+            'alerta_stock_bajo': alerta_stock_bajo
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al consumir material: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/liberar-reserva', methods=['POST'])
+@login_required
+def api_liberar_reserva(obra_id):
+    """
+    Libera una reserva activa (devuelve el stock al disponible).
+    """
+    try:
+        from models.inventory import StockReservation
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        data = request.get_json() or {}
+        reserva_id = data.get('reserva_id')
+
+        if not reserva_id:
+            return jsonify({'ok': False, 'error': 'ID de reserva requerido'}), 400
+
+        reserva = StockReservation.query.get(reserva_id)
+        if not reserva or reserva.project_id != obra_id:
+            return jsonify({'ok': False, 'error': 'Reserva no encontrada'}), 404
+
+        if reserva.estado != 'activa':
+            return jsonify({'ok': False, 'error': 'Solo se pueden liberar reservas activas'}), 400
+
+        reserva.estado = 'liberada'
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'mensaje': f'Reserva de {reserva.item.nombre} liberada exitosamente'
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al liberar reserva: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @obras_bp.route('/api/tareas/<int:tarea_id>/curva-s')
 @login_required
 def api_curva_s_tarea(tarea_id):

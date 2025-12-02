@@ -57,7 +57,11 @@
       "Bash(timeout 35 bash:*)",
       "Bash(dir:*)",
       "Bash(powershell \"Get-ChildItem -Path . -Recurse -File | Where-Object {$_ame -match ''''\\.py$'''' -and $_ullName -notmatch ''''\\.venv\\''''} | Select-Object FullName\")",
-      "Bash(timeout 50 bash:*)"
+      "Bash(timeout 50 bash:*)",
+      "Bash(timeout 45 bash:*)",
+      "Bash(winpty docker exec obyra-app python -m py_compile //app//inventario.py)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)"
     ],
     "deny": [],
     "ask": []

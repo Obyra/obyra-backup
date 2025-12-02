@@ -1,6 +1,11 @@
 """
 OBYRA Market - Payment Processing with Mercado Pago
 Handles payment creation, webhooks, and purchase order generation
+
+Seguridad implementada:
+- Validación de firma HMAC-SHA256 en webhooks
+- Prevención de replay attacks
+- Logging de seguridad para auditoría
 """
 
 from flask import Blueprint, request, jsonify, current_app, render_template
@@ -84,13 +89,80 @@ def create_mp_preference():
 
 @payments_bp.route('/api/payments/mp/webhook', methods=['POST'])
 def mp_webhook():
-    """Webhook de Mercado Pago para confirmar pagos"""
-    try:
-        current_app.logger.info(
-            f"MP webhook URL: {current_app.config.get('MP_WEBHOOK_PUBLIC_URL')}"
-        )
+    """
+    Webhook de Mercado Pago para confirmar pagos.
 
-        # Log del webhook recibido
+    Seguridad:
+    - Valida firma HMAC-SHA256 en producción
+    - Previene replay attacks
+    - Registra eventos de seguridad
+    """
+    try:
+        # Importar validador
+        from utils.webhook_validator import (
+            validate_mp_signature,
+            check_replay_attack,
+            mark_webhook_processed
+        )
+        from utils.security_logger import log_security_event
+
+        # Obtener headers de seguridad
+        x_signature = request.headers.get('x-signature', '')
+        x_request_id = request.headers.get('x-request-id', '')
+        payload = request.get_data()
+
+        # Obtener configuración
+        webhook_secret = current_app.config.get('MP_WEBHOOK_SECRET')
+        is_production = current_app.config.get('FLASK_ENV') == 'production'
+
+        # === VALIDACIÓN DE FIRMA ===
+        if is_production:
+            if not webhook_secret:
+                log_security_event(
+                    event_type='webhook_rejected',
+                    details={'reason': 'no_secret_configured', 'provider': 'mercadopago'},
+                    severity='critical'
+                )
+                current_app.logger.error(
+                    "CRÍTICO: MP_WEBHOOK_SECRET no configurado en producción"
+                )
+                return jsonify({"error": "Webhook validation failed"}), 401
+
+            if not validate_mp_signature(payload, x_signature, x_request_id, webhook_secret):
+                log_security_event(
+                    event_type='webhook_rejected',
+                    details={
+                        'reason': 'invalid_signature',
+                        'provider': 'mercadopago',
+                        'request_id': x_request_id,
+                        'ip': request.remote_addr
+                    },
+                    severity='high'
+                )
+                current_app.logger.warning(
+                    f"MP webhook rechazado: firma inválida (request_id: {x_request_id})"
+                )
+                return jsonify({"error": "Invalid signature"}), 401
+        elif webhook_secret:
+            # En desarrollo con secret configurado, validar pero loguear
+            if not validate_mp_signature(payload, x_signature, x_request_id, webhook_secret):
+                current_app.logger.warning(
+                    f"MP webhook: firma inválida en desarrollo (request_id: {x_request_id})"
+                )
+
+        # === PREVENCIÓN DE REPLAY ATTACKS ===
+        if x_request_id and check_replay_attack(x_request_id):
+            log_security_event(
+                event_type='webhook_replay_detected',
+                details={'provider': 'mercadopago', 'request_id': x_request_id},
+                severity='medium'
+            )
+            current_app.logger.warning(
+                f"MP webhook: replay detectado (request_id: {x_request_id})"
+            )
+            return jsonify({"status": "already_processed"}), 200
+
+        # === PROCESAR WEBHOOK ===
         webhook_data = request.get_json() or {}
         current_app.logger.info(f"MP Webhook received: {webhook_data}")
 
@@ -170,12 +242,28 @@ def mp_webhook():
                     f"Error generating purchase orders for order {order.id}"
                 )
 
+            # Marcar webhook como procesado (prevención de replay)
+            if x_request_id:
+                mark_webhook_processed(x_request_id, payload)
+
+            # Log de seguridad - pago exitoso
+            log_security_event(
+                event_type='payment_approved',
+                details={
+                    'order_id': order.id,
+                    'payment_id': payment_id,
+                    'amount': float(order.total),
+                    'currency': order.currency
+                },
+                severity='info'
+            )
+
             return jsonify({"status": "payment_processed"}), 200
 
         elif payment_status in ["rejected", "cancelled"]:
             # Pago rechazado/cancelado
             order.payment_status = 'failed'
-            
+
             payment_record = MarketPayment(
                 order_id=order.id,
                 provider='mercadopago',
@@ -187,12 +275,16 @@ def mp_webhook():
             db.session.add(payment_record)
             db.session.commit()
 
+            # Marcar webhook como procesado
+            if x_request_id:
+                mark_webhook_processed(x_request_id, payload)
+
             return jsonify({"status": "payment_failed"}), 200
 
         elif payment_status == "pending":
             # Pago pendiente
             order.payment_status = 'pending'
-            
+
             payment_record = MarketPayment(
                 order_id=order.id,
                 provider='mercadopago',
@@ -203,6 +295,10 @@ def mp_webhook():
             )
             db.session.add(payment_record)
             db.session.commit()
+
+            # Marcar webhook como procesado
+            if x_request_id:
+                mark_webhook_processed(x_request_id, payload)
 
             return jsonify({"status": "payment_pending"}), 200
 

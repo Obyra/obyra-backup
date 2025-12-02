@@ -9,6 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from extensions import db, csrf, limiter
 from sqlalchemy import desc, or_
 from models import Presupuesto, ItemPresupuesto, Obra, Organizacion, Cliente
+from services.calculation import BudgetCalculator, BudgetConstants
 from services.memberships import get_current_org_id, get_current_membership
 from utils.pagination import Pagination
 from utils import safe_int
@@ -95,11 +96,8 @@ def lista():
 @login_required
 def crear():
     """Crear nuevo presupuesto"""
-    # Roles permitidos: admin y PM
-    roles_permitidos = ['admin', 'pm', 'administrador']
-    user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
-
-    if user_role not in roles_permitidos:
+    # Verificar permisos de gestión usando método centralizado
+    if not current_user.puede_gestionar():
         flash('No tienes permisos para crear presupuestos', 'danger')
         return redirect(url_for('presupuestos.lista'))
 
@@ -174,7 +172,7 @@ def crear():
                 ubicacion_texto=request.form.get('ubicacion', '').strip(),
                 estado='borrador',
                 currency=moneda_presupuesto,
-                iva_porcentaje=Decimal('21.0'),
+                iva_porcentaje=BudgetConstants.DEFAULT_IVA_RATE,
                 vigencia_bloqueada=True
             )
 
@@ -627,7 +625,7 @@ def confirmar_como_obra(id):
         presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
 
         # Solo administradores pueden confirmar presupuestos
-        if not (current_user.role == 'admin' or current_user.es_admin()):
+        if not current_user.es_admin():
             return jsonify({'error': '⛔ Solo administradores pueden confirmar presupuestos como obras. Contactá a tu administrador.'}), 403
 
         # Verificar que el presupuesto no esté ya confirmado
@@ -874,9 +872,8 @@ def editar_obra(id):
         presupuesto = Presupuesto.query.filter_by(id=id, organizacion_id=org_id).first_or_404()
 
         # Admin, PM y técnicos pueden editar
-        user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
-        roles_edicion = ['admin', 'pm', 'administrador', 'tecnico']
-        if not (user_role in roles_edicion or current_user.es_admin()):
+        # Usar método centralizado de permisos
+        if not current_user.puede_editar():
             return jsonify({'error': '⛔ Solo administradores, PM y técnicos pueden editar presupuestos. Contactá a tu administrador.'}), 403
 
         # No se puede editar si ya está confirmado como obra
@@ -927,7 +924,7 @@ def editar_obra(id):
 @login_required
 def agregar_item(id):
     """Agregar item a presupuesto"""
-    if current_user.role not in ['admin', 'pm']:
+    if not current_user.puede_gestionar():
         return jsonify({'ok': False, 'error': 'No tienes permisos'}), 403
 
     try:
@@ -964,8 +961,13 @@ def agregar_item(id):
         total_ars = total
 
         if currency == 'USD' and presupuesto.tasa_usd_venta:
-            price_unit_ars = precio_unitario * presupuesto.tasa_usd_venta
-            total_ars = total * presupuesto.tasa_usd_venta
+            # Usar calculadora centralizada para conversión de moneda
+            tasa = Decimal(str(presupuesto.tasa_usd_venta))
+            if tasa <= 0:
+                flash('Tasa de cambio USD inválida. Configure el tipo de cambio.', 'warning')
+            else:
+                price_unit_ars = BudgetCalculator.convertir_moneda(precio_unitario, tasa)
+                total_ars = BudgetCalculator.convertir_moneda(total, tasa)
 
         # Crear item
         item = ItemPresupuesto(
@@ -1003,10 +1005,8 @@ def agregar_item(id):
 @csrf.exempt
 def editar_item(id):
     """Editar item de presupuesto"""
-    # Admin, PM y técnicos pueden editar items
-    user_role = getattr(current_user, 'role', None) or getattr(current_user, 'rol', None)
-    roles_edicion = ['admin', 'pm', 'administrador', 'tecnico']
-    if user_role not in roles_edicion:
+    # Usar método centralizado de permisos
+    if not current_user.puede_editar():
         return jsonify({'exito': False, 'error': 'No tienes permisos'}), 403
 
     try:
@@ -1043,8 +1043,15 @@ def editar_item(id):
 
         # Calcular equivalente en ARS según la moneda
         if item.currency == 'USD' and presupuesto.tasa_usd_venta:
-            item.price_unit_ars = item.precio_unitario * presupuesto.tasa_usd_venta
-            item.total_ars = item.total * presupuesto.tasa_usd_venta
+            # Usar calculadora centralizada para conversión de moneda
+            tasa = Decimal(str(presupuesto.tasa_usd_venta))
+            if tasa > 0:
+                item.price_unit_ars = BudgetCalculator.convertir_moneda(item.precio_unitario, tasa)
+                item.total_ars = BudgetCalculator.convertir_moneda(item.total, tasa)
+            else:
+                # Tasa inválida, copiar sin conversión
+                item.price_unit_ars = item.precio_unitario
+                item.total_ars = item.total
         else:
             # Si es ARS, copiar los valores directamente
             item.price_unit_ars = item.precio_unitario
@@ -1080,7 +1087,7 @@ def editar_item(id):
 @limiter.limit("20 per minute")
 def eliminar_item(id):
     """Eliminar item de presupuesto"""
-    if current_user.role not in ['admin', 'pm']:
+    if not current_user.puede_gestionar():
         return jsonify({'ok': False, 'error': 'No tienes permisos'}), 403
 
     try:
@@ -1183,7 +1190,7 @@ def eliminar(id):
 @login_required
 def cambiar_estado(id):
     """Cambiar estado del presupuesto"""
-    if current_user.role not in ['admin', 'pm']:
+    if not current_user.puede_gestionar():
         flash('No tienes permisos para cambiar el estado', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 
@@ -1224,7 +1231,7 @@ def revertir_borrador(id):
     """Revertir presupuesto a estado borrador (solo administradores)"""
     try:
         # Solo administradores
-        if current_user.role != 'admin':
+        if not current_user.es_admin():
             return jsonify({'error': 'Solo administradores pueden revertir presupuestos'}), 403
 
         org_id = get_current_org_id()
@@ -1307,7 +1314,7 @@ def revertir_confirmacion_obra(id):
     """
     try:
         # Solo administradores pueden revertir confirmaciones
-        if not (current_user.role == 'admin' or current_user.es_admin()):
+        if not current_user.es_admin():
             return jsonify({
                 'error': '⛔ Solo administradores pueden revertir confirmaciones de obra. Esta operación requiere privilegios especiales.'
             }), 403
@@ -1384,7 +1391,7 @@ def revertir_confirmacion_obra(id):
 @login_required
 def guardar_presupuesto():
     """Guardar presupuesto desde calculadora IA"""
-    if current_user.role not in ['admin', 'pm']:
+    if not current_user.puede_gestionar():
         return jsonify({'ok': False, 'error': 'No tienes permisos'}), 403
 
     try:
@@ -1406,7 +1413,7 @@ def guardar_presupuesto():
             vigencia_dias=30,
             estado='borrador',
             currency='ARS',
-            iva_porcentaje=Decimal('21.0')
+            iva_porcentaje=BudgetConstants.DEFAULT_IVA_RATE
         )
 
         db.session.add(presupuesto)
