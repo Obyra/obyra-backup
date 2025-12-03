@@ -822,10 +822,31 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="tipo" id="tipoItem">
-                    
+
+                    <!-- Selector de Item de Inventario (solo para materiales) -->
+                    <div class="mb-3" id="selectorInventario" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-warehouse me-1"></i>Vincular con Inventario
+                            <small class="text-muted">(opcional)</small>
+                        </label>
+                        <select class="form-select" name="item_inventario_id" id="itemInventarioSelect">
+                            <option value="">-- Sin vincular (ingreso manual) --</option>
+                            {% for item_inv in items_inventario|default([]) %}
+                            <option value="{{ item_inv.id }}"
+                                    data-nombre="{{ item_inv.nombre }}"
+                                    data-unidad="{{ item_inv.unidad }}"
+                                    data-stock="{{ item_inv.stock_actual }}">
+                                {{ item_inv.nombre }}{% if item_inv.descripcion %} - {{ item_inv.descripcion }}{% endif %}
+                                (Stock: {{ item_inv.stock_actual }} {{ item_inv.unidad }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Al vincular, se mostrará el stock real en la obra</small>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label">Descripción</label>
-                        <input type="text" class="form-control" name="descripcion" 
+                        <input type="text" class="form-control" name="descripcion" id="descripcionItem"
                                placeholder="Descripción del item" required>
                     </div>
                     
@@ -1072,11 +1093,49 @@ function abrirModalItem(tipo) {
         'mano_obra': 'Mano de Obra',
         'equipo': 'Equipo'
     };
-    
+
     document.getElementById('tipoItem').value = tipo;
     document.getElementById('tipoItemTexto').textContent = tipos[tipo];
+
+    // Mostrar selector de inventario solo para materiales
+    const selectorInventario = document.getElementById('selectorInventario');
+    if (tipo === 'material') {
+        selectorInventario.style.display = 'block';
+    } else {
+        selectorInventario.style.display = 'none';
+        document.getElementById('itemInventarioSelect').value = '';
+    }
+
+    // Limpiar formulario
+    document.getElementById('descripcionItem').value = '';
+    document.getElementById('itemInventarioSelect').value = '';
+
     new bootstrap.Modal(document.getElementById('agregarItemModal')).show();
 }
+
+// Autocompletar campos cuando se selecciona un item de inventario
+document.getElementById('itemInventarioSelect')?.addEventListener('change', function() {
+    const option = this.options[this.selectedIndex];
+    if (option.value) {
+        const nombre = option.dataset.nombre || '';
+        const unidad = option.dataset.unidad || '';
+
+        // Autocompletar descripción con el nombre del inventario
+        document.getElementById('descripcionItem').value = nombre;
+
+        // Autocompletar unidad si existe el select
+        const unidadSelect = document.querySelector('select[name="unidad"]');
+        if (unidadSelect) {
+            // Buscar opción que coincida
+            for (let i = 0; i < unidadSelect.options.length; i++) {
+                if (unidadSelect.options[i].value.toLowerCase() === unidad.toLowerCase()) {
+                    unidadSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+});
 
 // Funciones para editar información de la obra
 function toggleEditarObra() {

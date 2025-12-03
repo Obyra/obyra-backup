@@ -357,7 +357,7 @@ def detalle(id):
 @login_required
 def eliminar(id):
     """Elimina (desactiva) un item de inventario."""
-    if current_user.role not in ['admin', 'pm']:
+    if current_user.rol not in ['administrador']:
         flash('No tienes permisos para eliminar items de inventario.', 'danger')
         return redirect(url_for('inventario.lista'))
 
@@ -373,11 +373,11 @@ def eliminar(id):
     if item.stock_actual and float(item.stock_actual) > 0:
         flash(f'No se puede eliminar "{item.nombre}" porque tiene stock ({item.stock_actual} {item.unidad}). '
               f'Primero da de baja todo el stock.', 'warning')
-        return redirect(url_for('inventario.detalle', id=id))
+        return redirect(url_for('inventario.lista'))
 
     # Verificar si tiene movimientos o usos recientes (últimos 30 días)
-    from datetime import timedelta
-    fecha_limite = datetime.utcnow() - timedelta(days=30)
+    from datetime import datetime as dt, timedelta
+    fecha_limite = dt.utcnow() - timedelta(days=30)
     movimientos_recientes = item.movimientos.filter(MovimientoInventario.fecha >= fecha_limite).count()
     usos_recientes = item.usos.filter(UsoInventario.fecha_uso >= fecha_limite.date()).count()
 
@@ -1342,7 +1342,8 @@ def dar_baja(id):
     try:
         item = ItemInventario.query.get_or_404(id)
 
-        cantidad = float(request.form.get('cantidad', 0))
+        from decimal import Decimal
+        cantidad = Decimal(str(request.form.get('cantidad', 0)))
         motivo = request.form.get('motivo', '')
         obra_id = request.form.get('obra_id')
         observaciones = request.form.get('observaciones', '')
@@ -1350,14 +1351,15 @@ def dar_baja(id):
         if cantidad <= 0:
             return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
 
-        if cantidad > float(item.stock_actual):
+        stock_actual = Decimal(str(item.stock_actual)) if item.stock_actual else Decimal('0')
+        if cantidad > stock_actual:
             return jsonify({'success': False, 'message': 'No hay suficiente stock disponible'}), 400
 
         # Create movement record
         movimiento = MovimientoInventario(
             item_id=item.id,
             tipo='salida',
-            cantidad=cantidad,
+            cantidad=float(cantidad),
             motivo=motivo,
             observaciones=observaciones,
             usuario_id=current_user.id
@@ -1365,14 +1367,14 @@ def dar_baja(id):
         db.session.add(movimiento)
 
         # Update stock
-        item.stock_actual -= cantidad
+        item.stock_actual = float(stock_actual - cantidad)
 
         # If it's usage on an obra, record it
         if obra_id and motivo == 'Uso en obra':
             uso = UsoInventario(
                 obra_id=int(obra_id),
                 item_id=item.id,
-                cantidad_usada=cantidad,
+                cantidad_usada=float(cantidad),
                 fecha_uso=date.today(),
                 observaciones=observaciones,
                 usuario_id=current_user.id
@@ -1381,12 +1383,13 @@ def dar_baja(id):
 
         db.session.commit()
         flash(f'Se dio de baja {cantidad} {item.unidad} de {item.nombre}', 'success')
-        return jsonify({'success': True})
+        return redirect(url_for('inventario.lista'))
 
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error en dar_baja: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        flash(f'Error al dar de baja: {str(e)}', 'danger')
+        return redirect(url_for('inventario.lista'))
 
 
 @inventario_bp.route('/trasladar/<int:id>', methods=['POST'])

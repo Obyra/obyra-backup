@@ -86,7 +86,7 @@
     <div class="row">
         <div class="col-12">
             {% if items_con_obras %}
-            <div class="table-responsive" style="overflow: visible;">
+            <div class="">
                 <table class="table table-hover table-striped align-middle">
                     <thead class="table-dark">
                         <tr>
@@ -162,50 +162,18 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">
-                                <div class="d-flex justify-content-center gap-1">
+                                <div class="d-flex justify-content-center gap-1 flex-wrap">
                                     <a href="{{ url_for('inventario.detalle', id=item.id) }}"
                                        class="btn btn-outline-primary btn-sm"
                                        title="Ver detalles">
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                    <div class="dropdown">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle"
-                                                data-bs-toggle="dropdown" aria-expanded="false"
-                                                data-bs-boundary="viewport">
-                                            <i class="fas fa-tools"></i>
-                                        </button>
-                                        <ul class="dropdown-menu dropdown-menu-end shadow">
-                                            <li>
-                                                <a class="dropdown-item" href="#"
-                                                   onclick="abrirModalBaja('{{ item.id }}', '{{ item.nombre }}', 'uso'); return false;">
-                                                    <i class="fas fa-wrench text-primary me-2"></i>Dar de baja por uso
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a class="dropdown-item" href="#"
-                                                   onclick="abrirModalBaja('{{ item.id }}', '{{ item.nombre }}', 'rotura'); return false;">
-                                                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>Dar de baja por rotura
-                                                </a>
-                                            </li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li>
-                                                <a class="dropdown-item" href="#"
-                                                   onclick="abrirModalTraslado('{{ item.id }}', '{{ item.nombre }}', {{ item.stock_actual|float }}); return false;">
-                                                    <i class="fas fa-exchange-alt text-success me-2"></i>Trasladar a otro depósito
-                                                </a>
-                                            </li>
-                                            {% if current_user.rol in ['administrador'] %}
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li>
-                                                <a class="dropdown-item text-danger" href="#"
-                                                   onclick="confirmarEliminar('{{ item.id }}', '{{ item.nombre }}', '{{ item.codigo }}', {{ item.stock_actual|float }}); return false;">
-                                                    <i class="fas fa-trash me-2"></i>Eliminar item
-                                                </a>
-                                            </li>
-                                            {% endif %}
-                                        </ul>
-                                    </div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            title="Acciones"
+                                            onclick="abrirModalAcciones('{{ item.id }}', '{{ item.nombre }}', '{{ item.codigo }}', {{ item.stock_actual|float }})">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
                                     {% endif %}
                                 </div>
                             </td>
@@ -234,6 +202,43 @@
                 </div>
             </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Acciones del Item -->
+<div class="modal fade" id="modalAcciones" tabindex="-1" aria-labelledby="modalAccionesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white py-2">
+                <h6 class="modal-title" id="modalAccionesLabel">
+                    <i class="fas fa-cog me-2"></i>Acciones
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="list-group list-group-flush">
+                    <input type="hidden" id="accion_item_id">
+                    <input type="hidden" id="accion_item_nombre">
+                    <input type="hidden" id="accion_item_codigo">
+                    <input type="hidden" id="accion_item_stock">
+
+                    <button type="button" class="list-group-item list-group-item-action" onclick="ejecutarAccion('uso')">
+                        <i class="fas fa-wrench text-primary me-2"></i>Dar de baja por uso
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" onclick="ejecutarAccion('rotura')">
+                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>Dar de baja por rotura
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" onclick="ejecutarAccion('traslado')">
+                        <i class="fas fa-exchange-alt text-success me-2"></i>Trasladar a otro depósito
+                    </button>
+                    {% if current_user.rol == 'administrador' %}
+                    <button type="button" class="list-group-item list-group-item-action text-danger" onclick="ejecutarAccion('eliminar')">
+                        <i class="fas fa-trash me-2"></i>Eliminar item
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -424,6 +429,50 @@
 
 {% block scripts %}
 <script>
+// Modal de acciones
+function abrirModalAcciones(itemId, itemNombre, itemCodigo, stockActual) {
+    document.getElementById('accion_item_id').value = itemId;
+    document.getElementById('accion_item_nombre').value = itemNombre;
+    document.getElementById('accion_item_codigo').value = itemCodigo;
+    document.getElementById('accion_item_stock').value = stockActual;
+
+    // Actualizar título del modal
+    document.getElementById('modalAccionesLabel').innerHTML =
+        '<i class="fas fa-cog me-2"></i>' + itemNombre;
+
+    const modal = new bootstrap.Modal(document.getElementById('modalAcciones'));
+    modal.show();
+}
+
+function ejecutarAccion(accion) {
+    const itemId = document.getElementById('accion_item_id').value;
+    const itemNombre = document.getElementById('accion_item_nombre').value;
+    const itemCodigo = document.getElementById('accion_item_codigo').value;
+    const stockActual = parseFloat(document.getElementById('accion_item_stock').value);
+
+    // Cerrar modal de acciones
+    const modalAcciones = bootstrap.Modal.getInstance(document.getElementById('modalAcciones'));
+    modalAcciones.hide();
+
+    // Ejecutar acción correspondiente
+    setTimeout(() => {
+        switch(accion) {
+            case 'uso':
+                abrirModalBaja(itemId, itemNombre, 'uso');
+                break;
+            case 'rotura':
+                abrirModalBaja(itemId, itemNombre, 'rotura');
+                break;
+            case 'traslado':
+                abrirModalTraslado(itemId, itemNombre, stockActual);
+                break;
+            case 'eliminar':
+                confirmarEliminar(itemId, itemNombre, itemCodigo, stockActual);
+                break;
+        }
+    }, 300);
+}
+
 // Modal de baja
 function abrirModalBaja(itemId, itemNombre, tipoBaja) {
     document.getElementById('baja_item_id').value = itemId;

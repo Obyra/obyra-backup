@@ -337,6 +337,13 @@ def detalle(id):
                 current_app.logger.error(f"Error al parsear datos_proyecto para presupuesto {presupuesto.id}: {e}")
                 datos_proyecto = {}
 
+        # Obtener items de inventario para el selector de vinculación
+        from models import ItemInventario
+        items_inventario = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).order_by(ItemInventario.nombre).all()
+
         # Pasar subtotales como variables separadas al template
         return render_template('presupuestos/detalle.html',
                              presupuesto=presupuesto,
@@ -357,7 +364,8 @@ def detalle(id):
                              subtotal=subtotal,
                              iva_monto=iva_monto,
                              total_con_iva=total_con_iva,
-                             datos_proyecto=datos_proyecto)
+                             datos_proyecto=datos_proyecto,
+                             items_inventario=items_inventario)
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.detalle: {e}")
@@ -948,6 +956,7 @@ def agregar_item(id):
         unidad = request.form.get('unidad', 'un')
         precio_unitario = Decimal(request.form.get('precio_unitario', '0'))
         currency = request.form.get('currency', presupuesto.currency or 'ARS')
+        item_inventario_id = request.form.get('item_inventario_id', type=int)
 
         if not descripcion or cantidad <= 0 or precio_unitario <= 0:
             flash('Datos inválidos para el item', 'danger')
@@ -981,7 +990,8 @@ def agregar_item(id):
             currency=currency,
             price_unit_ars=price_unit_ars,
             total_ars=total_ars,
-            origen='manual'
+            origen='manual',
+            item_inventario_id=item_inventario_id if item_inventario_id else None
         )
 
         db.session.add(item)
