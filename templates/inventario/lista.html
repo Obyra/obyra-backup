@@ -93,10 +93,11 @@
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Categoría</th>
-                            <th class="text-center">Stock Actual</th>
+                            <th class="text-center">Stock Físico<br><small class="fw-normal">(cargado)</small></th>
+                            <th class="text-center">Stock Actual<br><small class="fw-normal">(disponible)</small></th>
+                            <th class="text-center">Trasladado<br><small class="fw-normal">(en obras)</small></th>
                             <th class="text-center">Stock Mínimo</th>
-                            <th>Depósito</th>
-                            <th class="text-center" style="width: 200px;">Acciones</th>
+                            <th class="text-center" style="width: 150px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -105,6 +106,9 @@
                         {% set obras = item_data.obras %}
                         {% set reservas = item_data.reservas or [] %}
                         {% set stock_reservado = item_data.stock_reservado or 0 %}
+                        {% set stock_fisico_inicial = item_data.stock_fisico_inicial or 0 %}
+                        {% set traslados_obras = item_data.traslados_obras or [] %}
+                        {% set total_trasladado = item_data.total_trasladado or 0 %}
                         <tr class="{{ 'table-warning' if item.necesita_reposicion }}" id="item-row-{{ item.id }}">
                             <td>
                                 <strong>{{ item.codigo }}</strong>
@@ -122,6 +126,11 @@
                                 <span class="badge bg-secondary">{{ item.categoria.nombre if item.categoria else 'Sin categoría' }}</span>
                             </td>
                             <td class="text-center">
+                                <strong class="text-primary">{{ stock_fisico_inicial|numero(2) }}</strong>
+                                <br>
+                                <small class="text-muted">{{ item.unidad }}</small>
+                            </td>
+                            <td class="text-center">
                                 <strong class="{{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">
                                     {{ item.stock_actual|numero(2) }}
                                 </strong>
@@ -135,31 +144,22 @@
                                 <small class="text-muted">{{ item.unidad }}</small>
                             </td>
                             <td class="text-center">
-                                <strong class="text-warning">{{ item.stock_minimo|numero(2) }}</strong>
-                            </td>
-                            <td>
-                                {% if reservas %}
-                                    <div class="d-flex flex-column gap-1 mb-1">
-                                        {% for reserva in reservas %}
-                                        <span class="badge bg-info text-dark" title="Reservado el {{ reserva.fecha }}">
-                                            <i class="fas fa-bookmark me-1"></i>{{ reserva.obra_nombre[:15] }}{% if reserva.obra_nombre|length > 15 %}...{% endif %}: {{ reserva.cantidad|numero(2) }}
-                                        </span>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                                {% if obras %}
-                                    <div class="d-flex flex-column gap-1">
-                                        {% for obra in obras %}
-                                        <a href="{{ url_for('obras.ver_obra', id=obra.id) }}"
-                                           class="badge bg-primary text-decoration-none"
-                                           title="{{ obra.nombre }}">
-                                            <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion or 'Sin dirección' }}
-                                        </a>
-                                        {% endfor %}
-                                    </div>
+                                {% if traslados_obras %}
+                                <div class="d-flex flex-column gap-1">
+                                    {% for traslado in traslados_obras %}
+                                    <a href="{{ url_for('obras.detalle', id=traslado.obra_id) }}"
+                                       class="badge bg-warning text-dark text-decoration-none"
+                                       title="Stock en {{ traslado.obra_nombre }}">
+                                        <i class="fas fa-truck me-1"></i>{{ traslado.cantidad|numero(2) }} → {{ traslado.obra_nombre[:12] }}{% if traslado.obra_nombre|length > 12 %}...{% endif %}
+                                    </a>
+                                    {% endfor %}
+                                </div>
                                 {% else %}
-                                    <span class="text-muted">—</span>
+                                <span class="text-muted">—</span>
                                 {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <strong class="text-warning">{{ item.stock_minimo|numero(2) }}</strong>
                             </td>
                             <td class="text-center">
                                 <div class="d-flex justify-content-center gap-1 flex-wrap">

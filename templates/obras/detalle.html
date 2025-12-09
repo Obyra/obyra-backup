@@ -248,10 +248,9 @@
             </div>
         </div>
         
-        <!-- Columna Lateral -->
+        <!-- Columna Lateral - Panel de Progreso -->
         <div class="col-lg-5">
-            <!-- Panel de Progreso -->
-            <div class="card shadow-sm border-0 mb-3">
+            <div class="card shadow-sm border-0 h-100">
                 <div class="card-body p-3 text-center" style="background: linear-gradient(135deg, #4a90e2 0%, #7bb3f0 100%); color: white;">
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <div class="d-flex align-items-center">
@@ -264,11 +263,11 @@
                         </button>
                         {% endif %}
                     </div>
-                    
+
                     <div class="progress mb-3" style="height: 10px; background-color: rgba(255,255,255,0.3);">
                         <div class="progress-bar bg-white" style="width: {{ obra.progreso }}%;"></div>
                     </div>
-                    
+
                     <h2 class="mb-1">{{ obra.progreso }}%</h2>
                     <p class="mb-0">Completado</p>
                 </div>
@@ -287,54 +286,12 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="progress mt-3" style="height: 6px;">
-                        <div class="progress-bar {% if obra.porcentaje_presupuesto_ejecutado > 100 %}bg-danger{% elif obra.porcentaje_presupuesto_ejecutado > 80 %}bg-warning{% else %}bg-info{% endif %}" 
+                        <div class="progress-bar {% if obra.porcentaje_presupuesto_ejecutado > 100 %}bg-danger{% elif obra.porcentaje_presupuesto_ejecutado > 80 %}bg-warning{% else %}bg-info{% endif %}"
                              style="width: {{ [obra.porcentaje_presupuesto_ejecutado, 100]|max }}%;"></div>
                     </div>
                     <small class="text-muted">{{ "%.1f"|format(obra.porcentaje_presupuesto_ejecutado) }}% ejecutado</small>
-                </div>
-            </div>
-
-            <!-- Panel de Certificaciones -->
-            <div class="card shadow-sm border-0">
-                <div class="card-body p-3" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-certificate me-2"></i>
-                            <span class="fw-bold">Certificaciones</span>
-                        </div>
-                        <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-light">
-                            <i class="fas fa-chevron-right"></i>
-                        </a>
-                    </div>
-
-                    <div class="d-flex justify-content-between mb-3">
-                        <div>
-                            <small class="text-uppercase text-white-50">Certificado</small>
-                            <div class="h5 mb-0">{{ certificaciones_resumen['certificado_ars']|moneda }}</div>
-                        </div>
-                        <div class="text-end">
-                            <small class="text-uppercase text-white-50">Pagado</small>
-                            <div class="h5 mb-0">{{ certificaciones_resumen['pagado_ars']|moneda }}</div>
-                        </div>
-                    </div>
-
-                    {% if certificaciones_recientes %}
-                        {% for cert in certificaciones_recientes %}
-                        <div class="bg-white text-dark rounded p-2 mb-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-success">{{ cert.porcentaje_avance }}%</span>
-                                <small class="text-muted">{{ (cert.approved_at or cert.created_at)|fecha }}</small>
-                            </div>
-                            <small class="text-success fw-bold">{{ cert.monto_certificado_ars|moneda }}</small>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="text-center">
-                            <p class="mb-0">No hay certificaciones aprobadas.</p>
-                        </div>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -397,6 +354,11 @@
                                 <i class="fas fa-list me-1"></i>Todos
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link btn-sm" id="stockobra-tab" data-bs-toggle="pill" data-bs-target="#stockobra" type="button" role="tab">
+                                <i class="fas fa-warehouse me-1"></i>Stock en Obra
+                            </button>
+                        </li>
                         <li class="nav-item ms-auto" role="presentation">
                             <button class="btn btn-warning btn-sm" onclick="reservarMateriales({{ obra.id }})" title="Reservar materiales en inventario">
                                 <i class="fas fa-shopping-cart me-1"></i>Reservar Stock
@@ -434,10 +396,11 @@
                                             <tr>
                                                 <th>Material</th>
                                                 <th class="text-center">Planificado</th>
+                                                <th class="text-center">Transferido</th>
                                                 <th class="text-center">Consumido</th>
                                                 <th class="text-center">Restante</th>
                                                 <th class="text-end">Costo</th>
-                                                <th class="text-center">Stock</th>
+                                                <th class="text-center">Stock Inv.</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -454,13 +417,45 @@
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-primary">{{ item.cantidad }} {{ item.unidad }}</span>
+                                                        <span class="badge bg-primary">{{ item.cantidad|numero }} {{ item.unidad }}</span>
+                                                    </td>
+                                                    {# Buscar stock transferido: por ID, por nombre exacto, o por coincidencia parcial #}
+                                                    {% set transferido_encontrado = namespace(data=none) %}
+                                                    {% if item.item_inventario and stock_transferido.get(item.item_inventario.id) %}
+                                                        {% set transferido_encontrado.data = stock_transferido[item.item_inventario.id] %}
+                                                    {% elif stock_transferido_por_nombre.get(item.descripcion|lower) %}
+                                                        {% set transferido_encontrado.data = stock_transferido_por_nombre[item.descripcion|lower] %}
+                                                    {% else %}
+                                                        {# Matching flexible: buscar si nombre de inventario está contenido en descripción #}
+                                                        {% for stock_item in stock_transferido_lista %}
+                                                            {% if stock_item.item_nombre_lower and stock_item.item_nombre_lower in item.descripcion|lower %}
+                                                                {% set transferido_encontrado.data = stock_item %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                    <td class="text-center">
+                                                        {% if transferido_encontrado.data %}
+                                                            <span class="badge bg-info">
+                                                                <i class="fas fa-truck me-1"></i>{{ transferido_encontrado.data.cantidad_disponible|numero }} {{ transferido_encontrado.data.unidad }}
+                                                            </span>
+                                                        {% else %}
+                                                            <span class="badge bg-secondary">0 {{ item.unidad }}</span>
+                                                        {% endif %}
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-success">0 {{ item.unidad }}</span>
+                                                        {% if transferido_encontrado.data %}
+                                                            <span class="badge bg-success">{{ transferido_encontrado.data.cantidad_consumida|numero }} {{ transferido_encontrado.data.unidad }}</span>
+                                                        {% else %}
+                                                            <span class="badge bg-success">0 {{ item.unidad }}</span>
+                                                        {% endif %}
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-warning text-dark">{{ item.cantidad }} {{ item.unidad }}</span>
+                                                        {% if transferido_encontrado.data %}
+                                                            {% set restante = transferido_encontrado.data.cantidad_disponible - transferido_encontrado.data.cantidad_consumida %}
+                                                            <span class="badge bg-warning text-dark">{{ restante|numero }} {{ transferido_encontrado.data.unidad }}</span>
+                                                        {% else %}
+                                                            <span class="badge bg-warning text-dark">0 {{ item.unidad }}</span>
+                                                        {% endif %}
                                                     </td>
                                                     <td class="text-end">
                                                         {% if presupuesto.currency == 'USD' %}
@@ -476,11 +471,11 @@
                                                             {% set necesario = item.cantidad|float %}
                                                             {% if stock >= necesario %}
                                                                 <span class="badge bg-success" title="Stock suficiente">
-                                                                    <i class="fas fa-check me-1"></i>{{ stock }} {{ item.item_inventario.unidad }}
+                                                                    <i class="fas fa-check me-1"></i>{{ stock|numero }} {{ item.item_inventario.unidad }}
                                                                 </span>
                                                             {% elif stock > 0 %}
                                                                 <span class="badge bg-warning text-dark" title="Stock insuficiente">
-                                                                    <i class="fas fa-exclamation-triangle me-1"></i>{{ stock }} {{ item.item_inventario.unidad }}
+                                                                    <i class="fas fa-exclamation-triangle me-1"></i>{{ stock|numero }} {{ item.item_inventario.unidad }}
                                                                 </span>
                                                             {% else %}
                                                                 <span class="badge bg-danger" title="Sin stock">
@@ -501,7 +496,7 @@
                                                 {% endfor %}
                                             {% else %}
                                                 <tr>
-                                                    <td colspan="6" class="text-center text-muted py-3">
+                                                    <td colspan="7" class="text-center text-muted py-3">
                                                         <i class="fas fa-info-circle me-2"></i>No hay materiales en el presupuesto
                                                     </td>
                                                 </tr>
@@ -515,14 +510,10 @@
                         <!-- Tab: Solo Mano de Obra -->
                         <div class="tab-pane fade" id="manoobra" role="tabpanel">
                             <div class="bg-white text-dark rounded p-3">
-                                <!-- Botón para ir a certificaciones -->
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h6 class="mb-0 text-muted">
                                         <i class="fas fa-hard-hat me-1"></i> Avance de Mano de Obra por Etapa
                                     </h6>
-                                    <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-certificate me-1"></i>Ver Certificaciones
-                                    </a>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-hover mb-0">
@@ -552,11 +543,11 @@
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-secondary">{{ item.cantidad }} {{ item.unidad }}</span>
+                                                        <span class="badge bg-secondary">{{ item.cantidad|numero }} {{ item.unidad }}</span>
                                                     </td>
                                                     <td class="text-center">
                                                         {% if ejecutado > 0 %}
-                                                        <span class="badge bg-success">{{ ejecutado|round(2) }} {{ item.unidad }}</span>
+                                                        <span class="badge bg-success">{{ ejecutado|numero }} {{ item.unidad }}</span>
                                                         {% else %}
                                                         <span class="badge bg-light text-muted">0 {{ item.unidad }}</span>
                                                         {% endif %}
@@ -604,9 +595,6 @@
                                     <small class="text-muted">
                                         <i class="fas fa-info-circle me-1"></i>
                                         Los datos de "Ejecutado" se calculan automáticamente desde los avances reportados por los operarios en las tareas.
-                                        <a href="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" class="text-primary">
-                                            Certificar avances →
-                                        </a>
                                     </small>
                                 </div>
                                 {% endif %}
@@ -670,6 +658,23 @@
                                             </tr>
                                         </tfoot>
                                     </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab: Stock en Obra (Inventario Local) -->
+                        <div class="tab-pane fade" id="stockobra" role="tabpanel">
+                            <div class="bg-white text-dark rounded p-3">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0"><i class="fas fa-warehouse me-2"></i>Inventario en Sitio de Construcción</h6>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="cargarStockObra({{ obra.id }})">
+                                        <i class="fas fa-sync-alt me-1"></i>Actualizar
+                                    </button>
+                                </div>
+                                <div id="stockObraContainer">
+                                    <div class="text-center py-4 text-muted">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Cargando stock de obra...
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2419,13 +2424,13 @@ function mostrarAlertasReservas(data) {
         `;
     }
 
-    // Mostrar materiales sin coincidencia en inventario
+    // Mostrar materiales sin vincular (solo informativo, no es error)
     if (data.materiales_sin_match > 0) {
         html += `
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
-                <strong><i class="fas fa-info-circle me-2"></i>Materiales no encontrados en inventario</strong>
-                <p class="mb-2 mt-2">Estos materiales del presupuesto no están en el inventario:</p>
-                <ul class="mb-0">
+            <div class="alert alert-secondary alert-dismissible fade show" role="alert">
+                <strong><i class="fas fa-link-slash me-2"></i>Materiales sin vincular al inventario</strong>
+                <p class="mb-2 mt-2 small">Para reservar stock de estos materiales, primero vincúlalos desde el presupuesto:</p>
+                <ul class="mb-0 small">
                     ${data.detalle.sin_match.map(m => `
                         <li>${m.descripcion}: ${m.cantidad} ${m.unidad}</li>
                     `).join('')}
@@ -2592,7 +2597,163 @@ async function liberarReserva(obraId, reservaId) {
 // Cargar reservas al iniciar la página
 document.addEventListener('DOMContentLoaded', function() {
     cargarReservas({{ obra.id }});
+    cargarStockObra({{ obra.id }});
 });
+
+// ========== GESTIÓN DE STOCK EN OBRA ==========
+async function cargarStockObra(obraId) {
+    const container = document.getElementById('stockObraContainer');
+    container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Cargando stock de obra...</div>';
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/stock-obra`);
+        const data = await response.json();
+
+        if (data.ok) {
+            renderizarStockObra(data.stock, obraId);
+        } else {
+            throw new Error(data.error || 'Error al cargar stock');
+        }
+    } catch (error) {
+        container.innerHTML = `
+            <div class="alert alert-danger m-2">
+                <i class="fas fa-exclamation-circle me-2"></i>${error.message}
+            </div>
+        `;
+    }
+}
+
+function renderizarStockObra(stock, obraId) {
+    const container = document.getElementById('stockObraContainer');
+
+    if (!stock || stock.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-info mb-0">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>No hay stock trasladado a esta obra.</strong>
+                <p class="mb-0 mt-2">Para agregar materiales, trasladá desde el <a href="/inventario" class="alert-link">Inventario General</a>.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Material</th>
+                        <th class="text-center">Disponible</th>
+                        <th class="text-center">Consumido</th>
+                        <th class="text-center">Total Recibido</th>
+                        <th class="text-center">Último Traslado</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    stock.forEach(s => {
+        const fechaTraslado = s.fecha_ultimo_traslado ? new Date(s.fecha_ultimo_traslado).toLocaleDateString('es-AR') : '-';
+        const disponible = s.cantidad_disponible || 0;
+        const consumido = s.cantidad_consumida || 0;
+        const totalRecibido = disponible + consumido;
+
+        html += `
+            <tr>
+                <td>
+                    <strong>${s.item_nombre}</strong>
+                    <br><small class="text-muted">${s.item_codigo} | ${s.unidad}</small>
+                </td>
+                <td class="text-center">
+                    ${disponible > 0
+                        ? `<span class="badge bg-success">${disponible.toFixed(2)} ${s.unidad}</span>`
+                        : `<span class="badge bg-secondary">0 ${s.unidad}</span>`
+                    }
+                </td>
+                <td class="text-center">
+                    <span class="badge bg-warning text-dark">${consumido.toFixed(2)} ${s.unidad}</span>
+                </td>
+                <td class="text-center">
+                    <span class="badge bg-info">${totalRecibido.toFixed(2)} ${s.unidad}</span>
+                </td>
+                <td class="text-center">
+                    <small class="text-muted">${fechaTraslado}</small>
+                </td>
+                <td class="text-center">
+                    ${disponible > 0 ? `
+                        <button class="btn btn-success btn-sm" onclick="registrarUsoObra(${obraId}, ${s.id}, '${s.item_nombre}', ${disponible}, '${s.unidad}')" title="Registrar consumo de este material">
+                            <i class="fas fa-minus-circle me-1"></i>Usar
+                        </button>
+                    ` : `
+                        <button class="btn btn-outline-primary btn-sm" onclick="pedirMasStock(${obraId}, ${s.item_inventario_id}, '${s.item_nombre}')" title="Solicitar más stock">
+                            <i class="fas fa-plus-circle me-1"></i>Pedir más
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+async function registrarUsoObra(obraId, stockObraId, itemNombre, disponible, unidad) {
+    const cantidad = prompt(`¿Cuánto ${unidad} de "${itemNombre}" se usó?\n\nDisponible: ${disponible} ${unidad}`, '');
+
+    if (!cantidad) return;
+
+    const cantidadNum = parseFloat(cantidad);
+    if (isNaN(cantidadNum) || cantidadNum <= 0) {
+        alert('La cantidad debe ser un número mayor a 0');
+        return;
+    }
+
+    if (cantidadNum > disponible) {
+        alert(`No hay suficiente stock. Disponible: ${disponible} ${unidad}`);
+        return;
+    }
+
+    const observaciones = prompt('Observaciones (opcional):', '');
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/usar-stock`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                stock_obra_id: stockObraId,
+                cantidad: cantidadNum,
+                observaciones: observaciones || ''
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            alert(`✅ Se registró el uso de ${cantidadNum} ${unidad} de ${itemNombre}`);
+            cargarStockObra(obraId);
+        } else {
+            throw new Error(data.error || 'Error al registrar uso');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+function pedirMasStock(obraId, itemInventarioId, itemNombre) {
+    alert(`Para pedir más "${itemNombre}", ve al Inventario General y realiza un traslado a esta obra.`);
+    window.open('/inventario?buscar=' + encodeURIComponent(itemNombre), '_blank');
+}
 </script>
 {% endblock %}
 

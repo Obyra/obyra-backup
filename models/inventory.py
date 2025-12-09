@@ -100,6 +100,93 @@ class UsoInventario(db.Model):
         return f'<UsoInventario {self.obra.nombre} - {self.item.nombre}>'
 
 
+class ReservaStock(db.Model):
+    """Reserva de stock para una obra. Permite apartar materiales del inventario sin moverlos."""
+    __tablename__ = 'reservas_stock'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
+    estado = db.Column(db.String(20), default='activa')  # activa, trasladada, cancelada
+    fecha_reserva = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_traslado = db.Column(db.DateTime, nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    notas = db.Column(db.Text)
+
+    # Relaciones
+    item = db.relationship('ItemInventario', backref='reservas')
+    obra = db.relationship('Obra', backref='reservas_stock')
+    usuario = db.relationship('Usuario')
+
+    def __repr__(self):
+        return f'<ReservaStock {self.item.nombre} - {self.cantidad} para {self.obra.nombre}>'
+
+
+class StockObra(db.Model):
+    """Stock físico presente en una obra. Inventario local del sitio de construcción."""
+    __tablename__ = 'stock_obra'
+
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=False)
+    cantidad_disponible = db.Column(db.Numeric(10, 3), default=0)  # Stock actual en obra
+    cantidad_consumida = db.Column(db.Numeric(10, 3), default=0)   # Total consumido
+    fecha_ultimo_traslado = db.Column(db.DateTime)
+    fecha_ultimo_uso = db.Column(db.DateTime)
+
+    # Relaciones
+    obra = db.relationship('Obra', backref='stock_obra')
+    item = db.relationship('ItemInventario', backref='stock_en_obras')
+
+    # Constraint único: un item solo puede tener un registro por obra
+    __table_args__ = (
+        db.UniqueConstraint('obra_id', 'item_inventario_id', name='uq_stock_obra_item'),
+    )
+
+    def __repr__(self):
+        return f'<StockObra {self.item.nombre} en {self.obra.nombre}: {self.cantidad_disponible}>'
+
+    @property
+    def cantidad_total_recibida(self):
+        """Total recibido = disponible + consumido"""
+        return float(self.cantidad_disponible or 0) + float(self.cantidad_consumida or 0)
+
+
+class MovimientoStockObra(db.Model):
+    """Registro de movimientos de stock en una obra (entradas y consumos)."""
+    __tablename__ = 'movimientos_stock_obra'
+
+    id = db.Column(db.Integer, primary_key=True)
+    stock_obra_id = db.Column(db.Integer, db.ForeignKey('stock_obra.id'), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # entrada, consumo, devolucion
+    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    observaciones = db.Column(db.Text)
+
+    # Para consumos: registrar costo
+    precio_unitario = db.Column(db.Numeric(10, 2))
+    moneda = db.Column(db.String(3), default='ARS')
+
+    # Referencia a reserva si viene de una
+    reserva_id = db.Column(db.Integer, db.ForeignKey('reservas_stock.id'), nullable=True)
+
+    # Relaciones
+    stock_obra = db.relationship('StockObra', backref='movimientos')
+    usuario = db.relationship('Usuario')
+    reserva = db.relationship('ReservaStock')
+
+    def __repr__(self):
+        return f'<MovimientoStockObra {self.tipo} {self.cantidad}>'
+
+    @property
+    def costo_total(self):
+        if self.precio_unitario and self.cantidad:
+            return float(self.precio_unitario) * float(self.cantidad)
+        return 0
+
+
 class InventoryCategory(db.Model):
     __tablename__ = 'inventory_category'
 

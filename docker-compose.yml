@@ -117,6 +117,7 @@ services:
       - ./blueprint_presupuestos.py:/app/blueprint_presupuestos.py:ro  # Mount presupuestos blueprint for development
       - ./reportes.py:/app/reportes.py:ro  # Mount reportes for development
       - ./inventario.py:/app/inventario.py:ro  # Mount inventario for development
+      - ./models:/app/models:ro  # Mount models for development
     ports:
       - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
     depends_on:

@@ -61,7 +61,9 @@
       "Bash(timeout 45 bash:*)",
       "Bash(winpty docker exec obyra-app python -m py_compile //app//inventario.py)",
       "Bash(git rebase:*)",
-      "Bash(GIT_EDITOR=true git rebase:*)"
+      "Bash(GIT_EDITOR=true git rebase:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker start:*)"
     ],
     "deny": [],
     "ask": []

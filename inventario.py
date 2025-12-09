@@ -140,7 +140,7 @@ def lista():
         ).distinct().all()
 
         # Buscar reservas activas para este item (en InventoryItem por nombre)
-        from models.inventory import InventoryItem, StockReservation
+        from models.inventory import InventoryItem, StockReservation, StockObra
         reservas_activas = []
         inv_item = InventoryItem.query.filter(
             InventoryItem.company_id == org_id,
@@ -159,11 +159,34 @@ def lista():
                     'fecha': r.created_at.strftime('%d/%m') if r.created_at else ''
                 })
 
+        # Calcular stock físico inicial (suma de todas las entradas)
+        entradas = db.session.query(
+            db.func.coalesce(db.func.sum(MovimientoInventario.cantidad), 0)
+        ).filter(
+            MovimientoInventario.item_id == item.id,
+            MovimientoInventario.tipo == 'entrada'
+        ).scalar()
+        stock_fisico_inicial = float(entradas or 0)
+
+        # Obtener traslados a obras
+        traslados_obras = []
+        stocks_en_obras = StockObra.query.filter_by(item_inventario_id=item.id).all()
+        for stock in stocks_en_obras:
+            if stock.cantidad_disponible and float(stock.cantidad_disponible) > 0:
+                traslados_obras.append({
+                    'obra_id': stock.obra_id,
+                    'obra_nombre': stock.obra.nombre if stock.obra else 'Sin nombre',
+                    'cantidad': float(stock.cantidad_disponible or 0)
+                })
+
         items_con_obras.append({
             'item': item,
             'obras': obras_confirmadas,
             'reservas': reservas_activas,
-            'stock_reservado': sum(r['cantidad'] for r in reservas_activas)
+            'stock_reservado': sum(r['cantidad'] for r in reservas_activas),
+            'stock_fisico_inicial': stock_fisico_inicial,
+            'traslados_obras': traslados_obras,
+            'total_trasladado': sum(t['cantidad'] for t in traslados_obras)
         })
 
     # Load new inventory categories
@@ -1395,14 +1418,18 @@ def dar_baja(id):
 @inventario_bp.route('/trasladar/<int:id>', methods=['POST'])
 @login_required
 def trasladar(id):
-    """Traslada un item de inventario a otro depósito"""
+    """Traslada un item de inventario general al stock de una obra"""
     if not current_user.puede_acceder_modulo('inventario'):
         return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
 
     try:
+        from models.inventory import StockObra, MovimientoStockObra
+        from decimal import Decimal
+        from datetime import datetime
+
         item = ItemInventario.query.get_or_404(id)
 
-        cantidad = float(request.form.get('cantidad', 0))
+        cantidad = Decimal(str(request.form.get('cantidad', 0)))
         obra_destino_id = request.form.get('obra_destino_id')
         observaciones = request.form.get('observaciones', '')
 
@@ -1410,10 +1437,10 @@ def trasladar(id):
             return jsonify({'success': False, 'message': 'La cantidad debe ser mayor a 0'}), 400
 
         if not obra_destino_id:
-            return jsonify({'success': False, 'message': 'Debe seleccionar un depósito destino'}), 400
+            return jsonify({'success': False, 'message': 'Debe seleccionar una obra destino'}), 400
 
         # Validación estricta de stock - NO permite stock negativo
-        stock_actual = float(item.stock_actual) if item.stock_actual else 0
+        stock_actual = Decimal(str(item.stock_actual)) if item.stock_actual else Decimal('0')
         if cantidad > stock_actual:
             current_app.logger.warning(
                 f"❌ Traslado bloqueado: stock insuficiente para {item.nombre}. "
@@ -1421,41 +1448,128 @@ def trasladar(id):
             )
             return jsonify({
                 'success': False,
-                'message': f'Stock insuficiente. Disponible: {stock_actual:.2f} {item.unidad}, solicitado: {cantidad:.2f} {item.unidad}'
+                'message': f'Stock insuficiente. Disponible: {float(stock_actual):.2f} {item.unidad}, solicitado: {float(cantidad):.2f} {item.unidad}'
             }), 400
 
-        # Create movement record for transfer
-        movimiento = MovimientoInventario(
+        obra_destino = Obra.query.get_or_404(int(obra_destino_id))
+
+        # 1. Registrar movimiento de SALIDA del inventario general
+        movimiento_salida = MovimientoInventario(
             item_id=item.id,
             tipo='salida',
-            cantidad=cantidad,
-            motivo=f'Traslado a obra',
+            cantidad=float(cantidad),
+            motivo=f'Traslado a obra: {obra_destino.nombre}',
             observaciones=observaciones,
             usuario_id=current_user.id
         )
-        db.session.add(movimiento)
+        db.session.add(movimiento_salida)
 
-        # Update stock (subtract from current location)
-        item.stock_actual -= cantidad
+        # 2. Descontar del inventario general
+        item.stock_actual = float(stock_actual - cantidad)
 
-        # Record usage in destination obra
-        uso = UsoInventario(
+        # 3. Buscar o crear el registro de StockObra
+        stock_obra = StockObra.query.filter_by(
             obra_id=int(obra_destino_id),
-            item_id=item.id,
-            cantidad_usada=cantidad,
-            fecha_uso=date.today(),
-            observaciones=f'Traslado desde depósito. {observaciones}',
-            usuario_id=current_user.id
+            item_inventario_id=item.id
+        ).first()
+
+        if not stock_obra:
+            stock_obra = StockObra(
+                obra_id=int(obra_destino_id),
+                item_inventario_id=item.id,
+                cantidad_disponible=0,
+                cantidad_consumida=0
+            )
+            db.session.add(stock_obra)
+            db.session.flush()  # Para obtener el ID
+
+        # 4. Sumar al stock de la obra
+        stock_obra.cantidad_disponible = float(
+            Decimal(str(stock_obra.cantidad_disponible or 0)) + cantidad
         )
-        db.session.add(uso)
+        stock_obra.fecha_ultimo_traslado = datetime.utcnow()
+
+        # 5. Registrar movimiento de ENTRADA en el stock de obra
+        movimiento_entrada = MovimientoStockObra(
+            stock_obra_id=stock_obra.id,
+            tipo='entrada',
+            cantidad=float(cantidad),
+            fecha=datetime.utcnow(),
+            usuario_id=current_user.id,
+            observaciones=f'Traslado desde inventario general. {observaciones}',
+            precio_unitario=item.precio_promedio,
+            moneda='ARS'
+        )
+        db.session.add(movimiento_entrada)
 
         db.session.commit()
 
-        obra_destino = Obra.query.get(obra_destino_id)
         flash(f'Se trasladaron {cantidad} {item.unidad} de {item.nombre} a {obra_destino.nombre}', 'success')
-        return jsonify({'success': True})
+        return redirect(url_for('inventario.lista'))
 
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error en trasladar: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@inventario_bp.route('/api/<int:item_id>/stock-obras', methods=['GET'])
+@login_required
+def api_stock_en_obras(item_id):
+    """Obtiene el stock de un item en todas las obras"""
+    try:
+        item = ItemInventario.query.get_or_404(item_id)
+
+        # Obtener stock en obras
+        stocks = StockObra.query.filter_by(item_inventario_id=item_id).all()
+
+        stock_obras = []
+        for stock in stocks:
+            if stock.cantidad_disponible and float(stock.cantidad_disponible) > 0:
+                stock_obras.append({
+                    'obra_id': stock.obra_id,
+                    'obra_nombre': stock.obra.nombre if stock.obra else 'Obra desconocida',
+                    'cantidad_disponible': float(stock.cantidad_disponible or 0),
+                    'cantidad_consumida': float(stock.cantidad_consumida or 0),
+                    'fecha_ultimo_traslado': stock.fecha_ultimo_traslado.strftime('%d/%m/%Y') if stock.fecha_ultimo_traslado else None
+                })
+
+        return jsonify({
+            'success': True,
+            'stock_obras': stock_obras
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en api_stock_en_obras: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@inventario_bp.route('/api/<int:item_id>/traslados', methods=['GET'])
+@login_required
+def api_traslados_item(item_id):
+    """Obtiene el historial de traslados de un item desde la tabla stock_obra"""
+    try:
+        item = ItemInventario.query.get_or_404(item_id)
+
+        # Obtener traslados desde stock_obra (datos reales)
+        stocks = StockObra.query.filter_by(item_inventario_id=item_id).all()
+
+        traslados = []
+        for stock in stocks:
+            if stock.cantidad_disponible and float(stock.cantidad_disponible) > 0:
+                traslados.append({
+                    'fecha': stock.fecha_ultimo_traslado.strftime('%d/%m/%Y %H:%M') if stock.fecha_ultimo_traslado else '-',
+                    'obra_id': stock.obra_id,
+                    'obra_nombre': stock.obra.nombre if stock.obra else 'Desconocida',
+                    'cantidad': float(stock.cantidad_disponible or 0),
+                    'usuario': None  # No tenemos esta info en stock_obra
+                })
+
+        return jsonify({
+            'success': True,
+            'traslados': traslados
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en api_traslados_item: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500

@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.nombre }} - Inventario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('inventario.lista') }}">Inventario</a></li>
+                    <li class="breadcrumb-item active">{{ item.nombre }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Información principal del item -->
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-box me-2"></i>{{ item.nombre }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <th style="width: 40%;">Código</th>
+                                <td><strong>{{ item.codigo }}</strong></td>
+                            </tr>
+                            <tr>
+                                <th>Categoría</th>
+                                <td>
+                                    {% if item.categoria %}
+                                    <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                                    {% else %}
+                                    <span class="text-muted">Sin categoría</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Unidad</th>
+                                <td>{{ item.unidad }}</td>
+                            </tr>
+                            <tr>
+                                <th>Stock Actual</th>
+                                <td>
+                                    <span class="fs-5 {{ 'text-danger' if item.necesita_reposicion else 'text-success' }}">
+                                        <strong>{{ item.stock_actual|numero(2) }}</strong>
+                                    </span>
+                                    {{ item.unidad }}
+                                    {% if item.necesita_reposicion %}
+                                    <br>
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Stock bajo
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Stock Mínimo</th>
+                                <td>{{ item.stock_minimo|numero(2) }} {{ item.unidad }}</td>
+                            </tr>
+                            <tr>
+                                <th>Precio Promedio</th>
+                                <td>
+                                    {% if item.precio_promedio %}
+                                    ${{ item.precio_promedio|numero(2) }} ARS
+                                    {% endif %}
+                                    {% if item.precio_promedio_usd %}
+                                    <br>
+                                    U$D {{ item.precio_promedio_usd|numero(2) }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if item.descripcion %}
+                            <tr>
+                                <th>Descripción</th>
+                                <td>{{ item.descripcion }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr>
+                                <th>Fecha Creación</th>
+                                <td>{{ item.fecha_creacion.strftime('%d/%m/%Y') if item.fecha_creacion else '-' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer">
+                    <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i>Volver a lista
+                    </a>
+                </div>
+            </div>
+
+            <!-- Stock en Obras -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-building me-2"></i>Stock en Obras
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div id="stockObras">
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Cargando...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Movimientos y Usos -->
+        <div class="col-lg-8">
+            <!-- Tabs -->
+            <ul class="nav nav-tabs" id="detalleTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="movimientos-tab" data-bs-toggle="tab"
+                            data-bs-target="#movimientos" type="button" role="tab">
+                        <i class="fas fa-exchange-alt me-1"></i>Movimientos
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="usos-tab" data-bs-toggle="tab"
+                            data-bs-target="#usos" type="button" role="tab">
+                        <i class="fas fa-hard-hat me-1"></i>Uso en Obras
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="traslados-tab" data-bs-toggle="tab"
+                            data-bs-target="#traslados" type="button" role="tab">
+                        <i class="fas fa-truck me-1"></i>Traslados
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="detalleTabsContent">
+                <!-- Tab Movimientos -->
+                <div class="tab-pane fade show active" id="movimientos" role="tabpanel">
+                    <div class="card border-top-0 rounded-top-0">
+                        <div class="card-body">
+                            {% if movimientos %}
+                            <div class="table-responsive">
+                                <table class="table table-hover table-sm">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Tipo</th>
+                                            <th class="text-end">Cantidad</th>
+                                            <th>Motivo</th>
+                                            <th>Usuario</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for mov in movimientos %}
+                                        <tr>
+                                            <td>{{ mov.fecha.strftime('%d/%m/%Y %H:%M') if mov.fecha else '-' }}</td>
+                                            <td>
+                                                {% if mov.tipo == 'entrada' %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-arrow-down me-1"></i>Entrada
+                                                </span>
+                                                {% elif mov.tipo == 'salida' %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-arrow-up me-1"></i>Salida
+                                                </span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-sync me-1"></i>{{ mov.tipo|capitalize }}
+                                                </span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-end">
+                                                <strong class="{{ 'text-success' if mov.tipo == 'entrada' else 'text-danger' }}">
+                                                    {{ '+' if mov.tipo == 'entrada' else '-' }}{{ mov.cantidad|numero(2) }}
+                                                </strong>
+                                            </td>
+                                            <td>{{ mov.motivo or '-' }}</td>
+                                            <td>
+                                                <small>{{ mov.usuario.nombre if mov.usuario else '-' }}</small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-inbox fa-2x mb-2"></i>
+                                <p>No hay movimientos registrados</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Usos en Obra -->
+                <div class="tab-pane fade" id="usos" role="tabpanel">
+                    <div class="card border-top-0 rounded-top-0">
+                        <div class="card-body">
+                            {% if usos_obra %}
+                            <div class="table-responsive">
+                                <table class="table table-hover table-sm">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Obra</th>
+                                            <th class="text-end">Cantidad</th>
+                                            <th>Observaciones</th>
+                                            <th>Usuario</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for uso in usos_obra %}
+                                        <tr>
+                                            <td>{{ uso.fecha_uso.strftime('%d/%m/%Y') if uso.fecha_uso else '-' }}</td>
+                                            <td>
+                                                <a href="{{ url_for('obras.detalle', id=uso.obra.id) }}" class="text-decoration-none">
+                                                    <i class="fas fa-building me-1"></i>{{ uso.obra.nombre }}
+                                                </a>
+                                            </td>
+                                            <td class="text-end">
+                                                <strong class="text-danger">-{{ uso.cantidad_usada|numero(2) }}</strong>
+                                            </td>
+                                            <td>
+                                                <small>{{ uso.observaciones or '-' }}</small>
+                                            </td>
+                                            <td>
+                                                <small>{{ uso.usuario.nombre if uso.usuario else '-' }}</small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-hard-hat fa-2x mb-2"></i>
+                                <p>No hay registros de uso en obras</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Traslados -->
+                <div class="tab-pane fade" id="traslados" role="tabpanel">
+                    <div class="card border-top-0 rounded-top-0">
+                        <div class="card-body">
+                            <div id="trasladosContent">
+                                <div class="text-center py-3">
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    cargarStockEnObras();
+    cargarTraslados();
+});
+
+function cargarStockEnObras() {
+    const container = document.getElementById('stockObras');
+    const itemId = {{ item.id }};
+
+    fetch(`/inventario/api/${itemId}/stock-obras`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.stock_obras && data.stock_obras.length > 0) {
+                let html = '<ul class="list-group list-group-flush">';
+                data.stock_obras.forEach(stock => {
+                    html += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <a href="/obras/${stock.obra_id}" class="text-decoration-none">
+                                    <i class="fas fa-building me-1"></i>${stock.obra_nombre}
+                                </a>
+                            </div>
+                            <div class="text-end">
+                                <strong class="text-primary">${stock.cantidad_disponible.toFixed(2)}</strong>
+                                <small class="text-muted">{{ item.unidad }}</small>
+                            </div>
+                        </li>
+                    `;
+                });
+                html += '</ul>';
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        No hay stock trasladado a obras
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            container.innerHTML = `
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    No hay stock trasladado a obras
+                </div>
+            `;
+        });
+}
+
+function cargarTraslados() {
+    const container = document.getElementById('trasladosContent');
+    const itemId = {{ item.id }};
+
+    fetch(`/inventario/api/${itemId}/traslados`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.traslados && data.traslados.length > 0) {
+                let html = `
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Obra Destino</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th>Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                data.traslados.forEach(traslado => {
+                    html += `
+                        <tr>
+                            <td>${traslado.fecha}</td>
+                            <td>
+                                <a href="/obras/${traslado.obra_id}" class="text-decoration-none">
+                                    <i class="fas fa-building me-1"></i>${traslado.obra_nombre}
+                                </a>
+                            </td>
+                            <td class="text-end">
+                                <strong class="text-warning">-${traslado.cantidad.toFixed(2)}</strong>
+                            </td>
+                            <td><small>${traslado.usuario || '-'}</small></td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-truck fa-2x mb-2"></i>
+                        <p>No hay traslados registrados</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            container.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-truck fa-2x mb-2"></i>
+                    <p>No hay traslados registrados</p>
+                </div>
+            `;
+        });
+}
+</script>
+{% endblock %}

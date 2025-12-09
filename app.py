@@ -592,10 +592,35 @@ def porcentaje_filter(valor):
     return f'{valor:.1f}%'
 
 @app.template_filter('numero')
-def numero_filter(valor, decimales=0):
+def numero_filter(valor, decimales=2):
+    """
+    Formatea números con formato argentino (punto miles, coma decimal).
+    Si el número es entero o muy cercano a entero, no muestra decimales.
+    """
     if valor is None:
         return '0'
-    return f'{valor:,.{decimales}f}'
+    try:
+        valor = float(valor)
+        # Si es un número entero (o muy cercano), no mostrar decimales
+        # Usar round para manejar problemas de precisión de floats
+        valor_redondeado = round(valor, decimales)
+        if valor_redondeado == int(valor_redondeado):
+            # Formato con punto como separador de miles
+            return f'{int(valor_redondeado):,}'.replace(',', '.')
+        else:
+            # Formato con decimales
+            formatted = f'{valor_redondeado:,.{decimales}f}'
+            # Eliminar ceros innecesarios al final de los decimales
+            if '.' in formatted:
+                formatted = formatted.rstrip('0').rstrip('.')
+                # Si quedó sin decimales, reformatear como entero
+                if '.' not in formatted:
+                    return f'{int(float(formatted.replace(",", ""))):,}'.replace(',', '.')
+            # Convertir a formato argentino: punto para miles, coma para decimales
+            formatted = formatted.replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+            return formatted
+    except (ValueError, TypeError):
+        return '0'
 
 @app.template_filter('estado_badge')
 def estado_badge_filter(estado):

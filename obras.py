@@ -626,6 +626,29 @@ def detalle(id):
             'etapa_nombre': etapa.nombre
         }
 
+    # Obtener stock transferido a esta obra (desde inventario)
+    from models.inventory import StockObra
+    stock_obra_items = StockObra.query.filter_by(obra_id=obra.id).all()
+    # Crear diccionarios para acceso rápido por item_inventario_id y por nombre
+    stock_transferido = {}
+    stock_transferido_por_nombre = {}
+    # Lista para matching flexible (buscar palabras del nombre de inventario en descripción del presupuesto)
+    stock_transferido_lista = []
+    for stock in stock_obra_items:
+        stock_data = {
+            'cantidad_disponible': float(stock.cantidad_disponible or 0),
+            'cantidad_consumida': float(stock.cantidad_consumida or 0),
+            'item_nombre': stock.item.nombre if stock.item else '',
+            'item_nombre_lower': stock.item.nombre.lower() if stock.item and stock.item.nombre else '',
+            'item_codigo': stock.item.codigo if stock.item else '',
+            'unidad': stock.item.unidad if stock.item else ''
+        }
+        stock_transferido[stock.item_inventario_id] = stock_data
+        stock_transferido_lista.append(stock_data)
+        # También indexar por nombre (en minúsculas) para match por nombre exacto
+        if stock.item and stock.item.nombre:
+            stock_transferido_por_nombre[stock.item.nombre.lower()] = stock_data
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
@@ -644,6 +667,9 @@ def detalle(id):
                          presupuesto=presupuesto,
                          items_presupuesto=items_presupuesto,
                          avances_mano_obra=avances_mano_obra,
+                         stock_transferido=stock_transferido,
+                         stock_transferido_por_nombre=stock_transferido_por_nombre,
+                         stock_transferido_lista=stock_transferido_lista,
                          wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
                          wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
 
@@ -1946,10 +1972,11 @@ def api_listar_tareas(etapa_id):
 def api_reservar_materiales(obra_id):
     """
     Genera reservas de stock en inventario para los materiales del presupuesto de la obra.
+    Solo procesa materiales que estén VINCULADOS a items del inventario.
     Si no hay stock suficiente, genera alertas de compra.
     """
     try:
-        from models.inventory import InventoryItem, Stock, StockReservation, Warehouse
+        from models.inventory import ItemInventario, ReservaStock
 
         obra = Obra.query.get_or_404(obra_id)
 
@@ -1969,66 +1996,83 @@ def api_reservar_materiales(obra_id):
 
         reservas_creadas = []
         alertas_compra = []
-        materiales_sin_match = []
+        materiales_sin_vincular = []
 
         for material in materiales:
-            # Usar vinculación directa si existe (PRECISA)
-            item_inventario = None
-
-            if material.item_inventario_id:
-                # Match directo por ID (100% preciso)
-                item_inventario = InventoryItem.query.get(material.item_inventario_id)
-                if item_inventario:
-                    current_app.logger.info(f"✅ Material '{material.descripcion}' vinculado directo por ID {material.item_inventario_id}")
-
-            # Fallback: buscar por nombre similar (menos preciso)
-            if not item_inventario:
-                item_inventario = InventoryItem.query.filter(
-                    InventoryItem.company_id == obra.organizacion_id,
-                    InventoryItem.nombre.ilike(f'%{material.descripcion}%')
-                ).first()
-
-                if item_inventario:
-                    current_app.logger.warning(f"⚠️ Material '{material.descripcion}' encontrado por nombre similar. Recomendado: vincular por ID.")
-
-            if not item_inventario:
-                materiales_sin_match.append({
+            # Solo procesar materiales que estén VINCULADOS a un item del inventario
+            if not material.item_inventario_id:
+                materiales_sin_vincular.append({
                     'descripcion': material.descripcion,
                     'cantidad': float(material.cantidad),
                     'unidad': material.unidad
                 })
                 continue
 
-            # Calcular stock disponible
-            stock_total = sum(s.cantidad for s in item_inventario.stocks)
-            stock_reservado = sum(r.qty for r in item_inventario.reservations if r.estado == 'activa')
-            stock_disponible = stock_total - stock_reservado
+            # Obtener el item del inventario vinculado
+            item_inv = ItemInventario.query.get(material.item_inventario_id)
+            if not item_inv:
+                materiales_sin_vincular.append({
+                    'descripcion': material.descripcion,
+                    'cantidad': float(material.cantidad),
+                    'unidad': material.unidad
+                })
+                continue
+
+            current_app.logger.info(f"✅ Procesando material '{material.descripcion}' vinculado a '{item_inv.nombre}'")
+
+            # Calcular stock disponible (stock actual - reservas activas)
+            stock_actual = float(item_inv.stock_actual or 0)
+
+            # Obtener reservas activas para este item
+            reservas_activas = ReservaStock.query.filter_by(
+                item_inventario_id=item_inv.id,
+                estado='activa'
+            ).all()
+            stock_reservado = sum(float(r.cantidad) for r in reservas_activas)
+            stock_disponible = stock_actual - stock_reservado
 
             cantidad_necesaria = float(material.cantidad)
 
+            # Verificar si ya existe una reserva para este material en esta obra
+            reserva_existente = ReservaStock.query.filter_by(
+                item_inventario_id=item_inv.id,
+                obra_id=obra.id,
+                estado='activa'
+            ).first()
+
+            if reserva_existente:
+                # Ya existe reserva, actualizar cantidad si es necesario
+                reservas_creadas.append({
+                    'material': item_inv.nombre,
+                    'cantidad': float(reserva_existente.cantidad),
+                    'unidad': item_inv.unidad,
+                    'nota': 'Ya reservado'
+                })
+                continue
+
             if stock_disponible >= cantidad_necesaria:
                 # Hay stock suficiente, crear reserva
-                reserva = StockReservation(
-                    item_id=item_inventario.id,
-                    project_id=obra.id,
-                    qty=cantidad_necesaria,
+                reserva = ReservaStock(
+                    item_inventario_id=item_inv.id,
+                    obra_id=obra.id,
+                    cantidad=cantidad_necesaria,
                     estado='activa',
-                    created_by=current_user.id
+                    usuario_id=current_user.id
                 )
                 db.session.add(reserva)
                 reservas_creadas.append({
-                    'material': item_inventario.nombre,
+                    'material': item_inv.nombre,
                     'cantidad': cantidad_necesaria,
-                    'unidad': item_inventario.unidad
+                    'unidad': item_inv.unidad
                 })
             else:
                 # No hay stock suficiente, generar alerta
                 alertas_compra.append({
-                    'material': item_inventario.nombre,
+                    'material': item_inv.nombre,
                     'cantidad_necesaria': cantidad_necesaria,
-                    'stock_disponible': float(stock_disponible),
-                    'faltante': cantidad_necesaria - float(stock_disponible),
-                    'unidad': item_inventario.unidad
+                    'stock_disponible': max(0, stock_disponible),
+                    'faltante': cantidad_necesaria - max(0, stock_disponible),
+                    'unidad': item_inv.unidad
                 })
 
         db.session.commit()
@@ -2037,11 +2081,11 @@ def api_reservar_materiales(obra_id):
             'ok': True,
             'reservas_creadas': len(reservas_creadas),
             'alertas_compra': len(alertas_compra),
-            'materiales_sin_match': len(materiales_sin_match),
+            'materiales_sin_match': len(materiales_sin_vincular),
             'detalle': {
                 'reservas': reservas_creadas,
                 'alertas': alertas_compra,
-                'sin_match': materiales_sin_match
+                'sin_match': materiales_sin_vincular
             }
         })
 
@@ -2058,28 +2102,28 @@ def api_obtener_reservas(obra_id):
     Obtiene las reservas de stock activas para una obra.
     """
     try:
-        from models.inventory import StockReservation, InventoryItem
+        from models.inventory import ReservaStock, ItemInventario
 
         obra = Obra.query.get_or_404(obra_id)
 
         if obra.organizacion_id != current_user.organizacion_id:
             return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
 
-        reservas = StockReservation.query.filter_by(
-            project_id=obra_id
-        ).join(InventoryItem).all()
+        reservas = ReservaStock.query.filter_by(
+            obra_id=obra_id
+        ).join(ItemInventario).all()
 
         reservas_data = []
         for r in reservas:
             reservas_data.append({
                 'id': r.id,
-                'item_id': r.item_id,
+                'item_id': r.item_inventario_id,
                 'item_nombre': r.item.nombre,
-                'item_sku': r.item.sku,
-                'cantidad': float(r.qty),
+                'item_codigo': r.item.codigo,
+                'cantidad': float(r.cantidad),
                 'unidad': r.item.unidad,
                 'estado': r.estado,
-                'fecha': r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else None
+                'fecha': r.fecha_reserva.strftime('%d/%m/%Y %H:%M') if r.fecha_reserva else None
             })
 
         return jsonify({
@@ -2099,16 +2143,14 @@ def api_obtener_reservas(obra_id):
 def api_consumir_material(obra_id):
     """
     Consume material de una reserva activa.
-    - Descuenta del stock real
+    - Descuenta del stock real (ItemInventario.stock_actual)
     - Marca la reserva como 'consumida' (total) o reduce cantidad (parcial)
     - Registra el uso en UsoInventario
     """
     try:
-        from models.inventory import (
-            StockReservation, InventoryItem, Stock,
-            StockMovement, Warehouse
-        )
-        from models import UsoInventario
+        from models.inventory import ReservaStock, ItemInventario, UsoInventario, MovimientoInventario
+        from decimal import Decimal
+        from datetime import datetime
 
         obra = Obra.query.get_or_404(obra_id)
 
@@ -2124,46 +2166,41 @@ def api_consumir_material(obra_id):
             return jsonify({'ok': False, 'error': 'Reserva y cantidad son requeridos'}), 400
 
         # Obtener reserva
-        reserva = StockReservation.query.get(reserva_id)
-        if not reserva or reserva.project_id != obra_id:
+        reserva = ReservaStock.query.get(reserva_id)
+        if not reserva or reserva.obra_id != obra_id:
             return jsonify({'ok': False, 'error': 'Reserva no encontrada'}), 404
 
         if reserva.estado != 'activa':
             return jsonify({'ok': False, 'error': f'La reserva no está activa (estado: {reserva.estado})'}), 400
 
-        cantidad_reservada = float(reserva.qty)
+        cantidad_reservada = float(reserva.cantidad)
         if cantidad_consumir > cantidad_reservada:
             return jsonify({
                 'ok': False,
                 'error': f'No puedes consumir más de lo reservado ({cantidad_reservada} {reserva.item.unidad})'
             }), 400
 
-        item = reserva.item
+        item = reserva.item  # ItemInventario
 
-        # Buscar el depósito principal o el primero disponible con stock
-        stock_record = Stock.query.filter(
-            Stock.item_id == item.id,
-            Stock.cantidad >= cantidad_consumir
-        ).first()
-
-        if not stock_record:
+        # Verificar stock disponible
+        stock_actual = float(item.stock_actual or 0)
+        if stock_actual < cantidad_consumir:
             return jsonify({
                 'ok': False,
-                'error': f'No hay stock físico suficiente de {item.nombre}'
+                'error': f'No hay stock físico suficiente de {item.nombre} (disponible: {stock_actual})'
             }), 400
 
         # Descontar del stock físico
-        stock_record.cantidad -= Decimal(str(cantidad_consumir))
+        item.stock_actual = float(Decimal(str(stock_actual)) - Decimal(str(cantidad_consumir)))
 
         # Registrar movimiento de egreso
-        movimiento = StockMovement(
+        movimiento = MovimientoInventario(
             item_id=item.id,
-            tipo='egreso',
-            qty=cantidad_consumir,
-            origen_warehouse_id=stock_record.warehouse_id,
-            project_id=obra_id,
+            tipo='salida',
+            cantidad=cantidad_consumir,
             motivo=f'Consumo en obra: {obra.nombre}',
-            user_id=current_user.id
+            observaciones=observaciones or f'Consumido de reserva #{reserva_id}',
+            usuario_id=current_user.id
         )
         db.session.add(movimiento)
 
@@ -2171,42 +2208,35 @@ def api_consumir_material(obra_id):
         if cantidad_consumir >= cantidad_reservada:
             # Consumo total
             reserva.estado = 'consumida'
+            reserva.fecha_consumo = datetime.utcnow()
         else:
             # Consumo parcial - reducir cantidad reservada
-            reserva.qty = Decimal(str(cantidad_reservada - cantidad_consumir))
+            reserva.cantidad = float(Decimal(str(cantidad_reservada)) - Decimal(str(cantidad_consumir)))
 
         # Registrar uso en obra (para historial y costos)
-        # Nota: UsoInventario usa items_inventario (ItemInventario), no inventory_item (InventoryItem)
-        # Por ahora registramos sin precio, se puede vincular después
-        from models.inventory import ItemInventario
-        item_legacy = ItemInventario.query.filter_by(
-            organizacion_id=obra.organizacion_id,
-            nombre=item.nombre
-        ).first()
-
-        if item_legacy:
-            uso = UsoInventario(
-                obra_id=obra_id,
-                item_id=item_legacy.id,
-                cantidad_usada=cantidad_consumir,
-                observaciones=observaciones or f'Consumido de reserva #{reserva_id}',
-                usuario_id=current_user.id,
-                precio_unitario_al_uso=item_legacy.precio_promedio,
-                moneda='ARS'
-            )
-            db.session.add(uso)
+        uso = UsoInventario(
+            obra_id=obra_id,
+            item_id=item.id,
+            cantidad_usada=cantidad_consumir,
+            observaciones=observaciones or f'Consumido de reserva #{reserva_id}',
+            usuario_id=current_user.id,
+            precio_unitario_al_uso=item.precio_promedio,
+            moneda='ARS'
+        )
+        db.session.add(uso)
 
         db.session.commit()
 
         # Verificar si queda stock bajo
-        stock_restante = sum(s.cantidad for s in item.stocks)
-        alerta_stock_bajo = stock_restante <= item.min_stock
+        stock_restante = float(item.stock_actual or 0)
+        stock_minimo = float(item.stock_minimo or 0)
+        alerta_stock_bajo = stock_restante <= stock_minimo
 
         return jsonify({
             'ok': True,
             'mensaje': f'Consumidos {cantidad_consumir} {item.unidad} de {item.nombre}',
             'reserva_estado': reserva.estado,
-            'stock_restante': float(stock_restante),
+            'stock_restante': stock_restante,
             'alerta_stock_bajo': alerta_stock_bajo
         })
 
@@ -2223,7 +2253,7 @@ def api_liberar_reserva(obra_id):
     Libera una reserva activa (devuelve el stock al disponible).
     """
     try:
-        from models.inventory import StockReservation
+        from models.inventory import ReservaStock
 
         obra = Obra.query.get_or_404(obra_id)
 
@@ -2236,14 +2266,14 @@ def api_liberar_reserva(obra_id):
         if not reserva_id:
             return jsonify({'ok': False, 'error': 'ID de reserva requerido'}), 400
 
-        reserva = StockReservation.query.get(reserva_id)
-        if not reserva or reserva.project_id != obra_id:
+        reserva = ReservaStock.query.get(reserva_id)
+        if not reserva or reserva.obra_id != obra_id:
             return jsonify({'ok': False, 'error': 'Reserva no encontrada'}), 404
 
         if reserva.estado != 'activa':
             return jsonify({'ok': False, 'error': 'Solo se pueden liberar reservas activas'}), 400
 
-        reserva.estado = 'liberada'
+        reserva.estado = 'cancelada'
         db.session.commit()
 
         return jsonify({
@@ -2253,6 +2283,124 @@ def api_liberar_reserva(obra_id):
 
     except Exception as e:
         current_app.logger.exception(f"Error al liberar reserva: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ========== STOCK EN OBRA (Inventario Local) ==========
+
+@obras_bp.route('/api/obras/<int:obra_id>/stock-obra', methods=['GET'])
+@login_required
+def api_obtener_stock_obra(obra_id):
+    """
+    Obtiene el stock físico presente en una obra.
+    """
+    try:
+        from models.inventory import StockObra, ItemInventario
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        stock_items = StockObra.query.filter_by(obra_id=obra_id).all()
+
+        stock_data = []
+        for s in stock_items:
+            stock_data.append({
+                'id': s.id,
+                'item_inventario_id': s.item_inventario_id,
+                'item_nombre': s.item.nombre,
+                'item_codigo': s.item.codigo,
+                'unidad': s.item.unidad,
+                'cantidad_disponible': float(s.cantidad_disponible or 0),
+                'cantidad_consumida': float(s.cantidad_consumida or 0),
+                'fecha_ultimo_traslado': s.fecha_ultimo_traslado.isoformat() if s.fecha_ultimo_traslado else None,
+                'fecha_ultimo_uso': s.fecha_ultimo_uso.isoformat() if s.fecha_ultimo_uso else None
+            })
+
+        return jsonify({
+            'ok': True,
+            'stock': stock_data,
+            'total_items': len(stock_data)
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al obtener stock de obra: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/usar-stock', methods=['POST'])
+@login_required
+def api_usar_stock_obra(obra_id):
+    """
+    Registra el uso/consumo de material del stock de la obra.
+    Descuenta del stock de obra y registra el costo.
+    """
+    try:
+        from models.inventory import StockObra, MovimientoStockObra
+        from decimal import Decimal
+        from datetime import datetime
+
+        obra = Obra.query.get_or_404(obra_id)
+
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        data = request.get_json() or {}
+        stock_obra_id = data.get('stock_obra_id')
+        cantidad = float(data.get('cantidad', 0))
+        observaciones = data.get('observaciones', '')
+
+        if not stock_obra_id or cantidad <= 0:
+            return jsonify({'ok': False, 'error': 'Stock y cantidad son requeridos'}), 400
+
+        # Obtener stock de obra
+        stock_obra = StockObra.query.get(stock_obra_id)
+        if not stock_obra or stock_obra.obra_id != obra_id:
+            return jsonify({'ok': False, 'error': 'Stock no encontrado'}), 404
+
+        # Verificar stock disponible
+        disponible = float(stock_obra.cantidad_disponible or 0)
+        if cantidad > disponible:
+            return jsonify({
+                'ok': False,
+                'error': f'Stock insuficiente. Disponible: {disponible} {stock_obra.item.unidad}'
+            }), 400
+
+        # Actualizar stock de obra
+        stock_obra.cantidad_disponible = float(
+            Decimal(str(disponible)) - Decimal(str(cantidad))
+        )
+        stock_obra.cantidad_consumida = float(
+            Decimal(str(stock_obra.cantidad_consumida or 0)) + Decimal(str(cantidad))
+        )
+        stock_obra.fecha_ultimo_uso = datetime.utcnow()
+
+        # Registrar movimiento de consumo
+        movimiento = MovimientoStockObra(
+            stock_obra_id=stock_obra.id,
+            tipo='consumo',
+            cantidad=cantidad,
+            fecha=datetime.utcnow(),
+            usuario_id=current_user.id,
+            observaciones=observaciones,
+            precio_unitario=stock_obra.item.precio_promedio,
+            moneda='ARS'
+        )
+        db.session.add(movimiento)
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'mensaje': f'Se registró el uso de {cantidad} {stock_obra.item.unidad} de {stock_obra.item.nombre}',
+            'stock_restante': float(stock_obra.cantidad_disponible),
+            'costo_registrado': float(movimiento.precio_unitario or 0) * cantidad if movimiento.precio_unitario else 0
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al registrar uso de stock: {e}")
         db.session.rollback()
         return jsonify({'ok': False, 'error': str(e)}), 500
 
