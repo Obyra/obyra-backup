@@ -259,13 +259,20 @@ function actualizarBotonesEliminarContacto() {
 
                 console.log('Enviando datos del cliente a ventana padre:', clienteData);
 
-                // Llamar función en ventana padre para actualizar selector
+                // Método 1: Llamar función en ventana padre para actualizar selector (presupuestos/crear)
                 if (typeof window.opener.actualizarSelectorCliente === 'function') {
                     window.opener.actualizarSelectorCliente(clienteData);
                     console.log('Función actualizarSelectorCliente ejecutada exitosamente');
-                } else {
-                    console.error('Función actualizarSelectorCliente no encontrada en ventana padre');
                 }
+
+                // Método 2: postMessage para presupuestos/detalle
+                window.opener.postMessage({
+                    tipo: 'clienteCreado',
+                    cliente_id: clienteData.id,
+                    nombre_completo: clienteData.nombre_completo,
+                    email: clienteData.email
+                }, '*');
+                console.log('postMessage enviado a ventana padre');
 
                 // Cerrar ventana inmediatamente después de comunicar
                 setTimeout(function() {

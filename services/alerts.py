@@ -147,3 +147,52 @@ def _resolver_nivel(dias_restantes: int) -> str:
     if dias_restantes <= 15:
         return "warning"
     return "info"
+
+
+def limpiar_alertas_presupuestos_confirmados(org_id: int) -> int:
+    """
+    Elimina las alertas de presupuestos que ya fueron confirmados como obra o aprobados.
+    Retorna el número de alertas eliminadas.
+    """
+    # Obtener IDs de presupuestos que ya no necesitan alertas
+    presupuestos_finalizados = Presupuesto.query.filter(
+        Presupuesto.organizacion_id == org_id,
+        Presupuesto.deleted_at.is_(None),
+        db.or_(
+            Presupuesto.confirmado_como_obra == True,
+            Presupuesto.estado.in_(['aprobado', 'confirmado'])
+        )
+    ).with_entities(Presupuesto.id).all()
+
+    ids_finalizados = [p.id for p in presupuestos_finalizados]
+
+    if not ids_finalizados:
+        return 0
+
+    # Buscar y eliminar alertas de estos presupuestos
+    alertas_a_eliminar = []
+    alertas = Event.query.filter(
+        Event.company_id == org_id,
+        Event.type == 'alert',
+        Event.title.like('%Presupuesto%vencer%')
+    ).all()
+
+    for alerta in alertas:
+        if alerta.meta and alerta.meta.get('presupuesto_id') in ids_finalizados:
+            alertas_a_eliminar.append(alerta)
+
+    eliminadas = 0
+    for alerta in alertas_a_eliminar:
+        db.session.delete(alerta)
+        eliminadas += 1
+
+    if eliminadas > 0:
+        try:
+            db.session.commit()
+            current_app.logger.info(f"Eliminadas {eliminadas} alertas de presupuestos confirmados")
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            current_app.logger.exception("Error eliminando alertas: %s", exc)
+            return 0
+
+    return eliminadas

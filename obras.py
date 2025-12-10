@@ -128,6 +128,147 @@ def handle_403(error):
 
 # ==== API endpoints ====
 
+# Ciudades principales de Argentina para sugerencias rápidas
+CIUDADES_ARGENTINA = [
+    {'nombre': 'Buenos Aires, CABA', 'provincia': 'Ciudad Autónoma de Buenos Aires'},
+    {'nombre': 'Córdoba', 'provincia': 'Córdoba'},
+    {'nombre': 'Rosario', 'provincia': 'Santa Fe'},
+    {'nombre': 'Mendoza', 'provincia': 'Mendoza'},
+    {'nombre': 'La Plata', 'provincia': 'Buenos Aires'},
+    {'nombre': 'San Miguel de Tucumán', 'provincia': 'Tucumán'},
+    {'nombre': 'Mar del Plata', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Salta', 'provincia': 'Salta'},
+    {'nombre': 'Santa Fe', 'provincia': 'Santa Fe'},
+    {'nombre': 'San Juan', 'provincia': 'San Juan'},
+    {'nombre': 'Resistencia', 'provincia': 'Chaco'},
+    {'nombre': 'Neuquén', 'provincia': 'Neuquén'},
+    {'nombre': 'Corrientes', 'provincia': 'Corrientes'},
+    {'nombre': 'Posadas', 'provincia': 'Misiones'},
+    {'nombre': 'San Salvador de Jujuy', 'provincia': 'Jujuy'},
+    {'nombre': 'Bahía Blanca', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Paraná', 'provincia': 'Entre Ríos'},
+    {'nombre': 'Formosa', 'provincia': 'Formosa'},
+    {'nombre': 'San Luis', 'provincia': 'San Luis'},
+    {'nombre': 'La Rioja', 'provincia': 'La Rioja'},
+    {'nombre': 'Catamarca', 'provincia': 'Catamarca'},
+    {'nombre': 'Río Gallegos', 'provincia': 'Santa Cruz'},
+    {'nombre': 'Ushuaia', 'provincia': 'Tierra del Fuego'},
+    {'nombre': 'Rawson', 'provincia': 'Chubut'},
+    {'nombre': 'Viedma', 'provincia': 'Río Negro'},
+    {'nombre': 'Santa Rosa', 'provincia': 'La Pampa'},
+    # Localidades populares del GBA
+    {'nombre': 'Quilmes', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Lanús', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Avellaneda', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Lomas de Zamora', 'provincia': 'Buenos Aires'},
+    {'nombre': 'San Isidro', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Vicente López', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Tigre', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Pilar', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Morón', 'provincia': 'Buenos Aires'},
+    {'nombre': 'San Martín', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Tres de Febrero', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Merlo', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Moreno', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Florencio Varela', 'provincia': 'Buenos Aires'},
+    {'nombre': 'Berazategui', 'provincia': 'Buenos Aires'},
+]
+
+# Cache simple para búsquedas (evita llamadas repetidas a Nominatim)
+_address_cache = {}
+_cache_max_size = 100
+
+def _get_cached_results(query):
+    """Obtiene resultados del cache si existen"""
+    return _address_cache.get(query.lower())
+
+def _set_cached_results(query, results):
+    """Guarda resultados en cache"""
+    if len(_address_cache) >= _cache_max_size:
+        # Eliminar la entrada más antigua (FIFO simple)
+        oldest_key = next(iter(_address_cache))
+        del _address_cache[oldest_key]
+    _address_cache[query.lower()] = results
+
+def _parse_address_query(query):
+    """Parsea la query para detectar calle, número y ciudad"""
+    import re
+
+    # Patrones comunes de direcciones argentinas
+    # "Av. Corrientes 1234, Buenos Aires"
+    # "Calle 7 número 1234, La Plata"
+    # "San Martín 500, Córdoba"
+
+    result = {
+        'street': None,
+        'number': None,
+        'city': None,
+        'original': query
+    }
+
+    # Detectar número de calle (3-5 dígitos)
+    number_match = re.search(r'\b(\d{2,5})\b', query)
+    if number_match:
+        result['number'] = number_match.group(1)
+        # Remover el número para obtener la calle
+        query_without_number = query.replace(number_match.group(1), '').strip()
+    else:
+        query_without_number = query
+
+    # Detectar ciudad si hay coma
+    if ',' in query_without_number:
+        parts = query_without_number.split(',')
+        result['street'] = parts[0].strip()
+        result['city'] = parts[1].strip() if len(parts) > 1 else None
+    else:
+        result['street'] = query_without_number.strip()
+
+    return result
+
+def _format_result(item, query_lower):
+    """Formatea un resultado de Nominatim para mejor visualización"""
+    addr = item.get('address', {})
+
+    # Construir dirección formateada
+    parts = []
+
+    # Calle y número
+    road = addr.get('road', '')
+    house_number = addr.get('house_number', '')
+    if road:
+        if house_number:
+            parts.append(f"{road} {house_number}")
+        else:
+            parts.append(road)
+
+    # Barrio/Localidad
+    suburb = addr.get('suburb', '') or addr.get('neighbourhood', '')
+    if suburb and suburb not in parts:
+        parts.append(suburb)
+
+    # Ciudad
+    city = addr.get('city', '') or addr.get('town', '') or addr.get('village', '') or addr.get('municipality', '')
+    if city and city not in parts:
+        parts.append(city)
+
+    # Provincia
+    state = addr.get('state', '')
+    if state and state not in parts:
+        parts.append(state)
+
+    formatted = ', '.join(parts) if parts else item.get('display_name', '')
+
+    return {
+        'display_name': item.get('display_name', ''),
+        'formatted_address': formatted,
+        'lat': item.get('lat'),
+        'lon': item.get('lon'),
+        'place_id': item.get('place_id'),
+        'type': item.get('type'),
+        'address': addr,
+        'relevance': item.get('relevance', 0)
+    }
+
 @obras_bp.route('/api/buscar-direcciones', methods=['GET'])
 @login_required
 def buscar_direcciones():
@@ -137,121 +278,148 @@ def buscar_direcciones():
     if not query:
         return jsonify({'ok': False, 'error': 'Query is required'}), 400
 
+    if len(query) < 3:
+        return jsonify({'ok': True, 'results': []})
+
+    # Verificar cache primero
+    cached = _get_cached_results(query)
+    if cached:
+        return jsonify({'ok': True, 'results': cached, 'cached': True})
+
     try:
+        query_lower = query.lower()
+        parsed = _parse_address_query(query)
+
         # Configuración de Nominatim
         url = "https://nominatim.openstreetmap.org/search"
         headers = {
-            'User-Agent': 'OBYRA-IA-Construction-Management/1.0',
+            'User-Agent': 'OBYRA-Construction-Management/2.0 (contacto@obyra.com)',
             'Accept-Language': 'es-AR,es;q=0.9'
         }
 
-        # Preparar múltiples búsquedas para mejorar resultados
         all_results = []
         seen_place_ids = set()
 
-        # 1. Búsqueda normal con query original
-        params_normal = {
-            'q': query,
-            'format': 'json',
-            'limit': 20,  # Aumentado significativamente
-            'addressdetails': 1,
-            'countrycodes': 'ar',
-            'dedupe': 1,
-            'polygon_threshold': 0.0
-        }
+        # 1. Si detectamos número de calle, hacer búsqueda estructurada primero
+        if parsed['number'] and parsed['street']:
+            street_query = f"{parsed['street']} {parsed['number']}"
+            if parsed['city']:
+                street_query += f", {parsed['city']}"
+            street_query += ", Argentina"
 
-        response = requests.get(url, params=params_normal, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            for item in data:
-                place_id = item.get('place_id')
-                if place_id and place_id not in seen_place_ids:
-                    seen_place_ids.add(place_id)
-                    all_results.append(item)
+            params_street = {
+                'q': street_query,
+                'format': 'json',
+                'limit': 10,
+                'addressdetails': 1,
+                'countrycodes': 'ar'
+            }
 
-        # 2. Si hay pocos resultados, hacer búsqueda estructurada (ciudad + calle)
-        if len(all_results) < 5:
-            # Agregar ", Argentina" si no está
-            query_with_country = query if 'argentina' in query.lower() else f"{query}, Argentina"
-            params_structured = {
-                'q': query_with_country,
+            try:
+                response = requests.get(url, params=params_street, headers=headers, timeout=8)
+                if response.status_code == 200:
+                    for item in response.json():
+                        place_id = item.get('place_id')
+                        if place_id and place_id not in seen_place_ids:
+                            seen_place_ids.add(place_id)
+                            item['relevance'] = 20  # Alta relevancia por búsqueda estructurada
+                            all_results.append(item)
+            except:
+                pass
+
+        # 2. Búsqueda normal
+        query_variations = [
+            query,
+            f"{query}, Argentina" if 'argentina' not in query_lower else query,
+        ]
+
+        # Si hay ciudad detectada, agregar variación
+        if parsed['city']:
+            for ciudad in CIUDADES_ARGENTINA:
+                if parsed['city'].lower() in ciudad['nombre'].lower():
+                    query_variations.append(f"{parsed['street']}, {ciudad['nombre']}, {ciudad['provincia']}, Argentina")
+                    break
+
+        for q_var in query_variations[:2]:  # Limitar a 2 variaciones
+            params = {
+                'q': q_var,
                 'format': 'json',
                 'limit': 15,
                 'addressdetails': 1,
                 'countrycodes': 'ar',
-                'dedupe': 0,  # No deduplicar para obtener más variedad
-                'extratags': 1
+                'dedupe': 1
             }
 
-            response2 = requests.get(url, params=params_structured, headers=headers, timeout=10)
-            if response2.status_code == 200:
-                data2 = response2.json()
-                for item in data2:
-                    place_id = item.get('place_id')
-                    if place_id and place_id not in seen_place_ids:
-                        seen_place_ids.add(place_id)
-                        all_results.append(item)
+            try:
+                response = requests.get(url, params=params, headers=headers, timeout=8)
+                if response.status_code == 200:
+                    for item in response.json():
+                        place_id = item.get('place_id')
+                        if place_id and place_id not in seen_place_ids:
+                            seen_place_ids.add(place_id)
+                            all_results.append(item)
+            except:
+                continue
 
-        # Calcular relevancia mejorada para cada resultado
+        # 3. Calcular relevancia mejorada
         for item in all_results:
-            item['relevance'] = 0
-            display_name = item.get('display_name', '').lower()
-            query_lower = query.lower()
+            if 'relevance' not in item:
+                item['relevance'] = 0
 
-            # Boost por coincidencia exacta o parcial
+            display_name = item.get('display_name', '').lower()
+            addr = item.get('address', {})
+
+            # Boost por coincidencia con query
             if query_lower in display_name:
                 item['relevance'] += 10
 
-            # Boost por coincidencia de palabras individuales
-            query_words = set(query_lower.split())
-            display_words = set(display_name.split(','))
-            matching_words = len(query_words.intersection(display_words))
-            item['relevance'] += matching_words * 2
-
-            if 'address' in item:
-                addr = item.get('address', {})
-
-                # Priorizar direcciones completas (calle + número)
-                if addr.get('road') and addr.get('house_number'):
-                    item['relevance'] += 8
-                elif addr.get('road'):
-                    item['relevance'] += 4
-
-                # Boost para ciudades principales
-                city = addr.get('city', '') or addr.get('town', '') or addr.get('village', '')
-                if city:
+            # Boost por cada palabra que coincide
+            query_words = set(query_lower.replace(',', ' ').split())
+            for word in query_words:
+                if len(word) > 2 and word in display_name:
                     item['relevance'] += 3
-                    # Extra boost para Buenos Aires, Córdoba, Rosario, etc.
-                    if any(c in city.lower() for c in ['buenos aires', 'córdoba', 'cordoba', 'rosario', 'mendoza', 'la plata']):
-                        item['relevance'] += 3
 
-                # Boost si menciona provincia
-                if addr.get('state'):
-                    item['relevance'] += 2
+            # Priorizar direcciones completas (calle + número)
+            if addr.get('road') and addr.get('house_number'):
+                item['relevance'] += 15
+                # Extra si el número coincide
+                if parsed['number'] and addr.get('house_number') == parsed['number']:
+                    item['relevance'] += 10
+            elif addr.get('road'):
+                item['relevance'] += 5
 
-                # Penalizar si es solo provincia o país sin detalle
-                if item.get('type') in ['state', 'country']:
-                    item['relevance'] -= 10
+            # Boost para ciudades principales
+            city = addr.get('city', '') or addr.get('town', '') or addr.get('village', '')
+            city_lower = city.lower() if city else ''
 
-                # Penalizar si es algo muy genérico
-                if item.get('type') in ['administrative']:
-                    item['relevance'] -= 3
+            principales = ['buenos aires', 'córdoba', 'cordoba', 'rosario', 'mendoza',
+                          'la plata', 'mar del plata', 'tucumán', 'tucuman', 'salta']
+            if any(c in city_lower for c in principales):
+                item['relevance'] += 5
 
-            # Boost por clase específica
-            osm_class = item.get('class', '')
-            if osm_class in ['building', 'highway', 'place']:
-                item['relevance'] += 2
+            # Penalizar resultados muy genéricos
+            if item.get('type') in ['state', 'country', 'administrative']:
+                item['relevance'] -= 15
 
-        # Ordenar por relevancia y eliminar duplicados
+            # Penalizar si no tiene calle
+            if not addr.get('road'):
+                item['relevance'] -= 5
+
+        # Ordenar por relevancia
         all_results.sort(key=lambda x: x.get('relevance', 0), reverse=True)
 
-        # Tomar los mejores 15 resultados
-        top_results = all_results[:15]
+        # Formatear y tomar los mejores 12 resultados
+        formatted_results = []
+        for item in all_results[:12]:
+            formatted = _format_result(item, query_lower)
+            if formatted['formatted_address']:  # Solo incluir si tiene dirección formateada
+                formatted_results.append(formatted)
 
-        if not top_results:
-            return jsonify({'ok': True, 'results': []})
+        # Guardar en cache
+        if formatted_results:
+            _set_cached_results(query, formatted_results)
 
-        return jsonify({'ok': True, 'results': top_results})
+        return jsonify({'ok': True, 'results': formatted_results})
 
     except requests.exceptions.Timeout:
         current_app.logger.warning(f"Nominatim timeout for query: {query}")
@@ -259,6 +427,21 @@ def buscar_direcciones():
     except Exception as e:
         current_app.logger.error(f"Error searching addresses: {str(e)}")
         return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
+
+@obras_bp.route('/api/ciudades-argentina', methods=['GET'])
+@login_required
+def ciudades_argentina():
+    """API endpoint para obtener ciudades de Argentina (para autocompletado rápido)"""
+    query = request.args.get('q', '').strip().lower()
+
+    if not query or len(query) < 2:
+        return jsonify({'ok': True, 'results': CIUDADES_ARGENTINA[:10]})
+
+    # Filtrar ciudades que coinciden
+    matches = [c for c in CIUDADES_ARGENTINA if query in c['nombre'].lower() or query in c['provincia'].lower()]
+
+    return jsonify({'ok': True, 'results': matches[:10]})
 
 
 # ==== Métricas y utilidades ====

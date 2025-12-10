@@ -139,31 +139,43 @@
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Nombre:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre" value="{{ obra.nombre if obra else (datos_proyecto.get('nombre_obra', '') if datos_proyecto else '') }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-nombre"
+                                           value="{{ obra.nombre if obra else (datos_proyecto.get('nombre_obra', '') if datos_proyecto else '') }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Cliente:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-cliente" value="{{ obra.cliente if obra else (datos_proyecto.get('cliente_nombre', '') if datos_proyecto else '') }}">
+                                    <div class="input-group input-group-sm">
+                                        <select class="form-select form-select-sm" id="edit-obra-cliente-select">
+                                            <option value="">-- Seleccionar cliente --</option>
+                                            <!-- Se cargan dinámicamente -->
+                                        </select>
+                                        <button type="button" class="btn btn-outline-success" onclick="abrirModalNuevoCliente()" title="Crear nuevo cliente">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" id="edit-obra-cliente" value="{{ obra.cliente if obra else (datos_proyecto.get('cliente_nombre', '') if datos_proyecto else '') }}">
+                                    <input type="hidden" id="edit-obra-cliente-id" value="{{ presupuesto.cliente_id if presupuesto.cliente_id else '' }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Descripción:</label>
-                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ obra.descripcion if obra and obra.descripcion else '' }}</textarea>
+                                    <textarea class="form-control form-control-sm" id="edit-obra-descripcion" rows="2">{{ obra.descripcion if obra and obra.descripcion else (datos_proyecto.get('descripcion', '') if datos_proyecto else '') }}</textarea>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-2">
                                     <label class="form-label fw-bold">Dirección:</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion" value="{{ obra.direccion if obra and obra.direccion else '' }}">
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-direccion"
+                                           value="{{ obra.direccion if obra and obra.direccion else (datos_proyecto.get('ubicacion', '') if datos_proyecto else '') }}">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label fw-bold">Fecha Inicio:</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-inicio"
-                                           value="{{ obra.fecha_inicio.strftime('%Y-%m-%d') if obra and obra.fecha_inicio else '' }}">
+                                    <label class="form-label fw-bold">Tipo de Obra:</label>
+                                    <input type="text" class="form-control form-control-sm" id="edit-obra-tipo"
+                                           value="{{ datos_proyecto.get('tipo_obra', '') if datos_proyecto else '' }}">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label fw-bold">Fecha Fin Estimada:</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-obra-fecha-fin"
-                                           value="{{ obra.fecha_fin_estimada.strftime('%Y-%m-%d') if obra and obra.fecha_fin_estimada else '' }}">
+                                    <label class="form-label fw-bold">Superficie (m²):</label>
+                                    <input type="number" class="form-control form-control-sm" id="edit-obra-superficie"
+                                           value="{{ datos_proyecto.get('superficie_m2', '') if datos_proyecto else '' }}">
                                 </div>
                             </div>
                         </div>
@@ -214,8 +226,9 @@
                                     <td class="text-end">{{ item.cantidad }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -258,8 +271,9 @@
                                     <td class="text-end">{{ item.cantidad }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -302,8 +316,9 @@
                                     <td class="text-end">{{ item.cantidad }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -346,8 +361,9 @@
                                     <td class="text-end">{{ item.cantidad }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -508,8 +524,9 @@
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end fw-bold">
@@ -517,8 +534,11 @@
                                     </td>
                                     {% if presupuesto.currency == 'USD' %}
                                     <td class="text-end fw-bold text-muted">
-                                        {% if item.total_ars %}
+                                        {% set total_item = (item.total_currency or item.total)|float %}
+                                        {% if item.total_ars and item.total_ars|float != total_item %}
                                             {{ item.total_ars|moneda('ARS') }}
+                                        {% elif presupuesto.tasa_usd_venta %}
+                                            {{ (total_item * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}
                                         {% else %}
                                             -
                                         {% endif %}
@@ -630,8 +650,9 @@
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end fw-bold">
@@ -639,8 +660,11 @@
                                     </td>
                                     {% if presupuesto.currency == 'USD' %}
                                     <td class="text-end fw-bold text-muted">
-                                        {% if item.total_ars %}
+                                        {% set total_item = (item.total_currency or item.total)|float %}
+                                        {% if item.total_ars and item.total_ars|float != total_item %}
                                             {{ item.total_ars|moneda('ARS') }}
+                                        {% elif presupuesto.tasa_usd_venta %}
+                                            {{ (total_item * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}
                                         {% else %}
                                             -
                                         {% endif %}
@@ -745,8 +769,9 @@
                                     <td class="text-end">{{ item.cantidad|numero(2) }}</td>
                                     <td class="text-end">
                                         {{ (item.price_unit_currency or item.precio_unitario)|moneda(item.currency or presupuesto.currency) }}
-                                        {% if item.currency and item.currency != 'ARS' and item.price_unit_ars %}
-                                            <div class="small text-muted">≈ {{ item.price_unit_ars|moneda('ARS') }}</div>
+                                        {% if presupuesto.currency == 'USD' and presupuesto.tasa_usd_venta %}
+                                            {% set precio_unit = (item.price_unit_currency or item.precio_unitario)|float %}
+                                            <div class="small text-muted">≈ {{ (precio_unit * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}</div>
                                         {% endif %}
                                     </td>
                                     <td class="text-end fw-bold">
@@ -754,8 +779,11 @@
                                     </td>
                                     {% if presupuesto.currency == 'USD' %}
                                     <td class="text-end fw-bold text-muted">
-                                        {% if item.total_ars %}
+                                        {% set total_item = (item.total_currency or item.total)|float %}
+                                        {% if item.total_ars and item.total_ars|float != total_item %}
                                             {{ item.total_ars|moneda('ARS') }}
+                                        {% elif presupuesto.tasa_usd_venta %}
+                                            {{ (total_item * presupuesto.tasa_usd_venta|float)|moneda('ARS') }}
                                         {% else %}
                                             -
                                         {% endif %}
@@ -1138,16 +1166,52 @@ document.getElementById('itemInventarioSelect')?.addEventListener('change', func
 });
 
 // Funciones para editar información de la obra
+let clientesCargados = [];
+
+async function cargarClientes() {
+    try {
+        const response = await fetch('/clientes/api/listar');
+        if (!response.ok) throw new Error('Error al cargar clientes');
+        clientesCargados = await response.json();
+
+        const select = document.getElementById('edit-obra-cliente-select');
+        const clienteIdActual = document.getElementById('edit-obra-cliente-id').value;
+
+        // Limpiar opciones existentes
+        select.innerHTML = '<option value="">-- Seleccionar cliente --</option>';
+
+        // Agregar clientes
+        clientesCargados.forEach(cliente => {
+            const option = document.createElement('option');
+            option.value = cliente.id;
+            option.textContent = cliente.empresa ? `${cliente.empresa} (${cliente.nombre_completo})` : cliente.nombre_completo;
+            option.dataset.nombre = cliente.nombre_completo;
+            option.dataset.empresa = cliente.empresa || '';
+
+            // Seleccionar el cliente actual si existe
+            if (clienteIdActual && cliente.id == clienteIdActual) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando clientes:', error);
+        showAlert('Error al cargar la lista de clientes', 'warning');
+    }
+}
+
 function toggleEditarObra() {
     const viewDiv = document.getElementById('info-obra-view');
     const editDiv = document.getElementById('info-obra-edit');
-    
+
     if (viewDiv.style.display === 'none') {
         viewDiv.style.display = 'block';
         editDiv.style.display = 'none';
     } else {
         viewDiv.style.display = 'none';
         editDiv.style.display = 'block';
+        // Cargar clientes al abrir el modo edición
+        cargarClientes();
     }
 }
 
@@ -1156,15 +1220,61 @@ function cancelarEditarObra() {
     document.getElementById('info-obra-edit').style.display = 'none';
 }
 
+function abrirModalNuevoCliente() {
+    // Abrir crear cliente en nueva ventana
+    const ventana = window.open('/clientes/crear', 'crearCliente', 'width=800,height=700,scrollbars=yes');
+
+    // Escuchar mensaje cuando se cree el cliente
+    window.addEventListener('message', function handler(event) {
+        if (event.data && event.data.tipo === 'clienteCreado') {
+            // Recargar la lista de clientes y seleccionar el nuevo
+            cargarClientes().then(() => {
+                const select = document.getElementById('edit-obra-cliente-select');
+                if (event.data.cliente_id) {
+                    select.value = event.data.cliente_id;
+                    document.getElementById('edit-obra-cliente-id').value = event.data.cliente_id;
+                }
+            });
+            window.removeEventListener('message', handler);
+        }
+    });
+}
+
+// Actualizar cliente_id cuando cambia el select
+document.getElementById('edit-obra-cliente-select')?.addEventListener('change', function() {
+    document.getElementById('edit-obra-cliente-id').value = this.value;
+    // Actualizar también el campo de texto oculto con el nombre
+    const selectedOption = this.options[this.selectedIndex];
+    if (selectedOption && selectedOption.value) {
+        const nombreCompleto = selectedOption.dataset.empresa
+            ? selectedOption.dataset.empresa
+            : selectedOption.dataset.nombre;
+        document.getElementById('edit-obra-cliente').value = nombreCompleto || '';
+    } else {
+        document.getElementById('edit-obra-cliente').value = '';
+    }
+});
+
 async function guardarObra() {
+    const clienteSelect = document.getElementById('edit-obra-cliente-select');
+    const clienteId = document.getElementById('edit-obra-cliente-id').value;
+
+    // Obtener nombre del cliente seleccionado
+    let clienteNombre = '';
+    if (clienteSelect && clienteSelect.selectedIndex > 0) {
+        const selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
+        clienteNombre = selectedOption.dataset.empresa || selectedOption.dataset.nombre || selectedOption.textContent;
+    }
+
     const data = {
         obra_id: currentObraId,
         nombre: document.getElementById('edit-obra-nombre').value.trim(),
-        cliente: document.getElementById('edit-obra-cliente').value.trim(),
+        cliente: clienteNombre,
+        cliente_id: clienteId ? parseInt(clienteId) : null,
         descripcion: document.getElementById('edit-obra-descripcion').value.trim(),
         direccion: document.getElementById('edit-obra-direccion').value.trim(),
-        fecha_inicio: document.getElementById('edit-obra-fecha-inicio').value,
-        fecha_fin_estimada: document.getElementById('edit-obra-fecha-fin').value
+        tipo_obra: document.getElementById('edit-obra-tipo').value.trim(),
+        superficie_m2: document.getElementById('edit-obra-superficie').value.trim()
     };
 
     if (!data.nombre) {
@@ -1212,25 +1322,17 @@ async function guardarObra() {
             }
             document.getElementById('obra-descripcion').textContent = data.descripcion || 'Sin descripción';
             document.getElementById('obra-direccion').textContent = data.direccion || 'Sin especificar';
+            document.getElementById('obra-tipo').textContent = data.tipo_obra || 'Sin especificar';
+            document.getElementById('obra-superficie').textContent = data.superficie_m2 ? `${data.superficie_m2} m²` : 'Sin especificar m²';
 
-            // Formatear fechas para mostrar
-            if (data.fecha_inicio) {
-                const fechaInicio = new Date(data.fecha_inicio + 'T00:00:00');
-                document.getElementById('obra-fecha-inicio').textContent = fechaInicio.toLocaleDateString('es-AR');
-            } else {
-                document.getElementById('obra-fecha-inicio').textContent = 'Sin definir';
+            // Actualizar el cliente_id guardado
+            if (data.cliente_id) {
+                document.getElementById('edit-obra-cliente-id').value = data.cliente_id;
             }
-            
-            if (data.fecha_fin_estimada) {
-                const fechaFin = new Date(data.fecha_fin_estimada + 'T00:00:00');
-                document.getElementById('obra-fecha-fin').textContent = fechaFin.toLocaleDateString('es-AR');
-            } else {
-                document.getElementById('obra-fecha-fin').textContent = 'Sin definir';
-            }
-            
+
             // Volver a vista normal
             cancelarEditarObra();
-            
+
             // Mostrar mensaje de éxito
             showAlert(result.mensaje || 'Obra actualizada correctamente', 'success');
         } else {

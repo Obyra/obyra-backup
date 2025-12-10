@@ -63,7 +63,8 @@
       "Bash(git rebase:*)",
       "Bash(GIT_EDITOR=true git rebase:*)",
       "Bash(docker stop:*)",
-      "Bash(docker start:*)"
+      "Bash(docker start:*)",
+      "Bash(winpty docker exec obyra-app grep -n \"cambiar-estado\" //app//blueprint_clientes.py)"
     ],
     "deny": [],
     "ask": []

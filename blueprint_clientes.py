@@ -5,7 +5,7 @@ from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app)
 from flask_login import login_required, current_user
 from datetime import datetime
-from extensions import db
+from extensions import db, csrf
 from models import Cliente
 from services.memberships import get_current_org_id
 from sqlalchemy import or_
@@ -268,6 +268,7 @@ def editar(id):
 
 
 @clientes_bp.route('/<int:id>/eliminar', methods=['POST'])
+@csrf.exempt
 @login_required
 def eliminar(id):
     """Eliminar (desactivar) cliente"""
@@ -282,12 +283,20 @@ def eliminar(id):
         if cliente.organizacion_id != org_id:
             return jsonify({'error': 'No autorizado'}), 403
 
-        # Verificar si tiene presupuestos asociados
-        if cliente.presupuestos.count() > 0:
+        # Verificar si tiene presupuestos u obras asociadas
+        tiene_presupuestos = cliente.presupuestos.count() > 0
+        tiene_obras = cliente.obras.count() > 0
+
+        if tiene_presupuestos or tiene_obras:
             # No eliminar, solo desactivar
             cliente.activo = False
             db.session.commit()
-            return jsonify({'mensaje': f'Cliente {cliente.nombre_completo} desactivado (tiene presupuestos asociados)'})
+            razon = []
+            if tiene_presupuestos:
+                razon.append('presupuestos')
+            if tiene_obras:
+                razon.append('obras')
+            return jsonify({'mensaje': f'Cliente {cliente.nombre_completo} desactivado (tiene {" y ".join(razon)} asociados)'})
         else:
             # Eliminar completamente
             nombre = cliente.nombre_completo
@@ -299,6 +308,77 @@ def eliminar(id):
         current_app.logger.error(f"Error en clientes.eliminar: {e}", exc_info=True)
         db.session.rollback()
         return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
+
+
+@clientes_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
+@csrf.exempt
+@login_required
+def cambiar_estado(id):
+    """Cambiar estado activo/inactivo del cliente"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'error': 'Sin organización activa'}), 400
+
+        cliente = Cliente.query.get_or_404(id)
+
+        # Verificar permisos
+        if cliente.organizacion_id != org_id:
+            return jsonify({'error': 'No autorizado'}), 403
+
+        # Obtener el nuevo estado del body JSON o form
+        data = request.get_json() if request.is_json else {}
+        nuevo_estado = data.get('activo')
+
+        if nuevo_estado is None:
+            # Toggle si no se especifica
+            cliente.activo = not cliente.activo
+        else:
+            cliente.activo = bool(nuevo_estado)
+
+        cliente.fecha_modificacion = datetime.utcnow()
+        db.session.commit()
+
+        estado_texto = 'activado' if cliente.activo else 'desactivado'
+        return jsonify({
+            'ok': True,
+            'mensaje': f'Cliente {cliente.nombre_completo} {estado_texto}',
+            'activo': cliente.activo
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en clientes.cambiar_estado: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': f'Error al cambiar estado: {str(e)}'}), 500
+
+
+@clientes_bp.route('/api/listar')
+@login_required
+def api_listar():
+    """API para listar todos los clientes activos (para dropdown en presupuestos)"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'error': 'Sin organización activa'}), 400
+
+        # Listar todos los clientes activos
+        clientes = Cliente.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).order_by(Cliente.empresa, Cliente.apellido, Cliente.nombre).all()
+
+        return jsonify([{
+            'id': c.id,
+            'nombre_completo': c.nombre_completo,
+            'email': c.email,
+            'telefono': c.telefono,
+            'documento': c.documento_formateado,
+            'empresa': c.empresa
+        } for c in clientes])
+
+    except Exception as e:
+        current_app.logger.error(f"Error en clientes.api_listar: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @clientes_bp.route('/api/buscar')

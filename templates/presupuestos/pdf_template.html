@@ -22,6 +22,11 @@
             line-height: 1.4;
         }
 
+        /* Salto de página */
+        .page-break {
+            page-break-before: always;
+        }
+
         /* Header con diseño diagonal */
         .header-wrapper {
             position: relative;
@@ -59,6 +64,27 @@
             font-weight: bold;
             color: white;
             margin-top: 5px;
+        }
+
+        /* Badge de moneda */
+        .currency-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 10pt;
+            font-weight: bold;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        .currency-badge-usd {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .currency-badge-ars {
+            background: #cce5ff;
+            color: #004085;
         }
 
         /* Estado badge */
@@ -193,11 +219,34 @@
             color: #e65100;
         }
 
+        /* Box de paridad */
+        .paridad-info {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 8pt;
+            text-align: center;
+        }
+
+        .paridad-info .paridad-title {
+            font-weight: bold;
+            color: #2e7d32;
+            margin-bottom: 2px;
+        }
+
+        .paridad-info .paridad-value {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #1b5e20;
+        }
+
         /* ========================================
            FOOTER CON TOTALES - Siempre al final
            ======================================== */
         .footer-section {
-            margin-top: 60px;
+            margin-top: 30px;
             page-break-inside: avoid;
         }
 
@@ -295,9 +344,27 @@
         .empresa-footer .footer-right {
             text-align: right;
         }
+
+        /* Paridad en footer */
+        .paridad-footer {
+            background: #1a1a1a;
+            color: #aaa;
+            padding: 6px 15px;
+            font-size: 7pt;
+            text-align: center;
+            border-top: 1px solid #333;
+        }
+
+        .paridad-footer strong {
+            color: #4caf50;
+        }
     </style>
 </head>
 <body>
+    {# ============================================
+       PÁGINA 1: MONEDA PRINCIPAL
+       ============================================ #}
+
     <!-- Header con datos de la empresa -->
     <div class="header-wrapper">
         <div class="header-content">
@@ -314,7 +381,12 @@
                 {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
                 {% if organizacion.email %}<span>{{ organizacion.email }}</span>{% endif %}
             </div>
-            <div class="header-title">Presupuesto</div>
+            <div class="header-title">
+                Presupuesto
+                <span class="currency-badge {% if moneda_principal == 'USD' %}currency-badge-usd{% else %}currency-badge-ars{% endif %}">
+                    {{ moneda_principal }}
+                </span>
+            </div>
         </div>
         <span class="estado-badge estado-{{ presupuesto.estado }}">{{ presupuesto.estado|title }}</span>
     </div>
@@ -347,13 +419,18 @@
     <div class="proyecto-info">
         {% if presupuesto.tipo_construccion %}<strong>Tipo:</strong> {{ presupuesto.tipo_construccion }} | {% endif %}
         {% if presupuesto.superficie_m2 %}<strong>Superficie:</strong> {{ presupuesto.superficie_m2 }} m² | {% endif %}
-        <strong>Moneda:</strong> {{ presupuesto.currency or 'ARS' }}
+        <strong>Moneda:</strong> {{ moneda_principal }}
     </div>
     {% endif %}
 
-    <!-- Contenido principal -->
+    <!-- Box de paridad -->
+    <div class="paridad-info">
+        <div class="paridad-title">Paridad Banco Nación (vendedor)</div>
+        <div class="paridad-value">1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}</div>
+    </div>
+
+    <!-- Contenido principal - MONEDA PRINCIPAL -->
     {% if items %}
-    <!-- Agrupar items por tipo -->
     {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
     {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
     {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
@@ -482,25 +559,23 @@
     <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
     {% endif %}
 
-    <!-- FOOTER: Datos empresa + Totales (siempre al final) -->
+    <!-- FOOTER PÁGINA 1: Totales en moneda principal -->
     <div class="footer-section">
-        <!-- Subtotales -->
         <div class="totals-bar">
             <table>
                 <tr>
                     <td class="label-col">Subtotal:</td>
-                    <td class="value-col">{{ presupuesto.currency }} {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</td>
+                    <td class="value-col">{{ moneda_principal }} {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</td>
                 </tr>
                 {% if presupuesto.iva_porcentaje and presupuesto.iva_porcentaje > 0 %}
                 <tr>
                     <td class="label-col">IVA ({{ "%.2f"|format(presupuesto.iva_porcentaje) }}%):</td>
-                    <td class="value-col">{{ presupuesto.currency }} {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</td>
+                    <td class="value-col">{{ moneda_principal }} {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</td>
                 </tr>
                 {% endif %}
             </table>
         </div>
 
-        <!-- Datos de la empresa -->
         <div class="empresa-footer">
             <table>
                 <tr>
@@ -525,12 +600,270 @@
             </table>
         </div>
 
-        <!-- Total final destacado (AL FINAL DE TODO) -->
+        <div class="paridad-footer">
+            <strong>Paridad Banco Nación (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
+        </div>
+
         <div class="total-final-bar">
             <table>
                 <tr>
-                    <td class="label-col">TOTAL</td>
-                    <td class="value-col">{{ presupuesto.currency }} {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</td>
+                    <td class="label-col">TOTAL {{ moneda_principal }}</td>
+                    <td class="value-col">{{ moneda_principal }} {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    {# ============================================
+       PÁGINA 2: MONEDA ALTERNATIVA
+       ============================================ #}
+
+    <div class="page-break"></div>
+
+    <!-- Header página 2 -->
+    <div class="header-wrapper">
+        <div class="header-content">
+            <div class="company-logo">
+                <svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 5px;">
+                    <circle cx="12" cy="12" r="12" fill="white"/>
+                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#ff8c00">{{ organizacion.nombre[0] if organizacion.nombre else 'O' }}</text>
+                </svg>
+                {{ organizacion.nombre }}
+            </div>
+            <div class="company-info">
+                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
+                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
+                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
+                {% if organizacion.email %}<span>{{ organizacion.email }}</span>{% endif %}
+            </div>
+            <div class="header-title">
+                Presupuesto
+                <span class="currency-badge {% if moneda_alternativa == 'USD' %}currency-badge-usd{% else %}currency-badge-ars{% endif %}">
+                    {{ moneda_alternativa }}
+                </span>
+            </div>
+        </div>
+        <span class="estado-badge estado-{{ presupuesto.estado }}">{{ presupuesto.estado|title }}</span>
+    </div>
+
+    <!-- Barra de información del cliente -->
+    <div class="info-bar">
+        <table>
+            <tr>
+                <td class="label">Cliente:</td>
+                <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
+                <td class="label">Nº Presupuesto:</td>
+                <td class="value"><strong>{{ presupuesto.numero }}</strong></td>
+            </tr>
+            <tr>
+                <td class="label">Fecha:</td>
+                <td class="value">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</td>
+                <td class="label">Vigencia:</td>
+                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
+            </tr>
+            {% if presupuesto.nombre %}
+            <tr>
+                <td class="label">Proyecto:</td>
+                <td class="value" colspan="3"><strong>{{ presupuesto.nombre }}</strong></td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+
+    {% if presupuesto.tipo_construccion or presupuesto.superficie_m2 %}
+    <div class="proyecto-info">
+        {% if presupuesto.tipo_construccion %}<strong>Tipo:</strong> {{ presupuesto.tipo_construccion }} | {% endif %}
+        {% if presupuesto.superficie_m2 %}<strong>Superficie:</strong> {{ presupuesto.superficie_m2 }} m² | {% endif %}
+        <strong>Moneda:</strong> {{ moneda_alternativa }} (convertido)
+    </div>
+    {% endif %}
+
+    <!-- Box de paridad -->
+    <div class="paridad-info">
+        <div class="paridad-title">Paridad Banco Nación (vendedor)</div>
+        <div class="paridad-value">1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}</div>
+    </div>
+
+    <!-- Contenido principal - MONEDA ALTERNATIVA (convertida) -->
+    {% if items %}
+    {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
+    {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
+    {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
+    {% set otros = items|rejectattr('tipo', 'in', ['material', 'mano_obra', 'equipo'])|list %}
+
+    {% if materiales %}
+    <div class="service-section">
+        <div class="service-header">Materiales ({{ materiales|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Cantidad</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in materiales %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad }}</td>
+                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if mano_obra %}
+    <div class="service-section">
+        <div class="service-header">Mano de Obra ({{ mano_obra|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Jornales</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in mano_obra %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.1f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad }}</td>
+                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if equipos %}
+    <div class="service-section">
+        <div class="service-header">Equipos y Maquinaria ({{ equipos|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Cantidad</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in equipos %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad }}</td>
+                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if otros %}
+    <div class="service-section">
+        <div class="service-header">Otros ({{ otros|length }} items)</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Descripción</th>
+                    <th class="right" style="width: 12%;">Cantidad</th>
+                    <th style="width: 10%;">Unidad</th>
+                    <th class="right" style="width: 14%;">P. Unit.</th>
+                    <th class="right" style="width: 14%;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in otros %}
+                <tr>
+                    <td>{{ item.descripcion }}</td>
+                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
+                    <td>{{ item.unidad or '-' }}</td>
+                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
+                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if presupuesto.observaciones %}
+    <div class="observaciones">
+        <div class="observaciones-title">Observaciones:</div>
+        <div>{{ presupuesto.observaciones }}</div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
+    {% endif %}
+
+    <!-- FOOTER PÁGINA 2: Totales en moneda alternativa -->
+    <div class="footer-section">
+        <div class="totals-bar">
+            <table>
+                <tr>
+                    <td class="label-col">Subtotal:</td>
+                    <td class="value-col">{{ moneda_alternativa }} {{ "{:,.2f}".format((presupuesto.total_sin_iva|float) * factor_conversion) }}</td>
+                </tr>
+                {% if presupuesto.iva_porcentaje and presupuesto.iva_porcentaje > 0 %}
+                <tr>
+                    <td class="label-col">IVA ({{ "%.2f"|format(presupuesto.iva_porcentaje) }}%):</td>
+                    <td class="value-col">{{ moneda_alternativa }} {{ "{:,.2f}".format(((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) * factor_conversion) }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <div class="empresa-footer">
+            <table>
+                <tr>
+                    <td style="width: 33%;">
+                        <div class="footer-title">{{ organizacion.nombre }}</div>
+                        {% if organizacion.cuit %}
+                        <div>CUIT: {{ organizacion.cuit }}</div>
+                        {% endif %}
+                        <div>{{ organizacion.direccion or 'Dirección no especificada' }}</div>
+                    </td>
+                    <td class="footer-center" style="width: 34%;">
+                        <div class="footer-title">Contacto</div>
+                        <div>Tel: {{ organizacion.telefono or '-' }}</div>
+                        <div>Email: {{ organizacion.email or '-' }}</div>
+                    </td>
+                    <td class="footer-right" style="width: 33%;">
+                        <div class="footer-title">Medios de pago</div>
+                        <div>Transferencia bancaria</div>
+                        <div>Efectivo</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="paridad-footer">
+            <strong>Paridad Banco Nación (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
+        </div>
+
+        <div class="total-final-bar">
+            <table>
+                <tr>
+                    <td class="label-col">TOTAL {{ moneda_alternativa }}</td>
+                    <td class="value-col">{{ moneda_alternativa }} {{ "{:,.2f}".format((presupuesto.total_con_iva|float) * factor_conversion) }}</td>
                 </tr>
             </table>
         </div>

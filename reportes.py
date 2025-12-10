@@ -5,7 +5,7 @@ from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario)
-from services.alerts import upsert_alert_vigencia, log_activity_vigencia
+from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpiar_alertas_presupuestos_confirmados
 from services.memberships import get_current_org_id
 from services.obras_filters import obras_visibles_clause
 
@@ -92,6 +92,9 @@ def dashboard():
 
     if cambios_estado:
         db.session.commit()
+
+    # Limpiar alertas de presupuestos que ya fueron confirmados como obra o aprobados
+    limpiar_alertas_presupuestos_confirmados(org_id)
 
     # SOLO mostrar alerta si hay presupuestos que realmente están vencidos Y necesitan atención
     # No contar presupuestos ya confirmados como obra, aprobados, o en estados finales

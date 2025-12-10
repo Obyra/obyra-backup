@@ -201,38 +201,54 @@ function searchAddresses(query) {
 
 function displaySuggestions(places) {
     suggestionsContainer.innerHTML = '';
-    
+
     if (places.length === 0) {
         hideSuggestions();
         return;
     }
-    
+
     places.forEach(place => {
         const suggestion = document.createElement('button');
         suggestion.type = 'button';
         suggestion.className = 'list-group-item list-group-item-action';
+
+        // Usar formatted_address si está disponible, sino display_name
+        const mainAddress = place.formatted_address || place.display_name;
+        const secondaryInfo = place.address ?
+            [place.address.state, place.address.country].filter(Boolean).join(', ') :
+            (place.type || '');
+
         suggestion.innerHTML = `
-            <div class="d-flex w-100 justify-content-between">
-                <h6 class="mb-1">${place.display_name}</h6>
+            <div class="d-flex w-100 justify-content-between align-items-start">
+                <div>
+                    <h6 class="mb-1 text-dark">${mainAddress}</h6>
+                    <small class="text-muted">${secondaryInfo}</small>
+                </div>
+                <i class="fas fa-map-marker-alt text-primary ms-2"></i>
             </div>
-            <small class="text-muted">${place.type}</small>
         `;
-        
+
         suggestion.addEventListener('click', function() {
-            selectAddress(place.display_name);
+            // Guardar también lat/lon si están disponibles
+            selectAddress(mainAddress, place.lat, place.lon);
         });
-        
+
         suggestionsContainer.appendChild(suggestion);
     });
-    
+
     showSuggestions();
 }
 
-function selectAddress(address) {
+function selectAddress(address, lat, lon) {
     direccionInput.value = address;
     selectedAddress = address;
+    // Guardar coordenadas si están disponibles (para uso futuro)
+    if (lat && lon) {
+        direccionInput.dataset.lat = lat;
+        direccionInput.dataset.lon = lon;
+    }
     hideSuggestions();
-    showMapsLink();
+    showMapsLink(lat, lon);
 }
 
 function showSuggestions() {
@@ -243,9 +259,15 @@ function hideSuggestions() {
     suggestionsContainer.style.display = 'none';
 }
 
-function showMapsLink() {
+function showMapsLink(lat, lon) {
     if (selectedAddress) {
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedAddress)}`;
+        // Si tenemos coordenadas, usar URL con lat/lon (más preciso)
+        let mapsUrl;
+        if (lat && lon) {
+            mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+        } else {
+            mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedAddress)}`;
+        }
         mapsLink.href = mapsUrl;
         mapsLinkContainer.style.display = 'block';
     }

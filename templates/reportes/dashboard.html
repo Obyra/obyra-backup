@@ -534,7 +534,6 @@
                         <select class="form-select" id="currency" name="currency">
                             <option value="ARS" selected>Peso Argentino (ARS)</option>
                             <option value="USD">Dólar Estadounidense (USD)</option>
-                            <option value="EUR">Euro (EUR)</option>
                         </select>
                     </div>
                 </form>
@@ -945,11 +944,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 formData.project_ids = selectedProjects;
             }
             
+            // Obtener token CSRF
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
             // Realizar request para generar PDF
             fetch('/api/reports/dashboard', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken || ''
                 },
                 body: JSON.stringify(formData)
             })

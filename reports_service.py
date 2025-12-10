@@ -24,6 +24,7 @@ import logging
 
 from models import Event, Obra, Presupuesto, Usuario, Organizacion, db
 from sqlalchemy import func, desc
+from extensions import csrf
 
 # Blueprint para endpoints de reportes
 reports_bp = Blueprint('reports', __name__)
@@ -33,6 +34,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @reports_bp.route('/api/reports/dashboard', methods=['POST'])
+@csrf.exempt  # Exentar CSRF para endpoint de generación de PDF
 @login_required
 def generate_dashboard_report():
     """

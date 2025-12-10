@@ -286,17 +286,6 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mt-3">
-                                <div class="text-muted small">
-                                    <i class="fas fa-info-circle"></i>
-                                    Marca las etapas que quieres recalcular con IA y ajusta los datos antes de guardar.
-                                </div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <button type="button" class="btn btn-outline-success btn-sm" onclick="calcularEtapasSeleccionadasIA()">
-                                        <i class="fas fa-brain"></i> Calcular etapas seleccionadas con IA
-                                    </button>
-                                </div>
-                            </div>
                         </div>
 
                         <!-- Botones de acción -->
@@ -306,10 +295,7 @@
                                     <button type="submit" class="btn btn-primary btn-lg">
                                         <i class="fas fa-save"></i> Crear Presupuesto
                                     </button>
-                                    <button type="button" class="btn btn-success btn-lg" onclick="calcularConIA()">
-                                        <i class="fas fa-brain"></i> Calcular con IA
-                                    </button>
-                                    <button type="button" class="btn btn-outline-success btn-lg" onclick="calcularEtapasSeleccionadasIA()">
+                                    <button type="button" class="btn btn-success btn-lg" onclick="calcularEtapasSeleccionadasIA()">
                                         <i class="fas fa-layer-group"></i> Calcular etapas seleccionadas con IA
                                     </button>
                                     <button type="button" class="btn btn-outline-secondary" onclick="limpiarFormulario()">
@@ -339,7 +325,7 @@
                             <li>Sube un plano PDF para análisis automático</li>
                             <li>Especifica la superficie si no tienes plano</li>
                             <li>Elige el tipo de construcción apropiado</li>
-                            <li>Usa "Calcular con IA" para obtener materiales</li>
+                            <li>Usa "Calcular etapas seleccionadas con IA" para obtener materiales</li>
                         </ul>
                     </div>
                 </div>
@@ -406,42 +392,24 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="seleccionarTodasEtapas">
-                                <label class="form-check-label" for="seleccionarTodasEtapas">
-                                    Seleccionar todas
-                                </label>
-                            </div>
-                        </div>
-                        <div class="row" id="etapasPredefinidas">
-                            <!-- Se cargarán con JavaScript -->
-                        </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="seleccionarTodasEtapas">
+                        <label class="form-check-label" for="seleccionarTodasEtapas">
+                            Seleccionar todas
+                        </label>
                     </div>
-                    <div class="col-md-4">
-                        <h6 class="mb-3"><i class="fas fa-plus-circle text-success"></i> Etapa Personalizada</h6>
-                        <div class="mb-3">
-                            <label for="etapaPersonalizadaNombre" class="form-label">Nombre</label>
-                            <input type="text" class="form-control" id="etapaPersonalizadaNombre" placeholder="Ej: Pintura Especial">
-                        </div>
-                        <div class="mb-3">
-                            <label for="etapaPersonalizadaDescripcion" class="form-label">Descripción</label>
-                            <textarea class="form-control" id="etapaPersonalizadaDescripcion" rows="3" placeholder="Descripción detallada..."></textarea>
-                        </div>
-                        <button type="button" class="btn btn-success btn-sm" onclick="agregarEtapaPersonalizada()">
-                            <i class="fas fa-plus"></i> Agregar Personalizada
-                        </button>
-                    </div>
+                </div>
+                <div class="row" id="etapasPredefinidas">
+                    <!-- Se cargarán con JavaScript -->
                 </div>
             </div>
             <div class="modal-footer">
                 <div class="me-auto">
                     <small class="text-muted">
-                        <i class="fas fa-info-circle"></i> 
-                        Selecciona múltiples etapas o agrega personalizadas
+                        <i class="fas fa-info-circle"></i>
+                        Selecciona las etapas que incluirá el presupuesto
                     </small>
                 </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -999,7 +967,7 @@ function toggleEtapaPredefinida(slug) {
 
     if (checkbox.checked) {
         if (!etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === slug)) {
-            etapasSeleccionadasArray.push({ ...etapa, personalizada: false });
+            etapasSeleccionadasArray.push({ ...etapa });
             etapasSeleccionadasIA.add(slug);
         }
     } else {
@@ -1009,38 +977,6 @@ function toggleEtapaPredefinida(slug) {
     limpiarResultadosEtapasIA();
     actualizarCheckboxSeleccionarTodas();
     console.log(`📋 Etapas seleccionadas: ${etapasSeleccionadasArray.length}`);
-}
-
-function agregarEtapaPersonalizada() {
-    const nombre = document.getElementById('etapaPersonalizadaNombre').value.trim();
-    const descripcion = document.getElementById('etapaPersonalizadaDescripcion').value.trim();
-
-    if (!nombre) {
-        alert('Ingresa el nombre de la etapa personalizada');
-        return;
-    }
-
-    if (etapasSeleccionadasArray.some(e => e.nombre.toLowerCase() === nombre.toLowerCase())) {
-        alert('Ya existe una etapa con ese nombre');
-        return;
-    }
-
-    const slug = generarSlugUnico(nombre);
-    const nuevaEtapa = {
-        nombre,
-        descripcion: descripcion || 'Etapa personalizada',
-        orden: etapasSeleccionadasArray.length + 100,
-        personalizada: true,
-        slug
-    };
-
-    etapasSeleccionadasArray.push(nuevaEtapa);
-    etapasSeleccionadasIA.add(slug);
-    document.getElementById('etapaPersonalizadaNombre').value = '';
-    document.getElementById('etapaPersonalizadaDescripcion').value = '';
-    limpiarResultadosEtapasIA();
-    actualizarVistaEtapas();
-    console.log(`✅ Etapa personalizada agregada: ${nombre}`);
 }
 
 function confirmarEtapasSeleccionadas() {
@@ -1078,7 +1014,6 @@ function actualizarVistaEtapas(renderBadges = true) {
     etapasOrdenadas.forEach((etapa) => {
         const slug = etapa.slug || slugifyEtapa(etapa.nombre);
         const checked = etapasSeleccionadasIA.has(slug);
-        const esPersonalizada = etapa.personalizada;
         const iaBadge = etapa.ia_aplicada && renderBadges ? '<span class="badge bg-success-subtle text-success ms-2">IA aplicada</span>' : '';
         const descripcion = etapa.descripcion || 'Sin descripción definida';
         const inputId = `etapaCheck_${slug}`;
@@ -1094,7 +1029,6 @@ function actualizarVistaEtapas(renderBadges = true) {
                                            ${checked ? 'checked' : ''} onchange="toggleEtapaIA(this)">
                                     <label class="form-check-label fw-bold text-primary" for="${inputId}">
                                         ${etapa.nombre}
-                                        ${esPersonalizada ? '<span class="badge bg-success ms-1">Personalizada</span>' : ''}
                                         ${iaBadge}
                                     </label>
                                 </div>

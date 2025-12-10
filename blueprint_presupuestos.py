@@ -376,7 +376,7 @@ def detalle(id):
 @presupuestos_bp.route('/<int:id>/pdf')
 @login_required
 def generar_pdf(id):
-    """Generar PDF del presupuesto con WeasyPrint"""
+    """Generar PDF del presupuesto con WeasyPrint - 2 páginas (USD y ARS)"""
     try:
         org_id = get_current_org_id()
         if not org_id:
@@ -402,6 +402,38 @@ def generar_pdf(id):
             ItemPresupuesto.presupuesto_id == presupuesto.id
         ).order_by(ItemPresupuesto.tipo, ItemPresupuesto.id).all()
 
+        # Obtener cotización del dólar (Banco Nación vendedor)
+        cotizacion_dolar = 1050.0  # Valor por defecto
+        fecha_cotizacion = presupuesto.fecha.strftime('%d/%m/%Y')
+
+        # Intentar obtener cotización guardada en el presupuesto
+        if presupuesto.tasa_usd_venta:
+            cotizacion_dolar = float(presupuesto.tasa_usd_venta)
+            if presupuesto.exchange_rate_as_of:
+                fecha_cotizacion = presupuesto.exchange_rate_as_of.strftime('%d/%m/%Y')
+        else:
+            # Intentar obtener cotización actual del BNA
+            try:
+                from services.exchange.providers.bna import fetch_official_rate
+                rate_snapshot = fetch_official_rate()
+                if rate_snapshot and rate_snapshot.value:
+                    cotizacion_dolar = float(rate_snapshot.value)
+                    fecha_cotizacion = rate_snapshot.as_of_date.strftime('%d/%m/%Y') if rate_snapshot.as_of_date else datetime.now().strftime('%d/%m/%Y')
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo obtener cotización BNA: {e}")
+
+        # Determinar moneda principal y alternativa
+        moneda_principal = presupuesto.currency or 'ARS'
+        moneda_alternativa = 'USD' if moneda_principal == 'ARS' else 'ARS'
+
+        # Calcular factor de conversión
+        # Si moneda principal es ARS, convertir a USD (dividir por cotización)
+        # Si moneda principal es USD, convertir a ARS (multiplicar por cotización)
+        if moneda_principal == 'ARS':
+            factor_conversion = 1 / cotizacion_dolar if cotizacion_dolar > 0 else 0
+        else:
+            factor_conversion = cotizacion_dolar
+
         try:
             # Renderizar HTML
             html_string = render_template(
@@ -410,7 +442,12 @@ def generar_pdf(id):
                 organizacion=organizacion,
                 usuario=current_user,
                 now=datetime.now(),
-                items=items_ordenados
+                items=items_ordenados,
+                moneda_principal=moneda_principal,
+                moneda_alternativa=moneda_alternativa,
+                cotizacion_dolar=cotizacion_dolar,
+                fecha_cotizacion=fecha_cotizacion,
+                factor_conversion=factor_conversion
             )
         except Exception as render_error:
             current_app.logger.error(f"Error al renderizar template PDF: {render_error}", exc_info=True)
@@ -872,6 +909,7 @@ def confirmar_como_obra(id):
 
 
 @presupuestos_bp.route('/<int:id>/editar-obra', methods=['POST'])
+@csrf.exempt
 @login_required
 def editar_obra(id):
     """Editar información de la obra/proyecto del presupuesto"""
@@ -910,6 +948,30 @@ def editar_obra(id):
         if 'descripcion' in data:
             proyecto_data['descripcion'] = data['descripcion'].strip()
 
+        if 'direccion' in data:
+            proyecto_data['ubicacion'] = data['direccion'].strip()
+
+        if 'tipo_obra' in data:
+            proyecto_data['tipo_obra'] = data['tipo_obra'].strip()
+
+        if 'superficie_m2' in data:
+            superficie = data['superficie_m2']
+            if superficie:
+                try:
+                    proyecto_data['superficie_m2'] = float(superficie)
+                except (ValueError, TypeError):
+                    proyecto_data['superficie_m2'] = superficie
+            else:
+                proyecto_data['superficie_m2'] = None
+
+        # Actualizar cliente_id en el presupuesto si se proporciona
+        if 'cliente_id' in data:
+            cliente_id = data['cliente_id']
+            if cliente_id:
+                presupuesto.cliente_id = int(cliente_id)
+            else:
+                presupuesto.cliente_id = None
+
         # Guardar el JSON actualizado
         presupuesto.datos_proyecto = json.dumps(proyecto_data, ensure_ascii=False)
 
@@ -919,7 +981,7 @@ def editar_obra(id):
 
         return jsonify({
             'exito': True,
-            'message': 'Información actualizada correctamente'
+            'mensaje': 'Información actualizada correctamente'
         })
 
     except Exception as e:
