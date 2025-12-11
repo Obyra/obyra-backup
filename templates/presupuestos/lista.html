@@ -168,24 +168,33 @@
                         <div class="d-grid gap-2" data-confirm-container="{{ presupuesto.id }}">
                             {% set es_admin = tiene_rol('admin') or (current_user.is_authenticated and current_user.es_admin()) %}
                             {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and es_admin and presupuesto.estado in ['borrador', 'enviado'] %}
+                            {% set cliente_obj = presupuesto.cliente %}
+                            {% set cliente_completo = cliente_obj and cliente_obj.nombre and (cliente_obj.email or cliente_obj.telefono) and cliente_obj.numero_documento %}
                             <button type="button" class="btn btn-success btn-sm btn-confirmar-presupuesto"
                                     data-action="abrir-confirmar"
                                     data-presupuesto-id="{{ presupuesto.id }}"
                                     data-numero="{{ presupuesto.numero }}"
                                     data-cliente="{{ cliente_proyecto|e }}"
+                                    data-cliente-id="{{ presupuesto.cliente_id or '' }}"
+                                    data-cliente-completo="{{ 'true' if cliente_completo else 'false' }}"
+                                    data-cliente-tiene-email="{{ 'true' if cliente_obj and cliente_obj.email else 'false' }}"
+                                    data-cliente-tiene-telefono="{{ 'true' if cliente_obj and cliente_obj.telefono else 'false' }}"
+                                    data-cliente-tiene-documento="{{ 'true' if cliente_obj and cliente_obj.numero_documento else 'false' }}"
                                     data-obra="{{ nombre_proyecto|e }}"
                                     data-ubicacion="{{ (ubicacion_proyecto or 'Ubicación no especificada')|e }}"
                                     data-ubicacion-valid="{{ 'true' if presupuesto.geocode_status == 'ok' or (presupuesto.geo_latitud and presupuesto.geo_longitud) else 'false' }}"
                                     data-moneda="{{ presupuesto.currency }}"
-                                    data-currency-symbol="{{ '$' if presupuesto.currency == 'ARS' else 'USD' }}"
-                                    data-tasa="{{ presupuesto.tasa_usd_venta|moneda('ARS') if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta else '' }}"
-                                    data-tasa-provider="{{ presupuesto.exchange_rate_provider or 'bna' }}"
-                                    data-cac="{{ '{:,.0f}'.format(presupuesto.indice_cac_valor) if presupuesto.indice_cac_valor else '' }}"
+                                    data-currency-symbol="{{ '$' if presupuesto.currency == 'ARS' else 'US$' }}"
+                                    data-tasa="{{ presupuesto.tasa_usd_venta if presupuesto.tasa_usd_venta else '' }}"
+                                    data-tasa-provider="{{ presupuesto.exchange_rate_provider or 'BNA' }}"
+                                    data-tasa-fecha="{{ presupuesto.exchange_rate_as_of.strftime('%d/%m/%Y') if presupuesto.exchange_rate_as_of else '' }}"
+                                    data-cac="{{ presupuesto.indice_cac_valor if presupuesto.indice_cac_valor else '' }}"
                                     data-cac-fecha="{{ presupuesto.indice_cac_fecha.strftime('%m/%Y') if presupuesto.indice_cac_fecha else '' }}"
                                     data-subtotal-materiales="{{ presupuesto.subtotal_materiales|moneda(presupuesto.currency) }}"
                                     data-subtotal-mano-obra="{{ presupuesto.subtotal_mano_obra|moneda(presupuesto.currency) }}"
                                     data-subtotal-equipos="{{ presupuesto.subtotal_equipos|moneda(presupuesto.currency) }}"
-                                    data-total="{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}"
+                                    data-total="{{ presupuesto.total_con_iva|float }}"
+                                    data-total-sin-iva="{{ presupuesto.total_sin_iva|float }}"
                                     data-geo-lat="{{ presupuesto.geo_latitud if presupuesto.geo_latitud is not none else '' }}"
                                     data-geo-lng="{{ presupuesto.geo_longitud if presupuesto.geo_longitud is not none else '' }}"
                                     data-geocode-status="{{ presupuesto.geocode_status or '' }}"
@@ -284,6 +293,115 @@
                         Revisa los datos clave antes de confirmar. Podrás ajustar las tareas luego desde la obra.
                     </p>
                     <div id="confirmModalMessage" class="alert alert-danger d-none" role="alert"></div>
+                    <div id="confirmClienteIncompleto" class="alert alert-warning d-none" role="alert">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-exclamation-triangle me-2 mt-1"></i>
+                            <div class="flex-grow-1">
+                                <strong>Datos del cliente incompletos</strong>
+                                <p class="mb-2 small">Complete los datos faltantes para confirmar la obra:</p>
+
+                                <!-- Formulario inline para completar datos del cliente -->
+                                <div id="formClienteInline" class="bg-white p-3 rounded border mt-2">
+                                    <input type="hidden" id="clienteIdEditar" value="">
+
+                                    <div class="row g-2">
+                                        <div class="col-md-6" id="campoEmailContainer">
+                                            <label class="form-label small mb-1">
+                                                <i class="fas fa-envelope me-1"></i>Email
+                                            </label>
+                                            <input type="email" class="form-control form-control-sm" id="clienteEmailInline" placeholder="email@ejemplo.com">
+                                        </div>
+                                        <div class="col-md-6" id="campoTelefonoContainer">
+                                            <label class="form-label small mb-1">
+                                                <i class="fas fa-phone me-1"></i>Teléfono
+                                            </label>
+                                            <input type="tel" class="form-control form-control-sm" id="clienteTelefonoInline" placeholder="11-1234-5678">
+                                        </div>
+                                        <div class="col-md-6" id="campoDocumentoContainer">
+                                            <label class="form-label small mb-1">
+                                                <i class="fas fa-id-card me-1"></i>DNI
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm" id="clienteDocumentoInline" placeholder="12345678">
+                                        </div>
+                                        <div class="col-md-6" id="campoCuitContainer">
+                                            <label class="form-label small mb-1">
+                                                <i class="fas fa-building me-1"></i>CUIT
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm" id="clienteCuitInline" placeholder="20-12345678-9">
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 d-flex gap-2">
+                                        <button type="button" class="btn btn-warning btn-sm" id="btnGuardarClienteInline">
+                                            <i class="fas fa-save me-1"></i>Guardar y continuar
+                                        </button>
+                                        <span class="text-muted small align-self-center" id="mensajeGuardadoCliente"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="confirmSinCliente" class="alert alert-warning d-none" role="alert">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-user-plus me-2 mt-1"></i>
+                            <div class="flex-grow-1">
+                                <strong>Sin cliente asignado</strong>
+                                <p class="mb-2 small">Seleccione un cliente existente o cree uno nuevo:</p>
+
+                                <!-- Selector de cliente existente -->
+                                <div id="selectorClienteExistente" class="bg-white p-3 rounded border">
+                                    <div class="mb-3">
+                                        <label class="form-label small mb-1">
+                                            <i class="fas fa-search me-1"></i>Buscar cliente existente
+                                        </label>
+                                        <select class="form-select form-select-sm" id="selectClienteExistente">
+                                            <option value="">-- Seleccionar cliente --</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="text-center my-2">
+                                        <span class="text-muted small">— o —</span>
+                                    </div>
+
+                                    <!-- Formulario para crear cliente nuevo -->
+                                    <div id="formNuevoCliente">
+                                        <p class="small text-muted mb-2"><i class="fas fa-user-plus me-1"></i>Crear cliente nuevo:</p>
+                                        <div class="row g-2">
+                                            <div class="col-md-6">
+                                                <input type="text" class="form-control form-control-sm" id="nuevoClienteNombre" placeholder="Nombre / Razón Social *">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <input type="text" class="form-control form-control-sm" id="nuevoClienteApellido" placeholder="Apellido (opcional)">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <input type="email" class="form-control form-control-sm" id="nuevoClienteEmail" placeholder="Email *">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <input type="tel" class="form-control form-control-sm" id="nuevoClienteTelefono" placeholder="Teléfono">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <select class="form-select form-select-sm" id="nuevoClienteTipoDoc">
+                                                    <option value="CUIT">CUIT</option>
+                                                    <option value="DNI">DNI</option>
+                                                    <option value="CUIL">CUIL</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-8">
+                                                <input type="text" class="form-control form-control-sm" id="nuevoClienteNumDoc" placeholder="Número de documento *">
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-3 d-flex gap-2">
+                                            <button type="button" class="btn btn-success btn-sm" id="btnCrearClienteRapido">
+                                                <i class="fas fa-plus me-1"></i>Crear y asignar cliente
+                                            </button>
+                                            <span class="text-muted small align-self-center" id="mensajeClienteCreado"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <dl class="row mb-3">
                         <dt class="col-sm-4">Presupuesto</dt>
                         <dd class="col-sm-8 fw-semibold" id="confirmPresupuestoNumero"></dd>
@@ -322,9 +440,13 @@
                         </div>
                     </div>
                     <div class="border rounded p-3 mb-3 bg-light">
-                        <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="text-muted">Total estimado (con IVA)</span>
                             <span class="fs-5 fw-bold" id="confirmTotalGeneral"></span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center text-muted small" id="confirmTotalAlternativoRow">
+                            <span>Equivalente en <span id="confirmMonedaAlternativa"></span></span>
+                            <span class="fw-semibold" id="confirmTotalAlternativo"></span>
                         </div>
                     </div>
                     <div class="border rounded p-3">
@@ -375,7 +497,13 @@ const campoSubtotalMateriales = document.getElementById('confirmSubtotalMaterial
 const campoSubtotalManoObra = document.getElementById('confirmSubtotalManoObra');
 const campoSubtotalEquipos = document.getElementById('confirmSubtotalEquipos');
 const campoTotalGeneral = document.getElementById('confirmTotalGeneral');
+const campoTotalAlternativoRow = document.getElementById('confirmTotalAlternativoRow');
+const campoTotalAlternativo = document.getElementById('confirmTotalAlternativo');
+const campoMonedaAlternativa = document.getElementById('confirmMonedaAlternativa');
 const campoUbicacionEstado = document.getElementById('confirmUbicacionEstado');
+const alertaClienteIncompleto = document.getElementById('confirmClienteIncompleto');
+const alertaSinCliente = document.getElementById('confirmSinCliente');
+const linkEditarCliente = document.getElementById('linkEditarCliente');
 const checkboxCrearTareas = document.getElementById('confirmCrearTareas');
 const checkboxNormalizarSlugs = document.getElementById('confirmNormalizarSlugs');
 let presupuestoSeleccionadoConfirmacion = null;
@@ -399,12 +527,62 @@ function abrirModalConfirmacion(button) {
     campoCliente.textContent = button.dataset.cliente || '—';
     campoUbicacion.textContent = button.dataset.ubicacion || 'Ubicación no especificada';
     campoMoneda.textContent = button.dataset.moneda || 'ARS';
-    campoTipoCambio.textContent = button.dataset.tasa ? `${button.dataset.tasa} (${(button.dataset.tasaProvider || '').toUpperCase()})` : '—';
-    campoIndiceCAC.textContent = button.dataset.cac ? `${button.dataset.cac}${button.dataset.cacFecha ? ' (vigencia ' + button.dataset.cacFecha + ')' : ''}` : '—';
+
+    // Tipo de cambio con formato completo
+    const tasa = parseFloat(button.dataset.tasa) || 0;
+    const tasaProvider = (button.dataset.tasaProvider || 'BNA').toUpperCase();
+    const tasaFecha = button.dataset.tasaFecha || '';
+    if (tasa > 0) {
+        let tipoCambioText = `1 USD = ${tasa.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ARS`;
+        if (tasaFecha) {
+            tipoCambioText += ` (${tasaProvider} - ${tasaFecha})`;
+        } else {
+            tipoCambioText += ` (${tasaProvider})`;
+        }
+        campoTipoCambio.textContent = tipoCambioText;
+    } else {
+        campoTipoCambio.textContent = '—';
+    }
+
+    // Índice CAC con formato completo
+    const cac = parseFloat(button.dataset.cac) || 0;
+    const cacFecha = button.dataset.cacFecha || '';
+    if (cac > 0) {
+        let cacText = cac.toLocaleString('es-AR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+        if (cacFecha) {
+            cacText += ` (vigencia ${cacFecha})`;
+        }
+        campoIndiceCAC.textContent = cacText;
+    } else {
+        campoIndiceCAC.textContent = '—';
+    }
+
     campoSubtotalMateriales.textContent = button.dataset.subtotalMateriales || '—';
     campoSubtotalManoObra.textContent = button.dataset.subtotalManoObra || '—';
     campoSubtotalEquipos.textContent = button.dataset.subtotalEquipos || '—';
-    campoTotalGeneral.textContent = button.dataset.total || '—';
+
+    // Total principal
+    const moneda = button.dataset.moneda || 'ARS';
+    const total = parseFloat(button.dataset.total) || 0;
+    const currencySymbol = moneda === 'ARS' ? '$' : 'US$';
+    campoTotalGeneral.textContent = `${currencySymbol}${total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+    // Total alternativo (conversión)
+    if (tasa > 0 && campoTotalAlternativoRow) {
+        campoTotalAlternativoRow.style.display = 'flex';
+        const monedaAlternativa = moneda === 'ARS' ? 'USD' : 'ARS';
+        const symbolAlternativo = monedaAlternativa === 'ARS' ? '$' : 'US$';
+        let totalAlternativo;
+        if (moneda === 'ARS') {
+            totalAlternativo = total / tasa;
+        } else {
+            totalAlternativo = total * tasa;
+        }
+        campoMonedaAlternativa.textContent = monedaAlternativa;
+        campoTotalAlternativo.textContent = `${symbolAlternativo}${totalAlternativo.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    } else if (campoTotalAlternativoRow) {
+        campoTotalAlternativoRow.style.display = 'none';
+    }
 
     if (button.dataset.ubicacionValid === 'true') {
         campoUbicacionEstado.innerHTML = '<span class="badge bg-success"><i class="fas fa-map-marker-alt me-1"></i>Ubicación validada correctamente.</span>';
@@ -419,11 +597,93 @@ function abrirModalConfirmacion(button) {
     if (confirmSpinner) {
         confirmSpinner.classList.add('d-none');
     }
-    if (confirmSubmitBtn) {
-        confirmSubmitBtn.disabled = false;
-    }
     if (checkboxCrearTareas) checkboxCrearTareas.checked = true;
     if (checkboxNormalizarSlugs) checkboxNormalizarSlugs.checked = true;
+
+    // Validar datos del cliente
+    const clienteId = button.dataset.clienteId;
+    const clienteCompleto = button.dataset.clienteCompleto === 'true';
+    const tieneEmail = button.dataset.clienteTieneEmail === 'true';
+    const tieneTelefono = button.dataset.clienteTieneTelefono === 'true';
+    const tieneDocumento = button.dataset.clienteTieneDocumento === 'true';
+
+    // Ocultar alertas por defecto
+    if (alertaClienteIncompleto) alertaClienteIncompleto.classList.add('d-none');
+    if (alertaSinCliente) alertaSinCliente.classList.add('d-none');
+
+    let clienteValido = true;
+
+    if (!clienteId) {
+        // No hay cliente asignado
+        if (alertaSinCliente) alertaSinCliente.classList.remove('d-none');
+        clienteValido = false;
+    } else if (!clienteCompleto) {
+        // Cliente asignado pero datos incompletos
+        if (alertaClienteIncompleto) {
+            alertaClienteIncompleto.classList.remove('d-none');
+
+            // Configurar el formulario inline con el ID del cliente
+            const clienteIdInput = document.getElementById('clienteIdEditar');
+            if (clienteIdInput) {
+                clienteIdInput.value = clienteId;
+            }
+
+            // Limpiar campos del formulario
+            const emailInput = document.getElementById('clienteEmailInline');
+            const telefonoInput = document.getElementById('clienteTelefonoInline');
+            const documentoInput = document.getElementById('clienteDocumentoInline');
+            const cuitInput = document.getElementById('clienteCuitInline');
+
+            if (emailInput) emailInput.value = '';
+            if (telefonoInput) telefonoInput.value = '';
+            if (documentoInput) documentoInput.value = '';
+            if (cuitInput) cuitInput.value = '';
+
+            // Mostrar/ocultar campos según lo que ya tiene
+            const emailContainer = document.getElementById('campoEmailContainer');
+            const telefonoContainer = document.getElementById('campoTelefonoContainer');
+            const documentoContainer = document.getElementById('campoDocumentoContainer');
+            const cuitContainer = document.getElementById('campoCuitContainer');
+
+            // Necesita email O teléfono - mostrar los que falten
+            const necesitaContacto = !tieneEmail && !tieneTelefono;
+
+            // Mostrar campo email si no tiene email (y necesita contacto)
+            if (emailContainer) {
+                emailContainer.style.display = (!tieneEmail) ? 'block' : 'none';
+            }
+
+            // Mostrar campo teléfono si no tiene teléfono (y necesita contacto)
+            if (telefonoContainer) {
+                telefonoContainer.style.display = (!tieneTelefono) ? 'block' : 'none';
+            }
+
+            // Si ya tiene documento (DNI o CUIT), ocultar campos de documento
+            // Con tener 1 de los 2 ya está completo
+            if (tieneDocumento) {
+                if (documentoContainer) documentoContainer.style.display = 'none';
+                if (cuitContainer) cuitContainer.style.display = 'none';
+            } else {
+                if (documentoContainer) documentoContainer.style.display = 'block';
+                if (cuitContainer) cuitContainer.style.display = 'block';
+            }
+
+            // Limpiar mensaje de guardado
+            const mensajeGuardado = document.getElementById('mensajeGuardadoCliente');
+            if (mensajeGuardado) mensajeGuardado.innerHTML = '';
+        }
+        clienteValido = false;
+    }
+
+    // Habilitar/deshabilitar botón de confirmar
+    if (confirmSubmitBtn) {
+        confirmSubmitBtn.disabled = !clienteValido;
+        if (!clienteValido) {
+            confirmSubmitBtn.title = 'Complete los datos del cliente para confirmar';
+        } else {
+            confirmSubmitBtn.title = '';
+        }
+    }
 
     confirmModal.show();
 }
@@ -744,6 +1004,321 @@ function showAlert(message, type = 'info') {
         }
     }, 3000);
 }
+
+// ========================================
+// Guardado inline de datos del cliente
+// ========================================
+const btnGuardarClienteInline = document.getElementById('btnGuardarClienteInline');
+const clienteIdEditar = document.getElementById('clienteIdEditar');
+const clienteEmailInline = document.getElementById('clienteEmailInline');
+const clienteTelefonoInline = document.getElementById('clienteTelefonoInline');
+const clienteDocumentoInline = document.getElementById('clienteDocumentoInline');
+const clienteCuitInline = document.getElementById('clienteCuitInline');
+const mensajeGuardadoCliente = document.getElementById('mensajeGuardadoCliente');
+
+if (btnGuardarClienteInline) {
+    btnGuardarClienteInline.addEventListener('click', guardarClienteInline);
+}
+
+async function guardarClienteInline() {
+    const clienteId = clienteIdEditar ? clienteIdEditar.value : null;
+    if (!clienteId) {
+        showAlert('No se pudo identificar el cliente', 'danger');
+        return;
+    }
+
+    const email = clienteEmailInline ? clienteEmailInline.value.trim() : '';
+    const telefono = clienteTelefonoInline ? clienteTelefonoInline.value.trim() : '';
+    const documento = clienteDocumentoInline ? clienteDocumentoInline.value.trim() : '';
+    const cuit = clienteCuitInline ? clienteCuitInline.value.trim() : '';
+
+    // Obtener datos actuales del cliente (qué ya tiene)
+    const yaTeníaEmail = presupuestoSeleccionadoConfirmacion?.dataset.clienteTieneEmail === 'true';
+    const yaTeníaTelefono = presupuestoSeleccionadoConfirmacion?.dataset.clienteTieneTelefono === 'true';
+    const yaTeníaDocumento = presupuestoSeleccionadoConfirmacion?.dataset.clienteTieneDocumento === 'true';
+
+    // Validar: necesita email O teléfono (al menos 1)
+    const tieneContacto = email || telefono || yaTeníaEmail || yaTeníaTelefono;
+    if (!tieneContacto) {
+        showAlert('Debe ingresar al menos un email o teléfono', 'warning');
+        return;
+    }
+
+    // Validar: necesita DNI O CUIT (al menos 1)
+    const tieneIdentificacion = documento || cuit || yaTeníaDocumento;
+    if (!tieneIdentificacion) {
+        showAlert('Debe ingresar DNI o CUIT', 'warning');
+        return;
+    }
+
+    // Deshabilitar botón mientras guarda
+    btnGuardarClienteInline.disabled = true;
+    btnGuardarClienteInline.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardando...';
+
+    try {
+        const formData = new FormData();
+        if (email) formData.append('email', email);
+        if (telefono) formData.append('telefono', telefono);
+        if (documento) formData.append('documento', documento);
+        if (cuit) formData.append('cuit', cuit);
+
+        const headers = {
+            'X-Requested-With': 'XMLHttpRequest',
+        };
+        const csrf = document.querySelector('meta[name="csrf-token"]');
+        if (csrf) {
+            headers['X-CSRFToken'] = csrf.getAttribute('content');
+        }
+
+        const response = await fetch(`/clientes/${clienteId}/actualizar-rapido`, {
+            method: 'POST',
+            headers,
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.exito) {
+            // Éxito - actualizar UI
+            if (mensajeGuardadoCliente) {
+                mensajeGuardadoCliente.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i>Guardado';
+            }
+
+            // Ocultar alerta de cliente incompleto
+            if (alertaClienteIncompleto) {
+                alertaClienteIncompleto.classList.add('d-none');
+            }
+
+            // Habilitar botón de confirmar
+            if (confirmSubmitBtn) {
+                confirmSubmitBtn.disabled = false;
+                confirmSubmitBtn.title = '';
+            }
+
+            // Actualizar data-attributes del botón original
+            if (presupuestoSeleccionadoConfirmacion) {
+                presupuestoSeleccionadoConfirmacion.dataset.clienteCompleto = 'true';
+                presupuestoSeleccionadoConfirmacion.dataset.clienteTieneEmail = email ? 'true' : presupuestoSeleccionadoConfirmacion.dataset.clienteTieneEmail;
+                presupuestoSeleccionadoConfirmacion.dataset.clienteTieneTelefono = telefono ? 'true' : presupuestoSeleccionadoConfirmacion.dataset.clienteTieneTelefono;
+                presupuestoSeleccionadoConfirmacion.dataset.clienteTieneDocumento = (documento || cuit) ? 'true' : 'false';
+            }
+
+            showAlert('Datos del cliente actualizados correctamente', 'success');
+
+        } else {
+            showAlert(result.error || 'Error al guardar los datos del cliente', 'danger');
+        }
+    } catch (error) {
+        console.error('Error guardando cliente:', error);
+        showAlert('Error de conexión al guardar los datos', 'danger');
+    } finally {
+        btnGuardarClienteInline.disabled = false;
+        btnGuardarClienteInline.innerHTML = '<i class="fas fa-save me-1"></i>Guardar y continuar';
+    }
+}
+
+// ========================================
+// Asignar cliente desde modal (sin cliente)
+// ========================================
+const selectClienteExistente = document.getElementById('selectClienteExistente');
+const btnCrearClienteRapido = document.getElementById('btnCrearClienteRapido');
+
+// Cargar lista de clientes cuando se muestra la alerta de sin cliente
+async function cargarClientesExistentes() {
+    if (!selectClienteExistente) return;
+
+    try {
+        const response = await fetch('/clientes/api/listar');
+        const clientes = await response.json();
+
+        // Limpiar opciones existentes
+        selectClienteExistente.innerHTML = '<option value="">-- Seleccionar cliente --</option>';
+
+        clientes.forEach(cliente => {
+            const option = document.createElement('option');
+            option.value = cliente.id;
+            option.textContent = cliente.empresa
+                ? `${cliente.empresa} - ${cliente.nombre_completo}`
+                : cliente.nombre_completo;
+            option.dataset.nombre = cliente.nombre_completo;
+            option.dataset.email = cliente.email || '';
+            option.dataset.telefono = cliente.telefono || '';
+            selectClienteExistente.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando clientes:', error);
+    }
+}
+
+// Asignar cliente existente al presupuesto
+if (selectClienteExistente) {
+    selectClienteExistente.addEventListener('change', async function() {
+        const clienteId = this.value;
+        if (!clienteId || !presupuestoSeleccionadoConfirmacion) return;
+
+        const presupuestoId = presupuestoSeleccionadoConfirmacion.dataset.presupuestoId;
+        const selectedOption = this.options[this.selectedIndex];
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+            const csrf = document.querySelector('meta[name="csrf-token"]');
+            if (csrf) {
+                headers['X-CSRFToken'] = csrf.getAttribute('content');
+            }
+
+            const response = await fetch(`/presupuestos/${presupuestoId}/asignar-cliente`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ cliente_id: clienteId }),
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.exito) {
+                // Actualizar UI
+                showAlert('Cliente asignado correctamente', 'success');
+
+                // Actualizar data-attributes
+                presupuestoSeleccionadoConfirmacion.dataset.clienteId = clienteId;
+                presupuestoSeleccionadoConfirmacion.dataset.clienteCompleto = 'true';
+                presupuestoSeleccionadoConfirmacion.dataset.cliente = selectedOption.dataset.nombre;
+
+                // Actualizar campo cliente en el modal
+                if (campoCliente) {
+                    campoCliente.textContent = selectedOption.dataset.nombre;
+                }
+
+                // Ocultar alerta de sin cliente
+                if (alertaSinCliente) alertaSinCliente.classList.add('d-none');
+
+                // Habilitar botón de confirmar
+                if (confirmSubmitBtn) {
+                    confirmSubmitBtn.disabled = false;
+                    confirmSubmitBtn.title = '';
+                }
+            } else {
+                showAlert(result.error || 'Error al asignar cliente', 'danger');
+            }
+        } catch (error) {
+            console.error('Error asignando cliente:', error);
+            showAlert('Error de conexión', 'danger');
+        }
+    });
+}
+
+// Crear cliente nuevo y asignar
+if (btnCrearClienteRapido) {
+    btnCrearClienteRapido.addEventListener('click', async function() {
+        if (!presupuestoSeleccionadoConfirmacion) return;
+
+        const nombre = document.getElementById('nuevoClienteNombre')?.value.trim();
+        const apellido = document.getElementById('nuevoClienteApellido')?.value.trim() || '';
+        const email = document.getElementById('nuevoClienteEmail')?.value.trim();
+        const telefono = document.getElementById('nuevoClienteTelefono')?.value.trim();
+        const tipoDoc = document.getElementById('nuevoClienteTipoDoc')?.value;
+        const numDoc = document.getElementById('nuevoClienteNumDoc')?.value.trim();
+
+        // Validaciones
+        if (!nombre) {
+            showAlert('Ingrese el nombre o razón social', 'warning');
+            return;
+        }
+        if (!email) {
+            showAlert('Ingrese el email del cliente', 'warning');
+            return;
+        }
+        if (!numDoc) {
+            showAlert('Ingrese el número de documento', 'warning');
+            return;
+        }
+
+        const presupuestoId = presupuestoSeleccionadoConfirmacion.dataset.presupuestoId;
+
+        // Deshabilitar botón
+        btnCrearClienteRapido.disabled = true;
+        btnCrearClienteRapido.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+            const csrf = document.querySelector('meta[name="csrf-token"]');
+            if (csrf) {
+                headers['X-CSRFToken'] = csrf.getAttribute('content');
+            }
+
+            // Crear cliente y asignar en un solo request
+            const response = await fetch(`/presupuestos/${presupuestoId}/crear-asignar-cliente`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    nombre,
+                    apellido,
+                    email,
+                    telefono,
+                    tipo_documento: tipoDoc,
+                    numero_documento: numDoc
+                }),
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.exito) {
+                showAlert('Cliente creado y asignado correctamente', 'success');
+
+                // Actualizar data-attributes
+                presupuestoSeleccionadoConfirmacion.dataset.clienteId = result.cliente_id;
+                presupuestoSeleccionadoConfirmacion.dataset.clienteCompleto = 'true';
+                presupuestoSeleccionadoConfirmacion.dataset.cliente = result.cliente_nombre;
+
+                // Actualizar campo cliente en el modal
+                if (campoCliente) {
+                    campoCliente.textContent = result.cliente_nombre;
+                }
+
+                // Ocultar alerta de sin cliente
+                if (alertaSinCliente) alertaSinCliente.classList.add('d-none');
+
+                // Habilitar botón de confirmar
+                if (confirmSubmitBtn) {
+                    confirmSubmitBtn.disabled = false;
+                    confirmSubmitBtn.title = '';
+                }
+
+                // Limpiar formulario
+                document.getElementById('nuevoClienteNombre').value = '';
+                document.getElementById('nuevoClienteApellido').value = '';
+                document.getElementById('nuevoClienteEmail').value = '';
+                document.getElementById('nuevoClienteTelefono').value = '';
+                document.getElementById('nuevoClienteNumDoc').value = '';
+            } else {
+                showAlert(result.error || 'Error al crear cliente', 'danger');
+            }
+        } catch (error) {
+            console.error('Error creando cliente:', error);
+            showAlert('Error de conexión', 'danger');
+        } finally {
+            btnCrearClienteRapido.disabled = false;
+            btnCrearClienteRapido.innerHTML = '<i class="fas fa-plus me-1"></i>Crear y asignar cliente';
+        }
+    });
+}
+
+// Modificar abrirModalConfirmacion para cargar clientes si no hay cliente
+const originalAbrirModal = abrirModalConfirmacion;
+abrirModalConfirmacion = function(button) {
+    originalAbrirModal(button);
+
+    // Si no hay cliente, cargar lista de clientes existentes
+    const clienteId = button.dataset.clienteId;
+    if (!clienteId) {
+        cargarClientesExistentes();
+    }
+};
 </script>
 
 {% endblock %}

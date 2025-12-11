@@ -310,6 +310,76 @@ def eliminar(id):
         return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
 
 
+@clientes_bp.route('/<int:id>/actualizar-rapido', methods=['POST'])
+@csrf.exempt
+@login_required
+def actualizar_rapido(id):
+    """Actualizar datos básicos del cliente (para completar desde modal de confirmación)"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'exito': False, 'error': 'Sin organización activa'}), 400
+
+        cliente = Cliente.query.get_or_404(id)
+
+        # Verificar permisos
+        if cliente.organizacion_id != org_id:
+            return jsonify({'exito': False, 'error': 'No autorizado'}), 403
+
+        # Actualizar campos si vienen en el request
+        email = request.form.get('email', '').strip()
+        telefono = request.form.get('telefono', '').strip()
+        # El modelo usa tipo_documento y numero_documento
+        documento = request.form.get('documento', '').strip()  # DNI
+        cuit = request.form.get('cuit', '').strip()  # CUIT
+
+        campos_actualizados = []
+
+        if email and not cliente.email:
+            cliente.email = email
+            campos_actualizados.append('email')
+
+        if telefono and not cliente.telefono:
+            cliente.telefono = telefono
+            campos_actualizados.append('teléfono')
+
+        # Si no tiene numero_documento, actualizar con DNI o CUIT
+        if not cliente.numero_documento:
+            if documento:
+                cliente.tipo_documento = 'DNI'
+                cliente.numero_documento = documento
+                campos_actualizados.append('DNI')
+            elif cuit:
+                cliente.tipo_documento = 'CUIT'
+                cliente.numero_documento = cuit
+                campos_actualizados.append('CUIT')
+
+        if campos_actualizados:
+            db.session.commit()
+            return jsonify({
+                'exito': True,
+                'mensaje': f'Se actualizaron: {", ".join(campos_actualizados)}',
+                'cliente': {
+                    'id': cliente.id,
+                    'nombre_completo': cliente.nombre_completo,
+                    'email': cliente.email,
+                    'telefono': cliente.telefono,
+                    'tipo_documento': cliente.tipo_documento,
+                    'numero_documento': cliente.numero_documento
+                }
+            })
+        else:
+            return jsonify({
+                'exito': True,
+                'mensaje': 'No hubo cambios (los campos ya tenían datos)'
+            })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en clientes.actualizar_rapido: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'exito': False, 'error': f'Error al actualizar: {str(e)}'}), 500
+
+
 @clientes_bp.route('/<int:id>/cambiar-estado', methods=['POST'])
 @csrf.exempt
 @login_required

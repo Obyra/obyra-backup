@@ -713,10 +713,10 @@
                                     <span class="badge bg-info">Etapa {{ miembro.etapa_id }}</span>
                                 </div>
                                 {% endif %}
-                                {% if miembro.created_at %}
+                                {% if miembro.fecha_asignacion or miembro.created_at %}
                                 <small class="text-muted">
                                     <i class="fas fa-calendar me-1"></i>
-                                    Desde {{ miembro.created_at.strftime('%d/%m/%Y') }}
+                                    Desde {{ (miembro.fecha_asignacion or miembro.created_at).strftime('%d/%m/%Y') }}
                                 </small>
                                 {% endif %}
                             </div>

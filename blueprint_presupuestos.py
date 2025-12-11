@@ -160,7 +160,39 @@ def crear():
                 except Exception as e:
                     current_app.logger.error(f"Error parseando payload IA para obtener moneda: {str(e)}")
 
-            # Crear presupuesto con la moneda correcta
+            # Obtener tasa de cambio actual del BNA
+            tasa_usd = None
+            tasa_fecha = None
+            tasa_provider = 'BNA'
+            try:
+                from services.exchange.providers.bna import fetch_official_rate
+                rate_snapshot = fetch_official_rate()
+                if rate_snapshot and rate_snapshot.value:
+                    tasa_usd = float(rate_snapshot.value)
+                    tasa_fecha = rate_snapshot.as_of_date
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo obtener cotización BNA al crear presupuesto: {e}")
+
+            # Obtener índice CAC actual
+            indice_cac = None
+            cac_fecha = None
+            try:
+                from services.cac.cac_service import get_index_for_month
+                from datetime import date as dt_date
+                today = dt_date.today()
+                cac_index = get_index_for_month(today.year, today.month)
+                if not cac_index:
+                    # Intentar mes anterior
+                    prev_month = today.month - 1 if today.month > 1 else 12
+                    prev_year = today.year if today.month > 1 else today.year - 1
+                    cac_index = get_index_for_month(prev_year, prev_month)
+                if cac_index:
+                    indice_cac = float(cac_index.value)
+                    cac_fecha = dt_date(cac_index.period_year, cac_index.period_month, 1)
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo obtener índice CAC al crear presupuesto: {e}")
+
+            # Crear presupuesto con la moneda correcta y datos de cotización
             presupuesto = Presupuesto(
                 organizacion_id=org_id,
                 numero=numero,
@@ -173,7 +205,12 @@ def crear():
                 estado='borrador',
                 currency=moneda_presupuesto,
                 iva_porcentaje=BudgetConstants.DEFAULT_IVA_RATE,
-                vigencia_bloqueada=True
+                vigencia_bloqueada=True,
+                tasa_usd_venta=tasa_usd,
+                exchange_rate_as_of=tasa_fecha,
+                exchange_rate_provider=tasa_provider,
+                indice_cac_valor=indice_cac,
+                indice_cac_fecha=cac_fecha
             )
 
             db.session.add(presupuesto)
@@ -540,6 +577,32 @@ Saludos cordiales,
             ItemPresupuesto.presupuesto_id == presupuesto.id
         ).order_by(ItemPresupuesto.tipo, ItemPresupuesto.id).all()
 
+        # Obtener cotización del dólar para el PDF dual moneda
+        cotizacion_dolar = 1050.0  # Valor por defecto
+        fecha_cotizacion = presupuesto.fecha.strftime('%d/%m/%Y')
+
+        if presupuesto.tasa_usd_venta:
+            cotizacion_dolar = float(presupuesto.tasa_usd_venta)
+            if presupuesto.exchange_rate_as_of:
+                fecha_cotizacion = presupuesto.exchange_rate_as_of.strftime('%d/%m/%Y')
+        else:
+            try:
+                from services.exchange.providers.bna import fetch_official_rate
+                rate_snapshot = fetch_official_rate()
+                if rate_snapshot and rate_snapshot.value:
+                    cotizacion_dolar = float(rate_snapshot.value)
+                    fecha_cotizacion = rate_snapshot.as_of_date.strftime('%d/%m/%Y') if rate_snapshot.as_of_date else datetime.now().strftime('%d/%m/%Y')
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo obtener cotización BNA: {e}")
+
+        moneda_principal = presupuesto.currency or 'ARS'
+        moneda_alternativa = 'USD' if moneda_principal == 'ARS' else 'ARS'
+
+        if moneda_principal == 'ARS':
+            factor_conversion = 1 / cotizacion_dolar if cotizacion_dolar > 0 else 0
+        else:
+            factor_conversion = cotizacion_dolar
+
         # Generar PDF
         html_string = render_template(
             'presupuestos/pdf_template.html',
@@ -547,7 +610,12 @@ Saludos cordiales,
             organizacion=organizacion,
             usuario=current_user,
             now=datetime.now(),
-            items=items_ordenados
+            items=items_ordenados,
+            moneda_principal=moneda_principal,
+            moneda_alternativa=moneda_alternativa,
+            cotizacion_dolar=cotizacion_dolar,
+            fecha_cotizacion=fecha_cotizacion,
+            factor_conversion=factor_conversion
         )
 
         pdf_buffer = io.BytesIO()
@@ -1298,6 +1366,7 @@ def cambiar_estado(id):
 
 
 @presupuestos_bp.route('/<int:id>/revertir-borrador', methods=['POST'])
+@csrf.exempt
 @login_required
 def revertir_borrador(id):
     """Revertir presupuesto a estado borrador (solo administradores)"""
@@ -1373,6 +1442,134 @@ def restaurar(id):
         current_app.logger.error(f"Error en presupuestos.restaurar: {e}", exc_info=True)
         db.session.rollback()
         return jsonify({'error': 'Error al restaurar el presupuesto'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/asignar-cliente', methods=['POST'])
+@csrf.exempt
+@login_required
+def asignar_cliente(id):
+    """Asignar un cliente existente al presupuesto"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'exito': False, 'error': 'Sin organización activa'}), 400
+
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first_or_404()
+
+        data = request.get_json()
+        cliente_id = data.get('cliente_id')
+
+        if not cliente_id:
+            return jsonify({'exito': False, 'error': 'Debe seleccionar un cliente'}), 400
+
+        # Convertir a entero
+        try:
+            cliente_id = int(cliente_id)
+        except (ValueError, TypeError):
+            return jsonify({'exito': False, 'error': 'ID de cliente inválido'}), 400
+
+        # Verificar que el cliente existe y pertenece a la organización
+        cliente = Cliente.query.filter_by(
+            id=cliente_id,
+            organizacion_id=org_id
+        ).first()
+
+        if not cliente:
+            return jsonify({'exito': False, 'error': 'Cliente no encontrado'}), 404
+
+        # Asignar cliente
+        presupuesto.cliente_id = cliente.id
+        db.session.commit()
+
+        return jsonify({
+            'exito': True,
+            'mensaje': f'Cliente {cliente.nombre_completo} asignado correctamente',
+            'cliente_id': cliente.id,
+            'cliente_nombre': cliente.nombre_completo
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.asignar_cliente: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'exito': False, 'error': 'Error al asignar cliente'}), 500
+
+
+@presupuestos_bp.route('/<int:id>/crear-asignar-cliente', methods=['POST'])
+@csrf.exempt
+@login_required
+def crear_asignar_cliente(id):
+    """Crear un cliente nuevo y asignarlo al presupuesto"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'exito': False, 'error': 'Sin organización activa'}), 400
+
+        presupuesto = Presupuesto.query.filter_by(
+            id=id,
+            organizacion_id=org_id
+        ).first_or_404()
+
+        data = request.get_json()
+        nombre = data.get('nombre', '').strip()
+        apellido = data.get('apellido', '').strip() or ''
+        email = data.get('email', '').strip()
+        telefono = data.get('telefono', '').strip()
+        tipo_documento = data.get('tipo_documento', 'CUIT').strip()
+        numero_documento = data.get('numero_documento', '').strip()
+
+        # Validaciones
+        if not nombre:
+            return jsonify({'exito': False, 'error': 'El nombre es requerido'}), 400
+        if not email:
+            return jsonify({'exito': False, 'error': 'El email es requerido'}), 400
+        if not numero_documento:
+            return jsonify({'exito': False, 'error': 'El número de documento es requerido'}), 400
+
+        # Verificar si ya existe un cliente con ese documento
+        existing = Cliente.query.filter_by(
+            organizacion_id=org_id,
+            numero_documento=numero_documento
+        ).first()
+
+        if existing:
+            return jsonify({
+                'exito': False,
+                'error': f'Ya existe un cliente con el documento {numero_documento}'
+            }), 400
+
+        # Crear cliente
+        cliente = Cliente(
+            organizacion_id=org_id,
+            nombre=nombre,
+            apellido=apellido,
+            tipo_documento=tipo_documento,
+            numero_documento=numero_documento,
+            email=email,
+            telefono=telefono or None,
+            empresa=nombre if not apellido else None  # Si no hay apellido, usar nombre como empresa
+        )
+
+        db.session.add(cliente)
+        db.session.flush()  # Para obtener el ID
+
+        # Asignar al presupuesto
+        presupuesto.cliente_id = cliente.id
+        db.session.commit()
+
+        return jsonify({
+            'exito': True,
+            'mensaje': f'Cliente {cliente.nombre_completo} creado y asignado correctamente',
+            'cliente_id': cliente.id,
+            'cliente_nombre': cliente.nombre_completo
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.crear_asignar_cliente: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'exito': False, 'error': f'Error al crear cliente: {str(e)}'}), 500
 
 
 @presupuestos_bp.route('/<int:id>/revertir-confirmacion', methods=['POST'])

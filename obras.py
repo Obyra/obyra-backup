@@ -732,11 +732,8 @@ def detalle(id):
     usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=org_id).all()
     etapas_disponibles = obtener_etapas_disponibles()
 
-    miembros = (ObraMiembro.query
-                .filter_by(obra_id=obra.id)
-                .join(Usuario, ObraMiembro.usuario_id == Usuario.id)
-                .order_by(Usuario.nombre.asc())
-                .all())
+    # Usar asignaciones como miembros para Equipo Asignado (AsignacionObra tiene los usuarios asignados)
+    miembros = asignaciones  # Las asignaciones ya incluyen usuario, rol_en_obra, etapa_id y fecha
 
     # Obtener TODOS los operarios de la organización para el selector de responsables
     # (no solo los asignados a esta obra)
@@ -1338,6 +1335,8 @@ def asignar_usuarios():
                 current_app.logger.warning(f"Skipping invalid task {tid}")
                 continue
 
+            obra_id = tarea.etapa.obra_id
+
             for uid in set(user_ids_int):
                 existing = TareaMiembro.query.filter_by(tarea_id=int(tid), user_id=uid).first()
                 if not existing:
@@ -1350,6 +1349,20 @@ def asignar_usuarios():
                     asignaciones_creadas += 1
                 else:
                     existing.cuota_objetivo = cuota
+
+                # También agregar a ObraMiembro si no existe (para que aparezca en "Equipo Asignado")
+                existing_obra_miembro = ObraMiembro.query.filter_by(obra_id=obra_id, usuario_id=uid).first()
+                if not existing_obra_miembro:
+                    usuario = Usuario.query.get(uid)
+                    rol_obra = usuario.rol if usuario else 'operario'
+                    nuevo_miembro_obra = ObraMiembro(
+                        obra_id=obra_id,
+                        usuario_id=uid,
+                        rol_en_obra=rol_obra,
+                        etapa_id=tarea.etapa_id
+                    )
+                    db.session.add(nuevo_miembro_obra)
+                    current_app.logger.info(f"Usuario {uid} agregado a equipo de obra {obra_id}")
 
         db.session.commit()
         return jsonify(ok=True, creados=asignaciones_creadas)
@@ -2877,6 +2890,8 @@ def eliminar_obra(obra_id):
         db.session.execute(db.text("DELETE FROM equipment_usage WHERE project_id = :obra_id"), {"obra_id": obra_id})
         db.session.execute(db.text("DELETE FROM stock_movement WHERE project_id = :obra_id"), {"obra_id": obra_id})
         db.session.execute(db.text("DELETE FROM stock_reservation WHERE project_id = :obra_id"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM movimientos_stock_obra WHERE stock_obra_id IN (SELECT id FROM stock_obra WHERE obra_id = :obra_id)"), {"obra_id": obra_id})
+        db.session.execute(db.text("DELETE FROM stock_obra WHERE obra_id = :obra_id"), {"obra_id": obra_id})
 
         # 6. Finalmente eliminar la obra
         db.session.delete(obra)
