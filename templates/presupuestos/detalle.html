@@ -39,9 +39,15 @@
                     {% endif %}
 
                     <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
+                        {% if request.args.get('desde_obra') %}
+                        <a href="{{ url_for('obras.detalle', id=request.args.get('desde_obra')) }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Volver a Obra
+                        </a>
+                        {% else %}
                         <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left me-1"></i>Volver
                         </a>
+                        {% endif %}
                         {% if presupuesto.items.count() > 0 %}
                         <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
                            class="btn btn-success" target="_blank">

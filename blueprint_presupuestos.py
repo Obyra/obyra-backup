@@ -14,10 +14,88 @@ from services.memberships import get_current_org_id, get_current_membership
 from utils.pagination import Pagination
 from utils import safe_int
 import io
+import re
 from weasyprint import HTML
 from flask_mail import Message
 
 presupuestos_bp = Blueprint('presupuestos', __name__)
+
+
+def buscar_item_inventario_por_nombre(descripcion, org_id):
+    """
+    Busca un item de inventario que coincida con la descripción del material.
+    Usa búsqueda fuzzy normalizada para encontrar coincidencias.
+
+    Args:
+        descripcion: Descripción del material del presupuesto
+        org_id: ID de la organización
+
+    Returns:
+        ItemInventario o None si no encuentra coincidencia
+    """
+    from models.inventory import ItemInventario
+
+    if not descripcion:
+        return None
+
+    # Normalizar descripción: lowercase, sin acentos, sin caracteres especiales
+    def normalizar(texto):
+        if not texto:
+            return ''
+        texto = texto.lower().strip()
+        # Remover acentos
+        reemplazos = {
+            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+            'ñ': 'n', 'ü': 'u'
+        }
+        for acento, sin_acento in reemplazos.items():
+            texto = texto.replace(acento, sin_acento)
+        # Remover caracteres especiales, dejar solo letras, números y espacios
+        texto = re.sub(r'[^a-z0-9\s]', '', texto)
+        # Remover espacios múltiples
+        texto = re.sub(r'\s+', ' ', texto)
+        return texto
+
+    desc_normalizada = normalizar(descripcion)
+
+    # Obtener todos los items de inventario de la organización
+    items = ItemInventario.query.filter_by(
+        organizacion_id=org_id,
+        activo=True
+    ).all()
+
+    mejor_match = None
+    mejor_score = 0
+
+    for item in items:
+        nombre_normalizado = normalizar(item.nombre)
+
+        # Coincidencia exacta
+        if desc_normalizada == nombre_normalizado:
+            return item
+
+        # Verificar si una contiene a la otra
+        if desc_normalizada in nombre_normalizado or nombre_normalizado in desc_normalizada:
+            # Calcular score basado en longitud de coincidencia
+            score = len(nombre_normalizado) if nombre_normalizado in desc_normalizada else len(desc_normalizada)
+            if score > mejor_score:
+                mejor_score = score
+                mejor_match = item
+
+        # Buscar por palabras clave principales
+        palabras_desc = set(desc_normalizada.split())
+        palabras_item = set(nombre_normalizado.split())
+
+        # Calcular coincidencia de palabras
+        coincidencias = palabras_desc & palabras_item
+        if len(coincidencias) >= 2:  # Al menos 2 palabras en común
+            score = len(coincidencias) * 10
+            if score > mejor_score:
+                mejor_score = score
+                mejor_match = item
+
+    # Solo devolver si hay una coincidencia razonable
+    return mejor_match if mejor_score >= 5 else None
 
 
 @presupuestos_bp.route('/')
@@ -229,6 +307,7 @@ def crear():
                     presupuesto.datos_proyecto = json.dumps(datos_proyecto_dict)
 
                     # Crear items SIN etapa_id (las etapas se crearán al confirmar como obra)
+                    items_vinculados = 0
                     for etapa in etapas_ia:
                         items_etapa = etapa.get('items', [])
                         for item in items_etapa:
@@ -238,9 +317,21 @@ def crear():
                             precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
                             total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
 
+                            # Buscar vinculación automática con inventario (solo para materiales)
+                            item_inventario_id = None
+                            tipo_item = item.get('tipo', 'material')
+                            if tipo_item == 'material':
+                                item_inv = buscar_item_inventario_por_nombre(
+                                    item.get('descripcion', ''),
+                                    org_id
+                                )
+                                if item_inv:
+                                    item_inventario_id = item_inv.id
+                                    items_vinculados += 1
+
                             item_presupuesto = ItemPresupuesto(
                                 presupuesto_id=presupuesto.id,
-                                tipo=item.get('tipo', 'material'),
+                                tipo=tipo_item,
                                 descripcion=item.get('descripcion', ''),
                                 unidad=item.get('unidad', 'unidades'),
                                 cantidad=Decimal(str(item.get('cantidad', 0))),
@@ -250,11 +341,13 @@ def crear():
                                 currency=moneda_ia,
                                 price_unit_ars=precio_unit_ars,
                                 total_ars=total_ars,
-                                etapa_id=None  # Se asignará al confirmar como obra
+                                etapa_id=None,  # Se asignará al confirmar como obra
+                                item_inventario_id=item_inventario_id  # Vinculación automática
                             )
                             db.session.add(item_presupuesto)
 
-                    current_app.logger.info(f"✅ Guardados {sum(len(e.get('items', [])) for e in etapas_ia)} items de IA en {moneda_ia} para presupuesto {numero} (etapas se crearán al confirmar como obra)")
+                    total_items = sum(len(e.get('items', [])) for e in etapas_ia)
+                    current_app.logger.info(f"✅ Guardados {total_items} items de IA en {moneda_ia} para presupuesto {numero} ({items_vinculados} vinculados a inventario)")
                 except Exception as e:
                     current_app.logger.error(f"Error procesando items de IA: {str(e)}")
                     import traceback

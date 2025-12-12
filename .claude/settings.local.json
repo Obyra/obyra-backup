@@ -64,7 +64,12 @@
       "Bash(GIT_EDITOR=true git rebase:*)",
       "Bash(docker stop:*)",
       "Bash(docker start:*)",
-      "Bash(winpty docker exec obyra-app grep -n \"cambiar-estado\" //app//blueprint_clientes.py)"
+      "Bash(winpty docker exec obyra-app grep -n \"cambiar-estado\" //app//blueprint_clientes.py)",
+      "Bash(node --check:*)",
+      "Bash(tr:*)",
+      "Bash(git checkout:*)",
+      "Bash(winpty docker exec:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "ask": []

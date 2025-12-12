@@ -77,8 +77,8 @@ class Obra(db.Model):
 
     def calcular_progreso_automatico(self):
         """
-        Calcula el progreso automático basado en mediciones por etapa.
-        Fórmula: (metros realizados / metros totales) * 100 por cada etapa
+        Calcula el progreso automático basado en las cantidades ejecutadas de las tareas.
+        Fórmula: Suma ponderada de (cantidad_ejecutada / cantidad_planificada) de cada tarea
         """
         from decimal import Decimal, ROUND_HALF_UP
 
@@ -87,31 +87,39 @@ class Obra(db.Model):
             return 0
 
         progreso_etapas = Decimal('0')
-        total_planificado_obra = Decimal('0')
-        total_ejecutado_obra = Decimal('0')
 
         for etapa in self.etapas:
-            # Prioridad 1: Usar mediciones de la etapa si están definidas
-            if etapa.cantidad_total_planificada and float(etapa.cantidad_total_planificada) > 0:
-                # Calcular avance por medición para esta etapa
-                etapa.calcular_avance_por_medicion()
+            tareas = etapa.tareas.all()
+            total_tareas = len(tareas)
 
-                total_planificado_obra += Decimal(str(etapa.cantidad_total_planificada))
-                total_ejecutado_obra += Decimal(str(etapa.cantidad_total_ejecutada or 0))
+            if total_tareas > 0:
+                # Calcular progreso de la etapa basado en porcentaje_avance de las tareas
+                # Ponderado por cantidad_planificada de cada tarea
+                total_planificado_etapa = Decimal('0')
+                total_ejecutado_etapa = Decimal('0')
 
-                # Contribución ponderada de esta etapa al progreso total
-                porcentaje_etapa = Decimal(str(etapa.porcentaje_avance_medicion)) / Decimal(str(total_etapas))
-                progreso_etapas += porcentaje_etapa
+                for tarea in tareas:
+                    cant_plan = Decimal(str(tarea.cantidad_planificada or 0))
+                    pct_avance = Decimal(str(tarea.porcentaje_avance or 0))
 
-            # Prioridad 2: Fallback a tareas completadas
-            else:
-                total_tareas = etapa.tareas.count()
-                if total_tareas > 0:
-                    tareas_completadas = etapa.tareas.filter_by(estado='completada').count()
-                    porcentaje_etapa = (Decimal(str(tareas_completadas)) / Decimal(str(total_tareas))) * (Decimal('100') / Decimal(str(total_etapas)))
-                    progreso_etapas += porcentaje_etapa
-                elif etapa.estado == 'finalizada':
-                    progreso_etapas += (Decimal('100') / Decimal(str(total_etapas)))
+                    if cant_plan > 0:
+                        total_planificado_etapa += cant_plan
+                        # Calcular ejecutado basado en el porcentaje
+                        total_ejecutado_etapa += (cant_plan * pct_avance / Decimal('100'))
+
+                # Calcular porcentaje de la etapa
+                if total_planificado_etapa > 0:
+                    porcentaje_etapa_calc = (total_ejecutado_etapa / total_planificado_etapa) * Decimal('100')
+                else:
+                    # Si no hay cantidades planificadas, usar promedio simple de porcentajes
+                    suma_pcts = sum(Decimal(str(t.porcentaje_avance or 0)) for t in tareas)
+                    porcentaje_etapa_calc = suma_pcts / Decimal(str(total_tareas))
+
+                # Contribución de esta etapa al progreso total (ponderado por # de etapas)
+                progreso_etapas += porcentaje_etapa_calc / Decimal(str(total_etapas))
+
+            elif etapa.estado == 'finalizada':
+                progreso_etapas += (Decimal('100') / Decimal(str(total_etapas)))
 
         # Agregar progreso de certificaciones - convertir a Decimal
         progreso_certificaciones = Decimal('0')

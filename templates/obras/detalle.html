@@ -252,16 +252,9 @@
         <div class="col-lg-5">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body p-3 text-center" style="background: linear-gradient(135deg, #4a90e2 0%, #7bb3f0 100%); color: white;">
-                    <div class="d-flex align-items-center justify-content-between mb-3">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-clock me-2"></i>
-                            <span class="fw-bold">Progreso</span>
-                        </div>
-                        {% if can_manage %}
-                        <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#certificarAvanceModal">
-                            <i class="fas fa-camera"></i>
-                        </button>
-                        {% endif %}
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-clock me-2"></i>
+                        <span class="fw-bold">Progreso</span>
                     </div>
 
                     <div class="progress mb-3" style="height: 10px; background-color: rgba(255,255,255,0.3);">
@@ -287,11 +280,40 @@
                         </div>
                     </div>
 
+                    <!-- Desglose de costos -->
+                    {% if costos_desglosados %}
+                    <div class="mt-3 border-top pt-3">
+                        <small class="text-muted d-block mb-2"><i class="fas fa-chart-pie me-1"></i>Desglose de costos:</small>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small><i class="fas fa-boxes text-warning me-1"></i>Materiales:</small>
+                            <small class="fw-bold">{{ "$ {:,.2f}".format(costos_desglosados.materiales) }}</small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small><i class="fas fa-hard-hat text-info me-1"></i>Mano de obra:</small>
+                            <small class="fw-bold">{{ "$ {:,.2f}".format(costos_desglosados.mano_obra) }}</small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center text-muted" style="font-size: 0.75rem;">
+                            <small>({{ "%.1f"|format(costos_desglosados.horas_trabajadas) }} hs × {{ "$ {:,.0f}".format(costos_desglosados.costo_hora) }}/h)</small>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="progress mt-3" style="height: 6px;">
                         <div class="progress-bar {% if obra.porcentaje_presupuesto_ejecutado > 100 %}bg-danger{% elif obra.porcentaje_presupuesto_ejecutado > 80 %}bg-warning{% else %}bg-info{% endif %}"
-                             style="width: {{ [obra.porcentaje_presupuesto_ejecutado, 100]|max }}%;"></div>
+                             style="width: {{ [obra.porcentaje_presupuesto_ejecutado, 100]|min }}%;"></div>
                     </div>
                     <small class="text-muted">{{ "%.1f"|format(obra.porcentaje_presupuesto_ejecutado) }}% ejecutado</small>
+
+                    {% if can_manage %}
+                    <div class="mt-3 text-center">
+                        <form action="{{ url_for('obras.actualizar_progreso_automatico', id=obra.id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-sync-alt me-1"></i> Recalcular Progreso
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -310,13 +332,10 @@
                         </div>
                         <div>
                             {% if presupuesto %}
-                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id) }}" class="btn btn-sm btn-light me-2" title="Ver presupuesto completo">
+                            <a href="{{ url_for('presupuestos.detalle', id=presupuesto.id, desde_obra=obra.id) }}" class="btn btn-sm btn-light me-2" title="Ver presupuesto completo">
                                 <i class="fas fa-file-invoice-dollar me-1"></i>Presupuesto
                             </a>
                             {% endif %}
-                            <a href="{{ url_for('inventario.lista') }}" class="btn btn-sm btn-light" title="Ir a inventario">
-                                <i class="fas fa-warehouse me-1"></i>Inventario
-                            </a>
                         </div>
                     </div>
 
@@ -360,7 +379,7 @@
                             </button>
                         </li>
                         <li class="nav-item ms-auto" role="presentation">
-                            <button class="btn btn-warning btn-sm" onclick="reservarMateriales({{ obra.id }})" title="Reservar materiales en inventario">
+                            <button class="btn btn-warning btn-sm" onclick="reservarMateriales(this, {{ obra.id }})" title="Reservar materiales en inventario">
                                 <i class="fas fa-shopping-cart me-1"></i>Reservar Stock
                             </button>
                         </li>
@@ -483,10 +502,10 @@
                                                                 </span>
                                                             {% endif %}
                                                         {% else %}
-                                                            {# Material no vinculado - botón para verificar #}
-                                                            <a href="{{ url_for('inventario.lista', buscar=item.descripcion.split()[0]) }}"
+                                                            {# Material no vinculado - botón para ir al inventario #}
+                                                            <a href="{{ url_for('inventario.lista') }}"
                                                                class="btn btn-sm btn-outline-secondary"
-                                                               title="Buscar en inventario"
+                                                               title="Ir al inventario para trasladar stock"
                                                                target="_blank">
                                                                 <i class="fas fa-search me-1"></i>Buscar
                                                             </a>
@@ -1089,6 +1108,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="formAvanceDetalle" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     
                     <div class="mb-3">
@@ -1136,19 +1156,19 @@
 
                     <!-- Materiales Consumidos -->
                     <div class="mb-3">
-                        <label class="form-label">Materiales consumidos *</label>
+                        <label class="form-label">Materiales consumidos (opcional)</label>
                         <div id="materiales-consumidos-container">
                             <div class="material-item mb-2">
                                 <div class="row g-2">
                                     <div class="col-md-6">
-                                        <select class="form-select material-select" name="material_id[]" required>
+                                        <select class="form-select material-select" name="material_id[]">
                                             <option value="">Seleccionar material...</option>
                                             <!-- Se llenará dinámicamente con items del inventario -->
                                         </select>
                                     </div>
                                     <div class="col-md-4">
                                         <input type="number" class="form-control" name="material_cantidad[]"
-                                               placeholder="Cantidad" step="0.01" min="0.01" required>
+                                               placeholder="Cantidad" step="0.01" min="0.01">
                                     </div>
                                     <div class="col-md-2">
                                         <button type="button" class="btn btn-sm btn-outline-danger w-100"
@@ -1162,14 +1182,14 @@
                         <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="agregarMaterial()">
                             <i class="fas fa-plus me-1"></i>Agregar otro material
                         </button>
-                        <small class="text-muted d-block mt-1">Debe registrar al menos un material consumido</small>
+                        <small class="text-muted d-block mt-1"></small>
                     </div>
 
                     <div class="mb-3">
-                        <label for="notas" class="form-label">Notas *</label>
+                        <label for="notas" class="form-label">Notas (opcional)</label>
                         <textarea class="form-control" id="notas" name="notas" rows="3"
-                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc." required></textarea>
-                        <small class="text-muted">Campo obligatorio para documentar el trabajo</small>
+                                  placeholder="Describir el trabajo realizado, materiales utilizados, etc."></textarea>
+                        <small class="text-muted"></small>
                     </div>
                     
                     <div class="mb-3">
@@ -2097,13 +2117,13 @@ function agregarMaterial() {
     newItem.innerHTML = `
         <div class="row g-2">
             <div class="col-md-6">
-                <select class="form-select material-select" name="material_id[]" required>
+                <select class="form-select material-select" name="material_id[]">
                     <option value="">Seleccionar material...</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <input type="number" class="form-control" name="material_cantidad[]"
-                       placeholder="Cantidad" step="0.01" min="0.01" required>
+                       placeholder="Cantidad" step="0.01" min="0.01">
             </div>
             <div class="col-md-2">
                 <button type="button" class="btn btn-sm btn-outline-danger w-100"
@@ -2143,22 +2163,9 @@ document.getElementById('formAvanceDetalle')?.addEventListener('submit', async f
     const cantidad = document.getElementById('cantidad').value;
     const unidad = document.getElementById('unidad_ingresada').value;
     const horas = document.getElementById('horas').value;
-    const notas = document.getElementById('notas').value.trim();
 
-    if (!cantidad || !unidad || !horas || !notas) {
-        alert('Debe completar todos los campos obligatorios: cantidad, unidad, horas y notas.');
-        return;
-    }
-
-    // Validar que haya al menos un material seleccionado
-    const materiales = document.querySelectorAll('.material-select');
-    let materialValido = false;
-    materiales.forEach(select => {
-        if (select.value) materialValido = true;
-    });
-
-    if (!materialValido) {
-        alert('Debe seleccionar al menos un material consumido.');
+    if (!cantidad || !unidad || !horas) {
+        alert('Debe completar todos los campos obligatorios: cantidad, unidad y horas.');
         return;
     }
 
@@ -2348,8 +2355,7 @@ async function confirmarRechazo() {
 console.log('🔧 HOTFIX activo: envíos tradicionales permitidos cuando corresponde.');
 
 // ========== RESERVA DE MATERIALES ==========
-async function reservarMateriales(obraId) {
-    const btn = event.target.closest('button');
+async function reservarMateriales(btn, obraId) {
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
@@ -2424,20 +2430,27 @@ function mostrarAlertasReservas(data) {
         `;
     }
 
-    // Mostrar materiales sin vincular (solo informativo, no es error)
-    if (data.materiales_sin_match > 0) {
-        html += `
-            <div class="alert alert-secondary alert-dismissible fade show" role="alert">
-                <strong><i class="fas fa-link-slash me-2"></i>Materiales sin vincular al inventario</strong>
-                <p class="mb-2 mt-2 small">Para reservar stock de estos materiales, primero vincúlalos desde el presupuesto:</p>
-                <ul class="mb-0 small">
-                    ${data.detalle.sin_match.map(m => `
-                        <li>${m.descripcion}: ${m.cantidad} ${m.unidad}</li>
-                    `).join('')}
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
+    // Si no hay reservas ni alertas, mostrar mensaje informativo
+    if (data.reservas_creadas === 0 && data.alertas_compra === 0) {
+        if (data.materiales_sin_match > 0) {
+            html += `
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <strong><i class="fas fa-info-circle me-2"></i>Sin materiales vinculados</strong>
+                    <p class="mb-0 mt-2">Los materiales del presupuesto no están vinculados al inventario.
+                    Para reservar stock, primero vinculá cada material desde el módulo de presupuestos.</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <strong><i class="fas fa-info-circle me-2"></i>Sin reservas pendientes</strong>
+                    <p class="mb-0 mt-2">No hay materiales nuevos para reservar.
+                    Los materiales ya fueron reservados o no hay materiales en el presupuesto.</p>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
     }
 
     container.innerHTML = html;
