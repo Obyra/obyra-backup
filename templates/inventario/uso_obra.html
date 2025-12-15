@@ -28,11 +28,16 @@
                             <label for="obra_id" class="form-label">Obra / Depósito *</label>
                             <select class="form-select" id="obra_id" name="obra_id" required>
                                 <option value="">Seleccionar destino...</option>
+                                <option value="general" {% if request.form.get('obra_id') == 'general' %}selected{% endif %}>
+                                    📦 Depósito General (Stock Central)
+                                </option>
+                                <optgroup label="Obras">
                                 {% for obra in obras %}
                                 <option value="{{ obra.id }}" {% if request.form.get('obra_id') == obra.id|string %}selected{% endif %}>
-                                    {{ obra.nombre }}
+                                    🏗️ {{ obra.nombre }}
                                 </option>
                                 {% endfor %}
+                                </optgroup>
                             </select>
                             <div class="form-text">Seleccioná el destino donde se dará de alta el artículo.</div>
                         </div>
@@ -50,21 +55,26 @@
 
                         <div class="mb-3">
                             <label for="item_id" class="form-label">Artículo *</label>
-                            <select class="form-select select2-search" id="item_id" name="item_id" required>
-                                <option value="">Buscar por código o nombre...</option>
-                                {% for item in items %}
-                                <option value="{{ item.id }}"
-                                        data-codigo="{{ item.codigo }}"
-                                        data-nombre="{{ item.nombre }}"
-                                        data-categoria="{{ item.categoria.nombre if item.categoria else '' }}"
-                                        data-unidad="{{ item.unidad }}"
-                                        {% if request.form.get('item_id') == item.id|string %}selected{% endif %}>
-                                    [{{ item.codigo }}] {{ item.nombre }}{% if item.categoria %} - {{ item.categoria.nombre }}{% endif %}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <div class="d-flex gap-2">
+                                <select class="form-select select2-search flex-grow-1" id="item_id" name="item_id" required>
+                                    <option value="">Buscar por código o nombre...</option>
+                                    {% for item in items %}
+                                    <option value="{{ item.id }}"
+                                            data-codigo="{{ item.codigo }}"
+                                            data-nombre="{{ item.nombre }}"
+                                            data-categoria="{{ item.categoria.nombre if item.categoria else '' }}"
+                                            data-unidad="{{ item.unidad }}"
+                                            {% if request.form.get('item_id') == item.id|string %}selected{% endif %}>
+                                        [{{ item.codigo }}] {{ item.nombre }}{% if item.categoria %} - {{ item.categoria.nombre }}{% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalNuevoItem" title="Crear nuevo artículo">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
                             <div class="form-text">
-                                <i class="fas fa-search me-1"></i>Buscá por código o nombre (total o parcial)
+                                <i class="fas fa-search me-1"></i>Buscá por código o nombre, o creá uno nuevo con el botón <i class="fas fa-plus text-success"></i>
                             </div>
                         </div>
 
@@ -138,6 +148,87 @@
                         <li>La cantidad ingresada se sumará automáticamente al stock del destino seleccionado.</li>
                     </ul>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal Crear Nuevo Item -->
+<div class="modal fade" id="modalNuevoItem" tabindex="-1" aria-labelledby="modalNuevoItemLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalNuevoItemLabel">
+                    <i class="fas fa-plus-circle me-2"></i>Crear Nuevo Artículo
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formNuevoItem">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                    <div class="mb-3">
+                        <label for="nuevo_codigo" class="form-label">Código *</label>
+                        <input type="text" class="form-control" id="nuevo_codigo" name="codigo" required
+                               placeholder="Ej: MAT001, HER001">
+                        <div class="form-text">Código único para identificar el artículo</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="nuevo_nombre" class="form-label">Nombre *</label>
+                        <input type="text" class="form-control" id="nuevo_nombre" name="nombre" required
+                               placeholder="Ej: Cemento Portland 50kg">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="nuevo_categoria" class="form-label">Categoría</label>
+                        <select class="form-select" id="nuevo_categoria" name="categoria_id">
+                            <option value="">Sin categoría</option>
+                            {% for cat in categorias %}
+                            <option value="{{ cat.id }}">{{ cat.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="nuevo_unidad" class="form-label">Unidad *</label>
+                                <select class="form-select" id="nuevo_unidad" name="unidad" required>
+                                    <option value="unidad">Unidad</option>
+                                    <option value="kg">Kilogramo (kg)</option>
+                                    <option value="tonelada">Tonelada</option>
+                                    <option value="litro">Litro</option>
+                                    <option value="m2">Metro cuadrado (m²)</option>
+                                    <option value="m3">Metro cúbico (m³)</option>
+                                    <option value="ml">Metro lineal (ml)</option>
+                                    <option value="bolsa">Bolsa</option>
+                                    <option value="rollo">Rollo</option>
+                                    <option value="caja">Caja</option>
+                                    <option value="pack">Pack</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="nuevo_stock_minimo" class="form-label">Stock Mínimo</label>
+                                <input type="number" class="form-control" id="nuevo_stock_minimo" name="stock_minimo"
+                                       value="0" min="0" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="nuevo_descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="nuevo_descripcion" name="descripcion" rows="2"
+                                  placeholder="Descripción opcional del artículo"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnGuardarNuevoItem">
+                    <i class="fas fa-save me-1"></i>Crear Artículo
+                </button>
             </div>
         </div>
     </div>
@@ -227,6 +318,90 @@ $(document).ready(function() {
     if ($('#item_id').val()) {
         $('#item_id').trigger('change');
     }
+
+    // ========== CREAR NUEVO ITEM ==========
+    $('#btnGuardarNuevoItem').on('click', function() {
+        const btn = $(this);
+        const form = $('#formNuevoItem');
+
+        // Validar campos requeridos
+        const codigo = $('#nuevo_codigo').val().trim();
+        const nombre = $('#nuevo_nombre').val().trim();
+        const unidad = $('#nuevo_unidad').val();
+
+        if (!codigo || !nombre || !unidad) {
+            alert('Por favor completá los campos obligatorios: Código, Nombre y Unidad');
+            return;
+        }
+
+        // Deshabilitar botón mientras procesa
+        btn.prop('disabled', true);
+        btn.html('<i class="fas fa-spinner fa-spin me-1"></i>Creando...');
+
+        // Preparar datos
+        const formData = {
+            codigo: codigo,
+            nombre: nombre,
+            unidad: unidad,
+            categoria_id: $('#nuevo_categoria').val() || null,
+            stock_minimo: parseFloat($('#nuevo_stock_minimo').val()) || 0,
+            descripcion: $('#nuevo_descripcion').val().trim()
+        };
+
+        // Enviar al servidor
+        $.ajax({
+            url: '/inventario/api/crear-item',
+            method: 'POST',
+            contentType: 'application/json',
+            headers: {
+                'X-CSRFToken': $('input[name="csrf_token"]').val()
+            },
+            data: JSON.stringify(formData),
+            success: function(response) {
+                if (response.ok) {
+                    // Agregar el nuevo item al select
+                    const newOption = new Option(
+                        `[${response.item.codigo}] ${response.item.nombre}`,
+                        response.item.id,
+                        true,
+                        true
+                    );
+                    $(newOption).attr('data-codigo', response.item.codigo);
+                    $(newOption).attr('data-nombre', response.item.nombre);
+                    $(newOption).attr('data-unidad', response.item.unidad);
+                    $(newOption).attr('data-categoria', response.item.categoria || '');
+
+                    $('#item_id').append(newOption).trigger('change');
+
+                    // Cerrar modal y limpiar form
+                    $('#modalNuevoItem').modal('hide');
+                    form[0].reset();
+
+                    // Mostrar mensaje de éxito
+                    alert('✅ Artículo creado exitosamente: ' + response.item.nombre);
+                } else {
+                    alert('Error: ' + (response.error || 'No se pudo crear el artículo'));
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = 'Error al crear el artículo';
+                try {
+                    const resp = JSON.parse(xhr.responseText);
+                    errorMsg = resp.error || errorMsg;
+                } catch(e) {}
+                alert(errorMsg);
+            },
+            complete: function() {
+                btn.prop('disabled', false);
+                btn.html('<i class="fas fa-save me-1"></i>Crear Artículo');
+            }
+        });
+    });
+
+    // Limpiar formulario al cerrar modal
+    $('#modalNuevoItem').on('hidden.bs.modal', function() {
+        $('#formNuevoItem')[0].reset();
+    });
 });
 </script>
 {% endblock %}

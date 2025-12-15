@@ -544,18 +544,23 @@ def uso_obra():
     ).distinct().order_by(Obra.nombre).all()
 
     items = ItemInventario.query.filter_by(activo=True).order_by(ItemInventario.nombre).all()
-    context = {'obras': obras, 'items': items, 'today': date.today()}
+
+    # Obtener categorías para el modal de crear nuevo item
+    org_id = get_current_org_id() or current_user.organizacion_id
+    categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all() if org_id else []
+
+    context = {'obras': obras, 'items': items, 'today': date.today(), 'categorias': categorias}
 
     if request.method == 'POST':
-        obra_id = request.form.get('obra_id')
+        destino = request.form.get('obra_id')  # Puede ser 'general' o un ID de obra
         item_id = request.form.get('item_id')
         cantidad = request.form.get('cantidad')
         fecha_compra = request.form.get('fecha_compra')
         proveedor = request.form.get('proveedor', '').strip()
         remito = request.form.get('remito', '').strip()
 
-        if not all([obra_id, item_id, cantidad]):
-            flash('Obra/Depósito, artículo y cantidad son obligatorios.', 'danger')
+        if not all([destino, item_id, cantidad]):
+            flash('Destino, artículo y cantidad son obligatorios.', 'danger')
             return render_template('inventario/uso_obra.html', **context)
 
         try:
@@ -572,21 +577,6 @@ def uso_obra():
 
             stock_actual = float(item.stock_actual) if item.stock_actual is not None else 0
 
-            # Validación estricta de stock - NO permite stock negativo
-            if cantidad > stock_actual:
-                current_app.logger.warning(
-                    f"❌ Stock insuficiente para {item.nombre}. "
-                    f"Disponible: {stock_actual}, Requerido: {cantidad}. "
-                    f"Operación bloqueada."
-                )
-                flash(
-                    f'❌ Stock insuficiente para {item.nombre}. '
-                    f'Disponible: {stock_actual:.2f} {item.unidad}, solicitado: {cantidad:.2f} {item.unidad}. '
-                    f'Primero registrá una entrada de material.',
-                    'danger'
-                )
-                return render_template('inventario/uso_obra.html', **context)
-
             # Convertir fecha
             fecha_compra_obj = date.today()
             if fecha_compra:
@@ -601,37 +591,96 @@ def uso_obra():
                 observaciones_parts.append(f'Remito: {remito}')
             observaciones = ' | '.join(observaciones_parts) if observaciones_parts else None
 
-            # Crear uso/registro en obra con precio histórico
-            uso = UsoInventario(
-                obra_id=obra_id,
-                item_id=item_id,
-                cantidad_usada=cantidad,
-                fecha_uso=fecha_compra_obj,
-                observaciones=observaciones,
-                usuario_id=current_user.id,
-                precio_unitario_al_uso=item.precio_promedio,
-                moneda='ARS'
-            )
+            # Determinar si es depósito general o una obra específica
+            es_deposito_general = (destino == 'general')
 
-            # Crear movimiento de ENTRADA (compra)
-            obra = Obra.query.get(obra_id)
-            movimiento = MovimientoInventario(
-                item_id=item_id,
-                tipo='entrada',
-                cantidad=cantidad,
-                motivo=f'Compra para {obra.nombre}',
-                observaciones=observaciones,
-                usuario_id=current_user.id
-            )
+            if es_deposito_general:
+                # DEPÓSITO GENERAL: Solo sumar al stock central
+                motivo = 'Compra - Depósito General'
 
-            # SUMAR stock (es una compra, no una salida)
-            item.stock_actual = stock_actual + cantidad
+                # Crear movimiento de ENTRADA
+                movimiento = MovimientoInventario(
+                    item_id=item_id,
+                    tipo='entrada',
+                    cantidad=cantidad,
+                    motivo=motivo,
+                    observaciones=observaciones,
+                    usuario_id=current_user.id
+                )
 
-            db.session.add(uso)
-            db.session.add(movimiento)
-            db.session.commit()
+                # Sumar al stock general
+                item.stock_actual = stock_actual + cantidad
 
-            flash('Compra registrada exitosamente.', 'success')
+                db.session.add(movimiento)
+                db.session.commit()
+
+                flash(f'✅ Compra registrada en Depósito General: {cantidad:.2f} {item.unidad} de {item.nombre}', 'success')
+
+            else:
+                # OBRA ESPECÍFICA: Sumar al stock general Y crear/actualizar StockObra
+                obra_id = int(destino)
+                obra = Obra.query.get(obra_id)
+
+                if not obra:
+                    flash('La obra seleccionada no existe.', 'danger')
+                    return render_template('inventario/uso_obra.html', **context)
+
+                motivo = f'Compra para obra: {obra.nombre}'
+
+                # Crear movimiento de ENTRADA
+                movimiento = MovimientoInventario(
+                    item_id=item_id,
+                    tipo='entrada',
+                    cantidad=cantidad,
+                    motivo=motivo,
+                    observaciones=observaciones,
+                    usuario_id=current_user.id
+                )
+
+                # Sumar al stock general
+                item.stock_actual = stock_actual + cantidad
+
+                # Crear o actualizar StockObra
+                stock_obra = StockObra.query.filter_by(
+                    obra_id=obra_id,
+                    item_inventario_id=item_id
+                ).first()
+
+                if stock_obra:
+                    # Actualizar stock existente
+                    stock_obra.cantidad_disponible = float(stock_obra.cantidad_disponible or 0) + cantidad
+                    stock_obra.fecha_ultimo_traslado = fecha_compra_obj
+                else:
+                    # Crear nuevo registro de stock en obra
+                    stock_obra = StockObra(
+                        obra_id=obra_id,
+                        item_inventario_id=item_id,
+                        cantidad_disponible=cantidad,
+                        cantidad_consumida=0,
+                        fecha_ultimo_traslado=fecha_compra_obj
+                    )
+                    db.session.add(stock_obra)
+
+                # Registrar movimiento en StockObra
+                mov_stock_obra = MovimientoStockObra(
+                    stock_obra_id=stock_obra.id if stock_obra.id else None,
+                    tipo='entrada',
+                    cantidad=cantidad,
+                    observaciones=f'Compra directa | {observaciones}' if observaciones else 'Compra directa',
+                    usuario_id=current_user.id
+                )
+
+                db.session.add(movimiento)
+                db.session.flush()  # Para obtener el ID de stock_obra si es nuevo
+
+                if not mov_stock_obra.stock_obra_id:
+                    mov_stock_obra.stock_obra_id = stock_obra.id
+
+                db.session.add(mov_stock_obra)
+                db.session.commit()
+
+                flash(f'✅ Compra registrada para {obra.nombre}: {cantidad:.2f} {item.unidad} de {item.nombre}', 'success')
+
             return redirect(url_for('inventario.lista'))
 
         except ValueError:
@@ -639,7 +688,9 @@ def uso_obra():
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error al registrar compra: {str(e)}")
-            flash('Error al registrar la compra.', 'danger')
+            import traceback
+            current_app.logger.error(traceback.format_exc())
+            flash(f'Error al registrar la compra: {str(e)}', 'danger')
 
     return render_template('inventario/uso_obra.html', **context)
 
@@ -777,6 +828,86 @@ def api_generar_codigo():
     except Exception as e:
         current_app.logger.error(f"Error generando código: {str(e)}")
         return jsonify({'error': 'Error al generar código automático'}), 500
+
+
+@inventario_bp.route('/api/crear-item', methods=['POST'])
+@login_required
+def api_crear_item():
+    """
+    API para crear un nuevo item de inventario (usado desde modal de Compras).
+    """
+    if not current_user.puede_acceder_modulo('inventario'):
+        return jsonify({'ok': False, 'error': 'Sin permisos para crear items'}), 403
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    if not org_id:
+        return jsonify({'ok': False, 'error': 'No tienes una organización activa'}), 400
+
+    try:
+        data = request.get_json() or {}
+
+        codigo = (data.get('codigo') or '').strip().upper()
+        nombre = (data.get('nombre') or '').strip()
+        unidad = (data.get('unidad') or '').strip()
+        categoria_id = data.get('categoria_id')
+        stock_minimo = float(data.get('stock_minimo') or 0)
+        descripcion = (data.get('descripcion') or '').strip()
+
+        # Validaciones
+        if not codigo or not nombre or not unidad:
+            return jsonify({'ok': False, 'error': 'Código, nombre y unidad son obligatorios'}), 400
+
+        # Verificar código duplicado
+        existing = ItemInventario.query.filter_by(codigo=codigo).first()
+        if existing:
+            return jsonify({'ok': False, 'error': f'Ya existe un item con el código {codigo}'}), 400
+
+        # Verificar nombre duplicado en la organización
+        existing_nombre = ItemInventario.query.filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.nombre.ilike(nombre),
+            ItemInventario.activo == True
+        ).first()
+        if existing_nombre:
+            return jsonify({
+                'ok': False,
+                'error': f'Ya existe "{nombre}" (código: {existing_nombre.codigo})'
+            }), 400
+
+        # Crear el item
+        nuevo_item = ItemInventario(
+            organizacion_id=org_id,
+            categoria_id=int(categoria_id) if categoria_id else None,
+            codigo=codigo,
+            nombre=nombre,
+            descripcion=descripcion,
+            unidad=unidad,
+            stock_actual=0,
+            stock_minimo=stock_minimo,
+            precio_promedio=0,
+            activo=True
+        )
+
+        db.session.add(nuevo_item)
+        db.session.commit()
+
+        current_app.logger.info(f"Item creado via API: {codigo} - {nombre} por usuario {current_user.id}")
+
+        return jsonify({
+            'ok': True,
+            'item': {
+                'id': nuevo_item.id,
+                'codigo': nuevo_item.codigo,
+                'nombre': nuevo_item.nombre,
+                'unidad': nuevo_item.unidad,
+                'categoria': nuevo_item.categoria.nombre if nuevo_item.categoria else None
+            }
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creando item via API: {str(e)}")
+        return jsonify({'ok': False, 'error': 'Error al crear el artículo'}), 500
 
 
 @inventario_bp.route('/api/tipo-cambio', methods=['GET'])

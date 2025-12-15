@@ -13,11 +13,8 @@
                         <i class="fas fa-chart-line me-1"></i>Análisis y Reportes
                     </a>
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-outline-primary me-2">
+                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-primary me-2">
                         <i class="fas fa-shopping-cart me-1"></i>Compras
-                    </a>
-                    <a href="{{ url_for('inventario.crear') }}" class="btn btn-primary me-2">
-                        <i class="fas fa-plus me-1"></i>Nuevo Item
                     </a>
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalGestionCategorias">
                         <i class="fas fa-tags me-1"></i>Categorías
@@ -189,14 +186,14 @@
                     <h4 class="text-muted">No hay items de inventario</h4>
                     <p class="text-muted">
                         {% if current_user.rol in ['administrador', 'tecnico'] %}
-                            Comienza agregando items a tu inventario.
+                            Comienza registrando una compra para agregar items al inventario.
                         {% else %}
                             No hay items disponibles para visualizar.
                         {% endif %}
                     </p>
                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                    <a href="{{ url_for('inventario.crear') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>Agregar Primer Item
+                    <a href="{{ url_for('inventario.uso_obra') }}" class="btn btn-primary">
+                        <i class="fas fa-shopping-cart me-1"></i>Ir a Compras
                     </a>
                     {% endif %}
                 </div>

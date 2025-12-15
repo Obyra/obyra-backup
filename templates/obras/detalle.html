@@ -454,9 +454,15 @@
                                                     {% endif %}
                                                     <td class="text-center">
                                                         {% if transferido_encontrado.data %}
-                                                            <span class="badge bg-info">
+                                                            <span class="badge bg-info stock-transferido-badge"
+                                                                  data-item-inventario-id="{{ transferido_encontrado.data.item_inventario_id }}"
+                                                                  data-unidad="{{ transferido_encontrado.data.unidad }}">
                                                                 <i class="fas fa-truck me-1"></i>{{ transferido_encontrado.data.cantidad_disponible|numero }} {{ transferido_encontrado.data.unidad }}
                                                             </span>
+                                                        {% elif item.item_inventario %}
+                                                            <span class="badge bg-secondary stock-transferido-badge"
+                                                                  data-item-inventario-id="{{ item.item_inventario.id }}"
+                                                                  data-unidad="{{ item.unidad }}">0 {{ item.unidad }}</span>
                                                         {% else %}
                                                             <span class="badge bg-secondary">0 {{ item.unidad }}</span>
                                                         {% endif %}
@@ -2612,6 +2618,88 @@ document.addEventListener('DOMContentLoaded', function() {
     cargarReservas({{ obra.id }});
     cargarStockObra({{ obra.id }});
 });
+
+// ========== AUTO-ACTUALIZACIÓN AL VOLVER A LA PESTAÑA ==========
+// Actualiza automáticamente cuando el usuario vuelve a esta pestaña
+// (útil cuando hace traslados desde inventario en otra pestaña)
+let ultimaActualizacion = Date.now();
+
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+        const ahora = Date.now();
+        // Solo actualizar si pasaron más de 3 segundos desde la última actualización
+        if (ahora - ultimaActualizacion > 3000) {
+            console.log('🔄 Actualizando datos de obra (pestaña activa)...');
+            actualizarDatosObra();
+            ultimaActualizacion = ahora;
+        }
+    }
+});
+
+// También actualizar cuando la ventana obtiene foco
+window.addEventListener('focus', function() {
+    const ahora = Date.now();
+    if (ahora - ultimaActualizacion > 3000) {
+        console.log('🔄 Actualizando datos de obra (ventana activa)...');
+        actualizarDatosObra();
+        ultimaActualizacion = ahora;
+    }
+});
+
+// Función central para actualizar todos los datos de la obra
+async function actualizarDatosObra() {
+    const obraId = {{ obra.id }};
+
+    // Actualizar en paralelo
+    await Promise.all([
+        cargarStockObra(obraId),
+        cargarReservas(obraId),
+        actualizarTablaMateriales(obraId)
+    ]);
+}
+
+// Actualizar la tabla de materiales (columna Transferido)
+async function actualizarTablaMateriales(obraId) {
+    try {
+        const response = await fetch(`/obras/api/obras/${obraId}/stock-obra`);
+        const data = await response.json();
+
+        if (data.ok && data.stock) {
+            // Crear mapa de stock por item_inventario_id
+            const stockMap = {};
+            data.stock.forEach(s => {
+                stockMap[s.item_inventario_id] = {
+                    disponible: parseFloat(s.cantidad_disponible) || 0,
+                    consumido: parseFloat(s.cantidad_consumida) || 0,
+                    unidad: s.unidad
+                };
+            });
+
+            // Actualizar badges de "Transferido" en la tabla de materiales
+            document.querySelectorAll('.stock-transferido-badge').forEach(badge => {
+                const itemId = badge.dataset.itemInventarioId;
+                const unidad = badge.dataset.unidad || '';
+
+                if (itemId && stockMap[itemId]) {
+                    const stock = stockMap[itemId];
+                    // Actualizar con el nuevo valor
+                    badge.innerHTML = `<i class="fas fa-truck me-1"></i>${stock.disponible.toFixed(2)} ${stock.unidad}`;
+                    badge.className = 'badge bg-info stock-transferido-badge';
+                    badge.dataset.itemInventarioId = itemId;
+                    badge.dataset.unidad = stock.unidad;
+                } else if (itemId && !stockMap[itemId]) {
+                    // No hay stock transferido para este item
+                    badge.innerHTML = `0 ${unidad}`;
+                    badge.className = 'badge bg-secondary stock-transferido-badge';
+                }
+            });
+
+            console.log(`✅ Tabla de materiales actualizada (${Object.keys(stockMap).length} items con stock)`);
+        }
+    } catch (error) {
+        console.warn('Error actualizando tabla de materiales:', error);
+    }
+}
 
 // ========== GESTIÓN DE STOCK EN OBRA ==========
 async function cargarStockObra(obraId) {
