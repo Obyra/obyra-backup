@@ -182,9 +182,12 @@ else:
 
 # Session Security Configuration
 from datetime import timedelta
-app.config["SESSION_COOKIE_SECURE"] = _env_flag("SESSION_COOKIE_SECURE", default=False)  # True en producción con HTTPS
+# SESSION_COOKIE_SECURE: True automáticamente en producción (FLASK_ENV=production)
+# También se puede forzar con SESSION_COOKIE_SECURE=true
+_is_production = os.environ.get('FLASK_ENV', '').lower() == 'production'
+app.config["SESSION_COOKIE_SECURE"] = _is_production or _env_flag("SESSION_COOKIE_SECURE", default=False)
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevenir acceso desde JavaScript
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Protección CSRF básica
+app.config["SESSION_COOKIE_SAMESITE"] = "Strict" if _is_production else "Lax"  # Más estricto en producción
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=int(os.getenv("SESSION_LIFETIME_HOURS", "24")))
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True  # Renovar sesión en cada request
 
@@ -236,6 +239,23 @@ setup_request_timing(app)
 # Setup security headers middleware (CSP, X-Frame-Options, etc.)
 from middleware.security_headers import setup_security_headers
 setup_security_headers(app)
+
+# CORS Configuration - Solo permite orígenes específicos en producción
+_cors_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+if _cors_origins:
+    try:
+        from flask_cors import CORS
+        origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+        CORS(app,
+             origins=origins_list,
+             supports_credentials=True,
+             methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+             allow_headers=['Content-Type', 'Authorization', 'X-CSRFToken'])
+        app.logger.info(f"CORS configurado para: {origins_list}")
+    except ImportError:
+        app.logger.warning("flask-cors no instalado, CORS no configurado")
+elif _is_production:
+    app.logger.warning("CORS_ALLOWED_ORIGINS no configurado en producción")
 
 # ---------------- Login dynamic resolution ----------------
 def _resolve_login_endpoint() -> Optional[str]:
@@ -1005,11 +1025,48 @@ def serve_media(relpath):
     media_dir = Path(app.instance_path) / "media"
     return send_from_directory(media_dir, relpath)
 
-# === HEALTH CHECK ENDPOINT ===
+# === HEALTH CHECK ENDPOINTS ===
 @app.route("/health")
 def health_check():
-    """Health check endpoint for Docker and monitoring"""
+    """Health check básico para load balancers"""
     return {"status": "healthy", "app": "obyra"}, 200
+
+@app.route("/health/detailed")
+def health_check_detailed():
+    """Health check detallado que verifica todas las dependencias"""
+    from sqlalchemy import text
+
+    checks = {
+        "app": "healthy",
+        "database": "unknown",
+        "redis": "unknown"
+    }
+    status_code = 200
+
+    # Verificar PostgreSQL
+    try:
+        db.session.execute(text("SELECT 1"))
+        checks["database"] = "healthy"
+    except Exception as e:
+        checks["database"] = f"unhealthy: {str(e)[:50]}"
+        status_code = 503
+
+    # Verificar Redis (si está configurado)
+    try:
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url:
+            import redis
+            r = redis.from_url(redis_url)
+            r.ping()
+            checks["redis"] = "healthy"
+        else:
+            checks["redis"] = "not_configured"
+    except Exception as e:
+        checks["redis"] = f"unhealthy: {str(e)[:50]}"
+        # Redis no es crítico, no cambiamos status_code
+
+    overall_status = "healthy" if status_code == 200 else "degraded"
+    return {"status": overall_status, "checks": checks}, status_code
 
 # Error handlers
 @app.errorhandler(403)
@@ -1049,5 +1106,7 @@ def internal_error(error):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5002))  # Use port 5002 by default (5000 conflicts with macOS AirPlay)
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # DEBUG solo se activa si FLASK_DEBUG=1 (nunca en producción)
+    debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
 
