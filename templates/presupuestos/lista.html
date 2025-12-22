@@ -10,14 +10,27 @@
                 <h2><i class="fas fa-calculator me-2"></i>Gestión de Presupuestos</h2>
                 {% if current_user.rol in ['administrador', 'tecnico'] %}
                 <div class="btn-group" role="group">
-                    <a href="{{ url_for('presupuestos.crear') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>Nuevo Presupuesto
-                    </a>
-                    {% if mostrar_calculadora_ia_header and has_endpoint('cotizacion.calculadora_inteligente') %}
-                    <a href="{{ url_for('cotizacion.calculadora_inteligente') }}" class="btn btn-success">
-                        <i class="fas fa-brain me-1"></i>Calculadora IA
-                    </a>
-                    {% endif %}
+                    <div class="dropdown">
+                        <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownNuevoPresupuesto"
+                                data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-plus me-1"></i>Nuevo Presupuesto
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="dropdownNuevoPresupuesto">
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('presupuestos.crear') }}">
+                                    <i class="fas fa-brain text-success me-2"></i>Con Calculadora IA
+                                    <br><small class="text-muted ms-4">Calcula materiales automaticamente</small>
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('presupuestos.crear_manual') }}">
+                                    <i class="fas fa-edit text-primary me-2"></i>Carga Manual
+                                    <br><small class="text-muted ms-4">Agrega items manualmente</small>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
                 {% endif %}
             </div>

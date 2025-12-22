@@ -23,6 +23,10 @@ from models import (
     MovimientoInventario,
     UsoInventario,
     Obra,
+    # Nuevo sistema de ubicaciones
+    Location,
+    StockUbicacion,
+    MovimientoStock,
 )
 from services.memberships import get_current_org_id
 
@@ -168,7 +172,7 @@ def lista():
         ).scalar()
         stock_fisico_inicial = float(entradas or 0)
 
-        # Obtener traslados a obras
+        # Obtener traslados a obras (legacy)
         traslados_obras = []
         stocks_en_obras = StockObra.query.filter_by(item_inventario_id=item.id).all()
         for stock in stocks_en_obras:
@@ -179,6 +183,20 @@ def lista():
                     'cantidad': float(stock.cantidad_disponible or 0)
                 })
 
+        # Obtener stock por ubicaciones (nuevo sistema)
+        stocks_ubicacion = StockUbicacion.query.filter_by(item_inventario_id=item.id).all()
+        ubicaciones_stock = []
+        for su in stocks_ubicacion:
+            if su.cantidad_disponible and float(su.cantidad_disponible) > 0:
+                ubicaciones_stock.append({
+                    'location_id': su.location_id,
+                    'location_nombre': su.location.nombre if su.location else 'Sin nombre',
+                    'location_tipo': su.location.tipo if su.location else 'UNKNOWN',
+                    'location_icono': su.location.icono if su.location else '📍',
+                    'cantidad': float(su.cantidad_disponible or 0),
+                    'obra_id': su.location.obra_id if su.location else None
+                })
+
         items_con_obras.append({
             'item': item,
             'obras': obras_confirmadas,
@@ -186,7 +204,8 @@ def lista():
             'stock_reservado': sum(r['cantidad'] for r in reservas_activas),
             'stock_fisico_inicial': stock_fisico_inicial,
             'traslados_obras': traslados_obras,
-            'total_trasladado': sum(t['cantidad'] for t in traslados_obras)
+            'total_trasladado': sum(t['cantidad'] for t in traslados_obras),
+            'ubicaciones_stock': ubicaciones_stock
         })
 
     # Load new inventory categories
@@ -361,9 +380,15 @@ def detalle(id):
     if not current_user.puede_acceder_modulo('inventario'):
         flash('No tienes permisos para ver detalles de inventario.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
     item = ItemInventario.query.get_or_404(id)
-    
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Verificar que el item pertenece a la organización (excepto superadmin)
+    if not current_user.is_super_admin and item.organizacion_id != org_id:
+        flash('No tienes permisos para ver este item.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
     # Obtener últimos movimientos
     movimientos = item.movimientos.order_by(MovimientoInventario.fecha.desc()).limit(10).all()
     
@@ -387,8 +412,8 @@ def eliminar(id):
     item = ItemInventario.query.get_or_404(id)
     org_id = get_current_org_id() or current_user.organizacion_id
 
-    # Verificar que el item pertenece a la organización
-    if item.organizacion_id != org_id:
+    # Verificar que el item pertenece a la organización (excepto superadmin)
+    if not current_user.is_super_admin and item.organizacion_id != org_id:
         flash('No tienes permisos para eliminar este item.', 'danger')
         return redirect(url_for('inventario.lista'))
 
@@ -436,9 +461,15 @@ def registrar_movimiento(id):
     if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para registrar movimientos.', 'danger')
         return redirect(url_for('inventario.detalle', id=id))
-    
+
     item = ItemInventario.query.get_or_404(id)
-    
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Verificar que el item pertenece a la organización (excepto superadmin)
+    if not current_user.is_super_admin and item.organizacion_id != org_id:
+        flash('No tienes permisos para modificar este item.', 'danger')
+        return redirect(url_for('inventario.lista'))
+
     tipo = request.form.get('tipo')
     cantidad = request.form.get('cantidad')
     precio_unitario = request.form.get('precio_unitario', 0)
@@ -534,40 +565,78 @@ def uso_obra():
         flash('No tienes permisos para registrar uso en obra.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    # Obtener obras de presupuestos aprobados
+    org_id = get_current_org_id() or current_user.organizacion_id
+
+    # Obtener todas las ubicaciones disponibles para el selector
+    ubicaciones = Location.query.filter_by(
+        organizacion_id=org_id,
+        activo=True
+    ).order_by(Location.tipo, Location.nombre).all()
+
+    # Si no hay depósito general, crearlo
+    deposito_general = Location.get_or_create_deposito_general(org_id)
+
+    # Obtener obras que tienen presupuesto aprobado y crear sus ubicaciones si no existen
     from models.budgets import Presupuesto
     obras = Obra.query.join(Presupuesto).filter(
         db.or_(
             Presupuesto.confirmado_como_obra == True,
             Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
-        )
+        ),
+        Obra.organizacion_id == org_id
     ).distinct().order_by(Obra.nombre).all()
 
-    items = ItemInventario.query.filter_by(activo=True).order_by(ItemInventario.nombre).all()
+    # Crear ubicaciones para obras que no las tengan
+    for obra in obras:
+        Location.get_or_create_for_obra(obra)
+
+    # Refrescar lista de ubicaciones
+    ubicaciones = Location.query.filter_by(
+        organizacion_id=org_id,
+        activo=True
+    ).order_by(Location.tipo.desc(), Location.nombre).all()  # WAREHOUSE primero, luego WORKSITE
+
+    items = ItemInventario.query.filter_by(
+        organizacion_id=org_id,
+        activo=True
+    ).order_by(ItemInventario.nombre).all()
 
     # Obtener categorías para el modal de crear nuevo item
-    org_id = get_current_org_id() or current_user.organizacion_id
     categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all() if org_id else []
 
-    context = {'obras': obras, 'items': items, 'today': date.today(), 'categorias': categorias}
+    # Obtener proveedores de la organización
+    from models import Proveedor
+    proveedores = Proveedor.query.filter_by(organizacion_id=org_id, activo=True).order_by(Proveedor.nombre).all() if org_id else []
+
+    context = {
+        'ubicaciones': ubicaciones,
+        'obras': obras,  # Mantenido para compatibilidad
+        'items': items,
+        'today': date.today(),
+        'categorias': categorias,
+        'proveedores': proveedores
+    }
 
     if request.method == 'POST':
-        destino = request.form.get('obra_id')  # Puede ser 'general' o un ID de obra
+        location_id = request.form.get('obra_id')  # Ahora es location_id pero mantenemos el nombre del campo
         item_id = request.form.get('item_id')
         cantidad = request.form.get('cantidad')
+        unidad = request.form.get('unidad', '').strip()
         fecha_compra = request.form.get('fecha_compra')
-        proveedor = request.form.get('proveedor', '').strip()
+        marca = request.form.get('marca', '').strip()
+        modelo = request.form.get('modelo', '').strip()
+        proveedor_id = request.form.get('proveedor_id', '').strip()
         remito = request.form.get('remito', '').strip()
 
-        if not all([destino, item_id, cantidad]):
-            flash('Destino, artículo y cantidad son obligatorios.', 'danger')
+        if not all([location_id, item_id, cantidad, unidad]):
+            flash('Destino, artículo, cantidad y unidad de medida son obligatorios.', 'danger')
             return render_template('inventario/uso_obra.html', **context)
 
         try:
             cantidad = float(cantidad)
-            item = ItemInventario.query.get(item_id)
+            item_base = ItemInventario.query.get(item_id)
 
-            if item is None:
+            if item_base is None:
                 flash('El artículo seleccionado no existe.', 'danger')
                 return render_template('inventario/uso_obra.html', **context)
 
@@ -575,112 +644,200 @@ def uso_obra():
                 flash('La cantidad debe ser mayor a cero.', 'danger')
                 return render_template('inventario/uso_obra.html', **context)
 
-            stock_actual = float(item.stock_actual) if item.stock_actual is not None else 0
+            # Lógica de variantes: si se especificó marca/modelo/proveedor diferente,
+            # buscar o crear una variante del artículo
+            item = item_base
+            proveedor_id_int = int(proveedor_id) if proveedor_id else None
 
-            # Convertir fecha
-            fecha_compra_obj = date.today()
-            if fecha_compra:
-                from datetime import datetime
-                fecha_compra_obj = datetime.strptime(fecha_compra, '%Y-%m-%d').date()
+            # Verificar si necesitamos crear una variante
+            necesita_variante = False
+            if marca and marca != (item_base.marca or ''):
+                necesita_variante = True
+            if modelo and modelo != (item_base.modelo or ''):
+                necesita_variante = True
+            if proveedor_id_int and proveedor_id_int != item_base.proveedor_id:
+                necesita_variante = True
 
-            # Construir observaciones con proveedor y remito
-            observaciones_parts = []
-            if proveedor:
-                observaciones_parts.append(f'Proveedor: {proveedor}')
-            if remito:
-                observaciones_parts.append(f'Remito: {remito}')
-            observaciones = ' | '.join(observaciones_parts) if observaciones_parts else None
-
-            # Determinar si es depósito general o una obra específica
-            es_deposito_general = (destino == 'general')
-
-            if es_deposito_general:
-                # DEPÓSITO GENERAL: Solo sumar al stock central
-                motivo = 'Compra - Depósito General'
-
-                # Crear movimiento de ENTRADA
-                movimiento = MovimientoInventario(
-                    item_id=item_id,
-                    tipo='entrada',
-                    cantidad=cantidad,
-                    motivo=motivo,
-                    observaciones=observaciones,
-                    usuario_id=current_user.id
-                )
-
-                # Sumar al stock general
-                item.stock_actual = stock_actual + cantidad
-
-                db.session.add(movimiento)
-                db.session.commit()
-
-                flash(f'✅ Compra registrada en Depósito General: {cantidad:.2f} {item.unidad} de {item.nombre}', 'success')
-
-            else:
-                # OBRA ESPECÍFICA: Sumar al stock general Y crear/actualizar StockObra
-                obra_id = int(destino)
-                obra = Obra.query.get(obra_id)
-
-                if not obra:
-                    flash('La obra seleccionada no existe.', 'danger')
-                    return render_template('inventario/uso_obra.html', **context)
-
-                motivo = f'Compra para obra: {obra.nombre}'
-
-                # Crear movimiento de ENTRADA
-                movimiento = MovimientoInventario(
-                    item_id=item_id,
-                    tipo='entrada',
-                    cantidad=cantidad,
-                    motivo=motivo,
-                    observaciones=observaciones,
-                    usuario_id=current_user.id
-                )
-
-                # Sumar al stock general
-                item.stock_actual = stock_actual + cantidad
-
-                # Crear o actualizar StockObra
-                stock_obra = StockObra.query.filter_by(
-                    obra_id=obra_id,
-                    item_inventario_id=item_id
+            if necesita_variante:
+                # Buscar si ya existe una variante con estos datos
+                variante_existente = ItemInventario.query.filter_by(
+                    organizacion_id=org_id,
+                    nombre=item_base.nombre,
+                    marca=marca or None,
+                    modelo=modelo or None,
+                    proveedor_id=proveedor_id_int,
+                    activo=True
                 ).first()
 
-                if stock_obra:
-                    # Actualizar stock existente
-                    stock_obra.cantidad_disponible = float(stock_obra.cantidad_disponible or 0) + cantidad
-                    stock_obra.fecha_ultimo_traslado = fecha_compra_obj
+                if variante_existente:
+                    item = variante_existente
                 else:
-                    # Crear nuevo registro de stock en obra
+                    # Generar código único para la variante
+                    import random
+                    import string
+                    sufijo = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+                    nuevo_codigo = f"{item_base.codigo}-{sufijo}"
+
+                    # Asegurar que el código sea único
+                    while ItemInventario.query.filter_by(codigo=nuevo_codigo).first():
+                        sufijo = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+                        nuevo_codigo = f"{item_base.codigo}-{sufijo}"
+
+                    # Crear la variante
+                    item = ItemInventario(
+                        organizacion_id=org_id,
+                        categoria_id=item_base.categoria_id,
+                        codigo=nuevo_codigo,
+                        nombre=item_base.nombre,
+                        descripcion=item_base.descripcion,
+                        unidad=unidad,
+                        marca=marca or None,
+                        modelo=modelo or None,
+                        proveedor_id=proveedor_id_int,
+                        stock_actual=0,
+                        stock_minimo=item_base.stock_minimo,
+                        precio_promedio=item_base.precio_promedio,
+                        activo=True
+                    )
+                    db.session.add(item)
+                    db.session.flush()
+                    current_app.logger.info(f"[INVENTARIO] Variante creada: {nuevo_codigo} - {item_base.nombre} ({marca} {modelo})")
+
+            # Actualizar unidad del item si cambió
+            if item.unidad != unidad:
+                item.unidad = unidad
+
+            # Convertir fecha
+            from datetime import datetime
+            fecha_compra_dt = datetime.now()
+            if fecha_compra:
+                fecha_compra_dt = datetime.strptime(fecha_compra, '%Y-%m-%d')
+
+            # Manejar compatibilidad: 'general' = depósito general
+            if location_id == 'general':
+                location = deposito_general
+            else:
+                location = Location.query.get(int(location_id))
+
+            if not location:
+                flash('La ubicación seleccionada no existe.', 'danger')
+                return render_template('inventario/uso_obra.html', **context)
+
+            # ============================================================
+            # NUEVO SISTEMA: Stock por Ubicación
+            # ============================================================
+
+            # Buscar o crear el registro de stock en esta ubicación
+            stock_ubicacion = StockUbicacion.query.filter_by(
+                location_id=location.id,
+                item_inventario_id=item.id
+            ).first()
+
+            if not stock_ubicacion:
+                stock_ubicacion = StockUbicacion(
+                    location_id=location.id,
+                    item_inventario_id=item.id,
+                    cantidad_disponible=0,
+                    cantidad_reservada=0,
+                    cantidad_consumida=0
+                )
+                db.session.add(stock_ubicacion)
+                db.session.flush()
+
+            # Actualizar cantidad disponible
+            stock_ubicacion.cantidad_disponible = float(stock_ubicacion.cantidad_disponible or 0) + cantidad
+            stock_ubicacion.fecha_ultima_entrada = fecha_compra_dt
+
+            # Obtener nombre del proveedor si existe
+            nombre_proveedor = None
+            if proveedor_id_int:
+                from models import Proveedor as ProveedorModel
+                prov = ProveedorModel.query.get(proveedor_id_int)
+                if prov:
+                    nombre_proveedor = prov.nombre
+
+            # Crear movimiento de stock
+            movimiento = MovimientoStock(
+                stock_ubicacion_id=stock_ubicacion.id,
+                tipo='entrada',
+                cantidad=cantidad,
+                fecha=fecha_compra_dt,
+                usuario_id=current_user.id,
+                motivo='Compra',
+                proveedor=nombre_proveedor,
+                remito=remito if remito else None,
+                precio_unitario=item.precio_promedio,
+                moneda='ARS'
+            )
+            db.session.add(movimiento)
+
+            # ============================================================
+            # LEGACY: Mantener compatibilidad con sistema anterior
+            # ============================================================
+
+            # Actualizar stock_actual del item (suma total)
+            item.stock_actual = float(item.stock_actual or 0) + cantidad
+
+            # Crear movimiento legacy
+            obs_parts = []
+            if nombre_proveedor:
+                obs_parts.append(f'Proveedor: {nombre_proveedor}')
+            if marca:
+                obs_parts.append(f'Marca: {marca}')
+            if modelo:
+                obs_parts.append(f'Modelo: {modelo}')
+            if remito:
+                obs_parts.append(f'Remito: {remito}')
+
+            mov_legacy = MovimientoInventario(
+                item_id=item.id,
+                tipo='entrada',
+                cantidad=cantidad,
+                motivo=f'Compra - {location.nombre}',
+                observaciones=' | '.join(obs_parts) if obs_parts else None,
+                usuario_id=current_user.id
+            )
+            db.session.add(mov_legacy)
+
+            # Si es una obra, también actualizar StockObra (legacy)
+            if location.tipo == 'WORKSITE' and location.obra_id:
+                from models.inventory import StockObra, MovimientoStockObra
+
+                stock_obra = StockObra.query.filter_by(
+                    obra_id=location.obra_id,
+                    item_inventario_id=item.id
+                ).first()
+
+                if not stock_obra:
                     stock_obra = StockObra(
-                        obra_id=obra_id,
-                        item_inventario_id=item_id,
-                        cantidad_disponible=cantidad,
-                        cantidad_consumida=0,
-                        fecha_ultimo_traslado=fecha_compra_obj
+                        obra_id=location.obra_id,
+                        item_inventario_id=item.id,
+                        cantidad_disponible=0,
+                        cantidad_consumida=0
                     )
                     db.session.add(stock_obra)
+                    db.session.flush()
 
-                # Registrar movimiento en StockObra
+                stock_obra.cantidad_disponible = float(stock_obra.cantidad_disponible or 0) + cantidad
+                stock_obra.fecha_ultimo_traslado = fecha_compra_dt
+
                 mov_stock_obra = MovimientoStockObra(
-                    stock_obra_id=stock_obra.id if stock_obra.id else None,
+                    stock_obra_id=stock_obra.id,
                     tipo='entrada',
                     cantidad=cantidad,
-                    observaciones=f'Compra directa | {observaciones}' if observaciones else 'Compra directa',
+                    observaciones=f'Compra directa - {nombre_proveedor}' if nombre_proveedor else 'Compra directa',
                     usuario_id=current_user.id
                 )
-
-                db.session.add(movimiento)
-                db.session.flush()  # Para obtener el ID de stock_obra si es nuevo
-
-                if not mov_stock_obra.stock_obra_id:
-                    mov_stock_obra.stock_obra_id = stock_obra.id
-
                 db.session.add(mov_stock_obra)
-                db.session.commit()
 
-                flash(f'✅ Compra registrada para {obra.nombre}: {cantidad:.2f} {item.unidad} de {item.nombre}', 'success')
+            db.session.commit()
 
+            # Construir mensaje de éxito con detalles de marca/modelo si aplica
+            item_desc = item.nombre
+            if marca or modelo:
+                item_desc += f' ({marca or ""} {modelo or ""})'.strip()
+
+            flash(f'✅ Compra registrada en {location.icono} {location.nombre}: {cantidad:.2f} {item.unidad} de {item_desc}', 'success')
             return redirect(url_for('inventario.lista'))
 
         except ValueError:

@@ -96,6 +96,11 @@
                             {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.uso_obra') %}
                             <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
                             {% endif %}
+                            {% if has_endpoint('requerimientos.lista') %}
+                            <li><a class="dropdown-item" href="{{ url_for('requerimientos.lista') }}">
+                                <i class="fas fa-shopping-cart me-1"></i>Requerimientos de Compra
+                            </a></li>
+                            {% endif %}
                             {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
@@ -166,8 +171,8 @@
                     </li>
                     {% endif %}
                     
-                    <!-- Documentos - Solo para Admin/PM -->
-                    {% if current_user.is_authenticated and current_user.role in ['admin','pm'] and has_endpoint('documentos.dashboard') %}
+                    <!-- Documentos - Solo para Super Admin -->
+                    {% if current_user.is_super_admin and has_endpoint('documentos.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-folder me-1"></i>Documentos
@@ -182,18 +187,16 @@
                             <li><a class="dropdown-item" href="{{ url_for('documentos.subir_documento') }}">
                                 <i class="fas fa-upload me-2"></i>Subir Documento
                             </a></li>
-                            {% if current_user.rol == 'administrador' %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('documentos.configuracion_tipos') }}">
                                 <i class="fas fa-cog me-2"></i>Configurar Tipos
                             </a></li>
-                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}
-                    
-                    <!-- Seguridad -->
-                    {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('seguridad.dashboard') %}
+
+                    <!-- Seguridad - Solo para Super Admin -->
+                    {% if current_user.is_super_admin and has_endpoint('seguridad.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-shield-alt me-1"></i>Seguridad
@@ -214,18 +217,44 @@
                             <li><a class="dropdown-item" href="{{ url_for('seguridad.certificaciones') }}">
                                 <i class="fas fa-certificate me-2"></i>Certificaciones
                             </a></li>
-                            {% if current_user.rol == 'administrador' %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('seguridad.auditorias') }}">
-                                <i class="fas fa-search me-2"></i>Auditorías
+                                <i class="fas fa-search me-2"></i>Auditorias
                             </a></li>
-                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}
                 </ul>
-                
-                <ul class="navbar-nav">
+
+                <ul class="navbar-nav align-items-center">
+                    {# Icono de notificaciones #}
+                    <li class="nav-item dropdown me-2">
+                        <a class="nav-link position-relative" href="#" id="navbarNotificaciones" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-bell"></i>
+                            <span id="notif-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none; font-size: 0.65rem;">
+                                0
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" style="width: 320px; max-height: 400px; overflow-y: auto;" aria-labelledby="navbarNotificaciones">
+                            <li class="dropdown-header d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-bell me-1"></i>Notificaciones</span>
+                                <a href="#" onclick="marcarTodasLeidas()" class="small text-primary">Marcar leídas</a>
+                            </li>
+                            <li><hr class="dropdown-divider m-0"></li>
+                            <div id="notif-lista">
+                                <li class="dropdown-item text-muted text-center py-3">
+                                    <small>No hay notificaciones</small>
+                                </li>
+                            </div>
+                            <li><hr class="dropdown-divider m-0"></li>
+                            <li>
+                                <a class="dropdown-item text-center small" href="{{ url_for('notificaciones.lista') if has_endpoint('notificaciones.lista') else '#' }}">
+                                    Ver todas
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="navbarUsuario" role="button" data-bs-toggle="dropdown">
                             {% if current_user.profile_picture %}
@@ -257,8 +286,11 @@
                                 <li><a class="dropdown-item" href="{{ url_for(auditoria_endpoint) }}">
                                     <i class="fas fa-shield-alt me-2"></i>Auditoría IA (Super Admin)
                                 </a></li>
-                                <li><hr class="dropdown-divider"></li>
                                 {% endif %}
+                                <li><a class="dropdown-item text-danger" href="{{ url_for('superadmin.panel') }}">
+                                    <i class="fas fa-crown me-2"></i>Panel Super Admin
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('account.perfil') }}">
                                 <i class="fas fa-id-badge me-2"></i>Perfil
@@ -338,6 +370,91 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- Notificaciones Script -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Cargar notificaciones al inicio
+        cargarNotificaciones();
+
+        // Recargar cada 60 segundos
+        setInterval(cargarNotificaciones, 60000);
+    });
+
+    function cargarNotificaciones() {
+        fetch('/notificaciones/api/recientes')
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    actualizarUINotificaciones(data.notificaciones, data.no_leidas);
+                }
+            })
+            .catch(err => console.log('Error cargando notificaciones:', err));
+    }
+
+    function actualizarUINotificaciones(notifs, noLeidas) {
+        const badge = document.getElementById('notif-badge');
+        const lista = document.getElementById('notif-lista');
+
+        // Actualizar badge
+        if (noLeidas > 0) {
+            badge.textContent = noLeidas > 99 ? '99+' : noLeidas;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+
+        // Actualizar lista
+        if (notifs.length === 0) {
+            lista.innerHTML = `
+                <li class="dropdown-item text-muted text-center py-3">
+                    <small>No hay notificaciones</small>
+                </li>`;
+            return;
+        }
+
+        let html = '';
+        notifs.forEach(n => {
+            const iconos = {
+                'requerimiento_compra': 'fas fa-shopping-cart text-warning',
+                'requerimiento_estado': 'fas fa-info-circle text-info',
+                'stock_bajo': 'fas fa-exclamation-triangle text-danger',
+                'tarea_asignada': 'fas fa-tasks text-primary'
+            };
+            const icono = iconos[n.tipo] || 'fas fa-bell text-secondary';
+            const bgClass = n.leida ? '' : 'bg-light';
+            const fecha = n.fecha_creacion ? new Date(n.fecha_creacion).toLocaleDateString() : '';
+
+            html += `
+                <li>
+                    <a class="dropdown-item py-2 ${bgClass}" href="${n.url || '#'}" onclick="marcarLeida(${n.id})">
+                        <div class="d-flex align-items-start">
+                            <i class="${icono} me-2 mt-1"></i>
+                            <div class="flex-grow-1">
+                                <div class="small fw-semibold">${n.titulo}</div>
+                                ${n.mensaje ? `<div class="small text-muted">${n.mensaje.substring(0, 60)}...</div>` : ''}
+                                <div class="small text-muted">${fecha}</div>
+                            </div>
+                        </div>
+                    </a>
+                </li>`;
+        });
+        lista.innerHTML = html;
+    }
+
+    function marcarLeida(id) {
+        fetch(`/notificaciones/api/marcar-leida/${id}`, { method: 'POST' })
+            .then(() => cargarNotificaciones())
+            .catch(err => console.log('Error marcando notificación:', err));
+    }
+
+    function marcarTodasLeidas() {
+        fetch('/notificaciones/api/marcar-todas-leidas', { method: 'POST' })
+            .then(() => cargarNotificaciones())
+            .catch(err => console.log('Error marcando notificaciones:', err));
+        return false;
+    }
+    </script>
 
     <!-- Page-specific scripts -->
     {% block scripts %}{% endblock %}

@@ -1,152 +1,279 @@
 {% extends "base.html" %}
-{% block title %}Facturación | OBYRA IA{% endblock %}
+{% block title %}Facturacion | OBYRA{% endblock %}
 
 {% block content %}
 <div class="container py-4">
     <div class="row g-4">
         <div class="col-lg-8">
-            <div class="card shadow-sm border-0">
+            {# Datos de Facturacion #}
+            <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <div>
-                        <h1 class="h4 mb-0">Facturación</h1>
-                        <small>Cargá los datos que usaremos para emitir tus comprobantes.</small>
+                        <h1 class="h4 mb-0">Datos de Facturacion</h1>
+                        <small>Completa tus datos para recibir facturas</small>
                     </div>
                     <i class="fas fa-file-invoice-dollar fa-2x"></i>
                 </div>
                 <div class="card-body">
-                    {% set require_card = false %}
-                    {% include 'account/_billing_form.html' with context %}
+                    <form method="post" id="formFacturacion">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="form_type" value="facturacion"/>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="razon_social" class="form-label">Razon social / Nombre completo</label>
+                                <input type="text" class="form-control" id="razon_social" name="razon_social"
+                                       value="{{ billing_profile.razon_social if billing_profile else usuario.nombre_completo }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="tax_id" class="form-label">CUIT para facturacion</label>
+                                <input type="text" class="form-control" id="tax_id" name="tax_id" inputmode="numeric"
+                                       placeholder="XX-XXXXXXXX-X"
+                                       value="{{ billing_profile.tax_id if billing_profile else (perfil.cuit if perfil else '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="billing_email" class="form-label">Email de facturacion</label>
+                                <input type="email" class="form-control" id="billing_email" name="billing_email"
+                                       value="{{ billing_profile.billing_email if billing_profile and billing_profile.billing_email else usuario.email }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="billing_phone" class="form-label">Telefono de contacto</label>
+                                <input type="tel" class="form-control" id="billing_phone" name="billing_phone"
+                                       value="{{ billing_profile.billing_phone if billing_profile else usuario.telefono or '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="address_line1" class="form-label">Direccion de facturacion</label>
+                                <input type="text" class="form-control" id="address_line1" name="address_line1"
+                                       value="{{ billing_profile.address_line1 if billing_profile else (perfil.direccion if perfil else '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="address_line2" class="form-label">Departamento / Piso (opcional)</label>
+                                <input type="text" class="form-control" id="address_line2" name="address_line2"
+                                       value="{{ billing_profile.address_line2 if billing_profile else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="city" class="form-label">Ciudad</label>
+                                <input type="text" class="form-control" id="city" name="city"
+                                       value="{{ billing_profile.city if billing_profile else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="province" class="form-label">Provincia</label>
+                                <input type="text" class="form-control" id="province" name="province"
+                                       value="{{ billing_profile.province if billing_profile else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="postal_code" class="form-label">Codigo postal</label>
+                                <input type="text" class="form-control" id="postal_code" name="postal_code"
+                                       value="{{ billing_profile.postal_code if billing_profile else '' }}">
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <h5 class="mb-3"><i class="fas fa-credit-card me-2"></i>Datos de Tarjeta (opcional)</h5>
+
+                        {% if billing_profile and billing_profile.card_last4 %}
+                        <div class="alert alert-success d-flex align-items-center mb-3">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <div>
+                                Tarjeta guardada: <strong>{{ billing_profile.card_brand or 'Tarjeta' }} **** {{ billing_profile.card_last4 }}</strong>
+                                {% if billing_profile.card_exp_month and billing_profile.card_exp_year %}
+                                    (vence {{ billing_profile.card_exp_month }}/{{ billing_profile.card_exp_year }})
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="cardholder_name" class="form-label">Titular de la tarjeta</label>
+                                <input type="text" class="form-control" id="cardholder_name" name="cardholder_name"
+                                       value="{{ billing_profile.cardholder_name if billing_profile else usuario.nombre_completo }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="card_number" class="form-label">Numero de tarjeta</label>
+                                <input type="text" class="form-control" id="card_number" name="card_number" inputmode="numeric"
+                                       placeholder="4242 4242 4242 4242" autocomplete="off">
+                                <div class="form-text">
+                                    <i class="fas fa-lock text-success me-1"></i>
+                                    Solo guardamos los ultimos 4 digitos por seguridad.
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="exp_month" class="form-label">Mes vencimiento</label>
+                                <input type="text" class="form-control" id="exp_month" name="exp_month" maxlength="2" inputmode="numeric"
+                                       placeholder="MM"
+                                       value="{{ billing_profile.card_exp_month if billing_profile else '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="exp_year" class="form-label">Ano vencimiento</label>
+                                <input type="text" class="form-control" id="exp_year" name="exp_year" maxlength="4" inputmode="numeric"
+                                       placeholder="AAAA"
+                                       value="{{ billing_profile.card_exp_year if billing_profile else '' }}">
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Guardar datos de facturacion
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {# Subir Comprobante de Pago #}
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="h5 mb-0">Subir Comprobante de Pago</h2>
+                        <small>Envia tu comprobante de transferencia</small>
+                    </div>
+                    <i class="fas fa-upload fa-2x"></i>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>Datos para Transferencia Bancaria</h6>
+                        <hr>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Banco:</strong> Banco Nacion Argentina</p>
+                                <p class="mb-1"><strong>Titular:</strong> OBYRA SAS</p>
+                                <p class="mb-1"><strong>CUIT:</strong> 30-71234567-8</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>CBU:</strong> 0110599530059912345678</p>
+                                <p class="mb-1"><strong>Alias:</strong> OBYRA.SERVICIOS</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="post" enctype="multipart/form-data" id="formComprobante">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="form_type" value="comprobante"/>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="monto_transferido" class="form-label">Monto transferido <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" id="monto_transferido" name="monto_transferido"
+                                           step="0.01" min="0" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="fecha_transferencia" class="form-label">Fecha de transferencia <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="fecha_transferencia" name="fecha_transferencia" required>
+                            </div>
+                            <div class="col-md-12">
+                                <label for="concepto" class="form-label">Concepto / Plan contratado</label>
+                                <select class="form-select" id="concepto" name="concepto">
+                                    <option value="plan_basico">Plan Basico - $15.000/mes</option>
+                                    <option value="plan_profesional">Plan Profesional - $35.000/mes</option>
+                                    <option value="plan_empresa">Plan Empresa - $75.000/mes</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                            </div>
+                            <div class="col-md-12">
+                                <label for="comprobante" class="form-label">Comprobante de pago <span class="text-danger">*</span></label>
+                                <input type="file" class="form-control" id="comprobante" name="comprobante"
+                                       accept=".pdf,.jpg,.jpeg,.png" required>
+                                <div class="form-text">Formatos aceptados: PDF, JPG, PNG. Maximo 5MB.</div>
+                            </div>
+                            <div class="col-md-12">
+                                <label for="notas_pago" class="form-label">Notas adicionales</label>
+                                <textarea class="form-control" id="notas_pago" name="notas_pago" rows="2"
+                                          placeholder="Numero de operacion, referencia, etc."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-paper-plane me-2"></i>Enviar Comprobante
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
+
         <div class="col-lg-4">
+            {# Resumen de cuenta #}
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body">
-                    <h2 class="h6 text-uppercase text-muted">Resumen</h2>
-                    <p class="mb-1"><strong>Plan actual:</strong> {{ current_user.plan_activo|capitalize }}</p>
-                    {% if billing_profile and billing_profile.card_last4 %}
-                    <p class="mb-1"><strong>Tarjeta:</strong> {{ billing_profile.card_brand or 'Tarjeta' }} •••• {{ billing_profile.card_last4 }}</p>
-                    {% endif %}
-                    {% if billing_profile and billing_profile.updated_at %}
-                    <p class="mb-0 text-muted small">Actualizado por última vez el {{ billing_profile.updated_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                    <h2 class="h6 text-uppercase text-muted">Tu Plan</h2>
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-crown fa-2x text-warning me-3"></i>
+                        <div>
+                            <h4 class="mb-0">{{ current_user.plan_activo|capitalize }}</h4>
+                            {% if current_user.plan_activo == 'prueba' %}
+                            <small class="text-muted">{{ current_user.dias_restantes_prueba() }} dias restantes</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if has_endpoint('planes.mostrar_planes') %}
+                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-arrow-up me-2"></i>Mejorar Plan
+                    </a>
                     {% endif %}
                 </div>
             </div>
+
+            {# Historial de pagos #}
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h2 class="h6 text-uppercase text-muted">¿Por qué pedimos estos datos?</h2>
-                    <p class="small mb-0">
-                        Usamos esta información para generar facturas válidas y preparar la integración con Stripe o Mercado Pago.
-                        Podés actualizarla en cualquier momento desde aquí.
-                    </p>
+                    <h2 class="h6 text-uppercase text-muted">Historial de Pagos</h2>
+                    {% if pagos_recientes %}
+                        {% for pago in pagos_recientes %}
+                        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                            <div>
+                                <small class="text-muted">{{ pago.fecha.strftime('%d/%m/%Y') }}</small>
+                                <div>{{ pago.concepto }}</div>
+                            </div>
+                            <span class="badge bg-{{ 'success' if pago.estado == 'aprobado' else 'warning' if pago.estado == 'pendiente' else 'secondary' }}">
+                                ${{ pago.monto|int }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted small mb-0">No hay pagos registrados aun.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Contacto #}
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted">Ayuda</h2>
+                    <p class="small mb-2">Si tienes dudas sobre facturacion, contactanos:</p>
+                    <p class="mb-1"><i class="fas fa-envelope me-2"></i>obyra.servicios@gmail.com</p>
+                    <p class="mb-0"><i class="fab fa-whatsapp me-2"></i>+54 9 XXX XXX-XXXX</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
-// Seguridad de tarjetas de crédito
-(function() {
-    'use strict';
+// Formateo de numero de tarjeta
+document.getElementById('card_number').addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 16) value = value.slice(0, 16);
+    e.target.value = value.replace(/(\d{4})/g, '$1 ').trim();
+});
 
-    const cardInput = document.getElementById('card_number');
-    if (!cardInput) return;
+// Fecha por defecto hoy
+document.getElementById('fecha_transferencia').valueAsDate = new Date();
 
-    // Variables para almacenar el valor real
-    let actualValue = '';
-
-    // Formatear número de tarjeta con espacios
-    function formatCardNumber(value) {
-        return value.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim();
-    }
-
-    // Enmascarar todo excepto los últimos 4 dígitos
-    function maskCardNumber(value) {
-        const digits = value.replace(/\s/g, '');
-        if (digits.length <= 4) return formatCardNumber(digits);
-
-        const masked = '•'.repeat(digits.length - 4) + digits.slice(-4);
-        return formatCardNumber(masked);
-    }
-
-    // Evento de input
-    cardInput.addEventListener('input', function(e) {
-        let value = e.target.value.replace(/[^\d]/g, '');
-
-        // Limitar a 16 dígitos
-        if (value.length > 16) {
-            value = value.slice(0, 16);
-        }
-
-        actualValue = value;
-
-        // Mostrar formateado pero SIN enmascarar durante la escritura
-        e.target.value = formatCardNumber(value);
-    });
-
-    // Cuando pierde el foco, enmascarar
-    cardInput.addEventListener('blur', function(e) {
-        if (actualValue.length > 0) {
-            e.target.value = maskCardNumber(actualValue);
-        }
-    });
-
-    // Cuando recupera el foco, mostrar los últimos 4 dígitos
-    cardInput.addEventListener('focus', function(e) {
-        if (actualValue.length > 4) {
-            // Mostrar solo los últimos 4 dígitos
-            e.target.value = formatCardNumber(actualValue.slice(-4));
-            actualValue = actualValue.slice(-4);
-        }
-    });
-
-    // Antes de enviar el formulario, asegurar que solo se envíen dígitos
-    const form = cardInput.closest('form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            // Crear un campo oculto con el valor real
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'card_number';
-            hiddenInput.value = actualValue;
-
-            // Deshabilitar el campo visible para que no se envíe
-            cardInput.disabled = true;
-
-            // Agregar el campo oculto
-            form.appendChild(hiddenInput);
-        });
-    }
-
-    // Validación de marca de tarjeta en tiempo real
-    cardInput.addEventListener('input', function(e) {
-        const value = actualValue;
-        let brand = '';
-
-        if (value.startsWith('4')) brand = 'Visa';
-        else if (/^5[1-5]/.test(value)) brand = 'Mastercard';
-        else if (/^3[47]/.test(value)) brand = 'American Express';
-        else if (value.startsWith('6')) brand = 'Discover';
-
-        // Mostrar indicador visual de la marca
-        const formText = cardInput.nextElementSibling;
-        if (formText && brand) {
-            formText.innerHTML = '<i class="fas fa-lock text-success me-1"></i> ' + brand + ' detectada. Guardamos únicamente los últimos 4 dígitos.';
-        }
-    });
-
-    // Prevenir copiar/pegar del número de tarjeta
-    cardInput.addEventListener('copy', function(e) {
+// Validacion del formulario de comprobante
+document.getElementById('formComprobante').addEventListener('submit', function(e) {
+    const file = document.getElementById('comprobante').files[0];
+    if (file && file.size > 5 * 1024 * 1024) {
         e.preventDefault();
+        alert('El archivo es demasiado grande. Maximo 5MB.');
         return false;
-    });
-
-    cardInput.addEventListener('cut', function(e) {
-        e.preventDefault();
-        return false;
-    });
-})();
+    }
+});
 </script>
 {% endblock %}

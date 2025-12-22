@@ -1,0 +1,850 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Presupuesto Manual - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-file-invoice-dollar text-primary me-2"></i>Nuevo Presupuesto Manual</h2>
+                    <p class="text-muted mb-0">Crea un presupuesto agregando items manualmente</p>
+                </div>
+                <div class="btn-group" role="group">
+                    <a href="{{ url_for('presupuestos.lista') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    <a href="{{ url_for('presupuestos.crear') }}" class="btn btn-outline-success">
+                        <i class="fas fa-brain me-1"></i>Usar IA
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form id="formPresupuestoManual" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="items_json" id="items_json" value="[]">
+
+        <div class="row">
+            <!-- Columna izquierda: Datos del presupuesto -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Datos del Presupuesto</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="numero" class="form-label fw-bold">Numero *</label>
+                            <input type="text" class="form-control" id="numero" name="numero"
+                                   value="{{ numero_sugerido }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="nombre_obra" class="form-label fw-bold">Nombre del Proyecto</label>
+                            <input type="text" class="form-control" id="nombre_obra" name="nombre_obra"
+                                   placeholder="Ej: Casa Familia Rodriguez">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cliente_id" class="form-label fw-bold">Cliente</label>
+                            <select class="form-select" id="cliente_id" name="cliente_id">
+                                <option value="">Sin cliente asignado</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}">
+                                    {{ cliente.nombre_completo }}{% if cliente.email %} - {{ cliente.email }}{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ubicacion" class="form-label fw-bold">
+                                <i class="fas fa-map-marker-alt text-danger me-1"></i>Ubicacion
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ubicacion" name="ubicacion"
+                                       placeholder="Buscar direccion...">
+                                <button class="btn btn-outline-secondary" type="button" id="btnValidarUbicacion">
+                                    <i class="fas fa-search-location"></i>
+                                </button>
+                            </div>
+                            <div class="form-text text-info" id="ubicacion_feedback">
+                                <i class="fas fa-info-circle"></i> Escribe una direccion para buscar
+                            </div>
+                            <div id="ubicacion_sugerencias" class="list-group shadow-sm mt-2 d-none" style="position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                            <div id="ubicacion_mapa_wrapper" class="mt-3 d-none">
+                                <div id="ubicacion_mapa" style="height: 180px; border-radius: 8px;"></div>
+                                <small class="text-muted d-block mt-1" id="ubicacion_meta"></small>
+                            </div>
+                            <input type="hidden" id="ubicacion_lat" name="ubicacion_lat">
+                            <input type="hidden" id="ubicacion_lng" name="ubicacion_lng">
+                            <input type="hidden" id="ubicacion_normalizada" name="ubicacion_normalizada">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="moneda" class="form-label fw-bold">Moneda *</label>
+                                <select class="form-select" id="moneda" name="moneda" required>
+                                    <option value="ARS" selected>ARS (Pesos)</option>
+                                    <option value="USD">USD (Dolares)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="vigencia_dias" class="form-label fw-bold">Vigencia (dias)</label>
+                                <input type="number" class="form-control" id="vigencia_dias" name="vigencia_dias"
+                                       value="30" min="1" max="180">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="descripcion" class="form-label fw-bold">Descripcion</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="3"
+                                      placeholder="Notas o descripcion adicional..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resumen -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-success text-white">
+                        <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Resumen</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Materiales:</span>
+                            <strong id="totalMateriales">$0.00</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Mano de Obra:</span>
+                            <strong id="totalManoObra">$0.00</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Equipos:</span>
+                            <strong id="totalEquipos">$0.00</strong>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="fw-bold">Subtotal:</span>
+                            <strong id="subtotalGeneral">$0.00</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>IVA (21%):</span>
+                            <strong id="ivaTotal">$0.00</strong>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-bold fs-5">TOTAL:</span>
+                            <strong class="text-success fs-5" id="totalGeneral">$0.00</strong>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button type="submit" class="btn btn-primary w-100" id="btnGuardar">
+                            <i class="fas fa-save me-1"></i>Guardar Presupuesto
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna derecha: Items -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="fas fa-list me-2"></i>Items del Presupuesto</h6>
+                        <button type="button" class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#modalAgregarItem">
+                            <i class="fas fa-plus me-1"></i>Agregar Item
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <!-- Tabs por tipo -->
+                        <ul class="nav nav-tabs" id="tabsItems" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="tab-materiales" data-bs-toggle="tab"
+                                        data-bs-target="#panel-materiales" type="button">
+                                    <i class="fas fa-boxes me-1"></i>Materiales <span class="badge bg-secondary" id="countMateriales">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-mano-obra" data-bs-toggle="tab"
+                                        data-bs-target="#panel-mano-obra" type="button">
+                                    <i class="fas fa-hard-hat me-1"></i>Mano de Obra <span class="badge bg-secondary" id="countManoObra">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-equipos" data-bs-toggle="tab"
+                                        data-bs-target="#panel-equipos" type="button">
+                                    <i class="fas fa-truck me-1"></i>Equipos <span class="badge bg-secondary" id="countEquipos">0</span>
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="tabsItemsContent">
+                            <!-- Panel Materiales -->
+                            <div class="tab-pane fade show active" id="panel-materiales" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Descripcion</th>
+                                                <th class="text-center" style="width: 80px;">Cant.</th>
+                                                <th class="text-center" style="width: 80px;">Unidad</th>
+                                                <th class="text-end" style="width: 120px;">P. Unit.</th>
+                                                <th class="text-end" style="width: 120px;">Subtotal</th>
+                                                <th style="width: 60px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-materiales">
+                                            <tr id="empty-materiales">
+                                                <td colspan="6" class="text-center text-muted py-4">
+                                                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                                    No hay materiales agregados
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Panel Mano de Obra -->
+                            <div class="tab-pane fade" id="panel-mano-obra" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Descripcion</th>
+                                                <th class="text-center" style="width: 80px;">Cant.</th>
+                                                <th class="text-center" style="width: 80px;">Unidad</th>
+                                                <th class="text-end" style="width: 120px;">P. Unit.</th>
+                                                <th class="text-end" style="width: 120px;">Subtotal</th>
+                                                <th style="width: 60px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-mano-obra">
+                                            <tr id="empty-mano-obra">
+                                                <td colspan="6" class="text-center text-muted py-4">
+                                                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                                    No hay mano de obra agregada
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Panel Equipos -->
+                            <div class="tab-pane fade" id="panel-equipos" role="tabpanel">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Descripcion</th>
+                                                <th class="text-center" style="width: 80px;">Cant.</th>
+                                                <th class="text-center" style="width: 80px;">Unidad</th>
+                                                <th class="text-end" style="width: 120px;">P. Unit.</th>
+                                                <th class="text-end" style="width: 120px;">Subtotal</th>
+                                                <th style="width: 60px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-equipos">
+                                            <tr id="empty-equipos">
+                                                <td colspan="6" class="text-center text-muted py-4">
+                                                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                                    No hay equipos agregados
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Modal Agregar Item -->
+<div class="modal fade" id="modalAgregarItem" tabindex="-1" aria-labelledby="modalAgregarItemLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalAgregarItemLabel">
+                    <i class="fas fa-plus me-2"></i>Agregar Item
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="itemTipo" class="form-label fw-bold">Tipo *</label>
+                    <select class="form-select" id="itemTipo" required>
+                        <option value="material">Material</option>
+                        <option value="mano_obra">Mano de Obra</option>
+                        <option value="equipo">Equipo</option>
+                    </select>
+                </div>
+
+                <!-- Selector de item del inventario -->
+                <div class="mb-3" id="selectorItemInventario">
+                    <label for="itemInventarioSelect" class="form-label fw-bold">
+                        <i class="fas fa-boxes text-primary me-1"></i>Seleccionar del Inventario
+                    </label>
+                    <select class="form-select" id="itemInventarioSelect">
+                        <option value="">-- Seleccionar item o escribir manualmente --</option>
+                        {% for item in items_inventario %}
+                        <option value="{{ item.id }}"
+                                data-nombre="{{ item.nombre }}"
+                                data-codigo="{{ item.codigo }}"
+                                data-unidad="{{ item.unidad or 'unidad' }}"
+                                data-categoria="{{ item.categoria.nombre if item.categoria else '' }}">
+                            [{{ item.codigo }}] {{ item.nombre }}{% if item.categoria %} ({{ item.categoria.nombre }}){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Selecciona un item existente o escribe manualmente abajo</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="itemDescripcion" class="form-label fw-bold">Descripcion *</label>
+                    <input type="text" class="form-control" id="itemDescripcion" required
+                           placeholder="Ej: Cemento Portland 50kg">
+                    <input type="hidden" id="itemInventarioId">
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="itemCantidad" class="form-label fw-bold">Cantidad *</label>
+                        <input type="number" class="form-control" id="itemCantidad"
+                               step="0.01" min="0.01" value="1" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="itemUnidad" class="form-label fw-bold">Unidad *</label>
+                        <select class="form-select" id="itemUnidad" required>
+                            <option value="unidad">Unidad</option>
+                            <option value="kg">Kilogramo (kg)</option>
+                            <option value="tn">Tonelada (tn)</option>
+                            <option value="ml">Metro lineal (ml)</option>
+                            <option value="m2">Metro cuadrado (m2)</option>
+                            <option value="m3">Metro cubico (m3)</option>
+                            <option value="lts">Litros (lts)</option>
+                            <option value="bolsa">Bolsa</option>
+                            <option value="rollo">Rollo</option>
+                            <option value="caja">Caja</option>
+                            <option value="pack">Pack</option>
+                            <option value="hora">Hora</option>
+                            <option value="dia">Dia</option>
+                            <option value="semana">Semana</option>
+                            <option value="mes">Mes</option>
+                            <option value="global">Global</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="itemPrecioUnitario" class="form-label fw-bold">Precio Unitario *</label>
+                    <div class="input-group">
+                        <span class="input-group-text" id="currencySymbol">$</span>
+                        <input type="number" class="form-control" id="itemPrecioUnitario"
+                               step="0.01" min="0" value="0" required>
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2">
+                    <div class="d-flex justify-content-between">
+                        <span>Subtotal:</span>
+                        <strong id="itemSubtotalPreview">$0.00</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarItem">
+                    <i class="fas fa-plus me-1"></i>Agregar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet CSS y JS para mapa -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ========== UBICACION CON MAPA ==========
+let ubicacionMap = null;
+let ubicacionMarker = null;
+let sugerenciasActuales = [];
+let sugerenciaSeleccionada = -1;
+let ubicacionDebounceTimer = null;
+const geocodeSugerenciasCache = new Map();
+const MIN_CARACTERES_UBICACION = 3;
+const UBICACION_DEBOUNCE_MS = 300;
+
+const ubicacionInput = document.getElementById('ubicacion');
+const btnValidarUbicacion = document.getElementById('btnValidarUbicacion');
+const ubicacionFeedback = document.getElementById('ubicacion_feedback');
+const ubicacionSugerencias = document.getElementById('ubicacion_sugerencias');
+const ubicacionMapaWrapper = document.getElementById('ubicacion_mapa_wrapper');
+const ubicacionMeta = document.getElementById('ubicacion_meta');
+
+function actualizarFeedbackUbicacion(texto, tipo = 'muted') {
+    if (!ubicacionFeedback) return;
+    ubicacionFeedback.innerHTML = '<i class="fas fa-info-circle"></i> ' + texto;
+    ubicacionFeedback.classList.remove('text-success', 'text-danger', 'text-muted', 'text-info');
+    if (tipo === 'success') ubicacionFeedback.classList.add('text-success');
+    else if (tipo === 'danger') ubicacionFeedback.classList.add('text-danger');
+    else if (tipo === 'info') ubicacionFeedback.classList.add('text-info');
+    else ubicacionFeedback.classList.add('text-muted');
+}
+
+function limpiarGeocodificacion(resetVisual = false) {
+    ['ubicacion_lat', 'ubicacion_lng', 'ubicacion_normalizada'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+    });
+    sugerenciaSeleccionada = -1;
+    sugerenciasActuales = [];
+    if (ubicacionSugerencias) {
+        ubicacionSugerencias.classList.add('d-none');
+        ubicacionSugerencias.innerHTML = '';
+    }
+    if (resetVisual) {
+        if (ubicacionMapaWrapper) ubicacionMapaWrapper.classList.add('d-none');
+        if (ubicacionMeta) ubicacionMeta.textContent = '';
+        if (ubicacionMarker) {
+            ubicacionMarker.remove();
+            ubicacionMarker = null;
+        }
+        actualizarFeedbackUbicacion('Escribe una direccion para buscar', 'info');
+    }
+}
+
+function manejarCambioUbicacion(event) {
+    limpiarGeocodificacion(true);
+    if (ubicacionDebounceTimer) {
+        clearTimeout(ubicacionDebounceTimer);
+        ubicacionDebounceTimer = null;
+    }
+    const valor = (event.target && typeof event.target.value === 'string') ? event.target.value : '';
+    const consulta = valor.trim();
+    if (consulta.length < MIN_CARACTERES_UBICACION) return;
+    ubicacionDebounceTimer = setTimeout(() => {
+        buscarUbicacion(consulta, { autoSelectFirst: false, triggeredByInput: true });
+    }, UBICACION_DEBOUNCE_MS);
+}
+
+function manejarTeclasUbicacion(event) {
+    if (!sugerenciasActuales || sugerenciasActuales.length === 0) return;
+    if (!ubicacionSugerencias || ubicacionSugerencias.classList.contains('d-none')) return;
+    switch (event.key) {
+        case 'ArrowDown':
+            event.preventDefault();
+            sugerenciaSeleccionada = (sugerenciaSeleccionada + 1) % sugerenciasActuales.length;
+            renderSugerencias(sugerenciaSeleccionada);
+            break;
+        case 'ArrowUp':
+            event.preventDefault();
+            sugerenciaSeleccionada = sugerenciaSeleccionada <= 0 ? sugerenciasActuales.length - 1 : sugerenciaSeleccionada - 1;
+            renderSugerencias(sugerenciaSeleccionada);
+            break;
+        case 'Enter':
+            if (sugerenciaSeleccionada >= 0 && sugerenciaSeleccionada < sugerenciasActuales.length) {
+                event.preventDefault();
+                aplicarGeocodificacion(sugerenciasActuales[sugerenciaSeleccionada], sugerenciaSeleccionada);
+            }
+            break;
+        case 'Escape':
+            event.preventDefault();
+            ocultarSugerencias();
+            break;
+    }
+}
+
+function ocultarSugerencias() {
+    if (!ubicacionSugerencias) return;
+    ubicacionSugerencias.classList.add('d-none');
+}
+
+function inicializarMapaUbicacion(lat, lng) {
+    if (typeof L === 'undefined') return;
+    if (!ubicacionMap) {
+        ubicacionMap = L.map('ubicacion_mapa');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap',
+            maxZoom: 19,
+        }).addTo(ubicacionMap);
+    }
+    ubicacionMap.setView([lat, lng], 15);
+    if (ubicacionMarker) {
+        ubicacionMarker.setLatLng([lat, lng]);
+    } else {
+        ubicacionMarker = L.marker([lat, lng]).addTo(ubicacionMap);
+    }
+    setTimeout(() => ubicacionMap.invalidateSize(), 150);
+}
+
+function renderSugerencias(selectedIndex = null) {
+    if (!ubicacionSugerencias) return;
+    ubicacionSugerencias.innerHTML = '';
+    if (!sugerenciasActuales || sugerenciasActuales.length === 0) {
+        ubicacionSugerencias.classList.add('d-none');
+        return;
+    }
+    sugerenciasActuales.forEach((item, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action';
+        if (selectedIndex !== null && index === selectedIndex) button.classList.add('active');
+        button.textContent = item.display_name || item.normalized || 'Direccion sugerida';
+        button.addEventListener('click', () => aplicarGeocodificacion(item, index));
+        ubicacionSugerencias.appendChild(button);
+    });
+    ubicacionSugerencias.classList.remove('d-none');
+}
+
+function aplicarGeocodificacion(data, index = 0) {
+    if (!data) return;
+    const latNum = Number(data.lat);
+    const lngNum = Number(data.lon);
+    if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
+        const latInput = document.getElementById('ubicacion_lat');
+        const lngInput = document.getElementById('ubicacion_lng');
+        if (latInput) latInput.value = latNum;
+        if (lngInput) lngInput.value = lngNum;
+        if (ubicacionMapaWrapper) ubicacionMapaWrapper.classList.remove('d-none');
+        inicializarMapaUbicacion(latNum, lngNum);
+    }
+    const normalizada = data.normalized || data.display_name || (ubicacionInput ? ubicacionInput.value.trim() : '');
+    if (ubicacionInput && normalizada) ubicacionInput.value = normalizada;
+    const normalizedInput = document.getElementById('ubicacion_normalizada');
+    if (normalizedInput) normalizedInput.value = normalizada;
+    if (ubicacionMeta) {
+        ubicacionMeta.textContent = `Lat ${latNum.toFixed(5)}, Lng ${lngNum.toFixed(5)}`;
+    }
+    actualizarFeedbackUbicacion('Ubicacion validada correctamente', 'success');
+    sugerenciaSeleccionada = index;
+    ocultarSugerencias();
+}
+
+async function buscarUbicacion(query = null, options = {}) {
+    if (!ubicacionInput) return;
+    const { autoSelectFirst = false, triggeredByInput = false } = options;
+    const direccion = (query !== null && typeof query === 'string') ? query.trim() : ubicacionInput.value.trim();
+    if (!direccion) {
+        actualizarFeedbackUbicacion('Ingresa una direccion para validar', 'danger');
+        limpiarGeocodificacion(true);
+        return;
+    }
+    const cacheKey = direccion.toLowerCase();
+    const cached = geocodeSugerenciasCache.get(cacheKey);
+    if (cached) {
+        sugerenciasActuales = cached;
+        if (sugerenciasActuales.length === 0) {
+            actualizarFeedbackUbicacion('No encontramos coincidencias', 'danger');
+            return;
+        }
+        sugerenciaSeleccionada = 0;
+        renderSugerencias(sugerenciaSeleccionada);
+        if (autoSelectFirst) aplicarGeocodificacion(sugerenciasActuales[0], 0);
+        else actualizarFeedbackUbicacion('Selecciona una sugerencia', 'info');
+        return;
+    }
+    actualizarFeedbackUbicacion('Buscando...', 'muted');
+    if (btnValidarUbicacion && !triggeredByInput) btnValidarUbicacion.disabled = true;
+    try {
+        const response = await fetch(`/obras/api/buscar-direcciones?q=${encodeURIComponent(direccion)}`);
+        if (!response.ok) throw new Error('No se pudo validar la direccion');
+        const data = await response.json();
+        sugerenciasActuales = (data && data.results) ? data.results : [];
+        geocodeSugerenciasCache.set(cacheKey, sugerenciasActuales);
+        if (sugerenciasActuales.length === 0) {
+            limpiarGeocodificacion(true);
+            actualizarFeedbackUbicacion('No encontramos coincidencias', 'danger');
+            return;
+        }
+        sugerenciaSeleccionada = 0;
+        renderSugerencias(sugerenciaSeleccionada);
+        if (autoSelectFirst) aplicarGeocodificacion(sugerenciasActuales[0], 0);
+        else actualizarFeedbackUbicacion('Selecciona una sugerencia', 'info');
+    } catch (error) {
+        console.error('Error geocodificando:', error);
+        limpiarGeocodificacion(true);
+        actualizarFeedbackUbicacion('Error al buscar. Intenta nuevamente.', 'danger');
+    } finally {
+        if (btnValidarUbicacion && !triggeredByInput) btnValidarUbicacion.disabled = false;
+    }
+}
+
+// Inicializar eventos de ubicacion
+document.addEventListener('DOMContentLoaded', () => {
+    if (ubicacionInput) {
+        ubicacionInput.addEventListener('input', manejarCambioUbicacion);
+        ubicacionInput.addEventListener('keydown', manejarTeclasUbicacion);
+    }
+    if (btnValidarUbicacion) {
+        btnValidarUbicacion.addEventListener('click', () => buscarUbicacion(null, { autoSelectFirst: true }));
+    }
+    document.addEventListener('click', (event) => {
+        if (!ubicacionSugerencias || ubicacionSugerencias.classList.contains('d-none')) return;
+        if (event.target === ubicacionInput) return;
+        if (ubicacionSugerencias.contains(event.target)) return;
+        ocultarSugerencias();
+    });
+});
+
+// ========== ITEMS DEL PRESUPUESTO ==========
+// Estado de items
+let items = [];
+let itemIdCounter = 0;
+
+// Elementos del DOM
+const itemsJsonInput = document.getElementById('items_json');
+const monedaSelect = document.getElementById('moneda');
+const itemInventarioSelect = document.getElementById('itemInventarioSelect');
+const itemDescripcionInput = document.getElementById('itemDescripcion');
+const itemUnidadSelect = document.getElementById('itemUnidad');
+const itemInventarioIdInput = document.getElementById('itemInventarioId');
+
+// Autocompletar al seleccionar item del inventario
+if (itemInventarioSelect) {
+    itemInventarioSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (this.value) {
+            // Autocompletar campos con datos del item seleccionado
+            const nombre = selectedOption.dataset.nombre || '';
+            const unidad = selectedOption.dataset.unidad || 'unidad';
+
+            if (itemDescripcionInput) itemDescripcionInput.value = nombre;
+            if (itemUnidadSelect) itemUnidadSelect.value = unidad;
+            if (itemInventarioIdInput) itemInventarioIdInput.value = this.value;
+        } else {
+            // Limpiar si se deselecciona
+            if (itemInventarioIdInput) itemInventarioIdInput.value = '';
+        }
+    });
+}
+
+// Limpiar selector de inventario cuando se escribe manualmente
+if (itemDescripcionInput) {
+    itemDescripcionInput.addEventListener('input', function() {
+        // Si el usuario escribe manualmente, limpiar el selector
+        if (itemInventarioSelect && itemInventarioSelect.value) {
+            const selectedNombre = itemInventarioSelect.options[itemInventarioSelect.selectedIndex].dataset.nombre || '';
+            if (this.value !== selectedNombre) {
+                itemInventarioSelect.value = '';
+                if (itemInventarioIdInput) itemInventarioIdInput.value = '';
+            }
+        }
+    });
+}
+
+// Formateo de moneda
+function formatCurrency(value, currency = 'ARS') {
+    const symbol = currency === 'USD' ? 'US$' : '$';
+    return symbol + parseFloat(value || 0).toLocaleString('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+// Actualizar simbolo de moneda
+function updateCurrencySymbol() {
+    const currency = monedaSelect.value;
+    const symbol = currency === 'USD' ? 'US$' : '$';
+    document.getElementById('currencySymbol').textContent = symbol;
+    actualizarTotales();
+}
+
+monedaSelect.addEventListener('change', updateCurrencySymbol);
+
+// Preview de subtotal en modal
+const cantidadInput = document.getElementById('itemCantidad');
+const precioInput = document.getElementById('itemPrecioUnitario');
+const subtotalPreview = document.getElementById('itemSubtotalPreview');
+
+function updateSubtotalPreview() {
+    const cantidad = parseFloat(cantidadInput.value) || 0;
+    const precio = parseFloat(precioInput.value) || 0;
+    const subtotal = cantidad * precio;
+    subtotalPreview.textContent = formatCurrency(subtotal, monedaSelect.value);
+}
+
+cantidadInput.addEventListener('input', updateSubtotalPreview);
+precioInput.addEventListener('input', updateSubtotalPreview);
+
+// Agregar item
+document.getElementById('btnConfirmarItem').addEventListener('click', function() {
+    const tipo = document.getElementById('itemTipo').value;
+    const descripcion = document.getElementById('itemDescripcion').value.trim();
+    const cantidad = parseFloat(document.getElementById('itemCantidad').value) || 0;
+    const unidad = document.getElementById('itemUnidad').value;
+    const precioUnitario = parseFloat(document.getElementById('itemPrecioUnitario').value) || 0;
+
+    if (!descripcion) {
+        alert('La descripcion es requerida');
+        return;
+    }
+
+    if (cantidad <= 0) {
+        alert('La cantidad debe ser mayor a 0');
+        return;
+    }
+
+    // Obtener item_inventario_id si se selecciono del inventario
+    const itemInventarioId = document.getElementById('itemInventarioId').value || null;
+
+    const item = {
+        id: ++itemIdCounter,
+        tipo: tipo,
+        descripcion: descripcion,
+        cantidad: cantidad,
+        unidad: unidad,
+        precio_unitario: precioUnitario,
+        subtotal: cantidad * precioUnitario,
+        item_inventario_id: itemInventarioId ? parseInt(itemInventarioId) : null
+    };
+
+    items.push(item);
+    renderItems();
+    actualizarTotales();
+
+    // Limpiar y cerrar modal
+    document.getElementById('itemDescripcion').value = '';
+    document.getElementById('itemCantidad').value = '1';
+    document.getElementById('itemPrecioUnitario').value = '0';
+    document.getElementById('itemInventarioSelect').value = '';
+    document.getElementById('itemInventarioId').value = '';
+    updateSubtotalPreview();
+
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalAgregarItem'));
+    modal.hide();
+});
+
+// Eliminar item
+function eliminarItem(itemId) {
+    items = items.filter(item => item.id !== itemId);
+    renderItems();
+    actualizarTotales();
+}
+
+// Renderizar items en tablas
+function renderItems() {
+    const currency = monedaSelect.value;
+    const tipoMap = {
+        'material': 'materiales',
+        'mano_obra': 'mano-obra',
+        'equipo': 'equipos'
+    };
+
+    // Limpiar todas las tablas
+    ['materiales', 'mano-obra', 'equipos'].forEach(tipo => {
+        const tbody = document.getElementById(`tbody-${tipo}`);
+        tbody.innerHTML = '';
+    });
+
+    // Agrupar items por tipo
+    const itemsPorTipo = {
+        'material': [],
+        'mano_obra': [],
+        'equipo': []
+    };
+
+    items.forEach(item => {
+        if (itemsPorTipo[item.tipo]) {
+            itemsPorTipo[item.tipo].push(item);
+        }
+    });
+
+    // Renderizar cada tipo
+    Object.keys(itemsPorTipo).forEach(tipo => {
+        const tipoKey = tipoMap[tipo];
+        const tbody = document.getElementById(`tbody-${tipoKey}`);
+        const itemsTipo = itemsPorTipo[tipo];
+
+        if (itemsTipo.length === 0) {
+            tbody.innerHTML = `
+                <tr id="empty-${tipoKey}">
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                        No hay items agregados
+                    </td>
+                </tr>
+            `;
+        } else {
+            itemsTipo.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.descripcion}</td>
+                    <td class="text-center">${item.cantidad}</td>
+                    <td class="text-center">${item.unidad}</td>
+                    <td class="text-end">${formatCurrency(item.precio_unitario, currency)}</td>
+                    <td class="text-end">${formatCurrency(item.subtotal, currency)}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItem(${item.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Actualizar contador en tab
+        const countBadge = document.getElementById(`count${tipo === 'material' ? 'Materiales' : (tipo === 'mano_obra' ? 'ManoObra' : 'Equipos')}`);
+        if (countBadge) {
+            countBadge.textContent = itemsTipo.length;
+        }
+    });
+
+    // Actualizar hidden input
+    itemsJsonInput.value = JSON.stringify(items);
+}
+
+// Actualizar totales
+function actualizarTotales() {
+    const currency = monedaSelect.value;
+
+    let totalMateriales = 0;
+    let totalManoObra = 0;
+    let totalEquipos = 0;
+
+    items.forEach(item => {
+        if (item.tipo === 'material') totalMateriales += item.subtotal;
+        else if (item.tipo === 'mano_obra') totalManoObra += item.subtotal;
+        else if (item.tipo === 'equipo') totalEquipos += item.subtotal;
+    });
+
+    const subtotal = totalMateriales + totalManoObra + totalEquipos;
+    const iva = subtotal * 0.21;
+    const total = subtotal + iva;
+
+    document.getElementById('totalMateriales').textContent = formatCurrency(totalMateriales, currency);
+    document.getElementById('totalManoObra').textContent = formatCurrency(totalManoObra, currency);
+    document.getElementById('totalEquipos').textContent = formatCurrency(totalEquipos, currency);
+    document.getElementById('subtotalGeneral').textContent = formatCurrency(subtotal, currency);
+    document.getElementById('ivaTotal').textContent = formatCurrency(iva, currency);
+    document.getElementById('totalGeneral').textContent = formatCurrency(total, currency);
+}
+
+// Validar formulario antes de enviar
+document.getElementById('formPresupuestoManual').addEventListener('submit', function(e) {
+    if (items.length === 0) {
+        e.preventDefault();
+        alert('Debes agregar al menos un item al presupuesto');
+        return false;
+    }
+
+    // Actualizar JSON de items
+    itemsJsonInput.value = JSON.stringify(items);
+});
+
+// Inicializar
+renderItems();
+actualizarTotales();
+</script>
+{% endblock %}

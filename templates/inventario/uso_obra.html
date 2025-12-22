@@ -28,14 +28,20 @@
                             <label for="obra_id" class="form-label">Obra / Depósito *</label>
                             <select class="form-select" id="obra_id" name="obra_id" required>
                                 <option value="">Seleccionar destino...</option>
-                                <option value="general" {% if request.form.get('obra_id') == 'general' %}selected{% endif %}>
-                                    📦 Depósito General (Stock Central)
+                                {% for ubicacion in ubicaciones %}
+                                    {% if ubicacion.tipo == 'WAREHOUSE' %}
+                                <option value="{{ ubicacion.id }}" {% if request.form.get('obra_id') == ubicacion.id|string %}selected{% endif %}>
+                                    📦 {{ ubicacion.nombre }}{% if ubicacion.es_principal %} (Principal){% endif %}
                                 </option>
+                                    {% endif %}
+                                {% endfor %}
                                 <optgroup label="Obras">
-                                {% for obra in obras %}
-                                <option value="{{ obra.id }}" {% if request.form.get('obra_id') == obra.id|string %}selected{% endif %}>
-                                    🏗️ {{ obra.nombre }}
+                                {% for ubicacion in ubicaciones %}
+                                    {% if ubicacion.tipo == 'WORKSITE' %}
+                                <option value="{{ ubicacion.id }}" {% if request.form.get('obra_id') == ubicacion.id|string %}selected{% endif %}>
+                                    🏗️ {{ ubicacion.nombre }}
                                 </option>
+                                    {% endif %}
                                 {% endfor %}
                                 </optgroup>
                             </select>
@@ -64,8 +70,10 @@
                                             data-nombre="{{ item.nombre }}"
                                             data-categoria="{{ item.categoria.nombre if item.categoria else '' }}"
                                             data-unidad="{{ item.unidad }}"
+                                            data-marca="{{ item.marca or '' }}"
+                                            data-modelo="{{ item.modelo or '' }}"
                                             {% if request.form.get('item_id') == item.id|string %}selected{% endif %}>
-                                        [{{ item.codigo }}] {{ item.nombre }}{% if item.categoria %} - {{ item.categoria.nombre }}{% endif %}
+                                        [{{ item.codigo }}] {{ item.nombre }}{% if item.marca %} - {{ item.marca }}{% endif %}{% if item.modelo %} {{ item.modelo }}{% endif %}{% if item.categoria %} ({{ item.categoria.nombre }}){% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -78,44 +86,92 @@
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="cantidad" class="form-label">Cantidad *</label>
-                            <div class="input-group">
-                                <input type="number"
-                                       class="form-control"
-                                       id="cantidad"
-                                       name="cantidad"
-                                       step="0.01"
-                                       min="0.01"
-                                       value="{{ request.form.get('cantidad', '') }}"
-                                       required>
-                                <span class="input-group-text" id="unidad-display">
-                                    <i class="fas fa-balance-scale"></i>
-                                </span>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="cantidad" class="form-label">Cantidad *</label>
+                                    <input type="number"
+                                           class="form-control"
+                                           id="cantidad"
+                                           name="cantidad"
+                                           step="0.01"
+                                           min="0.01"
+                                           value="{{ request.form.get('cantidad', '') }}"
+                                           required>
+                                </div>
                             </div>
-                            <div class="form-text">La cantidad se dará de alta automáticamente en el destino seleccionado.</div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="unidad" class="form-label">Unidad de Medida *</label>
+                                    <select class="form-select" id="unidad" name="unidad" required>
+                                        <option value="">Seleccionar...</option>
+                                        <option value="unidad" {% if request.form.get('unidad') == 'unidad' %}selected{% endif %}>Unidad</option>
+                                        <option value="kg" {% if request.form.get('unidad') == 'kg' %}selected{% endif %}>Kilogramo (kg)</option>
+                                        <option value="tn" {% if request.form.get('unidad') == 'tn' %}selected{% endif %}>Tonelada (tn)</option>
+                                        <option value="ml" {% if request.form.get('unidad') == 'ml' %}selected{% endif %}>Metro lineal (ml)</option>
+                                        <option value="m2" {% if request.form.get('unidad') == 'm2' %}selected{% endif %}>Metro cuadrado (m²)</option>
+                                        <option value="m3" {% if request.form.get('unidad') == 'm3' %}selected{% endif %}>Metro cúbico (m³)</option>
+                                        <option value="lts" {% if request.form.get('unidad') == 'lts' %}selected{% endif %}>Litros (lts)</option>
+                                        <option value="bolsa" {% if request.form.get('unidad') == 'bolsa' %}selected{% endif %}>Bolsa</option>
+                                        <option value="rollo" {% if request.form.get('unidad') == 'rollo' %}selected{% endif %}>Rollo</option>
+                                        <option value="caja" {% if request.form.get('unidad') == 'caja' %}selected{% endif %}>Caja</option>
+                                        <option value="pack" {% if request.form.get('unidad') == 'pack' %}selected{% endif %}>Pack</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3">
+                        <h6 class="text-muted mb-3"><i class="fas fa-tag me-2"></i>Datos opcionales (para variantes)</h6>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="marca" class="form-label">Marca</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="marca"
+                                           name="marca"
+                                           placeholder="Ej: Loma Negra, Weber"
+                                           value="{{ request.form.get('marca', '') }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="modelo" class="form-label">Modelo</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="modelo"
+                                           name="modelo"
+                                           placeholder="Ej: Portland 40kg, CPF40"
+                                           value="{{ request.form.get('modelo', '') }}">
+                                </div>
+                            </div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="proveedor" class="form-label">Proveedor</label>
-                            <input type="text"
-                                   class="form-control"
-                                   id="proveedor"
-                                   name="proveedor"
-                                   placeholder="Nombre del proveedor"
-                                   value="{{ request.form.get('proveedor', '') }}">
-                            <div class="form-text">Opcional: Registrá el proveedor de la compra</div>
+                            <label for="proveedor_id" class="form-label">Proveedor</label>
+                            <select class="form-select" id="proveedor_id" name="proveedor_id">
+                                <option value="">Sin proveedor específico</option>
+                                {% for prov in proveedores %}
+                                <option value="{{ prov.id }}" {% if request.form.get('proveedor_id') == prov.id|string %}selected{% endif %}>
+                                    {{ prov.nombre }}{% if prov.cuit %} ({{ prov.cuit }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Si especificás marca/modelo/proveedor y el artículo no existe, se creará una nueva variante.</div>
                         </div>
 
+                        <hr class="my-3">
+
                         <div class="mb-3">
-                            <label for="remito" class="form-label">Remito</label>
+                            <label for="remito" class="form-label">Remito / Factura</label>
                             <input type="text"
                                    class="form-control"
                                    id="remito"
                                    name="remito"
                                    placeholder="Número de remito o factura"
                                    value="{{ request.form.get('remito', '') }}">
-                            <div class="form-text">Opcional: Número de remito o factura</div>
                         </div>
 
                         <div class="alert alert-info d-flex align-items-start">
@@ -302,19 +358,28 @@ $(document).ready(function() {
         }
     });
 
-    // Actualizar la unidad de medida cuando se selecciona un artículo
+    // Actualizar campos cuando se selecciona un artículo
     $('#item_id').on('change', function() {
         var selectedOption = $(this).find('option:selected');
         var unidad = selectedOption.data('unidad');
+        var marca = selectedOption.data('marca');
+        var modelo = selectedOption.data('modelo');
 
+        // Autocompletar unidad si el artículo la tiene definida
         if (unidad) {
-            $('#unidad-display').html(unidad);
-        } else {
-            $('#unidad-display').html('<i class="fas fa-balance-scale"></i>');
+            $('#unidad').val(unidad);
+        }
+
+        // Autocompletar marca y modelo si existen
+        if (marca) {
+            $('#marca').val(marca);
+        }
+        if (modelo) {
+            $('#modelo').val(modelo);
         }
     });
 
-    // Si hay un artículo preseleccionado, mostrar su unidad
+    // Si hay un artículo preseleccionado, disparar el change
     if ($('#item_id').val()) {
         $('#item_id').trigger('change');
     }

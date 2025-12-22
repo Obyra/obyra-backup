@@ -1189,6 +1189,12 @@ function renderResultadoEtapasIA(data) {
     const contenedor = document.getElementById('resultadoEtapasIAContenido');
     const resumen = document.getElementById('resumenEtapasIAMetadatos');
     const etapas = data.etapas || [];
+    const tieneTC = data.tipo_cambio && data.tipo_cambio.valor > 0;
+    const redondeoAplicado = data.redondeo_aplicado;
+
+    // Formatters para ambas monedas
+    const fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+    const fmtUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
     if (etapas.length === 0) {
         contenedor.innerHTML = '<div class="alert alert-warning mb-0">La IA no generó items para las etapas seleccionadas.</div>';
@@ -1199,24 +1205,61 @@ function renderResultadoEtapasIA(data) {
     const htmlEtapas = etapas.map(etapa => {
         const items = etapa.items || [];
         const filas = items.map(item => {
-            const subtotal = (item.cantidad || 0) * (item.precio_unit || 0);
-            const precioUnit = item.precio_unit ? currencyFormatter.format(item.precio_unit) : '<span class="badge bg-warning text-dark">Sin precio</span>';
-            const subtotalFmt = item.precio_unit ? currencyFormatter.format(subtotal) : '<span class="text-muted">--</span>';
+            // Precios duales
+            const precioARS = item.precio_unit_ars || item.precio_unit || 0;
+            const precioUSD = item.precio_unit_usd || 0;
+            const subtotalARS = item.subtotal_ars || item.subtotal || 0;
+            const subtotalUSD = item.subtotal_usd || 0;
+
+            // Información de redondeo (solo para materiales)
+            let cantidadDisplay = Number(item.cantidad || 0).toFixed(2);
+            let cantidadNeta = '';
+            let detallePacksHTML = '';
+
+            if (item.tipo === 'material' && redondeoAplicado) {
+                if (item.cantidad_neta && item.cantidad_neta !== item.cantidad) {
+                    cantidadNeta = `<small class="text-muted d-block">(Neto: ${Number(item.cantidad_neta).toFixed(2)})</small>`;
+                }
+                if (item.detalle_packs) {
+                    detallePacksHTML = `<small class="text-success d-block">${item.detalle_packs}</small>`;
+                }
+                if (item.sobrante && item.sobrante > 0) {
+                    detallePacksHTML += `<small class="text-warning d-block">+${Number(item.sobrante).toFixed(2)} sobrante</small>`;
+                }
+            }
+
+            // Precios formateados
+            let precioDisplay = precioARS ? fmtARS.format(precioARS) : '<span class="badge bg-warning text-dark">Sin precio</span>';
+            let subtotalDisplay = subtotalARS ? fmtARS.format(subtotalARS) : '<span class="text-muted">--</span>';
+
+            // Agregar USD si disponible
+            if (tieneTC && precioUSD > 0) {
+                precioDisplay += `<small class="text-muted d-block">${fmtUSD.format(precioUSD)}</small>`;
+                subtotalDisplay += `<small class="text-muted d-block">${fmtUSD.format(subtotalUSD)}</small>`;
+            }
+
             return `
                 <tr>
                     <td class="text-capitalize">${item.tipo || '-'}</td>
                     <td>${item.codigo || '-'}</td>
                     <td>${item.descripcion || '-'}</td>
-                    <td class="text-end">${Number(item.cantidad || 0).toFixed(2)}</td>
+                    <td class="text-end">${cantidadDisplay}${cantidadNeta}${detallePacksHTML}</td>
                     <td>${item.unidad || ''}</td>
-                    <td class="text-end">${precioUnit}</td>
-                    <td class="text-end">${subtotalFmt}</td>
+                    <td class="text-end">${precioDisplay}</td>
+                    <td class="text-end">${subtotalDisplay}</td>
                     <td>${item.just || 'Regla determinística'}</td>
                 </tr>
             `;
         }).join('');
 
-        const subtotalTotal = etapa.subtotal_total ? currencyFormatter.format(etapa.subtotal_total) : currencyFormatter.format(0);
+        // Subtotales duales
+        const subtotalARS = etapa.subtotal_total_ars || etapa.subtotal_total || 0;
+        const subtotalUSD = etapa.subtotal_total_usd || 0;
+        let subtotalDisplay = fmtARS.format(subtotalARS);
+        if (tieneTC && subtotalUSD > 0) {
+            subtotalDisplay += ` <small class="text-muted">(${fmtUSD.format(subtotalUSD)})</small>`;
+        }
+
         const confianza = etapa.confianza ? Math.round(etapa.confianza * 100) : null;
 
         return `
@@ -1225,7 +1268,8 @@ function renderResultadoEtapasIA(data) {
                     <h6 class="mb-0 text-primary">${etapa.nombre}</h6>
                     <div class="d-flex align-items-center gap-2">
                         ${confianza ? `<span class="badge bg-info-subtle text-info">Confianza ${confianza}%</span>` : ''}
-                        <span class="badge bg-secondary-subtle text-secondary">${subtotalTotal}</span>
+                        ${redondeoAplicado ? '<span class="badge bg-success-subtle text-success">Redondeo aplicado</span>' : ''}
+                        <span class="badge bg-secondary-subtle text-secondary">${subtotalDisplay}</span>
                     </div>
                 </div>
                 ${items.length ? `
@@ -1236,10 +1280,10 @@ function renderResultadoEtapasIA(data) {
                                     <th>Tipo</th>
                                     <th>Código</th>
                                     <th>Descripción</th>
-                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Cantidad${redondeoAplicado ? ' (compra)' : ''}</th>
                                     <th>Unidad</th>
-                                    <th class="text-end">Precio unit.</th>
-                                    <th class="text-end">Subtotal</th>
+                                    <th class="text-end">Precio unit.${tieneTC ? '<br><small class="text-muted">ARS / USD</small>' : ''}</th>
+                                    <th class="text-end">Subtotal${tieneTC ? '<br><small class="text-muted">ARS / USD</small>' : ''}</th>
                                     <th>Justificación</th>
                                 </tr>
                             </thead>
@@ -1255,22 +1299,33 @@ function renderResultadoEtapasIA(data) {
     }).join('');
 
     contenedor.innerHTML = htmlEtapas;
-    const totalParcial = data.total_parcial ? currencyFormatter.format(data.total_parcial) : currencyFormatter.format(0);
+
+    // Totales duales
+    const totalARS = data.total_parcial_ars || data.total_parcial || 0;
+    const totalUSD = data.total_parcial_usd || 0;
+    let totalDisplay = fmtARS.format(totalARS);
+    if (tieneTC && totalUSD > 0) {
+        totalDisplay += ` / ${fmtUSD.format(totalUSD)}`;
+    }
+
     resumen.style.display = 'block';
     let tipoCambioTexto = '';
-    if (data.tipo_cambio && data.tipo_cambio.valor) {
-        const fxFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+    if (tieneTC) {
         const proveedor = (data.tipo_cambio.proveedor || '').toUpperCase();
         const fechaFx = data.tipo_cambio.as_of ? new Date(data.tipo_cambio.as_of) : (data.tipo_cambio.fetched_at ? new Date(data.tipo_cambio.fetched_at) : null);
         const fechaTexto = fechaFx ? fechaFx.toLocaleDateString('es-AR') : '';
-        tipoCambioTexto = ` · TC ${proveedor} ${fxFormatter.format(data.tipo_cambio.valor)}${fechaTexto ? ' (' + fechaTexto + ')' : ''}`;
+        tipoCambioTexto = ` · TC ${proveedor} ${fmtARS.format(data.tipo_cambio.valor)}${fechaTexto ? ' (' + fechaTexto + ')' : ''}`;
     }
     let cacTexto = '';
     if (data.cac && data.cac.valor) {
         const periodo = data.cac.periodo ? new Date(data.cac.periodo).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : '';
         cacTexto = ` · CAC ${Number(data.cac.valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${periodo ? ' (' + periodo + ')' : ''}`;
     }
-    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas${tipoCambioTexto}${cacTexto}.`;
+    let sobranteTexto = '';
+    if (data.total_sobrante_estimado && data.total_sobrante_estimado > 0) {
+        sobranteTexto = ` · Sobrante estimado: ${Number(data.total_sobrante_estimado).toFixed(2)} unidades`;
+    }
+    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalDisplay} · ${etapas.length} etapa(s) analizadas${tipoCambioTexto}${cacTexto}${sobranteTexto}.`;
 }
 
 function aplicarResultadosEtapasIA() {

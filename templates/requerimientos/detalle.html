@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}{{ requerimiento.numero }} - Requerimiento de Compra{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('requerimientos.lista') }}">Requerimientos</a></li>
+                    <li class="breadcrumb-item active">{{ requerimiento.numero }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Columna principal -->
+        <div class="col-lg-8">
+            <!-- Header del requerimiento -->
+            <div class="card mb-4">
+                <div class="card-header bg-{{ requerimiento.estado_color }} text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="mb-0">{{ requerimiento.numero }}</h4>
+                            <small>Requerimiento de Compra</small>
+                        </div>
+                        <span class="badge bg-white text-{{ requerimiento.estado_color }} fs-6">
+                            {{ requerimiento.estado_display }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-2">
+                                <i class="fas fa-hard-hat text-primary me-2"></i>
+                                <strong>Obra:</strong>
+                                <a href="{{ url_for('obras.detalle', obra_id=requerimiento.obra_id) }}">
+                                    {{ requerimiento.obra.nombre }}
+                                </a>
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-user text-secondary me-2"></i>
+                                <strong>Solicitante:</strong> {{ requerimiento.solicitante.nombre }}
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-flag text-{{ requerimiento.prioridad_color }} me-2"></i>
+                                <strong>Prioridad:</strong>
+                                <span class="badge bg-{{ requerimiento.prioridad_color }}">{{ requerimiento.prioridad_display }}</span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-2">
+                                <i class="fas fa-calendar text-info me-2"></i>
+                                <strong>Fecha Solicitud:</strong> {{ requerimiento.fecha_solicitud.strftime('%d/%m/%Y %H:%M') }}
+                            </p>
+                            {% if requerimiento.fecha_necesidad %}
+                            <p class="mb-2">
+                                <i class="fas fa-clock text-warning me-2"></i>
+                                <strong>Fecha Necesidad:</strong> {{ requerimiento.fecha_necesidad.strftime('%d/%m/%Y') }}
+                            </p>
+                            {% endif %}
+                            {% if requerimiento.fecha_aprobacion %}
+                            <p class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                <strong>Fecha {{ 'Aprobacion' if requerimiento.estado == 'aprobado' else 'Resolucion' }}:</strong>
+                                {{ requerimiento.fecha_aprobacion.strftime('%d/%m/%Y %H:%M') }}
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="mb-3">
+                        <h6><i class="fas fa-comment-alt me-2"></i>Motivo</h6>
+                        <p class="mb-0 bg-light p-3 rounded">{{ requerimiento.motivo }}</p>
+                    </div>
+
+                    {% if requerimiento.notas_aprobacion %}
+                    <div class="alert alert-{{ 'success' if requerimiento.estado == 'aprobado' else 'danger' if requerimiento.estado == 'rechazado' else 'info' }}">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-{{ 'check' if requerimiento.estado == 'aprobado' else 'times' if requerimiento.estado == 'rechazado' else 'info-circle' }} me-2"></i>
+                            Notas de {{ requerimiento.aprobador.nombre if requerimiento.aprobador else 'Administrador' }}
+                        </h6>
+                        <p class="mb-0">{{ requerimiento.notas_aprobacion }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Items del requerimiento -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Items Solicitados ({{ requerimiento.total_items }})</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripcion</th>
+                                    <th>Tipo</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th>Unidad</th>
+                                    <th class="text-end">Costo Est.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in requerimiento.items %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.descripcion }}</strong>
+                                        {% if item.codigo %}
+                                        <small class="text-muted d-block">{{ item.codigo }}</small>
+                                        {% endif %}
+                                        {% if item.notas %}
+                                        <small class="text-info d-block">{{ item.notas }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ item.tipo }}</span>
+                                    </td>
+                                    <td class="text-end">{{ "%.2f"|format(item.cantidad) }}</td>
+                                    <td>{{ item.unidad }}</td>
+                                    <td class="text-end">
+                                        {% if item.costo_estimado %}
+                                        ${{ "%.2f"|format(item.costo_estimado) }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if item.costo_estimado %}
+                                        <strong>${{ "%.2f"|format(item.subtotal_estimado) }}</strong>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="5" class="text-end">Total Estimado:</th>
+                                    <th class="text-end">${{ "%.2f"|format(requerimiento.costo_estimado_total) }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna lateral: Acciones -->
+        <div class="col-lg-4">
+            <!-- Estado y acciones -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-tasks me-2"></i>Acciones</h6>
+                </div>
+                <div class="card-body">
+                    {% if requerimiento.estado == 'pendiente' %}
+                        {% if current_user.rol in ['administrador', 'admin'] %}
+                        <!-- Botones de aprobacion -->
+                        <form method="POST" action="{{ url_for('requerimientos.aprobar', id=requerimiento.id) }}" class="mb-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-2">
+                                <textarea class="form-control" name="notas" rows="2"
+                                          placeholder="Notas de aprobacion (opcional)"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-check me-1"></i>Aprobar Requerimiento
+                            </button>
+                        </form>
+
+                        <form method="POST" action="{{ url_for('requerimientos.rechazar', id=requerimiento.id) }}" class="mb-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-2">
+                                <textarea class="form-control" name="notas" rows="2" required
+                                          placeholder="Motivo del rechazo (requerido)"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-danger w-100">
+                                <i class="fas fa-times me-1"></i>Rechazar Requerimiento
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if requerimiento.solicitante_id == current_user.id %}
+                        <form method="POST" action="{{ url_for('requerimientos.cancelar', id=requerimiento.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-secondary w-100"
+                                    onclick="return confirm('Cancelar este requerimiento?')">
+                                <i class="fas fa-ban me-1"></i>Cancelar Solicitud
+                            </button>
+                        </form>
+                        {% endif %}
+
+                    {% elif requerimiento.estado == 'aprobado' %}
+                        {% if current_user.rol in ['administrador', 'admin'] %}
+                        <form method="POST" action="{{ url_for('requerimientos.marcar_en_proceso', id=requerimiento.id) }}" class="mb-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-shopping-cart me-1"></i>Marcar en Proceso de Compra
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('requerimientos.completar', id=requerimiento.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-check-circle me-1"></i>Marcar como Completado
+                            </button>
+                        </form>
+                        {% endif %}
+
+                    {% elif requerimiento.estado == 'en_proceso' %}
+                        {% if current_user.rol in ['administrador', 'admin'] %}
+                        <form method="POST" action="{{ url_for('requerimientos.completar', id=requerimiento.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-check-circle me-1"></i>Marcar como Completado
+                            </button>
+                        </form>
+                        {% endif %}
+
+                    {% elif requerimiento.estado == 'completado' %}
+                        <div class="alert alert-success mb-0">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Requerimiento completado el {{ requerimiento.fecha_completado.strftime('%d/%m/%Y') if requerimiento.fecha_completado else '-' }}
+                        </div>
+
+                    {% elif requerimiento.estado == 'rechazado' %}
+                        <div class="alert alert-danger mb-0">
+                            <i class="fas fa-times-circle me-2"></i>
+                            Requerimiento rechazado
+                        </div>
+
+                    {% elif requerimiento.estado == 'cancelado' %}
+                        <div class="alert alert-secondary mb-0">
+                            <i class="fas fa-ban me-2"></i>
+                            Requerimiento cancelado
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Timeline de estados -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-history me-2"></i>Historial</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="d-flex mb-3">
+                            <div class="me-3">
+                                <span class="badge bg-primary rounded-circle p-2">
+                                    <i class="fas fa-plus"></i>
+                                </span>
+                            </div>
+                            <div>
+                                <strong>Creado</strong>
+                                <small class="text-muted d-block">{{ requerimiento.fecha_solicitud.strftime('%d/%m/%Y %H:%M') }}</small>
+                                <small>Por {{ requerimiento.solicitante.nombre }}</small>
+                            </div>
+                        </li>
+
+                        {% if requerimiento.fecha_aprobacion %}
+                        <li class="d-flex mb-3">
+                            <div class="me-3">
+                                <span class="badge bg-{{ 'success' if requerimiento.estado not in ['rechazado', 'cancelado'] else 'danger' }} rounded-circle p-2">
+                                    <i class="fas fa-{{ 'check' if requerimiento.estado not in ['rechazado', 'cancelado'] else 'times' }}"></i>
+                                </span>
+                            </div>
+                            <div>
+                                <strong>{{ 'Aprobado' if requerimiento.estado not in ['rechazado', 'cancelado'] else 'Rechazado' }}</strong>
+                                <small class="text-muted d-block">{{ requerimiento.fecha_aprobacion.strftime('%d/%m/%Y %H:%M') }}</small>
+                                {% if requerimiento.aprobador %}
+                                <small>Por {{ requerimiento.aprobador.nombre }}</small>
+                                {% endif %}
+                            </div>
+                        </li>
+                        {% endif %}
+
+                        {% if requerimiento.estado == 'en_proceso' %}
+                        <li class="d-flex mb-3">
+                            <div class="me-3">
+                                <span class="badge bg-primary rounded-circle p-2">
+                                    <i class="fas fa-shopping-cart"></i>
+                                </span>
+                            </div>
+                            <div>
+                                <strong>En proceso de compra</strong>
+                            </div>
+                        </li>
+                        {% endif %}
+
+                        {% if requerimiento.fecha_completado %}
+                        <li class="d-flex">
+                            <div class="me-3">
+                                <span class="badge bg-success rounded-circle p-2">
+                                    <i class="fas fa-check-circle"></i>
+                                </span>
+                            </div>
+                            <div>
+                                <strong>Completado</strong>
+                                <small class="text-muted d-block">{{ requerimiento.fecha_completado.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

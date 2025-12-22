@@ -6,6 +6,187 @@ from sqlalchemy.dialects.postgresql import JSONB
 import json
 
 
+# ============================================================
+# SISTEMA DE UBICACIONES (Location-based Inventory)
+# ============================================================
+
+class Location(db.Model):
+    """
+    Ubicación genérica para almacenar stock.
+    Puede ser un depósito (WAREHOUSE) o una obra (WORKSITE).
+    """
+    __tablename__ = 'locations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # WAREHOUSE, WORKSITE
+    nombre = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text)
+    direccion = db.Column(db.String(300))
+    es_principal = db.Column(db.Boolean, default=False)  # True para depósito principal
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Si es WORKSITE, referencia a la obra
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+
+    # Relaciones
+    organizacion = db.relationship('Organizacion', backref='locations')
+    obra = db.relationship('Obra', backref='location', uselist=False)
+    stock_items = db.relationship('StockUbicacion', back_populates='location', lazy='dynamic')
+
+    __table_args__ = (
+        # Solo puede haber un depósito principal por organización
+        db.Index('ix_location_principal', 'organizacion_id', 'es_principal',
+                 postgresql_where=db.text('es_principal = true'), unique=True),
+    )
+
+    def __repr__(self):
+        return f'<Location {self.tipo}: {self.nombre}>'
+
+    @property
+    def icono(self):
+        """Retorna el ícono apropiado según el tipo"""
+        if self.tipo == 'WAREHOUSE':
+            return '📦'
+        return '🏗️'
+
+    @property
+    def tipo_display(self):
+        """Nombre legible del tipo"""
+        tipos = {
+            'WAREHOUSE': 'Depósito',
+            'WORKSITE': 'Obra'
+        }
+        return tipos.get(self.tipo, self.tipo)
+
+    @classmethod
+    def get_or_create_deposito_general(cls, organizacion_id):
+        """Obtiene o crea el depósito general de una organización"""
+        deposito = cls.query.filter_by(
+            organizacion_id=organizacion_id,
+            tipo='WAREHOUSE',
+            es_principal=True
+        ).first()
+
+        if not deposito:
+            deposito = cls(
+                organizacion_id=organizacion_id,
+                tipo='WAREHOUSE',
+                nombre='Depósito General',
+                descripcion='Depósito central de la organización',
+                es_principal=True,
+                activo=True
+            )
+            db.session.add(deposito)
+            db.session.commit()
+
+        return deposito
+
+    @classmethod
+    def get_or_create_for_obra(cls, obra):
+        """Obtiene o crea una ubicación para una obra"""
+        location = cls.query.filter_by(obra_id=obra.id).first()
+
+        if not location:
+            location = cls(
+                organizacion_id=obra.organizacion_id,
+                tipo='WORKSITE',
+                nombre=obra.nombre,
+                obra_id=obra.id,
+                activo=True
+            )
+            db.session.add(location)
+            db.session.commit()
+
+        return location
+
+
+class StockUbicacion(db.Model):
+    """
+    Stock de un item en una ubicación específica.
+    Reemplaza conceptualmente a StockObra con un enfoque más genérico.
+    """
+    __tablename__ = 'stock_ubicacion'
+
+    id = db.Column(db.Integer, primary_key=True)
+    location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=False)
+    cantidad_disponible = db.Column(db.Numeric(10, 3), default=0)
+    cantidad_reservada = db.Column(db.Numeric(10, 3), default=0)  # Reservado pero no movido
+    cantidad_consumida = db.Column(db.Numeric(10, 3), default=0)  # Total usado/consumido
+    fecha_ultima_entrada = db.Column(db.DateTime)
+    fecha_ultimo_consumo = db.Column(db.DateTime)
+
+    # Relaciones
+    location = db.relationship('Location', back_populates='stock_items')
+    item = db.relationship('ItemInventario', backref='stock_ubicaciones')
+    movimientos = db.relationship('MovimientoStock', back_populates='stock_ubicacion', lazy='dynamic')
+
+    __table_args__ = (
+        db.UniqueConstraint('location_id', 'item_inventario_id', name='uq_stock_ubicacion_item'),
+    )
+
+    def __repr__(self):
+        return f'<StockUbicacion {self.item.nombre} en {self.location.nombre}: {self.cantidad_disponible}>'
+
+    @property
+    def cantidad_real_disponible(self):
+        """Stock disponible menos reservado"""
+        return float(self.cantidad_disponible or 0) - float(self.cantidad_reservada or 0)
+
+    @property
+    def cantidad_total_recibida(self):
+        """Total recibido = disponible + consumido"""
+        return float(self.cantidad_disponible or 0) + float(self.cantidad_consumida or 0)
+
+
+class MovimientoStock(db.Model):
+    """
+    Registro de todos los movimientos de stock (entradas, salidas, traslados, consumos).
+    Proporciona trazabilidad completa del inventario.
+    """
+    __tablename__ = 'movimientos_stock'
+
+    id = db.Column(db.Integer, primary_key=True)
+    stock_ubicacion_id = db.Column(db.Integer, db.ForeignKey('stock_ubicacion.id'), nullable=False)
+    tipo = db.Column(db.String(30), nullable=False)  # entrada, salida, traslado_entrada, traslado_salida, consumo, ajuste
+    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    # Información adicional
+    motivo = db.Column(db.String(200))
+    observaciones = db.Column(db.Text)
+    proveedor = db.Column(db.String(200))
+    remito = db.Column(db.String(100))
+
+    # Para traslados: referencia al movimiento relacionado
+    traslado_relacionado_id = db.Column(db.Integer, db.ForeignKey('movimientos_stock.id'), nullable=True)
+
+    # Precio al momento del movimiento (para calcular costos)
+    precio_unitario = db.Column(db.Numeric(10, 2))
+    moneda = db.Column(db.String(3), default='ARS')
+
+    # Relaciones
+    stock_ubicacion = db.relationship('StockUbicacion', back_populates='movimientos')
+    usuario = db.relationship('Usuario')
+    traslado_relacionado = db.relationship('MovimientoStock', remote_side=[id])
+
+    def __repr__(self):
+        return f'<MovimientoStock {self.tipo} {self.cantidad}>'
+
+    @property
+    def costo_total(self):
+        if self.precio_unitario and self.cantidad:
+            return float(self.precio_unitario) * float(self.cantidad)
+        return 0
+
+
+# ============================================================
+# MODELOS LEGACY (mantenidos para compatibilidad)
+# ============================================================
+
 class CategoriaInventario(db.Model):
     """DEPRECATED: Usar InventoryCategory en su lugar.
     Mantenido por compatibilidad con datos existentes."""
@@ -29,14 +210,27 @@ class ItemInventario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     categoria_id = db.Column(db.Integer, db.ForeignKey('inventory_category.id'), nullable=True)
     codigo = db.Column(db.String(50), unique=True, nullable=False)
-    nombre = db.Column(db.String(200), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)  # Nombre genérico del artículo
     descripcion = db.Column(db.Text)
     unidad = db.Column(db.String(20), nullable=False)
+
+    # Campos opcionales para diferenciar variantes del mismo artículo genérico
+    marca = db.Column(db.String(100), nullable=True)
+    modelo = db.Column(db.String(100), nullable=True)
+    proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores.id'), nullable=True)
+
     stock_actual = db.Column(db.Numeric(10, 3), default=0)
     stock_minimo = db.Column(db.Numeric(10, 3), default=0)
     precio_promedio = db.Column(db.Numeric(10, 2), default=0)  # Precio en ARS
     precio_promedio_usd = db.Column(db.Numeric(10, 2), default=0)  # Precio en USD
     activo = db.Column(db.Boolean, default=True)
+
+    # Campos para redondeo de compras
+    # presentaciones: JSON con tamaños de pack disponibles
+    # Formato: [{"size": 20, "name": "Balde 20L", "price": 15000}, {"size": 10, "name": "Balde 10L"}]
+    presentaciones = db.Column(db.Text, nullable=True)
+    # factor_conversion: para convertir m² a unidades (ej: 0.0225 para cerámico 15x15)
+    factor_conversion = db.Column(db.Numeric(10, 6), nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
 
@@ -45,6 +239,7 @@ class ItemInventario(db.Model):
     organizacion = db.relationship('Organizacion', back_populates='inventario')
     movimientos = db.relationship('MovimientoInventario', back_populates='item', lazy='dynamic')
     usos = db.relationship('UsoInventario', back_populates='item', lazy='dynamic')
+    proveedor = db.relationship('Proveedor', backref='items_inventario')
 
     def __repr__(self):
         return f'<ItemInventario {self.codigo} - {self.nombre}>'
@@ -52,6 +247,63 @@ class ItemInventario(db.Model):
     @property
     def necesita_reposicion(self):
         return self.stock_actual <= self.stock_minimo
+
+    @property
+    def presentaciones_lista(self):
+        """Retorna las presentaciones como lista de dicts"""
+        if not self.presentaciones:
+            return self._presentaciones_default()
+        try:
+            data = json.loads(self.presentaciones)
+            if isinstance(data, list) and data:
+                return data
+            return self._presentaciones_default()
+        except (TypeError, ValueError):
+            return self._presentaciones_default()
+
+    def _presentaciones_default(self):
+        """Retorna presentaciones por defecto según la unidad"""
+        defaults = {
+            'lts': [
+                {'size': 20, 'name': 'Balde 20L'},
+                {'size': 10, 'name': 'Balde 10L'},
+                {'size': 4, 'name': 'Balde 4L'},
+                {'size': 1, 'name': 'Litro'}
+            ],
+            'kg': [
+                {'size': 50, 'name': 'Bolsa 50kg'},
+                {'size': 25, 'name': 'Bolsa 25kg'},
+                {'size': 10, 'name': 'Bolsa 10kg'},
+                {'size': 1, 'name': 'Kg'}
+            ],
+            'ml': [{'size': 1, 'name': 'Metro'}],
+            'm2': [{'size': 1, 'name': 'm²'}],
+            'm3': [{'size': 1, 'name': 'm³'}],
+            'bolsa': [{'size': 1, 'name': 'Bolsa'}],
+            'unidad': [{'size': 1, 'name': 'Unidad'}],
+        }
+        unidad_lower = (self.unidad or 'unidad').lower()
+        return defaults.get(unidad_lower, [{'size': 1, 'name': 'Unidad'}])
+
+    @presentaciones_lista.setter
+    def presentaciones_lista(self, value):
+        """Guarda las presentaciones como JSON"""
+        if value:
+            self.presentaciones = json.dumps(value)
+        else:
+            self.presentaciones = None
+
+    def get_pack_sizes(self):
+        """Retorna solo los tamaños de pack para el motor de redondeo"""
+        return [p.get('size', 1) for p in self.presentaciones_lista]
+
+    def get_pack_prices(self):
+        """Retorna dict de precios por tamaño si están definidos"""
+        prices = {}
+        for p in self.presentaciones_lista:
+            if 'price' in p:
+                prices[p['size']] = p['price']
+        return prices if prices else None
 
 
 class MovimientoInventario(db.Model):
@@ -627,3 +879,212 @@ class GlobalMaterialUsage(db.Model):
 
     def __repr__(self):
         return f'<GlobalMaterialUsage {self.material.codigo} by org {self.organizacion_id}>'
+
+
+# ============================================================
+# SISTEMA DE REQUERIMIENTOS DE COMPRA
+# ============================================================
+
+class RequerimientoCompra(db.Model):
+    """
+    Solicitud de compra originada desde una obra cuando falta material/maquinaria.
+    Permite trackear el ciclo completo desde la solicitud hasta la entrega.
+    """
+    __tablename__ = 'requerimientos_compra'
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True, nullable=False)  # RC-2024-0001
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    solicitante_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    # Estado del requerimiento
+    estado = db.Column(db.String(20), default='pendiente')
+    # Estados: pendiente, aprobado, rechazado, en_proceso, completado, cancelado
+
+    # Prioridad
+    prioridad = db.Column(db.String(20), default='normal')  # baja, normal, alta, urgente
+
+    # Motivo/descripción
+    motivo = db.Column(db.Text, nullable=False)
+    notas_aprobacion = db.Column(db.Text)  # Notas del administrador al aprobar/rechazar
+
+    # Fechas
+    fecha_solicitud = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_necesidad = db.Column(db.Date)  # Cuándo se necesita el material
+    fecha_aprobacion = db.Column(db.DateTime)
+    fecha_completado = db.Column(db.DateTime)
+
+    # Usuario que aprobó/rechazó
+    aprobador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+
+    # Relaciones
+    organizacion = db.relationship('Organizacion', backref='requerimientos_compra')
+    obra = db.relationship('Obra', backref='requerimientos_compra')
+    solicitante = db.relationship('Usuario', foreign_keys=[solicitante_id], backref='requerimientos_solicitados')
+    aprobador = db.relationship('Usuario', foreign_keys=[aprobador_id], backref='requerimientos_aprobados')
+    items = db.relationship('RequerimientoCompraItem', back_populates='requerimiento',
+                           cascade='all, delete-orphan', lazy='dynamic')
+
+    def __repr__(self):
+        return f'<RequerimientoCompra {self.numero}>'
+
+    @classmethod
+    def generar_numero(cls, organizacion_id):
+        """Genera un número único para el requerimiento"""
+        year = datetime.utcnow().year
+        ultimo = cls.query.filter(
+            cls.organizacion_id == organizacion_id,
+            cls.numero.like(f'RC-{year}-%')
+        ).order_by(cls.id.desc()).first()
+
+        if ultimo and ultimo.numero:
+            try:
+                ultimo_num = int(ultimo.numero.split('-')[-1])
+            except:
+                ultimo_num = 0
+        else:
+            ultimo_num = 0
+
+        return f'RC-{year}-{str(ultimo_num + 1).zfill(4)}'
+
+    @property
+    def estado_display(self):
+        """Retorna el nombre legible del estado"""
+        estados = {
+            'pendiente': 'Pendiente de Aprobación',
+            'aprobado': 'Aprobado',
+            'rechazado': 'Rechazado',
+            'en_proceso': 'En Proceso de Compra',
+            'completado': 'Completado',
+            'cancelado': 'Cancelado'
+        }
+        return estados.get(self.estado, self.estado)
+
+    @property
+    def estado_color(self):
+        """Retorna el color Bootstrap para el estado"""
+        colores = {
+            'pendiente': 'warning',
+            'aprobado': 'info',
+            'rechazado': 'danger',
+            'en_proceso': 'primary',
+            'completado': 'success',
+            'cancelado': 'secondary'
+        }
+        return colores.get(self.estado, 'secondary')
+
+    @property
+    def prioridad_display(self):
+        """Retorna el nombre legible de la prioridad"""
+        prioridades = {
+            'baja': 'Baja',
+            'normal': 'Normal',
+            'alta': 'Alta',
+            'urgente': 'Urgente'
+        }
+        return prioridades.get(self.prioridad, self.prioridad)
+
+    @property
+    def prioridad_color(self):
+        """Retorna el color Bootstrap para la prioridad"""
+        colores = {
+            'baja': 'secondary',
+            'normal': 'info',
+            'alta': 'warning',
+            'urgente': 'danger'
+        }
+        return colores.get(self.prioridad, 'secondary')
+
+    @property
+    def total_items(self):
+        """Retorna la cantidad de items en el requerimiento"""
+        return self.items.count()
+
+    @property
+    def costo_estimado_total(self):
+        """Calcula el costo estimado total del requerimiento"""
+        total = 0
+        for item in self.items:
+            if item.costo_estimado:
+                total += float(item.costo_estimado) * float(item.cantidad)
+        return total
+
+    def aprobar(self, aprobador_id, notas=None):
+        """Aprueba el requerimiento"""
+        self.estado = 'aprobado'
+        self.aprobador_id = aprobador_id
+        self.fecha_aprobacion = datetime.utcnow()
+        if notas:
+            self.notas_aprobacion = notas
+
+    def rechazar(self, aprobador_id, notas=None):
+        """Rechaza el requerimiento"""
+        self.estado = 'rechazado'
+        self.aprobador_id = aprobador_id
+        self.fecha_aprobacion = datetime.utcnow()
+        if notas:
+            self.notas_aprobacion = notas
+
+    def marcar_en_proceso(self):
+        """Marca el requerimiento como en proceso de compra"""
+        self.estado = 'en_proceso'
+
+    def completar(self):
+        """Marca el requerimiento como completado"""
+        self.estado = 'completado'
+        self.fecha_completado = datetime.utcnow()
+
+
+class RequerimientoCompraItem(db.Model):
+    """
+    Ítem individual dentro de un requerimiento de compra.
+    """
+    __tablename__ = 'requerimiento_compra_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    requerimiento_id = db.Column(db.Integer, db.ForeignKey('requerimientos_compra.id', ondelete='CASCADE'), nullable=False)
+
+    # Puede estar vinculado a un item de inventario o ser texto libre
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
+    descripcion = db.Column(db.String(300), nullable=False)  # Descripción del material/equipo
+    codigo = db.Column(db.String(50))  # Código si existe
+
+    # Cantidades
+    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
+    unidad = db.Column(db.String(30), default='unidad')
+
+    # Cantidad planificada (del presupuesto) vs cantidad actual en obra
+    cantidad_planificada = db.Column(db.Numeric(10, 3), default=0)
+    cantidad_actual_obra = db.Column(db.Numeric(10, 3), default=0)
+
+    # Costo estimado (opcional)
+    costo_estimado = db.Column(db.Numeric(15, 2))
+    moneda = db.Column(db.String(3), default='ARS')
+
+    # Notas adicionales
+    notas = db.Column(db.Text)
+
+    # Tipo: material, maquinaria, herramienta, equipo
+    tipo = db.Column(db.String(30), default='material')
+
+    # Relaciones
+    requerimiento = db.relationship('RequerimientoCompra', back_populates='items')
+    item_inventario = db.relationship('ItemInventario', backref='requerimientos')
+
+    def __repr__(self):
+        return f'<RequerimientoCompraItem {self.descripcion}>'
+
+    @property
+    def deficit(self):
+        """Calcula el déficit (cantidad planificada - cantidad actual en obra)"""
+        plan = float(self.cantidad_planificada or 0)
+        actual = float(self.cantidad_actual_obra or 0)
+        return max(0, plan - actual)
+
+    @property
+    def subtotal_estimado(self):
+        """Calcula el subtotal estimado"""
+        if self.costo_estimado and self.cantidad:
+            return float(self.costo_estimado) * float(self.cantidad)
+        return 0

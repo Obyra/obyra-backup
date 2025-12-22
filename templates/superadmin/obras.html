@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Obras Global - Super Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('superadmin.panel') }}">Super Admin</a></li>
+                    <li class="breadcrumb-item active">Obras Global</li>
+                </ol>
+            </nav>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-hard-hat me-2"></i>Obras Global</h2>
+                <a href="{{ url_for('superadmin.panel') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-6">
+                    <label for="org_id" class="form-label">Organización</label>
+                    <select class="form-select" id="org_id" name="org_id">
+                        <option value="">Todas las organizaciones</option>
+                        {% for org in organizaciones %}
+                        <option value="{{ org.id }}" {% if org_filter == org.id %}selected{% endif %}>
+                            {{ org.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('superadmin.obras_global') }}" class="btn btn-outline-secondary">
+                        Limpiar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card">
+        <div class="card-header">
+            <strong>Obras encontradas: {{ obras|length }}</strong>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Organización</th>
+                        <th>Nombre</th>
+                        <th>Dirección</th>
+                        <th>Estado</th>
+                        <th>Fecha Creación</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obra in obras %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('superadmin.ver_organizacion', org_id=obra.organizacion_id) }}"
+                               class="text-decoration-none">
+                                <span class="badge bg-primary">{{ obra.organizacion.nombre if obra.organizacion else 'ID: ' ~ obra.organizacion_id }}</span>
+                            </a>
+                        </td>
+                        <td><strong>{{ obra.nombre }}</strong></td>
+                        <td>{{ obra.direccion or '-' }}</td>
+                        <td>
+                            {% set estado_class = {
+                                'en_progreso': 'warning',
+                                'completada': 'success',
+                                'pausada': 'secondary',
+                                'cancelada': 'danger'
+                            } %}
+                            <span class="badge bg-{{ estado_class.get(obra.estado, 'info') }}">
+                                {{ obra.estado or 'Sin estado' }}
+                            </span>
+                        </td>
+                        <td>{{ obra.fecha_creacion.strftime('%d/%m/%Y') if obra.fecha_creacion else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            No se encontraron obras
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

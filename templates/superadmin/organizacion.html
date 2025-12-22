@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}{{ org.nombre }} - Super Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('superadmin.panel') }}">Super Admin</a></li>
+                    <li class="breadcrumb-item active">{{ org.nombre }}</li>
+                </ol>
+            </nav>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="fas fa-building me-2"></i>{{ org.nombre }}
+                    {% if org.plan %}
+                    <span class="badge bg-info ms-2">{{ org.plan }}</span>
+                    {% endif %}
+                </h2>
+                <a href="{{ url_for('superadmin.panel') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usuarios -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <strong><i class="fas fa-users me-2"></i>Usuarios ({{ usuarios|length }})</strong>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Email</th>
+                                <th>Rol</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usuario in usuarios %}
+                            <tr>
+                                <td>{{ usuario.nombre or 'Sin nombre' }}</td>
+                                <td>{{ usuario.email }}</td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ usuario.rol or usuario.role or 'Sin rol' }}</span>
+                                    {% if usuario.is_super_admin %}
+                                    <span class="badge bg-danger">Super Admin</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if usuario.activo %}
+                                    <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center text-muted">Sin usuarios</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Obras -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <strong><i class="fas fa-hard-hat me-2"></i>Obras Recientes ({{ obras|length }})</strong>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for obra in obras[:10] %}
+                            <tr>
+                                <td>{{ obra.nombre }}</td>
+                                <td><span class="badge bg-info">{{ obra.estado or 'Sin estado' }}</span></td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="2" class="text-center text-muted">Sin obras</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventario -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-secondary text-white">
+                    <strong><i class="fas fa-boxes me-2"></i>Inventario ({{ items|length }})</strong>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Código</th>
+                                <th>Nombre</th>
+                                <th>Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items[:10] %}
+                            <tr>
+                                <td><code>{{ item.codigo }}</code></td>
+                                <td>{{ item.nombre[:30] }}{% if item.nombre|length > 30 %}...{% endif %}</td>
+                                <td>{{ item.stock_actual|default(0)|round(2) }} {{ item.unidad }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" class="text-center text-muted">Sin items</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Clientes -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <strong><i class="fas fa-address-book me-2"></i>Clientes ({{ clientes|length }})</strong>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Email</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cliente in clientes[:10] %}
+                            <tr>
+                                <td>{{ cliente.nombre }}</td>
+                                <td>{{ cliente.email or '-' }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="2" class="text-center text-muted">Sin clientes</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Presupuestos -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <strong><i class="fas fa-file-invoice-dollar me-2"></i>Presupuestos Recientes ({{ presupuestos|length }})</strong>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pres in presupuestos[:10] %}
+                            <tr>
+                                <td>{{ (pres.descripcion or 'Sin descripción')[:30] }}{% if (pres.descripcion or '')|length > 30 %}...{% endif %}</td>
+                                <td><span class="badge bg-secondary">{{ pres.estado or 'borrador' }}</span></td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="2" class="text-center text-muted">Sin presupuestos</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

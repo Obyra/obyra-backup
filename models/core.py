@@ -601,3 +601,119 @@ def upsert_user_module(user_id, module, view, edit):
     um.can_view = view
     um.can_edit = edit
     db.session.commit()
+
+
+# ===== MODELO DE NOTIFICACIONES =====
+
+class Notificacion(db.Model):
+    """
+    Sistema de notificaciones internas para usuarios.
+    Permite enviar alertas sobre eventos importantes del sistema.
+    """
+    __tablename__ = 'notificaciones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    # Tipo de notificación
+    tipo = db.Column(db.String(50), nullable=False)
+    # Tipos: requerimiento_compra, stock_bajo, tarea_asignada, avance_registrado, etc.
+
+    titulo = db.Column(db.String(200), nullable=False)
+    mensaje = db.Column(db.Text)
+
+    # URL a donde lleva la notificación (opcional)
+    url = db.Column(db.String(500))
+
+    # Estado
+    leida = db.Column(db.Boolean, default=False)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_lectura = db.Column(db.DateTime)
+
+    # Referencia al objeto relacionado (opcional)
+    referencia_tipo = db.Column(db.String(50))  # 'requerimiento', 'obra', 'tarea', etc.
+    referencia_id = db.Column(db.Integer)
+
+    # Relaciones
+    usuario = db.relationship('Usuario', backref=db.backref('notificaciones', lazy='dynamic'))
+    organizacion = db.relationship('Organizacion', backref=db.backref('notificaciones', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Notificacion {self.id} - {self.tipo} para {self.usuario_id}>'
+
+    def marcar_leida(self):
+        """Marca la notificación como leída"""
+        self.leida = True
+        self.fecha_lectura = datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tipo': self.tipo,
+            'titulo': self.titulo,
+            'mensaje': self.mensaje,
+            'url': self.url,
+            'leida': self.leida,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            'referencia_tipo': self.referencia_tipo,
+            'referencia_id': self.referencia_id
+        }
+
+    @classmethod
+    def crear_notificacion(cls, organizacion_id, usuario_id, tipo, titulo, mensaje=None,
+                           url=None, referencia_tipo=None, referencia_id=None):
+        """Crea una nueva notificación"""
+        notif = cls(
+            organizacion_id=organizacion_id,
+            usuario_id=usuario_id,
+            tipo=tipo,
+            titulo=titulo,
+            mensaje=mensaje,
+            url=url,
+            referencia_tipo=referencia_tipo,
+            referencia_id=referencia_id
+        )
+        db.session.add(notif)
+        return notif
+
+    @classmethod
+    def notificar_administradores(cls, organizacion_id, tipo, titulo, mensaje=None,
+                                   url=None, referencia_tipo=None, referencia_id=None):
+        """Crea notificaciones para todos los administradores de la organización"""
+        from models.core import Usuario
+
+        admins = Usuario.query.filter_by(
+            organizacion_id=organizacion_id,
+            rol='administrador',
+            activo=True
+        ).all()
+
+        notificaciones = []
+        for admin in admins:
+            notif = cls.crear_notificacion(
+                organizacion_id=organizacion_id,
+                usuario_id=admin.id,
+                tipo=tipo,
+                titulo=titulo,
+                mensaje=mensaje,
+                url=url,
+                referencia_tipo=referencia_tipo,
+                referencia_id=referencia_id
+            )
+            notificaciones.append(notif)
+
+        return notificaciones
+
+    @classmethod
+    def contar_no_leidas(cls, usuario_id):
+        """Cuenta las notificaciones no leídas de un usuario"""
+        return cls.query.filter_by(usuario_id=usuario_id, leida=False).count()
+
+    @classmethod
+    def obtener_recientes(cls, usuario_id, limite=10):
+        """Obtiene las notificaciones más recientes de un usuario"""
+        return cls.query.filter_by(usuario_id=usuario_id)\
+            .order_by(cls.fecha_creacion.desc())\
+            .limit(limite)\
+            .all()

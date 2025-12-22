@@ -23,15 +23,12 @@ def update_profile_from_form(usuario: Usuario, form) -> Tuple[bool, str]:
     direccion = (form.get('direccion') or '').strip()
     cuit_input = (form.get('cuit') or '').strip()
 
-    if not all([nombre, apellido, email, direccion, cuit_input]):
-        return False, 'Por favor, completa todos los campos obligatorios.'
+    # Solo nombre, apellido y email son obligatorios
+    if not all([nombre, apellido, email]):
+        return False, 'Por favor, completa nombre, apellido y email.'
 
     if not _EMAIL_REGEX.match(email):
-        return False, 'El email ingresado no es válido.'
-
-    cuit_normalizado = normalizar_cuit(cuit_input)
-    if not validar_cuit(cuit_normalizado):
-        return False, 'El CUIL/CUIT ingresado no es válido.'
+        return False, 'El email ingresado no es valido.'
 
     email_existente = (
         Usuario.query
@@ -41,13 +38,20 @@ def update_profile_from_form(usuario: Usuario, form) -> Tuple[bool, str]:
     if email_existente:
         return False, 'Ya existe un usuario registrado con ese email.'
 
-    cuit_existente = (
-        PerfilUsuario.query
-        .filter(PerfilUsuario.cuit == cuit_normalizado, PerfilUsuario.usuario_id != usuario.id)
-        .first()
-    )
-    if cuit_existente:
-        return False, 'El CUIL/CUIT ingresado pertenece a otro usuario.'
+    # Validar CUIT solo si se proporciona
+    cuit_normalizado = None
+    if cuit_input:
+        cuit_normalizado = normalizar_cuit(cuit_input)
+        if not validar_cuit(cuit_normalizado):
+            return False, 'El CUIL/CUIT ingresado no es valido.'
+
+        cuit_existente = (
+            PerfilUsuario.query
+            .filter(PerfilUsuario.cuit == cuit_normalizado, PerfilUsuario.usuario_id != usuario.id)
+            .first()
+        )
+        if cuit_existente:
+            return False, 'El CUIL/CUIT ingresado pertenece a otro usuario.'
 
     usuario.nombre = nombre
     usuario.apellido = apellido
@@ -59,8 +63,10 @@ def update_profile_from_form(usuario: Usuario, form) -> Tuple[bool, str]:
         perfil = PerfilUsuario(usuario=usuario)
         db.session.add(perfil)
 
-    perfil.cuit = cuit_normalizado
-    perfil.direccion = direccion
+    if cuit_normalizado:
+        perfil.cuit = cuit_normalizado
+    if direccion:
+        perfil.direccion = direccion
 
     status = usuario.ensure_onboarding_status()
     status.mark_profile_completed()
@@ -205,12 +211,67 @@ def perfil():
 @account_bp.route('/facturacion', methods=['GET', 'POST'])
 @login_required
 def facturacion():
+    import os
+    from flask import current_app
+    from werkzeug.utils import secure_filename
+
     if request.method == 'POST':
-        exito, mensaje = update_billing_from_form(current_user, request.form)
-        if exito:
-            flash(mensaje, 'success')
-            return redirect(url_for('account.facturacion'))
-        flash(mensaje, 'danger')
+        form_type = request.form.get('form_type', 'facturacion')
+
+        if form_type == 'facturacion':
+            # Guardar datos de facturacion
+            exito, mensaje = update_billing_from_form(current_user, request.form)
+            if exito:
+                flash(mensaje, 'success')
+            else:
+                flash(mensaje, 'danger')
+
+        elif form_type == 'comprobante':
+            # Procesar comprobante de pago
+            try:
+                monto = request.form.get('monto_transferido')
+                fecha = request.form.get('fecha_transferencia')
+                concepto = request.form.get('concepto')
+                notas = request.form.get('notas_pago', '')
+                archivo = request.files.get('comprobante')
+
+                if not all([monto, fecha, archivo]):
+                    flash('Por favor completa todos los campos obligatorios.', 'danger')
+                else:
+                    # Validar archivo
+                    if archivo.filename:
+                        filename = secure_filename(archivo.filename)
+                        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+                        if ext not in ['pdf', 'jpg', 'jpeg', 'png']:
+                            flash('Formato de archivo no permitido.', 'danger')
+                        else:
+                            # Guardar archivo
+                            upload_folder = os.path.join(current_app.root_path, 'instance', 'comprobantes')
+                            os.makedirs(upload_folder, exist_ok=True)
+
+                            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                            nuevo_nombre = f"{current_user.id}_{timestamp}_{filename}"
+                            filepath = os.path.join(upload_folder, nuevo_nombre)
+                            archivo.save(filepath)
+
+                            # Enviar email con el comprobante
+                            _enviar_email_comprobante(
+                                usuario=current_user,
+                                monto=monto,
+                                fecha=fecha,
+                                concepto=concepto,
+                                notas=notas,
+                                archivo_path=filepath
+                            )
+
+                            flash('Comprobante enviado correctamente. Lo revisaremos a la brevedad.', 'success')
+
+            except Exception as e:
+                current_app.logger.error(f"Error procesando comprobante: {e}")
+                flash(f'Error al procesar el comprobante: {str(e)}', 'danger')
+
+        return redirect(url_for('account.facturacion'))
 
     billing_profile = current_user.billing_profile
     onboarding_status = current_user.onboarding_status
@@ -220,7 +281,86 @@ def facturacion():
         billing_profile=billing_profile,
         onboarding_status=onboarding_status,
         perfil=current_user.perfil,
+        pagos_recientes=[]  # TODO: Implementar historial de pagos
     )
+
+
+def _enviar_email_comprobante(usuario, monto, fecha, concepto, notas, archivo_path):
+    """Envia email con comprobante de pago a obyra.servicios@gmail.com"""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+    from flask import current_app
+    import os
+
+    try:
+        # Configuracion del email
+        smtp_server = current_app.config.get('MAIL_SERVER', 'smtp.gmail.com')
+        smtp_port = current_app.config.get('MAIL_PORT', 587)
+        smtp_user = current_app.config.get('MAIL_USERNAME')
+        smtp_pass = current_app.config.get('MAIL_PASSWORD')
+
+        if not smtp_user or not smtp_pass:
+            current_app.logger.warning("Email no configurado, comprobante guardado pero no enviado")
+            return
+
+        # Crear mensaje
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = 'obyra.servicios@gmail.com'
+        msg['Subject'] = f'Nuevo Comprobante de Pago - {usuario.nombre_completo}'
+
+        # Conceptos legibles
+        conceptos = {
+            'plan_basico': 'Plan Basico - $15.000/mes',
+            'plan_profesional': 'Plan Profesional - $35.000/mes',
+            'plan_empresa': 'Plan Empresa - $75.000/mes',
+            'otro': 'Otro'
+        }
+
+        body = f"""
+Nuevo comprobante de pago recibido:
+
+Usuario: {usuario.nombre_completo}
+Email: {usuario.email}
+Organizacion ID: {usuario.organizacion_id}
+
+Datos del pago:
+- Monto: ${monto}
+- Fecha: {fecha}
+- Concepto: {conceptos.get(concepto, concepto)}
+- Notas: {notas or 'Sin notas'}
+
+Por favor, verificar el comprobante adjunto y procesar el pago.
+        """
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Adjuntar archivo
+        if archivo_path and os.path.exists(archivo_path):
+            with open(archivo_path, 'rb') as f:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename={os.path.basename(archivo_path)}'
+                )
+                msg.attach(part)
+
+        # Enviar
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+
+        current_app.logger.info(f"Email de comprobante enviado para usuario {usuario.id}")
+
+    except Exception as e:
+        current_app.logger.error(f"Error enviando email de comprobante: {e}")
+        raise
 
 
 @account_bp.route('/organizacion', methods=['GET', 'POST'])

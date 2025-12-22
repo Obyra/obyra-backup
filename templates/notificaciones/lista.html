@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Notificaciones{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-bell me-2"></i>Notificaciones</h2>
+                <div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="marcarTodasLeidasPage()">
+                        <i class="fas fa-check-double me-1"></i>Marcar todas como leidas
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if notificaciones.items %}
+    <div class="card">
+        <div class="list-group list-group-flush">
+            {% for notif in notificaciones.items %}
+            <div class="list-group-item list-group-item-action {% if not notif.leida %}bg-light{% endif %}">
+                <div class="d-flex w-100 justify-content-between align-items-start">
+                    <div class="d-flex align-items-start">
+                        {% set iconos = {
+                            'requerimiento_compra': 'fas fa-shopping-cart text-warning',
+                            'requerimiento_estado': 'fas fa-info-circle text-info',
+                            'stock_bajo': 'fas fa-exclamation-triangle text-danger',
+                            'tarea_asignada': 'fas fa-tasks text-primary'
+                        } %}
+                        <i class="{{ iconos.get(notif.tipo, 'fas fa-bell text-secondary') }} me-3 mt-1 fs-5"></i>
+                        <div>
+                            <h6 class="mb-1">
+                                {% if notif.url %}
+                                <a href="{{ notif.url }}" class="text-decoration-none text-dark">
+                                    {{ notif.titulo }}
+                                </a>
+                                {% else %}
+                                {{ notif.titulo }}
+                                {% endif %}
+                                {% if not notif.leida %}
+                                <span class="badge bg-primary ms-2">Nueva</span>
+                                {% endif %}
+                            </h6>
+                            {% if notif.mensaje %}
+                            <p class="mb-1 text-muted small">{{ notif.mensaje }}</p>
+                            {% endif %}
+                            <small class="text-muted">
+                                <i class="fas fa-clock me-1"></i>
+                                {{ notif.fecha_creacion.strftime('%d/%m/%Y %H:%M') if notif.fecha_creacion else '' }}
+                            </small>
+                        </div>
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        {% if not notif.leida %}
+                        <button class="btn btn-outline-secondary" onclick="marcarLeidaPage({{ notif.id }})" title="Marcar como leida">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-outline-danger" onclick="eliminarNotif({{ notif.id }})" title="Eliminar">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# Paginacion #}
+    {% if notificaciones.pages > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if notificaciones.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('notificaciones.lista', page=notificaciones.prev_num) }}">Anterior</a>
+            </li>
+            {% endif %}
+
+            {% for page_num in notificaciones.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                    {% if page_num == notificaciones.page %}
+                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% else %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('notificaciones.lista', page=page_num) }}">{{ page_num }}</a></li>
+                    {% endif %}
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if notificaciones.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('notificaciones.lista', page=notificaciones.next_num) }}">Siguiente</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-bell-slash fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No tienes notificaciones</h5>
+            <p class="text-muted">Las notificaciones apareceran aqui cuando haya actividad relevante.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function marcarLeidaPage(id) {
+    fetch(`/notificaciones/api/marcar-leida/${id}`, { method: 'POST' })
+        .then(() => location.reload())
+        .catch(err => alert('Error: ' + err));
+}
+
+function marcarTodasLeidasPage() {
+    fetch('/notificaciones/api/marcar-todas-leidas', { method: 'POST' })
+        .then(() => location.reload())
+        .catch(err => alert('Error: ' + err));
+}
+
+function eliminarNotif(id) {
+    if (!confirm('Desea eliminar esta notificacion?')) return;
+
+    fetch(`/notificaciones/api/eliminar/${id}`, { method: 'DELETE' })
+        .then(() => location.reload())
+        .catch(err => alert('Error: ' + err));
+}
+</script>
+{% endblock %}

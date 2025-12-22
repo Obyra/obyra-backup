@@ -1449,6 +1449,12 @@ def recalc_tarea_pct(tarea_id):
         tarea.fecha_fin_real = datetime.utcnow()
         current_app.logger.info(f"Tarea {tarea.id} '{tarea.nombre}' auto-completada al alcanzar 100%")
 
+        # Aprobar automáticamente todos los avances pendientes de esta tarea
+        avances_pendientes = [a for a in tarea.avances if a.status == 'pendiente']
+        for avance in avances_pendientes:
+            avance.status = 'aprobado'
+            current_app.logger.info(f"Avance {avance.id} auto-aprobado al completar tarea {tarea.id}")
+
     db.session.commit()
     return float(tarea.porcentaje_avance or 0)
 

@@ -379,9 +379,14 @@
                             </button>
                         </li>
                         <li class="nav-item ms-auto" role="presentation">
-                            <button class="btn btn-warning btn-sm" onclick="reservarMateriales(this, {{ obra.id }})" title="Reservar materiales en inventario">
-                                <i class="fas fa-shopping-cart me-1"></i>Reservar Stock
-                            </button>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-warning" onclick="reservarMateriales(this, {{ obra.id }})" title="Reservar materiales en inventario">
+                                    <i class="fas fa-lock me-1"></i>Reservar Stock
+                                </button>
+                                <button class="btn btn-danger" onclick="mostrarModalRequerimientoCompra()" title="Solicitar compra de materiales faltantes">
+                                    <i class="fas fa-shopping-cart me-1"></i>Solicitar Compra
+                                </button>
+                            </div>
                         </li>
                     </ul>
 
@@ -2855,6 +2860,245 @@ function pedirMasStock(obraId, itemInventarioId, itemNombre) {
     alert(`Para pedir más "${itemNombre}", ve al Inventario General y realiza un traslado a esta obra.`);
     window.open('/inventario?buscar=' + encodeURIComponent(itemNombre), '_blank');
 }
+
+// ========== REQUERIMIENTO DE COMPRA ==========
+let itemsRequerimiento = [];
+let itemReqIdCounter = 0;
+
+function mostrarModalRequerimientoCompra() {
+    itemsRequerimiento = [];
+    itemReqIdCounter = 0;
+    document.getElementById('reqMotivo').value = '';
+    document.getElementById('reqPrioridad').value = 'normal';
+    document.getElementById('reqFechaNecesidad').value = '';
+    renderItemsRequerimiento();
+
+    // Cargar materiales con deficit
+    cargarMaterialesConDeficit();
+
+    const modal = new bootstrap.Modal(document.getElementById('modalRequerimientoCompra'));
+    modal.show();
+}
+
+function cargarMaterialesConDeficit() {
+    const lista = document.getElementById('listaMaterialesDeficit');
+    lista.innerHTML = '<div class="text-center py-2"><i class="fas fa-spinner fa-spin"></i></div>';
+
+    fetch(`/requerimientos/api/materiales-obra/{{ obra.id }}`)
+        .then(resp => resp.json())
+        .then(data => {
+            if (data.ok && data.materiales) {
+                const conDeficit = data.materiales.filter(m => m.deficit > 0);
+                if (conDeficit.length === 0) {
+                    lista.innerHTML = '<div class="text-muted small p-2">No hay materiales con deficit</div>';
+                    return;
+                }
+                lista.innerHTML = conDeficit.map(mat => `
+                    <a href="#" class="list-group-item list-group-item-action py-2" onclick="agregarMaterialReq(${JSON.stringify(mat).replace(/"/g, '&quot;')}); return false;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="small">${mat.descripcion}</strong>
+                            </div>
+                            <span class="badge bg-danger">-${mat.deficit.toFixed(1)} ${mat.unidad}</span>
+                        </div>
+                    </a>
+                `).join('');
+            } else {
+                lista.innerHTML = '<div class="text-danger small p-2">Error al cargar</div>';
+            }
+        })
+        .catch(() => {
+            lista.innerHTML = '<div class="text-danger small p-2">Error de conexion</div>';
+        });
+}
+
+function agregarMaterialReq(mat) {
+    // Verificar si ya existe
+    if (mat.item_inventario_id && itemsRequerimiento.find(i => i.item_inventario_id === mat.item_inventario_id)) {
+        alert('Este material ya fue agregado');
+        return;
+    }
+
+    itemsRequerimiento.push({
+        id: ++itemReqIdCounter,
+        item_inventario_id: mat.item_inventario_id,
+        descripcion: mat.descripcion,
+        codigo: mat.codigo || '',
+        cantidad: mat.deficit || 1,
+        unidad: mat.unidad,
+        cantidad_planificada: mat.cantidad_planificada || 0,
+        cantidad_actual_obra: mat.cantidad_actual_obra || 0,
+        tipo: mat.tipo || 'material'
+    });
+    renderItemsRequerimiento();
+}
+
+function agregarItemManualReq() {
+    const desc = prompt('Descripcion del material/equipo:');
+    if (!desc) return;
+    const cant = parseFloat(prompt('Cantidad necesaria:', '1'));
+    if (!cant || cant <= 0) return;
+    const unidad = prompt('Unidad (unidad, kg, lts, m2, etc):', 'unidad');
+
+    itemsRequerimiento.push({
+        id: ++itemReqIdCounter,
+        item_inventario_id: null,
+        descripcion: desc,
+        codigo: '',
+        cantidad: cant,
+        unidad: unidad || 'unidad',
+        tipo: 'material'
+    });
+    renderItemsRequerimiento();
+}
+
+function eliminarItemReq(itemId) {
+    itemsRequerimiento = itemsRequerimiento.filter(i => i.id !== itemId);
+    renderItemsRequerimiento();
+}
+
+function renderItemsRequerimiento() {
+    const lista = document.getElementById('listaItemsRequerimiento');
+    const btn = document.getElementById('btnEnviarRequerimiento');
+
+    if (itemsRequerimiento.length === 0) {
+        lista.innerHTML = '<div class="text-center text-muted py-3 small">Selecciona materiales de la lista o agrega manualmente</div>';
+        btn.disabled = true;
+    } else {
+        lista.innerHTML = itemsRequerimiento.map(item => `
+            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <div>
+                    <strong class="small">${item.descripcion}</strong>
+                    <span class="badge bg-primary ms-1">${item.cantidad} ${item.unidad}</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItemReq(${item.id})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('');
+        btn.disabled = false;
+    }
+
+    document.getElementById('totalItemsReq').textContent = itemsRequerimiento.length;
+}
+
+async function enviarRequerimientoCompra() {
+    const motivo = document.getElementById('reqMotivo').value.trim();
+    if (!motivo) {
+        alert('Debe indicar el motivo de la solicitud');
+        return;
+    }
+    if (itemsRequerimiento.length === 0) {
+        alert('Debe agregar al menos un item');
+        return;
+    }
+
+    const btn = document.getElementById('btnEnviarRequerimiento');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enviando...';
+
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const response = await fetch('/requerimientos/api/crear-desde-obra', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken || ''
+            },
+            body: JSON.stringify({
+                obra_id: {{ obra.id }},
+                motivo: motivo,
+                prioridad: document.getElementById('reqPrioridad').value,
+                fecha_necesidad: document.getElementById('reqFechaNecesidad').value || null,
+                items: itemsRequerimiento.map(i => ({
+                    item_inventario_id: i.item_inventario_id,
+                    descripcion: i.descripcion,
+                    codigo: i.codigo,
+                    cantidad: i.cantidad,
+                    unidad: i.unidad,
+                    cantidad_planificada: i.cantidad_planificada || 0,
+                    cantidad_actual_obra: i.cantidad_actual_obra || 0,
+                    tipo: i.tipo
+                }))
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+            alert(`Requerimiento ${data.numero} creado exitosamente. El administrador sera notificado.`);
+            bootstrap.Modal.getInstance(document.getElementById('modalRequerimientoCompra')).hide();
+            // Opcional: redirigir al detalle del requerimiento
+            // window.location.href = `/requerimientos/${data.requerimiento_id}`;
+        } else {
+            throw new Error(data.error || 'Error al crear requerimiento');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Enviar Solicitud';
+    }
+}
 </script>
+
+<!-- Modal Requerimiento de Compra -->
+<div class="modal fade" id="modalRequerimientoCompra" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-shopping-cart me-2"></i>Solicitar Compra de Materiales</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-5">
+                        <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-warning me-1"></i>Materiales con Deficit</h6>
+                        <div id="listaMaterialesDeficit" class="list-group list-group-flush border rounded" style="max-height: 250px; overflow-y: auto;">
+                            <div class="text-center py-2"><i class="fas fa-spinner fa-spin"></i></div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" onclick="agregarItemManualReq()">
+                            <i class="fas fa-plus me-1"></i>Agregar Manual
+                        </button>
+                    </div>
+                    <div class="col-md-7">
+                        <h6 class="mb-2"><i class="fas fa-list me-1"></i>Items a Solicitar (<span id="totalItemsReq">0</span>)</h6>
+                        <div id="listaItemsRequerimiento" class="list-group list-group-flush border rounded mb-3" style="max-height: 150px; overflow-y: auto;">
+                            <div class="text-center text-muted py-3 small">Selecciona materiales de la lista</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">Motivo de la solicitud *</label>
+                            <textarea class="form-control form-control-sm" id="reqMotivo" rows="2" required
+                                      placeholder="Ej: Falta material para completar etapa de pintura..."></textarea>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-6">
+                                <label class="form-label fw-bold small">Prioridad</label>
+                                <select class="form-select form-select-sm" id="reqPrioridad">
+                                    <option value="baja">Baja</option>
+                                    <option value="normal" selected>Normal</option>
+                                    <option value="alta">Alta</option>
+                                    <option value="urgente">Urgente</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-bold small">Fecha necesidad</label>
+                                <input type="date" class="form-control form-control-sm" id="reqFechaNecesidad">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnEnviarRequerimiento" onclick="enviarRequerimientoCompra()" disabled>
+                    <i class="fas fa-paper-plane me-1"></i>Enviar Solicitud
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 

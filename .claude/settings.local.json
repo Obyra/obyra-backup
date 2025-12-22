@@ -69,7 +69,8 @@
       "Bash(tr:*)",
       "Bash(git checkout:*)",
       "Bash(winpty docker exec:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec:*)"
     ],
     "deny": [],
     "ask": []

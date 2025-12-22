@@ -402,6 +402,210 @@ def crear():
         return redirect(url_for('presupuestos.lista'))
 
 
+@presupuestos_bp.route('/crear-manual', methods=['GET', 'POST'])
+@login_required
+def crear_manual():
+    """Crear nuevo presupuesto de forma manual (sin IA)"""
+    # Verificar permisos de gestión
+    if not current_user.puede_gestionar():
+        flash('No tienes permisos para crear presupuestos', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            flash('No tienes una organización activa', 'warning')
+            return redirect(url_for('index'))
+
+        if request.method == 'POST':
+            import json
+
+            # Obtener datos del formulario
+            numero = request.form.get('numero', '').strip()
+            cliente_id = request.form.get('cliente_id', type=int)
+            vigencia_dias = request.form.get('vigencia_dias', 30, type=int)
+            moneda = request.form.get('moneda', 'ARS')
+
+            # Datos del proyecto
+            nombre_obra = request.form.get('nombre_obra', '').strip()
+            ubicacion = request.form.get('ubicacion', '').strip()
+            descripcion = request.form.get('descripcion', '').strip()
+
+            # Validaciones
+            if not numero:
+                flash('El número de presupuesto es requerido', 'danger')
+                return redirect(url_for('presupuestos.crear_manual'))
+
+            # Verificar que el número no esté duplicado
+            existing = Presupuesto.query.filter_by(
+                organizacion_id=org_id,
+                numero=numero
+            ).first()
+
+            if existing:
+                flash(f'Ya existe un presupuesto con el número {numero}', 'danger')
+                return redirect(url_for('presupuestos.crear_manual'))
+
+            # Obtener nombre del cliente si se seleccionó
+            cliente_nombre = ''
+            if cliente_id:
+                cliente = Cliente.query.filter_by(id=cliente_id, organizacion_id=org_id).first()
+                if cliente:
+                    cliente_nombre = cliente.nombre_completo
+
+            # Preparar datos del proyecto como JSON
+            datos_proyecto = {
+                'nombre_obra': nombre_obra,
+                'ubicacion': ubicacion,
+                'descripcion': descripcion,
+                'cliente_nombre': cliente_nombre,
+                'modo_creacion': 'manual'
+            }
+
+            # Obtener tasa de cambio actual del BNA
+            tasa_usd = None
+            tasa_fecha = None
+            tasa_provider = 'BNA'
+            try:
+                from services.exchange.providers.bna import fetch_official_rate
+                rate_snapshot = fetch_official_rate()
+                if rate_snapshot and rate_snapshot.value:
+                    tasa_usd = float(rate_snapshot.value)
+                    tasa_fecha = rate_snapshot.as_of_date
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo obtener cotización BNA: {e}")
+
+            # Obtener índice CAC actual
+            indice_cac = None
+            cac_fecha = None
+            try:
+                from services.cac.cac_service import get_index_for_month
+                from datetime import date as dt_date
+                today = dt_date.today()
+                cac_index = get_index_for_month(today.year, today.month)
+                if not cac_index:
+                    prev_month = today.month - 1 if today.month > 1 else 12
+                    prev_year = today.year if today.month > 1 else today.year - 1
+                    cac_index = get_index_for_month(prev_year, prev_month)
+                if cac_index:
+                    indice_cac = float(cac_index.value)
+                    cac_fecha = dt_date(cac_index.period_year, cac_index.period_month, 1)
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo obtener índice CAC: {e}")
+
+            # Crear presupuesto
+            presupuesto = Presupuesto(
+                organizacion_id=org_id,
+                numero=numero,
+                cliente_id=cliente_id if cliente_id else None,
+                fecha=date.today(),
+                vigencia_dias=vigencia_dias,
+                datos_proyecto=json.dumps(datos_proyecto),
+                ubicacion_texto=ubicacion,
+                estado='borrador',
+                currency=moneda,
+                iva_porcentaje=BudgetConstants.DEFAULT_IVA_RATE,
+                vigencia_bloqueada=True,
+                tasa_usd_venta=tasa_usd,
+                exchange_rate_as_of=tasa_fecha,
+                exchange_rate_provider=tasa_provider,
+                indice_cac_valor=indice_cac,
+                indice_cac_fecha=cac_fecha
+            )
+
+            db.session.add(presupuesto)
+            db.session.flush()
+
+            # Procesar items manuales
+            items_json = request.form.get('items_json', '[]')
+            try:
+                items_data = json.loads(items_json)
+                for item_data in items_data:
+                    precio_unit = Decimal(str(item_data.get('precio_unitario', 0)))
+                    cantidad = Decimal(str(item_data.get('cantidad', 0)))
+                    subtotal = precio_unit * cantidad
+
+                    # Calcular precio en ARS si la moneda es USD
+                    precio_unit_ars = precio_unit
+                    total_ars = subtotal
+                    if moneda == 'USD' and tasa_usd:
+                        precio_unit_ars = precio_unit * Decimal(str(tasa_usd))
+                        total_ars = subtotal * Decimal(str(tasa_usd))
+
+                    # Obtener item_inventario_id si viene del inventario
+                    item_inventario_id = item_data.get('item_inventario_id')
+                    if item_inventario_id:
+                        item_inventario_id = int(item_inventario_id)
+
+                    item_presupuesto = ItemPresupuesto(
+                        presupuesto_id=presupuesto.id,
+                        tipo=item_data.get('tipo', 'material'),
+                        descripcion=item_data.get('descripcion', ''),
+                        unidad=item_data.get('unidad', 'unidad'),
+                        cantidad=cantidad,
+                        precio_unitario=precio_unit,
+                        total=subtotal,
+                        origen='manual',
+                        currency=moneda,
+                        price_unit_ars=precio_unit_ars,
+                        total_ars=total_ars,
+                        item_inventario_id=item_inventario_id
+                    )
+                    db.session.add(item_presupuesto)
+
+                current_app.logger.info(f"✅ Creado presupuesto manual {numero} con {len(items_data)} items")
+            except Exception as e:
+                current_app.logger.error(f"Error procesando items manuales: {str(e)}")
+
+            db.session.commit()
+
+            flash(f'Presupuesto {numero} creado exitosamente', 'success')
+            return redirect(url_for('presupuestos.detalle', id=presupuesto.id))
+
+        # GET - Mostrar formulario
+        # Generar número de presupuesto sugerido
+        fecha_hoy = date.today().strftime('%Y%m%d')
+        ultimo_hoy = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
+            Presupuesto.numero.like(f'PRES-{fecha_hoy}-%')
+        ).order_by(desc(Presupuesto.id)).first()
+
+        if ultimo_hoy and ultimo_hoy.numero:
+            try:
+                partes = ultimo_hoy.numero.split('-')
+                if len(partes) == 3:
+                    num = int(partes[2]) + 1
+                    numero_sugerido = f"PRES-{fecha_hoy}-{num:03d}"
+                else:
+                    numero_sugerido = f"PRES-{fecha_hoy}-001"
+            except (IndexError, ValueError, AttributeError):
+                numero_sugerido = f"PRES-{fecha_hoy}-001"
+        else:
+            numero_sugerido = f"PRES-{fecha_hoy}-001"
+
+        # Obtener lista de clientes
+        clientes = Cliente.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).order_by(Cliente.nombre, Cliente.apellido).all()
+
+        # Obtener items del inventario para el selector
+        from models.inventory import ItemInventario
+        items_inventario = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        ).order_by(ItemInventario.nombre).all()
+
+        return render_template('presupuestos/crear_manual.html',
+                             numero_sugerido=numero_sugerido,
+                             clientes=clientes,
+                             items_inventario=items_inventario)
+
+    except Exception as e:
+        current_app.logger.error(f"Error en presupuestos.crear_manual: {e}")
+        flash('Error al crear el presupuesto', 'danger')
+        return redirect(url_for('presupuestos.lista'))
+
+
 @presupuestos_bp.route('/<int:id>')
 @login_required
 def detalle(id):
@@ -1814,12 +2018,14 @@ def guardar_presupuesto():
 @login_required
 def calcular_etapas_ia():
     """
-    Endpoint para cálculo de etapas seleccionadas con reglas determinísticas
+    Endpoint para cálculo de etapas seleccionadas con reglas determinísticas.
+    Soporta redondeo de compras y precios duales USD/ARS.
     """
     try:
         from calculadora_ia import calcular_etapas_seleccionadas
         from services.exchange.base import ensure_rate
         from services.exchange.providers.bna import fetch_official_rate
+        from services.budget_rounding_service import process_budget_with_rounding_and_dual_currency
         from decimal import Decimal
         from datetime import date
 
@@ -1846,38 +2052,68 @@ def calcular_etapas_ia():
         presupuesto_id = data.get('presupuesto_id')
         currency = (data.get('currency') or data.get('moneda', 'ARS')).upper()
         aplicar_desperdicio = data.get('aplicar_desperdicio', True)  # Por defecto True
+        aplicar_redondeo = data.get('aplicar_redondeo', True)  # Redondeo de compras
+        mostrar_sobrante = data.get('mostrar_sobrante', True)  # Mostrar sobrantes
 
-        # Obtener tipo de cambio si es necesario
+        # Siempre obtener tipo de cambio para precios duales
         fx_snapshot = None
-        if currency == 'USD':
-            try:
-                fx_snapshot = ensure_rate(
-                    provider='bna_html',
-                    base_currency='ARS',
-                    quote_currency='USD',
-                    fetcher=fetch_official_rate,
-                    as_of=date.today(),
-                    fallback_rate=Decimal('1000.00')  # Fallback conservador
-                )
-                current_app.logger.info(f"Tipo de cambio obtenido: {fx_snapshot.value} ARS/USD")
-            except Exception as e:
-                current_app.logger.error(f"Error obteniendo tipo de cambio: {str(e)}")
-                return jsonify({
-                    'ok': False,
-                    'error': f'No se pudo obtener el tipo de cambio USD: {str(e)}'
-                }), 500
+        fx_rate = None
+        try:
+            fx_snapshot = ensure_rate(
+                provider='bna_html',
+                base_currency='ARS',
+                quote_currency='USD',
+                fetcher=fetch_official_rate,
+                as_of=date.today(),
+                fallback_rate=Decimal('1000.00')  # Fallback conservador
+            )
+            fx_rate = float(fx_snapshot.value)
+            current_app.logger.info(f"Tipo de cambio BNA obtenido: {fx_rate} ARS/USD")
+        except Exception as e:
+            current_app.logger.warning(f"No se pudo obtener tipo de cambio: {str(e)}")
+            # Continuar sin tipo de cambio
 
-        # Llamar a la función de cálculo
+        # Llamar a la función de cálculo base
         resultado = calcular_etapas_seleccionadas(
             etapas_payload=etapa_ids,
             superficie_m2=float(superficie_m2),
             tipo_calculo=tipo_calculo,
             contexto=parametros_contexto,
             presupuesto_id=presupuesto_id,
-            currency=currency,
-            fx_snapshot=fx_snapshot,
+            currency='ARS',  # Siempre calcular en ARS base
+            fx_snapshot=None,  # No aplicar conversión aquí
             aplicar_desperdicio=aplicar_desperdicio
         )
+
+        if resultado.get('ok') and resultado.get('etapas'):
+            # Aplicar redondeo de compras y precios duales
+            resultado_procesado = process_budget_with_rounding_and_dual_currency(
+                etapas=resultado['etapas'],
+                fx_rate=fx_rate,
+                base_currency='ARS',
+                apply_rounding=aplicar_redondeo,
+                include_surplus=mostrar_sobrante
+            )
+
+            # Actualizar resultado con datos procesados
+            resultado['etapas'] = resultado_procesado['etapas']
+            resultado['total_parcial_ars'] = resultado_procesado.get('total_parcial_ars', resultado.get('total_parcial', 0))
+            resultado['total_parcial'] = resultado['total_parcial_ars']  # Mantener compatibilidad
+            resultado['redondeo_aplicado'] = aplicar_redondeo
+
+            if fx_rate:
+                resultado['total_parcial_usd'] = resultado_procesado.get('total_parcial_usd')
+                resultado['tipo_cambio'] = {
+                    'valor': fx_rate,
+                    'proveedor': fx_snapshot.provider if fx_snapshot else 'fallback',
+                    'base_currency': 'ARS',
+                    'quote_currency': 'USD',
+                    'fetched_at': fx_snapshot.fetched_at.isoformat() if fx_snapshot else None,
+                    'as_of': fx_snapshot.as_of_date.isoformat() if fx_snapshot else None
+                }
+
+            if mostrar_sobrante and aplicar_redondeo:
+                resultado['total_sobrante_estimado'] = resultado_procesado.get('total_sobrante_estimado', 0)
 
         return jsonify(resultado), 200
 

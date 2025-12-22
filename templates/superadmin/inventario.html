@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Inventario Global - Super Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('superadmin.panel') }}">Super Admin</a></li>
+                    <li class="breadcrumb-item active">Inventario Global</li>
+                </ol>
+            </nav>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-boxes me-2"></i>Inventario Global</h2>
+                <a href="{{ url_for('superadmin.panel') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <label for="org_id" class="form-label">Organización</label>
+                    <select class="form-select" id="org_id" name="org_id">
+                        <option value="">Todas las organizaciones</option>
+                        {% for org in organizaciones %}
+                        <option value="{{ org.id }}" {% if org_filter == org.id %}selected{% endif %}>
+                            {{ org.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label for="buscar" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="buscar" name="buscar"
+                           value="{{ buscar }}" placeholder="Código o nombre...">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('superadmin.inventario_global') }}" class="btn btn-outline-secondary">
+                        Limpiar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card">
+        <div class="card-header">
+            <strong>Items encontrados: {{ items|length }}</strong>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Organización</th>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Marca/Modelo</th>
+                        <th class="text-center">Stock</th>
+                        <th>Unidad</th>
+                        <th>Categoría</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('superadmin.ver_organizacion', org_id=item.organizacion_id) }}"
+                               class="text-decoration-none">
+                                <span class="badge bg-primary">{{ item.organizacion.nombre if item.organizacion else 'ID: ' ~ item.organizacion_id }}</span>
+                            </a>
+                        </td>
+                        <td><code>{{ item.codigo }}</code></td>
+                        <td>{{ item.nombre }}</td>
+                        <td>
+                            {% if item.marca or item.modelo %}
+                            <small class="text-muted">
+                                {{ item.marca or '' }} {{ item.modelo or '' }}
+                            </small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <strong class="{{ 'text-danger' if (item.stock_actual or 0) <= (item.stock_minimo or 0) else 'text-success' }}">
+                                {{ (item.stock_actual or 0)|round(2) }}
+                            </strong>
+                        </td>
+                        <td>{{ item.unidad }}</td>
+                        <td>
+                            {% if item.categoria %}
+                            <span class="badge bg-secondary">{{ item.categoria.nombre }}</span>
+                            {% else %}
+                            <span class="text-muted">Sin categoría</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            No se encontraron items
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

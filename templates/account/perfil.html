@@ -19,41 +19,28 @@
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <h2 class="h6 text-uppercase text-muted">Estado de onboarding</h2>
-                    {% set profile_done = onboarding_status and onboarding_status.profile_completed %}
-                    {% set billing_done = onboarding_status and onboarding_status.billing_completed %}
-                    {% set total_steps = 2 %}
-                    {% set completed_steps = (1 if profile_done else 0) + (1 if billing_done else 0) %}
-                    <div class="progress mb-3" style="height: 6px;">
-                        <div class="progress-bar bg-success" role="progressbar"
-                             style="width: {{ (completed_steps / total_steps * 100) if total_steps else 0 }}%"></div>
-                    </div>
-                    <ul class="list-unstyled small mb-0">
-                        <li class="d-flex align-items-center mb-2">
-                            <i class="fas {{ 'fa-check-circle text-success' if profile_done else 'fa-circle text-muted' }} me-2"></i>
-                            Paso 1: Perfil
-                        </li>
-                        <li class="d-flex align-items-center">
-                            <i class="fas {{ 'fa-check-circle text-success' if billing_done else 'fa-circle text-muted' }} me-2"></i>
-                            Paso 2: Facturación
-                        </li>
-                    </ul>
-                </div>
-            </div>
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h2 class="h6 text-uppercase text-muted">Accesos rápidos</h2>
-                    <a href="{{ url_for('account.organizacion') }}" class="btn btn-outline-primary w-100 mb-2">
-                        <i class="fas fa-building me-2"></i>Configurar organización
-                    </a>
+                    <h2 class="h6 text-uppercase text-muted">Tu cuenta</h2>
+                    <p class="mb-2"><strong>Plan:</strong>
+                        <span class="badge bg-{{ 'warning' if current_user.plan_activo == 'prueba' else 'success' }}">
+                            {{ current_user.plan_activo|capitalize }}
+                        </span>
+                    </p>
+                    {% if current_user.plan_activo == 'prueba' %}
+                    <p class="mb-2 text-muted small">
+                        <i class="fas fa-clock me-1"></i>{{ current_user.dias_restantes_prueba() }} dias restantes
+                    </p>
+                    {% endif %}
+                    <hr>
                     <a href="{{ url_for('account.facturacion') }}" class="btn btn-outline-primary w-100 mb-2">
-                        <i class="fas fa-file-invoice-dollar me-2"></i>Gestionar facturación
+                        <i class="fas fa-file-invoice-dollar me-2"></i>Ir a Facturacion
                     </a>
-                    <a href="{{ url_for('onboarding.billing') }}" class="btn btn-outline-secondary w-100">
-                        <i class="fas fa-magic me-2"></i>Repetir onboarding
+                    {% if has_endpoint('planes.mostrar_planes') %}
+                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-outline-success w-100">
+                        <i class="fas fa-crown me-2"></i>Ver Planes
                     </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -847,6 +847,8 @@ else:
 for module_name, attr_name, prefix in [
     ('presupuestos', 'presupuestos_bp', '/presupuestos'),
     ('blueprint_clientes', 'clientes_bp', None),  # usa el prefijo definido en el blueprint
+    ('blueprint_requerimientos', 'requerimientos_bp', None),  # Requerimientos de compra desde obras
+    ('blueprint_notificaciones', 'notificaciones_bp', None),  # Sistema de notificaciones
     ('agent_local', 'agent_bp', None),
 ]:
     try:
@@ -954,6 +956,14 @@ try:
     print("[OK] Marketplace blueprint registered successfully")
 except ImportError as e:
     print(f"[WARN] Marketplace blueprint not available: {e}")
+
+# Super Admin panel
+try:
+    from superadmin import superadmin_bp
+    app.register_blueprint(superadmin_bp)
+    print("[OK] Super Admin blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Super Admin blueprint not available: {e}")
 
 _refresh_login_view()
 

@@ -118,6 +118,10 @@ services:
       - ./reportes.py:/app/reportes.py:ro  # Mount reportes for development
       - ./inventario.py:/app/inventario.py:ro  # Mount inventario for development
       - ./models:/app/models:ro  # Mount models for development
+      - ./app.py:/app/app.py:ro  # Mount app.py for development
+      - ./blueprint_requerimientos.py:/app/blueprint_requerimientos.py:ro  # Requerimientos de compra
+      - ./blueprint_notificaciones.py:/app/blueprint_notificaciones.py:ro  # Notificaciones
+      - ./blueprint_clientes.py:/app/blueprint_clientes.py:ro  # Clientes
     ports:
       - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
     depends_on:

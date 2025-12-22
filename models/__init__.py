@@ -67,6 +67,10 @@ from models.clients import Cliente
 
 # Inventory models
 from models.inventory import (
+    # Sistema de Ubicaciones (nuevo)
+    Location,
+    StockUbicacion,
+    MovimientoStock,
     # Legacy
     CategoriaInventario,
     ItemInventario,
