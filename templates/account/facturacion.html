@@ -167,9 +167,7 @@
                             <div class="col-md-12">
                                 <label for="concepto" class="form-label">Concepto / Plan contratado</label>
                                 <select class="form-select" id="concepto" name="concepto">
-                                    <option value="plan_basico">Plan Basico - $15.000/mes</option>
-                                    <option value="plan_profesional">Plan Profesional - $35.000/mes</option>
-                                    <option value="plan_empresa">Plan Empresa - $75.000/mes</option>
+                                    <option value="obyra_pro" selected>OBYRA Pro - $250 USD/mes</option>
                                     <option value="otro">Otro</option>
                                 </select>
                             </div>
@@ -201,7 +199,7 @@
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body">
                     <h2 class="h6 text-uppercase text-muted">Tu Plan</h2>
-                    <div class="d-flex align-items-center mb-3">
+                    <div class="d-flex align-items-center">
                         <i class="fas fa-crown fa-2x text-warning me-3"></i>
                         <div>
                             <h4 class="mb-0">{{ current_user.plan_activo|capitalize }}</h4>
@@ -210,11 +208,6 @@
                             {% endif %}
                         </div>
                     </div>
-                    {% if has_endpoint('planes.mostrar_planes') %}
-                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-outline-primary w-100">
-                        <i class="fas fa-arrow-up me-2"></i>Mejorar Plan
-                    </a>
-                    {% endif %}
                 </div>
             </div>
 

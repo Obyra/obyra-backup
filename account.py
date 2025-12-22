@@ -314,9 +314,7 @@ def _enviar_email_comprobante(usuario, monto, fecha, concepto, notas, archivo_pa
 
         # Conceptos legibles
         conceptos = {
-            'plan_basico': 'Plan Basico - $15.000/mes',
-            'plan_profesional': 'Plan Profesional - $35.000/mes',
-            'plan_empresa': 'Plan Empresa - $75.000/mes',
+            'obyra_pro': 'OBYRA Pro - $250 USD/mes',
             'otro': 'Otro'
         }
 
