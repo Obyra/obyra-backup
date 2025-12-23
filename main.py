@@ -12,6 +12,11 @@ def privacidad():
     """Página de política de privacidad"""
     return render_template('legal/privacidad.html')
 
+@app.route('/offline')
+def offline():
+    """Página offline para PWA"""
+    return render_template('offline.html')
+
 if __name__ == '__main__':
     import os
     # DEBUG solo se activa si FLASK_DEBUG=1 (nunca en producción)

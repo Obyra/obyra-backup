@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#1a1a1a"/>
+  <rect x="24" y="24" width="464" height="464" rx="48" fill="#2d2d2d"/>
+  <!-- Casco de construccion -->
+  <ellipse cx="256" cy="280" rx="140" ry="100" fill="#f0b400"/>
+  <rect x="116" y="240" width="280" height="80" fill="#f0b400"/>
+  <rect x="136" y="200" width="240" height="50" rx="10" fill="#d9a300"/>
+  <!-- Linea del casco -->
+  <rect x="116" y="280" width="280" height="12" fill="#1a1a1a" opacity="0.3"/>
+  <!-- Visera -->
+  <rect x="96" y="310" width="320" height="20" rx="4" fill="#d9a300"/>
+  <!-- Texto OBYRA -->
+  <text x="256" y="420" font-family="Arial Black, sans-serif" font-size="72" font-weight="900" fill="#f0b400" text-anchor="middle" letter-spacing="8">OBYRA</text>
+</svg>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sin conexion - OBYRA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 400px;
+        }
+        .icon {
+            width: 120px;
+            height: 120px;
+            background: rgba(240, 180, 0, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+            border: 3px solid #f0b400;
+        }
+        .icon svg {
+            width: 60px;
+            height: 60px;
+            fill: #f0b400;
+        }
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .btn {
+            display: inline-block;
+            background: #f0b400;
+            color: #1a1a1a;
+            padding: 0.875rem 2rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            background: #d9a300;
+            transform: translateY(-2px);
+        }
+        .logo {
+            margin-top: 3rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #f0b400;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M23.64 7c-.45-.34-4.93-4-11.64-4C5.28 3 .81 6.66.36 7L12 21.5 23.64 7z" opacity="0.3"/>
+                <path d="M12 3C5.28 3 .81 6.66.36 7l2.37 3.07C4.93 8.33 8.1 6.5 12 6.5s7.07 1.83 9.27 3.57L23.64 7c-.45-.34-4.93-4-11.64-4z"/>
+                <path d="M12 10c-2.81 0-5.19 1.23-6.84 3.07L12 21.5l6.84-8.43C17.19 11.23 14.81 10 12 10z"/>
+                <line x1="2" y1="2" x2="22" y2="22" stroke="#f0b400" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <h1>Sin conexion</h1>
+        <p>No hay conexion a internet. Verifica tu conexion y vuelve a intentarlo.</p>
+        <a href="/" class="btn" onclick="window.location.reload(); return false;">
+            Reintentar
+        </a>
+        <div class="logo">OBYRA IA</div>
+    </div>
+</body>
+</html>
