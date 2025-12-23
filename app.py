@@ -705,6 +705,18 @@ with app.app_context():
     # Legacy file: migrations_runtime.py → _migrations_runtime_old.py
     # ============================================================================
 
+    # En Railway/producción: crear todas las tablas si no existen
+    # Esto es necesario porque las migraciones de Alembic usan schema "app"
+    # que no existe en Railway (usa "public" por defecto)
+    _is_railway = os.getenv("RAILWAY_ENVIRONMENT") is not None or \
+                  os.getenv("RAILWAY_PROJECT_ID") is not None
+    if _is_railway:
+        try:
+            db.create_all()
+            print("[OK] Railway: All database tables created/verified")
+        except Exception as e:
+            print(f"[WARN] Railway db.create_all() error: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions

@@ -43,10 +43,19 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     if [ -f "migrations/env.py" ]; then
         echo "Running: flask db upgrade"
         if ! flask db upgrade 2>&1; then
-            echo "ERROR: Database migration failed! See error above."
-            exit 1
+            echo "WARNING: Database migration failed! See error above."
+            # En Railway, no salimos con error porque db.create_all() en app.py
+            # creará las tablas. Las migraciones locales usan schema "app" que
+            # no existe en Railway.
+            if [ -n "$RAILWAY_ENVIRONMENT" ] || [ -n "$RAILWAY_PROJECT_ID" ]; then
+                echo "Railway detected: continuing despite migration failure (db.create_all will handle tables)"
+            else
+                echo "ERROR: Database migration failed!"
+                exit 1
+            fi
+        else
+            echo "✓ Migrations completed successfully!"
         fi
-        echo "✓ Migrations completed successfully!"
     else
         echo "WARNING: No migrations directory found, skipping..."
     fi
