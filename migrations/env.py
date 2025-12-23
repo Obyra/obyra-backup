@@ -52,6 +52,23 @@ def _convert_railway_url(url: str) -> str:
     return url
 
 
+def _is_railway_environment() -> bool:
+    """Detectar si estamos corriendo en Railway."""
+    return os.getenv("RAILWAY_ENVIRONMENT") is not None or \
+           os.getenv("RAILWAY_PROJECT_ID") is not None or \
+           "railway" in os.getenv("DATABASE_URL", "").lower()
+
+
+def _get_version_table_schema() -> Optional[str]:
+    """Retorna el schema para la tabla de versiones de Alembic.
+
+    En Railway usamos 'public' (default), en local usamos 'app'.
+    """
+    if _is_railway_environment():
+        return None  # Usa schema public por defecto
+    return "app"
+
+
 def _get_url() -> str:
     env_url = os.getenv("ALEMBIC_DATABASE_URL")
     if env_url:
@@ -104,6 +121,7 @@ def _ensure_models_loaded() -> None:
 
 def run_migrations_offline() -> None:
     url = _get_url()
+    version_schema = _get_version_table_schema()
     configure_args = dict(
         url=url,
         target_metadata=target_metadata,
@@ -111,10 +129,11 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
         version_table="alembic_version",
-        version_table_schema="app",
         compare_type=True,
         compare_server_default=True,
     )
+    if version_schema:
+        configure_args["version_table_schema"] = version_schema
     with _app_context_scope():
         _ensure_models_loaded()
         context.configure(**configure_args)
@@ -135,21 +154,24 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        try:
-            # Asegura que todo caiga en schema app por defecto
-            connection.exec_driver_sql("SET search_path TO app, public")
-        except Exception:
-            pass
+        version_schema = _get_version_table_schema()
+        if version_schema:
+            try:
+                # Asegura que todo caiga en schema app por defecto (solo local)
+                connection.exec_driver_sql(f"SET search_path TO {version_schema}, public")
+            except Exception:
+                pass
 
         configure_args = dict(
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
             version_table="alembic_version",
-            version_table_schema="app",
             compare_type=True,
             compare_server_default=True,
         )
+        if version_schema:
+            configure_args["version_table_schema"] = version_schema
         with _app_context_scope():
             _ensure_models_loaded()
             context.configure(**configure_args)
