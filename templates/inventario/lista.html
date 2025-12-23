@@ -9,6 +9,10 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-boxes me-2"></i>Gestión de Inventario</h2>
                 <div>
+                    <a href="{{ url_for('inventario.alertas_stock') }}" class="btn btn-warning me-2" id="btnAlertasStock">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Alertas
+                        <span class="badge bg-danger ms-1" id="badgeAlertas" style="display:none;">0</span>
+                    </a>
                     <a href="{{ url_for('inventario.analisis') }}" class="btn btn-success me-2">
                         <i class="fas fa-chart-line me-1"></i>Análisis y Reportes
                     </a>
@@ -671,4 +675,25 @@ function confirmarEliminar(itemId, itemNombre, itemCodigo, stockActual) {
 <form id="formEliminar" method="POST" style="display: none;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
 </form>
+
+<script>
+// Cargar conteo de alertas de stock
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/inventario/api/alertas-stock/count')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.count > 0) {
+                const badge = document.getElementById('badgeAlertas');
+                badge.textContent = data.count;
+                badge.style.display = 'inline';
+                // Si hay criticos, cambiar el boton a rojo
+                if (data.critico > 0) {
+                    document.getElementById('btnAlertasStock').classList.remove('btn-warning');
+                    document.getElementById('btnAlertasStock').classList.add('btn-danger');
+                }
+            }
+        })
+        .catch(err => console.log('Error cargando alertas:', err));
+});
+</script>
 {% endblock %}

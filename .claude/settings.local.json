@@ -71,7 +71,8 @@
       "Bash(winpty docker exec:*)",
       "Bash(docker compose:*)",
       "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

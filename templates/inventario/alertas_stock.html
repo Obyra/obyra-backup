@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% block title %}Alertas de Stock Bajo | OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">
+                <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                Alertas de Stock Bajo
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('reportes.dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('inventario.lista') }}">Inventario</a></li>
+                    <li class="breadcrumb-item active">Alertas</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i>Volver
+            </a>
+            <button type="button" class="btn btn-primary" onclick="generarNotificaciones()">
+                <i class="fas fa-bell me-1"></i>Generar Notificaciones
+            </button>
+        </div>
+    </div>
+
+    <!-- Cards de Resumen -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-danger">{{ conteo.critico }}</div>
+                    <div class="text-muted">
+                        <i class="fas fa-times-circle text-danger me-1"></i>Sin Stock
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-warning">{{ conteo.muy_bajo + conteo.bajo }}</div>
+                    <div class="text-muted">
+                        <i class="fas fa-exclamation-triangle text-warning me-1"></i>Stock Bajo
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-info">{{ conteo.alerta }}</div>
+                    <div class="text-muted">
+                        <i class="fas fa-info-circle text-info me-1"></i>En Alerta
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-primary">{{ conteo.total }}</div>
+                    <div class="text-muted">
+                        <i class="fas fa-boxes text-primary me-1"></i>Total Alertas
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Costo de Reposicion -->
+    {% if resumen.costo_reposicion_total > 0 %}
+    <div class="alert alert-info d-flex align-items-center mb-4">
+        <i class="fas fa-calculator fa-2x me-3"></i>
+        <div>
+            <strong>Costo estimado de reposicion:</strong>
+            <span class="fs-4 ms-2">${{ "%.2f"|format(resumen.costo_reposicion_total) }}</span>
+            <small class="text-muted ms-2">(basado en precio promedio)</small>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabla de Items -->
+    {% if items %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Items con Stock Bajo</h5>
+            <div class="input-group" style="max-width: 300px;">
+                <input type="text" class="form-control form-control-sm" id="buscarItem" placeholder="Buscar item...">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tablaAlertas">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Estado</th>
+                            <th>Codigo</th>
+                            <th>Item</th>
+                            <th>Categoria</th>
+                            <th class="text-end">Stock Actual</th>
+                            <th class="text-end">Stock Minimo</th>
+                            <th class="text-end">Deficit</th>
+                            <th class="text-end">Costo Repos.</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td>
+                                {% if item.urgencia == 'critico' %}
+                                <span class="badge bg-danger">
+                                    <i class="fas fa-times-circle me-1"></i>SIN STOCK
+                                </span>
+                                {% elif item.urgencia == 'muy_bajo' %}
+                                <span class="badge bg-danger">
+                                    <i class="fas fa-exclamation-circle me-1"></i>MUY BAJO
+                                </span>
+                                {% elif item.urgencia == 'bajo' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>BAJO
+                                </span>
+                                {% else %}
+                                <span class="badge bg-info">
+                                    <i class="fas fa-info-circle me-1"></i>ALERTA
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <code>{{ item.codigo }}</code>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('inventario.detalle', id=item.id) }}" class="text-decoration-none">
+                                    <strong>{{ item.nombre }}</strong>
+                                </a>
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ item.categoria }}</small>
+                            </td>
+                            <td class="text-end">
+                                <span class="{% if item.stock_actual == 0 %}text-danger fw-bold{% endif %}">
+                                    {{ item.stock_actual }} {{ item.unidad }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                {{ item.stock_minimo }} {{ item.unidad }}
+                            </td>
+                            <td class="text-end">
+                                <span class="text-danger fw-bold">
+                                    -{{ item.deficit }} {{ item.unidad }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                {% if item.costo_reposicion > 0 %}
+                                ${{ "%.2f"|format(item.costo_reposicion) }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('inventario.detalle', id=item.id) }}"
+                                       class="btn btn-outline-primary" title="Ver detalle">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-success"
+                                            onclick="abrirModalCompra({{ item.id }}, '{{ item.nombre }}', {{ item.deficit }})"
+                                            title="Agregar stock">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+            <h4>Todo en orden</h4>
+            <p class="text-muted mb-0">No hay items con stock bajo en este momento.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal para agregar stock -->
+<div class="modal fade" id="modalAgregarStock" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle text-success me-2"></i>Agregar Stock
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formAgregarStock" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="mb-3">
+                        <strong id="itemNombreModal"></strong>
+                        <br>
+                        <small class="text-muted">Deficit actual: <span id="itemDeficitModal" class="text-danger"></span></small>
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">Cantidad a agregar</label>
+                        <input type="number" class="form-control" name="cantidad" id="cantidadAgregar"
+                               step="0.01" min="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Motivo</label>
+                        <select class="form-select" name="motivo">
+                            <option value="compra">Compra</option>
+                            <option value="devolucion">Devolucion</option>
+                            <option value="ajuste">Ajuste de inventario</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observaciones (opcional)</label>
+                        <textarea class="form-control" name="observaciones" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check me-1"></i>Agregar Stock
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Busqueda en tabla
+document.getElementById('buscarItem').addEventListener('input', function() {
+    const filtro = this.value.toLowerCase();
+    document.querySelectorAll('.item-row').forEach(row => {
+        const texto = row.textContent.toLowerCase();
+        row.style.display = texto.includes(filtro) ? '' : 'none';
+    });
+});
+
+// Modal para agregar stock
+let itemIdActual = null;
+
+function abrirModalCompra(itemId, nombre, deficit) {
+    itemIdActual = itemId;
+    document.getElementById('itemNombreModal').textContent = nombre;
+    document.getElementById('itemDeficitModal').textContent = deficit + ' unidades';
+    document.getElementById('cantidadAgregar').value = deficit;
+    document.getElementById('formAgregarStock').action = '/inventario/' + itemId + '/movimiento';
+
+    new bootstrap.Modal(document.getElementById('modalAgregarStock')).show();
+}
+
+// Submit del form
+document.getElementById('formAgregarStock').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    formData.append('tipo', 'entrada');
+
+    fetch(this.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'No se pudo agregar el stock'));
+        }
+    })
+    .catch(err => {
+        // Si no es JSON, probablemente redirigió
+        location.reload();
+    });
+});
+
+// Generar notificaciones
+function generarNotificaciones() {
+    fetch('/inventario/api/alertas-stock/generar', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+</script>
+{% endblock %}

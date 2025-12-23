@@ -547,9 +547,17 @@ def registrar_movimiento(id):
         
         db.session.add(movimiento)
         db.session.commit()
-        
+
+        # Verificar stock bajo y generar alerta si es necesario
+        try:
+            from services.stock_alerts_service import verificar_y_notificar_stock_bajo
+            if verificar_y_notificar_stock_bajo(item, current_user.id, org_id):
+                flash(f'Alerta: El stock de "{item.nombre}" esta por debajo del minimo.', 'warning')
+        except Exception as alert_err:
+            current_app.logger.warning(f"Error al verificar alerta de stock: {alert_err}")
+
         flash('Movimiento registrado exitosamente.', 'success')
-        
+
     except ValueError:
         flash('Cantidad y precio deben ser números válidos.', 'danger')
     except Exception as e:
@@ -1861,3 +1869,104 @@ def api_traslados_item(item_id):
     except Exception as e:
         current_app.logger.error(f"Error en api_traslados_item: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================
+# ALERTAS DE STOCK BAJO
+# ============================================================
+
+@inventario_bp.route('/api/alertas-stock', methods=['GET'])
+@login_required
+def api_alertas_stock():
+    """Obtiene las alertas de stock bajo para la organización actual"""
+    from services.stock_alerts_service import obtener_resumen_alertas
+    from services.memberships import get_current_org_id
+
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'success': False, 'message': 'No hay organización seleccionada'}), 400
+
+        resumen = obtener_resumen_alertas(org_id)
+
+        return jsonify({
+            'success': True,
+            'alertas': resumen
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en api_alertas_stock: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@inventario_bp.route('/api/alertas-stock/count', methods=['GET'])
+@login_required
+def api_alertas_stock_count():
+    """Obtiene solo el conteo de alertas de stock bajo (para badges)"""
+    from services.stock_alerts_service import contar_alertas_stock
+    from services.memberships import get_current_org_id
+
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'success': False, 'count': 0}), 200
+
+        conteo = contar_alertas_stock(org_id)
+
+        return jsonify({
+            'success': True,
+            'count': conteo['total'],
+            'critico': conteo['critico'],
+            'bajo': conteo['bajo'] + conteo['muy_bajo'] + conteo['alerta']
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en api_alertas_stock_count: {str(e)}")
+        return jsonify({'success': False, 'count': 0}), 200
+
+
+@inventario_bp.route('/api/alertas-stock/generar', methods=['POST'])
+@login_required
+def api_generar_alertas():
+    """Genera notificaciones para todos los items con stock bajo"""
+    from services.stock_alerts_service import generar_alertas_masivas
+    from services.memberships import get_current_org_id
+
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'success': False, 'message': 'No hay organización seleccionada'}), 400
+
+        stats = generar_alertas_masivas(org_id, current_user.id)
+
+        return jsonify({
+            'success': True,
+            'message': f"Se crearon {stats['notificaciones_creadas']} notificaciones nuevas",
+            'stats': stats
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en api_generar_alertas: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@inventario_bp.route('/alertas-stock')
+@login_required
+def alertas_stock():
+    """Vista de alertas de stock bajo"""
+    from services.stock_alerts_service import obtener_resumen_alertas
+    from services.memberships import get_current_org_id
+
+    org_id = get_current_org_id()
+    if not org_id:
+        flash('Debe seleccionar una organización primero', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    resumen = obtener_resumen_alertas(org_id)
+
+    return render_template(
+        'inventario/alertas_stock.html',
+        resumen=resumen,
+        conteo=resumen['conteo'],
+        items=resumen['todos_los_items']
+    )
