@@ -45,10 +45,17 @@ def _set_sqlalchemy_url(url: str) -> str:
     return url
 
 
+def _convert_railway_url(url: str) -> str:
+    """Convertir URL de Railway al formato SQLAlchemy con psycopg."""
+    if url and url.startswith("postgresql://") and "+psycopg" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
 def _get_url() -> str:
     env_url = os.getenv("ALEMBIC_DATABASE_URL")
     if env_url:
-        return _set_sqlalchemy_url(env_url)
+        return _set_sqlalchemy_url(_convert_railway_url(env_url))
 
     ini_url = config.get_main_option("sqlalchemy.url")
     if ini_url:

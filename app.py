@@ -132,6 +132,13 @@ if not database_url:
         "Por favor configure DATABASE_URL en su archivo .env"
     )
 
+# Convertir URL de Railway/Heroku al formato SQLAlchemy con psycopg
+# Railway usa: postgresql://user:pass@host:port/db
+# SQLAlchemy necesita: postgresql+psycopg://user:pass@host:port/db
+if database_url.startswith("postgresql://") and "+psycopg" not in database_url:
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    print("🔄 URL convertida a formato psycopg para SQLAlchemy")
+
 # Agregar SSL para Neon si falta
 if "neon.tech" in database_url and "sslmode=" not in database_url:
     database_url += ("&" if "?" in database_url else "?") + "sslmode=require"
