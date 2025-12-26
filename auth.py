@@ -562,7 +562,7 @@ def register():
             login_user(nuevo_usuario)
             log_login_attempt(email.lower(), True)
             current_app.logger.info(f'Nuevo usuario registrado: {email.lower()} - Organizacion: {nueva_organizacion.id}')
-            flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada exitosamente.', 'success')
+            flash(f'¡Bienvenido/a {nombre}! Tu cuenta ha sido creada. Tenes 30 dias gratis para probar todas las funcionalidades.', 'success')
             destino = _post_login_destination(nuevo_usuario)
             return redirect(destino)
         except Exception as e:
