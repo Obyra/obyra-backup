@@ -22,8 +22,8 @@
                     <div class="card shadow-lg border-0 overflow-hidden">
                         <!-- Header con precio -->
                         <div class="card-header text-white text-center py-5"
-                             style="background: linear-gradient(135deg, #0d6efd, #6f42c1);">
-                            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill mb-3">
+                             style="background: linear-gradient(135deg, #1A374D, #2D5A7B);">
+                            <span class="badge bg-success text-white px-3 py-2 rounded-pill mb-3">
                                 <i class="fas fa-star me-1"></i>Plan Completo
                             </span>
                             <h2 class="card-title mb-3 fw-bold">
@@ -31,8 +31,18 @@
                             </h2>
                             <div class="precio-container">
                                 <div class="d-flex justify-content-center align-items-baseline">
-                                    <span class="display-3 fw-bold">$250</span>
+                                    <span class="display-3 fw-bold">${{ precio_usd|int }}</span>
                                     <span class="fs-4 ms-2">USD/mes</span>
+                                </div>
+                                <div class="precio-ars mt-3 p-2 rounded" style="background: rgba(76,175,80,0.2);">
+                                    <span class="fs-5">
+                                        <i class="fas fa-exchange-alt me-2"></i>
+                                        Equivalente: <strong>${{ "{:,.0f}".format(precio_ars) }}</strong> ARS
+                                    </span>
+                                    <br>
+                                    <small class="opacity-75">
+                                        Cotizacion BNA: ${{ "{:,.2f}".format(cotizacion.value) }} ({{ cotizacion.as_of_date }})
+                                    </small>
                                 </div>
                                 <p class="opacity-75 mb-0 mt-2">
                                     <i class="fas fa-tag me-1"></i>Precio por organizacion
@@ -191,11 +201,19 @@
 
                         <div class="card-footer bg-transparent p-4">
                             <div class="d-grid gap-3">
-                                <a href="{{ url_for('planes.plan_premium') }}"
-                                   class="btn btn-primary btn-lg py-3">
-                                    <i class="fas fa-rocket me-2"></i>
-                                    Comenzar Ahora
+                                <a href="{{ url_for('planes.instrucciones_pago') }}"
+                                   class="btn btn-success btn-lg py-3">
+                                    <i class="fas fa-credit-card me-2"></i>
+                                    Pagar con Transferencia
                                 </a>
+                                <div class="text-center">
+                                    <span class="badge bg-light text-dark me-2">
+                                        <i class="fas fa-dollar-sign me-1"></i>USD
+                                    </span>
+                                    <span class="badge bg-light text-dark">
+                                        <i class="fas fa-peso-sign me-1"></i>ARS
+                                    </span>
+                                </div>
                                 <p class="text-center text-muted small mb-0">
                                     <i class="fas fa-shield-alt me-1"></i>
                                     7 dias de garantia de devolucion

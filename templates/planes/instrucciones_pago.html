@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}Pagar OBYRA Pro - Transferencia Bancaria{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <!-- Encabezado -->
+            <div class="text-center mb-5">
+                <h1 class="display-5 fw-bold text-primary mb-3">
+                    <i class="fas fa-credit-card me-3"></i>Pagar OBYRA Pro
+                </h1>
+                <p class="lead text-muted">
+                    Selecciona tu metodo de pago preferido: transferencia en dolares o pesos
+                </p>
+            </div>
+
+            <!-- Resumen del plan -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h5 class="fw-bold mb-1">
+                                <i class="fas fa-crown text-warning me-2"></i>Plan OBYRA Pro
+                            </h5>
+                            <p class="text-muted mb-0">Acceso completo a todas las funcionalidades</p>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <div class="precio-resumen">
+                                <span class="display-6 fw-bold text-success">${{ precio_usd|int }}</span>
+                                <span class="text-muted">USD/mes</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Opciones de pago -->
+            <div class="row g-4 mb-5">
+                <!-- Opcion USD -->
+                <div class="col-lg-6">
+                    <div class="card h-100 shadow border-0 payment-option" id="card-usd">
+                        <div class="card-header py-3 text-white" style="background: linear-gradient(135deg, #1A374D, #2D5A7B);">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <h5 class="mb-0 fw-bold">
+                                    <i class="fas fa-dollar-sign me-2"></i>Transferencia en USD
+                                </h5>
+                                <span class="badge bg-success">Recomendado</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="precio-grande text-center mb-4">
+                                <span class="display-4 fw-bold text-primary">${{ precio_usd|int }}</span>
+                                <span class="text-muted fs-5">USD</span>
+                            </div>
+
+                            <div class="datos-bancarios">
+                                <h6 class="fw-bold text-uppercase text-muted mb-3">
+                                    <i class="fas fa-university me-2"></i>Datos para transferir
+                                </h6>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">Banco</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.bank_name }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">Titular</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.holder_name }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">DNI</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.holder_dni }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">CBU (Cuenta USD)</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold font-monospace" id="cbu-usd">{{ bank_info.usd.cbu }}</span>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="copiarTexto('cbu-usd')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">Alias</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold" id="alias-usd">{{ bank_info.usd.alias }}</span>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="copiarTexto('alias-usd')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item">
+                                    <label class="text-muted small">Nro. Cuenta</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.usd.account }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Opcion ARS -->
+                <div class="col-lg-6">
+                    <div class="card h-100 shadow border-0 payment-option" id="card-ars">
+                        <div class="card-header py-3 text-white" style="background: linear-gradient(135deg, #4CAF50, #45a049);">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <h5 class="mb-0 fw-bold">
+                                    <i class="fas fa-peso-sign me-2"></i>Transferencia en ARS
+                                </h5>
+                                <span class="badge bg-light text-dark">Pesos</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="precio-grande text-center mb-3">
+                                <span class="display-4 fw-bold text-success" id="precio-ars-display">${{ "{:,.0f}".format(precio_ars) }}</span>
+                                <span class="text-muted fs-5">ARS</span>
+                            </div>
+                            <div class="text-center mb-4">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Cotizacion BNA: ${{ "{:,.2f}".format(cotizacion.value) }} ({{ cotizacion.as_of_date }})
+                                </small>
+                                <br>
+                                <button class="btn btn-sm btn-link p-0" onclick="actualizarCotizacion()">
+                                    <i class="fas fa-sync-alt me-1"></i>Actualizar cotizacion
+                                </button>
+                            </div>
+
+                            <div class="datos-bancarios">
+                                <h6 class="fw-bold text-uppercase text-muted mb-3">
+                                    <i class="fas fa-university me-2"></i>Datos para transferir
+                                </h6>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">Banco</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.bank_name }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">Titular</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.holder_name }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">DNI</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.holder_dni }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">CBU (Cuenta Pesos)</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold font-monospace" id="cbu-ars">{{ bank_info.ars.cbu }}</span>
+                                        <button class="btn btn-sm btn-outline-success" onclick="copiarTexto('cbu-ars')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item mb-3">
+                                    <label class="text-muted small">Alias</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold" id="alias-ars">{{ bank_info.ars.alias }}</span>
+                                        <button class="btn btn-sm btn-outline-success" onclick="copiarTexto('alias-ars')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="dato-item">
+                                    <label class="text-muted small">Nro. Cuenta</label>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold">{{ bank_info.ars.account }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Instrucciones -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-4">
+                        <i class="fas fa-list-ol text-primary me-2"></i>Como realizar el pago
+                    </h5>
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="step-item text-center">
+                                <div class="step-number mb-3">1</div>
+                                <h6 class="fw-bold">Realiza la transferencia</h6>
+                                <p class="text-muted small mb-0">
+                                    Transfiere el monto exacto a la cuenta que prefieras (USD o ARS)
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="step-item text-center">
+                                <div class="step-number mb-3">2</div>
+                                <h6 class="fw-bold">Envia el comprobante</h6>
+                                <p class="text-muted small mb-0">
+                                    Sube tu comprobante de transferencia en la seccion de facturacion
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="step-item text-center">
+                                <div class="step-number mb-3">3</div>
+                                <h6 class="fw-bold">Activacion en 24hs</h6>
+                                <p class="text-muted small mb-0">
+                                    Verificamos tu pago y activamos tu plan en menos de 24 horas
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boton subir comprobante -->
+            <div class="text-center mb-4">
+                <a href="{{ url_for('account.facturacion') }}" class="btn btn-primary btn-lg px-5">
+                    <i class="fas fa-upload me-2"></i>Subir Comprobante de Pago
+                </a>
+            </div>
+
+            <!-- Ayuda -->
+            <div class="card bg-light border-0">
+                <div class="card-body p-4 text-center">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-question-circle text-primary me-2"></i>Necesitas ayuda?
+                    </h6>
+                    <p class="text-muted mb-3">
+                        Si tienes dudas sobre el proceso de pago, contactanos:
+                    </p>
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <a href="https://wa.me/5491123456789?text=Hola!%20Necesito%20ayuda%20con%20el%20pago%20de%20OBYRA%20Pro"
+                           class="btn btn-success" target="_blank">
+                            <i class="fab fa-whatsapp me-2"></i>WhatsApp
+                        </a>
+                        <a href="mailto:obyra.servicios@gmail.com?subject=Ayuda%20con%20pago%20OBYRA%20Pro"
+                           class="btn btn-outline-primary">
+                            <i class="fas fa-envelope me-2"></i>Email
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.payment-option {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.payment-option:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+}
+
+.dato-item {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+}
+
+.dato-item label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.step-number {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #1A374D, #2D5A7B);
+    color: white;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.font-monospace {
+    font-family: 'Courier New', Courier, monospace;
+    letter-spacing: 1px;
+}
+
+.precio-grande {
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 1rem;
+}
+
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2rem;
+    }
+}
+</style>
+
+<script>
+function copiarTexto(elementId) {
+    const elemento = document.getElementById(elementId);
+    const texto = elemento.innerText;
+
+    navigator.clipboard.writeText(texto).then(function() {
+        // Mostrar feedback
+        const btn = elemento.nextElementSibling;
+        const iconOriginal = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        btn.classList.add('btn-success');
+        btn.classList.remove('btn-outline-primary', 'btn-outline-success');
+
+        setTimeout(function() {
+            btn.innerHTML = iconOriginal;
+            btn.classList.remove('btn-success');
+            if (elementId.includes('usd')) {
+                btn.classList.add('btn-outline-primary');
+            } else {
+                btn.classList.add('btn-outline-success');
+            }
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Error al copiar:', err);
+        alert('Texto copiado: ' + texto);
+    });
+}
+
+function actualizarCotizacion() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Actualizando...';
+
+    fetch('{{ url_for("planes.api_cotizacion") }}')
+        .then(response => response.json())
+        .then(data => {
+            const precioArs = data.plan.precio_ars;
+            const cotizacion = data.cotizacion.value;
+            const fecha = data.cotizacion.as_of_date;
+
+            document.getElementById('precio-ars-display').innerText = '$' + precioArs.toLocaleString('es-AR', {maximumFractionDigits: 0});
+
+            // Actualizar el texto de cotizacion
+            const cotizacionText = document.querySelector('#card-ars .text-center.mb-4 small');
+            cotizacionText.innerHTML = '<i class="fas fa-info-circle me-1"></i>Cotizacion BNA: $' + cotizacion.toLocaleString('es-AR', {minimumFractionDigits: 2}) + ' (' + fecha + ')';
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Actualizar cotizacion';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Actualizar cotizacion';
+            alert('Error al actualizar la cotizacion. Intenta nuevamente.');
+        });
+}
+</script>
+{% endblock %}

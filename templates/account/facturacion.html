@@ -131,19 +131,59 @@
                     <i class="fas fa-upload fa-2x"></i>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-info">
-                        <h6><i class="fas fa-info-circle me-2"></i>Datos para Transferencia Bancaria</h6>
+                    {# Selector de moneda #}
+                    <div class="btn-group w-100 mb-3" role="group">
+                        <input type="radio" class="btn-check" name="moneda_selector" id="moneda_usd" value="USD" checked>
+                        <label class="btn btn-outline-primary" for="moneda_usd">
+                            <i class="fas fa-dollar-sign me-1"></i>Transferencia USD
+                        </label>
+                        <input type="radio" class="btn-check" name="moneda_selector" id="moneda_ars" value="ARS">
+                        <label class="btn btn-outline-success" for="moneda_ars">
+                            <i class="fas fa-peso-sign me-1"></i>Transferencia ARS
+                        </label>
+                    </div>
+
+                    {# Datos cuenta USD #}
+                    <div class="alert alert-primary" id="datos-usd">
+                        <h6><i class="fas fa-dollar-sign me-2"></i>Cuenta en Dolares (USD)</h6>
                         <hr>
                         <div class="row">
                             <div class="col-md-6">
-                                <p class="mb-1"><strong>Banco:</strong> Banco Nacion Argentina</p>
-                                <p class="mb-1"><strong>Titular:</strong> OBYRA SAS</p>
-                                <p class="mb-1"><strong>CUIT:</strong> 30-71234567-8</p>
+                                <p class="mb-1"><strong>Banco:</strong> Banco Galicia</p>
+                                <p class="mb-1"><strong>Titular:</strong> Brendan Ezequiel Arrastia</p>
+                                <p class="mb-1"><strong>DNI:</strong> 34722707</p>
                             </div>
                             <div class="col-md-6">
-                                <p class="mb-1"><strong>CBU:</strong> 0110599530059912345678</p>
-                                <p class="mb-1"><strong>Alias:</strong> OBYRA.SERVICIOS</p>
+                                <p class="mb-1"><strong>CBU:</strong> <code class="user-select-all">0070104031004008448459</code></p>
+                                <p class="mb-1"><strong>Alias:</strong> <code class="user-select-all">OBYRA.APP</code></p>
+                                <p class="mb-1"><strong>Cuenta:</strong> 4008448-4 104-5</p>
                             </div>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <span class="badge bg-primary fs-6">Monto: $250 USD</span>
+                        </div>
+                    </div>
+
+                    {# Datos cuenta ARS #}
+                    <div class="alert alert-success d-none" id="datos-ars">
+                        <h6><i class="fas fa-peso-sign me-2"></i>Cuenta en Pesos (ARS)</h6>
+                        <hr>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Banco:</strong> Banco Galicia</p>
+                                <p class="mb-1"><strong>Titular:</strong> Brendan Ezequiel Arrastia</p>
+                                <p class="mb-1"><strong>DNI:</strong> 34722707</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>CBU:</strong> <code class="user-select-all">0070104030004163653728</code></p>
+                                <p class="mb-1"><strong>Alias:</strong> <code class="user-select-all">OBYRA.APP.PESOS</code></p>
+                                <p class="mb-1"><strong>Cuenta:</strong> 4163653-7 104-2</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <span class="badge bg-success fs-6" id="monto-ars-badge">Monto: Calculando...</span>
+                            <br>
+                            <small class="text-muted" id="cotizacion-info">Cotizacion BNA del dia</small>
                         </div>
                     </div>
 
@@ -152,16 +192,23 @@
                         <input type="hidden" name="form_type" value="comprobante"/>
 
                         <div class="row g-3">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <label for="moneda_pago" class="form-label">Moneda <span class="text-danger">*</span></label>
+                                <select class="form-select" id="moneda_pago" name="moneda_pago" required>
+                                    <option value="USD" selected>USD - Dolares</option>
+                                    <option value="ARS">ARS - Pesos</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
                                 <label for="monto_transferido" class="form-label">Monto transferido <span class="text-danger">*</span></label>
                                 <div class="input-group">
-                                    <span class="input-group-text">$</span>
+                                    <span class="input-group-text" id="simbolo-moneda">$</span>
                                     <input type="number" class="form-control" id="monto_transferido" name="monto_transferido"
                                            step="0.01" min="0" required>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <label for="fecha_transferencia" class="form-label">Fecha de transferencia <span class="text-danger">*</span></label>
+                            <div class="col-md-4">
+                                <label for="fecha_transferencia" class="form-label">Fecha <span class="text-danger">*</span></label>
                                 <input type="date" class="form-control" id="fecha_transferencia" name="fecha_transferencia" required>
                             </div>
                             <div class="col-md-12">
@@ -268,5 +315,69 @@ document.getElementById('formComprobante').addEventListener('submit', function(e
         return false;
     }
 });
+
+// Manejo de selector de moneda
+const selectorUsd = document.getElementById('moneda_usd');
+const selectorArs = document.getElementById('moneda_ars');
+const datosUsd = document.getElementById('datos-usd');
+const datosArs = document.getElementById('datos-ars');
+const selectMoneda = document.getElementById('moneda_pago');
+const montoInput = document.getElementById('monto_transferido');
+
+function cambiarMoneda(moneda) {
+    if (moneda === 'USD') {
+        datosUsd.classList.remove('d-none');
+        datosArs.classList.add('d-none');
+        selectMoneda.value = 'USD';
+        montoInput.value = '250';
+    } else {
+        datosUsd.classList.add('d-none');
+        datosArs.classList.remove('d-none');
+        selectMoneda.value = 'ARS';
+        // Obtener cotizacion y actualizar monto
+        obtenerCotizacion();
+    }
+}
+
+selectorUsd.addEventListener('change', function() {
+    if (this.checked) cambiarMoneda('USD');
+});
+
+selectorArs.addEventListener('change', function() {
+    if (this.checked) cambiarMoneda('ARS');
+});
+
+selectMoneda.addEventListener('change', function() {
+    if (this.value === 'USD') {
+        selectorUsd.checked = true;
+        cambiarMoneda('USD');
+    } else {
+        selectorArs.checked = true;
+        cambiarMoneda('ARS');
+    }
+});
+
+function obtenerCotizacion() {
+    fetch('/planes/api/cotizacion')
+        .then(response => response.json())
+        .then(data => {
+            const precioArs = data.plan.precio_ars;
+            const cotizacion = data.cotizacion.value;
+            const fecha = data.cotizacion.as_of_date;
+
+            document.getElementById('monto-ars-badge').innerText = 'Monto: $' + precioArs.toLocaleString('es-AR', {maximumFractionDigits: 0}) + ' ARS';
+            document.getElementById('cotizacion-info').innerText = 'Cotizacion BNA: $' + cotizacion.toLocaleString('es-AR', {minimumFractionDigits: 2}) + ' (' + fecha + ')';
+            montoInput.value = Math.round(precioArs);
+        })
+        .catch(error => {
+            console.error('Error obteniendo cotizacion:', error);
+            document.getElementById('monto-ars-badge').innerText = 'Monto: Consultar cotizacion';
+        });
+}
+
+// Cargar cotizacion al iniciar si ARS esta seleccionado
+if (selectorArs.checked) {
+    obtenerCotizacion();
+}
 </script>
 {% endblock %}

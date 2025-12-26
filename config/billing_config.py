@@ -81,10 +81,27 @@ class BillingConfig:
     # Mercado Pago (ya configurado en app.py)
     MP_ENABLED: bool = bool(os.getenv('MP_ACCESS_TOKEN', '').strip())
 
-    # CBU/Alias para transferencias bancarias
-    BANK_CBU: str = os.getenv('BILLING_BANK_CBU', '')
-    BANK_ALIAS: str = os.getenv('BILLING_BANK_ALIAS', '')
-    BANK_NAME: str = os.getenv('BILLING_BANK_NAME', '')
+    # Transferencias bancarias habilitadas
+    BANK_TRANSFER_ENABLED: bool = True
+
+    # Datos del titular
+    BANK_HOLDER_NAME: str = 'Brendan Ezequiel Arrastia'
+    BANK_HOLDER_DNI: str = '34722707'
+    BANK_NAME: str = 'Banco Galicia'
+
+    # Cuenta en DÓLARES (USD)
+    BANK_USD_CBU: str = '0070104031004008448459'
+    BANK_USD_ALIAS: str = 'OBYRA.APP'
+    BANK_USD_ACCOUNT: str = '4008448-4 104-5'
+
+    # Cuenta en PESOS (ARS)
+    BANK_ARS_CBU: str = '0070104030004163653728'
+    BANK_ARS_ALIAS: str = 'OBYRA.APP.PESOS'
+    BANK_ARS_ACCOUNT: str = '4163653-7 104-2'
+
+    # Legacy (mantener por compatibilidad)
+    BANK_CBU: str = os.getenv('BILLING_BANK_CBU', '0070104031004008448459')
+    BANK_ALIAS: str = os.getenv('BILLING_BANK_ALIAS', 'OBYRA.APP')
 
     # ============================================
     # MÉTODOS DE UTILIDAD
@@ -155,6 +172,31 @@ class BillingConfig:
         iva_monto = subtotal * (cls.IVA_PERCENTAGE / 100)
         total = subtotal + iva_monto
         return (subtotal, iva_monto, total)
+
+    @classmethod
+    def get_bank_info(cls) -> dict:
+        """
+        Retorna información completa de cuentas bancarias para transferencias
+
+        Returns:
+            Diccionario con datos de cuentas USD y ARS
+        """
+        return {
+            'enabled': cls.BANK_TRANSFER_ENABLED,
+            'holder_name': cls.BANK_HOLDER_NAME,
+            'holder_dni': cls.BANK_HOLDER_DNI,
+            'bank_name': cls.BANK_NAME,
+            'usd': {
+                'cbu': cls.BANK_USD_CBU,
+                'alias': cls.BANK_USD_ALIAS,
+                'account': cls.BANK_USD_ACCOUNT,
+            },
+            'ars': {
+                'cbu': cls.BANK_ARS_CBU,
+                'alias': cls.BANK_ARS_ALIAS,
+                'account': cls.BANK_ARS_ACCOUNT,
+            }
+        }
 
 
 # Configuración global para fácil acceso
