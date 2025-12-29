@@ -1215,19 +1215,66 @@ def aceptar_invitacion():
     return render_template('auth/aceptar_invitacion.html', organizacion=organizacion)
 
 def _deliver_reset_link(account: ResettableAccount, reset_url: str, portal: str) -> None:
-    """Envía o registra el enlace de reseteo usando el canal configurado."""
-    delivery_mode = current_app.config.get('PASSWORD_RESET_DELIVERY', 'email')
+    """Envía el enlace de reseteo por correo electronico."""
+    from services.email_service import send_email
+
     portal = _normalize_portal(portal)
     email = getattr(account, 'email', 'cuenta')
+    nombre = getattr(account, 'nombre', None)
 
-    if current_app.debug or current_app.config.get('ENV') == 'development':
-        print(f"🔐 Enlace de restablecimiento ({portal}) para {email}: {reset_url}")
-        return
+    # Log para debug (siempre util para troubleshooting)
+    current_app.logger.info('Generando enlace de restablecimiento para %s (%s)', email, portal)
 
-    if delivery_mode == 'email':
-        current_app.logger.info('Enlace de restablecimiento generado para %s (%s): %s', email, portal, reset_url)
-    else:
-        current_app.logger.info('Password reset link for %s via %s pending integration: %s', email, delivery_mode, reset_url)
+    # Renderizar template de email
+    try:
+        html_content = render_template(
+            'emails/recuperar_password.html',
+            email=email,
+            nombre=nombre,
+            reset_url=reset_url,
+            portal=portal
+        )
+    except Exception as e:
+        current_app.logger.error('Error renderizando template de recuperacion: %s', str(e))
+        # Fallback a contenido simple si falla el template
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>Recuperar Contraseña - OBYRA</h2>
+            <p>Hola,</p>
+            <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+            <p>Hace clic en el siguiente enlace para crear una nueva contraseña:</p>
+            <p><a href="{reset_url}" style="background: #1A374D; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Restablecer Contraseña</a></p>
+            <p>O copia este enlace en tu navegador: {reset_url}</p>
+            <p>Este enlace expira en 1 hora.</p>
+            <p>Si no solicitaste este cambio, ignora este correo.</p>
+            <br>
+            <p>Saludos,<br>Equipo OBYRA</p>
+        </body>
+        </html>
+        """
+
+    # Enviar el correo
+    try:
+        email_sent = send_email(
+            to_email=email,
+            subject='Recuperar contraseña - OBYRA',
+            html_content=html_content
+        )
+
+        if email_sent:
+            current_app.logger.info('Email de recuperacion enviado exitosamente a %s', email)
+        else:
+            current_app.logger.warning('No se pudo enviar email de recuperacion a %s (SMTP no configurado o fallo)', email)
+            # En desarrollo, mostrar enlace en consola como fallback
+            if current_app.debug:
+                print(f"🔐 Enlace de restablecimiento ({portal}) para {email}: {reset_url}")
+
+    except Exception as e:
+        current_app.logger.error('Error enviando email de recuperacion a %s: %s', email, str(e))
+        # En desarrollo, mostrar enlace en consola como fallback
+        if current_app.debug:
+            print(f"🔐 Enlace de restablecimiento ({portal}) para {email}: {reset_url}")
 
 
 @auth_bp.route('/crear-operario-rapido', methods=['POST'])
