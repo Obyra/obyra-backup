@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Alertas del Sistema | OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">
+                <i class="fas fa-bell text-warning me-2"></i>Alertas y Notificaciones
+            </h1>
+            <p class="text-muted mb-0">Resumen de todas las alertas activas del sistema</p>
+        </div>
+        <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Volver al Dashboard
+        </a>
+    </div>
+
+    <!-- Resumen de alertas -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-danger text-white">
+                <div class="card-body text-center">
+                    <h2 class="display-5 fw-bold mb-0">{{ conteo.critica }}</h2>
+                    <small>Criticas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-warning text-dark">
+                <div class="card-body text-center">
+                    <h2 class="display-5 fw-bold mb-0">{{ conteo.alta }}</h2>
+                    <small>Altas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-info text-white">
+                <div class="card-body text-center">
+                    <h2 class="display-5 fw-bold mb-0">{{ conteo.media }}</h2>
+                    <small>Medias</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-secondary text-white">
+                <div class="card-body text-center">
+                    <h2 class="display-5 fw-bold mb-0">{{ conteo.total }}</h2>
+                    <small>Total</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Stock Bajo -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-boxes text-warning me-2"></i>Stock Bajo
+                        <span class="badge bg-warning text-dark ms-2">{{ alertas_stock|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_stock %}
+                        {% for alerta in alertas_stock %}
+                        <a href="{{ alerta.url }}" class="text-decoration-none">
+                            <div class="alert-item mb-2 p-3 rounded position-relative"
+                                 style="background: linear-gradient(135deg, {% if alerta.severidad == 'critica' %}#dc3545, #c82333{% elif alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#ffc107, #ffb300{% endif %});">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-grow-1 text-white">
+                                        <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                        <div class="small">{{ alerta.descripcion }}</div>
+                                        <div class="small opacity-75">{{ alerta.referencia }}</div>
+                                    </div>
+                                    <span class="badge bg-white text-{{ 'danger' if alerta.severidad == 'critica' else 'warning' }}">
+                                        {{ alerta.severidad }}
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay alertas de stock bajo</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Presupuestos por Vencer -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-invoice-dollar text-info me-2"></i>Presupuestos por Vencer
+                        <span class="badge bg-info ms-2">{{ alertas_presupuestos|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_presupuestos %}
+                        {% for alerta in alertas_presupuestos %}
+                        <a href="{{ alerta.url }}" class="text-decoration-none">
+                            <div class="alert-item mb-2 p-3 rounded"
+                                 style="background: linear-gradient(135deg, {% if alerta.severidad == 'critica' %}#dc3545, #c82333{% elif alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#17a2b8, #138496{% endif %});">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-grow-1 text-white">
+                                        <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                        <div class="small">{{ alerta.descripcion }}</div>
+                                        <div class="small opacity-75">{{ alerta.referencia }}</div>
+                                    </div>
+                                    <span class="badge bg-white text-{{ 'danger' if alerta.severidad == 'critica' else 'warning' if alerta.severidad == 'alta' else 'info' }}">
+                                        {{ alerta.severidad }}
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay presupuestos por vencer</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Obras Demoradas -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-building text-danger me-2"></i>Obras Demoradas
+                        <span class="badge bg-danger ms-2">{{ alertas_obras|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_obras %}
+                        {% for alerta in alertas_obras %}
+                        <a href="{{ alerta.url }}" class="text-decoration-none">
+                            <div class="alert-item mb-2 p-3 rounded"
+                                 style="background: linear-gradient(135deg, {% if alerta.severidad == 'critica' %}#dc3545, #c82333{% elif alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#6c757d, #5a6268{% endif %});">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-grow-1 text-white">
+                                        <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                        <div class="small">{{ alerta.descripcion }}</div>
+                                        <div class="small opacity-75">{{ alerta.referencia }}</div>
+                                    </div>
+                                    <span class="badge bg-white text-{{ 'danger' if alerta.severidad == 'critica' else 'warning' if alerta.severidad == 'alta' else 'secondary' }}">
+                                        {{ alerta.severidad }}
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay obras demoradas</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Tareas Vencidas -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tasks text-purple me-2" style="color: #6f42c1;"></i>Tareas sin Completar
+                        <span class="badge ms-2" style="background: #6f42c1;">{{ alertas_tareas|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_tareas %}
+                        {% for alerta in alertas_tareas %}
+                        <a href="{{ alerta.url }}" class="text-decoration-none">
+                            <div class="alert-item mb-2 p-3 rounded"
+                                 style="background: linear-gradient(135deg, {% if alerta.severidad == 'critica' %}#dc3545, #c82333{% elif alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#6f42c1, #5a3d9a{% endif %});">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-grow-1 text-white">
+                                        <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                        <div class="small">{{ alerta.descripcion }}</div>
+                                        <div class="small opacity-75">{{ alerta.referencia }}</div>
+                                    </div>
+                                    <span class="badge bg-white text-{{ 'danger' if alerta.severidad == 'critica' else 'warning' if alerta.severidad == 'alta' else 'secondary' }}">
+                                        {{ alerta.severidad }}
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay tareas vencidas</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sobrecostos -->
+        <div class="col-lg-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line text-danger me-2"></i>Sobrecostos Detectados
+                        <span class="badge bg-danger ms-2">{{ alertas_sobrecosto|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_sobrecosto %}
+                        <div class="row g-3">
+                        {% for alerta in alertas_sobrecosto %}
+                            <div class="col-md-4">
+                                <a href="{{ alerta.url }}" class="text-decoration-none">
+                                    <div class="alert-item p-3 rounded"
+                                         style="background: linear-gradient(135deg, {% if alerta.severidad == 'critica' %}#dc3545, #c82333{% elif alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#ffc107, #ffb300{% endif %});">
+                                        <div class="d-flex align-items-start">
+                                            <div class="flex-grow-1 text-white">
+                                                <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                                <div class="small">{{ alerta.descripcion }}</div>
+                                                <div class="small opacity-75">{{ alerta.referencia }}</div>
+                                            </div>
+                                            <span class="badge bg-white text-{{ 'danger' if alerta.severidad == 'critica' else 'warning' }}">
+                                                {{ alerta.severidad }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </a>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay sobrecostos detectados</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.alert-item {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.alert-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}

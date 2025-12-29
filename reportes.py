@@ -6,6 +6,7 @@ from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpiar_alertas_presupuestos_confirmados
+from services.alertas_dashboard import obtener_alertas_para_dashboard, contar_alertas_por_severidad
 from services.memberships import get_current_org_id
 from services.obras_filters import obras_visibles_clause
 
@@ -174,11 +175,15 @@ def dashboard():
         Event.company_id == org_id
     ).order_by(desc(Event.created_at)).limit(25).all()
 
-    # Alertas de alta prioridad para el panel lateral
-    alertas = Event.query.filter(
+    # Alertas de alta prioridad para el panel lateral (eventos del sistema)
+    alertas_eventos = Event.query.filter(
         Event.company_id == org_id,
         Event.severity.in_(['media', 'alta', 'critica'])
     ).order_by(desc(Event.created_at)).limit(10).all()
+
+    # Alertas reales del dashboard (stock, presupuestos, obras, tareas, sobrecosto)
+    alertas_dashboard = obtener_alertas_para_dashboard(org_id, limite=10)
+    conteo_alertas = contar_alertas_por_severidad(org_id)
     
     # Mostrar banner solo para administradores en entornos de desarrollo cuando los reportes están deshabilitados
     admin_checker = getattr(current_user, 'es_admin', None)
@@ -203,7 +208,9 @@ def dashboard():
                          kpis=kpis,
                          obras_activas=obras_activas,
                          eventos_recientes=eventos_recientes,
-                         alertas=alertas,
+                         alertas=alertas_eventos,
+                         alertas_dashboard=alertas_dashboard,
+                         conteo_alertas=conteo_alertas,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,
                          presupuestos_vencidos=presupuestos_vencidos,
@@ -211,6 +218,42 @@ def dashboard():
                          obras_vencimiento=obras_vencimiento,
                          charts_enabled=CHARTS_ENABLED,
                          show_reports_banner=show_reports_banner)
+
+
+@reportes_bp.route('/alertas')
+@login_required
+def ver_alertas():
+    """Muestra todas las alertas del sistema"""
+    from services.alertas_dashboard import (
+        obtener_alertas_stock_bajo,
+        obtener_alertas_presupuestos_vencer,
+        obtener_alertas_obras_demoradas,
+        obtener_alertas_tareas_vencidas,
+        obtener_alertas_sobrecosto,
+        contar_alertas_por_severidad
+    )
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if not org_id:
+        flash('Selecciona una organizacion para ver las alertas.', 'warning')
+        return redirect(url_for('auth.seleccionar_organizacion'))
+
+    # Obtener todas las alertas por categoria
+    alertas_stock = obtener_alertas_stock_bajo(org_id, limite=20)
+    alertas_presupuestos = obtener_alertas_presupuestos_vencer(org_id, limite=20)
+    alertas_obras = obtener_alertas_obras_demoradas(org_id, limite=20)
+    alertas_tareas = obtener_alertas_tareas_vencidas(org_id, limite=20)
+    alertas_sobrecosto = obtener_alertas_sobrecosto(org_id, limite=20)
+    conteo = contar_alertas_por_severidad(org_id)
+
+    return render_template('reportes/alertas.html',
+                         alertas_stock=alertas_stock,
+                         alertas_presupuestos=alertas_presupuestos,
+                         alertas_obras=alertas_obras,
+                         alertas_tareas=alertas_tareas,
+                         alertas_sobrecosto=alertas_sobrecosto,
+                         conteo=conteo)
+
 
 def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None):
     """Calcula los KPIs principales del dashboard"""
