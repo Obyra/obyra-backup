@@ -67,6 +67,41 @@ def _normalize_membership_role(raw_role: Optional[str]) -> Optional[str]:
 
     return None
 
+
+# Límite de usuarios por organización
+MAX_USUARIOS_POR_ORGANIZACION = 10
+
+
+def contar_usuarios_organizacion(org_id):
+    """
+    Cuenta el número de usuarios activos en una organización.
+    Retorna el conteo de miembros activos.
+    """
+    if not org_id:
+        return 0
+
+    return OrgMembership.query.filter(
+        OrgMembership.organizacion_id == org_id,
+        OrgMembership.activo == True
+    ).count()
+
+
+def verificar_limite_usuarios(org_id):
+    """
+    Verifica si la organización puede agregar más usuarios.
+    Retorna (puede_agregar: bool, mensaje: str)
+    """
+    if not org_id:
+        return False, "No se encontró la organización."
+
+    cantidad_actual = contar_usuarios_organizacion(org_id)
+
+    if cantidad_actual >= MAX_USUARIOS_POR_ORGANIZACION:
+        return False, f"Has alcanzado el límite de {MAX_USUARIOS_POR_ORGANIZACION} usuarios para tu organización. Contacta a soporte para ampliar tu plan."
+
+    return True, f"Usuarios: {cantidad_actual}/{MAX_USUARIOS_POR_ORGANIZACION}"
+
+
 equipos_bp = Blueprint('equipos', __name__)
 
 @equipos_bp.route('/')
@@ -169,6 +204,14 @@ def usuarios_nuevo():
         flash('Ya existe un usuario con ese email.', 'danger')
         return redirect(url_for('equipos.usuarios_nuevo'))
 
+    # Verificar límite de usuarios por organización
+    membership_actual = get_current_membership()
+    if membership_actual:
+        puede_agregar, mensaje_limite = verificar_limite_usuarios(membership_actual.organizacion_id)
+        if not puede_agregar:
+            flash(mensaje_limite, 'danger')
+            return redirect(url_for('equipos.usuarios_nuevo'))
+
     temp_password = temp_password_input or generate_temporary_password()
 
     try:
@@ -265,7 +308,15 @@ def crear():
         if Usuario.query.filter_by(email=email).first():
             flash('Ya existe un usuario con ese email.', 'danger')
             return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
-        
+
+        # Verificar límite de usuarios por organización
+        membership = get_current_membership()
+        if membership:
+            puede_agregar, mensaje_limite = verificar_limite_usuarios(membership.organizacion_id)
+            if not puede_agregar:
+                flash(mensaje_limite, 'danger')
+                return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
+
         try:
             # Crear nuevo usuario
             nuevo_usuario = Usuario(
@@ -520,9 +571,25 @@ def rendimiento():
     if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para ver reportes de rendimiento.', 'danger')
         return redirect(url_for('equipos.lista'))
-    
-    # Obtener todos los usuarios activos con estadísticas
-    usuarios = Usuario.query.filter_by(activo=True).all()
+
+    # Obtener la membresía actual del usuario
+    membership = get_current_membership()
+    if not membership:
+        flash('No tienes una organización asignada.', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    org_id = membership.organizacion_id
+
+    # Obtener usuarios de la misma organización (filtrado por membresía)
+    usuarios_ids = db.session.query(OrgMembership.usuario_id).filter(
+        OrgMembership.organizacion_id == org_id,
+        OrgMembership.activo == True
+    ).subquery()
+
+    usuarios = Usuario.query.filter(
+        Usuario.id.in_(usuarios_ids),
+        Usuario.activo == True
+    ).all()
     
     estadisticas = []
     for usuario in usuarios:
@@ -583,7 +650,14 @@ def usuarios_crear():
     # Verificar permisos admin/pm
     if current_user.role not in ['admin', 'pm']:
         return jsonify(ok=False, error="Sin permisos"), 403
-    
+
+    # Verificar límite de usuarios por organización
+    membership = get_current_membership()
+    if membership:
+        puede_agregar, mensaje_limite = verificar_limite_usuarios(membership.organizacion_id)
+        if not puede_agregar:
+            return jsonify(ok=False, error=mensaje_limite), 400
+
     f = request.form
     role = (f.get('role') or 'operario').strip()
     org_id = getattr(current_user, 'organizacion_id', None)
