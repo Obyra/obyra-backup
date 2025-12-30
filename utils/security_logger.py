@@ -160,11 +160,13 @@ def log_admin_action(action, target_user_id=None, details=None):
     )
 
 
-def log_password_change(user_id, email):
+def log_password_change(user_id, email, is_reset=False):
     """Log a password change"""
+    event_type = 'password_reset' if is_reset else 'password_change'
+    message = f"Password {'reset' if is_reset else 'changed'} for user {email}"
     log_security_event(
-        'password_change',
-        f"Password changed for user {email}",
+        event_type,
+        message,
         user_id=user_id,
         email=email
     )
