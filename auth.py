@@ -450,7 +450,7 @@ def reset_password(token: str):
             activate_pending_memberships(account)
         db.session.commit()
 
-        log_password_change(account.email, is_reset=True)
+        log_password_change(account.id, account.email, is_reset=True)
         current_app.logger.info(f'Contrasena restablecida para: {account.email}')
 
         flash('Tu contraseña fue actualizada. Ahora puedes iniciar sesión.', 'success')
