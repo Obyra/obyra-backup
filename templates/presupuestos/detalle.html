@@ -54,6 +54,11 @@
                             <i class="fas fa-file-pdf me-1"></i>PDF
                         </a>
                         {% endif %}
+                        {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'aprobado' and not presupuesto.confirmado_como_obra and not presupuesto.obra_id %}
+                        <button type="button" class="btn btn-primary" onclick="confirmarComoObra({{ presupuesto.id }})">
+                            <i class="fas fa-check-circle me-1"></i>Confirmar y Crear Obra
+                        </button>
+                        {% endif %}
                         {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                         <button class="btn btn-outline-warning" onclick="abrirPerderModal({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                             <i class="fas fa-archive me-1"></i>Marcar como perdido
@@ -1117,6 +1122,55 @@ async function eliminarPresupuesto(id, numero) {
         setTimeout(() => window.location.href = '/presupuestos', 800);
     } catch (error) {
         console.error('Error al eliminar:', error);
+        showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
+    }
+}
+
+async function confirmarComoObra(id) {
+    if (!confirm('¿Confirmar este presupuesto y crear la obra?\n\nEsto pasará el presupuesto al módulo de obras para su ejecución.')) {
+        return;
+    }
+
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        if (csrfToken) {
+            headers['X-CSRFToken'] = csrfToken;
+        }
+
+        const response = await fetch(`/presupuestos/${id}/confirmar-obra`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                crear_tareas: true,
+                normalizar_slugs: true
+            })
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok || result.error) {
+            showAlert(result.error || 'Error al confirmar el presupuesto.', 'danger');
+            return;
+        }
+
+        showAlert(result.message || 'Obra creada correctamente.', 'success');
+
+        // Redirigir a la obra creada si hay URL
+        if (result.redirect_url) {
+            setTimeout(() => window.location.href = result.redirect_url, 1000);
+        } else if (result.obra_url) {
+            setTimeout(() => window.location.href = result.obra_url, 1000);
+        } else {
+            setTimeout(() => window.location.reload(), 1000);
+        }
+    } catch (error) {
+        console.error('Error al confirmar:', error);
         showAlert('No se pudo completar la operación. Intenta nuevamente.', 'danger');
     }
 }

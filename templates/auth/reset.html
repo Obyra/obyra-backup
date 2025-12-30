@@ -56,12 +56,14 @@
 </div>
 
 <style>
+/* Base styles */
 .auth-container {
     min-height: calc(100vh - 200px);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem 0;
+    padding: 2rem 1rem;
+    box-sizing: border-box;
 }
 
 .auth-card {
@@ -72,18 +74,45 @@
     width: 100%;
     max-width: 450px;
     margin: 0 auto;
+    box-sizing: border-box;
+}
+
+.auth-header h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.auth-header p {
+    font-size: 0.95rem;
+}
+
+.auth-form .form-label {
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #495057;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .auth-form .form-control {
-    border-radius: 0.5rem;
+    border-radius: 0;
     border: 2px solid #e9ecef;
-    padding: 0.75rem 1rem;
+    padding: 0.875rem 1rem;
+    font-size: 16px; /* Previene zoom en iOS */
     transition: all 0.3s ease;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .auth-form .form-control:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
+    border-color: var(--primary-color, #28a745);
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.15);
+    outline: none;
+}
+
+.auth-form .input-group {
+    flex-wrap: nowrap;
 }
 
 .auth-form .input-group-text {
@@ -91,36 +120,178 @@
     border: 2px solid #e9ecef;
     border-right: none;
     background: #f8f9fa;
+    padding: 0.875rem 1rem;
 }
 
-.auth-link {
-    color: var(--primary-color);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.auth-link:hover {
-    color: var(--primary-color);
-    text-decoration: underline;
-}
-
-@media (max-width: 576px) {
-    .auth-card {
-        margin: 1rem;
-        padding: 1.5rem;
-    }
+.auth-form .input-group .form-control {
+    border-radius: 0;
 }
 
 .toggle-password {
     border: 2px solid #e9ecef;
     border-left: none;
+    border-radius: 0 0.5rem 0.5rem 0;
     background: #f8f9fa;
     color: #6c757d;
+    padding: 0.875rem 1rem;
+    min-width: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.toggle-password:hover {
+.toggle-password:hover,
+.toggle-password:active {
     background: #e9ecef;
     color: #495057;
+}
+
+.btn-primary {
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    min-height: 50px;
+}
+
+.auth-link {
+    color: var(--primary-color, #28a745);
+    text-decoration: none;
+    font-weight: 500;
+    padding: 0.5rem;
+    display: inline-block;
+}
+
+.auth-link:hover {
+    color: var(--primary-color, #28a745);
+    text-decoration: underline;
+}
+
+/* Tablet */
+@media (max-width: 768px) {
+    .auth-container {
+        padding: 1.5rem 1rem;
+        min-height: calc(100vh - 150px);
+    }
+
+    .auth-card {
+        padding: 2rem;
+        border-radius: 0.75rem;
+    }
+
+    .auth-header h2 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Mobile */
+@media (max-width: 576px) {
+    .auth-container {
+        padding: 1rem 0.75rem;
+        min-height: calc(100vh - 120px);
+        align-items: flex-start;
+        padding-top: 2rem;
+    }
+
+    .auth-card {
+        margin: 0;
+        padding: 1.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .auth-header {
+        margin-bottom: 1.5rem !important;
+    }
+
+    .auth-header i {
+        font-size: 2.5rem !important;
+    }
+
+    .auth-header h2 {
+        font-size: 1.35rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .auth-header p {
+        font-size: 0.875rem;
+    }
+
+    .auth-form .form-label {
+        font-size: 0.8rem;
+    }
+
+    .auth-form .form-control {
+        padding: 0.75rem 0.875rem;
+        font-size: 16px; /* Importante: previene zoom en iOS */
+    }
+
+    .auth-form .input-group-text {
+        padding: 0.75rem;
+    }
+
+    .toggle-password {
+        padding: 0.75rem;
+        min-width: 44px; /* Mínimo recomendado por Apple para touch targets */
+    }
+
+    .btn-primary {
+        padding: 0.75rem 1rem;
+        font-size: 0.95rem;
+        min-height: 48px;
+    }
+
+    .mb-3 {
+        margin-bottom: 1rem !important;
+    }
+
+    .mt-4 {
+        margin-top: 1.5rem !important;
+    }
+}
+
+/* iPhone SE y pantallas muy pequeñas */
+@media (max-width: 375px) {
+    .auth-card {
+        padding: 1.25rem;
+    }
+
+    .auth-header h2 {
+        font-size: 1.25rem;
+    }
+
+    .auth-form .form-control {
+        padding: 0.65rem 0.75rem;
+    }
+
+    .auth-form .input-group-text {
+        padding: 0.65rem;
+    }
+
+    .toggle-password {
+        padding: 0.65rem;
+    }
+}
+
+/* Safe area para iPhone X y posteriores (notch) */
+@supports (padding: max(0px)) {
+    .auth-container {
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+        padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+}
+
+/* Mejoras de accesibilidad táctil */
+@media (hover: none) and (pointer: coarse) {
+    .toggle-password {
+        min-width: 48px;
+        min-height: 48px;
+    }
+
+    .auth-link {
+        padding: 0.75rem;
+    }
 }
 </style>
 

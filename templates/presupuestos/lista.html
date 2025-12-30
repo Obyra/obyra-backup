@@ -180,7 +180,7 @@
                     <div class="card-footer bg-transparent" data-presupuesto-footer="{{ presupuesto.id }}">
                         <div class="d-grid gap-2" data-confirm-container="{{ presupuesto.id }}">
                             {% set es_admin = tiene_rol('admin') or (current_user.is_authenticated and current_user.es_admin()) %}
-                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and es_admin and presupuesto.estado in ['borrador', 'enviado'] %}
+                            {% if not presupuesto.confirmado_como_obra and not presupuesto.obra_id and es_admin and presupuesto.estado in ['borrador', 'enviado', 'aprobado'] %}
                             {% set cliente_obj = presupuesto.cliente %}
                             {% set cliente_completo = cliente_obj and cliente_obj.nombre and (cliente_obj.email or cliente_obj.telefono) and cliente_obj.numero_documento %}
                             <button type="button" class="btn btn-success btn-sm btn-confirmar-presupuesto"
