@@ -34,13 +34,13 @@ def send_email(to_email, subject, html_content, attachments=None):
         if isinstance(smtp_port, str):
             smtp_port = int(smtp_port)
 
-        # Log detallado para debug
-        logging.info(f"[EMAIL] Intentando enviar email a {to_email}")
-        logging.info(f"[EMAIL] SMTP Config: host={smtp_host}, port={smtp_port}, user={smtp_user}, from={from_email}")
-        logging.info(f"[EMAIL] Password configurado: {'SI' if smtp_password else 'NO'} (len={len(smtp_password) if smtp_password else 0})")
+        # Log detallado para debug (usando current_app.logger para Railway)
+        current_app.logger.info(f"[EMAIL] Intentando enviar email a {to_email}")
+        current_app.logger.info(f"[EMAIL] SMTP Config: host={smtp_host}, port={smtp_port}, user={smtp_user}, from={from_email}")
+        current_app.logger.info(f"[EMAIL] Password configurado: {'SI' if smtp_password else 'NO'} (len={len(smtp_password) if smtp_password else 0})")
 
         if not all([smtp_host, smtp_user, smtp_password]):
-            logging.warning(f"[EMAIL] SMTP configuration incomplete - host:{bool(smtp_host)}, user:{bool(smtp_user)}, pass:{bool(smtp_password)}")
+            current_app.logger.warning(f"[EMAIL] SMTP configuration incomplete - host:{bool(smtp_host)}, user:{bool(smtp_user)}, pass:{bool(smtp_password)}")
             return False
         
         # Crear mensaje
@@ -68,24 +68,25 @@ def send_email(to_email, subject, html_content, attachments=None):
                         msg.attach(part)
         
         # Enviar email
-        logging.info(f"[EMAIL] Conectando a {smtp_host}:{smtp_port}...")
+        current_app.logger.info(f"[EMAIL] Conectando a {smtp_host}:{smtp_port}...")
         server = smtplib.SMTP(smtp_host, smtp_port)
         server.starttls()
-        logging.info(f"[EMAIL] TLS establecido, iniciando login...")
+        current_app.logger.info(f"[EMAIL] TLS establecido, iniciando login...")
         server.login(smtp_user, smtp_password)
-        logging.info(f"[EMAIL] Login exitoso, enviando mensaje...")
+        current_app.logger.info(f"[EMAIL] Login exitoso, enviando mensaje...")
 
         text = msg.as_string()
         server.sendmail(from_email, to_email, text)
         server.quit()
 
-        logging.info(f"[EMAIL] ✅ Email enviado exitosamente a {to_email}")
+        current_app.logger.info(f"[EMAIL] ✅ Email enviado exitosamente a {to_email}")
         return True
 
     except Exception as e:
-        logging.error(f"[EMAIL] ❌ Error enviando email a {to_email}: {str(e)}")
+        from flask import current_app as app
+        app.logger.error(f"[EMAIL] ❌ Error enviando email a {to_email}: {str(e)}")
         import traceback
-        logging.error(f"[EMAIL] Traceback: {traceback.format_exc()}")
+        app.logger.error(f"[EMAIL] Traceback: {traceback.format_exc()}")
         return False
 
 def send_po_notification(po):
