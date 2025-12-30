@@ -78,6 +78,9 @@ def crear():
             flash('No tienes una organización activa', 'warning')
             return redirect(url_for('index'))
 
+        # Detectar si viene desde el módulo de presupuestos
+        desde_presupuesto = request.args.get('desde_presupuesto') or request.form.get('desde_presupuesto')
+
         if request.method == 'POST':
             # Importar validadores
             from utils.validators import validate_email, validate_string_length, validate_phone, sanitize_string
@@ -191,12 +194,16 @@ def crear():
 
             flash(f'Cliente {cliente.nombre_completo} creado exitosamente', 'success')
 
+            # Si viene desde presupuestos, redirigir de vuelta con el cliente preseleccionado
+            if desde_presupuesto:
+                return redirect(url_for('presupuestos.crear', cliente_id=cliente.id))
+
             # Redirigir con parámetro success para comunicación con ventana padre
             return render_template('clientes/crear.html',
                                  cliente_creado=cliente,
                                  success=True)
 
-        return render_template('clientes/crear.html')
+        return render_template('clientes/crear.html', desde_presupuesto=desde_presupuesto)
 
     except Exception as e:
         current_app.logger.error(f"Error en clientes.crear: {e}", exc_info=True)

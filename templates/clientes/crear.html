@@ -8,15 +8,32 @@
         <div class="col-md-8 offset-md-2">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-user-plus"></i> Nuevo Cliente</h2>
+                {% if desde_presupuesto %}
+                <a href="{{ url_for('presupuestos.crear') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver al Presupuesto
+                </a>
+                {% else %}
                 <a href="{{ url_for('clientes.lista') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left"></i> Volver
                 </a>
+                {% endif %}
             </div>
+
+            {% if desde_presupuesto %}
+            <div class="alert alert-info mb-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Creando cliente para presupuesto</strong><br>
+                <small>Una vez creado el cliente, serás redirigido automáticamente al presupuesto con el cliente ya seleccionado.</small>
+            </div>
+            {% endif %}
 
             <div class="card">
                 <div class="card-body">
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        {% if desde_presupuesto %}
+                        <input type="hidden" name="desde_presupuesto" value="1"/>
+                        {% endif %}
 
                         <h5 class="mb-3">Información de la Empresa</h5>
                         <div class="mb-3">

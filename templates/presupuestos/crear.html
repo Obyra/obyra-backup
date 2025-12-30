@@ -206,12 +206,12 @@
                                     <select class="form-select" id="cliente_id" name="cliente_id">
                                         <option value="">Sin cliente asignado</option>
                                         {% for cliente in clientes %}
-                                        <option value="{{ cliente.id }}">
+                                        <option value="{{ cliente.id }}" {% if request.args.get('cliente_id')|string == cliente.id|string %}selected{% endif %}>
                                             {{ cliente.nombre_completo }} - {{ cliente.email }}
                                         </option>
                                         {% endfor %}
                                     </select>
-                                    <a href="{{ url_for('clientes.crear') }}" class="btn btn-outline-primary" target="_blank" title="Crear nuevo cliente">
+                                    <a href="{{ url_for('clientes.crear', desde_presupuesto=1) }}" class="btn btn-outline-primary" title="Crear nuevo cliente">
                                         <i class="fas fa-plus"></i>
                                     </a>
                                     <a href="{{ url_for('clientes.lista') }}" class="btn btn-outline-secondary" target="_blank" title="Ver todos los clientes">
