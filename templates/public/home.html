@@ -25,6 +25,15 @@
                         <i class="fas fa-store me-2"></i>PORTAL PROVEEDORES
                     </a>
                 </div>
+                <!-- Botón Instalar App PWA -->
+                <div id="pwa-install-container" class="mt-3 d-none">
+                    <button id="pwa-install-btn" class="btn btn-install-app btn-lg w-100">
+                        <i class="fas fa-mobile-alt me-2"></i>INSTALAR APP EN TU CELULAR
+                    </button>
+                    <p class="text-white-50 small mt-2 mb-0">
+                        <i class="fas fa-info-circle me-1"></i>Acceso rápido desde tu pantalla de inicio
+                    </p>
+                </div>
             </div>
             <div class="col-lg-5">
                 <div class="card login-card border-0 shadow-lg">
@@ -382,5 +391,180 @@
         padding: 1.5rem;
     }
 }
+
+/* Botón Instalar App */
+.btn-install-app {
+    background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+    color: #fff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    padding: 0.875rem 1.5rem;
+    border-radius: 30px;
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+    animation: pulse-install 2s infinite;
+}
+
+.btn-install-app:hover {
+    background: linear-gradient(135deg, #F7931E 0%, #FF6B35 100%);
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.5);
+}
+
+@keyframes pulse-install {
+    0%, 100% { box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4); }
+    50% { box-shadow: 0 4px 25px rgba(255, 107, 53, 0.6); }
+}
+
+/* iOS Install Banner */
+.ios-install-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+    color: #fff;
+    padding: 1rem;
+    z-index: 9999;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    border-top: 3px solid #4CAF50;
+}
+
+.ios-install-banner .close-banner {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.25rem;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.ios-install-banner .close-banner:hover {
+    opacity: 1;
+}
 </style>
+
+<!-- Banner de instalación para iOS -->
+<div id="ios-install-banner" class="ios-install-banner d-none">
+    <button class="close-banner" onclick="closeIOSBanner()">
+        <i class="fas fa-times"></i>
+    </button>
+    <div class="container">
+        <div class="d-flex align-items-center gap-3">
+            <div class="flex-shrink-0">
+                <i class="fas fa-mobile-alt fa-2x text-warning"></i>
+            </div>
+            <div class="flex-grow-1">
+                <strong>Instala OBYRA en tu iPhone</strong>
+                <p class="mb-0 small opacity-75">
+                    Toca <i class="fas fa-share-square"></i> y luego "Agregar a pantalla de inicio"
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// PWA Install Handler
+let deferredPrompt;
+const installContainer = document.getElementById('pwa-install-container');
+const installBtn = document.getElementById('pwa-install-btn');
+const iosBanner = document.getElementById('ios-install-banner');
+
+// Detectar si ya está instalado como PWA
+function isInstalledPWA() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.navigator.standalone === true;
+}
+
+// Detectar iOS
+function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+// Detectar Android
+function isAndroid() {
+    return /Android/.test(navigator.userAgent);
+}
+
+// Mostrar banner de iOS si corresponde
+function showIOSBanner() {
+    if (isIOS() && !isInstalledPWA() && !localStorage.getItem('ios-banner-dismissed')) {
+        iosBanner.classList.remove('d-none');
+    }
+}
+
+function closeIOSBanner() {
+    iosBanner.classList.add('d-none');
+    localStorage.setItem('ios-banner-dismissed', 'true');
+}
+
+// Evento beforeinstallprompt (Chrome/Android)
+window.addEventListener('beforeinstallprompt', (e) => {
+    console.log('PWA: beforeinstallprompt fired');
+    e.preventDefault();
+    deferredPrompt = e;
+
+    // Mostrar botón de instalación
+    if (installContainer) {
+        installContainer.classList.remove('d-none');
+    }
+});
+
+// Click en botón de instalar
+if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+        if (deferredPrompt) {
+            // Android/Chrome
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log('PWA install outcome:', outcome);
+
+            if (outcome === 'accepted') {
+                installContainer.classList.add('d-none');
+            }
+            deferredPrompt = null;
+        } else if (isIOS()) {
+            // iOS - mostrar instrucciones
+            showIOSBanner();
+        }
+    });
+}
+
+// Evento appinstalled
+window.addEventListener('appinstalled', () => {
+    console.log('PWA: App instalada');
+    if (installContainer) {
+        installContainer.classList.add('d-none');
+    }
+    deferredPrompt = null;
+});
+
+// Al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    // Si es iOS y no está instalado, mostrar banner después de 3 segundos
+    if (isIOS() && !isInstalledPWA()) {
+        setTimeout(showIOSBanner, 3000);
+
+        // También mostrar el botón de instalar con instrucciones
+        if (installContainer) {
+            installContainer.classList.remove('d-none');
+            if (installBtn) {
+                installBtn.innerHTML = '<i class="fas fa-mobile-alt me-2"></i>INSTALAR EN iPHONE';
+            }
+        }
+    }
+
+    // Si es Android y el prompt aún no se disparó, mostrar el botón igual
+    if (isAndroid() && !isInstalledPWA()) {
+        // El botón se mostrará cuando se dispare beforeinstallprompt
+        console.log('PWA: Esperando prompt de instalación en Android');
+    }
+});
+</script>
 {% endblock %}
