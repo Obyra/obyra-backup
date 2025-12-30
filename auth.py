@@ -389,12 +389,16 @@ def forgot_password():
                 account = None
 
         if account:
+            current_app.logger.info(f'[FORGOT] Cuenta encontrada para {email}, generando token...')
             token = _generate_reset_token(account, portal)
             reset_kwargs = {'token': token, '_external': True}
             if portal != 'user':
                 reset_kwargs['portal'] = portal
             reset_url = url_for('auth.reset_password', **reset_kwargs)
+            current_app.logger.info(f'[FORGOT] Enviando enlace de reset a {email}')
             _deliver_reset_link(account, reset_url, portal)
+        else:
+            current_app.logger.warning(f'[FORGOT] No se encontro cuenta activa para {email} (portal={portal})')
 
         flash('Si el email corresponde a una cuenta activa, te enviamos las instrucciones para restablecer la contraseña.', 'info')
         return redirect(submit_url)
