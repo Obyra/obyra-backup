@@ -1,86 +1,59 @@
 """
 OBYRA Market - Email Service
-Handles SMTP email sending for notifications and purchase orders
+Handles email sending using Resend API for notifications and purchase orders
 """
 
-import smtplib
 import logging
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 import os
+import requests
+
 
 def send_email(to_email, subject, html_content, attachments=None):
     """
-    Envía email usando configuración SMTP
+    Envía email usando Resend API
 
     Args:
         to_email (str): Email destinatario
         subject (str): Asunto del email
         html_content (str): Contenido HTML del email
-        attachments (list): Lista de archivos adjuntos
+        attachments (list): Lista de archivos adjuntos (no soportado aún con Resend)
     """
     try:
         from flask import current_app
 
-        smtp_host = current_app.config.get('SMTP_HOST')
-        smtp_port = current_app.config.get('SMTP_PORT', 587)
-        smtp_user = current_app.config.get('SMTP_USER')
-        smtp_password = current_app.config.get('SMTP_PASSWORD')
-        from_email = current_app.config.get('FROM_EMAIL', smtp_user)
+        resend_api_key = current_app.config.get('RESEND_API_KEY')
+        from_email = current_app.config.get('FROM_EMAIL', 'OBYRA <onboarding@resend.dev>')
 
-        # Asegurar que el puerto sea entero
-        if isinstance(smtp_port, str):
-            smtp_port = int(smtp_port)
-
-        # Log detallado para debug (usando current_app.logger para Railway)
         current_app.logger.info(f"[EMAIL] Intentando enviar email a {to_email}")
-        current_app.logger.info(f"[EMAIL] SMTP Config: host={smtp_host}, port={smtp_port}, user={smtp_user}, from={from_email}")
-        current_app.logger.info(f"[EMAIL] Password configurado: {'SI' if smtp_password else 'NO'} (len={len(smtp_password) if smtp_password else 0})")
+        current_app.logger.info(f"[EMAIL] Resend API Key configurada: {'SI' if resend_api_key else 'NO'}")
+        current_app.logger.info(f"[EMAIL] From: {from_email}")
 
-        if not all([smtp_host, smtp_user, smtp_password]):
-            current_app.logger.warning(f"[EMAIL] SMTP configuration incomplete - host:{bool(smtp_host)}, user:{bool(smtp_user)}, pass:{bool(smtp_password)}")
+        if not resend_api_key:
+            current_app.logger.warning("[EMAIL] RESEND_API_KEY no configurada")
             return False
-        
-        # Crear mensaje
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
-        msg['From'] = from_email
-        msg['To'] = to_email
-        
-        # Contenido HTML
-        html_part = MIMEText(html_content, 'html', 'utf-8')
-        msg.attach(html_part)
-        
-        # Adjuntos
-        if attachments:
-            for attachment in attachments:
-                if os.path.exists(attachment['path']):
-                    with open(attachment['path'], 'rb') as f:
-                        part = MIMEBase('application', 'octet-stream')
-                        part.set_payload(f.read())
-                        encoders.encode_base64(part)
-                        part.add_header(
-                            'Content-Disposition',
-                            f'attachment; filename= {attachment["filename"]}'
-                        )
-                        msg.attach(part)
-        
-        # Enviar email
-        current_app.logger.info(f"[EMAIL] Conectando a {smtp_host}:{smtp_port}...")
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.starttls()
-        current_app.logger.info(f"[EMAIL] TLS establecido, iniciando login...")
-        server.login(smtp_user, smtp_password)
-        current_app.logger.info(f"[EMAIL] Login exitoso, enviando mensaje...")
 
-        text = msg.as_string()
-        server.sendmail(from_email, to_email, text)
-        server.quit()
+        # Enviar via Resend API
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": from_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content
+            },
+            timeout=30
+        )
 
-        current_app.logger.info(f"[EMAIL] ✅ Email enviado exitosamente a {to_email}")
-        return True
+        if response.status_code == 200:
+            current_app.logger.info(f"[EMAIL] ✅ Email enviado exitosamente a {to_email}")
+            return True
+        else:
+            current_app.logger.error(f"[EMAIL] ❌ Error de Resend: {response.status_code} - {response.text}")
+            return False
 
     except Exception as e:
         from flask import current_app as app

@@ -216,17 +216,14 @@ app.config["MAIL_PASSWORD"] = os.getenv("SMTP_PASSWORD", "")
 app.config["MAIL_DEFAULT_SENDER"] = os.getenv("SMTP_USER", "")
 app.config["MAIL_SUPPRESS_SEND"] = False
 
-# SMTP Configuration (for email_service.py)
-app.config["SMTP_HOST"] = os.getenv("SMTP_HOST", "smtp.gmail.com")
-app.config["SMTP_PORT"] = int(os.getenv("SMTP_PORT", "587"))
-app.config["SMTP_USER"] = os.getenv("SMTP_USER", "")
-app.config["SMTP_PASSWORD"] = os.getenv("SMTP_PASSWORD", "")
-app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL", os.getenv("SMTP_USER", ""))
+# Resend Configuration (for email_service.py)
+app.config["RESEND_API_KEY"] = os.getenv("RESEND_API_KEY", "")
+app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL", "OBYRA <onboarding@resend.dev>")
 
-if app.config["MAIL_USERNAME"]:
-    app.logger.info(f"Email configured: {app.config['MAIL_USERNAME']}")
+if app.config["RESEND_API_KEY"]:
+    app.logger.info(f"Email configured with Resend API")
 else:
-    app.logger.warning("Email (SMTP) is not configured; email sending will not work.")
+    app.logger.warning("RESEND_API_KEY is not configured; email sending will not work.")
 
 # initialize extensions
 db.init_app(app)
