@@ -22,6 +22,9 @@
                     </span>
                     <input type="password" class="form-control" id="password" name="password"
                            placeholder="Nueva contraseña" required>
+                    <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
             </div>
 
@@ -33,6 +36,9 @@
                     </span>
                     <input type="password" class="form-control" id="confirm_password" name="confirm_password"
                            placeholder="Repite la contraseña" required>
+                    <button class="btn btn-outline-secondary toggle-password" type="button" data-target="confirm_password">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
             </div>
 
@@ -104,5 +110,39 @@
         padding: 1.5rem;
     }
 }
+
+.toggle-password {
+    border: 2px solid #e9ecef;
+    border-left: none;
+    background: #f8f9fa;
+    color: #6c757d;
+}
+
+.toggle-password:hover {
+    background: #e9ecef;
+    color: #495057;
+}
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.toggle-password').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const input = document.getElementById(targetId);
+            const icon = this.querySelector('i');
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
