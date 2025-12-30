@@ -3,7 +3,79 @@
 {% block title %}Bienvenido a OBYRA IA{% endblock %}
 
 {% block content %}
-<div class="landing-hero py-5">
+<!-- Vista PWA (solo login) - se muestra cuando está instalada como app -->
+<div id="pwa-login-view" class="pwa-login-container d-none">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-5">
+                <div class="text-center mb-4">
+                    <i class="fas fa-building fa-3x text-success mb-3"></i>
+                    <h1 class="h3 fw-bold text-white">OBYRA IA</h1>
+                    <p class="text-white-75">Gestión inteligente de obras</p>
+                </div>
+                <div class="card login-card border-0 shadow-lg">
+                    <div class="card-header-custom">
+                        <h2 class="h5 fw-bold text-center mb-0">INICIAR SESION</h2>
+                    </div>
+                    <div class="card-body p-4">
+                        <form method="POST" action="{{ url_for('index') }}" class="needs-validation" novalidate>
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            {% if next_value %}
+                            <input type="hidden" name="next" value="{{ next_value }}">
+                            {% endif %}
+                            <div class="mb-3">
+                                <label for="pwa-email" class="form-label">EMAIL</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                    <input type="email" class="form-control" id="pwa-email" name="email"
+                                           placeholder="tu@email.com"
+                                           value="{{ form_data.email }}"
+                                           required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="pwa-password" class="form-label">CONTRASENA</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                    <input type="password" class="form-control" id="pwa-password" name="password"
+                                           placeholder="Tu contrasena" required>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePWAPassword()">
+                                        <i class="fas fa-eye" id="pwa-eye-icon"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="pwa-remember" name="remember" checked>
+                                <label class="form-check-label" for="pwa-remember">
+                                    Recordar mi sesion
+                                </label>
+                            </div>
+                            <div class="d-grid gap-2 mb-3">
+                                <button type="submit" class="btn btn-yellow btn-lg">
+                                    <i class="fas fa-sign-in-alt me-2"></i>INGRESAR
+                                </button>
+                            </div>
+                            <div class="text-center">
+                                <a href="{{ url_for('auth.forgot_password') }}" class="auth-link small">
+                                    Olvidaste tu contrasena?
+                                </a>
+                            </div>
+                        </form>
+                        <hr class="my-3">
+                        <div class="text-center small">
+                            <a href="{{ url_for('auth.register') }}" class="text-muted">Crear cuenta</a>
+                            <span class="text-muted mx-2">|</span>
+                            <a href="{{ url_for('supplier_auth.login') }}" class="text-muted">Portal Proveedores</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Vista Web (landing completa) - se muestra en navegador normal -->
+<div id="web-landing-view" class="landing-hero py-5">
     <div class="container">
         <div class="row align-items-center g-5">
             <div class="col-lg-7">
@@ -106,7 +178,7 @@
     </div>
 </div>
 
-<section class="landing-features py-5">
+<section id="features-section" class="landing-features py-5">
     <div class="container">
         <div class="text-center mb-5">
             <h2 class="section-title">POR QUE ELEGIR <span class="text-yellow">OBYRA</span></h2>
@@ -145,6 +217,28 @@
 </section>
 
 <style>
+/* Vista PWA - Solo Login */
+.pwa-login-container {
+    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.pwa-login-container .login-card {
+    border-radius: 16px;
+}
+
+.pwa-login-container .card-header-custom {
+    border-radius: 16px 16px 0 0;
+}
+
+.pwa-login-container .btn-outline-secondary {
+    border-color: #d4d4d4;
+    border-left: none;
+}
+
 /* Hero Section - Estilo Landing Page */
 .landing-hero {
     background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
@@ -472,6 +566,9 @@
 <script>
 // PWA Install Handler
 let deferredPrompt;
+const pwaLoginView = document.getElementById('pwa-login-view');
+const webLandingView = document.getElementById('web-landing-view');
+const featuresSection = document.getElementById('features-section');
 const installContainer = document.getElementById('pwa-install-container');
 const installBtn = document.getElementById('pwa-install-btn');
 const iosBanner = document.getElementById('ios-install-banner');
@@ -492,6 +589,41 @@ function isAndroid() {
     return /Android/.test(navigator.userAgent);
 }
 
+// Toggle password en vista PWA
+function togglePWAPassword() {
+    const input = document.getElementById('pwa-password');
+    const icon = document.getElementById('pwa-eye-icon');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+// Mostrar vista correcta según si es PWA o web
+function showCorrectView() {
+    if (isInstalledPWA()) {
+        // Es PWA instalada - mostrar solo login
+        console.log('PWA: Modo app instalada - mostrando solo login');
+        if (pwaLoginView) pwaLoginView.classList.remove('d-none');
+        if (webLandingView) webLandingView.classList.add('d-none');
+        if (featuresSection) featuresSection.classList.add('d-none');
+    } else {
+        // Es navegador web - mostrar landing completa
+        console.log('PWA: Modo navegador - mostrando landing completa');
+        if (pwaLoginView) pwaLoginView.classList.add('d-none');
+        if (webLandingView) webLandingView.classList.remove('d-none');
+        if (featuresSection) featuresSection.classList.remove('d-none');
+    }
+}
+
+// Ejecutar inmediatamente para evitar flash de contenido
+showCorrectView();
+
 // Mostrar banner de iOS si corresponde
 function showIOSBanner() {
     if (isIOS() && !isInstalledPWA() && !localStorage.getItem('ios-banner-dismissed')) {
@@ -510,8 +642,8 @@ window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
 
-    // Mostrar botón de instalación
-    if (installContainer) {
+    // Mostrar botón de instalación (solo si no es PWA)
+    if (installContainer && !isInstalledPWA()) {
         installContainer.classList.remove('d-none');
     }
 });
@@ -547,6 +679,9 @@ window.addEventListener('appinstalled', () => {
 
 // Al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
+    // Verificar vista correcta nuevamente
+    showCorrectView();
+
     // Si es iOS y no está instalado, mostrar banner después de 3 segundos
     if (isIOS() && !isInstalledPWA()) {
         setTimeout(showIOSBanner, 3000);
