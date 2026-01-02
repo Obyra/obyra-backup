@@ -10,6 +10,7 @@ from models import Usuario, AsignacionObra, Obra, RegistroTiempo, OrgMembership
 from services.memberships import get_current_membership
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 from auth import generate_temporary_password, send_new_member_invitation
 
@@ -199,8 +200,11 @@ def usuarios_nuevo():
         flash('Por favor, ingresa un email válido.', 'danger')
         return redirect(url_for('equipos.usuarios_nuevo'))
 
-    # Verificar que el email no exista
-    if Usuario.query.filter_by(email=email).first():
+    # Normalizar email a minúsculas
+    email = email.lower().strip()
+
+    # Verificar que el email no exista (case-insensitive)
+    if Usuario.query.filter(func.lower(Usuario.email) == email).first():
         flash('Ya existe un usuario con ese email.', 'danger')
         return redirect(url_for('equipos.usuarios_nuevo'))
 
@@ -304,8 +308,11 @@ def crear():
             flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
             return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
         
-        # Verificar que el email no exista
-        if Usuario.query.filter_by(email=email).first():
+        # Normalizar email a minúsculas
+        email = email.lower().strip()
+
+        # Verificar que el email no exista (case-insensitive)
+        if Usuario.query.filter(func.lower(Usuario.email) == email).first():
             flash('Ya existe un usuario con ese email.', 'danger')
             return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
 

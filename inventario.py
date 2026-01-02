@@ -228,10 +228,45 @@ def lista():
         )
     ).distinct().all()
 
+    # Construir árbol de categorías con items agrupados (para vista de carpetas)
+    arbol_categorias = []
+    for cat_principal in categorias_nuevas:
+        # Obtener subcategorías
+        subcategorias = InventoryCategory.query.filter_by(
+            company_id=org_id,
+            parent_id=cat_principal.id,
+            is_active=True
+        ).order_by(InventoryCategory.nombre).all()
+
+        # Contar items por subcategoría
+        subcats_con_items = []
+        total_items_categoria = 0
+        for subcat in subcategorias:
+            items_subcat = ItemInventario.query.filter_by(
+                organizacion_id=org_id,
+                categoria_id=subcat.id,
+                activo=True
+            ).count()
+            total_items_categoria += items_subcat
+            subcats_con_items.append({
+                'id': subcat.id,
+                'nombre': subcat.nombre,
+                'items_count': items_subcat
+            })
+
+        if total_items_categoria > 0 or subcats_con_items:
+            arbol_categorias.append({
+                'id': cat_principal.id,
+                'nombre': cat_principal.nombre,
+                'subcategorias': subcats_con_items,
+                'total_items': total_items_categoria
+            })
+
     return render_template('inventario/lista.html',
                          items_con_obras=items_con_obras,
                          categorias=categorias,
                          categorias_nuevas=categorias_nuevas,
+                         arbol_categorias=arbol_categorias,
                          categoria_id=categoria_id,
                          buscar=buscar,
                          stock_bajo=stock_bajo,

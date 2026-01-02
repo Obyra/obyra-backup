@@ -768,6 +768,22 @@ def generar_pdf(id):
         else:
             factor_conversion = cotizacion_dolar
 
+        # Parsear datos_proyecto para obtener información adicional
+        import json
+        datos_proyecto = {}
+        nombre_proyecto = None
+        tipo_construccion = None
+        superficie_m2 = None
+
+        if presupuesto.datos_proyecto:
+            try:
+                datos_proyecto = json.loads(presupuesto.datos_proyecto) if isinstance(presupuesto.datos_proyecto, str) else presupuesto.datos_proyecto
+                nombre_proyecto = datos_proyecto.get('nombre_obra') or datos_proyecto.get('nombre')
+                tipo_construccion = datos_proyecto.get('tipo_construccion')
+                superficie_m2 = datos_proyecto.get('superficie_m2')
+            except (json.JSONDecodeError, TypeError) as e:
+                current_app.logger.warning(f"Error parseando datos_proyecto en PDF: {e}")
+
         try:
             # Renderizar HTML
             html_string = render_template(
@@ -781,7 +797,10 @@ def generar_pdf(id):
                 moneda_alternativa=moneda_alternativa,
                 cotizacion_dolar=cotizacion_dolar,
                 fecha_cotizacion=fecha_cotizacion,
-                factor_conversion=factor_conversion
+                factor_conversion=factor_conversion,
+                nombre_proyecto=nombre_proyecto,
+                tipo_construccion=tipo_construccion,
+                superficie_m2=superficie_m2
             )
         except Exception as render_error:
             current_app.logger.error(f"Error al renderizar template PDF: {render_error}", exc_info=True)
@@ -2129,3 +2148,122 @@ def calcular_etapas_ia():
             'ok': False,
             'error': f'Error al calcular etapas: {str(e)}'
         }), 500
+
+
+# =============================================================================
+# API DE PRECIOS - Datos importados desde Excel
+# =============================================================================
+
+@presupuestos_bp.route('/api/precios/buscar')
+@login_required
+def api_buscar_precios():
+    """
+    Busca articulos y precios en la base de datos de Excel importada.
+
+    Query params:
+        q: Termino de busqueda
+        tipo: Tipo de construccion (Economica, Estandar, Premium)
+        limite: Maximo de resultados (default 20)
+    """
+    try:
+        from services.calculadora_precios import buscar_articulos
+
+        termino = request.args.get('q', '').strip()
+        tipo_construccion = request.args.get('tipo', 'Estandar')
+        limite = min(int(request.args.get('limite', 20)), 100)
+
+        if not termino or len(termino) < 2:
+            return jsonify({'ok': True, 'articulos': [], 'mensaje': 'Ingrese al menos 2 caracteres'})
+
+        articulos = buscar_articulos(
+            termino=termino,
+            tipo_construccion=tipo_construccion,
+            solo_con_precio=True,
+            limite=limite
+        )
+
+        return jsonify({
+            'ok': True,
+            'articulos': articulos,
+            'total': len(articulos),
+            'tipo_construccion': tipo_construccion
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error buscando precios: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/precios/categoria/<path:categoria>')
+@login_required
+def api_precios_categoria(categoria):
+    """
+    Obtiene todos los precios de una categoria especifica.
+    """
+    try:
+        from services.calculadora_precios import obtener_precios_categoria
+
+        tipo_construccion = request.args.get('tipo', 'Estandar')
+
+        articulos = obtener_precios_categoria(
+            categoria=categoria,
+            tipo_construccion=tipo_construccion,
+            solo_con_precio=True
+        )
+
+        return jsonify({
+            'ok': True,
+            'categoria': categoria,
+            'articulos': articulos,
+            'total': len(articulos),
+            'tipo_construccion': tipo_construccion
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo precios de categoria: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/precios/categorias')
+@login_required
+def api_listar_categorias():
+    """
+    Lista todas las categorias disponibles.
+    """
+    try:
+        from services.calculadora_precios import obtener_categorias_disponibles
+
+        tipo_construccion = request.args.get('tipo', 'Estandar')
+        categorias = obtener_categorias_disponibles(tipo_construccion)
+
+        return jsonify({
+            'ok': True,
+            'categorias': categorias,
+            'total': len(categorias),
+            'tipo_construccion': tipo_construccion
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error listando categorias: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/precios/estadisticas')
+@login_required
+def api_estadisticas_precios():
+    """
+    Obtiene estadisticas de los datos de precios importados.
+    """
+    try:
+        from services.calculadora_precios import obtener_estadisticas
+
+        stats = obtener_estadisticas()
+
+        return jsonify({
+            'ok': True,
+            'estadisticas': stats
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo estadisticas: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500

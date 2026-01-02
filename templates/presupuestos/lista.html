@@ -126,13 +126,13 @@
                             {% endif %}
                         </p>
 
-                        <div class="d-flex align-items-center gap-2 mb-3">
-                            <span class="badge bg-light text-dark border">{{ presupuesto.currency }}</span>
-                            {% if presupuesto.currency != 'ARS' and presupuesto.tasa_usd_venta %}
-                                <span class="text-muted small">
-                                    TC {{ presupuesto.exchange_rate_provider|upper if presupuesto.exchange_rate_provider else 'BNA' }}
-                                    {{ presupuesto.tasa_usd_venta|moneda('ARS') }}
-                                </span>
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                            <span class="badge bg-light text-dark border">ARS</span>
+                            {% if presupuesto.exchange_rate_value and presupuesto.exchange_rate_value > 0 %}
+                            <span class="badge bg-light text-dark border">USD</span>
+                            <span class="text-muted small">
+                                TC: ${{ '{:,.0f}'.format(presupuesto.exchange_rate_value) }}
+                            </span>
                             {% endif %}
                             {% if presupuesto.indice_cac_valor %}
                                 <span class="text-muted small">
@@ -144,11 +144,17 @@
                         <div class="row text-center mb-3">
                             <div class="col-6">
                                 <small class="text-muted d-block">Sin IVA</small>
-                                <strong class="text-primary">{{ presupuesto.total_sin_iva|moneda(presupuesto.currency) }}</strong>
+                                <strong class="text-primary">{{ presupuesto.total_sin_iva|moneda('ARS') }}</strong>
+                                {% if presupuesto.exchange_rate_value and presupuesto.exchange_rate_value > 0 %}
+                                <small class="text-muted d-block">{{ (presupuesto.total_sin_iva / presupuesto.exchange_rate_value)|moneda('USD') }}</small>
+                                {% endif %}
                             </div>
                             <div class="col-6">
                                 <small class="text-muted d-block">Total</small>
-                                <strong class="text-success">{{ presupuesto.total_con_iva|moneda(presupuesto.currency) }}</strong>
+                                <strong class="text-success">{{ presupuesto.total_con_iva|moneda('ARS') }}</strong>
+                                {% if presupuesto.exchange_rate_value and presupuesto.exchange_rate_value > 0 %}
+                                <small class="text-muted d-block">{{ (presupuesto.total_con_iva / presupuesto.exchange_rate_value)|moneda('USD') }}</small>
+                                {% endif %}
                             </div>
                         </div>
 

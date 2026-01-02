@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Pagar con Tarjeta - OBYRA Pro{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Encabezado -->
+            <div class="text-center mb-5">
+                <h1 class="display-5 fw-bold text-primary mb-3">
+                    <i class="fas fa-credit-card me-3"></i>Pagar con Tarjeta
+                </h1>
+                <p class="lead text-muted">
+                    Completa tus datos de facturacion para procesar el pago
+                </p>
+            </div>
+
+            <!-- Resumen del plan -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h5 class="fw-bold mb-1">
+                                <i class="fas fa-crown text-warning me-2"></i>Plan OBYRA Pro
+                            </h5>
+                            <p class="text-muted mb-0">Acceso completo a todas las funcionalidades</p>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <div class="precio-resumen">
+                                <span class="display-6 fw-bold text-success">${{ precio_usd|int }}</span>
+                                <span class="text-muted">USD/mes</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulario de Facturacion -->
+            <div class="card shadow border-0 mb-4">
+                <div class="card-header py-3 text-white" style="background: linear-gradient(135deg, #1A374D, #2D5A7B);">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-file-invoice me-2"></i>Datos de Facturacion
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form id="form-pago-tarjeta" method="POST" action="{{ url_for('planes.procesar_pago_tarjeta') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Datos personales / empresa -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="fw-bold text-muted mb-3">
+                                    <i class="fas fa-building me-2"></i>Datos del comprador
+                                </h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Razon Social / Nombre completo <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="razon_social" required
+                                       placeholder="Ej: Constructora ABC S.A.">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">CUIT / DNI <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="cuit_dni" required
+                                       placeholder="Ej: 20-12345678-9">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email de facturacion <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control" name="email" required
+                                       value="{{ current_user.email if current_user.is_authenticated else '' }}"
+                                       placeholder="facturacion@empresa.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Telefono <span class="text-danger">*</span></label>
+                                <input type="tel" class="form-control" name="telefono" required
+                                       placeholder="Ej: 11 1234-5678">
+                            </div>
+                        </div>
+
+                        <!-- Direccion -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="fw-bold text-muted mb-3">
+                                    <i class="fas fa-map-marker-alt me-2"></i>Direccion de facturacion
+                                </h6>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">Direccion <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="direccion" required
+                                       placeholder="Calle y numero">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Codigo Postal <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="codigo_postal" required
+                                       placeholder="Ej: 1425">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Ciudad <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="ciudad" required
+                                       placeholder="Ej: Buenos Aires">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Provincia <span class="text-danger">*</span></label>
+                                <select class="form-select" name="provincia" required>
+                                    <option value="">Seleccionar...</option>
+                                    <option value="Buenos Aires">Buenos Aires</option>
+                                    <option value="CABA">Ciudad Autonoma de Buenos Aires</option>
+                                    <option value="Catamarca">Catamarca</option>
+                                    <option value="Chaco">Chaco</option>
+                                    <option value="Chubut">Chubut</option>
+                                    <option value="Cordoba">Cordoba</option>
+                                    <option value="Corrientes">Corrientes</option>
+                                    <option value="Entre Rios">Entre Rios</option>
+                                    <option value="Formosa">Formosa</option>
+                                    <option value="Jujuy">Jujuy</option>
+                                    <option value="La Pampa">La Pampa</option>
+                                    <option value="La Rioja">La Rioja</option>
+                                    <option value="Mendoza">Mendoza</option>
+                                    <option value="Misiones">Misiones</option>
+                                    <option value="Neuquen">Neuquen</option>
+                                    <option value="Rio Negro">Rio Negro</option>
+                                    <option value="Salta">Salta</option>
+                                    <option value="San Juan">San Juan</option>
+                                    <option value="San Luis">San Luis</option>
+                                    <option value="Santa Cruz">Santa Cruz</option>
+                                    <option value="Santa Fe">Santa Fe</option>
+                                    <option value="Santiago del Estero">Santiago del Estero</option>
+                                    <option value="Tierra del Fuego">Tierra del Fuego</option>
+                                    <option value="Tucuman">Tucuman</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Seccion de tarjeta (placeholder) -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="fw-bold text-muted mb-3">
+                                    <i class="fas fa-credit-card me-2"></i>Datos de la tarjeta
+                                </h6>
+                            </div>
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Proximamente:</strong> Estamos integrando el sistema de pago con tarjeta.
+                                    Por el momento, te recomendamos usar la opcion de <a href="{{ url_for('planes.instrucciones_pago') }}">pago por transferencia</a>.
+                                </div>
+                                <!-- Aqui ira el formulario de tarjeta cuando se integre -->
+                                <div id="card-element" class="form-control p-3 bg-light text-center text-muted">
+                                    <i class="fas fa-lock me-2"></i>
+                                    Formulario de pago seguro - Proximamente
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Terminos -->
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="acepta_terminos" name="acepta_terminos" required>
+                                <label class="form-check-label" for="acepta_terminos">
+                                    Acepto los <a href="{{ url_for('legal.terminos') }}" target="_blank">Terminos y Condiciones</a>
+                                    y la <a href="{{ url_for('legal.privacidad') }}" target="_blank">Politica de Privacidad</a>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Boton de pago -->
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success btn-lg py-3" disabled>
+                                <i class="fas fa-lock me-2"></i>
+                                Pagar ${{ precio_usd|int }} USD
+                            </button>
+                            <small class="text-muted text-center mt-2">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                Pago seguro. 7 dias de garantia de devolucion.
+                            </small>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Alternativa transferencia -->
+            <div class="card bg-light border-0">
+                <div class="card-body p-4 text-center">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-university text-primary me-2"></i>Preferes pagar con transferencia?
+                    </h6>
+                    <p class="text-muted mb-3">
+                        Podes realizar una transferencia bancaria en USD o ARS y enviar el comprobante.
+                    </p>
+                    <a href="{{ url_for('planes.instrucciones_pago') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-exchange-alt me-2"></i>Ver datos bancarios
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.precio-resumen {
+    padding: 0.5rem;
+}
+
+#card-element {
+    min-height: 50px;
+    border: 2px dashed #dee2e6;
+    border-radius: 0.5rem;
+}
+</style>
+{% endblock %}

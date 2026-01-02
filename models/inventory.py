@@ -225,6 +225,11 @@ class ItemInventario(db.Model):
     precio_promedio_usd = db.Column(db.Numeric(10, 2), default=0)  # Precio en USD
     activo = db.Column(db.Boolean, default=True)
 
+    # Tipo de construcción al que aplica (para calculadora IA)
+    aplica_economica = db.Column(db.Boolean, default=False)
+    aplica_estandar = db.Column(db.Boolean, default=False)
+    aplica_premium = db.Column(db.Boolean, default=False)
+
     # Campos para redondeo de compras
     # presentaciones: JSON con tamaños de pack disponibles
     # Formato: [{"size": 20, "name": "Balde 20L", "price": 15000}, {"size": 10, "name": "Balde 10L"}]

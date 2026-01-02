@@ -135,6 +135,9 @@
                                     <span class="input-group-text"><i class="fas fa-lock"></i></span>
                                     <input type="password" class="form-control" id="landing-password" name="password"
                                            placeholder="Tu contrasena" required>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleLandingPassword()">
+                                        <i class="fas fa-eye" id="landing-eye-icon"></i>
+                                    </button>
                                 </div>
                             </div>
                             <div class="mb-3 form-check">
@@ -593,6 +596,21 @@ function isAndroid() {
 function togglePWAPassword() {
     const input = document.getElementById('pwa-password');
     const icon = document.getElementById('pwa-eye-icon');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+// Toggle password en vista Landing/Web
+function toggleLandingPassword() {
+    const input = document.getElementById('landing-password');
+    const icon = document.getElementById('landing-eye-icon');
     if (input.type === 'password') {
         input.type = 'text';
         icon.classList.remove('fa-eye');

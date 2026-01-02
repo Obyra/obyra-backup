@@ -406,19 +406,19 @@
                 <td class="label">Vigencia:</td>
                 <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
             </tr>
-            {% if presupuesto.nombre %}
+            {% if nombre_proyecto %}
             <tr>
                 <td class="label">Proyecto:</td>
-                <td class="value" colspan="3"><strong>{{ presupuesto.nombre }}</strong></td>
+                <td class="value" colspan="3"><strong>{{ nombre_proyecto }}</strong></td>
             </tr>
             {% endif %}
         </table>
     </div>
 
-    {% if presupuesto.tipo_construccion or presupuesto.superficie_m2 %}
+    {% if tipo_construccion or superficie_m2 %}
     <div class="proyecto-info">
-        {% if presupuesto.tipo_construccion %}<strong>Tipo:</strong> {{ presupuesto.tipo_construccion }} | {% endif %}
-        {% if presupuesto.superficie_m2 %}<strong>Superficie:</strong> {{ presupuesto.superficie_m2 }} m² | {% endif %}
+        {% if tipo_construccion %}<strong>Tipo:</strong> {{ tipo_construccion }} | {% endif %}
+        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m² | {% endif %}
         <strong>Moneda:</strong> {{ moneda_principal }}
     </div>
     {% endif %}
@@ -661,19 +661,19 @@
                 <td class="label">Vigencia:</td>
                 <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
             </tr>
-            {% if presupuesto.nombre %}
+            {% if nombre_proyecto %}
             <tr>
                 <td class="label">Proyecto:</td>
-                <td class="value" colspan="3"><strong>{{ presupuesto.nombre }}</strong></td>
+                <td class="value" colspan="3"><strong>{{ nombre_proyecto }}</strong></td>
             </tr>
             {% endif %}
         </table>
     </div>
 
-    {% if presupuesto.tipo_construccion or presupuesto.superficie_m2 %}
+    {% if tipo_construccion or superficie_m2 %}
     <div class="proyecto-info">
-        {% if presupuesto.tipo_construccion %}<strong>Tipo:</strong> {{ presupuesto.tipo_construccion }} | {% endif %}
-        {% if presupuesto.superficie_m2 %}<strong>Superficie:</strong> {{ presupuesto.superficie_m2 }} m² | {% endif %}
+        {% if tipo_construccion %}<strong>Tipo:</strong> {{ tipo_construccion }} | {% endif %}
+        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m² | {% endif %}
         <strong>Moneda:</strong> {{ moneda_alternativa }} (convertido)
     </div>
     {% endif %}

@@ -904,6 +904,34 @@ ETAPA_REGLAS_BASE = {
         'equipos': [],
         'notas': 'Limpieza fina, sellado y entrega de obra.'
     },
+    'seguridad': {
+        'nombre': 'Seguridad',
+        'materiales': [
+            {'codigo': 'MAT-INCENDIO', 'material_key': 'sistema_incendio', 'descripcion': 'Sistema contra incendio (extintores, mangueras)', 'unidad': 'global', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-ALARMA', 'material_key': 'alarma', 'descripcion': 'Sistema de alarmas y detección', 'unidad': 'global', 'coef_por_m2': 0.006}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-SEG', 'descripcion': 'Técnico instalador de seguridad', 'unidad': 'jornal', 'coef_por_m2': 0.10}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-SEGURIDAD', 'descripcion': 'Herramientas especializadas seguridad', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1}
+        ],
+        'notas': 'Equipos contra incendio, alarmas, detectores y maquinaria de edificio.'
+    },
+    'herreria-de-obra': {
+        'nombre': 'Herrería de Obra',
+        'materiales': [
+            {'codigo': 'MAT-HIERRO-ESTRUC', 'material_key': 'hierro_estructural', 'descripcion': 'Perfiles y estructuras metálicas', 'unidad': 'kg', 'coef_por_m2': 2.5},
+            {'codigo': 'MAT-REJAS', 'material_key': 'rejas', 'descripcion': 'Rejas, portones y barandas', 'unidad': 'm²', 'coef_por_m2': 0.15}
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-HERR', 'descripcion': 'Herrero especializado', 'unidad': 'jornal', 'coef_por_m2': 0.14}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-SOLDADORA', 'descripcion': 'Soldadora y amoladora', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Rejas, portones, barandas, escaleras metálicas y estructuras de herrería.'
+    },
 }
 
 STAGE_CALC_CACHE: Dict[str, Any] = {}
