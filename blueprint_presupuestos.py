@@ -2267,3 +2267,164 @@ def api_estadisticas_precios():
     except Exception as e:
         current_app.logger.error(f"Error obteniendo estadisticas: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# CALCULADORA IA MEJORADA - Endpoints
+# ============================================================================
+
+@presupuestos_bp.route('/api/calculadora/etapas')
+@login_required
+def api_calculadora_etapas():
+    """
+    Obtiene la lista de etapas disponibles con cantidad de items.
+    """
+    try:
+        from services.calculadora_ia_mejorada import obtener_resumen_etapas
+
+        etapas = obtener_resumen_etapas()
+
+        return jsonify({
+            'ok': True,
+            'etapas': etapas,
+            'total_etapas': len(etapas)
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo etapas: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/calculadora/calcular-etapa', methods=['POST'])
+@login_required
+def api_calculadora_calcular_etapa():
+    """
+    Calcula el presupuesto para una etapa específica.
+
+    Body JSON:
+        - etapa_slug: slug de la etapa
+        - metros_cuadrados: superficie en m²
+        - tipo_construccion: 'Económica', 'Estándar' o 'Premium'
+        - tipo_cambio_usd: (opcional) tipo de cambio USD/ARS
+    """
+    try:
+        from services.calculadora_ia_mejorada import calcular_etapa_mejorada
+
+        data = request.get_json() or {}
+
+        etapa_slug = data.get('etapa_slug')
+        metros_cuadrados = float(data.get('metros_cuadrados', 0))
+        tipo_construccion = data.get('tipo_construccion', 'Estándar')
+        tipo_cambio_usd = float(data.get('tipo_cambio_usd', 1200))
+
+        if not etapa_slug:
+            return jsonify({'ok': False, 'error': 'etapa_slug es requerido'}), 400
+
+        if metros_cuadrados <= 0:
+            return jsonify({'ok': False, 'error': 'metros_cuadrados debe ser mayor a 0'}), 400
+
+        org_id = get_current_org_id() or 2
+
+        resultado = calcular_etapa_mejorada(
+            etapa_slug=etapa_slug,
+            metros_cuadrados=metros_cuadrados,
+            tipo_construccion=tipo_construccion,
+            org_id=org_id,
+            tipo_cambio_usd=tipo_cambio_usd,
+            incluir_items_detalle=True
+        )
+
+        return jsonify({
+            'ok': True,
+            'calculo': resultado
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error calculando etapa: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/calculadora/calcular-completo', methods=['POST'])
+@login_required
+def api_calculadora_calcular_completo():
+    """
+    Calcula el presupuesto completo para múltiples etapas.
+
+    Body JSON:
+        - metros_cuadrados: superficie en m²
+        - tipo_construccion: 'Económica', 'Estándar' o 'Premium'
+        - etapas: (opcional) lista de slugs de etapas, null = todas
+        - tipo_cambio_usd: (opcional) tipo de cambio USD/ARS
+    """
+    try:
+        from services.calculadora_ia_mejorada import calcular_presupuesto_completo
+
+        data = request.get_json() or {}
+
+        metros_cuadrados = float(data.get('metros_cuadrados', 0))
+        tipo_construccion = data.get('tipo_construccion', 'Estándar')
+        etapas = data.get('etapas')  # None = todas
+        tipo_cambio_usd = float(data.get('tipo_cambio_usd', 1200))
+
+        if metros_cuadrados <= 0:
+            return jsonify({'ok': False, 'error': 'metros_cuadrados debe ser mayor a 0'}), 400
+
+        org_id = get_current_org_id() or 2
+
+        resultado = calcular_presupuesto_completo(
+            metros_cuadrados=metros_cuadrados,
+            tipo_construccion=tipo_construccion,
+            etapas_seleccionadas=etapas,
+            org_id=org_id,
+            tipo_cambio_usd=tipo_cambio_usd
+        )
+
+        return jsonify({
+            'ok': True,
+            'presupuesto': resultado
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error calculando presupuesto completo: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/calculadora/items-etapa/<etapa_slug>')
+@login_required
+def api_calculadora_items_etapa(etapa_slug):
+    """
+    Obtiene los items de inventario para una etapa específica.
+
+    Query params:
+        - tipo: 'Económica', 'Estándar' o 'Premium' (default: Estándar)
+        - limite: máximo de items a retornar (default: 50)
+    """
+    try:
+        from services.calculadora_ia_mejorada import obtener_items_etapa_desde_bd, contar_items_etapa
+
+        tipo_construccion = request.args.get('tipo', 'Estándar')
+        limite = int(request.args.get('limite', 50))
+
+        org_id = get_current_org_id() or 2
+
+        items = obtener_items_etapa_desde_bd(
+            etapa_slug=etapa_slug,
+            tipo_construccion=tipo_construccion,
+            org_id=org_id,
+            limite=limite
+        )
+
+        conteo = contar_items_etapa(etapa_slug, tipo_construccion, org_id)
+
+        return jsonify({
+            'ok': True,
+            'etapa_slug': etapa_slug,
+            'tipo_construccion': tipo_construccion,
+            'items': items,
+            'total_disponibles': conteo['total'],
+            'con_precio': conteo['con_precio']
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo items de etapa: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
