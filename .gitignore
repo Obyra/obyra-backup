@@ -82,3 +82,12 @@ htmlcov/
 # =========================
 # IMPORTANTE: NO ignoramos PNG/JPG del repo
 # (si querés ignorar solo contenido generado por usuario ya está cubierto en /uploads)
+
+# =========================
+# Archivos de importación Excel (temporales)
+# =========================
+CALCULADORA IA-NEGRO.rar
+CALCULADORA IA-NEGRO/
+excel_calculadora/
+data/
+nul
