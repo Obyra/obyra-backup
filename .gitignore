@@ -7,7 +7,13 @@ __pycache__/
 *.pyd
 .venv/
 venv/
+env/
 .python-version
+*.egg
+*.egg-info/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
 
 # =========================
 # Secretos / config runtime
@@ -17,19 +23,22 @@ venv/
 !.env.example
 *.key
 *.pem
+*.crt
+secrets.yaml
+secrets.json
+credentials.json
 
 # =========================
 # Repos/archivos locales app
 # =========================
 # Instancia Flask (runtime data, sqlite locales, media de usuario, etc.)
 instance/
-# Si usás solo una subcarpeta, igual ignoramos todo instance/ arriba.
-# Mantener si querés artefactos generados por Alembic como banderitas locales:
-instance/migrations/*.done
+*.db
+*.sqlite
+*.sqlite3
 
 # Uploads locales (NO ignoramos imágenes del repo, solo las subidas en runtime)
 uploads/
-# Si tenés otro bucket/carpeta de runtime:
 media/
 storage/
 
@@ -40,48 +49,106 @@ node_modules/
 dist/
 build/
 .npm/
+.yarn/
+*.bundle.js
+*.chunk.js
+
+# =========================
+# Docker
+# =========================
+# No ignoramos docker-compose.yml ni Dockerfile (son parte del proyecto)
+docker-compose.override.yml
+.docker/
 
 # =========================
 # Replit
-# (dejamos .replit y replit.nix para reproducir el entorno)
 # =========================
 .repldb
+.replit.nix.lock
 
 # =========================
 # Archivos pesados / dumps
 # =========================
-# Evitar subir dumps/exports
 *.dump
 *.bak
-# SQL sueltos (pero NO bloqueamos migrations/*.sql si algún día los usás)
 *.sql
 !migrations/**/*.sql
+*.tar
+*.tar.gz
+*.zip
+*.rar
+*.7z
 
 # =========================
 # SO / editores
 # =========================
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+nul
+
+# Linux
+*~
+.directory
+
+# Editores
 .vscode/
 .idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.settings/
 
 # =========================
 # Tests / reports
 # =========================
 .coverage
+coverage.xml
+*.cover
 htmlcov/
 .pytest_cache/
+.tox/
+.nox/
+nosetests.xml
+test-results/
+junit.xml
 
 # =========================
 # Logs
 # =========================
 *.log
+logs/
+*.out
 
 # =========================
-# Imágenes del proyecto
+# Caché y temporales
 # =========================
-# IMPORTANTE: NO ignoramos PNG/JPG del repo
-# (si querés ignorar solo contenido generado por usuario ya está cubierto en /uploads)
+.cache/
+*.tmp
+*.temp
+*.pid
+*.seed
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# =========================
+# Jupyter Notebooks
+# =========================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
 
 # =========================
 # Archivos de importación Excel (temporales)
@@ -90,4 +157,12 @@ CALCULADORA IA-NEGRO.rar
 CALCULADORA IA-NEGRO/
 excel_calculadora/
 data/
-nul
+scripts/import_*.py
+scripts/generate_*.py
+
+# =========================
+# Archivos generados
+# =========================
+*.min.js
+*.min.css
+*.map
