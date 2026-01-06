@@ -85,7 +85,7 @@ class BillingConfig:
     BANK_TRANSFER_ENABLED: bool = True
 
     # Datos del titular
-    BANK_HOLDER_NAME: str = 'Brendan Ezequiel Arrastia'
+    BANK_HOLDER_NAME: str = 'Brenda Priscila Koldobsky'
     BANK_HOLDER_DNI: str = '34722707'
     BANK_NAME: str = 'Banco Galicia'
 
