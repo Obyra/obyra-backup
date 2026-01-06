@@ -11,7 +11,22 @@ from config.billing_config import BILLING
 
 planes_bp = Blueprint('planes', __name__, url_prefix='/planes')
 
+# Features comunes a todos los planes (sistema completo)
+FEATURES_SISTEMA_COMPLETO = [
+    'Calculadora IA completa',
+    'Presupuestos ilimitados',
+    'Gestion de obras',
+    'Gestion de clientes',
+    'Inventario completo',
+    'Gestion de equipos Leiten',
+    'Modo offline para operarios',
+    'Reportes completos',
+    'Soporte por email y WhatsApp',
+    'Actualizaciones incluidas'
+]
+
 # Configuración de planes de suscripción
+# La única diferencia entre planes es la cantidad de usuarios
 PLANES_CONFIG = {
     'prueba': {
         'nombre': 'Prueba Gratuita',
@@ -19,25 +34,17 @@ PLANES_CONFIG = {
         'precio_mensual_usd': Decimal('0.00'),
         'max_usuarios': 5,
         'duracion_dias': 30,
-        'descripcion': '30 días de prueba gratuita',
-        'features': ['Acceso limitado', 'Hasta 5 usuarios', 'Soporte por email']
+        'descripcion': '30 dias de prueba gratuita',
+        'features': ['Sistema completo por 30 dias', 'Hasta 5 usuarios', 'Soporte por email']
     },
     'estandar': {
-        'nombre': 'Plan Estándar',
+        'nombre': 'Plan Estandar',
         'precio_usd': Decimal('150.00'),
         'precio_mensual_usd': Decimal('150.00'),
         'max_usuarios': 5,
-        'duracion_dias': 365,  # Plan anual
-        'descripcion': 'Ideal para equipos pequeños',
-        'features': [
-            'Hasta 5 usuarios',
-            'Calculadora IA completa',
-            'Presupuestos ilimitados',
-            'Gestión de obras',
-            'Inventario básico',
-            'Soporte por email y WhatsApp',
-            'Actualizaciones incluidas'
-        ]
+        'duracion_dias': 365,
+        'descripcion': 'Ideal para equipos pequenos',
+        'features': FEATURES_SISTEMA_COMPLETO + ['Hasta 5 usuarios']
     },
     'premium': {
         'nombre': 'Plan Premium',
@@ -46,16 +53,8 @@ PLANES_CONFIG = {
         'max_usuarios': 10,
         'duracion_dias': 365,
         'descripcion': 'Para empresas en crecimiento',
-        'features': [
-            'Hasta 10 usuarios',
-            'Todo lo del Plan Estándar',
-            'Reportes avanzados',
-            'Gestión de equipos Leiten',
-            'Modo offline para operarios',
-            'Soporte prioritario 24hs',
-            'Capacitación personalizada'
-        ],
-        'popular': True  # Marcar como más popular
+        'features': FEATURES_SISTEMA_COMPLETO + ['Hasta 10 usuarios'],
+        'popular': True
     },
     'full_premium': {
         'nombre': 'Plan Full Premium',
@@ -64,15 +63,7 @@ PLANES_CONFIG = {
         'max_usuarios': 20,
         'duracion_dias': 365,
         'descripcion': 'Para grandes constructoras',
-        'features': [
-            'Hasta 20 usuarios',
-            'Todo lo del Plan Premium',
-            'Multi-organización',
-            'API de integración',
-            'Dashboard ejecutivo',
-            'Soporte dedicado',
-            'Consultoría mensual incluida'
-        ]
+        'features': FEATURES_SISTEMA_COMPLETO + ['Hasta 20 usuarios']
     }
 }
 
