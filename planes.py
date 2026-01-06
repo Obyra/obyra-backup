@@ -6,11 +6,77 @@ import os
 from werkzeug.utils import secure_filename
 from app import db
 from models import Usuario
+from models.core import Organizacion
 from config.billing_config import BILLING
 
 planes_bp = Blueprint('planes', __name__, url_prefix='/planes')
 
-# Precio del plan en USD
+# Configuración de planes de suscripción
+PLANES_CONFIG = {
+    'prueba': {
+        'nombre': 'Prueba Gratuita',
+        'precio_usd': Decimal('0.00'),
+        'precio_mensual_usd': Decimal('0.00'),
+        'max_usuarios': 5,
+        'duracion_dias': 30,
+        'descripcion': '30 días de prueba gratuita',
+        'features': ['Acceso limitado', 'Hasta 5 usuarios', 'Soporte por email']
+    },
+    'estandar': {
+        'nombre': 'Plan Estándar',
+        'precio_usd': Decimal('150.00'),
+        'precio_mensual_usd': Decimal('150.00'),
+        'max_usuarios': 5,
+        'duracion_dias': 365,  # Plan anual
+        'descripcion': 'Ideal para equipos pequeños',
+        'features': [
+            'Hasta 5 usuarios',
+            'Calculadora IA completa',
+            'Presupuestos ilimitados',
+            'Gestión de obras',
+            'Inventario básico',
+            'Soporte por email y WhatsApp',
+            'Actualizaciones incluidas'
+        ]
+    },
+    'premium': {
+        'nombre': 'Plan Premium',
+        'precio_usd': Decimal('250.00'),
+        'precio_mensual_usd': Decimal('250.00'),
+        'max_usuarios': 10,
+        'duracion_dias': 365,
+        'descripcion': 'Para empresas en crecimiento',
+        'features': [
+            'Hasta 10 usuarios',
+            'Todo lo del Plan Estándar',
+            'Reportes avanzados',
+            'Gestión de equipos Leiten',
+            'Modo offline para operarios',
+            'Soporte prioritario 24hs',
+            'Capacitación personalizada'
+        ],
+        'popular': True  # Marcar como más popular
+    },
+    'full_premium': {
+        'nombre': 'Plan Full Premium',
+        'precio_usd': Decimal('300.00'),
+        'precio_mensual_usd': Decimal('300.00'),
+        'max_usuarios': 20,
+        'duracion_dias': 365,
+        'descripcion': 'Para grandes constructoras',
+        'features': [
+            'Hasta 20 usuarios',
+            'Todo lo del Plan Premium',
+            'Multi-organización',
+            'API de integración',
+            'Dashboard ejecutivo',
+            'Soporte dedicado',
+            'Consultoría mensual incluida'
+        ]
+    }
+}
+
+# Precio legacy (mantener compatibilidad)
 PLAN_PRECIO_USD = Decimal('250.00')
 
 
@@ -70,12 +136,64 @@ def mostrar_planes():
     """Página de planes de suscripción"""
     # Obtener cotización actual
     cotizacion = obtener_cotizacion_bna()
-    precio_ars = PLAN_PRECIO_USD * Decimal(str(cotizacion['value']))
+
+    # Calcular precios en ARS para cada plan
+    planes_con_precios = {}
+    for key, plan in PLANES_CONFIG.items():
+        if key == 'prueba':
+            continue  # No mostrar plan de prueba en la selección
+        precio_ars = plan['precio_usd'] * Decimal(str(cotizacion['value']))
+        planes_con_precios[key] = {
+            **plan,
+            'precio_ars': float(precio_ars.quantize(Decimal('0.01'))),
+            'precio_usd': float(plan['precio_usd'])
+        }
+
+    # Obtener plan actual de la organización del usuario
+    plan_actual = None
+    org_info = None
+    if current_user.is_authenticated and current_user.organizacion:
+        org = current_user.organizacion
+        plan_actual = org.plan_tipo or 'prueba'
+        org_info = {
+            'nombre': org.nombre,
+            'plan_tipo': plan_actual,
+            'max_usuarios': org.max_usuarios or 5,
+            'usuarios_actuales': org.usuarios_activos_count
+        }
 
     return render_template('planes/planes.html',
+        planes=planes_con_precios,
+        plan_actual=plan_actual,
+        org_info=org_info,
+        cotizacion=cotizacion,
+        # Legacy - mantener compatibilidad
         precio_usd=float(PLAN_PRECIO_USD),
+        precio_ars=float(PLAN_PRECIO_USD * Decimal(str(cotizacion['value'])))
+    )
+
+
+@planes_bp.route('/seleccionar/<plan_tipo>')
+@login_required
+def seleccionar_plan(plan_tipo):
+    """Seleccionar un plan y redirigir a instrucciones de pago"""
+    if plan_tipo not in PLANES_CONFIG or plan_tipo == 'prueba':
+        flash('Plan no válido.', 'error')
+        return redirect(url_for('planes.mostrar_planes'))
+
+    plan = PLANES_CONFIG[plan_tipo]
+    cotizacion = obtener_cotizacion_bna()
+    precio_ars = plan['precio_usd'] * Decimal(str(cotizacion['value']))
+
+    return render_template('planes/instrucciones_pago.html',
+        plan_seleccionado=plan_tipo,
+        plan_nombre=plan['nombre'],
+        precio_usd=float(plan['precio_usd']),
         precio_ars=float(precio_ars.quantize(Decimal('0.01'))),
-        cotizacion=cotizacion
+        max_usuarios=plan['max_usuarios'],
+        cotizacion=cotizacion,
+        bank_info=BILLING.get_bank_info(),
+        user=current_user
     )
 
 

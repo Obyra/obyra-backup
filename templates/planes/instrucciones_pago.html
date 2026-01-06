@@ -22,14 +22,20 @@
                     <div class="row align-items-center">
                         <div class="col-md-8">
                             <h5 class="fw-bold mb-1">
-                                <i class="fas fa-crown text-warning me-2"></i>Plan OBYRA Pro
+                                <i class="fas fa-crown text-warning me-2"></i>{{ plan_nombre if plan_nombre else 'Plan OBYRA Pro' }}
                             </h5>
-                            <p class="text-muted mb-0">Acceso completo a todas las funcionalidades</p>
+                            <p class="text-muted mb-0">
+                                {% if max_usuarios %}
+                                Hasta {{ max_usuarios }} usuarios - Plan anual
+                                {% else %}
+                                Acceso completo a todas las funcionalidades
+                                {% endif %}
+                            </p>
                         </div>
                         <div class="col-md-4 text-md-end">
                             <div class="precio-resumen">
                                 <span class="display-6 fw-bold text-success">${{ precio_usd|int }}</span>
-                                <span class="text-muted">USD/mes</span>
+                                <span class="text-muted">USD/mes + IVA</span>
                             </div>
                         </div>
                     </div>

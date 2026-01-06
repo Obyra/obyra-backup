@@ -845,6 +845,16 @@ def usuarios_admin():
     admins_count = sum(1 for miembro in miembros if miembro.role == 'admin')
     usuarios_google = sum(1 for miembro in miembros if miembro.usuario.auth_provider == 'google')
 
+    # Información del límite de usuarios del plan
+    org = Organizacion.query.get(membership.org_id)
+    limite_info = {
+        'max_usuarios': org.max_usuarios or 5 if org else 5,
+        'usuarios_actuales': org.usuarios_activos_count if org else 0,
+        'puede_agregar': org.puede_agregar_usuario() if org else True,
+        'disponibles': org.usuarios_disponibles() if org else 5,
+        'plan_tipo': org.plan_tipo or 'prueba' if org else 'prueba'
+    }
+
     return render_template(
         'auth/usuarios_admin.html',
         miembros=miembros,
@@ -855,6 +865,7 @@ def usuarios_admin():
         rol_filtro=rol_filtro,
         auth_provider_filtro=auth_provider_filtro,
         buscar=buscar,
+        limite_info=limite_info,
     )
 
 @auth_bp.route('/usuarios/integrantes', methods=['POST'])
@@ -1142,19 +1153,32 @@ def invitar_usuario():
     if not current_user.es_admin():
         flash('No tienes permisos para invitar usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    # Verificar límite de usuarios del plan
+    org = current_user.organizacion
+    if org and not org.puede_agregar_usuario():
+        max_usuarios = org.max_usuarios or 5
+        flash(f'Has alcanzado el límite de {max_usuarios} usuarios de tu plan. '
+              f'Actualiza tu plan para agregar más usuarios.', 'warning')
+        return redirect(url_for('planes.mostrar_planes'))
+
     if request.method == 'POST':
         email = request.form.get('email')
         rol = request.form.get('rol', 'operario')
         if not email:
             flash('Por favor, ingresa un email válido.', 'danger')
             return render_template('auth/invitar.html')
-        
+
+        # Re-verificar límite antes de crear
+        if org and not org.puede_agregar_usuario():
+            flash(f'Límite de usuarios alcanzado. Actualiza tu plan para continuar.', 'warning')
+            return redirect(url_for('planes.mostrar_planes'))
+
         usuario_existente = Usuario.query.filter_by(email=email.lower()).first()
         if usuario_existente:
             flash('Este email ya está registrado en el sistema.', 'danger')
             return render_template('auth/invitar.html')
-        
+
         try:
             nuevo_usuario = Usuario(
                 nombre='Usuario',

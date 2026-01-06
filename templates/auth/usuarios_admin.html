@@ -29,6 +29,52 @@
         </div>
     </div>
 
+    <!-- Alerta de límite de usuarios -->
+    {% if limite_info and not limite_info.puede_agregar %}
+    <div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+        <i class="fas fa-exclamation-triangle me-3 fa-2x"></i>
+        <div>
+            <strong>Limite de usuarios alcanzado</strong><br>
+            Tu plan {{ limite_info.plan_tipo|title }} permite hasta {{ limite_info.max_usuarios }} usuarios.
+            <a href="{{ url_for('planes.mostrar_planes') }}" class="alert-link">Actualizar plan</a> para agregar mas usuarios.
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Barra de progreso de usuarios -->
+    {% if limite_info %}
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span>
+                    <i class="fas fa-users me-2"></i>
+                    <strong>Usuarios:</strong> {{ limite_info.usuarios_actuales }} / {{ limite_info.max_usuarios }}
+                </span>
+                <span class="badge bg-{{ 'success' if limite_info.puede_agregar else 'danger' }}">
+                    Plan {{ limite_info.plan_tipo|title }}
+                </span>
+            </div>
+            <div class="progress" style="height: 10px;">
+                {% set porcentaje = (limite_info.usuarios_actuales / limite_info.max_usuarios * 100)|int %}
+                <div class="progress-bar bg-{{ 'success' if porcentaje < 80 else ('warning' if porcentaje < 100 else 'danger') }}"
+                     role="progressbar"
+                     style="width: {{ porcentaje }}%"
+                     aria-valuenow="{{ limite_info.usuarios_actuales }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ limite_info.max_usuarios }}">
+                </div>
+            </div>
+            <small class="text-muted">
+                {% if limite_info.disponibles > 0 %}
+                    Puedes agregar {{ limite_info.disponibles }} usuario(s) mas
+                {% else %}
+                    <a href="{{ url_for('planes.mostrar_planes') }}">Actualiza tu plan</a> para agregar mas usuarios
+                {% endif %}
+            </small>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Estadísticas rápidas -->
     <div class="row mb-4">
         <div class="col-md-3">

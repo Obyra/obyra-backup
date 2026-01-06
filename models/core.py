@@ -28,6 +28,12 @@ class Organizacion(db.Model):
     token_invitacion = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     activa = db.Column(db.Boolean, default=True)
 
+    # Plan de suscripción
+    plan_tipo = db.Column(db.String(50), default='prueba')  # prueba, estandar, premium, full_premium
+    max_usuarios = db.Column(db.Integer, default=5)  # Límite de usuarios según plan
+    fecha_inicio_plan = db.Column(db.DateTime)  # Fecha de inicio del plan pago
+    fecha_fin_plan = db.Column(db.DateTime)  # Fecha de vencimiento del plan
+
     # Relaciones
     usuarios = db.relationship(
         'Usuario',
@@ -73,6 +79,34 @@ class Organizacion(db.Model):
     def link_invitacion(self):
         from flask import url_for
         return url_for('auth.unirse_organizacion', token=self.token_invitacion, _external=True)
+
+    @property
+    def usuarios_activos_count(self):
+        """Cuenta usuarios activos de la organización"""
+        return self.usuarios.filter_by(activo=True).count()
+
+    def puede_agregar_usuario(self):
+        """Verifica si se puede agregar un nuevo usuario según el límite del plan"""
+        return self.usuarios_activos_count < (self.max_usuarios or 5)
+
+    def usuarios_disponibles(self):
+        """Retorna cuántos usuarios más se pueden agregar"""
+        max_u = self.max_usuarios or 5
+        return max(0, max_u - self.usuarios_activos_count)
+
+    def plan_info(self):
+        """Retorna información del plan actual"""
+        from planes import PLANES_CONFIG
+        plan = PLANES_CONFIG.get(self.plan_tipo, PLANES_CONFIG['prueba'])
+        return {
+            'tipo': self.plan_tipo,
+            'nombre': plan['nombre'],
+            'precio_usd': plan['precio_usd'],
+            'max_usuarios': self.max_usuarios or plan['max_usuarios'],
+            'usuarios_actuales': self.usuarios_activos_count,
+            'usuarios_disponibles': self.usuarios_disponibles(),
+            'puede_agregar': self.puede_agregar_usuario()
+        }
 
 
 class Usuario(UserMixin, db.Model):

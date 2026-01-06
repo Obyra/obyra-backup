@@ -1,284 +1,208 @@
 {% extends "base.html" %}
 
-{% block title %}Plan OBYRA Pro - Gestion de Obras Inteligente{% endblock %}
+{% block title %}Planes de Suscripcion - OBYRA{% endblock %}
 
 {% block content %}
 <div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-lg-10">
+        <div class="col-lg-12">
             <!-- Encabezado -->
             <div class="text-center mb-5">
                 <h1 class="display-4 fw-bold text-primary mb-3">
-                    <i class="fas fa-rocket me-3"></i>OBYRA Pro
+                    <i class="fas fa-rocket me-3"></i>Planes OBYRA
                 </h1>
                 <p class="lead text-muted">
-                    La plataforma integral para gestionar tu empresa constructora de forma inteligente
+                    Elige el plan que mejor se adapte a tu empresa constructora
                 </p>
+                {% if org_info %}
+                <div class="alert alert-info d-inline-block">
+                    <i class="fas fa-building me-2"></i>
+                    <strong>{{ org_info.nombre }}</strong> -
+                    Plan actual: <span class="badge bg-primary">{{ org_info.plan_tipo|title }}</span>
+                    ({{ org_info.usuarios_actuales }}/{{ org_info.max_usuarios }} usuarios)
+                </div>
+                {% endif %}
             </div>
 
-            <!-- Plan Unico -->
-            <div class="row justify-content-center mb-5">
-                <div class="col-lg-8">
-                    <div class="card shadow-lg border-0 overflow-hidden">
-                        <!-- Header con precio -->
-                        <div class="card-header text-white text-center py-5"
-                             style="background: linear-gradient(135deg, #1A374D, #2D5A7B);">
-                            <span class="badge bg-success text-white px-3 py-2 rounded-pill mb-3">
-                                <i class="fas fa-star me-1"></i>Plan Completo
-                            </span>
-                            <h2 class="card-title mb-3 fw-bold">
-                                <i class="fas fa-crown me-2"></i>OBYRA Pro
-                            </h2>
-                            <div class="precio-container">
+            <!-- Cotizacion del dia -->
+            <div class="text-center mb-4">
+                <span class="badge bg-secondary px-3 py-2">
+                    <i class="fas fa-dollar-sign me-1"></i>
+                    Cotizacion USD/ARS: ${{ "{:,.2f}".format(cotizacion.value) }}
+                    <small>({{ cotizacion.as_of_date }})</small>
+                </span>
+            </div>
+
+            <!-- Planes -->
+            <div class="row g-4 justify-content-center">
+                {% for plan_key, plan in planes.items() %}
+                <div class="col-lg-4">
+                    <div class="card h-100 shadow-lg border-0 {% if plan.get('popular') %}border-primary border-3{% endif %}">
+                        {% if plan.get('popular') %}
+                        <div class="card-header bg-primary text-white text-center py-2">
+                            <i class="fas fa-star me-1"></i> MAS POPULAR
+                        </div>
+                        {% endif %}
+
+                        <!-- Header del plan -->
+                        <div class="card-header text-center py-4
+                            {% if plan_key == 'estandar' %}bg-success text-white
+                            {% elif plan_key == 'premium' %}bg-primary text-white
+                            {% else %}bg-dark text-white{% endif %}">
+                            <h3 class="card-title mb-2 fw-bold">{{ plan.nombre }}</h3>
+                            <p class="mb-3 opacity-75">{{ plan.descripcion }}</p>
+
+                            <div class="precio-container p-3 rounded" style="background: rgba(255,255,255,0.15);">
                                 <div class="d-flex justify-content-center align-items-baseline">
-                                    <span class="display-3 fw-bold">${{ precio_usd|int }}</span>
-                                    <span class="fs-4 ms-2">USD/mes</span>
+                                    <span class="display-4 fw-bold">${{ plan.precio_usd|int }}</span>
+                                    <span class="fs-5 ms-2">USD/mes</span>
                                 </div>
-                                <div class="precio-ars mt-3 p-2 rounded" style="background: rgba(76,175,80,0.2);">
-                                    <span class="fs-5">
-                                        <i class="fas fa-exchange-alt me-2"></i>
-                                        Equivalente: <strong>${{ "{:,.0f}".format(precio_ars) }}</strong> ARS
+                                <div class="mt-2">
+                                    <small class="opacity-75">+ IVA</small>
+                                </div>
+                                <hr class="my-2 opacity-50">
+                                <div>
+                                    <span class="fs-6">
+                                        ${{ "{:,.0f}".format(plan.precio_ars) }} ARS/mes
                                     </span>
-                                    <br>
-                                    <small class="opacity-75">
-                                        Cotizacion BNA: ${{ "{:,.2f}".format(cotizacion.value) }} ({{ cotizacion.as_of_date }})
-                                    </small>
                                 </div>
-                                <p class="opacity-75 mb-0 mt-2">
-                                    <i class="fas fa-tag me-1"></i>Precio por organizacion
-                                </p>
                             </div>
                         </div>
 
-                        <div class="card-body p-5">
-                            <!-- Usuarios incluidos -->
-                            <div class="text-center mb-4 p-4 bg-light rounded-3">
-                                <h4 class="text-primary mb-3">
-                                    <i class="fas fa-users me-2"></i>Equipo Incluido
-                                </h4>
-                                <div class="row g-3">
-                                    <div class="col-md-4">
-                                        <div class="border rounded p-3 bg-white">
-                                            <i class="fas fa-user-tie fa-2x text-primary mb-2"></i>
-                                            <h5 class="mb-1">1 Administrador</h5>
-                                            <small class="text-muted">Control total</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="border rounded p-3 bg-white">
-                                            <i class="fas fa-hard-hat fa-2x text-success mb-2"></i>
-                                            <h5 class="mb-1">PM / Operarios</h5>
-                                            <small class="text-muted">Gestion de obras</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="border rounded p-3 bg-white">
-                                            <i class="fas fa-user-plus fa-2x text-info mb-2"></i>
-                                            <h5 class="mb-1">+10 Usuarios</h5>
-                                            <small class="text-muted">Equipo completo</small>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="card-body p-4">
+                            <!-- Limite de usuarios destacado -->
+                            <div class="text-center mb-4 p-3 bg-light rounded-3">
+                                <i class="fas fa-users fa-2x text-primary mb-2"></i>
+                                <h4 class="mb-0">Hasta {{ plan.max_usuarios }} usuarios</h4>
                             </div>
 
-                            <!-- Caracteristicas principales -->
-                            <h4 class="text-primary fw-bold mb-4">
-                                <i class="fas fa-check-double me-2"></i>Todo lo que necesitas:
-                            </h4>
-
-                            <div class="row g-4">
-                                <div class="col-md-6">
-                                    <ul class="list-unstyled">
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-brain fa-lg text-primary me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Calculadora IA Avanzada</strong>
-                                                <p class="text-muted small mb-0">Presupuestos inteligentes con IA que calcula materiales y mano de obra automaticamente</p>
-                                            </div>
-                                        </li>
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-infinity fa-lg text-success me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Presupuestos Ilimitados</strong>
-                                                <p class="text-muted small mb-0">Crea todos los presupuestos que necesites sin restricciones</p>
-                                            </div>
-                                        </li>
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-file-pdf fa-lg text-danger me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Exportacion PDF Profesional</strong>
-                                                <p class="text-muted small mb-0">Genera presupuestos en USD y ARS listos para enviar a clientes</p>
-                                            </div>
-                                        </li>
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-boxes fa-lg text-warning me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Gestion de Inventario</strong>
-                                                <p class="text-muted small mb-0">Control de stock, traslados y consumo por obra en tiempo real</p>
-                                            </div>
-                                        </li>
-                                    </ul>
-                                </div>
-                                <div class="col-md-6">
-                                    <ul class="list-unstyled">
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-building fa-lg text-info me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Gestion de Obras Completa</strong>
-                                                <p class="text-muted small mb-0">Seguimiento de tareas, avances, equipo asignado y timeline</p>
-                                            </div>
-                                        </li>
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-shopping-cart fa-lg text-purple me-3 mt-1" style="color: #6f42c1;"></i>
-                                            <div>
-                                                <strong>Requerimientos de Compra</strong>
-                                                <p class="text-muted small mb-0">Solicita materiales desde obra con flujo de aprobacion</p>
-                                            </div>
-                                        </li>
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-chart-line fa-lg text-success me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Reportes y Estadisticas</strong>
-                                                <p class="text-muted small mb-0">Dashboard con metricas de rentabilidad, costos y rendimiento</p>
-                                            </div>
-                                        </li>
-                                        <li class="mb-3 d-flex align-items-start">
-                                            <i class="fas fa-headset fa-lg text-primary me-3 mt-1"></i>
-                                            <div>
-                                                <strong>Soporte Prioritario</strong>
-                                                <p class="text-muted small mb-0">Atencion por WhatsApp y email con respuesta en 24hs</p>
-                                            </div>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-
-                            <!-- Beneficios adicionales -->
-                            <div class="mt-4 p-4 bg-success bg-opacity-10 rounded-3">
-                                <h5 class="text-success mb-3">
-                                    <i class="fas fa-gift me-2"></i>Beneficios Exclusivos
-                                </h5>
-                                <div class="row g-2">
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-check text-success me-2"></i>
-                                            <span>Actualizaciones gratuitas</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-check text-success me-2"></i>
-                                            <span>Backup automatico diario</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-check text-success me-2"></i>
-                                            <span>Capacitacion inicial incluida</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-check text-success me-2"></i>
-                                            <span>Sin contratos a largo plazo</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-check text-success me-2"></i>
-                                            <span>Precios CAC actualizados</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-check text-success me-2"></i>
-                                            <span>Cotizacion USD/ARS en tiempo real</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <!-- Features -->
+                            <ul class="list-unstyled">
+                                {% for feature in plan.features %}
+                                <li class="mb-2 d-flex align-items-start">
+                                    <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                    <span>{{ feature }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
                         </div>
 
                         <div class="card-footer bg-transparent p-4">
-                            <div class="d-grid gap-3">
-                                <!-- Opcion 1: Pagar con Tarjeta -->
-                                <a href="{{ url_for('planes.pago_tarjeta') }}"
-                                   class="btn btn-success btn-lg py-3">
-                                    <i class="fas fa-credit-card me-2"></i>
-                                    Pagar con Tarjeta
-                                </a>
-                                <!-- Opcion 2: Pagar con Transferencia -->
-                                <a href="{{ url_for('planes.instrucciones_pago') }}"
-                                   class="btn btn-outline-primary btn-lg py-3">
-                                    <i class="fas fa-university me-2"></i>
-                                    Pagar con Transferencia
-                                </a>
-                                <div class="text-center">
-                                    <span class="badge bg-light text-dark me-2">
-                                        <i class="fas fa-dollar-sign me-1"></i>USD
-                                    </span>
-                                    <span class="badge bg-light text-dark">
-                                        <i class="fas fa-peso-sign me-1"></i>ARS
-                                    </span>
-                                </div>
-                                <p class="text-center text-muted small mb-0">
-                                    <i class="fas fa-shield-alt me-1"></i>
-                                    7 dias de garantia de devolucion
-                                </p>
-                            </div>
+                            {% if plan_actual == plan_key %}
+                            <button class="btn btn-outline-secondary btn-lg w-100" disabled>
+                                <i class="fas fa-check me-2"></i>Plan Actual
+                            </button>
+                            {% else %}
+                            <a href="{{ url_for('planes.seleccionar_plan', plan_tipo=plan_key) }}"
+                               class="btn {% if plan.get('popular') %}btn-primary{% else %}btn-outline-primary{% endif %} btn-lg w-100">
+                                <i class="fas fa-arrow-right me-2"></i>Seleccionar Plan
+                            </a>
+                            {% endif %}
                         </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Tabla comparativa -->
+            <div class="card mt-5 shadow-sm">
+                <div class="card-header bg-light">
+                    <h4 class="mb-0"><i class="fas fa-table me-2"></i>Comparativa de Planes</h4>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Caracteristica</th>
+                                    <th class="text-center">Estandar</th>
+                                    <th class="text-center bg-primary">Premium</th>
+                                    <th class="text-center">Full Premium</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><i class="fas fa-users me-2"></i>Usuarios</td>
+                                    <td class="text-center">5</td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>10</strong></td>
+                                    <td class="text-center">20</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-dollar-sign me-2"></i>Precio mensual</td>
+                                    <td class="text-center">USD 150</td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>USD 250</strong></td>
+                                    <td class="text-center">USD 300</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-brain me-2"></i>Calculadora IA</td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-file-alt me-2"></i>Presupuestos ilimitados</td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-building me-2"></i>Gestion de obras</td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-boxes me-2"></i>Inventario</td>
+                                    <td class="text-center">Basico</td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>Avanzado</strong></td>
+                                    <td class="text-center"><strong>Avanzado</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-tools me-2"></i>Equipos Leiten</td>
+                                    <td class="text-center"><i class="fas fa-times text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline</td>
+                                    <td class="text-center"><i class="fas fa-times text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-chart-line me-2"></i>Reportes</td>
+                                    <td class="text-center">Basicos</td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>Avanzados</strong></td>
+                                    <td class="text-center"><strong>Ejecutivos</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-headset me-2"></i>Soporte</td>
+                                    <td class="text-center">Email + WhatsApp</td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>Prioritario 24hs</strong></td>
+                                    <td class="text-center"><strong>Dedicado</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-chalkboard-teacher me-2"></i>Capacitacion</td>
+                                    <td class="text-center"><i class="fas fa-times text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><strong>+ Consultoria</strong></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
 
-            <!-- Comparativa con competencia -->
-            <div class="row mb-5">
-                <div class="col-12">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body p-4">
-                            <h4 class="text-center mb-4">
-                                <i class="fas fa-balance-scale me-2 text-primary"></i>
-                                Por que elegir OBYRA?
-                            </h4>
-                            <div class="row g-4 text-center">
-                                <div class="col-md-4">
-                                    <div class="p-3">
-                                        <i class="fas fa-clock fa-3x text-primary mb-3"></i>
-                                        <h5>Ahorra Tiempo</h5>
-                                        <p class="text-muted mb-0">Presupuestos que tomaban horas, ahora en minutos con nuestra IA</p>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="p-3">
-                                        <i class="fas fa-hand-holding-usd fa-3x text-success mb-3"></i>
-                                        <h5>Reduce Costos</h5>
-                                        <p class="text-muted mb-0">Control preciso de inventario y materiales evita desperdicios</p>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="p-3">
-                                        <i class="fas fa-trophy fa-3x text-warning mb-3"></i>
-                                        <h5>Gana Mas Obras</h5>
-                                        <p class="text-muted mb-0">Presupuestos profesionales que impresionan a tus clientes</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Garantia y FAQ -->
-            <div class="row g-4">
+            <!-- Metodos de pago -->
+            <div class="row mt-5 g-4">
                 <div class="col-md-6">
                     <div class="card bg-light border-0 h-100">
                         <div class="card-body text-center p-4">
-                            <i class="fas fa-shield-alt fa-3x text-success mb-3"></i>
-                            <h5 class="fw-bold mb-3">Garantia de Satisfaccion</h5>
+                            <i class="fas fa-credit-card fa-3x text-primary mb-3"></i>
+                            <h5 class="fw-bold mb-3">Pago con Tarjeta</h5>
                             <p class="text-muted mb-0">
-                                Si no estas completamente satisfecho con OBYRA,
-                                te devolvemos el 100% de tu dinero en los primeros 7 dias.
-                                Sin preguntas, sin complicaciones.
+                                Aceptamos todas las tarjetas de credito y debito.
+                                Pago seguro procesado por MercadoPago.
                             </p>
                         </div>
                     </div>
@@ -286,18 +210,27 @@
                 <div class="col-md-6">
                     <div class="card bg-light border-0 h-100">
                         <div class="card-body text-center p-4">
-                            <i class="fas fa-comments fa-3x text-primary mb-3"></i>
-                            <h5 class="fw-bold mb-3">Necesitas mas usuarios?</h5>
+                            <i class="fas fa-university fa-3x text-success mb-3"></i>
+                            <h5 class="fw-bold mb-3">Transferencia Bancaria</h5>
                             <p class="text-muted mb-0">
-                                Si tu equipo crece, podemos agregar usuarios adicionales.
-                                Contactanos para un plan personalizado.
+                                Transferencia a cuenta bancaria en USD o ARS.
+                                Descuento especial por pago anual anticipado.
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Boton de contacto -->
+            <!-- Garantia -->
+            <div class="text-center mt-5 p-4 bg-success bg-opacity-10 rounded-3">
+                <i class="fas fa-shield-alt fa-2x text-success mb-3"></i>
+                <h5 class="fw-bold mb-2">Garantia de Satisfaccion</h5>
+                <p class="text-muted mb-0">
+                    7 dias de garantia de devolucion. Si no estas satisfecho, te devolvemos el 100% de tu dinero.
+                </p>
+            </div>
+
+            <!-- Contacto -->
             <div class="text-center mt-5">
                 <p class="text-muted">
                     <i class="fas fa-question-circle me-1"></i>
@@ -323,19 +256,16 @@
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-.precio-container {
-    background: rgba(255,255,255,0.1);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    margin-top: 1rem;
+.card:hover {
+    transform: translateY(-5px);
 }
 
-.list-unstyled li {
-    padding: 0.5rem 0;
+.precio-container {
+    border-radius: 1rem;
 }
 
 @media (max-width: 768px) {
-    .display-3 {
+    .display-4 {
         font-size: 2.5rem;
     }
 }
