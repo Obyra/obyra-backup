@@ -275,7 +275,7 @@
                             <span>{{ current_user.nombre }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            {% if current_user.plan_activo == 'prueba' %}
+                            {% if current_user.plan_activo == 'prueba' and not current_user.is_super_admin %}
                             <li class="dropdown-item-text bg-warning text-dark small">
                                 <i class="fas fa-clock me-1"></i>
                                 Prueba: {{ current_user.dias_restantes_prueba() }} días restantes

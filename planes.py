@@ -325,10 +325,14 @@ def usuario_requiere_plan():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
     if not current_user.is_authenticated:
         return False
-    
+
+    # Super Admin nunca requiere plan
+    if hasattr(current_user, 'is_super_admin') and current_user.is_super_admin:
+        return False
+
     # Si ya tiene un plan activo, no necesita seleccionar
     if hasattr(current_user, 'plan_activo') and current_user.plan_activo:
         return False
-    
+
     # Verificar si han pasado 30 días desde el registro
     return verificar_periodo_prueba(current_user)
