@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Categorias de Equipos - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-folder me-2 text-warning"></i>
+                        Categorias de Equipos
+                    </h2>
+                    <p class="text-muted mb-0">Gestiona las categorias de equipos de {{ proveedor|title }}</p>
+                </div>
+                <a href="{{ url_for('admin_equipos.lista') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i> Volver
+                </a>
+            </div>
+
+            <div class="row">
+                <!-- Nueva Categoria -->
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Nueva Categoria</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('admin_equipos.crear_categoria') }}">
+                                <input type="hidden" name="proveedor" value="{{ proveedor }}">
+
+                                <div class="mb-3">
+                                    <label class="form-label">Nombre *</label>
+                                    <input type="text" name="nombre" class="form-control" required
+                                           placeholder="Ej: Compactacion">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Descripcion</label>
+                                    <textarea name="descripcion" class="form-control" rows="2"
+                                              placeholder="Descripcion opcional..."></textarea>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-plus me-1"></i> Crear Categoria
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de Categorias -->
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Categorias Existentes</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush">
+                                {% for cat in categorias %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">{{ cat.nombre }}</h6>
+                                        {% if cat.descripcion %}
+                                        <small class="text-muted">{{ cat.descripcion }}</small>
+                                        {% endif %}
+                                        <br>
+                                        <span class="badge bg-{{ 'success' if cat.activo else 'secondary' }}">
+                                            {{ 'Activa' if cat.activo else 'Inactiva' }}
+                                        </span>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-primary fs-6">
+                                            {{ cat.equipos.filter_by(activo=True).count() }} equipos
+                                        </span>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="list-group-item text-center py-4">
+                                    <i class="fas fa-folder-open fa-2x text-muted mb-2"></i>
+                                    <p class="text-muted mb-0">No hay categorias registradas</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

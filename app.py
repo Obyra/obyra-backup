@@ -1022,6 +1022,14 @@ try:
 except ImportError as e:
     print(f"[WARN] API Offline blueprint not available: {e}")
 
+# Admin Equipos Proveedor (Leiten)
+try:
+    from admin_equipos_leiten import admin_equipos_bp
+    app.register_blueprint(admin_equipos_bp)
+    print("[OK] Admin Equipos Proveedor blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Admin Equipos Proveedor blueprint not available: {e}")
+
 _refresh_login_view()
 
 # --- Public legal pages fallbacks ---------------------------------------

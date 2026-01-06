@@ -457,13 +457,118 @@ PRECIOS_MANO_OBRA = {
     'promedio': 2800,     # Promedio ponderado
 }
 
-# Precios de equipos por día (en ARS)
+# Precios de equipos por día (en ARS) - Valores por defecto
 PRECIOS_EQUIPOS = {
     'basico': 15000,      # Herramientas básicas
     'intermedio': 35000,  # Equipos medianos
     'pesado': 85000,      # Maquinaria pesada
     'promedio': 28000,    # Promedio
 }
+
+
+def obtener_equipos_leiten_por_etapa(etapa_slug: str, limite: int = 10) -> List[Dict[str, Any]]:
+    """
+    Obtiene equipos de Leiten para una etapa específica.
+
+    Args:
+        etapa_slug: Slug de la etapa de construcción
+        limite: Máximo de equipos a retornar
+
+    Returns:
+        Lista de equipos con precios de alquiler/venta
+    """
+    try:
+        from models.equipment import EquipoProveedor
+
+        equipos = EquipoProveedor.query.filter(
+            EquipoProveedor.activo == True,
+            EquipoProveedor.proveedor == 'leiten',
+            EquipoProveedor.etapa_construccion == etapa_slug
+        ).limit(limite).all()
+
+        return [e.to_dict() for e in equipos]
+
+    except Exception as e:
+        logger.warning(f"Error obteniendo equipos Leiten: {e}")
+        return []
+
+
+def calcular_costo_equipos_leiten(
+    etapa_slug: str,
+    dias_estimados: float,
+    tipo_cambio_usd: float = 1200.0
+) -> Dict[str, Any]:
+    """
+    Calcula el costo de equipos usando precios reales de Leiten.
+
+    Args:
+        etapa_slug: Slug de la etapa
+        dias_estimados: Días de uso estimado
+        tipo_cambio_usd: Tipo de cambio
+
+    Returns:
+        Diccionario con costos de equipos
+    """
+    equipos = obtener_equipos_leiten_por_etapa(etapa_slug, limite=5)
+
+    if not equipos:
+        # Si no hay equipos Leiten, usar valores por defecto
+        return {
+            'fuente': 'default',
+            'equipos': [],
+            'costo_alquiler_usd': dias_estimados * (PRECIOS_EQUIPOS['promedio'] / tipo_cambio_usd) / 28 * dias_estimados,
+            'costo_alquiler_ars': dias_estimados * PRECIOS_EQUIPOS['promedio'] / 28 * dias_estimados,
+        }
+
+    # Calcular costo basado en equipos Leiten
+    total_alquiler_usd = 0
+    equipos_detalle = []
+
+    for equipo in equipos:
+        if equipo.get('precio_alquiler_usd'):
+            # Precio por 28 días, calcular proporción
+            precio_diario = equipo['precio_alquiler_usd'] / 28
+            costo_equipo = precio_diario * dias_estimados
+
+            total_alquiler_usd += costo_equipo
+
+            equipos_detalle.append({
+                'nombre': equipo['nombre'],
+                'marca': equipo.get('marca'),
+                'precio_alquiler_28d_usd': equipo['precio_alquiler_usd'],
+                'precio_diario_usd': round(precio_diario, 2),
+                'dias_uso': dias_estimados,
+                'costo_total_usd': round(costo_equipo, 2),
+            })
+
+    # Si no hay equipos con precio de alquiler, usar venta como referencia
+    if total_alquiler_usd == 0:
+        for equipo in equipos:
+            if equipo.get('precio_venta_usd'):
+                # Estimar alquiler como 5% del valor de venta mensual
+                precio_mensual_estimado = equipo['precio_venta_usd'] * 0.05
+                precio_diario = precio_mensual_estimado / 28
+                costo_equipo = precio_diario * dias_estimados
+
+                total_alquiler_usd += costo_equipo
+
+                equipos_detalle.append({
+                    'nombre': equipo['nombre'],
+                    'marca': equipo.get('marca'),
+                    'precio_venta_usd': equipo['precio_venta_usd'],
+                    'precio_diario_estimado_usd': round(precio_diario, 2),
+                    'dias_uso': dias_estimados,
+                    'costo_total_usd': round(costo_equipo, 2),
+                    'nota': 'Precio estimado basado en valor de venta'
+                })
+
+    return {
+        'fuente': 'leiten',
+        'equipos': equipos_detalle,
+        'cantidad_equipos': len(equipos_detalle),
+        'costo_alquiler_usd': round(total_alquiler_usd, 2),
+        'costo_alquiler_ars': round(total_alquiler_usd * tipo_cambio_usd, 2),
+    }
 
 
 def obtener_items_etapa_desde_bd(
@@ -668,10 +773,21 @@ def calcular_etapa_mejorada(
     horas_totales = metros_cuadrados * coef['mano_obra_hs']
     costo_mano_obra = horas_totales * PRECIOS_MANO_OBRA['promedio']
 
-    # Equipos
+    # Equipos - Intentar usar precios de Leiten
     dias_equipo = metros_cuadrados * coef['equipos_dias']
     dias_equipo = max(dias_equipo, 1)  # Mínimo 1 día
-    costo_equipos = dias_equipo * PRECIOS_EQUIPOS['promedio']
+
+    # Obtener costos de equipos de Leiten si están disponibles
+    equipos_leiten = calcular_costo_equipos_leiten(etapa_slug, dias_equipo, tipo_cambio_usd)
+
+    if equipos_leiten['fuente'] == 'leiten' and equipos_leiten['costo_alquiler_ars'] > 0:
+        costo_equipos = equipos_leiten['costo_alquiler_ars']
+        equipos_detalle = equipos_leiten['equipos']
+        fuente_equipos = 'leiten'
+    else:
+        costo_equipos = dias_equipo * PRECIOS_EQUIPOS['promedio']
+        equipos_detalle = []
+        fuente_equipos = 'estimado'
 
     # Subtotal
     subtotal_ars = costo_materiales_base + costo_mano_obra + costo_equipos
@@ -700,9 +816,10 @@ def calcular_etapa_mejorada(
         },
         'equipos': {
             'dias_estimados': round(dias_equipo, 1),
-            'costo_dia': PRECIOS_EQUIPOS['promedio'],
+            'fuente': fuente_equipos,
             'costo_ars': round(costo_equipos, 2),
             'costo_usd': round(costo_equipos / tipo_cambio_usd, 2),
+            'detalle_leiten': equipos_detalle if fuente_equipos == 'leiten' else None,
         },
 
         # Totales

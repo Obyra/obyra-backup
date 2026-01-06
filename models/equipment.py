@@ -128,3 +128,198 @@ class MaintenanceAttachment(db.Model):
 
     def __repr__(self):
         return f'<MaintenanceAttachment {self.filename}>'
+
+
+# =============================================================================
+# PRECIOS DE EQUIPOS - Integración con proveedores (Leiten, etc.)
+# =============================================================================
+
+class CategoriaEquipoProveedor(db.Model):
+    """Categorías de equipos de proveedores externos (Leiten, etc.)"""
+    __tablename__ = 'categoria_equipo_proveedor'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    slug = db.Column(db.String(100), nullable=False, unique=True)
+    descripcion = db.Column(db.Text)
+    proveedor = db.Column(db.String(100), default='leiten')  # leiten, otro_proveedor
+    categoria_padre_id = db.Column(db.Integer, db.ForeignKey('categoria_equipo_proveedor.id'))
+    orden = db.Column(db.Integer, default=0)
+    activo = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    categoria_padre = db.relationship('CategoriaEquipoProveedor', remote_side=[id], backref='subcategorias')
+    equipos = db.relationship('EquipoProveedor', back_populates='categoria', lazy='dynamic')
+
+    def __repr__(self):
+        return f'<CategoriaEquipoProveedor {self.nombre}>'
+
+    @staticmethod
+    def get_or_create(nombre, proveedor='leiten'):
+        """Obtiene o crea una categoría por nombre"""
+        from slugify import slugify
+        slug = slugify(nombre)
+        cat = CategoriaEquipoProveedor.query.filter_by(slug=slug, proveedor=proveedor).first()
+        if not cat:
+            cat = CategoriaEquipoProveedor(nombre=nombre, slug=slug, proveedor=proveedor)
+            db.session.add(cat)
+        return cat
+
+
+class EquipoProveedor(db.Model):
+    """Equipos de proveedores externos con precios de alquiler y venta"""
+    __tablename__ = 'equipo_proveedor'
+
+    id = db.Column(db.Integer, primary_key=True)
+    categoria_id = db.Column(db.Integer, db.ForeignKey('categoria_equipo_proveedor.id'), nullable=False)
+    proveedor = db.Column(db.String(100), default='leiten')
+
+    # Identificación
+    codigo = db.Column(db.String(50))  # Código interno del proveedor
+    nombre = db.Column(db.String(300), nullable=False)
+    marca = db.Column(db.String(100))
+    modelo = db.Column(db.String(100))
+
+    # Especificaciones técnicas
+    potencia = db.Column(db.String(50))  # Ej: "5.5 hp", "3 kW"
+    capacidad = db.Column(db.String(100))  # Ej: "150 litros", "500 kg"
+    peso = db.Column(db.String(50))  # Ej: "70 kg"
+    motor = db.Column(db.String(100))  # Ej: "Honda GX160 Nafta"
+    especificaciones = db.Column(db.JSON)  # Otras specs en JSON
+
+    # Precios de ALQUILER (en USD por 28 días)
+    precio_alquiler_usd = db.Column(db.Numeric(12, 2))
+    periodo_alquiler_dias = db.Column(db.Integer, default=28)
+
+    # Precios de VENTA
+    precio_venta_usd = db.Column(db.Numeric(12, 2))
+    precio_venta_ars = db.Column(db.Numeric(14, 2))
+
+    # IVA
+    iva_porcentaje = db.Column(db.Numeric(5, 2), default=10.5)
+
+    # Disponibilidad
+    disponible_alquiler = db.Column(db.Boolean, default=True)
+    disponible_venta = db.Column(db.Boolean, default=True)
+
+    # Metadata
+    url_producto = db.Column(db.String(500))  # URL en sitio del proveedor
+    imagen_url = db.Column(db.String(500))
+    notas = db.Column(db.Text)
+
+    # Etapas de construcción donde aplica
+    etapa_construccion = db.Column(db.String(100))  # excavacion, estructura, etc.
+
+    # Control
+    activo = db.Column(db.Boolean, default=True)
+    fecha_actualizacion_precio = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    categoria = db.relationship('CategoriaEquipoProveedor', back_populates='equipos')
+
+    def __repr__(self):
+        return f'<EquipoProveedor {self.nombre}>'
+
+    @property
+    def precio_alquiler_diario_usd(self):
+        """Calcula precio de alquiler por día"""
+        if self.precio_alquiler_usd and self.periodo_alquiler_dias:
+            return float(self.precio_alquiler_usd) / self.periodo_alquiler_dias
+        return None
+
+    @property
+    def precio_alquiler_con_iva_usd(self):
+        """Precio de alquiler con IVA incluido"""
+        if self.precio_alquiler_usd:
+            iva = float(self.iva_porcentaje or 10.5) / 100
+            return float(self.precio_alquiler_usd) * (1 + iva)
+        return None
+
+    @property
+    def precio_venta_con_iva_ars(self):
+        """Precio de venta con IVA incluido en ARS"""
+        if self.precio_venta_ars:
+            iva = float(self.iva_porcentaje or 10.5) / 100
+            return float(self.precio_venta_ars) * (1 + iva)
+        return None
+
+    def to_dict(self):
+        """Convierte a diccionario para API"""
+        return {
+            'id': self.id,
+            'codigo': self.codigo,
+            'nombre': self.nombre,
+            'marca': self.marca,
+            'modelo': self.modelo,
+            'categoria': self.categoria.nombre if self.categoria else None,
+            'proveedor': self.proveedor,
+            'potencia': self.potencia,
+            'capacidad': self.capacidad,
+            'peso': self.peso,
+            'motor': self.motor,
+            'precio_alquiler_usd': float(self.precio_alquiler_usd) if self.precio_alquiler_usd else None,
+            'precio_alquiler_diario_usd': self.precio_alquiler_diario_usd,
+            'periodo_alquiler_dias': self.periodo_alquiler_dias,
+            'precio_venta_usd': float(self.precio_venta_usd) if self.precio_venta_usd else None,
+            'precio_venta_ars': float(self.precio_venta_ars) if self.precio_venta_ars else None,
+            'iva_porcentaje': float(self.iva_porcentaje) if self.iva_porcentaje else 10.5,
+            'disponible_alquiler': self.disponible_alquiler,
+            'disponible_venta': self.disponible_venta,
+            'etapa_construccion': self.etapa_construccion,
+            'url_producto': self.url_producto,
+            'imagen_url': self.imagen_url
+        }
+
+    @staticmethod
+    def buscar(query, categoria_id=None, proveedor='leiten', solo_alquiler=False, solo_venta=False):
+        """Búsqueda de equipos"""
+        q = EquipoProveedor.query.filter_by(activo=True, proveedor=proveedor)
+
+        if categoria_id:
+            q = q.filter_by(categoria_id=categoria_id)
+
+        if solo_alquiler:
+            q = q.filter(EquipoProveedor.disponible_alquiler == True)
+            q = q.filter(EquipoProveedor.precio_alquiler_usd.isnot(None))
+
+        if solo_venta:
+            q = q.filter(EquipoProveedor.disponible_venta == True)
+            q = q.filter(db.or_(
+                EquipoProveedor.precio_venta_usd.isnot(None),
+                EquipoProveedor.precio_venta_ars.isnot(None)
+            ))
+
+        if query:
+            search = f"%{query}%"
+            q = q.filter(db.or_(
+                EquipoProveedor.nombre.ilike(search),
+                EquipoProveedor.marca.ilike(search),
+                EquipoProveedor.modelo.ilike(search),
+                EquipoProveedor.codigo.ilike(search)
+            ))
+
+        return q.order_by(EquipoProveedor.nombre).all()
+
+
+class HistorialPrecioEquipo(db.Model):
+    """Historial de cambios de precios para tracking"""
+    __tablename__ = 'historial_precio_equipo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    equipo_id = db.Column(db.Integer, db.ForeignKey('equipo_proveedor.id'), nullable=False)
+    tipo_precio = db.Column(db.String(20), nullable=False)  # alquiler_usd, venta_usd, venta_ars
+    precio_anterior = db.Column(db.Numeric(14, 2))
+    precio_nuevo = db.Column(db.Numeric(14, 2))
+    fecha_cambio = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+
+    # Relaciones
+    equipo = db.relationship('EquipoProveedor', backref='historial_precios')
+    usuario = db.relationship('Usuario', backref='cambios_precio_equipo')
+
+    def __repr__(self):
+        return f'<HistorialPrecioEquipo {self.equipo_id} {self.tipo_precio}>'
