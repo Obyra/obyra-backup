@@ -475,6 +475,12 @@ def verificar_periodo_prueba():
             flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
             return redirect(url_for('planes.mostrar_planes'))
 
+@app.route('/offline')
+def offline_page():
+    """Página para modo offline."""
+    return render_template('offline.html')
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Landing principal con acceso a inicio de sesión y portal de proveedores."""
@@ -1007,6 +1013,14 @@ try:
     print("[OK] Super Admin blueprint registered successfully")
 except ImportError as e:
     print(f"[WARN] Super Admin blueprint not available: {e}")
+
+# API Offline para modo sin conexión
+try:
+    from api_offline import api_offline_bp
+    app.register_blueprint(api_offline_bp)
+    print("[OK] API Offline blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] API Offline blueprint not available: {e}")
 
 _refresh_login_view()
 

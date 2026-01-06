@@ -3,96 +3,334 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sin conexion - OBYRA</title>
+    <title>OBYRA - Modo Offline</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --primary-color: #00d9ff;
+            --bg-dark: #1a1a2e;
+            --bg-darker: #16213e;
+            --text-light: #eee;
         }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
+            color: var(--text-light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        .container {
+
+        .offline-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
             text-align: center;
-            padding: 2rem;
-            max-width: 400px;
         }
-        .icon {
-            width: 120px;
-            height: 120px;
-            background: rgba(76, 175, 80, 0.1);
-            border-radius: 50%;
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+        }
+
+        .offline-icon {
+            font-size: 80px;
+            color: #f59e0b;
+            margin: 30px 0;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-item {
+            background: rgba(0, 217, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            border: none;
+            color: #000;
+            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+        }
+
+        .btn-primary:hover {
+            background: #00b8d9;
+            color: #000;
+        }
+
+        .btn-outline {
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            background: transparent;
+            padding: 12px 24px;
+            border-radius: 8px;
+        }
+
+        .btn-outline:hover {
+            background: var(--primary-color);
+            color: #000;
+        }
+
+        .pending-list {
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .pending-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 8px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            margin: 0 auto 2rem;
-            border: 3px solid #4CAF50;
+            gap: 10px;
         }
-        .icon svg {
-            width: 60px;
-            height: 60px;
-            fill: #4CAF50;
+
+        .pending-item i {
+            color: #f59e0b;
         }
-        h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+
+        .connection-status {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        p {
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 2rem;
-            line-height: 1.6;
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
         }
-        .btn {
-            display: inline-block;
-            background: #4CAF50;
-            color: #ffffff;
-            padding: 0.875rem 2rem;
-            border-radius: 30px;
-            text-decoration: none;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            transition: all 0.3s ease;
+
+        .status-dot.online {
+            background: #22c55e;
         }
-        .btn:hover {
-            background: #45a049;
-            transform: translateY(-2px);
+
+        .feature-list {
+            text-align: left;
+            margin: 20px 0;
         }
-        .logo {
-            margin-top: 3rem;
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #4CAF50;
-            letter-spacing: 2px;
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+
+        .feature-item i.fa-check {
+            color: #22c55e;
+        }
+
+        .feature-item i.fa-times {
+            color: #ef4444;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                <path d="M23.64 7c-.45-.34-4.93-4-11.64-4C5.28 3 .81 6.66.36 7L12 21.5 23.64 7z" opacity="0.3"/>
-                <path d="M12 3C5.28 3 .81 6.66.36 7l2.37 3.07C4.93 8.33 8.1 6.5 12 6.5s7.07 1.83 9.27 3.57L23.64 7c-.45-.34-4.93-4-11.64-4z"/>
-                <path d="M12 10c-2.81 0-5.19 1.23-6.84 3.07L12 21.5l6.84-8.43C17.19 11.23 14.81 10 12 10z"/>
-                <line x1="2" y1="2" x2="22" y2="22" stroke="#f0b400" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
+    <div class="offline-container">
+        <img src="/static/img/logo.png" alt="OBYRA" class="logo" onerror="this.style.display='none'">
+
+        <div class="offline-icon">
+            <i class="fas fa-cloud-slash"></i>
         </div>
-        <h1>Sin conexion</h1>
-        <p>No hay conexion a internet. Verifica tu conexion y vuelve a intentarlo.</p>
-        <a href="/" class="btn" onclick="window.location.reload(); return false;">
-            Reintentar
-        </a>
-        <div class="logo">OBYRA IA</div>
+
+        <h1>Modo Offline</h1>
+        <p class="subtitle">Trabajando sin conexion a internet</p>
+
+        <div class="card">
+            <h5><i class="fas fa-database me-2"></i>Datos Disponibles</h5>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-obras">-</div>
+                    <div class="stat-label">Obras</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-tareas">-</div>
+                    <div class="stat-label">Tareas</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-inventario">-</div>
+                    <div class="stat-label">Items Inventario</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-pendientes">-</div>
+                    <div class="stat-label">Pendientes Sync</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h5><i class="fas fa-tasks me-2"></i>Funciones Disponibles Offline</h5>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <i class="fas fa-check"></i>
+                    <span>Ver tus obras y tareas asignadas</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-check"></i>
+                    <span>Registrar avances de trabajo</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-check"></i>
+                    <span>Tomar fotos de avances</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-check"></i>
+                    <span>Buscar en inventario</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-times"></i>
+                    <span>Crear nuevas obras</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-times"></i>
+                    <span>Modificar presupuestos</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="pending-card" style="display: none;">
+            <h5><i class="fas fa-clock me-2"></i>Cambios Pendientes</h5>
+            <div class="pending-list" id="pending-list">
+                <!-- Se llena dinamicamente -->
+            </div>
+        </div>
+
+        <div class="d-grid gap-2">
+            <button class="btn btn-primary" onclick="goToMisTareas()">
+                <i class="fas fa-tasks me-2"></i>Ver Mis Tareas
+            </button>
+            <button class="btn btn-outline" onclick="tryReconnect()">
+                <i class="fas fa-sync me-2"></i>Reintentar Conexion
+            </button>
+        </div>
+
+        <div class="connection-status">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">Verificando conexion...</span>
+        </div>
     </div>
+
+    <script src="/static/js/indexed-db.js"></script>
+    <script>
+        // Inicializar y mostrar estadisticas
+        async function initOfflinePage() {
+            try {
+                await ObyraDB.init();
+                const stats = await ObyraDB.getStats();
+
+                document.getElementById('stat-obras').textContent = stats.obras;
+                document.getElementById('stat-tareas').textContent = stats.tareas;
+                document.getElementById('stat-inventario').textContent = stats.inventario;
+                document.getElementById('stat-pendientes').textContent = stats.pendientes_sync;
+
+                // Mostrar pendientes si hay
+                if (stats.pendientes_sync > 0) {
+                    document.getElementById('pending-card').style.display = 'block';
+                    const queue = await ObyraDB.getSyncQueue();
+                    const listEl = document.getElementById('pending-list');
+                    listEl.innerHTML = queue.map(op => `
+                        <div class="pending-item">
+                            <i class="fas fa-clock"></i>
+                            <span>${op.type.replace(/_/g, ' ')}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.log('IndexedDB no disponible');
+            }
+
+            // Estado de conexion
+            updateConnectionStatus();
+            window.addEventListener('online', updateConnectionStatus);
+            window.addEventListener('offline', updateConnectionStatus);
+        }
+
+        function updateConnectionStatus() {
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+
+            if (navigator.onLine) {
+                dot.classList.add('online');
+                text.textContent = 'Conexion restaurada';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1500);
+            } else {
+                dot.classList.remove('online');
+                text.textContent = 'Sin conexion';
+            }
+        }
+
+        function goToMisTareas() {
+            window.location.href = '/obras/mis-tareas';
+        }
+
+        function tryReconnect() {
+            window.location.reload();
+        }
+
+        // Iniciar
+        initOfflinePage();
+    </script>
 </body>
 </html>
