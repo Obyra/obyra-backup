@@ -175,40 +175,178 @@ def _normalize_argentina_address(query: str) -> str:
     return f"{query}, Buenos Aires, Argentina"
 
 
+def _expand_common_street_names(query: str) -> str:
+    """
+    Expande nombres de calles comunes que tienen nombres oficiales largos.
+    Por ejemplo: "Av San Martin" en muchos partidos del GBA es en realidad
+    "Avenida del Libertador General José de San Martín".
+    """
+    import re
+    result = query.strip()
+    query_lower = result.lower()
+
+    # Mapeo de nombres comunes a nombres oficiales (con variantes)
+    # Formato: (patron_regex, reemplazo)
+    calles_comunes = [
+        # San Martin - muy comun en GBA
+        (r'\b(av\.?|avenida)\s+(san\s+martin|san\s+martín)\b',
+         'Avenida del Libertador General José de San Martín', re.IGNORECASE),
+
+        # Rivadavia
+        (r'\b(av\.?|avenida)\s+rivadavia\b',
+         'Avenida Rivadavia', re.IGNORECASE),
+
+        # Corrientes
+        (r'\b(av\.?|avenida)\s+corrientes\b',
+         'Avenida Corrientes', re.IGNORECASE),
+
+        # Santa Fe
+        (r'\b(av\.?|avenida)\s+santa\s+fe\b',
+         'Avenida Santa Fe', re.IGNORECASE),
+
+        # Cabildo
+        (r'\b(av\.?|avenida)\s+cabildo\b',
+         'Avenida Cabildo', re.IGNORECASE),
+
+        # Libertador
+        (r'\b(av\.?|avenida)\s+(del\s+)?libertador\b',
+         'Avenida del Libertador', re.IGNORECASE),
+
+        # 9 de Julio
+        (r'\b(av\.?|avenida)\s+9\s+de\s+julio\b',
+         'Avenida 9 de Julio', re.IGNORECASE),
+
+        # Belgrano
+        (r'\b(av\.?|avenida)\s+belgrano\b',
+         'Avenida Belgrano', re.IGNORECASE),
+
+        # Maipu
+        (r'\b(av\.?|avenida)\s+maipu\b',
+         'Avenida Maipú', re.IGNORECASE),
+
+        # Ruta 8
+        (r'\bruta\s+8\b', 'Ruta Nacional 8', re.IGNORECASE),
+        (r'\bruta\s+nacional\s+8\b', 'Ruta Nacional 8', re.IGNORECASE),
+
+        # Acceso Oeste
+        (r'\bacceso\s+oeste\b', 'Acceso Oeste', re.IGNORECASE),
+
+        # Panamericana
+        (r'\bpanamericana\b', 'Autopista Panamericana', re.IGNORECASE),
+    ]
+
+    for pattern, replacement, flags in calles_comunes:
+        if re.search(pattern, result, flags=flags):
+            # Extraer el numero de altura si existe
+            match_altura = re.search(r'\b(\d{2,5})\b', result)
+            altura = match_altura.group(1) if match_altura else None
+
+            # Extraer localidad (despues de la coma)
+            match_localidad = re.search(r',\s*(.+)$', result)
+            localidad = match_localidad.group(1) if match_localidad else None
+
+            # Construir direccion expandida
+            result = replacement
+            if altura:
+                result = f"{result} {altura}"
+            if localidad:
+                result = f"{result}, {localidad}"
+
+            break  # Solo aplicar la primera coincidencia
+
+    return result
+
+
+def _expand_abbreviations(query: str) -> str:
+    """
+    Expande abreviaturas comunes de calles argentinas.
+    """
+    import re
+
+    # Primero intentar expandir nombres de calles comunes
+    result = _expand_common_street_names(query)
+
+    # Abreviaturas de tipos de via (orden importa - mas especificas primero)
+    abreviaturas_via = [
+        # Avenida - varias formas
+        (r'\bav\.?\s+', 'Avenida ', re.IGNORECASE),
+        (r'\bavda\.?\s+', 'Avenida ', re.IGNORECASE),
+        (r'\bavenida\s+', 'Avenida ', re.IGNORECASE),
+        # Boulevard
+        (r'\bbv\.?\s+', 'Boulevard ', re.IGNORECASE),
+        (r'\bblvd\.?\s+', 'Boulevard ', re.IGNORECASE),
+        (r'\bboul\.?\s+', 'Boulevard ', re.IGNORECASE),
+        # Calle
+        (r'\bclle\.?\s+', 'Calle ', re.IGNORECASE),
+        # Pasaje
+        (r'\bpje\.?\s+', 'Pasaje ', re.IGNORECASE),
+        (r'\bpsje\.?\s+', 'Pasaje ', re.IGNORECASE),
+        # Diagonal
+        (r'\bdiag\.?\s+', 'Diagonal ', re.IGNORECASE),
+    ]
+
+    # Abreviaturas de titulos/rangos militares
+    abreviaturas_titulos = [
+        (r'\bgral\.?\s+', 'General ', re.IGNORECASE),
+        (r'\bgeneral\s+', 'General ', re.IGNORECASE),
+        (r'\bgen\.?\s+', 'General ', re.IGNORECASE),
+        (r'\bgte\.?\s+', 'General ', re.IGNORECASE),
+        (r'\bcnel\.?\s+', 'Coronel ', re.IGNORECASE),
+        (r'\bcte\.?\s+', 'Comandante ', re.IGNORECASE),
+        (r'\bcap\.?\s+', 'Capitan ', re.IGNORECASE),
+        (r'\btte\.?\s+', 'Teniente ', re.IGNORECASE),
+        (r'\bsgto\.?\s+', 'Sargento ', re.IGNORECASE),
+        (r'\balte\.?\s+', 'Almirante ', re.IGNORECASE),
+        (r'\bcomod\.?\s+', 'Comodoro ', re.IGNORECASE),
+        (r'\bbrig\.?\s+', 'Brigadier ', re.IGNORECASE),
+    ]
+
+    # Abreviaturas de titulos civiles
+    abreviaturas_civiles = [
+        (r'\bdr\.?\s+', 'Doctor ', re.IGNORECASE),
+        (r'\bdra\.?\s+', 'Doctora ', re.IGNORECASE),
+        (r'\bing\.?\s+', 'Ingeniero ', re.IGNORECASE),
+        (r'\blic\.?\s+', 'Licenciado ', re.IGNORECASE),
+        (r'\bprof\.?\s+', 'Profesor ', re.IGNORECASE),
+        (r'\bpte\.?\s+', 'Presidente ', re.IGNORECASE),
+        (r'\bpresidente\s+', 'Presidente ', re.IGNORECASE),
+        (r'\bintendente\s+', 'Intendente ', re.IGNORECASE),
+        (r'\bint\.?\s+', 'Intendente ', re.IGNORECASE),
+    ]
+
+    # Abreviaturas religiosas/santos
+    abreviaturas_santos = [
+        (r'\bsta\.?\s+', 'Santa ', re.IGNORECASE),
+        (r'\bsto\.?\s+', 'Santo ', re.IGNORECASE),
+        (r'\bs\.?\s+', 'San ', re.IGNORECASE),  # Solo 's' seguido de espacio
+    ]
+
+    # Aplicar todas las expansiones
+    for pattern, replacement, flags in (abreviaturas_via + abreviaturas_titulos +
+                                         abreviaturas_civiles + abreviaturas_santos):
+        result = re.sub(pattern, replacement, result, flags=flags)
+
+    return result
+
+
 def _generate_search_variants(query: str) -> List[str]:
     """
     Genera variantes de búsqueda para mejorar la tasa de éxito.
     Por ejemplo, si una dirección completa falla, intenta sin número de puerta.
     """
     import re
-    variants = [query]  # Siempre incluir la original
 
-    # Normalizar "Gral." a "General" y variantes similares
-    query_normalized = query
-    abreviaturas_calles = {
-        r'\bGral\.?\s': 'General ',
-        r'\bGte\.?\s': 'General ',
-        r'\bAv\.?\s': 'Avenida ',
-        r'\bBv\.?\s': 'Boulevard ',
-        r'\bBlvd\.?\s': 'Boulevard ',
-        r'\bCte\.?\s': 'Coronel ',
-        r'\bCnel\.?\s': 'Coronel ',
-        r'\bCap\.?\s': 'Capitan ',
-        r'\bDr\.?\s': 'Doctor ',
-        r'\bPte\.?\s': 'Presidente ',
-        r'\bSta\.?\s': 'Santa ',
-        r'\bSto\.?\s': 'Santo ',
-        r'\bSan\s': 'San ',
-    }
+    # Primero expandir abreviaturas
+    query_expanded = _expand_abbreviations(query)
 
-    for abrev_pattern, completo in abreviaturas_calles.items():
-        query_normalized = re.sub(abrev_pattern, completo, query_normalized, flags=re.IGNORECASE)
+    # Si la expansion cambio algo, poner la version expandida primero
+    if query_expanded.lower() != query.lower():
+        variants = [query_expanded, query]
+    else:
+        variants = [query]
 
-    if query_normalized != query:
-        variants.append(query_normalized)
-
-    # Trabajar con ambas versiones (original y normalizada)
-    for base_query in [query, query_normalized]:
+    # Trabajar con la version expandida
+    for base_query in [query_expanded]:
         # Si tiene número de puerta al inicio (ej: "1234 Calle Principal"), invertir
         match = re.match(r'^(\d+)\s+(.+)$', base_query.strip())
         if match:
