@@ -727,6 +727,36 @@ with app.app_context():
         except Exception as e:
             print(f"[WARN] Railway db.create_all() error: {e}")
 
+    # Migración automática: agregar columnas de planes a organizaciones
+    try:
+        from sqlalchemy import text
+        plan_columns_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='plan_tipo') THEN
+                ALTER TABLE organizaciones ADD COLUMN plan_tipo VARCHAR(50) DEFAULT 'prueba';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='max_usuarios') THEN
+                ALTER TABLE organizaciones ADD COLUMN max_usuarios INTEGER DEFAULT 5;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='fecha_inicio_plan') THEN
+                ALTER TABLE organizaciones ADD COLUMN fecha_inicio_plan TIMESTAMP;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='fecha_fin_plan') THEN
+                ALTER TABLE organizaciones ADD COLUMN fecha_fin_plan TIMESTAMP;
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(plan_columns_sql))
+        db.session.commit()
+        print("[OK] Plan columns migration applied")
+    except Exception as e:
+        print(f"[WARN] Plan columns migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
