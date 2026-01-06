@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required, current_user
 from models import db
 from models.core import Usuario, Organizacion
-from models.projects import Obra, Tarea, AvanceTarea
+from models.projects import Obra, TareaEtapa, TareaAvance, EtapaObra, TareaResponsables
 
 api_offline_bp = Blueprint('api_offline', __name__, url_prefix='/api/offline')
 
@@ -32,9 +32,9 @@ def mis_obras():
         if current_user.is_super_admin or current_user.role in ('admin', 'pm'):
             obras = Obra.query.filter_by(organizacion_id=org_id, activo=True).all()
         else:
-            # Operarios solo ven obras donde tienen tareas asignadas
-            obras = db.session.query(Obra).join(Tarea).filter(
-                Tarea.asignado_a_id == current_user.id,
+            # Operarios ven obras donde tienen tareas asignadas
+            obras = db.session.query(Obra).join(EtapaObra).join(TareaEtapa).join(TareaResponsables).filter(
+                TareaResponsables.usuario_id == current_user.id,
                 Obra.activo == True
             ).distinct().all()
 
@@ -47,7 +47,7 @@ def mis_obras():
                 'estado': obra.estado,
                 'fecha_inicio': obra.fecha_inicio.isoformat() if obra.fecha_inicio else None,
                 'fecha_fin_estimada': obra.fecha_fin_estimada.isoformat() if obra.fecha_fin_estimada else None,
-                'porcentaje_avance': obra.porcentaje_avance or 0,
+                'porcentaje_avance': float(obra.porcentaje_avance) if obra.porcentaje_avance else 0,
                 'cliente_nombre': obra.cliente.nombre if obra.cliente else None,
                 'updated_at': obra.updated_at.isoformat() if hasattr(obra, 'updated_at') and obra.updated_at else None
             })
@@ -70,31 +70,32 @@ def mis_tareas():
     Obtener tareas asignadas al usuario para modo offline.
     """
     try:
-        # Obtener tareas del usuario
-        tareas = Tarea.query.filter_by(
-            asignado_a_id=current_user.id
-        ).filter(
-            Tarea.estado.in_(['pendiente', 'en_progreso'])
+        # Obtener tareas del usuario a través de TareaResponsables
+        tareas = db.session.query(TareaEtapa).join(TareaResponsables).filter(
+            TareaResponsables.usuario_id == current_user.id,
+            TareaEtapa.estado.in_(['pendiente', 'en_curso'])
         ).all()
 
         tareas_data = []
         for tarea in tareas:
+            # Obtener la obra a través de la etapa
+            obra = tarea.etapa.obra if tarea.etapa else None
+
             tareas_data.append({
                 'id': tarea.id,
-                'titulo': tarea.titulo,
+                'nombre': tarea.nombre,
                 'descripcion': tarea.descripcion,
                 'estado': tarea.estado,
-                'prioridad': tarea.prioridad,
-                'porcentaje_avance': tarea.porcentaje_avance or 0,
-                'obra_id': tarea.obra_id,
-                'obra_nombre': tarea.obra.nombre if tarea.obra else None,
+                'porcentaje_avance': float(tarea.porcentaje_avance) if tarea.porcentaje_avance else 0,
+                'obra_id': obra.id if obra else None,
+                'obra_nombre': obra.nombre if obra else None,
+                'etapa_id': tarea.etapa_id,
+                'etapa_nombre': tarea.etapa.nombre if tarea.etapa else None,
                 'fecha_inicio': tarea.fecha_inicio.isoformat() if tarea.fecha_inicio else None,
                 'fecha_fin': tarea.fecha_fin.isoformat() if tarea.fecha_fin else None,
-                'asignado_a': current_user.id,
-                'etapa': tarea.etapa,
                 'unidad': tarea.unidad,
-                'cantidad_total': float(tarea.cantidad_total) if tarea.cantidad_total else None,
-                'cantidad_ejecutada': float(tarea.cantidad_ejecutada) if tarea.cantidad_ejecutada else 0
+                'cantidad_planificada': float(tarea.cantidad_planificada) if tarea.cantidad_planificada else None,
+                'objetivo': float(tarea.objetivo) if tarea.objetivo else None
             })
 
         return jsonify({
@@ -115,33 +116,35 @@ def tareas_por_obra(obra_id):
     Obtener todas las tareas de una obra específica.
     """
     try:
-        tareas = Tarea.query.filter_by(obra_id=obra_id).all()
+        # Obtener tareas a través de las etapas de la obra
+        tareas = db.session.query(TareaEtapa).join(EtapaObra).filter(
+            EtapaObra.obra_id == obra_id
+        ).all()
 
         tareas_data = []
         for tarea in tareas:
-            asignado = None
-            if tarea.asignado_a:
-                asignado = {
-                    'id': tarea.asignado_a.id,
-                    'nombre': tarea.asignado_a.nombre
-                }
+            # Obtener responsables
+            responsables = []
+            for asig in tarea.asignaciones:
+                if asig.usuario:
+                    responsables.append({
+                        'id': asig.usuario.id,
+                        'nombre': asig.usuario.nombre
+                    })
 
             tareas_data.append({
                 'id': tarea.id,
-                'titulo': tarea.titulo,
+                'nombre': tarea.nombre,
                 'descripcion': tarea.descripcion,
                 'estado': tarea.estado,
-                'prioridad': tarea.prioridad,
-                'porcentaje_avance': tarea.porcentaje_avance or 0,
-                'obra_id': tarea.obra_id,
+                'porcentaje_avance': float(tarea.porcentaje_avance) if tarea.porcentaje_avance else 0,
+                'etapa_id': tarea.etapa_id,
+                'etapa_nombre': tarea.etapa.nombre if tarea.etapa else None,
                 'fecha_inicio': tarea.fecha_inicio.isoformat() if tarea.fecha_inicio else None,
                 'fecha_fin': tarea.fecha_fin.isoformat() if tarea.fecha_fin else None,
-                'asignado_a': tarea.asignado_a_id,
-                'asignado_info': asignado,
-                'etapa': tarea.etapa,
+                'responsables': responsables,
                 'unidad': tarea.unidad,
-                'cantidad_total': float(tarea.cantidad_total) if tarea.cantidad_total else None,
-                'cantidad_ejecutada': float(tarea.cantidad_ejecutada) if tarea.cantidad_ejecutada else 0
+                'cantidad_planificada': float(tarea.cantidad_planificada) if tarea.cantidad_planificada else None
             })
 
         return jsonify({
@@ -169,34 +172,29 @@ def crear_avance():
         if not tarea_id:
             return jsonify({'ok': False, 'error': 'tarea_id es requerido'}), 400
 
-        tarea = Tarea.query.get(tarea_id)
+        tarea = TareaEtapa.query.get(tarea_id)
         if not tarea:
             return jsonify({'ok': False, 'error': 'Tarea no encontrada'}), 404
 
         # Crear avance
-        avance = AvanceTarea(
+        avance = TareaAvance(
             tarea_id=tarea_id,
             usuario_id=current_user.id,
             descripcion=data.get('descripcion', ''),
-            porcentaje=data.get('porcentaje', 0),
-            horas_trabajadas=data.get('horas_trabajadas'),
-            observaciones=data.get('observaciones'),
-            cantidad_ejecutada=data.get('cantidad_ejecutada')
+            cantidad_ingresada=data.get('cantidad_ingresada', 0),
+            unidad_ingresada=data.get('unidad', tarea.unidad),
+            status='pendiente'
         )
 
         db.session.add(avance)
 
-        # Actualizar porcentaje de la tarea
+        # Actualizar porcentaje de la tarea si se proporciona
         if data.get('porcentaje'):
             tarea.porcentaje_avance = data.get('porcentaje')
-            if data.get('porcentaje') >= 100:
+            if float(data.get('porcentaje')) >= 100:
                 tarea.estado = 'completada'
-            elif data.get('porcentaje') > 0:
-                tarea.estado = 'en_progreso'
-
-        # Actualizar cantidad ejecutada
-        if data.get('cantidad_ejecutada'):
-            tarea.cantidad_ejecutada = (tarea.cantidad_ejecutada or 0) + float(data.get('cantidad_ejecutada'))
+            elif float(data.get('porcentaje')) > 0:
+                tarea.estado = 'en_curso'
 
         db.session.commit()
 
@@ -204,7 +202,7 @@ def crear_avance():
             'ok': True,
             'avance_id': avance.id,
             'message': 'Avance registrado correctamente',
-            'offline_id': data.get('offline_id')  # Para matching en sincronización
+            'offline_id': data.get('offline_id')
         })
 
     except Exception as e:
@@ -220,7 +218,7 @@ def actualizar_tarea(tarea_id):
     Actualizar estado/progreso de una tarea.
     """
     try:
-        tarea = Tarea.query.get(tarea_id)
+        tarea = TareaEtapa.query.get(tarea_id)
         if not tarea:
             return jsonify({'ok': False, 'error': 'Tarea no encontrada'}), 404
 
@@ -231,12 +229,6 @@ def actualizar_tarea(tarea_id):
 
         if 'porcentaje_avance' in data:
             tarea.porcentaje_avance = data['porcentaje_avance']
-
-        if 'cantidad_ejecutada' in data:
-            tarea.cantidad_ejecutada = data['cantidad_ejecutada']
-
-        if 'observaciones' in data:
-            tarea.observaciones = data['observaciones']
 
         db.session.commit()
 
@@ -257,7 +249,6 @@ def actualizar_tarea(tarea_id):
 def inventario_basico():
     """
     Obtener lista básica de inventario para búsqueda offline.
-    Solo nombres, códigos y unidades (sin precios para optimizar).
     """
     try:
         from models.inventory import ItemInventario
@@ -299,17 +290,20 @@ def sync_status():
     """
     try:
         org_id = get_current_org_id()
-
-        # Contar datos disponibles
         from models.inventory import ItemInventario
+        from datetime import datetime
+
+        # Contar tareas del usuario
+        tareas_count = db.session.query(TareaEtapa).join(TareaResponsables).filter(
+            TareaResponsables.usuario_id == current_user.id,
+            TareaEtapa.estado.in_(['pendiente', 'en_curso'])
+        ).count()
 
         stats = {
             'obras': Obra.query.filter_by(organizacion_id=org_id, activo=True).count(),
-            'tareas_pendientes': Tarea.query.filter_by(asignado_a_id=current_user.id).filter(
-                Tarea.estado.in_(['pendiente', 'en_progreso'])
-            ).count(),
+            'tareas_pendientes': tareas_count,
             'inventario': ItemInventario.query.filter_by(organizacion_id=org_id, activo=True).count(),
-            'server_time': db.func.now()
+            'server_time': datetime.utcnow().isoformat()
         }
 
         return jsonify({
@@ -329,7 +323,6 @@ def sync_status():
 def sync_batch():
     """
     Sincronizar múltiples operaciones en un solo request.
-    Útil para cuando el operario vuelve a tener conexión.
     """
     try:
         data = request.get_json() or {}
@@ -343,20 +336,17 @@ def sync_batch():
 
             try:
                 if op_type == 'CREATE_AVANCE':
-                    # Crear avance
-                    tarea = Tarea.query.get(op_data.get('tarea_id'))
+                    tarea = TareaEtapa.query.get(op_data.get('tarea_id'))
                     if tarea:
-                        avance = AvanceTarea(
+                        avance = TareaAvance(
                             tarea_id=op_data.get('tarea_id'),
                             usuario_id=current_user.id,
                             descripcion=op_data.get('descripcion', ''),
-                            porcentaje=op_data.get('porcentaje', 0),
-                            horas_trabajadas=op_data.get('horas_trabajadas'),
-                            observaciones=op_data.get('observaciones')
+                            cantidad_ingresada=op_data.get('cantidad_ingresada', 0),
+                            status='pendiente'
                         )
                         db.session.add(avance)
 
-                        # Actualizar tarea
                         if op_data.get('porcentaje'):
                             tarea.porcentaje_avance = op_data.get('porcentaje')
 
@@ -373,7 +363,7 @@ def sync_batch():
                         })
 
                 elif op_type == 'UPDATE_TAREA':
-                    tarea = Tarea.query.get(op_data.get('id'))
+                    tarea = TareaEtapa.query.get(op_data.get('id'))
                     if tarea:
                         if 'estado' in op_data:
                             tarea.estado = op_data['estado']
