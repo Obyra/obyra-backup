@@ -1055,61 +1055,107 @@ Saludos cordiales,
         pdf_buffer.seek(0)
         pdf_bytes = pdf_buffer.read()
 
-        # Enviar email usando Flask-Mail si está configurado, sino informar
-        try:
-            from extensions import mail
+        # Preparar datos del remitente
+        user_email = current_user.email if current_user.is_authenticated else None
+        user_name = f"{current_user.nombre} {current_user.apellido}" if current_user.is_authenticated else "OBYRA"
 
-            # NOTA: Gmail no permite cambiar el remitente (FROM) cuando se envía a través de su SMTP.
-            # Usamos Reply-To para que las respuestas vayan al usuario actual que envía el presupuesto.
-            user_email = current_user.email if current_user.is_authenticated else None
-            user_name = f"{current_user.nombre} {current_user.apellido}" if current_user.is_authenticated else "OBYRA"
+        # Intentar primero con Resend (más confiable)
+        email_enviado = False
+        resend_api_key = current_app.config.get('RESEND_API_KEY')
 
-            # El FROM será siempre obyra.servicios@gmail.com (configurado en MAIL_DEFAULT_SENDER)
-            # Pero incluimos el nombre del usuario en el display name
-            sender_email = f"{user_name} - OBYRA <{current_app.config.get('MAIL_DEFAULT_SENDER')}>"
+        if resend_api_key:
+            try:
+                from services.email_service import send_email as resend_send_email
 
-            # Log para debugging
-            current_app.logger.info(f"Intentando enviar email desde {sender_email} hacia {email_destino}")
-            if user_email:
-                current_app.logger.info(f"Reply-To: {user_email}")
-            current_app.logger.info(f"SMTP Config: {current_app.config.get('MAIL_SERVER')}:{current_app.config.get('MAIL_PORT')}")
+                current_app.logger.info(f"Intentando enviar email via Resend a {email_destino}")
 
-            msg = Message(
-                asunto,
-                recipients=[email_destino],
-                body=mensaje,
-                sender=sender_email
-            )
+                # Convertir mensaje de texto a HTML simple
+                mensaje_html = f"<pre style='font-family: Arial, sans-serif; white-space: pre-wrap;'>{mensaje}</pre>"
 
-            # Si el usuario tiene email, configurar Reply-To para que las respuestas vayan a él
-            if user_email:
-                msg.reply_to = f"{user_name} <{user_email}>"
-            msg.attach(
-                f'presupuesto_{presupuesto.numero}.pdf',
-                'application/pdf',
-                pdf_bytes
-            )
+                # Preparar adjunto
+                adjuntos = [{
+                    'filename': f'presupuesto_{presupuesto.numero}.pdf',
+                    'content': pdf_bytes,
+                    'content_type': 'application/pdf'
+                }]
 
-            current_app.logger.info("Enviando email...")
-            mail.send(msg)
-            current_app.logger.info("Email enviado exitosamente!")
+                # Enviar con Resend
+                email_enviado = resend_send_email(
+                    to_email=email_destino,
+                    subject=asunto,
+                    html_content=mensaje_html,
+                    attachments=adjuntos,
+                    reply_to=user_email,
+                    text_content=mensaje
+                )
 
-            # Actualizar estado si está en borrador
-            if presupuesto.estado == 'borrador':
-                presupuesto.estado = 'enviado'
-                db.session.commit()
+                if email_enviado:
+                    current_app.logger.info("Email enviado exitosamente via Resend!")
+                else:
+                    current_app.logger.warning("Resend falló, intentando con Flask-Mail...")
 
-            flash(f'Presupuesto enviado exitosamente a {email_destino}', 'success')
-            return redirect(url_for('presupuestos.detalle', id=id))
+            except Exception as resend_error:
+                current_app.logger.warning(f"Error con Resend: {resend_error}, intentando Flask-Mail...")
 
-        except ImportError:
-            flash('El sistema de envío de emails no está configurado. Por favor contacte al administrador.', 'warning')
-            current_app.logger.warning("Flask-Mail no está configurado")
-            return redirect(url_for('presupuestos.detalle', id=id))
+        # Si Resend no funcionó, intentar con Flask-Mail
+        if not email_enviado:
+            try:
+                from extensions import mail
+
+                sender_email = f"{user_name} - OBYRA <{current_app.config.get('MAIL_DEFAULT_SENDER')}>"
+
+                current_app.logger.info(f"Intentando enviar email via Flask-Mail desde {sender_email} hacia {email_destino}")
+
+                msg = Message(
+                    asunto,
+                    recipients=[email_destino],
+                    body=mensaje,
+                    sender=sender_email
+                )
+
+                if user_email:
+                    msg.reply_to = f"{user_name} <{user_email}>"
+                msg.attach(
+                    f'presupuesto_{presupuesto.numero}.pdf',
+                    'application/pdf',
+                    pdf_bytes
+                )
+
+                mail.send(msg)
+                email_enviado = True
+                current_app.logger.info("Email enviado exitosamente via Flask-Mail!")
+
+            except ImportError:
+                current_app.logger.warning("Flask-Mail no está configurado")
+            except Exception as mail_error:
+                error_msg = str(mail_error)
+                current_app.logger.error(f"Error al enviar email via Flask-Mail: {mail_error}", exc_info=True)
+
+                # Mostrar error específico
+                if 'SMTPAuthenticationError' in type(mail_error).__name__ or 'Authentication' in error_msg or '535' in error_msg:
+                    flash('Error de autenticación del servidor de correo. Por favor contacte al administrador.', 'danger')
+                elif 'SMTP' in type(mail_error).__name__ or 'smtp' in error_msg.lower():
+                    flash(f'Error del servidor de correo: {error_msg[:100]}', 'danger')
+                else:
+                    flash(f'Error al enviar el email: {error_msg[:100]}', 'danger')
+                return redirect(url_for('presupuestos.enviar_email', id=id))
+
+        # Si ninguno funcionó
+        if not email_enviado:
+            flash('No se pudo enviar el email. Verifique la configuración del servidor de correo.', 'danger')
+            return redirect(url_for('presupuestos.enviar_email', id=id))
+
+        # Actualizar estado si está en borrador
+        if presupuesto.estado == 'borrador':
+            presupuesto.estado = 'enviado'
+            db.session.commit()
+
+        flash(f'Presupuesto enviado exitosamente a {email_destino}', 'success')
+        return redirect(url_for('presupuestos.detalle', id=id))
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.enviar_email: {e}", exc_info=True)
-        flash('Error al enviar el email', 'danger')
+        flash('Error al procesar el envío del email', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 
 

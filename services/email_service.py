@@ -8,7 +8,7 @@ import os
 import requests
 
 
-def send_email(to_email, subject, html_content, attachments=None):
+def send_email(to_email, subject, html_content, attachments=None, reply_to=None, text_content=None):
     """
     Envía email usando Resend API
 
@@ -16,10 +16,13 @@ def send_email(to_email, subject, html_content, attachments=None):
         to_email (str): Email destinatario
         subject (str): Asunto del email
         html_content (str): Contenido HTML del email
-        attachments (list): Lista de archivos adjuntos (no soportado aún con Resend)
+        attachments (list): Lista de archivos adjuntos [{'filename': 'x.pdf', 'content': bytes, 'content_type': 'application/pdf'}]
+        reply_to (str): Email para respuestas
+        text_content (str): Contenido de texto plano (alternativo al HTML)
     """
     try:
         from flask import current_app
+        import base64
 
         resend_api_key = current_app.config.get('RESEND_API_KEY')
         from_email = current_app.config.get('FROM_EMAIL', 'OBYRA <onboarding@resend.dev>')
@@ -32,6 +35,40 @@ def send_email(to_email, subject, html_content, attachments=None):
             current_app.logger.warning("[EMAIL] RESEND_API_KEY no configurada")
             return False
 
+        # Construir payload del email
+        email_payload = {
+            "from": from_email,
+            "to": [to_email],
+            "subject": subject,
+        }
+
+        # Agregar contenido HTML o texto
+        if html_content:
+            email_payload["html"] = html_content
+        if text_content:
+            email_payload["text"] = text_content
+
+        # Agregar Reply-To si está configurado
+        if reply_to:
+            email_payload["reply_to"] = reply_to
+
+        # Agregar adjuntos si existen
+        if attachments:
+            email_attachments = []
+            for att in attachments:
+                # Resend espera el contenido en base64
+                if isinstance(att.get('content'), bytes):
+                    content_b64 = base64.b64encode(att['content']).decode('utf-8')
+                else:
+                    content_b64 = att.get('content', '')
+
+                email_attachments.append({
+                    "filename": att.get('filename', 'adjunto.pdf'),
+                    "content": content_b64
+                })
+            email_payload["attachments"] = email_attachments
+            current_app.logger.info(f"[EMAIL] Adjuntos incluidos: {len(email_attachments)}")
+
         # Enviar via Resend API
         response = requests.post(
             "https://api.resend.com/emails",
@@ -39,12 +76,7 @@ def send_email(to_email, subject, html_content, attachments=None):
                 "Authorization": f"Bearer {resend_api_key}",
                 "Content-Type": "application/json"
             },
-            json={
-                "from": from_email,
-                "to": [to_email],
-                "subject": subject,
-                "html": html_content
-            },
+            json=email_payload,
             timeout=30
         )
 

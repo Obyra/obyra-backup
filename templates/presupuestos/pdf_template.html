@@ -87,25 +87,6 @@
             color: #004085;
         }
 
-        /* Estado badge */
-        .estado-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            background: #f0f0f0;
-            color: #666;
-            border-radius: 15px;
-            font-size: 8pt;
-            font-weight: bold;
-            text-transform: uppercase;
-            position: absolute;
-            top: 15px;
-            right: 25px;
-        }
-
-        .estado-enviado { background: #e3f2fd; color: #1976d2; }
-        .estado-aprobado { background: #e8f5e9; color: #388e3c; }
-        .estado-rechazado { background: #ffebee; color: #d32f2f; }
-
         /* Información del cliente y fecha */
         .info-bar {
             background: #f5f5f5;
@@ -343,14 +324,15 @@
        ============================================ #}
 
     <!-- Header con datos de la empresa -->
+    {% set nombre_org = organizacion.nombre|replace('Organización de ', '')|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
     <div class="header-wrapper">
         <div class="header-content">
             <div class="company-logo">
                 <svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 5px;">
                     <circle cx="12" cy="12" r="12" fill="white"/>
-                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ organizacion.nombre[0] if organizacion.nombre else 'O' }}</text>
+                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ nombre_org[0] }}</text>
                 </svg>
-                {{ organizacion.nombre }}
+                {{ nombre_org }}
             </div>
             <div class="company-info">
                 {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
@@ -365,7 +347,6 @@
                 </span>
             </div>
         </div>
-        <span class="estado-badge estado-{{ presupuesto.estado }}">{{ presupuesto.estado|title }}</span>
     </div>
 
     <!-- Barra de información del cliente -->
@@ -597,9 +578,9 @@
             <div class="company-logo">
                 <svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 5px;">
                     <circle cx="12" cy="12" r="12" fill="white"/>
-                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ organizacion.nombre[0] if organizacion.nombre else 'O' }}</text>
+                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ nombre_org[0] }}</text>
                 </svg>
-                {{ organizacion.nombre }}
+                {{ nombre_org }}
             </div>
             <div class="company-info">
                 {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
@@ -614,7 +595,6 @@
                 </span>
             </div>
         </div>
-        <span class="estado-badge estado-{{ presupuesto.estado }}">{{ presupuesto.estado|title }}</span>
     </div>
 
     <!-- Barra de información del cliente -->
