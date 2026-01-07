@@ -219,29 +219,6 @@
             color: #e65100;
         }
 
-        /* Box de paridad */
-        .paridad-info {
-            background: #e8f5e9;
-            border: 1px solid #4caf50;
-            padding: 8px 12px;
-            margin-bottom: 12px;
-            border-radius: 4px;
-            font-size: 8pt;
-            text-align: center;
-        }
-
-        .paridad-info .paridad-title {
-            font-weight: bold;
-            color: #2e7d32;
-            margin-bottom: 2px;
-        }
-
-        .paridad-info .paridad-value {
-            font-size: 10pt;
-            font-weight: bold;
-            color: #1b5e20;
-        }
-
         /* ========================================
            FOOTER CON TOTALES - Siempre al final
            ======================================== */
@@ -422,12 +399,6 @@
         <strong>Moneda:</strong> {{ moneda_principal }}
     </div>
     {% endif %}
-
-    <!-- Box de paridad -->
-    <div class="paridad-info">
-        <div class="paridad-title">Paridad Banco Nación (vendedor)</div>
-        <div class="paridad-value">1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}</div>
-    </div>
 
     <!-- Contenido principal - MONEDA PRINCIPAL -->
     {% if items %}
@@ -677,12 +648,6 @@
         <strong>Moneda:</strong> {{ moneda_alternativa }} (convertido)
     </div>
     {% endif %}
-
-    <!-- Box de paridad -->
-    <div class="paridad-info">
-        <div class="paridad-title">Paridad Banco Nación (vendedor)</div>
-        <div class="paridad-value">1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}</div>
-    </div>
 
     <!-- Contenido principal - MONEDA ALTERNATIVA (convertida) -->
     {% if items %}
