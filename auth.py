@@ -922,6 +922,25 @@ def crear_integrante_desde_panel():
     try:
         if email_existente:
             usuario_objetivo = email_existente
+
+            # NUEVO: Verificar si el usuario tiene membresías ACTIVAS en OTRAS organizaciones
+            # Si es así, no permitir vincularlo (debe ser dado de baja primero por el admin original)
+            memberships_otras_orgs = OrgMembership.query.filter(
+                OrgMembership.user_id == usuario_objetivo.id,
+                OrgMembership.org_id != org_id,
+                OrgMembership.status == 'active',
+                db.or_(
+                    OrgMembership.archived.is_(False),
+                    OrgMembership.archived.is_(None),
+                )
+            ).first()
+
+            if memberships_otras_orgs:
+                return jsonify({
+                    'success': False,
+                    'message': 'Este email ya está registrado en otra organización. El usuario debe ser dado de baja de su organización actual antes de poder ser agregado aquí.'
+                }), 409
+
             membership_existente = OrgMembership.query.filter_by(org_id=org_id, user_id=usuario_objetivo.id).first()
             if membership_existente and not membership_existente.archived:
                 estado = membership_existente.status
