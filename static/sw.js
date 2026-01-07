@@ -1,5 +1,5 @@
-// OBYRA Service Worker v1.0
-const CACHE_NAME = 'obyra-cache-v1';
+// OBYRA Service Worker v2.0 - Google Maps tiles
+const CACHE_NAME = 'obyra-cache-v2';
 const OFFLINE_URL = '/offline';
 
 // Archivos esenciales para cachear

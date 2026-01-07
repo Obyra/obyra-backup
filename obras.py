@@ -272,7 +272,9 @@ def _format_result(item, query_lower):
 @obras_bp.route('/api/buscar-direcciones', methods=['GET'])
 @login_required
 def buscar_direcciones():
-    """API endpoint para buscar direcciones usando Nominatim (optimizado para Argentina)"""
+    """API endpoint para buscar direcciones usando Google Maps (con fallback a Nominatim)"""
+    from services.geocoding_service import search as geocoding_search
+
     query = request.args.get('q', '').strip()
 
     if not query:
@@ -287,133 +289,25 @@ def buscar_direcciones():
         return jsonify({'ok': True, 'results': cached, 'cached': True})
 
     try:
-        query_lower = query.lower()
-        parsed = _parse_address_query(query)
+        # Usar el servicio de geocoding mejorado (Google Maps con detección de localidades GBA)
+        geocode_results = geocoding_search(query, limit=10)
 
-        # Configuración de Nominatim
-        url = "https://nominatim.openstreetmap.org/search"
-        headers = {
-            'User-Agent': 'OBYRA-Construction-Management/2.0 (contacto@obyra.com)',
-            'Accept-Language': 'es-AR,es;q=0.9'
-        }
+        if not geocode_results:
+            return jsonify({'ok': True, 'results': []})
 
-        all_results = []
-        seen_place_ids = set()
-
-        # 1. Si detectamos número de calle, hacer búsqueda estructurada primero
-        if parsed['number'] and parsed['street']:
-            street_query = f"{parsed['street']} {parsed['number']}"
-            if parsed['city']:
-                street_query += f", {parsed['city']}"
-            street_query += ", Argentina"
-
-            params_street = {
-                'q': street_query,
-                'format': 'json',
-                'limit': 10,
-                'addressdetails': 1,
-                'countrycodes': 'ar'
-            }
-
-            try:
-                response = requests.get(url, params=params_street, headers=headers, timeout=8)
-                if response.status_code == 200:
-                    for item in response.json():
-                        place_id = item.get('place_id')
-                        if place_id and place_id not in seen_place_ids:
-                            seen_place_ids.add(place_id)
-                            item['relevance'] = 20  # Alta relevancia por búsqueda estructurada
-                            all_results.append(item)
-            except:
-                pass
-
-        # 2. Búsqueda normal
-        query_variations = [
-            query,
-            f"{query}, Argentina" if 'argentina' not in query_lower else query,
-        ]
-
-        # Si hay ciudad detectada, agregar variación
-        if parsed['city']:
-            for ciudad in CIUDADES_ARGENTINA:
-                if parsed['city'].lower() in ciudad['nombre'].lower():
-                    query_variations.append(f"{parsed['street']}, {ciudad['nombre']}, {ciudad['provincia']}, Argentina")
-                    break
-
-        for q_var in query_variations[:2]:  # Limitar a 2 variaciones
-            params = {
-                'q': q_var,
-                'format': 'json',
-                'limit': 15,
-                'addressdetails': 1,
-                'countrycodes': 'ar',
-                'dedupe': 1
-            }
-
-            try:
-                response = requests.get(url, params=params, headers=headers, timeout=8)
-                if response.status_code == 200:
-                    for item in response.json():
-                        place_id = item.get('place_id')
-                        if place_id and place_id not in seen_place_ids:
-                            seen_place_ids.add(place_id)
-                            all_results.append(item)
-            except:
-                continue
-
-        # 3. Calcular relevancia mejorada
-        for item in all_results:
-            if 'relevance' not in item:
-                item['relevance'] = 0
-
-            display_name = item.get('display_name', '').lower()
-            addr = item.get('address', {})
-
-            # Boost por coincidencia con query
-            if query_lower in display_name:
-                item['relevance'] += 10
-
-            # Boost por cada palabra que coincide
-            query_words = set(query_lower.replace(',', ' ').split())
-            for word in query_words:
-                if len(word) > 2 and word in display_name:
-                    item['relevance'] += 3
-
-            # Priorizar direcciones completas (calle + número)
-            if addr.get('road') and addr.get('house_number'):
-                item['relevance'] += 15
-                # Extra si el número coincide
-                if parsed['number'] and addr.get('house_number') == parsed['number']:
-                    item['relevance'] += 10
-            elif addr.get('road'):
-                item['relevance'] += 5
-
-            # Boost para ciudades principales
-            city = addr.get('city', '') or addr.get('town', '') or addr.get('village', '')
-            city_lower = city.lower() if city else ''
-
-            principales = ['buenos aires', 'córdoba', 'cordoba', 'rosario', 'mendoza',
-                          'la plata', 'mar del plata', 'tucumán', 'tucuman', 'salta']
-            if any(c in city_lower for c in principales):
-                item['relevance'] += 5
-
-            # Penalizar resultados muy genéricos
-            if item.get('type') in ['state', 'country', 'administrative']:
-                item['relevance'] -= 15
-
-            # Penalizar si no tiene calle
-            if not addr.get('road'):
-                item['relevance'] -= 5
-
-        # Ordenar por relevancia
-        all_results.sort(key=lambda x: x.get('relevance', 0), reverse=True)
-
-        # Formatear y tomar los mejores 12 resultados
+        # Formatear resultados para compatibilidad con el frontend
         formatted_results = []
-        for item in all_results[:12]:
-            formatted = _format_result(item, query_lower)
-            if formatted['formatted_address']:  # Solo incluir si tiene dirección formateada
-                formatted_results.append(formatted)
+        for result in geocode_results:
+            formatted = {
+                'display_name': result.get('display_name', ''),
+                'formatted_address': result.get('display_name', ''),
+                'lat': result.get('lat'),
+                'lon': result.get('lng'),
+                'place_id': result.get('place_id'),
+                'provider': result.get('provider', 'google'),
+                'relevance': 100,  # Los resultados de Google ya vienen ordenados por relevancia
+            }
+            formatted_results.append(formatted)
 
         # Guardar en cache
         if formatted_results:
@@ -421,9 +315,6 @@ def buscar_direcciones():
 
         return jsonify({'ok': True, 'results': formatted_results})
 
-    except requests.exceptions.Timeout:
-        current_app.logger.warning(f"Nominatim timeout for query: {query}")
-        return jsonify({'ok': False, 'error': 'Search timeout'}), 504
     except Exception as e:
         current_app.logger.error(f"Error searching addresses: {str(e)}")
         return jsonify({'ok': False, 'error': 'Internal server error'}), 500

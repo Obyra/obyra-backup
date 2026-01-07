@@ -628,6 +628,23 @@ def porcentaje_filter(valor):
         return '0%'
     return f'{valor:.1f}%'
 
+@app.template_filter('entero')
+def entero_filter(valor):
+    """
+    Redondea números hacia arriba (ceil) y formatea como entero con separador de miles.
+    Usado para cantidades de materiales que deben mostrarse como números enteros.
+    """
+    import math
+    if valor is None:
+        return '0'
+    try:
+        valor = float(valor)
+        valor_ceil = math.ceil(valor)
+        return f'{valor_ceil:,}'.replace(',', '.')
+    except (ValueError, TypeError):
+        return '0'
+
+
 @app.template_filter('numero')
 def numero_filter(valor, decimales=2):
     """

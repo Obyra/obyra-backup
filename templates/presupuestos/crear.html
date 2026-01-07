@@ -841,10 +841,16 @@ function inicializarMapaUbicacion(lat, lng) {
         return;
     }
     if (!ubicacionMap) {
-        ubicacionMap = L.map('ubicacion_mapa');
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19,
+        ubicacionMap = L.map('ubicacion_mapa', {
+            attributionControl: false
+        });
+        // Agregar atribución personalizada sin "Leaflet |"
+        L.control.attribution({ prefix: false }).addTo(ubicacionMap);
+        // Usar Google Maps tiles
+        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
+            subdomains: ['0', '1', '2', '3'],
+            attribution: '© Google Maps',
+            maxZoom: 20,
         }).addTo(ubicacionMap);
     }
     ubicacionMap.setView([lat, lng], 15);

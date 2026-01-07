@@ -2,11 +2,11 @@ from datetime import datetime
 import re
 from typing import Tuple
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for, jsonify
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
-from extensions import db
+from extensions import db, csrf
 from models import PerfilUsuario, Usuario
 from auth import normalizar_cuit, validar_cuit
 
@@ -392,3 +392,34 @@ def organizacion():
         organizacion=organizacion,
         usuario=current_user
     )
+
+
+@account_bp.route('/cambiar-password', methods=['POST'])
+@csrf.exempt
+@login_required
+def cambiar_password():
+    """Permite al usuario cambiar su contraseña"""
+
+    password_actual = request.form.get('password_actual', '')
+    password_nueva = request.form.get('password_nueva', '')
+    password_confirmar = request.form.get('password_confirmar', '')
+
+    if not all([password_actual, password_nueva, password_confirmar]):
+        return jsonify({'success': False, 'message': 'Todos los campos son obligatorios'}), 400
+
+    if password_nueva != password_confirmar:
+        return jsonify({'success': False, 'message': 'Las contraseñas no coinciden'}), 400
+
+    if len(password_nueva) < 6:
+        return jsonify({'success': False, 'message': 'La contraseña debe tener al menos 6 caracteres'}), 400
+
+    if not current_user.check_password(password_actual):
+        return jsonify({'success': False, 'message': 'La contraseña actual es incorrecta'}), 400
+
+    try:
+        current_user.set_password(password_nueva)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Contraseña actualizada correctamente'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al actualizar la contraseña'}), 500

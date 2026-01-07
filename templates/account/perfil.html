@@ -37,13 +37,141 @@
                         <i class="fas fa-file-invoice-dollar me-2"></i>Ir a Facturacion
                     </a>
                     {% if has_endpoint('planes.mostrar_planes') %}
-                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-outline-success w-100">
+                    <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-outline-success w-100 mb-2">
                         <i class="fas fa-crown me-2"></i>Ver Planes
                     </a>
                     {% endif %}
+                    <button type="button" class="btn btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#modalCambiarPassword">
+                        <i class="fas fa-key me-2"></i>Cambiar Contraseña
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Modal Cambiar Contraseña -->
+<div class="modal fade" id="modalCambiarPassword" tabindex="-1" aria-labelledby="modalCambiarPasswordLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="formCambiarPassword" method="POST" action="{{ url_for('account.cambiar_password') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCambiarPasswordLabel">
+                        <i class="fas fa-key me-2"></i>Cambiar Contraseña
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="passwordAlert" class="alert d-none" role="alert"></div>
+                    <div class="mb-3">
+                        <label for="password_actual" class="form-label">Contraseña actual</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password_actual" name="password_actual" required>
+                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password_actual">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password_nueva" class="form-label">Nueva contraseña</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password_nueva" name="password_nueva" required minlength="6">
+                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password_nueva">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Mínimo 6 caracteres</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password_confirmar" class="form-label">Confirmar nueva contraseña</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password_confirmar" name="password_confirmar" required minlength="6">
+                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password_confirmar">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('formCambiarPassword').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const passwordNueva = document.getElementById('password_nueva').value;
+    const passwordConfirmar = document.getElementById('password_confirmar').value;
+    const alertDiv = document.getElementById('passwordAlert');
+
+    if (passwordNueva !== passwordConfirmar) {
+        alertDiv.className = 'alert alert-danger';
+        alertDiv.textContent = 'Las contraseñas no coinciden';
+        alertDiv.classList.remove('d-none');
+        return;
+    }
+
+    if (passwordNueva.length < 6) {
+        alertDiv.className = 'alert alert-danger';
+        alertDiv.textContent = 'La contraseña debe tener al menos 6 caracteres';
+        alertDiv.classList.remove('d-none');
+        return;
+    }
+
+    const formData = new FormData(this);
+
+    fetch(this.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alertDiv.className = 'alert alert-success';
+            alertDiv.textContent = data.message;
+            alertDiv.classList.remove('d-none');
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('modalCambiarPassword')).hide();
+                document.getElementById('formCambiarPassword').reset();
+                alertDiv.classList.add('d-none');
+            }, 2000);
+        } else {
+            alertDiv.className = 'alert alert-danger';
+            alertDiv.textContent = data.message;
+            alertDiv.classList.remove('d-none');
+        }
+    })
+    .catch(error => {
+        alertDiv.className = 'alert alert-danger';
+        alertDiv.textContent = 'Error al procesar la solicitud';
+        alertDiv.classList.remove('d-none');
+    });
+});
+
+// Toggle password visibility
+document.querySelectorAll('.toggle-password').forEach(button => {
+    button.addEventListener('click', function() {
+        const targetId = this.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        const icon = this.querySelector('i');
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    });
+});
+</script>
 {% endblock %}

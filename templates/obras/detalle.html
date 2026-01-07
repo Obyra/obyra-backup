@@ -441,7 +441,7 @@
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-primary">{{ item.cantidad|numero }} {{ item.unidad }}</span>
+                                                        <span class="badge bg-primary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
                                                     </td>
                                                     {# Buscar stock transferido: por ID, por nombre exacto, o por coincidencia parcial #}
                                                     {% set transferido_encontrado = namespace(data=none) %}
@@ -573,11 +573,11 @@
                                                         {% endif %}
                                                     </td>
                                                     <td class="text-center">
-                                                        <span class="badge bg-secondary">{{ item.cantidad|numero }} {{ item.unidad }}</span>
+                                                        <span class="badge bg-secondary">{{ item.cantidad|entero }} {{ item.unidad }}</span>
                                                     </td>
                                                     <td class="text-center">
                                                         {% if ejecutado > 0 %}
-                                                        <span class="badge bg-success">{{ ejecutado|numero }} {{ item.unidad }}</span>
+                                                        <span class="badge bg-success">{{ ejecutado|entero }} {{ item.unidad }}</span>
                                                         {% else %}
                                                         <span class="badge bg-light text-muted">0 {{ item.unidad }}</span>
                                                         {% endif %}

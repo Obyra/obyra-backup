@@ -385,7 +385,7 @@ def detalle(id):
                 OrgMembership.archived.is_(None),
             ),
         )
-        .options(joinedload('usuario'))
+        .options(joinedload(OrgMembership.usuario))
         .first()
     )
 

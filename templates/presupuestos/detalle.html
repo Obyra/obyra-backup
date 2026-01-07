@@ -549,7 +549,7 @@
                                     data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
-                                    <td class="text-end">{{ item.cantidad|numero(2) }}</td>
+                                    <td class="text-end">{{ item.cantidad|entero }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
                                     <td class="text-end fw-bold text-success">{{ (item.total_currency or 0)|moneda('USD') }}</td>
                                     <td class="text-end fw-bold text-primary">{{ (item.total_ars or item.total or 0)|moneda('ARS') }}</td>
@@ -650,8 +650,8 @@
                                     data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.personas or 1 }}</td>
-                                    <td class="text-center">{{ (item.duracion_dias or ((item.jornales or item.cantidad) / (item.personas or 1)))|numero(1) }}</td>
-                                    <td class="text-end">{{ (item.jornales or item.cantidad)|numero(1) }}</td>
+                                    <td class="text-center">{{ (item.duracion_dias or ((item.jornales or item.cantidad) / (item.personas or 1)))|entero }}</td>
+                                    <td class="text-end">{{ (item.jornales or item.cantidad)|entero }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
                                     <td class="text-end fw-bold text-success">{{ (item.total_currency or 0)|moneda('USD') }}</td>
@@ -748,7 +748,7 @@
                                     data-item-delete-confirm="¿Eliminar este item?">
                                     <td>{{ item.descripcion }}</td>
                                     <td>{{ item.unidad }}</td>
-                                    <td class="text-end">{{ item.cantidad|numero(2) }}</td>
+                                    <td class="text-end">{{ item.cantidad|entero }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
                                     <td class="text-end fw-bold text-success">{{ (item.total_currency or 0)|moneda('USD') }}</td>
                                     <td class="text-end fw-bold text-primary">{{ (item.total_ars or item.total or 0)|moneda('ARS') }}</td>

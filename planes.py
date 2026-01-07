@@ -234,13 +234,192 @@ def pago_tarjeta():
     )
 
 
+@planes_bp.route('/pago-mercadopago/<plan>')
+@login_required
+def pago_mercadopago(plan):
+    """Crear preferencia de pago en MercadoPago y redirigir al checkout."""
+    import mercadopago
+
+    # Verificar que MP está configurado
+    mp_access_token = os.getenv('MP_ACCESS_TOKEN', '').strip()
+    if not mp_access_token:
+        flash('El pago con tarjeta no está disponible en este momento. Por favor, usa transferencia bancaria.', 'warning')
+        return redirect(url_for('planes.instrucciones_pago'))
+
+    # Obtener info del plan
+    if plan not in PLANES_CONFIG:
+        plan = 'premium'  # Default
+
+    plan_info = PLANES_CONFIG[plan]
+    cotizacion = obtener_cotizacion_bna()
+    precio_ars = float(plan_info['precio_usd'] * Decimal(str(cotizacion['value'])))
+
+    # Inicializar SDK
+    sdk = mercadopago.SDK(mp_access_token)
+
+    # Obtener URL base para callbacks
+    base_url = os.getenv('BASE_URL', '').strip()
+    if not base_url or 'localhost' in base_url:
+        # En desarrollo local, usar una URL genérica (MP redirige igual)
+        base_url = request.url_root.rstrip('/')
+
+    # Crear preferencia
+    preference_data = {
+        "items": [
+            {
+                "id": f"plan_{plan}",
+                "title": f"OBYRA Pro - {plan_info['nombre']}",
+                "description": f"Suscripcion mensual - Hasta {plan_info['max_usuarios']} usuarios",
+                "category_id": "services",
+                "quantity": 1,
+                "currency_id": "ARS",
+                "unit_price": round(precio_ars, 2)
+            }
+        ],
+        "payer": {
+            "name": current_user.nombre,
+            "surname": current_user.apellido,
+            "email": current_user.email
+        },
+        "external_reference": f"user_{current_user.id}_plan_{plan}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "statement_descriptor": "OBYRA PRO"
+    }
+
+    # Solo agregar back_urls y auto_return si tenemos URL pública configurada
+    public_url = os.getenv('MP_WEBHOOK_PUBLIC_URL', '').strip()
+    if public_url:
+        preference_data["back_urls"] = {
+            "success": f"{public_url}/planes/pago-exitoso",
+            "failure": f"{public_url}/planes/pago-fallido",
+            "pending": f"{public_url}/planes/pago-pendiente"
+        }
+        preference_data["auto_return"] = "approved"
+        preference_data["notification_url"] = f"{public_url}/planes/webhook-mercadopago"
+
+    try:
+        preference_response = sdk.preference().create(preference_data)
+        preference = preference_response.get("response", {})
+
+        if not preference.get("init_point"):
+            print(f"MP Error Response: {preference_response}")
+            flash('Error al crear el pago. Por favor, intenta nuevamente.', 'error')
+            return redirect(url_for('planes.instrucciones_pago'))
+
+        # Redirigir al checkout de MercadoPago
+        return redirect(preference["init_point"])
+
+    except Exception as e:
+        print(f"Error creando preferencia MP: {e}")
+        flash('Error al procesar el pago. Por favor, intenta con transferencia bancaria.', 'error')
+        return redirect(url_for('planes.instrucciones_pago'))
+
+
+@planes_bp.route('/pago-exitoso')
+@login_required
+def pago_exitoso():
+    """Callback cuando el pago fue exitoso."""
+    # Obtener datos del pago
+    payment_id = request.args.get('payment_id')
+    status = request.args.get('status')
+    external_reference = request.args.get('external_reference', '')
+
+    # Parsear el plan del external_reference
+    plan_tipo = 'premium'  # Default
+    if 'plan_' in external_reference:
+        try:
+            plan_tipo = external_reference.split('plan_')[1].split('_')[0]
+        except:
+            pass
+
+    if status == 'approved':
+        # Activar el plan del usuario
+        try:
+            org = current_user.organizacion
+            if org:
+                plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG['premium'])
+                org.plan_tipo = plan_tipo
+                org.max_usuarios = plan_info['max_usuarios']
+                org.fecha_inicio_plan = datetime.utcnow()
+                org.fecha_fin_plan = datetime.utcnow() + timedelta(days=30)  # 1 mes
+                db.session.commit()
+
+                flash(f'¡Pago exitoso! Tu plan {plan_info["nombre"]} ha sido activado.', 'success')
+            else:
+                flash('Pago recibido. Contactanos para activar tu plan.', 'info')
+        except Exception as e:
+            print(f"Error activando plan: {e}")
+            flash('Pago recibido. Estamos procesando tu suscripcion.', 'info')
+    else:
+        flash('El pago fue procesado. Te notificaremos cuando se confirme.', 'info')
+
+    return redirect(url_for('planes.ver_planes'))
+
+
+@planes_bp.route('/pago-fallido')
+@login_required
+def pago_fallido():
+    """Callback cuando el pago falló."""
+    flash('El pago no pudo ser procesado. Por favor, intenta nuevamente o usa otra forma de pago.', 'error')
+    return redirect(url_for('planes.instrucciones_pago'))
+
+
+@planes_bp.route('/pago-pendiente')
+@login_required
+def pago_pendiente():
+    """Callback cuando el pago está pendiente."""
+    flash('Tu pago está siendo procesado. Te notificaremos cuando se confirme.', 'info')
+    return redirect(url_for('planes.ver_planes'))
+
+
+@planes_bp.route('/webhook-mercadopago', methods=['POST'])
+def webhook_mercadopago():
+    """Webhook para recibir notificaciones de MercadoPago."""
+    import mercadopago
+
+    mp_access_token = os.getenv('MP_ACCESS_TOKEN', '').strip()
+    if not mp_access_token:
+        return jsonify({"status": "error"}), 400
+
+    data = request.get_json(silent=True) or {}
+    topic = data.get('type') or request.args.get('topic')
+    resource_id = data.get('data', {}).get('id') or request.args.get('id')
+
+    if topic == 'payment' and resource_id:
+        try:
+            sdk = mercadopago.SDK(mp_access_token)
+            payment_info = sdk.payment().get(resource_id)
+            payment = payment_info.get("response", {})
+
+            if payment.get("status") == "approved":
+                external_reference = payment.get("external_reference", "")
+                # Parsear user_id y plan
+                if "user_" in external_reference and "_plan_" in external_reference:
+                    parts = external_reference.split("_")
+                    user_id = int(parts[1])
+                    plan_tipo = parts[3]
+
+                    # Activar plan
+                    user = Usuario.query.get(user_id)
+                    if user and user.organizacion:
+                        plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG['premium'])
+                        user.organizacion.plan_tipo = plan_tipo
+                        user.organizacion.max_usuarios = plan_info['max_usuarios']
+                        user.organizacion.fecha_inicio_plan = datetime.utcnow()
+                        user.organizacion.fecha_fin_plan = datetime.utcnow() + timedelta(days=30)
+                        db.session.commit()
+                        print(f"Plan {plan_tipo} activado para usuario {user_id}")
+
+        except Exception as e:
+            print(f"Error procesando webhook MP: {e}")
+
+    return jsonify({"status": "ok"}), 200
+
+
 @planes_bp.route('/procesar-pago-tarjeta', methods=['POST'])
 @login_required
 def procesar_pago_tarjeta():
-    """Procesar pago con tarjeta (placeholder - a implementar con pasarela de pagos)."""
-    # Por ahora solo redirigir con mensaje
-    flash('El pago con tarjeta estará disponible próximamente. Por favor, usa la opción de transferencia bancaria.', 'info')
-    return redirect(url_for('planes.instrucciones_pago'))
+    """Procesar pago con tarjeta (redirige a MercadoPago)."""
+    return redirect(url_for('planes.pago_mercadopago', plan='premium'))
 
 
 @planes_bp.route('/enviar-comprobante', methods=['POST'])

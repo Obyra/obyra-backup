@@ -977,7 +977,8 @@ def crear_integrante_desde_panel():
             usuario_objetivo.nombre = usuario_objetivo.nombre or nombre
             usuario_objetivo.apellido = usuario_objetivo.apellido or apellido
             usuario_objetivo.telefono = telefono_sanitizado
-            usuario_objetivo.role = role_front  # Solo usar campo unificado 'role'
+            usuario_objetivo.rol = rol_interno  # Campo legacy requerido por la BD
+            usuario_objetivo.role = role_front  # Campo unificado
             usuario_objetivo.activo = True
             if not usuario_objetivo.organizacion_id:
                 usuario_objetivo.organizacion_id = org_id
@@ -999,7 +1000,8 @@ def crear_integrante_desde_panel():
                 apellido=apellido,
                 email=email,
                 telefono=telefono_sanitizado,
-                role=role_front,  # Solo usar campo unificado 'role'
+                rol=rol_interno,  # Campo legacy requerido por la BD
+                role=role_front,  # Campo unificado
                 auth_provider='manual',
                 activo=True,
                 organizacion_id=org_id,

@@ -44,8 +44,55 @@
 
             <!-- Opciones de pago -->
             <div class="row g-4 mb-5">
+                <!-- Opcion Tarjeta -->
+                <div class="col-lg-4">
+                    <div class="card h-100 shadow border-0 payment-option" id="card-tarjeta">
+                        <div class="card-header py-3 text-white" style="background: linear-gradient(135deg, #6B21A8, #9333EA);">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <h5 class="mb-0 fw-bold">
+                                    <i class="fas fa-credit-card me-2"></i>Tarjeta de Credito
+                                </h5>
+                                <span class="badge bg-warning text-dark">Instantaneo</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="precio-grande text-center mb-4">
+                                <span class="display-4 fw-bold" style="color: #6B21A8;">${{ "{:,.0f}".format(precio_ars) }}</span>
+                                <span class="text-muted fs-5">ARS</span>
+                            </div>
+                            <div class="text-center mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Equivalente a ${{ precio_usd|int }} USD
+                                </small>
+                            </div>
+
+                            <div class="datos-tarjeta text-center">
+                                <div class="mb-3">
+                                    <img src="https://www.mercadopago.com/org-img/MP3/API/logos/visa.gif" alt="Visa" class="me-2" style="height: 30px;">
+                                    <img src="https://www.mercadopago.com/org-img/MP3/API/logos/master.gif" alt="Mastercard" class="me-2" style="height: 30px;">
+                                    <img src="https://www.mercadopago.com/org-img/MP3/API/logos/amex.gif" alt="Amex" style="height: 30px;">
+                                </div>
+                                <p class="text-muted small mb-3">
+                                    <i class="fas fa-shield-alt me-1"></i>
+                                    Pago seguro via MercadoPago
+                                </p>
+                                <ul class="list-unstyled text-start small text-muted mb-4">
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Tarjeta de credito</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Tarjeta de debito</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Activacion instantanea</li>
+                                </ul>
+                                <a href="{{ url_for('planes.pago_mercadopago', plan=plan_seleccionado if plan_seleccionado else 'premium') }}"
+                                   class="btn btn-lg w-100 text-white" style="background: linear-gradient(135deg, #6B21A8, #9333EA);">
+                                    <i class="fas fa-lock me-2"></i>Pagar con Tarjeta
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Opcion USD -->
-                <div class="col-lg-6">
+                <div class="col-lg-4">
                     <div class="card h-100 shadow border-0 payment-option" id="card-usd">
                         <div class="card-header py-3 text-white" style="background: linear-gradient(135deg, #1A374D, #2D5A7B);">
                             <div class="d-flex align-items-center justify-content-between">
@@ -119,7 +166,7 @@
                 </div>
 
                 <!-- Opcion ARS -->
-                <div class="col-lg-6">
+                <div class="col-lg-4">
                     <div class="card h-100 shadow border-0 payment-option" id="card-ars">
                         <div class="card-header py-3 text-white" style="background: linear-gradient(135deg, #4CAF50, #45a049);">
                             <div class="d-flex align-items-center justify-content-between">

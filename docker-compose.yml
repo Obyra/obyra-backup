@@ -92,9 +92,9 @@ services:
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
 
-      # Maps/Geocoding
-      MAPS_PROVIDER: ${MAPS_PROVIDER:-nominatim}
-      MAPS_API_KEY: ${MAPS_API_KEY}
+      # Maps/Geocoding (Google Maps API)
+      MAPS_PROVIDER: ${MAPS_PROVIDER:-google}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
       MAPS_USER_AGENT: ${MAPS_USER_AGENT:-OBYRA/1.0}
 
       # Feature Flags
@@ -122,6 +122,8 @@ services:
       - ./blueprint_requerimientos.py:/app/blueprint_requerimientos.py:ro  # Requerimientos de compra
       - ./blueprint_notificaciones.py:/app/blueprint_notificaciones.py:ro  # Notificaciones
       - ./blueprint_clientes.py:/app/blueprint_clientes.py:ro  # Clientes
+      - ./config:/app/config:ro  # Config files (billing, etc.)
+      - ./planes.py:/app/planes.py:ro  # Planes blueprint
     ports:
       - "5003:5000"  # Puerto externo 5003 (5000, 5001 ocupados)
     depends_on:

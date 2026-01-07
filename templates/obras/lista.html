@@ -172,7 +172,7 @@
                                                 <span class="d-none d-md-inline ms-1">Ver en mapa</span>
                                             </button>
                                             {% elif obra.direccion %}
-                                            <a class="btn btn-sm btn-outline-info d-flex align-items-center" href="https://www.openstreetmap.org/search?query={{ obra.direccion|urlencode }}" target="_blank" rel="noopener" title="Abrir en mapa externo">
+                                            <a class="btn btn-sm btn-outline-info d-flex align-items-center" href="https://www.google.com/maps/search/?api=1&query={{ obra.direccion|urlencode }}" target="_blank" rel="noopener" title="Abrir en Google Maps">
                                                 <i class="fas fa-map-marker-alt"></i>
                                                 <span class="d-none d-md-inline ms-1">Abrir mapa</span>
                                             </a>
@@ -297,7 +297,9 @@
     letter-spacing: 0.5px;
 }
 </style>
+<!-- Map version: 2026-01-07-v2 - Google Maps tiles -->
 <script>
+// === MAPA GOOGLE MAPS v2 ===
 let mapa;
 let marcadores = [];
 const marcadoresPorId = {};
@@ -339,14 +341,22 @@ function inicializarMapa() {
         // Crear mapa centrado en Buenos Aires
         mapa = L.map('mapa', {
             preferCanvas: false,
-            zoomControl: true
+            zoomControl: true,
+            attributionControl: false  // Deshabilitar atribución por defecto
         }).setView([-34.6037, -58.3816], 11);
+
+        // Agregar atribución personalizada
+        L.control.attribution({
+            prefix: false
+        }).addTo(mapa);
+
         console.log('✅ Mapa creado');
-        
-        // Agregar capa base
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
+
+        // Agregar capa base - Google Maps tiles
+        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
+            subdomains: ['0', '1', '2', '3'],
+            attribution: '© Google Maps',
+            maxZoom: 20
         }).addTo(mapa);
         console.log('✅ Capa base agregada');
         
