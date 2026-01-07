@@ -251,6 +251,7 @@ class ItemPresupuesto(db.Model):
     precio_unitario = db.Column(db.Numeric(10, 2), nullable=False)
     total = db.Column(db.Numeric(15, 2), nullable=False)
     etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id'), nullable=True)
+    etapa_nombre = db.Column(db.String(100), nullable=True)  # Nombre de etapa para presupuestos sin obra
     origen = db.Column(db.String(20), default='manual')  # manual, ia, importado
     currency = db.Column(db.String(3), nullable=False, default='ARS')
     price_unit_currency = db.Column(db.Numeric(15, 2))

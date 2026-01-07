@@ -306,16 +306,31 @@ def crear():
                     datos_proyecto_dict['ia_payload'] = ia_payload
                     presupuesto.datos_proyecto = json.dumps(datos_proyecto_dict)
 
-                    # Crear items SIN etapa_id (las etapas se crearán al confirmar como obra)
+                    # Crear items SIN etapa_id pero CON etapa_nombre (las etapas se crearán al confirmar como obra)
                     items_vinculados = 0
                     for etapa in etapas_ia:
+                        nombre_etapa = etapa.get('nombre', 'Sin Etapa')
                         items_etapa = etapa.get('items', [])
                         for item in items_etapa:
-                            # Obtener precios en la moneda correcta
+                            # Obtener precios - precio_unit está en la moneda del presupuesto (USD si es USD)
                             precio_unit = Decimal(str(item.get('precio_unit', 0)))
                             subtotal = Decimal(str(item.get('subtotal', 0)))
                             precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
                             total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
+
+                            # price_unit_currency y total_currency son los valores en USD
+                            # Si la moneda es USD, precio_unit ya está en USD
+                            # Si la moneda es ARS, necesitamos calcular el equivalente USD
+                            if moneda_ia == 'USD':
+                                price_unit_usd = precio_unit
+                                total_usd = subtotal
+                            elif tasa_usd and float(tasa_usd) > 0:
+                                # Convertir de ARS a USD usando la tasa
+                                price_unit_usd = precio_unit / tasa_usd
+                                total_usd = subtotal / tasa_usd
+                            else:
+                                price_unit_usd = None
+                                total_usd = None
 
                             # Buscar vinculación automática con inventario (solo para materiales)
                             item_inventario_id = None
@@ -339,9 +354,12 @@ def crear():
                                 total=subtotal,
                                 origen='ia',
                                 currency=moneda_ia,
+                                price_unit_currency=price_unit_usd,  # Precio unitario en USD
+                                total_currency=total_usd,  # Total en USD
                                 price_unit_ars=precio_unit_ars,
                                 total_ars=total_ars,
                                 etapa_id=None,  # Se asignará al confirmar como obra
+                                etapa_nombre=nombre_etapa,  # Guardar nombre de etapa para mostrar
                                 item_inventario_id=item_inventario_id  # Vinculación automática
                             )
                             db.session.add(item_presupuesto)
@@ -642,6 +660,60 @@ def detalle(id):
         ia_equipos = [i for i in items if i.tipo == 'equipo' and i.origen == 'ia']
         ia_herramientas = [i for i in items if i.tipo == 'herramienta' and i.origen == 'ia']
 
+        # Agrupar items IA por etapa para vista organizada
+        from collections import defaultdict
+        ia_por_etapa = defaultdict(lambda: {'materiales': [], 'mano_obra': [], 'equipos': [], 'herramientas': []})
+
+        # Definir orden de etapas de construccion
+        etapas_orden = [
+            'Trabajos Preliminares', 'Movimiento de Suelos', 'Estructura',
+            'Mamposteria', 'Cubierta', 'Instalacion Sanitaria', 'Instalacion Electrica',
+            'Instalacion de Gas', 'Carpinteria', 'Revestimientos', 'Pintura',
+            'Vidrios', 'Pisos', 'Instalaciones Especiales', 'Limpieza Final', 'Otros'
+        ]
+
+        for item in ia_materiales:
+            # Usar etapa_nombre guardado, o nombre de etapa vinculada, o 'Sin Etapa'
+            nombre = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin Etapa')
+            ia_por_etapa[nombre]['materiales'].append(item)
+
+        for item in ia_mano_obra:
+            nombre = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin Etapa')
+            ia_por_etapa[nombre]['mano_obra'].append(item)
+
+        for item in ia_equipos:
+            nombre = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin Etapa')
+            ia_por_etapa[nombre]['equipos'].append(item)
+
+        for item in ia_herramientas:
+            nombre = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin Etapa')
+            ia_por_etapa[nombre]['herramientas'].append(item)
+
+        # Ordenar etapas segun el orden definido
+        ia_por_etapa_ordenado = {}
+        for etapa in etapas_orden:
+            if etapa in ia_por_etapa:
+                ia_por_etapa_ordenado[etapa] = ia_por_etapa[etapa]
+        # Agregar etapas que no estan en el orden predefinido
+        for etapa, items_etapa in ia_por_etapa.items():
+            if etapa not in ia_por_etapa_ordenado:
+                ia_por_etapa_ordenado[etapa] = items_etapa
+
+        # Calcular subtotales por etapa
+        subtotales_por_etapa = {}
+        for etapa_nombre, items_etapa in ia_por_etapa_ordenado.items():
+            subtotal_etapa = Decimal('0')
+            subtotal_etapa_usd = Decimal('0')
+            for tipo in ['materiales', 'mano_obra', 'equipos', 'herramientas']:
+                for item in items_etapa[tipo]:
+                    subtotal_etapa += item.total or Decimal('0')
+                    if item.total_currency:
+                        subtotal_etapa_usd += item.total_currency
+            subtotales_por_etapa[etapa_nombre] = {
+                'total': subtotal_etapa,
+                'total_usd': subtotal_etapa_usd
+            }
+
         # Calcular totales de IA
         totales_ia = {
             'materiales': sum(i.total for i in ia_materiales),
@@ -651,15 +723,41 @@ def detalle(id):
         }
         totales_ia['general'] = sum(totales_ia.values())
 
-        # Calcular subtotales por categoría
+        # Calcular totales en USD
+        totales_ia_usd = {
+            'materiales': sum((i.total_currency or Decimal('0')) for i in ia_materiales),
+            'mano_obra': sum((i.total_currency or Decimal('0')) for i in ia_mano_obra),
+            'equipos': sum((i.total_currency or Decimal('0')) for i in ia_equipos),
+            'herramientas': sum((i.total_currency or Decimal('0')) for i in ia_herramientas),
+        }
+        totales_ia_usd['general'] = sum(totales_ia_usd.values())
+
+        # Calcular subtotales por categoría (en moneda principal y USD)
         subtotal_materiales = sum(i.total for i in items_materiales)
         subtotal_mano_obra = sum(i.total for i in items_mano_obra)
         subtotal_equipos = sum(i.total for i in items_equipos)
 
+        # Calcular subtotales en USD (usando total_currency si existe, o total_ars con conversión)
+        tasa_usd = presupuesto.tasa_usd_venta or Decimal('0')
+        subtotal_materiales_usd = sum((i.total_currency or Decimal('0')) for i in items_materiales)
+        subtotal_mano_obra_usd = sum((i.total_currency or Decimal('0')) for i in items_mano_obra)
+        subtotal_equipos_usd = sum((i.total_currency or Decimal('0')) for i in items_equipos)
+
+        # Calcular subtotales en ARS
+        subtotal_materiales_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_materiales)
+        subtotal_mano_obra_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_mano_obra)
+        subtotal_equipos_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_equipos)
+
         # Calcular total general del presupuesto
         subtotal = sum(i.total for i in items)
+        subtotal_usd = sum((i.total_currency or Decimal('0')) for i in items)
+        subtotal_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items)
         iva_monto = subtotal * (presupuesto.iva_porcentaje / Decimal('100'))
+        iva_monto_usd = subtotal_usd * (presupuesto.iva_porcentaje / Decimal('100'))
+        iva_monto_ars = subtotal_ars * (presupuesto.iva_porcentaje / Decimal('100'))
         total_con_iva = subtotal + iva_monto
+        total_con_iva_usd = subtotal_usd + iva_monto_usd
+        total_con_iva_ars = subtotal_ars + iva_monto_ars
 
         # Parsear datos_proyecto para obtener información del cliente y obra
         import json
@@ -691,13 +789,28 @@ def detalle(id):
                              ia_mano_obra=ia_mano_obra,
                              ia_equipos=ia_equipos,
                              ia_herramientas=ia_herramientas,
+                             ia_por_etapa=ia_por_etapa_ordenado,
+                             subtotales_por_etapa=subtotales_por_etapa,
                              totales_ia=totales_ia,
+                             totales_ia_usd=totales_ia_usd,
                              subtotal_materiales=subtotal_materiales,
                              subtotal_mano_obra=subtotal_mano_obra,
                              subtotal_equipos=subtotal_equipos,
+                             subtotal_materiales_usd=subtotal_materiales_usd,
+                             subtotal_mano_obra_usd=subtotal_mano_obra_usd,
+                             subtotal_equipos_usd=subtotal_equipos_usd,
+                             subtotal_materiales_ars=subtotal_materiales_ars,
+                             subtotal_mano_obra_ars=subtotal_mano_obra_ars,
+                             subtotal_equipos_ars=subtotal_equipos_ars,
                              subtotal=subtotal,
+                             subtotal_usd=subtotal_usd,
+                             subtotal_ars=subtotal_ars,
                              iva_monto=iva_monto,
+                             iva_monto_usd=iva_monto_usd,
+                             iva_monto_ars=iva_monto_ars,
                              total_con_iva=total_con_iva,
+                             total_con_iva_usd=total_con_iva_usd,
+                             total_con_iva_ars=total_con_iva_ars,
                              datos_proyecto=datos_proyecto,
                              items_inventario=items_inventario)
 
