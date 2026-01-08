@@ -162,17 +162,13 @@ def crear(obra_id=None):
             # Obtener materiales planificados vs disponibles en la obra
             materiales_obra = _obtener_materiales_obra(obra_seleccionada)
 
-    # Items de inventario para selector
-    items_inventario = ItemInventario.query.filter_by(
-        organizacion_id=org_id,
-        activo=True
-    ).order_by(ItemInventario.nombre).all()
+    # Ya no cargamos items_inventario aquí - ahora se buscan vía AJAX
+    # para mejor rendimiento en móviles
 
     return render_template('requerimientos/crear.html',
                           obras=obras,
                           obra_seleccionada=obra_seleccionada,
-                          materiales_obra=materiales_obra,
-                          items_inventario=items_inventario)
+                          materiales_obra=materiales_obra)
 
 
 @requerimientos_bp.route('/<int:id>')

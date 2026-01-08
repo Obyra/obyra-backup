@@ -62,20 +62,8 @@
                         <div class="mb-3">
                             <label for="item_id" class="form-label">Artículo *</label>
                             <div class="d-flex gap-2">
-                                <select class="form-select select2-search flex-grow-1" id="item_id" name="item_id" required>
+                                <select class="form-select flex-grow-1" id="item_id" name="item_id" required>
                                     <option value="">Buscar por código o nombre...</option>
-                                    {% for item in items %}
-                                    <option value="{{ item.id }}"
-                                            data-codigo="{{ item.codigo }}"
-                                            data-nombre="{{ item.nombre }}"
-                                            data-categoria="{{ item.categoria.nombre if item.categoria else '' }}"
-                                            data-unidad="{{ item.unidad }}"
-                                            data-marca="{{ item.marca or '' }}"
-                                            data-modelo="{{ item.modelo or '' }}"
-                                            {% if request.form.get('item_id') == item.id|string %}selected{% endif %}>
-                                        [{{ item.codigo }}] {{ item.nombre }}{% if item.marca %} - {{ item.marca }}{% endif %}{% if item.modelo %} {{ item.modelo }}{% endif %}{% if item.categoria %} ({{ item.categoria.nombre }}){% endif %}
-                                    </option>
-                                    {% endfor %}
                                 </select>
                                 <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalNuevoItem" title="Crear nuevo artículo">
                                     <i class="fas fa-plus"></i>
@@ -294,12 +282,13 @@
 {% block scripts %}
 <script>
 $(document).ready(function() {
-    // Inicializar Select2 en el campo de ítem de inventario
+    // Inicializar Select2 con búsqueda AJAX para el campo de artículo
     $('#item_id').select2({
         theme: 'bootstrap-5',
-        placeholder: 'Buscar por código o nombre...',
+        placeholder: 'Escribí para buscar artículos...',
         allowClear: true,
         width: '100%',
+        minimumInputLength: 1,
         language: {
             noResults: function() {
                 return 'No se encontraron resultados';
@@ -307,41 +296,33 @@ $(document).ready(function() {
             searching: function() {
                 return 'Buscando...';
             },
-            inputTooShort: function() {
-                return 'Ingresá al menos 1 carácter';
+            inputTooShort: function(args) {
+                return 'Ingresá al menos ' + args.minimum + ' carácter';
+            },
+            loadingMore: function() {
+                return 'Cargando más resultados...';
             }
         },
-        // Búsqueda personalizada
-        matcher: function(params, data) {
-            // Si no hay término de búsqueda, mostrar todas las opciones
-            if ($.trim(params.term) === '') {
-                return data;
-            }
-
-            // Si es la opción placeholder, no mostrarla
-            if (!data.id) {
-                return null;
-            }
-
-            // Obtener los datos del elemento
-            var codigo = $(data.element).data('codigo') || '';
-            var nombre = $(data.element).data('nombre') || '';
-            var categoria = $(data.element).data('categoria') || '';
-
-            // Convertir todo a minúsculas para búsqueda insensible a mayúsculas
-            var searchTerm = params.term.toLowerCase();
-            var codigoLower = codigo.toString().toLowerCase();
-            var nombreLower = nombre.toString().toLowerCase();
-            var categoriaLower = categoria.toString().toLowerCase();
-
-            // Buscar coincidencias parciales en código, nombre o categoría
-            if (codigoLower.indexOf(searchTerm) > -1 ||
-                nombreLower.indexOf(searchTerm) > -1 ||
-                categoriaLower.indexOf(searchTerm) > -1) {
-                return data;
-            }
-
-            return null;
+        ajax: {
+            url: '/inventario/api/buscar-items',
+            dataType: 'json',
+            delay: 300,
+            data: function(params) {
+                return {
+                    term: params.term || '',
+                    page: params.page || 1
+                };
+            },
+            processResults: function(data, params) {
+                params.page = params.page || 1;
+                return {
+                    results: data.results,
+                    pagination: {
+                        more: data.pagination.more
+                    }
+                };
+            },
+            cache: true
         }
     });
 
@@ -359,30 +340,22 @@ $(document).ready(function() {
     });
 
     // Actualizar campos cuando se selecciona un artículo
-    $('#item_id').on('change', function() {
-        var selectedOption = $(this).find('option:selected');
-        var unidad = selectedOption.data('unidad');
-        var marca = selectedOption.data('marca');
-        var modelo = selectedOption.data('modelo');
+    $('#item_id').on('select2:select', function(e) {
+        var data = e.params.data;
 
         // Autocompletar unidad si el artículo la tiene definida
-        if (unidad) {
-            $('#unidad').val(unidad);
+        if (data.unidad) {
+            $('#unidad').val(data.unidad);
         }
 
         // Autocompletar marca y modelo si existen
-        if (marca) {
-            $('#marca').val(marca);
+        if (data.marca) {
+            $('#marca').val(data.marca);
         }
-        if (modelo) {
-            $('#modelo').val(modelo);
+        if (data.modelo) {
+            $('#modelo').val(data.modelo);
         }
     });
-
-    // Si hay un artículo preseleccionado, disparar el change
-    if ($('#item_id').val()) {
-        $('#item_id').trigger('change');
-    }
 
     // ========== CREAR NUEVO ITEM ==========
     $('#btnGuardarNuevoItem').on('click', function() {

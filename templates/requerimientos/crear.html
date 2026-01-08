@@ -149,18 +149,10 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label class="form-label fw-bold">Seleccionar del Inventario</label>
-                    <select class="form-select" id="itemInventarioSelect" onchange="autocompletarItem()">
-                        <option value="">-- Escribir manualmente --</option>
-                        {% for item in items_inventario %}
-                        <option value="{{ item.id }}"
-                                data-nombre="{{ item.nombre }}"
-                                data-codigo="{{ item.codigo }}"
-                                data-unidad="{{ item.unidad or 'unidad' }}"
-                                data-precio="{{ item.precio_promedio or 0 }}">
-                            [{{ item.codigo }}] {{ item.nombre }}
-                        </option>
-                        {% endfor %}
+                    <select class="form-select" id="itemInventarioSelect">
+                        <option value="">-- Buscar artículo o escribir manualmente --</option>
                     </select>
+                    <div class="form-text">Escribí para buscar en el inventario</div>
                 </div>
 
                 <div class="mb-3">
@@ -225,6 +217,49 @@
 <script>
 let items = [];
 let itemIdCounter = 0;
+
+// Inicializar Select2 con AJAX para búsqueda de items
+$(document).ready(function() {
+    $('#itemInventarioSelect').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Buscar artículo...',
+        allowClear: true,
+        width: '100%',
+        minimumInputLength: 1,
+        dropdownParent: $('#modalAgregarItem'),
+        language: {
+            noResults: function() { return 'No se encontraron resultados'; },
+            searching: function() { return 'Buscando...'; },
+            inputTooShort: function() { return 'Ingresá al menos 1 carácter'; },
+            loadingMore: function() { return 'Cargando más...'; }
+        },
+        ajax: {
+            url: '/inventario/api/buscar-items',
+            dataType: 'json',
+            delay: 300,
+            data: function(params) {
+                return { term: params.term || '', page: params.page || 1 };
+            },
+            processResults: function(data, params) {
+                params.page = params.page || 1;
+                return {
+                    results: data.results,
+                    pagination: { more: data.pagination.more }
+                };
+            },
+            cache: true
+        }
+    });
+
+    // Autocompletar cuando se selecciona un item
+    $('#itemInventarioSelect').on('select2:select', function(e) {
+        var data = e.params.data;
+        if (data.id) {
+            document.getElementById('itemDescripcion').value = data.nombre || data.text;
+            document.getElementById('itemUnidad').value = data.unidad || 'unidad';
+        }
+    });
+});
 
 function cargarMaterialesObra() {
     const obraId = document.getElementById('obra_id').value;
@@ -310,20 +345,6 @@ function mostrarModalAgregarItem() {
 
     const modal = new bootstrap.Modal(document.getElementById('modalAgregarItem'));
     modal.show();
-}
-
-function autocompletarItem() {
-    const select = document.getElementById('itemInventarioSelect');
-    const option = select.options[select.selectedIndex];
-
-    if (select.value) {
-        document.getElementById('itemDescripcion').value = option.dataset.nombre || '';
-        document.getElementById('itemUnidad').value = option.dataset.unidad || 'unidad';
-        const precio = parseFloat(option.dataset.precio || 0);
-        if (precio > 0) {
-            document.getElementById('itemCosto').value = precio;
-        }
-    }
 }
 
 function agregarItem() {

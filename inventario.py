@@ -639,10 +639,9 @@ def uso_obra():
         activo=True
     ).order_by(Location.tipo.desc(), Location.nombre).all()  # WAREHOUSE primero, luego WORKSITE
 
-    items = ItemInventario.query.filter_by(
-        organizacion_id=org_id,
-        activo=True
-    ).order_by(ItemInventario.nombre).all()
+    # Ya no cargamos todos los items aquí - ahora se buscan vía AJAX
+    # para mejor rendimiento en móviles (11k+ items)
+    items = []
 
     # Obtener categorías para el modal de crear nuevo item
     categorias = InventoryCategory.query.filter_by(company_id=org_id, is_active=True).all() if org_id else []
@@ -1468,6 +1467,79 @@ def crear_categoria():
 
     flash(message, 'success' if created else 'info')
     return redirect(url_for('inventario.categorias'))
+
+@inventario_bp.route('/api/buscar-items', methods=['GET'])
+@login_required
+def api_buscar_items():
+    """
+    API para búsqueda AJAX de items del inventario.
+    Soporta Select2 con paginación para grandes volúmenes de datos.
+    """
+    try:
+        org_id = get_current_org_id() or current_user.organizacion_id
+        if not org_id:
+            return jsonify({'results': [], 'pagination': {'more': False}})
+
+        # Parámetros de búsqueda
+        term = request.args.get('term', '').strip()
+        page = request.args.get('page', 1, type=int)
+        per_page = 30  # Items por página
+
+        # Query base
+        query = ItemInventario.query.filter_by(
+            organizacion_id=org_id,
+            activo=True
+        )
+
+        # Filtrar por término de búsqueda
+        if term:
+            search_term = f'%{term}%'
+            query = query.filter(
+                db.or_(
+                    ItemInventario.codigo.ilike(search_term),
+                    ItemInventario.nombre.ilike(search_term),
+                    ItemInventario.descripcion.ilike(search_term)
+                )
+            )
+
+        # Ordenar y paginar
+        query = query.order_by(ItemInventario.nombre)
+        total = query.count()
+        items = query.offset((page - 1) * per_page).limit(per_page).all()
+
+        # Formatear resultados para Select2
+        results = []
+        for item in items:
+            text = f'[{item.codigo}] {item.nombre}'
+            if item.marca:
+                text += f' - {item.marca}'
+            if item.modelo:
+                text += f' {item.modelo}'
+            if item.categoria:
+                text += f' ({item.categoria.nombre})'
+
+            results.append({
+                'id': item.id,
+                'text': text,
+                'codigo': item.codigo,
+                'nombre': item.nombre,
+                'unidad': item.unidad or 'unidad',
+                'marca': item.marca or '',
+                'modelo': item.modelo or '',
+                'categoria': item.categoria.nombre if item.categoria else ''
+            })
+
+        return jsonify({
+            'results': results,
+            'pagination': {
+                'more': (page * per_page) < total
+            }
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error en api_buscar_items: {str(e)}")
+        return jsonify({'results': [], 'pagination': {'more': False}})
+
 
 @inventario_bp.route('/items-disponibles', methods=['GET'])
 @login_required

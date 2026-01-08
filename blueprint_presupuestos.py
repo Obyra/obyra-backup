@@ -116,7 +116,10 @@ def lista():
         # Query base - excluir presupuestos eliminados y presupuestos confirmados como obras
         query = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
             Presupuesto.estado != 'eliminado',
-            Presupuesto.confirmado_como_obra.is_not(True)
+            or_(
+                Presupuesto.confirmado_como_obra.is_(False),
+                Presupuesto.confirmado_como_obra.is_(None)
+            )
         )
 
         # Aplicar filtros
