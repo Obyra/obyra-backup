@@ -44,13 +44,13 @@
                         <option value="">Todas las categorías</option>
                         {% if categorias_nuevas %}
                             {% for categoria in categorias_nuevas %}
-                            <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id|string }}>
+                            <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id }}>
                                 {{ categoria.nombre }}
                             </option>
                             {% endfor %}
                         {% endif %}
                         {% for categoria in categorias %}
-                        <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id|string }}>
+                        <option value="{{ categoria.id }}" {{ 'selected' if categoria_id == categoria.id }}>
                             {{ categoria.nombre }}
                         </option>
                         {% endfor %}
@@ -82,7 +82,16 @@
             </form>
         </div>
     </div>
-    
+
+    <!-- Botón volver cuando hay filtro activo -->
+    {% if categoria_id or buscar %}
+    <div class="mb-3">
+        <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Volver a todas las categorías
+        </a>
+    </div>
+    {% endif %}
+
     <!-- Vista de Carpetas por Etapa -->
     {% if arbol_categorias and not buscar and not categoria_id %}
     <div class="card mb-4">

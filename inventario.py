@@ -87,7 +87,7 @@ def lista():
         flash('No tienes permisos para acceder a este módulo.', 'danger')
         return redirect(url_for('reportes.dashboard'))
 
-    categoria_id = request.args.get('categoria', '')
+    categoria_id = request.args.get('categoria', '', type=int) or None
     buscar = request.args.get('buscar', '')
     stock_bajo = request.args.get('stock_bajo', '')
 
