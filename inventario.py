@@ -171,8 +171,9 @@ def lista():
 
     categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
 
-    # Get all obras for dropdowns
+    # Get all obras for dropdowns (filtradas por organización)
     obras_disponibles = Obra.query.join(Presupuesto).filter(
+        Obra.organizacion_id == org_id,
         db.or_(
             Presupuesto.confirmado_como_obra == True,
             Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
@@ -1809,7 +1810,15 @@ def trasladar(id):
                 'message': f'Stock insuficiente. Disponible: {float(stock_actual):.2f} {item.unidad}, solicitado: {float(cantidad):.2f} {item.unidad}'
             }), 400
 
-        obra_destino = Obra.query.get_or_404(int(obra_destino_id))
+        # Validar que la obra pertenezca a la organización del usuario
+        org_id = get_current_org_id() or current_user.organizacion_id
+        obra_destino = Obra.query.filter_by(
+            id=int(obra_destino_id),
+            organizacion_id=org_id
+        ).first()
+
+        if not obra_destino:
+            return jsonify({'success': False, 'message': 'Obra no encontrada o no pertenece a tu organización'}), 404
 
         # 1. Registrar movimiento de SALIDA del inventario general
         movimiento_salida = MovimientoInventario(
