@@ -131,6 +131,8 @@ def lista():
             ),
         )
         .join(Usuario, OrgMembership.user_id == Usuario.id)
+        # Excluir super administradores del sistema de la lista de equipos
+        .filter(Usuario.is_super_admin.is_(False))
     )
 
     if rol_filtro:
@@ -595,7 +597,8 @@ def rendimiento():
 
     usuarios = Usuario.query.filter(
         Usuario.id.in_(usuarios_ids),
-        Usuario.activo == True
+        Usuario.activo == True,
+        Usuario.is_super_admin.is_(False)  # Excluir super administradores del sistema
     ).all()
     
     estadisticas = []
@@ -647,7 +650,10 @@ def usuarios_listar():
         flash('No tienes permisos para gestionar usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
     
-    users = Usuario.query.filter_by(organizacion_id=current_user.organizacion_id).order_by(Usuario.id.desc()).all()
+    users = Usuario.query.filter(
+        Usuario.organizacion_id == current_user.organizacion_id,
+        Usuario.is_super_admin.is_(False)  # Excluir super administradores del sistema
+    ).order_by(Usuario.id.desc()).all()
     return render_template('equipo/usuarios.html', users=users)
 
 @equipos_bp.route('/usuarios', methods=['POST'])
