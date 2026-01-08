@@ -90,6 +90,7 @@ def lista():
     categoria_id = request.args.get('categoria', '', type=int) or None
     buscar = request.args.get('buscar', '')
     stock_bajo = request.args.get('stock_bajo', '')
+    con_stock = request.args.get('con_stock', '')
 
     # Obtener org_id del usuario actual
     org_id = get_current_org_id() or current_user.organizacion_id
@@ -118,6 +119,10 @@ def lista():
                 ItemInventario.descripcion.ilike(buscar_pattern)
             )
         )
+
+    if con_stock:
+        # Filtrar solo artículos con stock mayor a 0
+        query = query.filter(ItemInventario.stock_actual > 0)
 
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
@@ -222,6 +227,7 @@ def lista():
                          categoria_id=categoria_id,
                          buscar=buscar,
                          stock_bajo=stock_bajo,
+                         con_stock=con_stock,
                          obras_disponibles=obras_disponibles,
                          pagination=pagination,
                          total_items=total_items,

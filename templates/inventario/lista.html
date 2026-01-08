@@ -64,15 +64,22 @@
                         <i class="fas fa-info-circle me-1"></i>Busca coincidencias parciales en cualquier parte del texto
                     </div>
                 </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <div class="form-check me-3">
+                <div class="col-md-3 d-flex align-items-end flex-wrap gap-2">
+                    <div class="form-check me-2">
+                        <input class="form-check-input" type="checkbox" id="con_stock" name="con_stock" value="1"
+                               {{ 'checked' if con_stock }}>
+                        <label class="form-check-label" for="con_stock">
+                            Solo con stock
+                        </label>
+                    </div>
+                    <div class="form-check me-2">
                         <input class="form-check-input" type="checkbox" id="stock_bajo" name="stock_bajo" value="1"
                                {{ 'checked' if stock_bajo }}>
                         <label class="form-check-label" for="stock_bajo">
-                            Solo stock bajo
+                            Stock bajo
                         </label>
                     </div>
-                    <button type="submit" class="btn btn-outline-primary me-2">
+                    <button type="submit" class="btn btn-outline-primary">
                         <i class="fas fa-search me-1"></i>Filtrar
                     </button>
                     <a href="{{ url_for('inventario.lista') }}" class="btn btn-outline-secondary">
