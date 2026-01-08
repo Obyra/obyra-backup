@@ -65,12 +65,14 @@
                                 <select class="form-select flex-grow-1" id="item_id" name="item_id" required>
                                     <option value="">Buscar por código o nombre...</option>
                                 </select>
+                                {% if current_user.rol in ['administrador', 'tecnico'] %}
                                 <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalNuevoItem" title="Crear nuevo artículo">
                                     <i class="fas fa-plus"></i>
                                 </button>
+                                {% endif %}
                             </div>
                             <div class="form-text">
-                                <i class="fas fa-search me-1"></i>Buscá por código o nombre, o creá uno nuevo con el botón <i class="fas fa-plus text-success"></i>
+                                <i class="fas fa-search me-1"></i>Buscá por código o nombre{% if current_user.rol in ['administrador', 'tecnico'] %}, o creá uno nuevo con el botón <i class="fas fa-plus text-success"></i>{% endif %}
                             </div>
                         </div>
 

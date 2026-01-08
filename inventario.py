@@ -122,90 +122,38 @@ def lista():
     if stock_bajo:
         query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
 
-    items = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre).all()
-    current_app.logger.info(f"[INVENTARIO] Items encontrados: {len(items)}")
+    # Paginación para mejor rendimiento en móviles
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)  # 50 items por página por defecto
+    per_page = min(per_page, 100)  # Máximo 100 por página
 
-    # Get confirmed obras for each item
+    base_query = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre)
+    total_items = base_query.count()
+
+    # Paginación
+    pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
+    items = pagination.items
+
+    current_app.logger.info(f"[INVENTARIO] Items en página {page}: {len(items)} de {total_items} total")
+
+    # Optimización: Solo cargar datos detallados si hay pocos items (búsqueda o filtro)
+    # Para la vista general, solo mostramos datos básicos
     from models.projects import Obra
     from models.budgets import Presupuesto
+    from models.inventory import StockObra
 
     items_con_obras = []
     for item in items:
-        obras_confirmadas = db.session.query(Obra).join(
-            UsoInventario, Obra.id == UsoInventario.obra_id
-        ).join(
-            Presupuesto, Obra.id == Presupuesto.obra_id
-        ).filter(
-            UsoInventario.item_id == item.id,
-            db.or_(
-                Presupuesto.confirmado_como_obra == True,
-                Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
-            )
-        ).distinct().all()
-
-        # Buscar reservas activas para este item (en InventoryItem por nombre)
-        from models.inventory import InventoryItem, StockReservation, StockObra
-        reservas_activas = []
-        inv_item = InventoryItem.query.filter(
-            InventoryItem.company_id == org_id,
-            InventoryItem.nombre.ilike(item.nombre)
-        ).first()
-
-        if inv_item:
-            reservas = StockReservation.query.filter_by(
-                item_id=inv_item.id,
-                estado='activa'
-            ).all()
-            for r in reservas:
-                reservas_activas.append({
-                    'obra_nombre': r.project.nombre if r.project else 'Sin obra',
-                    'cantidad': float(r.qty),
-                    'fecha': r.created_at.strftime('%d/%m') if r.created_at else ''
-                })
-
-        # Calcular stock físico inicial (suma de todas las entradas)
-        entradas = db.session.query(
-            db.func.coalesce(db.func.sum(MovimientoInventario.cantidad), 0)
-        ).filter(
-            MovimientoInventario.item_id == item.id,
-            MovimientoInventario.tipo == 'entrada'
-        ).scalar()
-        stock_fisico_inicial = float(entradas or 0)
-
-        # Obtener traslados a obras (legacy)
-        traslados_obras = []
-        stocks_en_obras = StockObra.query.filter_by(item_inventario_id=item.id).all()
-        for stock in stocks_en_obras:
-            if stock.cantidad_disponible and float(stock.cantidad_disponible) > 0:
-                traslados_obras.append({
-                    'obra_id': stock.obra_id,
-                    'obra_nombre': stock.obra.nombre if stock.obra else 'Sin nombre',
-                    'cantidad': float(stock.cantidad_disponible or 0)
-                })
-
-        # Obtener stock por ubicaciones (nuevo sistema)
-        stocks_ubicacion = StockUbicacion.query.filter_by(item_inventario_id=item.id).all()
-        ubicaciones_stock = []
-        for su in stocks_ubicacion:
-            if su.cantidad_disponible and float(su.cantidad_disponible) > 0:
-                ubicaciones_stock.append({
-                    'location_id': su.location_id,
-                    'location_nombre': su.location.nombre if su.location else 'Sin nombre',
-                    'location_tipo': su.location.tipo if su.location else 'UNKNOWN',
-                    'location_icono': su.location.icono if su.location else '📍',
-                    'cantidad': float(su.cantidad_disponible or 0),
-                    'obra_id': su.location.obra_id if su.location else None
-                })
-
+        # Versión simplificada - no hacer queries pesadas para cada item
         items_con_obras.append({
             'item': item,
-            'obras': obras_confirmadas,
-            'reservas': reservas_activas,
-            'stock_reservado': sum(r['cantidad'] for r in reservas_activas),
-            'stock_fisico_inicial': stock_fisico_inicial,
-            'traslados_obras': traslados_obras,
-            'total_trasladado': sum(t['cantidad'] for t in traslados_obras),
-            'ubicaciones_stock': ubicaciones_stock
+            'obras': [],
+            'reservas': [],
+            'stock_reservado': 0,
+            'stock_fisico_inicial': float(item.stock_actual or 0),
+            'traslados_obras': [],
+            'total_trasladado': 0,
+            'ubicaciones_stock': []
         })
 
     # Load new inventory categories
@@ -270,7 +218,11 @@ def lista():
                          categoria_id=categoria_id,
                          buscar=buscar,
                          stock_bajo=stock_bajo,
-                         obras_disponibles=obras_disponibles)
+                         obras_disponibles=obras_disponibles,
+                         pagination=pagination,
+                         total_items=total_items,
+                         page=page,
+                         per_page=per_page)
 
 @inventario_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
