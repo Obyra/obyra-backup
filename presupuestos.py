@@ -389,7 +389,11 @@ def detalle(id):
         abort(404)
     etapas = obra.etapas.order_by(EtapaObra.orden).all()
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
-    usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=org_id).all()
+    usuarios_disponibles = Usuario.query.filter(
+        Usuario.activo == True,
+        Usuario.organizacion_id == org_id,
+        Usuario.is_super_admin.is_(False)
+    ).all()
     etapas_disponibles = obtener_etapas_disponibles()
 
     miembros = (ObraMiembro.query

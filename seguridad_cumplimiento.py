@@ -358,7 +358,10 @@ def certificaciones():
         query = query.filter_by(usuario_id=usuario_id)
     
     certificaciones = query.order_by(CertificacionPersonal.fecha_vencimiento.asc()).all()
-    usuarios = Usuario.query.filter_by(activo=True).all()
+    usuarios = Usuario.query.filter(
+        Usuario.activo == True,
+        Usuario.is_super_admin.is_(False)
+    ).all()
     
     return render_template('seguridad/certificaciones.html', certificaciones=certificaciones, usuarios=usuarios)
 
@@ -467,7 +470,7 @@ def calcular_indice_frecuencia():
     ).count()
     
     # Estimar horas trabajadas (simplificado)
-    horas_estimadas = 2000 * Usuario.query.filter_by(activo=True).count()
+    horas_estimadas = 2000 * Usuario.query.filter(Usuario.activo == True, Usuario.is_super_admin.is_(False)).count()
     
     return (accidentes_año * 1000000) / horas_estimadas if horas_estimadas > 0 else 0
 
@@ -478,7 +481,7 @@ def calcular_indice_gravedad():
         IncidenteSeguridad.fecha_incidente >= datetime.now().replace(month=1, day=1)
     ).scalar() or 0
     
-    horas_estimadas = 2000 * Usuario.query.filter_by(activo=True).count()
+    horas_estimadas = 2000 * Usuario.query.filter(Usuario.activo == True, Usuario.is_super_admin.is_(False)).count()
     
     return (dias_perdidos * 1000000) / horas_estimadas if horas_estimadas > 0 else 0
 
@@ -498,7 +501,7 @@ def calcular_tasa_accidentalidad():
         IncidenteSeguridad.tipo_incidente == 'accidente'
     ).count()
     
-    trabajadores_activos = Usuario.query.filter_by(activo=True).count()
+    trabajadores_activos = Usuario.query.filter(Usuario.activo == True, Usuario.is_super_admin.is_(False)).count()
     
     return (accidentes_mes / trabajadores_activos * 100) if trabajadores_activos > 0 else 0
 

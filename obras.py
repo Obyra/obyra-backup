@@ -629,7 +629,11 @@ def detalle(id):
     porcentaje_obra = pct_obra(obra) if etapas else 0
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
-    usuarios_disponibles = Usuario.query.filter_by(activo=True, organizacion_id=org_id).all()
+    usuarios_disponibles = Usuario.query.filter(
+        Usuario.activo == True,
+        Usuario.organizacion_id == org_id,
+        Usuario.is_super_admin.is_(False)
+    ).all()
     etapas_disponibles = obtener_etapas_disponibles()
 
     # Usar asignaciones como miembros para Equipo Asignado (AsignacionObra tiene los usuarios asignados)
@@ -637,10 +641,10 @@ def detalle(id):
 
     # Obtener TODOS los operarios de la organización para el selector de responsables
     # (no solo los asignados a esta obra)
-    todos_operarios = Usuario.query.filter_by(
-        activo=True,
-        organizacion_id=org_id
-    ).filter(
+    todos_operarios = Usuario.query.filter(
+        Usuario.activo == True,
+        Usuario.organizacion_id == org_id,
+        Usuario.is_super_admin.is_(False),
         db.or_(
             Usuario.rol == 'operario',
             Usuario.role == 'operario',

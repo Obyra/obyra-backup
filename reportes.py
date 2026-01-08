@@ -331,10 +331,11 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
         Obra.progreso < 50  # Simplificado: menos del 50% se considera retrasado
     ).count()
     
-    # Personal activo
+    # Personal activo (excluir super administradores del sistema)
     personal_activo = Usuario.query.filter(
         Usuario.organizacion_id == org_id,
-        Usuario.activo == True
+        Usuario.activo == True,
+        Usuario.is_super_admin.is_(False)
     ).count()
 
     # Obras con personal asignado

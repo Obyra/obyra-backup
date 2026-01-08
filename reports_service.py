@@ -364,10 +364,11 @@ def calculate_kpis_v2(org_id, fecha_desde, fecha_hasta, project_ids):
         Obra.progreso.isnot(None)
     ).scalar() or 0
     
-    # Personal activo
+    # Personal activo (excluir super administradores del sistema)
     personal_activo = Usuario.query.filter(
         Usuario.organizacion_id == org_id,
-        Usuario.activo == True
+        Usuario.activo == True,
+        Usuario.is_super_admin.is_(False)
     ).count()
     
     # Presupuestos creados en el período
