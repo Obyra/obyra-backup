@@ -156,14 +156,17 @@ def lista():
             'ubicaciones_stock': []
         })
 
-    # Load new inventory categories
+    # Load new inventory categories (propias de la org + globales)
     org_id = get_current_org_id() or current_user.organizacion_id
     categorias_nuevas = []
     if org_id:
-        categorias_nuevas = InventoryCategory.query.filter_by(
-            company_id=org_id,
-            is_active=True,
-            parent_id=None
+        categorias_nuevas = InventoryCategory.query.filter(
+            db.or_(
+                InventoryCategory.company_id == org_id,
+                InventoryCategory.is_global == True
+            ),
+            InventoryCategory.is_active == True,
+            InventoryCategory.parent_id.is_(None)
         ).order_by(InventoryCategory.sort_order, InventoryCategory.nombre).all()
 
     categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
@@ -179,11 +182,11 @@ def lista():
     # Construir árbol de categorías con items agrupados (para vista de carpetas)
     arbol_categorias = []
     for cat_principal in categorias_nuevas:
-        # Obtener subcategorías
-        subcategorias = InventoryCategory.query.filter_by(
-            company_id=org_id,
-            parent_id=cat_principal.id,
-            is_active=True
+        # Obtener subcategorías (de la misma company_id que la categoría padre)
+        subcategorias = InventoryCategory.query.filter(
+            InventoryCategory.company_id == cat_principal.company_id,
+            InventoryCategory.parent_id == cat_principal.id,
+            InventoryCategory.is_active == True
         ).order_by(InventoryCategory.nombre).all()
 
         # Contar items por subcategoría
