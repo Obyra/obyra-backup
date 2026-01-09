@@ -165,7 +165,7 @@
     {% endif %}
 
     <!-- Tabla de items -->
-    <div class="row {% if arbol_categorias and not buscar and not categoria_id %}collapse{% endif %}" id="vistaTabla">
+    <div class="row {% if arbol_categorias and not buscar and not categoria_id and not con_stock and not stock_bajo %}collapse{% endif %}" id="vistaTabla">
         <div class="col-12">
             {% if items_con_obras %}
             <div class="">
