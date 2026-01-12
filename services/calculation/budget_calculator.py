@@ -144,10 +144,13 @@ class BudgetCalculator:
         cero = Decimal('0')
 
         def _get_item_total(item) -> Decimal:
-            """Obtiene el total del item, priorizando total_currency."""
-            valor = getattr(item, 'total_currency', None)
-            if valor is not None:
-                return BudgetCalculator._to_decimal(valor)
+            """Obtiene el total del item en la moneda correcta."""
+            # Priorizar total_ars si existe y es válido (para items de IA)
+            valor_ars = getattr(item, 'total_ars', None)
+            if valor_ars is not None and BudgetCalculator._to_decimal(valor_ars) > Decimal('0'):
+                return BudgetCalculator._to_decimal(valor_ars)
+
+            # Fallback a total (campo estándar)
             return BudgetCalculator._to_decimal(getattr(item, 'total', None))
 
         subtotal_materiales = sum(
