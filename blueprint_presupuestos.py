@@ -369,6 +369,11 @@ def crear():
 
                     total_items = sum(len(e.get('items', [])) for e in etapas_ia)
                     current_app.logger.info(f"✅ Guardados {total_items} items de IA en {moneda_ia} para presupuesto {numero} ({items_vinculados} vinculados a inventario)")
+
+                    # CRÍTICO: Calcular totales después de agregar items
+                    db.session.flush()  # Asegurar que los items estén en la sesión
+                    presupuesto.calcular_totales()
+                    current_app.logger.info(f"💰 Totales calculados: Sin IVA={presupuesto.total_sin_iva}, Con IVA={presupuesto.total_con_iva}")
                 except Exception as e:
                     current_app.logger.error(f"Error procesando items de IA: {str(e)}")
                     import traceback
@@ -2279,6 +2284,9 @@ def calcular_etapas_ia():
             current_app.logger.warning(f"No se pudo obtener tipo de cambio: {str(e)}")
             # Continuar sin tipo de cambio
 
+        # Obtener org_id del usuario actual para consultar inventario
+        org_id = get_current_org_id()
+
         # Llamar a la función de cálculo base
         resultado = calcular_etapas_seleccionadas(
             etapas_payload=etapa_ids,
@@ -2288,7 +2296,8 @@ def calcular_etapas_ia():
             presupuesto_id=presupuesto_id,
             currency='ARS',  # Siempre calcular en ARS base
             fx_snapshot=None,  # No aplicar conversión aquí
-            aplicar_desperdicio=aplicar_desperdicio
+            aplicar_desperdicio=aplicar_desperdicio,
+            org_id=org_id  # Pasar org_id para consultar inventario real
         )
 
         if resultado.get('ok') and resultado.get('etapas'):

@@ -957,7 +957,52 @@ def obtener_multiplicador_tipo(tipo):
     return 1.0, clave.title()
 
 
-def _precio_referencia(codigo: str, cac_context: CACContext) -> Decimal:
+def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[int] = None) -> Decimal:
+    """
+    Obtiene el precio de referencia, intentando primero consultar el inventario real
+    de la organización, y si no está disponible, usa los precios de referencia hardcodeados.
+    """
+    # Intentar obtener precio real del inventario
+    if org_id:
+        try:
+            from models import ItemInventario
+            from extensions import db
+
+            # Mapeo de códigos a búsquedas en inventario
+            busquedas_inventario = {
+                'MAT-CEMENTO': ['cemento', 'portland'],
+                'MAT-ARENA': ['arena'],
+                'MAT-PIEDRA': ['piedra', 'canto rodado'],
+                'MAT-LADRILLO': ['ladrillo', 'ladrillos'],
+                'MAT-HIERRO8': ['hierro 8', 'hierro', 'varilla 8'],
+                'MAT-PINTURA-INT': ['pintura interior', 'pintura lavable', 'latex interior'],
+                'MAT-PINTURA-EXT': ['pintura exterior', 'revestimiento', 'acrilico exterior'],
+                'MAT-SELLADOR': ['sellador', 'fijador', 'imprimacion'],
+                'MAT-YESO': ['yeso', 'enduido'],
+                'MAT-CABLE': ['cable', 'cable electrico'],
+                'MAT-CAÑO-AGUA': ['caño agua', 'caño pvc', 'tuberia agua'],
+                'MAT-CAÑO-GAS': ['caño gas', 'tuberia gas'],
+                'MAT-CAÑO-CLOACA': ['caño cloaca', 'caño desague', 'tuberia cloaca'],
+            }
+
+            if codigo in busquedas_inventario:
+                terminos = busquedas_inventario[codigo]
+                for termino in terminos:
+                    # Buscar en inventario (case-insensitive)
+                    item = ItemInventario.query.filter(
+                        ItemInventario.organizacion_id == org_id,
+                        ItemInventario.nombre.ilike(f'%{termino}%')
+                    ).first()
+
+                    if item and item.precio_unitario:
+                        precio_real = _to_decimal(item.precio_unitario, '0')
+                        if precio_real > DECIMAL_ZERO:
+                            logging.info(f"📦 Usando precio real del inventario para {codigo}: {item.nombre} = ${precio_real}")
+                            return _quantize_currency(precio_real * cac_context.multiplier)
+        except Exception as e:
+            logging.warning(f"No se pudo consultar inventario para {codigo}: {e}")
+
+    # Fallback: usar precio de referencia hardcodeado
     base = _to_decimal(PRECIO_REFERENCIA.get(codigo), '0')
     return _quantize_currency(base * cac_context.multiplier)
 
@@ -1150,6 +1195,7 @@ def calcular_etapa_por_reglas(
     currency: str = 'ARS',
     fx_rate: Optional[Decimal] = None,
     aplicar_desperdicio: bool = True,
+    org_id: Optional[int] = None,
 ):
     reglas = ETAPA_REGLAS_BASE.get(etapa_slug)
     nombre = etiqueta or (reglas['nombre'] if reglas else etapa_slug.replace('-', ' ').title())
@@ -1192,7 +1238,7 @@ def calcular_etapa_por_reglas(
             cantidad_final = Decimal(str(math.ceil(float(cantidad_base))))
             justificacion = 'Coeficiente por m² (cantidad neta)'
 
-        precio = _precio_referencia(material['codigo'], cac_context)
+        precio = _precio_referencia(material['codigo'], cac_context, org_id)
         precio_moneda = _convert_currency(precio, currency, tasa)
 
         # Item con cantidad (incluye desperdicio si está habilitado)
@@ -1226,7 +1272,7 @@ def calcular_etapa_por_reglas(
             cantidad = Decimal(str(max(1, math.ceil(float(cantidad_base)))))
             justificacion = 'Escala de jornales por m² (sin margen)'
 
-        precio = _precio_referencia(mano_obra['codigo'], cac_context)
+        precio = _precio_referencia(mano_obra['codigo'], cac_context, org_id)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_mano_obra += _quantize_currency(cantidad * precio_moneda)
         items.append({
@@ -1251,7 +1297,7 @@ def calcular_etapa_por_reglas(
         dias = dias if dias > DECIMAL_ZERO else base
         # Redondear días de equipos siempre hacia arriba (2.25 -> 3)
         dias = Decimal(str(math.ceil(float(dias))))
-        precio = _precio_referencia(equipo['codigo'], cac_context)
+        precio = _precio_referencia(equipo['codigo'], cac_context, org_id)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_equipos += _quantize_currency(dias * precio_moneda)
         items.append({
@@ -1301,7 +1347,7 @@ def calcular_etapa_por_reglas(
                 cantidad = specs['cantidad']
                 dias = int(Decimal(str(specs['dias'])) * factor_dias)
                 # Precio estimado para maquinaria (40-60% del precio de equipos estándar)
-                precio_base = _precio_referencia('EQ-MEZCLADORA', cac_context)
+                precio_base = _precio_referencia('EQ-MEZCLADORA', cac_context, org_id)
                 precio_moneda = _convert_currency(precio_base * Decimal('0.5'), currency, tasa)
                 subtotal_equipos += _quantize_currency(Decimal(str(dias)) * precio_moneda)
                 items.append({
@@ -1325,7 +1371,7 @@ def calcular_etapa_por_reglas(
                     cantidad_herr = int(cantidad_herr * 1.2)
                 dias_herr = int(Decimal(str(specs['dias'])) * factor_dias)
                 # Precio estimado para herramientas (menor que maquinaria)
-                precio_base_herr = _precio_referencia('EQ-MEZCLADORA', cac_context) * Decimal('0.15')
+                precio_base_herr = _precio_referencia('EQ-MEZCLADORA', cac_context, org_id) * Decimal('0.15')
                 precio_moneda_herr = _convert_currency(precio_base_herr, currency, tasa)
                 costo_herr = Decimal(str(cantidad_herr)) * precio_moneda_herr
                 subtotal_equipos += _quantize_currency(costo_herr)
@@ -1377,6 +1423,7 @@ def calcular_etapas_seleccionadas(
     currency: str = 'ARS',
     fx_snapshot: Optional[ExchangeRateSnapshot] = None,
     aplicar_desperdicio: bool = True,
+    org_id: Optional[int] = None,
 ):
     if superficie_m2 is None:
         raise ValueError('superficie_m2 es obligatoria')
@@ -1430,6 +1477,7 @@ def calcular_etapas_seleccionadas(
             currency=currency,
             fx_rate=fx_rate,
             aplicar_desperdicio=aplicar_desperdicio,
+            org_id=org_id,
         )
         etapas_resultado.append(resultado)
         total_parcial += _to_decimal(resultado.get('subtotal_total'), '0')
