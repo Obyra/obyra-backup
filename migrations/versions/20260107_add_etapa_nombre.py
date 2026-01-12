@@ -8,7 +8,7 @@ import sqlalchemy as sa
 import json
 
 revision = "202601070001"
-down_revision = "202512010001"  # after processed_webhooks
+down_revision = "20251201_webhooks"  # after processed_webhooks
 branch_labels = None
 depends_on = None
 

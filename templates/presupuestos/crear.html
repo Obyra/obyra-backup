@@ -302,14 +302,9 @@
                         <!-- Botones de acción -->
                         <div class="row">
                             <div class="col-12">
-                                <div class="d-flex gap-2 flex-wrap">
-                                    <button type="submit" class="btn btn-primary btn-lg">
-                                        <i class="fas fa-save"></i> CREAR PRESUPUESTO
-                                    </button>
-                                    <button type="button" class="btn btn-success btn-lg" onclick="calcularConIA()">
-                                        <i class="fas fa-brain"></i> CALCULAR CON IA
-                                    </button>
-                                </div>
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-save"></i> CREAR PRESUPUESTO
+                                </button>
                             </div>
                         </div>
 
@@ -1263,15 +1258,15 @@ function renderResultadoEtapasIA(data) {
             const precioUnit = item.precio_unit ? currencyFormatter.format(item.precio_unit) : '<span class="badge bg-warning text-dark">Sin precio</span>';
             const subtotalFmt = item.precio_unit ? currencyFormatter.format(subtotal) : '<span class="text-muted">--</span>';
             return `
-                <tr>
-                    <td class="text-capitalize">${item.tipo || '-'}</td>
-                    <td>${item.codigo || '-'}</td>
-                    <td>${item.descripcion || '-'}</td>
-                    <td class="text-end">${Number(item.cantidad || 0).toFixed(2)}</td>
-                    <td>${item.unidad || ''}</td>
-                    <td class="text-end">${precioUnit}</td>
-                    <td class="text-end">${subtotalFmt}</td>
-                    <td>${item.just || 'Regla determinística'}</td>
+                <tr style="font-size: 0.8rem;">
+                    <td class="text-capitalize" style="padding: 0.4rem;">${item.tipo || '-'}</td>
+                    <td style="padding: 0.4rem;">${item.codigo || '-'}</td>
+                    <td style="padding: 0.4rem; max-width: 200px; white-space: normal;">${item.descripcion || '-'}</td>
+                    <td class="text-end" style="padding: 0.4rem;">${Number(item.cantidad || 0).toFixed(2)}</td>
+                    <td style="padding: 0.4rem;">${item.unidad || ''}</td>
+                    <td class="text-end" style="padding: 0.4rem;">${precioUnit}</td>
+                    <td class="text-end" style="padding: 0.4rem; font-weight: 600;">${subtotalFmt}</td>
+                    <td style="padding: 0.4rem; font-size: 0.7rem; max-width: 150px; white-space: normal;">${item.just || 'Regla determinística'}</td>
                 </tr>
             `;
         }).join('');
@@ -1289,24 +1284,27 @@ function renderResultadoEtapasIA(data) {
                     </div>
                 </div>
                 ${items.length ? `
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover align-middle">
-                            <thead class="table-light">
+                    <div class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                        <table class="table table-sm table-hover align-middle" style="font-size: 0.8rem; white-space: nowrap; min-width: 100%;">
+                            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #f8f9fa;">
                                 <tr>
-                                    <th>Tipo</th>
-                                    <th>Código</th>
-                                    <th>Descripción</th>
-                                    <th class="text-end">Cantidad</th>
-                                    <th>Unidad</th>
-                                    <th class="text-end">Precio unit.</th>
-                                    <th class="text-end">Subtotal</th>
-                                    <th>Justificación</th>
+                                    <th style="font-size: 0.7rem; padding: 0.4rem;">Tipo</th>
+                                    <th style="font-size: 0.7rem; padding: 0.4rem;">Código</th>
+                                    <th style="font-size: 0.7rem; padding: 0.4rem; min-width: 150px;">Descripción</th>
+                                    <th class="text-end" style="font-size: 0.7rem; padding: 0.4rem;">Cant.</th>
+                                    <th style="font-size: 0.7rem; padding: 0.4rem;">Unidad</th>
+                                    <th class="text-end" style="font-size: 0.7rem; padding: 0.4rem;">P. Unit.</th>
+                                    <th class="text-end" style="font-size: 0.7rem; padding: 0.4rem;">Subtotal</th>
+                                    <th style="font-size: 0.65rem; padding: 0.4rem; min-width: 100px;">Justificación</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${filas}
                             </tbody>
                         </table>
+                    </div>
+                    <div class="small text-muted mt-1" style="font-size: 0.7rem;">
+                        <i class="fas fa-hand-point-right"></i> Desliza horizontalmente para ver más columnas
                     </div>
                 ` : '<div class="alert alert-warning mb-0">Sin items sugeridos para esta etapa.</div>'}
                 ${etapa.notas ? `<p class="small text-muted mt-2 mb-0">${etapa.notas}</p>` : ''}

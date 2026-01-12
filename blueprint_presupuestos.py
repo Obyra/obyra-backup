@@ -177,6 +177,10 @@ def lista():
 @login_required
 def crear():
     """Crear nuevo presupuesto"""
+    # Log database info for debugging
+    db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', 'Not configured')
+    current_app.logger.info(f"🔍 [CREAR PRESUPUESTO] DB URL: {db_url[:50]}... | Method: {request.method} | User: {current_user.id}")
+
     # Verificar permisos de gestión usando método centralizado
     if not current_user.puede_gestionar():
         flash('No tienes permisos para crear presupuestos', 'danger')
