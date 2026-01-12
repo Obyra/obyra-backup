@@ -425,8 +425,11 @@ def crear():
                              clientes=clientes)
 
     except Exception as e:
-        current_app.logger.error(f"Error en presupuestos.crear: {e}")
-        flash('Error al crear el presupuesto', 'danger')
+        import traceback
+        error_details = traceback.format_exc()
+        current_app.logger.error(f"Error en presupuestos.crear: {e}\n{error_details}")
+        # Mostrar error más descriptivo al usuario
+        flash(f'Error al crear el presupuesto: {str(e)}', 'danger')
         return redirect(url_for('presupuestos.lista'))
 
 
