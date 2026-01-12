@@ -498,3 +498,131 @@ def api_buscar():
     except Exception as e:
         current_app.logger.error(f"Error en clientes.api_buscar: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@clientes_bp.route('/api/crear', methods=['POST'])
+@login_required
+def api_crear():
+    """API para crear cliente desde modal (AJAX)"""
+    try:
+        org_id = get_current_org_id()
+        if not org_id:
+            return jsonify({'error': 'No tienes una organización activa'}), 403
+
+        # Obtener datos del JSON
+        data = request.get_json()
+
+        # Importar validadores
+        from utils.validators import validate_email, validate_string_length, validate_phone, sanitize_string
+
+        # Obtener datos
+        empresa = data.get('empresa', '').strip()
+        tipo_documento = data.get('tipo_documento', 'CUIT').strip()
+        numero_documento = data.get('numero_documento', '').strip()
+        email = data.get('email', '').strip()
+        telefono = data.get('telefono', '').strip()
+        telefono_alternativo = data.get('telefono_alternativo', '').strip()
+        direccion = data.get('direccion', '').strip()
+        ciudad = data.get('ciudad', '').strip()
+        provincia = data.get('provincia', '').strip()
+        codigo_postal = data.get('codigo_postal', '').strip()
+        notas = data.get('notas', '').strip()
+
+        # Contactos
+        contactos_data = data.get('contactos', [])
+        contactos = []
+        for c in contactos_data:
+            if c.get('nombre', '').strip() or c.get('apellido', '').strip():
+                contactos.append({
+                    'nombre': c.get('nombre', '').strip(),
+                    'apellido': c.get('apellido', '').strip(),
+                    'email': c.get('email', '').strip(),
+                    'telefono': c.get('telefono', '').strip(),
+                    'rol': c.get('rol', '').strip()
+                })
+
+        # Para mantener compatibilidad, usar primer contacto como datos principales si existen
+        nombre = contactos[0]['nombre'] if contactos and contactos[0]['nombre'] else empresa
+        apellido = contactos[0]['apellido'] if contactos and contactos[0]['apellido'] else ''
+
+        # Validaciones
+        valid, error = validate_string_length(empresa, "Razón Social / Nombre de la Empresa", min_length=2, max_length=150)
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        valid, error = validate_string_length(numero_documento, "Número de documento", min_length=5, max_length=20)
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        # Validar email si está presente
+        if email:
+            valid, error = validate_email(email)
+            if not valid:
+                return jsonify({'error': error}), 400
+
+        # Validar teléfonos si están presentes
+        if telefono:
+            valid, error = validate_phone(telefono)
+            if not valid:
+                return jsonify({'error': f"Teléfono: {error}"}), 400
+
+        if telefono_alternativo:
+            valid, error = validate_phone(telefono_alternativo)
+            if not valid:
+                return jsonify({'error': f"Teléfono alternativo: {error}"}), 400
+
+        # Sanitizar strings
+        nombre = sanitize_string(nombre, 100)
+        apellido = sanitize_string(apellido, 100)
+        direccion = sanitize_string(direccion, 255)
+        ciudad = sanitize_string(ciudad, 100)
+        provincia = sanitize_string(provincia, 100)
+
+        # Verificar si ya existe
+        existing = Cliente.query.filter_by(
+            organizacion_id=org_id,
+            numero_documento=numero_documento
+        ).first()
+
+        if existing:
+            return jsonify({'error': f'Ya existe un cliente con el documento {numero_documento}'}), 400
+
+        # Crear cliente
+        cliente = Cliente(
+            organizacion_id=org_id,
+            nombre=nombre,
+            apellido=apellido,
+            tipo_documento=tipo_documento,
+            numero_documento=numero_documento,
+            email=email or None,
+            telefono=telefono or None,
+            telefono_alternativo=telefono_alternativo or None,
+            direccion=direccion or None,
+            ciudad=ciudad or None,
+            provincia=provincia or None,
+            codigo_postal=codigo_postal or None,
+            empresa=empresa,
+            contactos=contactos if contactos else None,
+            notas=notas or None
+        )
+
+        db.session.add(cliente)
+        db.session.commit()
+
+        # Retornar datos del cliente creado
+        return jsonify({
+            'success': True,
+            'cliente': {
+                'id': cliente.id,
+                'nombre_completo': cliente.nombre_completo,
+                'email': cliente.email,
+                'empresa': cliente.empresa,
+                'telefono': cliente.telefono,
+                'documento': cliente.documento_formateado
+            }
+        }), 201
+
+    except Exception as e:
+        current_app.logger.error(f"Error en clientes.api_crear: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': 'Error al crear el cliente'}), 500

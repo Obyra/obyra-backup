@@ -249,7 +249,7 @@ def crear():
                 from services.exchange.providers.bna import fetch_official_rate
                 rate_snapshot = fetch_official_rate()
                 if rate_snapshot and rate_snapshot.value:
-                    tasa_usd = float(rate_snapshot.value)
+                    tasa_usd = Decimal(str(rate_snapshot.value))  # Mantener como Decimal para consistencia
                     tasa_fecha = rate_snapshot.as_of_date
             except Exception as e:
                 current_app.logger.warning(f"No se pudo obtener cotización BNA al crear presupuesto: {e}")
@@ -327,8 +327,8 @@ def crear():
                             if moneda_ia == 'USD':
                                 price_unit_usd = precio_unit
                                 total_usd = subtotal
-                            elif tasa_usd and float(tasa_usd) > 0:
-                                # Convertir de ARS a USD usando la tasa
+                            elif tasa_usd and tasa_usd > Decimal('0'):
+                                # Convertir de ARS a USD usando la tasa (ambos son Decimal)
                                 price_unit_usd = precio_unit / tasa_usd
                                 total_usd = subtotal / tasa_usd
                             else:
@@ -383,28 +383,30 @@ def crear():
         # GET - Mostrar formulario
         obras = Obra.query.filter_by(organizacion_id=org_id).order_by(Obra.nombre).all()
 
-        # Generar número de presupuesto sugerido
+        # Generar número de presupuesto sugerido ÚNICO
         fecha_hoy = date.today().strftime('%Y%m%d')
 
-        # Buscar el último presupuesto del día actual
-        ultimo_hoy = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
+        # Buscar TODOS los presupuestos del día (incluyendo eliminados) para evitar colisiones
+        presupuestos_hoy = Presupuesto.query.filter_by(organizacion_id=org_id).filter(
             Presupuesto.numero.like(f'PRES-{fecha_hoy}-%')
-        ).order_by(desc(Presupuesto.id)).first()
+        ).all()
 
-        if ultimo_hoy and ultimo_hoy.numero:
-            # Extraer el número correlativo del formato "PRES-20251105-001"
+        # Extraer todos los números correlativos usados
+        numeros_usados = set()
+        for p in presupuestos_hoy:
             try:
-                partes = ultimo_hoy.numero.split('-')
+                partes = p.numero.split('-')
                 if len(partes) == 3:
-                    num = int(partes[2]) + 1
-                    numero_sugerido = f"PRES-{fecha_hoy}-{num:03d}"
-                else:
-                    numero_sugerido = f"PRES-{fecha_hoy}-001"
-            except (IndexError, ValueError, AttributeError) as e:
-                current_app.logger.warning(f"Error al generar número de presupuesto: {e}")
-                numero_sugerido = f"PRES-{fecha_hoy}-001"
-        else:
-            numero_sugerido = f"PRES-{fecha_hoy}-001"
+                    numeros_usados.add(int(partes[2]))
+            except (IndexError, ValueError, AttributeError):
+                pass
+
+        # Encontrar el primer número disponible
+        num = 1
+        while num in numeros_usados:
+            num += 1
+
+        numero_sugerido = f"PRES-{fecha_hoy}-{num:03d}"
 
         # Obtener lista de clientes activos de la organización
         clientes = Cliente.query.filter_by(
@@ -957,6 +959,9 @@ def enviar_email(id):
     try:
         org_id = get_current_org_id()
         if not org_id:
+            # Si es JSON, retornar error JSON
+            if request.is_json:
+                return jsonify({'error': 'No tienes una organización activa'}), 403
             flash('No tienes una organización activa', 'warning')
             return redirect(url_for('index'))
 
@@ -989,17 +994,27 @@ Saludos cordiales,
                 mensaje_default=mensaje_default
             )
 
-        # POST: Enviar email
-        email_destino = request.form.get('email', '').strip()
-        asunto = request.form.get('asunto', f'Presupuesto {presupuesto.numero}').strip()
-        mensaje = request.form.get('mensaje', '').strip()
+        # POST: Enviar email (puede ser form o JSON)
+        if request.is_json:
+            data = request.get_json()
+            email_destino = data.get('email', '').strip()
+            asunto = data.get('asunto', f'Presupuesto {presupuesto.numero}').strip()
+            mensaje = data.get('mensaje', '').strip()
+        else:
+            email_destino = request.form.get('email', '').strip()
+            asunto = request.form.get('asunto', f'Presupuesto {presupuesto.numero}').strip()
+            mensaje = request.form.get('mensaje', '').strip()
 
         if not email_destino:
+            if request.is_json:
+                return jsonify({'error': 'Debe ingresar un email de destino'}), 400
             flash('Debe ingresar un email de destino', 'danger')
             return redirect(url_for('presupuestos.enviar_email', id=id))
 
         # Verificar que el presupuesto tenga ítems
         if presupuesto.items.count() == 0:
+            if request.is_json:
+                return jsonify({'error': 'No se puede enviar un presupuesto sin ítems'}), 400
             flash('No se puede enviar un presupuesto sin ítems. Por favor agregue ítems al presupuesto primero.', 'warning')
             return redirect(url_for('presupuestos.detalle', id=id))
 
@@ -1145,6 +1160,8 @@ Saludos cordiales,
 
         # Si ninguno funcionó
         if not email_enviado:
+            if request.is_json:
+                return jsonify({'error': 'No se pudo enviar el email. Verifique la configuración del servidor de correo.'}), 500
             flash('No se pudo enviar el email. Verifique la configuración del servidor de correo.', 'danger')
             return redirect(url_for('presupuestos.enviar_email', id=id))
 
@@ -1153,11 +1170,19 @@ Saludos cordiales,
             presupuesto.estado = 'enviado'
             db.session.commit()
 
+        if request.is_json:
+            return jsonify({
+                'success': True,
+                'message': f'Presupuesto enviado exitosamente a {email_destino}'
+            }), 200
+
         flash(f'Presupuesto enviado exitosamente a {email_destino}', 'success')
         return redirect(url_for('presupuestos.detalle', id=id))
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.enviar_email: {e}", exc_info=True)
+        if request.is_json:
+            return jsonify({'error': 'Error al procesar el envío del email'}), 500
         flash('Error al procesar el envío del email', 'danger')
         return redirect(url_for('presupuestos.detalle', id=id))
 

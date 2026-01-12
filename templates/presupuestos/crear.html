@@ -206,14 +206,14 @@
                                     <select class="form-select" id="cliente_id" name="cliente_id">
                                         <option value="">Sin cliente asignado</option>
                                         {% for cliente in clientes %}
-                                        <option value="{{ cliente.id }}" {% if request.args.get('cliente_id')|string == cliente.id|string %}selected{% endif %}>
+                                        <option value="{{ cliente.id }}">
                                             {{ cliente.nombre_completo }} - {{ cliente.email }}
                                         </option>
                                         {% endfor %}
                                     </select>
-                                    <a href="{{ url_for('clientes.crear', desde_presupuesto=1) }}" class="btn btn-outline-primary" title="Crear nuevo cliente" onclick="guardarDatosFormulario()">
+                                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalCrearCliente" title="Crear nuevo cliente">
                                         <i class="fas fa-plus"></i>
-                                    </a>
+                                    </button>
                                     <a href="{{ url_for('clientes.lista') }}" class="btn btn-outline-secondary" target="_blank" title="Ver todos los clientes">
                                         <i class="fas fa-users"></i>
                                     </a>
@@ -286,6 +286,17 @@
                                 </div>
                             </div>
 
+                            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mt-3">
+                                <div class="text-muted small">
+                                    <i class="fas fa-info-circle"></i>
+                                    Marca las etapas que quieres recalcular con IA y ajusta los datos antes de guardar.
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-outline-success btn-sm" onclick="calcularEtapasSeleccionadasIA()">
+                                        <i class="fas fa-brain"></i> Calcular etapas seleccionadas con IA
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Botones de acción -->
@@ -293,13 +304,10 @@
                             <div class="col-12">
                                 <div class="d-flex gap-2 flex-wrap">
                                     <button type="submit" class="btn btn-primary btn-lg">
-                                        <i class="fas fa-save"></i> Crear Presupuesto
+                                        <i class="fas fa-save"></i> CREAR PRESUPUESTO
                                     </button>
-                                    <button type="button" class="btn btn-success btn-lg" onclick="calcularEtapasSeleccionadasIA()">
-                                        <i class="fas fa-layer-group"></i> Calcular etapas seleccionadas con IA
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary" onclick="limpiarFormulario()">
-                                        <i class="fas fa-broom"></i> Limpiar
+                                    <button type="button" class="btn btn-success btn-lg" onclick="calcularConIA()">
+                                        <i class="fas fa-brain"></i> CALCULAR CON IA
                                     </button>
                                 </div>
                             </div>
@@ -325,7 +333,7 @@
                             <li>Sube un plano PDF para análisis automático</li>
                             <li>Especifica la superficie si no tienes plano</li>
                             <li>Elige el tipo de construcción apropiado</li>
-                            <li>Usa "Calcular etapas seleccionadas con IA" para obtener materiales</li>
+                            <li>Usa "Calcular con IA" para obtener materiales</li>
                         </ul>
                     </div>
                 </div>
@@ -392,24 +400,42 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="seleccionarTodasEtapas">
-                        <label class="form-check-label" for="seleccionarTodasEtapas">
-                            Seleccionar todas
-                        </label>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0"><i class="fas fa-list-check text-primary"></i> Etapas Predefinidas</h6>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="seleccionarTodasEtapas">
+                                <label class="form-check-label" for="seleccionarTodasEtapas">
+                                    Seleccionar todas
+                                </label>
+                            </div>
+                        </div>
+                        <div class="row" id="etapasPredefinidas">
+                            <!-- Se cargarán con JavaScript -->
+                        </div>
                     </div>
-                </div>
-                <div class="row" id="etapasPredefinidas">
-                    <!-- Se cargarán con JavaScript -->
+                    <div class="col-md-4">
+                        <h6 class="mb-3"><i class="fas fa-plus-circle text-success"></i> Etapa Personalizada</h6>
+                        <div class="mb-3">
+                            <label for="etapaPersonalizadaNombre" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="etapaPersonalizadaNombre" placeholder="Ej: Pintura Especial">
+                        </div>
+                        <div class="mb-3">
+                            <label for="etapaPersonalizadaDescripcion" class="form-label">Descripción</label>
+                            <textarea class="form-control" id="etapaPersonalizadaDescripcion" rows="3" placeholder="Descripción detallada..."></textarea>
+                        </div>
+                        <button type="button" class="btn btn-success btn-sm" onclick="agregarEtapaPersonalizada()">
+                            <i class="fas fa-plus"></i> Agregar Personalizada
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <div class="me-auto">
                     <small class="text-muted">
-                        <i class="fas fa-info-circle"></i>
-                        Selecciona las etapas que incluirá el presupuesto
+                        <i class="fas fa-info-circle"></i> 
+                        Selecciona múltiples etapas o agrega personalizadas
                     </small>
                 </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -424,148 +450,12 @@
 </div>
 
 <!-- Modal de vista previa IA por etapas -->
-<style>
-/* Estilos responsivos para modal IA */
-@media (max-width: 768px) {
-    #modalResultadoEtapasIA .modal-dialog {
-        margin: 0.5rem;
-        max-width: calc(100% - 1rem);
-    }
-    #modalResultadoEtapasIA .modal-header {
-        padding: 0.75rem 1rem;
-    }
-    #modalResultadoEtapasIA .modal-header h5 {
-        font-size: 1rem;
-    }
-    #modalResultadoEtapasIA .modal-body {
-        padding: 0.75rem;
-    }
-    #modalResultadoEtapasIA .modal-footer {
-        flex-direction: column;
-        gap: 0.75rem;
-        padding: 0.75rem;
-    }
-    #modalResultadoEtapasIA .modal-footer > div {
-        width: 100%;
-        text-align: center;
-    }
-    #modalResultadoEtapasIA .modal-footer .d-flex.gap-2 {
-        justify-content: center;
-        width: 100%;
-    }
-    #modalResultadoEtapasIA .modal-footer .btn {
-        flex: 1;
-    }
-    /* Ocultar tabla en móviles */
-    #modalResultadoEtapasIA .table-desktop {
-        display: none !important;
-    }
-    /* Mostrar tarjetas en móviles */
-    #modalResultadoEtapasIA .items-mobile {
-        display: block !important;
-    }
-    /* Header de etapa en móvil */
-    #modalResultadoEtapasIA .etapa-header-mobile {
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        gap: 0.5rem;
-    }
-    #modalResultadoEtapasIA .etapa-badges {
-        flex-wrap: wrap;
-        gap: 0.25rem;
-    }
-    #modalResultadoEtapasIA .etapa-badges .badge {
-        font-size: 0.7rem;
-    }
-    /* Alert resumen más compacto */
-    #resumenEtapasIAMetadatos {
-        font-size: 0.85rem;
-        padding: 0.75rem !important;
-        line-height: 1.4;
-    }
-}
-
-@media (min-width: 769px) {
-    /* Ocultar tarjetas en desktop */
-    #modalResultadoEtapasIA .items-mobile {
-        display: none !important;
-    }
-    #modalResultadoEtapasIA .table-desktop {
-        display: block !important;
-    }
-}
-
-/* Estilos de tarjeta para items en móvil */
-.ia-item-card {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-}
-.ia-item-card:last-child {
-    margin-bottom: 0;
-}
-.ia-item-card .item-tipo {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: #6c757d;
-    margin-bottom: 0.25rem;
-}
-.ia-item-card .item-desc {
-    font-weight: 500;
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
-    color: #212529;
-}
-.ia-item-card .item-codigo {
-    font-size: 0.75rem;
-    color: #6c757d;
-    margin-bottom: 0.5rem;
-}
-.ia-item-card .item-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    padding: 0.25rem 0;
-    border-top: 1px solid #e9ecef;
-}
-.ia-item-card .item-row:first-of-type {
-    border-top: none;
-    padding-top: 0;
-}
-.ia-item-card .item-row .label {
-    color: #6c757d;
-}
-.ia-item-card .item-row .value {
-    font-weight: 500;
-    text-align: right;
-}
-.ia-item-card .item-subtotal {
-    background: #e7f5e7;
-    margin: 0.5rem -0.75rem -0.75rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0 0 8px 8px;
-    display: flex;
-    justify-content: space-between;
-    font-weight: 600;
-}
-.ia-item-card .item-just {
-    font-size: 0.75rem;
-    color: #6c757d;
-    font-style: italic;
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px dashed #dee2e6;
-}
-</style>
 <div class="modal fade" id="modalResultadoEtapasIA" tabindex="-1" aria-labelledby="modalResultadoEtapasIALabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title" id="modalResultadoEtapasIALabel">
-                    <i class="fas fa-brain me-2"></i>Resultados IA
+                    <i class="fas fa-brain me-2"></i>Resultados IA por etapas seleccionadas
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
@@ -581,15 +471,14 @@
             <div class="modal-footer d-flex justify-content-between">
                 <div class="text-muted small">
                     <i class="fas fa-robot me-1"></i>
-                    <span class="d-none d-md-inline">Los valores calculados se guardarán con el presupuesto cuando confirmes la creación.</span>
-                    <span class="d-md-none">Valores se guardarán al confirmar.</span>
+                    Los valores calculados se guardarán con el presupuesto cuando confirmes la creación.
                 </div>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times"></i> <span class="d-none d-sm-inline">Cancelar</span>
+                        <i class="fas fa-times"></i> Cancelar
                     </button>
                     <button type="button" class="btn btn-success" onclick="aplicarResultadosEtapasIA()">
-                        <i class="fas fa-save"></i> <span class="d-none d-sm-inline">Aplicar</span><span class="d-sm-none">OK</span>
+                        <i class="fas fa-save"></i> Aplicar al presupuesto
                     </button>
                 </div>
             </div>
@@ -841,16 +730,10 @@ function inicializarMapaUbicacion(lat, lng) {
         return;
     }
     if (!ubicacionMap) {
-        ubicacionMap = L.map('ubicacion_mapa', {
-            attributionControl: false
-        });
-        // Agregar atribución personalizada sin "Leaflet |"
-        L.control.attribution({ prefix: false }).addTo(ubicacionMap);
-        // Usar Google Maps tiles
-        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
-            subdomains: ['0', '1', '2', '3'],
-            attribution: '© Google Maps',
-            maxZoom: 20,
+        ubicacionMap = L.map('ubicacion_mapa');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
         }).addTo(ubicacionMap);
     }
     ubicacionMap.setView([lat, lng], 15);
@@ -1056,10 +939,8 @@ const ETAPAS_PREDEFINIDAS = [
     { nombre: 'Pisos', descripcion: 'Colocación de pisos y revestimientos', orden: 11, slug: 'pisos' },
     { nombre: 'Carpintería', descripcion: 'Instalación de puertas, ventanas y muebles', orden: 12, slug: 'carpinteria' },
     { nombre: 'Pintura', descripcion: 'Trabajos de pintura interior y exterior', orden: 13, slug: 'pintura' },
-    { nombre: 'Herrería de Obra', descripcion: 'Rejas, portones, barandas y estructuras metálicas', orden: 14, slug: 'herreria-de-obra' },
-    { nombre: 'Seguridad', descripcion: 'Equipos contra incendio, alarmas y maquinaria edificio', orden: 15, slug: 'seguridad' },
-    { nombre: 'Instalaciones Complementarias', descripcion: 'Aire acondicionado, calefacción, etc.', orden: 16, slug: 'instalaciones-complementarias' },
-    { nombre: 'Limpieza Final', descripcion: 'Limpieza y acondicionamiento final', orden: 17, slug: 'limpieza-final' }
+    { nombre: 'Instalaciones Complementarias', descripcion: 'Aire acondicionado, calefacción, etc.', orden: 14, slug: 'instalaciones-complementarias' },
+    { nombre: 'Limpieza Final', descripcion: 'Limpieza y acondicionamiento final', orden: 15, slug: 'limpieza-final' }
 ];
 
 function mostrarPanelEtapas() {
@@ -1112,7 +993,7 @@ function toggleEtapaPredefinida(slug) {
 
     if (checkbox.checked) {
         if (!etapasSeleccionadasArray.some(e => (e.slug || slugifyEtapa(e.nombre)) === slug)) {
-            etapasSeleccionadasArray.push({ ...etapa });
+            etapasSeleccionadasArray.push({ ...etapa, personalizada: false });
             etapasSeleccionadasIA.add(slug);
         }
     } else {
@@ -1122,6 +1003,38 @@ function toggleEtapaPredefinida(slug) {
     limpiarResultadosEtapasIA();
     actualizarCheckboxSeleccionarTodas();
     console.log(`📋 Etapas seleccionadas: ${etapasSeleccionadasArray.length}`);
+}
+
+function agregarEtapaPersonalizada() {
+    const nombre = document.getElementById('etapaPersonalizadaNombre').value.trim();
+    const descripcion = document.getElementById('etapaPersonalizadaDescripcion').value.trim();
+
+    if (!nombre) {
+        alert('Ingresa el nombre de la etapa personalizada');
+        return;
+    }
+
+    if (etapasSeleccionadasArray.some(e => e.nombre.toLowerCase() === nombre.toLowerCase())) {
+        alert('Ya existe una etapa con ese nombre');
+        return;
+    }
+
+    const slug = generarSlugUnico(nombre);
+    const nuevaEtapa = {
+        nombre,
+        descripcion: descripcion || 'Etapa personalizada',
+        orden: etapasSeleccionadasArray.length + 100,
+        personalizada: true,
+        slug
+    };
+
+    etapasSeleccionadasArray.push(nuevaEtapa);
+    etapasSeleccionadasIA.add(slug);
+    document.getElementById('etapaPersonalizadaNombre').value = '';
+    document.getElementById('etapaPersonalizadaDescripcion').value = '';
+    limpiarResultadosEtapasIA();
+    actualizarVistaEtapas();
+    console.log(`✅ Etapa personalizada agregada: ${nombre}`);
 }
 
 function confirmarEtapasSeleccionadas() {
@@ -1159,6 +1072,7 @@ function actualizarVistaEtapas(renderBadges = true) {
     etapasOrdenadas.forEach((etapa) => {
         const slug = etapa.slug || slugifyEtapa(etapa.nombre);
         const checked = etapasSeleccionadasIA.has(slug);
+        const esPersonalizada = etapa.personalizada;
         const iaBadge = etapa.ia_aplicada && renderBadges ? '<span class="badge bg-success-subtle text-success ms-2">IA aplicada</span>' : '';
         const descripcion = etapa.descripcion || 'Sin descripción definida';
         const inputId = `etapaCheck_${slug}`;
@@ -1174,6 +1088,7 @@ function actualizarVistaEtapas(renderBadges = true) {
                                            ${checked ? 'checked' : ''} onchange="toggleEtapaIA(this)">
                                     <label class="form-check-label fw-bold text-primary" for="${inputId}">
                                         ${etapa.nombre}
+                                        ${esPersonalizada ? '<span class="badge bg-success ms-1">Personalizada</span>' : ''}
                                         ${iaBadge}
                                     </label>
                                 </div>
@@ -1334,12 +1249,6 @@ function renderResultadoEtapasIA(data) {
     const contenedor = document.getElementById('resultadoEtapasIAContenido');
     const resumen = document.getElementById('resumenEtapasIAMetadatos');
     const etapas = data.etapas || [];
-    const tieneTC = data.tipo_cambio && data.tipo_cambio.valor > 0;
-    const redondeoAplicado = data.redondeo_aplicado;
-
-    // Formatters para ambas monedas
-    const fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
-    const fmtUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
     if (etapas.length === 0) {
         contenedor.innerHTML = '<div class="alert alert-warning mb-0">La IA no generó items para las etapas seleccionadas.</div>';
@@ -1349,147 +1258,55 @@ function renderResultadoEtapasIA(data) {
 
     const htmlEtapas = etapas.map(etapa => {
         const items = etapa.items || [];
-
-        // Generar filas para tabla desktop
         const filas = items.map(item => {
-            const precioARS = item.precio_unit_ars || item.precio_unit || 0;
-            const precioUSD = item.precio_unit_usd || 0;
-            const subtotalARS = item.subtotal_ars || item.subtotal || 0;
-            const subtotalUSD = item.subtotal_usd || 0;
-
-            let cantidadDisplay = Number(item.cantidad || 0).toFixed(2);
-            let cantidadNeta = '';
-            let detallePacksHTML = '';
-
-            if (item.tipo === 'material' && redondeoAplicado) {
-                if (item.cantidad_neta && item.cantidad_neta !== item.cantidad) {
-                    cantidadNeta = `<small class="text-muted d-block">(Neto: ${Number(item.cantidad_neta).toFixed(2)})</small>`;
-                }
-                if (item.detalle_packs) {
-                    detallePacksHTML = `<small class="text-success d-block">${item.detalle_packs}</small>`;
-                }
-                if (item.sobrante && item.sobrante > 0) {
-                    detallePacksHTML += `<small class="text-warning d-block">+${Number(item.sobrante).toFixed(2)} sobrante</small>`;
-                }
-            }
-
-            let precioDisplay = precioARS ? fmtARS.format(precioARS) : '<span class="badge bg-warning text-dark">Sin precio</span>';
-            let subtotalDisplay = subtotalARS ? fmtARS.format(subtotalARS) : '<span class="text-muted">--</span>';
-
-            if (tieneTC && precioUSD > 0) {
-                precioDisplay += `<small class="text-muted d-block">${fmtUSD.format(precioUSD)}</small>`;
-                subtotalDisplay += `<small class="text-muted d-block">${fmtUSD.format(subtotalUSD)}</small>`;
-            }
-
+            const subtotal = (item.cantidad || 0) * (item.precio_unit || 0);
+            const precioUnit = item.precio_unit ? currencyFormatter.format(item.precio_unit) : '<span class="badge bg-warning text-dark">Sin precio</span>';
+            const subtotalFmt = item.precio_unit ? currencyFormatter.format(subtotal) : '<span class="text-muted">--</span>';
             return `
                 <tr>
                     <td class="text-capitalize">${item.tipo || '-'}</td>
                     <td>${item.codigo || '-'}</td>
                     <td>${item.descripcion || '-'}</td>
-                    <td class="text-end">${cantidadDisplay}${cantidadNeta}${detallePacksHTML}</td>
+                    <td class="text-end">${Number(item.cantidad || 0).toFixed(2)}</td>
                     <td>${item.unidad || ''}</td>
-                    <td class="text-end">${precioDisplay}</td>
-                    <td class="text-end">${subtotalDisplay}</td>
+                    <td class="text-end">${precioUnit}</td>
+                    <td class="text-end">${subtotalFmt}</td>
                     <td>${item.just || 'Regla determinística'}</td>
                 </tr>
             `;
         }).join('');
 
-        // Generar tarjetas para móviles
-        const tarjetas = items.map(item => {
-            const precioARS = item.precio_unit_ars || item.precio_unit || 0;
-            const precioUSD = item.precio_unit_usd || 0;
-            const subtotalARS = item.subtotal_ars || item.subtotal || 0;
-            const subtotalUSD = item.subtotal_usd || 0;
-
-            let cantidadDisplay = Number(item.cantidad || 0).toFixed(2);
-            let cantidadExtra = '';
-
-            if (item.tipo === 'material' && redondeoAplicado) {
-                if (item.cantidad_neta && item.cantidad_neta !== item.cantidad) {
-                    cantidadExtra += ` (Neto: ${Number(item.cantidad_neta).toFixed(2)})`;
-                }
-                if (item.detalle_packs) {
-                    cantidadExtra += ` - ${item.detalle_packs}`;
-                }
-            }
-
-            let precioDisplayMobile = precioARS ? fmtARS.format(precioARS) : 'Sin precio';
-            let subtotalDisplayMobile = subtotalARS ? fmtARS.format(subtotalARS) : '--';
-
-            if (tieneTC && precioUSD > 0) {
-                precioDisplayMobile += ` (${fmtUSD.format(precioUSD)})`;
-                subtotalDisplayMobile += ` (${fmtUSD.format(subtotalUSD)})`;
-            }
-
-            return `
-                <div class="ia-item-card">
-                    <div class="item-tipo">${item.tipo || '-'}</div>
-                    <div class="item-desc">${item.descripcion || '-'}</div>
-                    ${item.codigo ? `<div class="item-codigo"><i class="fas fa-barcode me-1"></i>${item.codigo}</div>` : ''}
-                    <div class="item-row">
-                        <span class="label">Cantidad:</span>
-                        <span class="value">${cantidadDisplay} ${item.unidad || ''}${cantidadExtra}</span>
-                    </div>
-                    <div class="item-row">
-                        <span class="label">Precio unit.:</span>
-                        <span class="value">${precioDisplayMobile}</span>
-                    </div>
-                    <div class="item-subtotal">
-                        <span>Subtotal:</span>
-                        <span>${subtotalDisplayMobile}</span>
-                    </div>
-                    ${item.just ? `<div class="item-just"><i class="fas fa-info-circle me-1"></i>${item.just}</div>` : ''}
-                </div>
-            `;
-        }).join('');
-
-        // Subtotales duales
-        const subtotalARS = etapa.subtotal_total_ars || etapa.subtotal_total || 0;
-        const subtotalUSD = etapa.subtotal_total_usd || 0;
-        let subtotalDisplay = fmtARS.format(subtotalARS);
-        if (tieneTC && subtotalUSD > 0) {
-            subtotalDisplay += ` <small class="text-muted">(${fmtUSD.format(subtotalUSD)})</small>`;
-        }
-
+        const subtotalTotal = etapa.subtotal_total ? currencyFormatter.format(etapa.subtotal_total) : currencyFormatter.format(0);
         const confianza = etapa.confianza ? Math.round(etapa.confianza * 100) : null;
 
         return `
             <div class="mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-2 etapa-header-mobile">
+                <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="mb-0 text-primary">${etapa.nombre}</h6>
-                    <div class="d-flex align-items-center gap-2 etapa-badges">
+                    <div class="d-flex align-items-center gap-2">
                         ${confianza ? `<span class="badge bg-info-subtle text-info">Confianza ${confianza}%</span>` : ''}
-                        ${redondeoAplicado ? '<span class="badge bg-success-subtle text-success">Redondeo</span>' : ''}
-                        <span class="badge bg-secondary-subtle text-secondary">${subtotalDisplay}</span>
+                        <span class="badge bg-secondary-subtle text-secondary">${subtotalTotal}</span>
                     </div>
                 </div>
                 ${items.length ? `
-                    <!-- Vista Desktop: Tabla -->
-                    <div class="table-desktop">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Tipo</th>
-                                        <th>Código</th>
-                                        <th>Descripción</th>
-                                        <th class="text-end">Cantidad${redondeoAplicado ? ' (compra)' : ''}</th>
-                                        <th>Unidad</th>
-                                        <th class="text-end">Precio unit.${tieneTC ? '<br><small class="text-muted">ARS / USD</small>' : ''}</th>
-                                        <th class="text-end">Subtotal${tieneTC ? '<br><small class="text-muted">ARS / USD</small>' : ''}</th>
-                                        <th>Justificación</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${filas}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <!-- Vista Móvil: Tarjetas -->
-                    <div class="items-mobile">
-                        ${tarjetas}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th>Código</th>
+                                    <th>Descripción</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th>Unidad</th>
+                                    <th class="text-end">Precio unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                    <th>Justificación</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filas}
+                            </tbody>
+                        </table>
                     </div>
                 ` : '<div class="alert alert-warning mb-0">Sin items sugeridos para esta etapa.</div>'}
                 ${etapa.notas ? `<p class="small text-muted mt-2 mb-0">${etapa.notas}</p>` : ''}
@@ -1498,33 +1315,22 @@ function renderResultadoEtapasIA(data) {
     }).join('');
 
     contenedor.innerHTML = htmlEtapas;
-
-    // Totales duales
-    const totalARS = data.total_parcial_ars || data.total_parcial || 0;
-    const totalUSD = data.total_parcial_usd || 0;
-    let totalDisplay = fmtARS.format(totalARS);
-    if (tieneTC && totalUSD > 0) {
-        totalDisplay += ` / ${fmtUSD.format(totalUSD)}`;
-    }
-
+    const totalParcial = data.total_parcial ? currencyFormatter.format(data.total_parcial) : currencyFormatter.format(0);
     resumen.style.display = 'block';
     let tipoCambioTexto = '';
-    if (tieneTC) {
+    if (data.tipo_cambio && data.tipo_cambio.valor) {
+        const fxFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
         const proveedor = (data.tipo_cambio.proveedor || '').toUpperCase();
         const fechaFx = data.tipo_cambio.as_of ? new Date(data.tipo_cambio.as_of) : (data.tipo_cambio.fetched_at ? new Date(data.tipo_cambio.fetched_at) : null);
         const fechaTexto = fechaFx ? fechaFx.toLocaleDateString('es-AR') : '';
-        tipoCambioTexto = ` · TC ${proveedor} ${fmtARS.format(data.tipo_cambio.valor)}${fechaTexto ? ' (' + fechaTexto + ')' : ''}`;
+        tipoCambioTexto = ` · TC ${proveedor} ${fxFormatter.format(data.tipo_cambio.valor)}${fechaTexto ? ' (' + fechaTexto + ')' : ''}`;
     }
     let cacTexto = '';
     if (data.cac && data.cac.valor) {
         const periodo = data.cac.periodo ? new Date(data.cac.periodo).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : '';
         cacTexto = ` · CAC ${Number(data.cac.valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${periodo ? ' (' + periodo + ')' : ''}`;
     }
-    let sobranteTexto = '';
-    if (data.total_sobrante_estimado && data.total_sobrante_estimado > 0) {
-        sobranteTexto = ` · Sobrante: ${Number(data.total_sobrante_estimado).toFixed(2)} u.`;
-    }
-    resumen.innerHTML = `<strong>Total IA:</strong> ${totalDisplay} · ${etapas.length} etapa(s)${tipoCambioTexto}${cacTexto}${sobranteTexto}`;
+    resumen.innerHTML = `<strong>Total parcial IA:</strong> ${totalParcial} · ${etapas.length} etapa(s) analizadas${tipoCambioTexto}${cacTexto}.`;
 }
 
 function aplicarResultadosEtapasIA() {
@@ -1816,138 +1622,170 @@ window.actualizarSelectorCliente = function(clienteData) {
         }, 5000);
     }
 };
-
-// ========== GUARDAR/RESTAURAR DATOS DEL FORMULARIO ==========
-// Lista de campos a guardar
-const camposFormulario = [
-    'nombre_obra',
-    'tipo_obra',
-    'cantidad_pisos',
-    'ubicacion',
-    'tipo_construccion',
-    'superficie_m2',
-    'fecha_inicio',
-    'fecha_fin',
-    'presupuesto_disponible',
-    'moneda',
-    'vigencia_dias',
-    'notas'
-];
-
-// Guardar datos del formulario antes de ir a crear cliente
-function guardarDatosFormulario() {
-    const datos = {};
-    camposFormulario.forEach(campo => {
-        const elemento = document.getElementById(campo);
-        if (elemento) {
-            datos[campo] = elemento.value;
-        }
-    });
-
-    // Guardar también las etapas seleccionadas
-    if (etapasSeleccionadasArray && etapasSeleccionadasArray.length > 0) {
-        datos._etapas = JSON.stringify(etapasSeleccionadasArray);
-    }
-
-    // Guardar datos de cálculo IA si existen
-    if (datosCalculoIA) {
-        datos._datosIA = JSON.stringify(datosCalculoIA);
-    }
-
-    // Guardar en sessionStorage
-    sessionStorage.setItem('presupuesto_form_data', JSON.stringify(datos));
-    console.log('Datos del formulario guardados:', datos);
-}
-
-// Restaurar datos del formulario al volver de crear cliente
-function restaurarDatosFormulario() {
-    const datosGuardados = sessionStorage.getItem('presupuesto_form_data');
-    if (!datosGuardados) return false;
-
-    try {
-        const datos = JSON.parse(datosGuardados);
-        let restaurados = 0;
-
-        camposFormulario.forEach(campo => {
-            const elemento = document.getElementById(campo);
-            if (elemento && datos[campo]) {
-                elemento.value = datos[campo];
-                restaurados++;
-
-                // Disparar evento change para campos que lo necesitan
-                if (campo === 'tipo_obra' || campo === 'moneda') {
-                    elemento.dispatchEvent(new Event('change'));
-                }
-            }
-        });
-
-        // Restaurar etapas seleccionadas
-        if (datos._etapas) {
-            try {
-                const etapas = JSON.parse(datos._etapas);
-                etapasSeleccionadasArray = etapas;
-                etapas.forEach(e => {
-                    if (e.slug) etapasSeleccionadasIA.add(e.slug);
-                });
-                actualizarVistaEtapas();
-            } catch (e) {
-                console.warn('Error restaurando etapas:', e);
-            }
-        }
-
-        // Restaurar datos IA
-        if (datos._datosIA) {
-            try {
-                datosCalculoIA = JSON.parse(datos._datosIA);
-            } catch (e) {
-                console.warn('Error restaurando datos IA:', e);
-            }
-        }
-
-        // Limpiar datos guardados
-        sessionStorage.removeItem('presupuesto_form_data');
-
-        if (restaurados > 0) {
-            console.log('Formulario restaurado con', restaurados, 'campos');
-            // Mostrar mensaje informativo
-            mostrarMensajeRestauracion();
-            return true;
-        }
-    } catch (e) {
-        console.error('Error restaurando datos del formulario:', e);
-    }
-    return false;
-}
-
-function mostrarMensajeRestauracion() {
-    const form = document.getElementById('nuevoPresupuestoForm');
-    if (!form) return;
-
-    const alerta = document.createElement('div');
-    alerta.className = 'alert alert-info alert-dismissible fade show mb-3';
-    alerta.innerHTML = `
-        <i class="fas fa-info-circle me-2"></i>
-        <strong>Datos restaurados.</strong> Se recuperaron los datos que habías ingresado antes de crear el cliente.
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    form.insertBefore(alerta, form.firstChild);
-
-    // Auto-cerrar después de 5 segundos
-    setTimeout(() => {
-        alerta.classList.remove('show');
-        setTimeout(() => alerta.remove(), 150);
-    }, 5000);
-}
-
-// Verificar si venimos de crear cliente y restaurar datos
-document.addEventListener('DOMContentLoaded', function() {
-    // Si hay cliente_id en la URL, significa que venimos de crear cliente
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('cliente_id')) {
-        restaurarDatosFormulario();
-    }
-});
 </script>
 
+<!-- Modal para Crear Cliente -->
+<div class="modal fade" id="modalCrearCliente" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Crear Nuevo Cliente</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCrearClienteModal">
+                    <h6 class="mb-3">Información de la Empresa</h6>
+
+                    <div class="mb-3">
+                        <label class="form-label">Razón Social / Nombre de la Empresa <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="modal_empresa" name="empresa" required>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo de Documento <span class="text-danger">*</span></label>
+                            <select class="form-select" id="modal_tipo_documento" name="tipo_documento" required>
+                                <option value="CUIT" selected>CUIT</option>
+                                <option value="DNI">DNI</option>
+                                <option value="CUIL">CUIL</option>
+                                <option value="Pasaporte">Pasaporte</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Número de Documento <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="modal_numero_documento" name="numero_documento" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="modal_email" name="email">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="modal_telefono" name="telefono">
+                        </div>
+                    </div>
+
+                    <h6 class="mb-3 mt-4">Contacto Principal (opcional)</h6>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="modal_contacto_nombre" name="contacto_nombre">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Apellido</label>
+                            <input type="text" class="form-control" id="modal_contacto_apellido" name="contacto_apellido">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Email del Contacto</label>
+                            <input type="email" class="form-control" id="modal_contacto_email" name="contacto_email">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Rol</label>
+                            <input type="text" class="form-control" id="modal_contacto_rol" name="contacto_rol" placeholder="Ej: Gerente General">
+                        </div>
+                    </div>
+
+                    <div id="modal_error" class="alert alert-danger d-none"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarClienteModal()">
+                    <i class="fas fa-save"></i> Crear Cliente
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function guardarClienteModal() {
+    const form = document.getElementById('formCrearClienteModal');
+    const errorDiv = document.getElementById('modal_error');
+    errorDiv.classList.add('d-none');
+
+    // Validar formulario
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    // Preparar datos
+    const contactos = [];
+    const nombre = document.getElementById('modal_contacto_nombre').value.trim();
+    const apellido = document.getElementById('modal_contacto_apellido').value.trim();
+
+    if (nombre || apellido) {
+        contactos.push({
+            nombre: nombre,
+            apellido: apellido,
+            email: document.getElementById('modal_contacto_email').value.trim(),
+            telefono: '',
+            rol: document.getElementById('modal_contacto_rol').value.trim()
+        });
+    }
+
+    const data = {
+        empresa: document.getElementById('modal_empresa').value.trim(),
+        tipo_documento: document.getElementById('modal_tipo_documento').value,
+        numero_documento: document.getElementById('modal_numero_documento').value.trim(),
+        email: document.getElementById('modal_email').value.trim(),
+        telefono: document.getElementById('modal_telefono').value.trim(),
+        contactos: contactos
+    };
+
+    try {
+        const response = await fetch('/clientes/api/crear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            // Agregar el cliente al dropdown
+            const select = document.getElementById('cliente_id');
+            const option = document.createElement('option');
+            option.value = result.cliente.id;
+            option.textContent = `${result.cliente.nombre_completo} - ${result.cliente.email || 'Sin email'}`;
+            option.selected = true;
+            select.appendChild(option);
+
+            // Limpiar y cerrar modal
+            form.reset();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalCrearCliente'));
+            modal.hide();
+
+            // Mostrar mensaje de éxito
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show mt-2';
+            alert.innerHTML = `
+                <strong>¡Éxito!</strong> Cliente "${result.cliente.nombre_completo}" creado y seleccionado.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            select.parentElement.parentElement.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        } else {
+            errorDiv.textContent = result.error || 'Error al crear el cliente';
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Error de conexión. Intenta nuevamente.';
+        errorDiv.classList.remove('d-none');
+    }
+}
+</script>
 
 {% endblock %}
