@@ -134,6 +134,18 @@
                          aria-labelledby="heading-{{ etapa.id }}"
                          data-bs-parent="#acordeonEtapas">
                         <div class="accordion-body p-0">
+                            {% if etapa.tiene_items_directos %}
+                            <!-- Categoría con items directos (sin subcategorías) -->
+                            <div class="p-3">
+                                <p class="text-muted mb-3">
+                                    <i class="fas fa-boxes me-2"></i>
+                                    Esta categoría contiene <strong>{{ etapa.total_items }}</strong> artículos
+                                </p>
+                                <a href="{{ url_for('inventario.lista', categoria=etapa.id) }}" class="btn btn-primary w-100">
+                                    <i class="fas fa-list me-2"></i>Ver artículos de {{ etapa.nombre }}
+                                </a>
+                            </div>
+                            {% else %}
                             <!-- Subcategorías como lista -->
                             <div class="list-group list-group-flush">
                                 {% for subcat in etapa.subcategorias %}
@@ -155,6 +167,7 @@
                                     <i class="fas fa-list me-2"></i>Ver todos los artículos de {{ etapa.nombre }}
                                 </a>
                             </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
