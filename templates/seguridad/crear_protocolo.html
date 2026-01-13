@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Protocolo de Seguridad - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-plus-circle me-2 text-success"></i>Nuevo Protocolo de Seguridad
+                </h1>
+                <a href="{{ url_for('seguridad.protocolos') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a Protocolos
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('seguridad.procesar_protocolo') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Nombre -->
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label fw-bold">
+                                Nombre del Protocolo <span class="text-danger">*</span>
+                            </label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="nombre"
+                                   name="nombre"
+                                   required
+                                   placeholder="Ej: Uso obligatorio de EPP en altura"
+                                   maxlength="200">
+                            <small class="text-muted">Nombre descriptivo y claro del protocolo</small>
+                        </div>
+
+                        <!-- Descripción -->
+                        <div class="mb-3">
+                            <label for="descripcion" class="form-label fw-bold">Descripción</label>
+                            <textarea class="form-control"
+                                      id="descripcion"
+                                      name="descripcion"
+                                      rows="4"
+                                      placeholder="Describe en detalle el protocolo de seguridad..."></textarea>
+                            <small class="text-muted">Detalles, pasos y consideraciones del protocolo</small>
+                        </div>
+
+                        <!-- Categoría -->
+                        <div class="mb-3">
+                            <label for="categoria" class="form-label fw-bold">
+                                Categoría <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="categoria" name="categoria" required>
+                                <option value="">Seleccione una categoría...</option>
+                                <option value="epp">EPP - Equipos de Protección Personal</option>
+                                <option value="procedimiento">Procedimiento de Trabajo Seguro</option>
+                                <option value="emergencia">Procedimiento de Emergencia</option>
+                                <option value="inspeccion">Inspección y Verificación</option>
+                            </select>
+                            <small class="text-muted">Tipo de protocolo de seguridad</small>
+                        </div>
+
+                        <!-- Obligatorio -->
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       id="obligatorio"
+                                       name="obligatorio"
+                                       checked>
+                                <label class="form-check-label fw-bold" for="obligatorio">
+                                    Protocolo Obligatorio
+                                </label>
+                            </div>
+                            <small class="text-muted">Si está marcado, este protocolo debe cumplirse en todas las obras</small>
+                        </div>
+
+                        <!-- Frecuencia de Revisión -->
+                        <div class="mb-3">
+                            <label for="frecuencia_revision" class="form-label fw-bold">
+                                Frecuencia de Revisión (días)
+                            </label>
+                            <input type="number"
+                                   class="form-control"
+                                   id="frecuencia_revision"
+                                   name="frecuencia_revision"
+                                   value="30"
+                                   min="1"
+                                   max="365"
+                                   placeholder="30">
+                            <small class="text-muted">Cada cuántos días se debe revisar el cumplimiento (por defecto 30 días)</small>
+                        </div>
+
+                        <!-- Normativa de Referencia -->
+                        <div class="mb-4">
+                            <label for="normativa_referencia" class="form-label fw-bold">
+                                Normativa de Referencia
+                            </label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="normativa_referencia"
+                                   name="normativa_referencia"
+                                   placeholder="Ej: Ley 19.587, Dec. 351/79, Res. 51/97"
+                                   maxlength="200">
+                            <small class="text-muted">Normas, leyes o regulaciones que respaldan este protocolo</small>
+                        </div>
+
+                        <!-- Botones -->
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{{ url_for('seguridad.protocolos') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-1"></i>Crear Protocolo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="card border-info mt-3">
+                <div class="card-body">
+                    <h6 class="card-title text-info">
+                        <i class="fas fa-info-circle me-2"></i>Sobre los Protocolos de Seguridad
+                    </h6>
+                    <ul class="mb-0 small">
+                        <li><strong>EPP:</strong> Protocolos sobre uso correcto de equipos de protección (cascos, guantes, arnés, etc.)</li>
+                        <li><strong>Procedimiento:</strong> Pasos seguros para realizar trabajos específicos (altura, espacios confinados, etc.)</li>
+                        <li><strong>Emergencia:</strong> Cómo actuar ante incendios, accidentes, evacuaciones, etc.</li>
+                        <li><strong>Inspección:</strong> Verificaciones periódicas de seguridad en obra</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
