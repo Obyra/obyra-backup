@@ -16,16 +16,30 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
 
+    # Detectar si estamos en Railway (sin schema "app")
+    import os
+    is_railway = os.getenv("RAILWAY_ENVIRONMENT") is not None or \
+                 os.getenv("RAILWAY_PROJECT_ID") is not None
+
     # Set search_path for PostgreSQL
     is_pg = conn.engine.url.get_backend_name() == 'postgresql'
-    if is_pg:
+    if is_pg and not is_railway:
+        # Solo en local con schema app
         conn.execute(text("SET search_path TO app, public"))
 
     # Check if table exists before altering
     if is_pg:
-        table_exists = conn.execute(
-            text("SELECT to_regclass('app.items_presupuesto')")
-        ).scalar()
+        # Buscar en el schema correcto según el ambiente
+        if is_railway:
+            # Railway usa public
+            table_exists = conn.execute(
+                text("SELECT to_regclass('public.items_presupuesto')")
+            ).scalar()
+        else:
+            # Local usa app
+            table_exists = conn.execute(
+                text("SELECT to_regclass('app.items_presupuesto')")
+            ).scalar()
     else:
         from sqlalchemy import inspect
         insp = inspect(conn)
