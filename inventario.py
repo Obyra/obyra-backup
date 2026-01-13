@@ -129,37 +129,45 @@ def lista():
 
     # Paginación para mejor rendimiento en móviles
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)  # 50 items por página por defecto
+    per_page = request.args.get('per_page', 25, type=int)  # 25 items por página por defecto (optimizado)
     per_page = min(per_page, 100)  # Máximo 100 por página
 
-    base_query = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre)
-    total_items = base_query.count()
+    # OPTIMIZACIÓN: Detectar si estamos en vista de carpetas (sin filtros)
+    vista_carpetas = not buscar and not categoria_id and not con_stock and not stock_bajo
 
-    # Paginación
-    pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
-    items = pagination.items
-
-    current_app.logger.info(f"[INVENTARIO] Items en página {page}: {len(items)} de {total_items} total")
-
-    # Optimización: Solo cargar datos detallados si hay pocos items (búsqueda o filtro)
-    # Para la vista general, solo mostramos datos básicos
     from models.projects import Obra
     from models.budgets import Presupuesto
     from models.inventory import StockObra
 
     items_con_obras = []
-    for item in items:
-        # Versión simplificada - no hacer queries pesadas para cada item
-        items_con_obras.append({
-            'item': item,
-            'obras': [],
-            'reservas': [],
-            'stock_reservado': 0,
-            'stock_fisico_inicial': float(item.stock_actual or 0),
-            'traslados_obras': [],
-            'total_trasladado': 0,
-            'ubicaciones_stock': []
-        })
+    pagination = None
+    total_items = 0
+
+    # Solo cargar items si hay filtros activos (no en vista de carpetas)
+    if not vista_carpetas:
+        base_query = query.filter(ItemInventario.activo == True).order_by(ItemInventario.nombre)
+        total_items = base_query.count()
+
+        # Paginación
+        pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
+        items = pagination.items
+
+        current_app.logger.info(f"[INVENTARIO] Items en página {page}: {len(items)} de {total_items} total")
+
+        for item in items:
+            # Versión simplificada - no hacer queries pesadas para cada item
+            items_con_obras.append({
+                'item': item,
+                'obras': [],
+                'reservas': [],
+                'stock_reservado': 0,
+                'stock_fisico_inicial': float(item.stock_actual or 0),
+                'traslados_obras': [],
+                'total_trasladado': 0,
+                'ubicaciones_stock': []
+            })
+    else:
+        current_app.logger.info(f"[INVENTARIO] Vista de carpetas - no cargando items")
 
     # Load new inventory categories (propias de la org + globales)
     org_id = get_current_org_id() or current_user.organizacion_id
@@ -176,59 +184,42 @@ def lista():
 
     categorias = CategoriaInventario.query.order_by(CategoriaInventario.nombre).all()
 
-    # Get all obras for dropdowns (filtradas por organización)
-    obras_disponibles = Obra.query.join(Presupuesto).filter(
-        Obra.organizacion_id == org_id,
-        db.or_(
-            Presupuesto.confirmado_como_obra == True,
-            Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
-        )
-    ).distinct().all()
+    # Get all obras for dropdowns (solo si hay filtros activos)
+    obras_disponibles = []
+    if not vista_carpetas:
+        obras_disponibles = Obra.query.join(Presupuesto).filter(
+            Obra.organizacion_id == org_id,
+            db.or_(
+                Presupuesto.confirmado_como_obra == True,
+                Presupuesto.estado.in_(['aprobado', 'convertido', 'confirmado'])
+            )
+        ).distinct().all()
 
     # Construir árbol de categorías con items agrupados (para vista de carpetas)
+    # OPTIMIZACIÓN: Una sola query para contar items por categoría
+    conteo_items = {}
+    if org_id:
+        conteo_query = db.session.query(
+            ItemInventario.categoria_id,
+            db.func.count(ItemInventario.id)
+        ).filter(
+            ItemInventario.organizacion_id == org_id,
+            ItemInventario.activo == True
+        ).group_by(ItemInventario.categoria_id).all()
+        conteo_items = {cat_id: count for cat_id, count in conteo_query}
+
     arbol_categorias = []
     for cat_principal in categorias_nuevas:
-        # Obtener subcategorías (de la misma company_id que la categoría padre)
-        subcategorias = InventoryCategory.query.filter(
-            InventoryCategory.company_id == cat_principal.company_id,
-            InventoryCategory.parent_id == cat_principal.id,
-            InventoryCategory.is_active == True
-        ).order_by(InventoryCategory.nombre).all()
+        # Usar el conteo pre-calculado en lugar de queries individuales
+        total_items_categoria = conteo_items.get(cat_principal.id, 0)
 
-        # Contar items por subcategoría
-        subcats_con_items = []
-        total_items_categoria = 0
-
-        if subcategorias:
-            # Si hay subcategorías, contar items de cada una
-            for subcat in subcategorias:
-                items_subcat = ItemInventario.query.filter_by(
-                    organizacion_id=org_id,
-                    categoria_id=subcat.id,
-                    activo=True
-                ).count()
-                total_items_categoria += items_subcat
-                subcats_con_items.append({
-                    'id': subcat.id,
-                    'nombre': subcat.nombre,
-                    'items_count': items_subcat
-                })
-        else:
-            # Si NO hay subcategorías, contar items directos de la categoría principal
-            items_directos = ItemInventario.query.filter_by(
-                organizacion_id=org_id,
-                categoria_id=cat_principal.id,
-                activo=True
-            ).count()
-            total_items_categoria = items_directos
-
-        if total_items_categoria > 0 or subcats_con_items:
+        if total_items_categoria > 0:
             arbol_categorias.append({
                 'id': cat_principal.id,
                 'nombre': cat_principal.nombre,
-                'subcategorias': subcats_con_items,
+                'subcategorias': [],
                 'total_items': total_items_categoria,
-                'tiene_items_directos': not subcategorias and total_items_categoria > 0
+                'tiene_items_directos': True
             })
 
     return render_template('inventario/lista.html',
