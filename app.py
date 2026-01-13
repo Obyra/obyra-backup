@@ -1123,6 +1123,73 @@ def service_worker():
     """Serve Service Worker from root directory"""
     return send_from_directory(".", "sw.js", mimetype="application/javascript")
 
+# === ADMIN FIX ENDPOINT (TEMPORAL) ===
+@app.route("/admin/fix-etapa-nombre")
+@login_required
+def fix_etapa_nombre():
+    """Endpoint temporal para agregar columna etapa_nombre en Railway"""
+    from sqlalchemy import text
+
+    # Solo super admins
+    if not current_user.is_super_admin:
+        return {"error": "Unauthorized"}, 403
+
+    try:
+        # Verificar si la columna existe
+        result = db.session.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+            AND table_name = 'items_presupuesto'
+            AND column_name = 'etapa_nombre'
+        """))
+
+        if result.fetchone():
+            return {
+                "status": "already_exists",
+                "message": "La columna 'etapa_nombre' ya existe"
+            }, 200
+
+        # Agregar la columna
+        db.session.execute(text("""
+            ALTER TABLE items_presupuesto
+            ADD COLUMN etapa_nombre VARCHAR(100)
+        """))
+        db.session.commit()
+
+        # Verificar que se agregó
+        result = db.session.execute(text("""
+            SELECT column_name, data_type, character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+            AND table_name = 'items_presupuesto'
+            AND column_name = 'etapa_nombre'
+        """))
+
+        row = result.fetchone()
+        if row:
+            return {
+                "status": "success",
+                "message": "Columna 'etapa_nombre' agregada exitosamente",
+                "details": {
+                    "column_name": row[0],
+                    "data_type": row[1],
+                    "max_length": row[2]
+                }
+            }, 200
+        else:
+            return {
+                "status": "error",
+                "message": "No se pudo verificar la columna después de agregarla"
+            }, 500
+
+    except Exception as e:
+        db.session.rollback()
+        return {
+            "status": "error",
+            "message": str(e)
+        }, 500
+
 # === HEALTH CHECK ENDPOINTS ===
 @app.route("/health")
 def health_check():
