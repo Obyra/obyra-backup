@@ -206,8 +206,8 @@
                     </li>
                     {% endif %}
 
-                    <!-- Seguridad - Solo para Super Admin -->
-                    {% if current_user.is_super_admin and has_endpoint('seguridad.dashboard') %}
+                    <!-- Seguridad - Para Admin, PM, Técnico y Super Admin -->
+                    {% if current_user.puede_acceder_modulo('seguridad') and has_endpoint('seguridad.dashboard') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-danger" href="#" id="navbarSeguridad" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-shield-alt me-1"></i>Seguridad
