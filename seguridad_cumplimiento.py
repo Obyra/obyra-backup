@@ -219,7 +219,37 @@ def nuevo_checklist():
     """Formulario para nuevo checklist"""
     obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
     protocolos = ProtocoloSeguridad.query.filter_by(activo=True).all()
-    return render_template('seguridad/nuevo_checklist.html', obras=obras, protocolos=protocolos)
+    from datetime import date
+    return render_template('seguridad/nuevo_checklist.html', obras=obras, protocolos=protocolos, today=date.today().isoformat())
+
+@seguridad_bp.route('/nuevo_checklist', methods=['POST'])
+@login_required
+def procesar_nuevo_checklist():
+    """Procesa la creación de un nuevo checklist"""
+    try:
+        from datetime import datetime
+
+        fecha_inspeccion_str = request.form.get('fecha_inspeccion')
+        fecha_inspeccion = datetime.strptime(fecha_inspeccion_str, '%Y-%m-%d').date() if fecha_inspeccion_str else date.today()
+
+        checklist = ChecklistSeguridad(
+            obra_id=safe_int(request.form.get('obra_id')),
+            protocolo_id=safe_int(request.form.get('protocolo_id')),
+            fecha_inspeccion=fecha_inspeccion,
+            inspector_id=safe_int(request.form.get('inspector_id', current_user.id)),
+            estado='pendiente'
+        )
+
+        db.session.add(checklist)
+        db.session.commit()
+
+        flash(f'Checklist creado correctamente. Ahora puede ejecutarlo en obra.', 'success')
+        return redirect(url_for('seguridad.ejecutar_checklist', checklist_id=checklist.id))
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear checklist: {str(e)}', 'danger')
+        return redirect(url_for('seguridad.nuevo_checklist'))
 
 @seguridad_bp.route('/ejecutar_checklist/<int:checklist_id>')
 @login_required

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Checklist de Seguridad - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-clipboard-check me-2 text-success"></i>Nuevo Checklist de Seguridad
+                </h1>
+                <a href="{{ url_for('seguridad.checklists') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a Checklists
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('seguridad.procesar_nuevo_checklist') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Obra -->
+                        <div class="mb-3">
+                            <label for="obra_id" class="form-label fw-bold">
+                                Obra <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="obra_id" name="obra_id" required>
+                                <option value="">Seleccione una obra...</option>
+                                {% for obra in obras %}
+                                <option value="{{ obra.id }}">{{ obra.nombre }} - {{ obra.direccion }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Obra donde se realizará la inspección</small>
+                        </div>
+
+                        <!-- Protocolo -->
+                        <div class="mb-3">
+                            <label for="protocolo_id" class="form-label fw-bold">
+                                Protocolo a Verificar <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="protocolo_id" name="protocolo_id" required>
+                                <option value="">Seleccione un protocolo...</option>
+                                {% for protocolo in protocolos %}
+                                <option value="{{ protocolo.id }}" data-categoria="{{ protocolo.categoria }}">
+                                    {{ protocolo.nombre }}
+                                    {% if protocolo.obligatorio %}
+                                    <span class="badge bg-danger ms-2">Obligatorio</span>
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Protocolo de seguridad que se inspeccionará</small>
+                        </div>
+
+                        <!-- Fecha de Inspección -->
+                        <div class="mb-3">
+                            <label for="fecha_inspeccion" class="form-label fw-bold">
+                                Fecha de Inspección <span class="text-danger">*</span>
+                            </label>
+                            <input type="date"
+                                   class="form-control"
+                                   id="fecha_inspeccion"
+                                   name="fecha_inspeccion"
+                                   required
+                                   value="{{ today }}">
+                            <small class="text-muted">Fecha programada para realizar la inspección</small>
+                        </div>
+
+                        <!-- Inspector (usuario actual por defecto) -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Inspector</label>
+                            <input type="text"
+                                   class="form-control"
+                                   value="{{ current_user.nombre }} {{ current_user.apellido }}"
+                                   readonly>
+                            <input type="hidden" name="inspector_id" value="{{ current_user.id }}">
+                            <small class="text-muted">Usuario asignado para ejecutar la inspección</small>
+                        </div>
+
+                        <!-- Botones -->
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{{ url_for('seguridad.checklists') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-1"></i>Crear Checklist
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="card border-info mt-3">
+                <div class="card-body">
+                    <h6 class="card-title text-info">
+                        <i class="fas fa-info-circle me-2"></i>¿Qué es un Checklist de Seguridad?
+                    </h6>
+                    <p class="mb-2 small">
+                        Un checklist es un <strong>formulario de inspección</strong> que te permite verificar
+                        sistemáticamente el cumplimiento de un protocolo de seguridad en una obra específica.
+                    </p>
+                    <ul class="mb-0 small">
+                        <li><strong>1. Crear:</strong> Programas una inspección seleccionando obra, protocolo y fecha</li>
+                        <li><strong>2. Ejecutar:</strong> Vas a la obra y marcas cada ítem como conforme o no conforme</li>
+                        <li><strong>3. Reportar:</strong> El sistema calcula automáticamente el nivel de cumplimiento (0-100%)</li>
+                        <li><strong>4. Acciones:</strong> Registras observaciones y acciones correctivas necesarias</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Agregar badge visual según categoría del protocolo
+document.getElementById('protocolo_id').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const categoria = selectedOption.dataset.categoria;
+
+    // Opcional: mostrar info según categoría
+    console.log('Protocolo seleccionado - Categoría:', categoria);
+});
+</script>
+{% endblock %}
