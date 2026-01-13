@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Reportar Incidente de Seguridad - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-exclamation-triangle me-2 text-danger"></i>Reportar Incidente de Seguridad
+                </h1>
+                <a href="{{ url_for('seguridad.incidentes') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a Incidentes
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-10 col-xl-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('seguridad.procesar_incidente') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Información Básica -->
+                        <div class="card mb-4 border-danger">
+                            <div class="card-header bg-danger text-white">
+                                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Información Básica</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="obra_id" class="form-label fw-bold">
+                                            Obra <span class="text-danger">*</span>
+                                        </label>
+                                        <select class="form-select" id="obra_id" name="obra_id" required>
+                                            <option value="">Seleccione la obra...</option>
+                                            {% for obra in obras %}
+                                            <option value="{{ obra.id }}">{{ obra.nombre }} - {{ obra.direccion }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="fecha_incidente" class="form-label fw-bold">
+                                            Fecha y Hora del Incidente <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="datetime-local"
+                                               class="form-control"
+                                               id="fecha_incidente"
+                                               name="fecha_incidente"
+                                               required>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="tipo_incidente" class="form-label fw-bold">
+                                            Tipo de Incidente <span class="text-danger">*</span>
+                                        </label>
+                                        <select class="form-select" id="tipo_incidente" name="tipo_incidente" required>
+                                            <option value="">Seleccione el tipo...</option>
+                                            <option value="accidente">Accidente</option>
+                                            <option value="casi_accidente">Casi Accidente</option>
+                                            <option value="condicion_insegura">Condición Insegura</option>
+                                        </select>
+                                        <small class="text-muted">Tipo de evento ocurrido</small>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="gravedad" class="form-label fw-bold">
+                                            Gravedad <span class="text-danger">*</span>
+                                        </label>
+                                        <select class="form-select" id="gravedad" name="gravedad" required>
+                                            <option value="">Seleccione la gravedad...</option>
+                                            <option value="leve">Leve</option>
+                                            <option value="moderado">Moderado</option>
+                                            <option value="grave">Grave</option>
+                                            <option value="muy_grave">Muy Grave</option>
+                                        </select>
+                                        <small class="text-muted">Nivel de severidad del incidente</small>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="descripcion" class="form-label fw-bold">
+                                        Descripción del Incidente <span class="text-danger">*</span>
+                                    </label>
+                                    <textarea class="form-control"
+                                              id="descripcion"
+                                              name="descripcion"
+                                              rows="4"
+                                              required
+                                              placeholder="Describa detalladamente qué sucedió, cómo ocurrió, y las circunstancias..."></textarea>
+                                    <small class="text-muted">Sea lo más específico posible</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="ubicacion_exacta" class="form-label fw-bold">
+                                        Ubicación Exacta
+                                    </label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="ubicacion_exacta"
+                                           name="ubicacion_exacta"
+                                           placeholder="Ej: Planta baja, sector norte, cerca de escalera principal">
+                                    <small class="text-muted">Especifique el lugar exacto dentro de la obra</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Personas Involucradas -->
+                        <div class="card mb-4 border-warning">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0"><i class="fas fa-user-injured me-2"></i>Personas Involucradas</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="persona_afectada" class="form-label fw-bold">
+                                        Persona Afectada
+                                    </label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="persona_afectada"
+                                           name="persona_afectada"
+                                           placeholder="Nombre completo de la persona afectada">
+                                    <small class="text-muted">Deje en blanco si no hubo lesionados</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="testigos" class="form-label fw-bold">
+                                        Testigos
+                                    </label>
+                                    <textarea class="form-control"
+                                              id="testigos"
+                                              name="testigos"
+                                              rows="2"
+                                              placeholder="Nombres de testigos presentes, uno por línea"></textarea>
+                                    <small class="text-muted">Personas que presenciaron el incidente</small>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   id="primeros_auxilios"
+                                                   name="primeros_auxilios">
+                                            <label class="form-check-label fw-bold" for="primeros_auxilios">
+                                                Se prestaron primeros auxilios
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-4 mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   id="atencion_medica"
+                                                   name="atencion_medica">
+                                            <label class="form-check-label fw-bold" for="atencion_medica">
+                                                Requirió atención médica
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-4 mb-3">
+                                        <label for="dias_perdidos" class="form-label fw-bold">
+                                            Días Perdidos
+                                        </label>
+                                        <input type="number"
+                                               class="form-control"
+                                               id="dias_perdidos"
+                                               name="dias_perdidos"
+                                               value="0"
+                                               min="0"
+                                               max="365">
+                                        <small class="text-muted">Días de trabajo perdidos</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Acciones Inmediatas -->
+                        <div class="card mb-4 border-info">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Acciones Tomadas</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="acciones_inmediatas" class="form-label fw-bold">
+                                        Acciones Inmediatas Tomadas
+                                    </label>
+                                    <textarea class="form-control"
+                                              id="acciones_inmediatas"
+                                              name="acciones_inmediatas"
+                                              rows="4"
+                                              placeholder="Describa las medidas que se tomaron inmediatamente después del incidente..."></textarea>
+                                    <small class="text-muted">Incluya evacuaciones, primeros auxilios, aislamiento de área, etc.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botones -->
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{{ url_for('seguridad.incidentes') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-danger btn-lg">
+                                <i class="fas fa-exclamation-circle me-1"></i>Reportar Incidente
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Información Importante -->
+            <div class="card border-danger mt-3">
+                <div class="card-body">
+                    <h6 class="card-title text-danger">
+                        <i class="fas fa-shield-alt me-2"></i>Importante sobre Incidentes de Seguridad
+                    </h6>
+                    <ul class="mb-0 small">
+                        <li><strong>Accidente:</strong> Evento que resulta en lesión o daño a personas</li>
+                        <li><strong>Casi Accidente:</strong> Evento que pudo causar lesión pero no lo hizo</li>
+                        <li><strong>Condición Insegura:</strong> Situación que puede causar un accidente</li>
+                        <li><strong>Reporte Inmediato:</strong> Los incidentes graves deben reportarse de inmediato a supervisión</li>
+                        <li><strong>Notificación Automática:</strong> Los incidentes graves/muy graves notificarán automáticamente a los responsables</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Establecer fecha y hora actual por defecto
+document.addEventListener('DOMContentLoaded', function() {
+    const fechaIncidente = document.getElementById('fecha_incidente');
+    if (!fechaIncidente.value) {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        fechaIncidente.value = now.toISOString().slice(0, 16);
+    }
+});
+
+// Mostrar advertencia según gravedad
+document.getElementById('gravedad').addEventListener('change', function() {
+    const gravedad = this.value;
+    if (gravedad === 'grave' || gravedad === 'muy_grave') {
+        if (!document.getElementById('alert-grave')) {
+            const alert = document.createElement('div');
+            alert.id = 'alert-grave';
+            alert.className = 'alert alert-danger mt-2';
+            alert.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i><strong>Atención:</strong> Los incidentes graves deben notificarse de inmediato a supervisión y se enviarán alertas automáticas.';
+            this.parentElement.appendChild(alert);
+        }
+    } else {
+        const alert = document.getElementById('alert-grave');
+        if (alert) alert.remove();
+    }
+});
+
+// Auto-expandir textareas
+document.querySelectorAll('textarea').forEach(textarea => {
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+});
+
+// Alerta antes de salir sin guardar
+let formChanged = false;
+document.querySelectorAll('input, textarea, select').forEach(element => {
+    element.addEventListener('change', () => {
+        formChanged = true;
+    });
+});
+
+window.addEventListener('beforeunload', (e) => {
+    if (formChanged) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+document.querySelector('form').addEventListener('submit', () => {
+    formChanged = false;
+});
+</script>
+{% endblock %}
