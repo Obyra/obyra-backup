@@ -381,19 +381,122 @@ def procesar_incidente():
 def certificaciones():
     """Gestión de certificaciones del personal"""
     usuario_id = request.args.get('usuario_id', type=int)
-    
+    obra_id = request.args.get('obra_id', type=int)
+
     query = CertificacionPersonal.query.filter_by(activo=True)
-    
+
     if usuario_id:
         query = query.filter_by(usuario_id=usuario_id)
-    
+
     certificaciones = query.order_by(CertificacionPersonal.fecha_vencimiento.asc()).all()
     usuarios = Usuario.query.filter(
         Usuario.activo == True,
         Usuario.is_super_admin.is_(False)
     ).all()
-    
-    return render_template('seguridad/certificaciones.html', certificaciones=certificaciones, usuarios=usuarios)
+    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+
+    return render_template('seguridad/certificaciones.html',
+                         certificaciones=certificaciones,
+                         usuarios=usuarios,
+                         obras=obras,
+                         today=date.today())
+
+@seguridad_bp.route('/agregar_certificacion')
+@login_required
+def agregar_certificacion():
+    """Formulario para agregar nueva certificación de personal"""
+    if current_user.role not in ['admin', 'pm', 'tecnico']:
+        flash('No tienes permisos para agregar certificaciones', 'danger')
+        return redirect(url_for('seguridad.certificaciones'))
+
+    obra_id = request.args.get('obra_id', type=int)
+
+    # Obtener obras activas
+    obras = Obra.query.filter(Obra.estado.in_(['en_curso', 'planificacion'])).all()
+
+    # Si se especifica una obra, obtener operarios asignados a esa obra
+    usuarios = []
+    if obra_id:
+        # Buscar operarios asignados a la obra
+        from models.projects import AsignacionObra
+        asignaciones = AsignacionObra.query.filter_by(obra_id=obra_id, activo=True).all()
+        usuario_ids = [a.usuario_id for a in asignaciones]
+        usuarios = Usuario.query.filter(
+            Usuario.id.in_(usuario_ids),
+            Usuario.activo == True
+        ).all()
+    else:
+        # Todos los usuarios activos que no son super_admin
+        usuarios = Usuario.query.filter(
+            Usuario.activo == True,
+            Usuario.is_super_admin.is_(False)
+        ).all()
+
+    return render_template('seguridad/agregar_certificacion.html',
+                         obras=obras,
+                         usuarios=usuarios,
+                         obra_id=obra_id,
+                         today=date.today().isoformat())
+
+@seguridad_bp.route('/agregar_certificacion', methods=['POST'])
+@login_required
+def procesar_agregar_certificacion():
+    """Procesa la creación de una nueva certificación de personal"""
+    if current_user.role not in ['admin', 'pm', 'tecnico']:
+        flash('No tienes permisos para agregar certificaciones', 'danger')
+        return redirect(url_for('seguridad.certificaciones'))
+
+    try:
+        # Parsear fechas
+        fecha_emision_str = request.form.get('fecha_emision')
+        fecha_vencimiento_str = request.form.get('fecha_vencimiento')
+
+        fecha_emision = datetime.strptime(fecha_emision_str, '%Y-%m-%d').date() if fecha_emision_str else date.today()
+        fecha_vencimiento = datetime.strptime(fecha_vencimiento_str, '%Y-%m-%d').date() if fecha_vencimiento_str else None
+
+        certificacion = CertificacionPersonal(
+            usuario_id=safe_int(request.form.get('usuario_id')),
+            tipo_certificacion=request.form.get('tipo_certificacion'),
+            entidad_emisora=request.form.get('entidad_emisora'),
+            numero_certificado=request.form.get('numero_certificado'),
+            fecha_emision=fecha_emision,
+            fecha_vencimiento=fecha_vencimiento,
+            archivo_certificado=request.form.get('archivo_certificado'),
+            activo=True
+        )
+
+        db.session.add(certificacion)
+        db.session.commit()
+
+        flash('Certificación agregada correctamente', 'success')
+        return redirect(url_for('seguridad.certificaciones'))
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al agregar certificación: {str(e)}', 'danger')
+        return redirect(url_for('seguridad.agregar_certificacion'))
+
+@seguridad_bp.route('/api/operarios_obra/<int:obra_id>')
+@login_required
+def api_operarios_obra(obra_id):
+    """API para obtener operarios asignados a una obra"""
+    try:
+        from models.projects import AsignacionObra
+        asignaciones = AsignacionObra.query.filter_by(obra_id=obra_id, activo=True).all()
+        usuario_ids = [a.usuario_id for a in asignaciones]
+        usuarios = Usuario.query.filter(
+            Usuario.id.in_(usuario_ids),
+            Usuario.activo == True
+        ).all()
+
+        return jsonify([{
+            'id': u.id,
+            'nombre': u.nombre,
+            'email': u.email,
+            'role': u.role
+        } for u in usuarios])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @seguridad_bp.route('/auditorias')
 @login_required

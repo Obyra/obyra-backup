@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Agregar Certificación de Personal - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-certificate me-2 text-success"></i>Agregar Certificación de Personal
+                </h1>
+                <a href="{{ url_for('seguridad.certificaciones') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver a Certificaciones
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-10 col-xl-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('seguridad.procesar_agregar_certificacion') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Selección de Obra y Trabajador -->
+                        <div class="card mb-4 border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-user-hard-hat me-2"></i>Trabajador</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="obra_id" class="form-label fw-bold">
+                                            Obra (opcional)
+                                        </label>
+                                        <select class="form-select" id="obra_id" name="obra_id">
+                                            <option value="">Todas las obras</option>
+                                            {% for obra in obras %}
+                                            <option value="{{ obra.id }}" {% if obra_id and obra.id == obra_id %}selected{% endif %}>
+                                                {{ obra.nombre }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <small class="text-muted">Filtra operarios asignados a una obra específica</small>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="usuario_id" class="form-label fw-bold">
+                                            Trabajador <span class="text-danger">*</span>
+                                        </label>
+                                        <select class="form-select" id="usuario_id" name="usuario_id" required>
+                                            <option value="">Seleccione el trabajador...</option>
+                                            {% for usuario in usuarios %}
+                                            <option value="{{ usuario.id }}">{{ usuario.nombre }} - {{ usuario.email }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <small class="text-muted">Persona que recibe la certificación</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Datos de la Certificación -->
+                        <div class="card mb-4 border-success">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0"><i class="fas fa-file-certificate me-2"></i>Datos de la Certificación</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="tipo_certificacion" class="form-label fw-bold">
+                                            Tipo de Certificación <span class="text-danger">*</span>
+                                        </label>
+                                        <select class="form-select" id="tipo_certificacion" name="tipo_certificacion" required>
+                                            <option value="">Seleccione el tipo...</option>
+                                            <optgroup label="Equipos de Protección Personal (EPP)">
+                                                <option value="EPP - Uso de Casco">EPP - Uso de Casco</option>
+                                                <option value="EPP - Arnés de Seguridad">EPP - Arnés de Seguridad</option>
+                                                <option value="EPP - Protección Respiratoria">EPP - Protección Respiratoria</option>
+                                                <option value="EPP - Protección Auditiva">EPP - Protección Auditiva</option>
+                                            </optgroup>
+                                            <optgroup label="Capacitaciones">
+                                                <option value="Capacitación - Trabajo en Altura">Capacitación - Trabajo en Altura</option>
+                                                <option value="Capacitación - Espacios Confinados">Capacitación - Espacios Confinados</option>
+                                                <option value="Capacitación - Manejo de Cargas">Capacitación - Manejo de Cargas</option>
+                                                <option value="Capacitación - Primeros Auxilios">Capacitación - Primeros Auxilios</option>
+                                                <option value="Capacitación - Extinción de Incendios">Capacitación - Extinción de Incendios</option>
+                                                <option value="Capacitación - Riesgo Eléctrico">Capacitación - Riesgo Eléctrico</option>
+                                            </optgroup>
+                                            <optgroup label="Habilitaciones">
+                                                <option value="Habilitación - Operador de Grúa">Habilitación - Operador de Grúa</option>
+                                                <option value="Habilitación - Autoelevador">Habilitación - Autoelevador</option>
+                                                <option value="Habilitación - Soldador">Habilitación - Soldador</option>
+                                                <option value="Habilitación - Electricista">Habilitación - Electricista</option>
+                                            </optgroup>
+                                            <optgroup label="Exámenes Médicos">
+                                                <option value="Examen - Preocupacional">Examen - Preocupacional</option>
+                                                <option value="Examen - Periódico">Examen - Periódico</option>
+                                                <option value="Examen - Aptitud Física">Examen - Aptitud Física</option>
+                                            </optgroup>
+                                            <option value="Otro">Otro (especificar en observaciones)</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="entidad_emisora" class="form-label fw-bold">
+                                            Entidad Emisora <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text"
+                                               class="form-control"
+                                               id="entidad_emisora"
+                                               name="entidad_emisora"
+                                               required
+                                               placeholder="Ej: ART, Instituto de Capacitación, etc.">
+                                        <small class="text-muted">Organismo o empresa que emite el certificado</small>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="numero_certificado" class="form-label fw-bold">
+                                            Número de Certificado
+                                        </label>
+                                        <input type="text"
+                                               class="form-control"
+                                               id="numero_certificado"
+                                               name="numero_certificado"
+                                               placeholder="Ej: CERT-2024-001234">
+                                        <small class="text-muted">Número o código del certificado (opcional)</small>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="archivo_certificado" class="form-label fw-bold">
+                                            URL del Archivo
+                                        </label>
+                                        <input type="url"
+                                               class="form-control"
+                                               id="archivo_certificado"
+                                               name="archivo_certificado"
+                                               placeholder="https://...">
+                                        <small class="text-muted">Link al documento escaneado (opcional)</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fechas de Vigencia -->
+                        <div class="card mb-4 border-warning">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Vigencia</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="fecha_emision" class="form-label fw-bold">
+                                            Fecha de Emisión <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="date"
+                                               class="form-control"
+                                               id="fecha_emision"
+                                               name="fecha_emision"
+                                               value="{{ today }}"
+                                               required>
+                                        <small class="text-muted">Fecha en que se emitió el certificado</small>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="fecha_vencimiento" class="form-label fw-bold">
+                                            Fecha de Vencimiento
+                                        </label>
+                                        <input type="date"
+                                               class="form-control"
+                                               id="fecha_vencimiento"
+                                               name="fecha_vencimiento">
+                                        <small class="text-muted">Dejar vacío si no tiene vencimiento</small>
+                                    </div>
+                                </div>
+
+                                <div class="alert alert-info mb-0">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Recordatorio:</strong> El sistema notificará automáticamente cuando las certificaciones estén próximas a vencer (30 días antes).
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botones -->
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{{ url_for('seguridad.certificaciones') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save me-1"></i>Guardar Certificación
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Información sobre Certificaciones -->
+            <div class="card border-info mt-3">
+                <div class="card-body">
+                    <h6 class="card-title text-info">
+                        <i class="fas fa-lightbulb me-2"></i>Tipos de Certificaciones Comunes
+                    </h6>
+                    <div class="row small">
+                        <div class="col-md-6">
+                            <ul class="mb-0">
+                                <li><strong>EPP:</strong> Certificados de uso correcto de equipos de protección</li>
+                                <li><strong>Capacitaciones:</strong> Cursos de seguridad completados</li>
+                                <li><strong>Habilitaciones:</strong> Permisos para operar maquinaria</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="mb-0">
+                                <li><strong>Exámenes Médicos:</strong> Aptitud física para el trabajo</li>
+                                <li><strong>NR (Normas):</strong> Cumplimiento de normativas específicas</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Cargar operarios dinámicamente al cambiar la obra
+document.getElementById('obra_id').addEventListener('change', function() {
+    const obraId = this.value;
+    const usuarioSelect = document.getElementById('usuario_id');
+
+    if (obraId) {
+        // Cargar operarios de la obra
+        fetch(`/seguridad/api/operarios_obra/${obraId}`)
+            .then(response => response.json())
+            .then(data => {
+                usuarioSelect.innerHTML = '<option value="">Seleccione el trabajador...</option>';
+                if (data.length === 0) {
+                    usuarioSelect.innerHTML += '<option value="" disabled>No hay operarios asignados a esta obra</option>';
+                } else {
+                    data.forEach(usuario => {
+                        usuarioSelect.innerHTML += `<option value="${usuario.id}">${usuario.nombre} - ${usuario.email}</option>`;
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error cargando operarios:', error);
+            });
+    } else {
+        // Recargar la página sin filtro de obra
+        window.location.href = '{{ url_for("seguridad.agregar_certificacion") }}';
+    }
+});
+
+// Validar fecha de vencimiento mayor a emisión
+document.getElementById('fecha_vencimiento').addEventListener('change', function() {
+    const emision = document.getElementById('fecha_emision').value;
+    const vencimiento = this.value;
+
+    if (emision && vencimiento && vencimiento <= emision) {
+        alert('La fecha de vencimiento debe ser posterior a la fecha de emisión');
+        this.value = '';
+    }
+});
+
+// Auto-calcular vencimiento según tipo de certificación
+document.getElementById('tipo_certificacion').addEventListener('change', function() {
+    const tipo = this.value;
+    const fechaEmision = document.getElementById('fecha_emision');
+    const fechaVencimiento = document.getElementById('fecha_vencimiento');
+
+    if (fechaEmision.value && !fechaVencimiento.value) {
+        const emision = new Date(fechaEmision.value);
+        let mesesVigencia = 12; // Default 1 año
+
+        // Ajustar según tipo
+        if (tipo.includes('Examen')) {
+            mesesVigencia = 12; // 1 año
+        } else if (tipo.includes('Capacitación')) {
+            mesesVigencia = 24; // 2 años
+        } else if (tipo.includes('Habilitación')) {
+            mesesVigencia = 36; // 3 años
+        } else if (tipo.includes('EPP')) {
+            mesesVigencia = 12; // 1 año
+        }
+
+        emision.setMonth(emision.getMonth() + mesesVigencia);
+        fechaVencimiento.value = emision.toISOString().split('T')[0];
+    }
+});
+
+// Alerta antes de salir sin guardar
+let formChanged = false;
+document.querySelectorAll('input, select').forEach(element => {
+    element.addEventListener('change', () => {
+        formChanged = true;
+    });
+});
+
+window.addEventListener('beforeunload', (e) => {
+    if (formChanged) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+document.querySelector('form').addEventListener('submit', () => {
+    formChanged = false;
+});
+</script>
+{% endblock %}
