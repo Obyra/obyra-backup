@@ -15,7 +15,18 @@ api_offline_bp = Blueprint('api_offline', __name__, url_prefix='/api/offline')
 def get_current_org_id():
     """Obtener ID de organización actual del usuario."""
     from flask import session
-    return session.get('current_org_id') or getattr(current_user, 'organizacion_id', None)
+
+    # Intentar obtener de session primero
+    org_id = session.get('current_org_id')
+    if org_id:
+        return org_id
+
+    # Fallback a organizacion_id del usuario
+    if hasattr(current_user, 'organizacion_id'):
+        return current_user.organizacion_id
+
+    # Si el usuario no tiene organización, retornar None
+    return None
 
 
 @api_offline_bp.route('/mis-obras')
@@ -28,29 +39,87 @@ def mis_obras():
     try:
         org_id = get_current_org_id()
 
+        # Si no hay org_id y no es super admin, retornar lista vacía
+        if not org_id and not (hasattr(current_user, 'is_super_admin') and current_user.is_super_admin):
+            current_app.logger.warning(f"Usuario {current_user.id} no tiene organización asignada")
+            return jsonify({
+                'ok': True,
+                'obras': [],
+                'total': 0,
+                'message': 'Usuario sin organización asignada'
+            })
+
         # Obtener obras según rol
-        if current_user.is_super_admin or current_user.role in ('admin', 'pm'):
-            obras = Obra.query.filter_by(organizacion_id=org_id, activo=True).all()
-        else:
-            # Operarios ven obras donde tienen tareas asignadas
-            obras = db.session.query(Obra).join(EtapaObra).join(TareaEtapa).join(TareaResponsables).filter(
-                TareaResponsables.usuario_id == current_user.id,
-                Obra.activo == True
-            ).distinct().all()
+        try:
+            if hasattr(current_user, 'is_super_admin') and current_user.is_super_admin:
+                # Super admin ve todas las obras activas
+                if org_id:
+                    obras = Obra.query.filter_by(organizacion_id=org_id, activo=True).all()
+                else:
+                    obras = Obra.query.filter_by(activo=True).limit(100).all()
+            elif current_user.role in ('admin', 'pm'):
+                obras = Obra.query.filter_by(organizacion_id=org_id, activo=True).all()
+            else:
+                # Operarios ven obras donde tienen tareas asignadas
+                obras = db.session.query(Obra).join(EtapaObra).join(TareaEtapa).join(TareaResponsables).filter(
+                    TareaResponsables.usuario_id == current_user.id,
+                    Obra.activo == True
+                ).distinct().all()
+        except Exception as query_error:
+            current_app.logger.error(f"Error en query de obras: {query_error}")
+            return jsonify({
+                'ok': True,
+                'obras': [],
+                'total': 0,
+                'error': 'Error consultando obras'
+            })
 
         obras_data = []
         for obra in obras:
-            obras_data.append({
-                'id': obra.id,
-                'nombre': obra.nombre,
-                'direccion': obra.direccion,
-                'estado': obra.estado,
-                'fecha_inicio': obra.fecha_inicio.isoformat() if obra.fecha_inicio else None,
-                'fecha_fin_estimada': obra.fecha_fin_estimada.isoformat() if obra.fecha_fin_estimada else None,
-                'porcentaje_avance': float(obra.porcentaje_avance) if obra.porcentaje_avance else 0,
-                'cliente_nombre': obra.cliente.nombre if obra.cliente else None,
-                'updated_at': obra.updated_at.isoformat() if hasattr(obra, 'updated_at') and obra.updated_at else None
-            })
+            try:
+                # Construir objeto de forma segura
+                obra_dict = {
+                    'id': obra.id,
+                    'nombre': obra.nombre if obra.nombre else 'Sin nombre',
+                    'direccion': obra.direccion if hasattr(obra, 'direccion') else '',
+                    'estado': obra.estado if hasattr(obra, 'estado') else 'desconocido',
+                }
+
+                # Agregar campos opcionales de forma segura
+                if hasattr(obra, 'fecha_inicio') and obra.fecha_inicio:
+                    obra_dict['fecha_inicio'] = obra.fecha_inicio.isoformat()
+                else:
+                    obra_dict['fecha_inicio'] = None
+
+                if hasattr(obra, 'fecha_fin_estimada') and obra.fecha_fin_estimada:
+                    obra_dict['fecha_fin_estimada'] = obra.fecha_fin_estimada.isoformat()
+                else:
+                    obra_dict['fecha_fin_estimada'] = None
+
+                if hasattr(obra, 'porcentaje_avance') and obra.porcentaje_avance:
+                    obra_dict['porcentaje_avance'] = float(obra.porcentaje_avance)
+                else:
+                    obra_dict['porcentaje_avance'] = 0
+
+                # Cliente nombre - manejar relación
+                try:
+                    if hasattr(obra, 'cliente') and obra.cliente:
+                        obra_dict['cliente_nombre'] = obra.cliente.nombre
+                    else:
+                        obra_dict['cliente_nombre'] = None
+                except Exception:
+                    obra_dict['cliente_nombre'] = None
+
+                # Updated at
+                if hasattr(obra, 'updated_at') and obra.updated_at:
+                    obra_dict['updated_at'] = obra.updated_at.isoformat()
+                else:
+                    obra_dict['updated_at'] = None
+
+                obras_data.append(obra_dict)
+            except Exception as obra_error:
+                current_app.logger.error(f"Error procesando obra {obra.id}: {obra_error}")
+                continue
 
         return jsonify({
             'ok': True,
@@ -59,8 +128,14 @@ def mis_obras():
         })
 
     except Exception as e:
+        import traceback
         current_app.logger.error(f"Error obteniendo obras offline: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({
+            'ok': False,
+            'error': str(e),
+            'traceback': traceback.format_exc() if current_app.debug else None
+        }), 500
 
 
 @api_offline_bp.route('/mis-tareas')
@@ -71,32 +146,72 @@ def mis_tareas():
     """
     try:
         # Obtener tareas del usuario a través de TareaResponsables
-        tareas = db.session.query(TareaEtapa).join(TareaResponsables).filter(
-            TareaResponsables.usuario_id == current_user.id,
-            TareaEtapa.estado.in_(['pendiente', 'en_curso'])
-        ).all()
+        try:
+            tareas = db.session.query(TareaEtapa).join(TareaResponsables).filter(
+                TareaResponsables.usuario_id == current_user.id,
+                TareaEtapa.estado.in_(['pendiente', 'en_curso'])
+            ).all()
+        except Exception as query_error:
+            current_app.logger.error(f"Error en query de tareas: {query_error}")
+            return jsonify({
+                'ok': True,
+                'tareas': [],
+                'total': 0,
+                'error': 'Error consultando tareas'
+            })
 
         tareas_data = []
         for tarea in tareas:
-            # Obtener la obra a través de la etapa
-            obra = tarea.etapa.obra if tarea.etapa else None
+            try:
+                # Obtener la obra a través de la etapa de forma segura
+                obra = None
+                try:
+                    if hasattr(tarea, 'etapa') and tarea.etapa:
+                        if hasattr(tarea.etapa, 'obra'):
+                            obra = tarea.etapa.obra
+                except Exception:
+                    pass
 
-            tareas_data.append({
-                'id': tarea.id,
-                'nombre': tarea.nombre,
-                'descripcion': tarea.descripcion,
-                'estado': tarea.estado,
-                'porcentaje_avance': float(tarea.porcentaje_avance) if tarea.porcentaje_avance else 0,
-                'obra_id': obra.id if obra else None,
-                'obra_nombre': obra.nombre if obra else None,
-                'etapa_id': tarea.etapa_id,
-                'etapa_nombre': tarea.etapa.nombre if tarea.etapa else None,
-                'fecha_inicio': tarea.fecha_inicio.isoformat() if tarea.fecha_inicio else None,
-                'fecha_fin': tarea.fecha_fin.isoformat() if tarea.fecha_fin else None,
-                'unidad': tarea.unidad,
-                'cantidad_planificada': float(tarea.cantidad_planificada) if tarea.cantidad_planificada else None,
-                'objetivo': float(tarea.objetivo) if tarea.objetivo else None
-            })
+                tarea_dict = {
+                    'id': tarea.id,
+                    'nombre': tarea.nombre if hasattr(tarea, 'nombre') and tarea.nombre else 'Sin nombre',
+                    'descripcion': tarea.descripcion if hasattr(tarea, 'descripcion') else '',
+                    'estado': tarea.estado if hasattr(tarea, 'estado') else 'pendiente',
+                    'porcentaje_avance': float(tarea.porcentaje_avance) if hasattr(tarea, 'porcentaje_avance') and tarea.porcentaje_avance else 0,
+                    'obra_id': obra.id if obra else None,
+                    'obra_nombre': obra.nombre if obra and hasattr(obra, 'nombre') else None,
+                    'etapa_id': tarea.etapa_id if hasattr(tarea, 'etapa_id') else None,
+                }
+
+                # Etapa nombre
+                try:
+                    if hasattr(tarea, 'etapa') and tarea.etapa and hasattr(tarea.etapa, 'nombre'):
+                        tarea_dict['etapa_nombre'] = tarea.etapa.nombre
+                    else:
+                        tarea_dict['etapa_nombre'] = None
+                except Exception:
+                    tarea_dict['etapa_nombre'] = None
+
+                # Fechas
+                if hasattr(tarea, 'fecha_inicio') and tarea.fecha_inicio:
+                    tarea_dict['fecha_inicio'] = tarea.fecha_inicio.isoformat()
+                else:
+                    tarea_dict['fecha_inicio'] = None
+
+                if hasattr(tarea, 'fecha_fin') and tarea.fecha_fin:
+                    tarea_dict['fecha_fin'] = tarea.fecha_fin.isoformat()
+                else:
+                    tarea_dict['fecha_fin'] = None
+
+                # Campos numéricos
+                tarea_dict['unidad'] = tarea.unidad if hasattr(tarea, 'unidad') else None
+                tarea_dict['cantidad_planificada'] = float(tarea.cantidad_planificada) if hasattr(tarea, 'cantidad_planificada') and tarea.cantidad_planificada else None
+                tarea_dict['objetivo'] = float(tarea.objetivo) if hasattr(tarea, 'objetivo') and tarea.objetivo else None
+
+                tareas_data.append(tarea_dict)
+            except Exception as tarea_error:
+                current_app.logger.error(f"Error procesando tarea {tarea.id}: {tarea_error}")
+                continue
 
         return jsonify({
             'ok': True,
@@ -105,8 +220,14 @@ def mis_tareas():
         })
 
     except Exception as e:
+        import traceback
         current_app.logger.error(f"Error obteniendo tareas offline: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({
+            'ok': False,
+            'error': str(e),
+            'traceback': traceback.format_exc() if current_app.debug else None
+        }), 500
 
 
 @api_offline_bp.route('/tareas-obra/<int:obra_id>')
