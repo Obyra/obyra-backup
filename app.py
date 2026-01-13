@@ -1190,6 +1190,172 @@ def fix_etapa_nombre():
             "message": str(e)
         }, 500
 
+@app.route("/admin/fix-security-tables")
+@login_required
+def fix_security_tables():
+    """Endpoint temporal para crear tablas de seguridad en Railway"""
+    from sqlalchemy import text
+
+    # Solo super admins
+    if not current_user.is_super_admin:
+        return {"error": "Unauthorized"}, 403
+
+    try:
+        results = []
+        errors = []
+
+        # 1. protocolos_seguridad
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS protocolos_seguridad (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    descripcion TEXT,
+                    categoria VARCHAR(50) NOT NULL,
+                    obligatorio BOOLEAN DEFAULT true,
+                    frecuencia_revision INTEGER DEFAULT 30,
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    activo BOOLEAN DEFAULT true,
+                    normativa_referencia VARCHAR(200)
+                )
+            """))
+            results.append("protocolos_seguridad")
+        except Exception as e:
+            errors.append(f"protocolos_seguridad: {str(e)}")
+
+        # 2. checklists_seguridad
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS checklists_seguridad (
+                    id SERIAL PRIMARY KEY,
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    protocolo_id INTEGER NOT NULL REFERENCES protocolos_seguridad(id),
+                    fecha_inspeccion DATE NOT NULL,
+                    inspector_id INTEGER NOT NULL REFERENCES usuarios(id),
+                    estado VARCHAR(20) DEFAULT 'pendiente',
+                    puntuacion INTEGER,
+                    observaciones TEXT,
+                    acciones_correctivas TEXT,
+                    fecha_completado TIMESTAMP
+                )
+            """))
+            results.append("checklists_seguridad")
+        except Exception as e:
+            errors.append(f"checklists_seguridad: {str(e)}")
+
+        # 3. items_checklist
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS items_checklist (
+                    id SERIAL PRIMARY KEY,
+                    checklist_id INTEGER NOT NULL REFERENCES checklists_seguridad(id),
+                    descripcion VARCHAR(300) NOT NULL,
+                    conforme BOOLEAN,
+                    observacion TEXT,
+                    criticidad VARCHAR(20) DEFAULT 'media'
+                )
+            """))
+            results.append("items_checklist")
+        except Exception as e:
+            errors.append(f"items_checklist: {str(e)}")
+
+        # 4. incidentes_seguridad
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS incidentes_seguridad (
+                    id SERIAL PRIMARY KEY,
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    fecha_incidente TIMESTAMP NOT NULL,
+                    tipo_incidente VARCHAR(50) NOT NULL,
+                    gravedad VARCHAR(20) NOT NULL,
+                    descripcion TEXT NOT NULL,
+                    ubicacion_exacta VARCHAR(200),
+                    persona_afectada VARCHAR(100),
+                    testigos TEXT,
+                    primeros_auxilios BOOLEAN DEFAULT false,
+                    atencion_medica BOOLEAN DEFAULT false,
+                    dias_perdidos INTEGER DEFAULT 0,
+                    causa_raiz TEXT,
+                    acciones_inmediatas TEXT,
+                    acciones_preventivas TEXT,
+                    responsable_id INTEGER NOT NULL REFERENCES usuarios(id),
+                    estado VARCHAR(20) DEFAULT 'abierto',
+                    fecha_cierre TIMESTAMP
+                )
+            """))
+            results.append("incidentes_seguridad")
+        except Exception as e:
+            errors.append(f"incidentes_seguridad: {str(e)}")
+
+        # 5. certificaciones_personal
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS certificaciones_personal (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+                    tipo_certificacion VARCHAR(100) NOT NULL,
+                    entidad_emisora VARCHAR(200) NOT NULL,
+                    numero_certificado VARCHAR(50),
+                    fecha_emision DATE NOT NULL,
+                    fecha_vencimiento DATE,
+                    archivo_certificado VARCHAR(500),
+                    activo BOOLEAN DEFAULT true
+                )
+            """))
+            results.append("certificaciones_personal")
+        except Exception as e:
+            errors.append(f"certificaciones_personal: {str(e)}")
+
+        # 6. auditorias_seguridad
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS auditorias_seguridad (
+                    id SERIAL PRIMARY KEY,
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    fecha_auditoria DATE NOT NULL,
+                    auditor_externo VARCHAR(200),
+                    tipo_auditoria VARCHAR(50) NOT NULL,
+                    puntuacion_general INTEGER,
+                    hallazgos_criticos INTEGER DEFAULT 0,
+                    hallazgos_mayores INTEGER DEFAULT 0,
+                    hallazgos_menores INTEGER DEFAULT 0,
+                    informe_path VARCHAR(500),
+                    plan_accion_path VARCHAR(500),
+                    fecha_seguimiento DATE,
+                    estado VARCHAR(20) DEFAULT 'programada'
+                )
+            """))
+            results.append("auditorias_seguridad")
+        except Exception as e:
+            errors.append(f"auditorias_seguridad: {str(e)}")
+
+        # Crear índices
+        try:
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_checklists_obra ON checklists_seguridad(obra_id)"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_checklists_estado ON checklists_seguridad(estado)"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_incidentes_obra ON incidentes_seguridad(obra_id)"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_incidentes_fecha ON incidentes_seguridad(fecha_incidente)"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_incidentes_estado ON incidentes_seguridad(estado)"))
+            results.append("indices_creados")
+        except Exception as e:
+            errors.append(f"indices: {str(e)}")
+
+        db.session.commit()
+
+        return {
+            "status": "success",
+            "message": f"Tablas de seguridad creadas: {len(results)} exitosas, {len(errors)} errores",
+            "tables_created": results,
+            "errors": errors if errors else None
+        }, 200
+
+    except Exception as e:
+        db.session.rollback()
+        return {
+            "status": "error",
+            "message": f"Error crítico: {str(e)}"
+        }, 500
+
 # === HEALTH CHECK ENDPOINTS ===
 @app.route("/health")
 def health_check():
