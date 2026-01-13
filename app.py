@@ -1356,6 +1356,93 @@ def fix_security_tables():
             "message": f"Error crítico: {str(e)}"
         }, 500
 
+@app.route("/admin/diagnostico")
+@login_required
+def diagnostico():
+    """Endpoint de diagnóstico para ver errores en Railway"""
+    from sqlalchemy import text
+    import traceback
+
+    # Solo super admins
+    if not current_user.is_super_admin:
+        return {"error": "Unauthorized"}, 403
+
+    diagnostics = {
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "role": current_user.role,
+            "is_super_admin": current_user.is_super_admin
+        },
+        "database": {},
+        "tables": {},
+        "blueprints": {},
+        "errors": []
+    }
+
+    # Verificar conexión a DB
+    try:
+        db.session.execute(text("SELECT 1"))
+        diagnostics["database"]["status"] = "connected"
+    except Exception as e:
+        diagnostics["database"]["status"] = "error"
+        diagnostics["database"]["error"] = str(e)
+        diagnostics["errors"].append(f"DB: {str(e)}")
+
+    # Verificar tablas de seguridad
+    security_tables = [
+        'protocolos_seguridad',
+        'checklists_seguridad',
+        'items_checklist',
+        'incidentes_seguridad',
+        'certificaciones_personal',
+        'auditorias_seguridad'
+    ]
+
+    for table in security_tables:
+        try:
+            result = db.session.execute(text(f"SELECT COUNT(*) FROM {table}"))
+            count = result.scalar()
+            diagnostics["tables"][table] = {"exists": True, "count": count}
+        except Exception as e:
+            diagnostics["tables"][table] = {"exists": False, "error": str(e)[:100]}
+            diagnostics["errors"].append(f"{table}: {str(e)[:100]}")
+
+    # Verificar blueprints registrados
+    diagnostics["blueprints"]["registered"] = [
+        rule.rule for rule in app.url_map.iter_rules()
+        if 'seguridad' in rule.rule or 'api/offline' in rule.rule
+    ]
+
+    # Test seguridad dashboard
+    try:
+        with app.test_request_context():
+            from seguridad_cumplimiento import calcular_estadisticas_seguridad
+            stats = calcular_estadisticas_seguridad()
+            diagnostics["seguridad_module"] = {"status": "ok", "stats": stats}
+    except Exception as e:
+        diagnostics["seguridad_module"] = {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        diagnostics["errors"].append(f"Seguridad module: {str(e)}")
+
+    # Test API offline
+    try:
+        from api_offline import get_current_org_id
+        org_id = get_current_org_id()
+        diagnostics["api_offline"] = {"status": "ok", "org_id": org_id}
+    except Exception as e:
+        diagnostics["api_offline"] = {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        diagnostics["errors"].append(f"API offline: {str(e)}")
+
+    return diagnostics, 200
+
 # === HEALTH CHECK ENDPOINTS ===
 @app.route("/health")
 def health_check():
