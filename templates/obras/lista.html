@@ -422,7 +422,7 @@ function inicializarMapa() {
                                 style="border-radius: 8px; padding: 8px 16px;">
                             <i class="fas fa-eye me-2"></i>Ver Detalles Completos
                         </button>
-                        <button onclick="abrirVentanaClima({{ obra.latitud }}, {{ obra.longitud }}, '{{ obra.nombre }}', '{{ obra.direccion }}', {{ obra.id }})" 
+                        <button onclick="abrirVentanaClima({{ obra.latitud or 'null' }}, {{ obra.longitud or 'null' }}, '{{ obra.nombre|replace("'", "\\'") }}', '{{ obra.direccion|replace("'", "\\'")|default("Sin dirección", true) }}', {{ obra.id }})" 
                                 class="btn btn-info btn-sm d-flex align-items-center justify-content-center"
                                 style="border-radius: 8px; padding: 8px 16px; background: linear-gradient(45deg, #17a2b8, #20c997); border: none;">
                             <i class="fas fa-cloud-sun me-2"></i>Información del Clima
@@ -474,6 +474,12 @@ function verDetallesObra(obraId) {
 // Función para abrir ventana de clima en pantalla completa
 function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
     console.log(`☁️ Abriendo ventana de clima para ${nombreObra}: ${lat}, ${lng}`);
+
+    // Validar coordenadas
+    if (!lat || !lng || lat === 'null' || lng === 'null') {
+        alert('Esta obra no tiene coordenadas configuradas. Por favor, edita la obra y agrega una dirección válida.');
+        return;
+    }
     
     // Crear ventana modal de clima
     const modalHTML = `
