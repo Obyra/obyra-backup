@@ -1117,6 +1117,12 @@ def serve_media(relpath):
     media_dir = Path(app.instance_path) / "media"
     return send_from_directory(media_dir, relpath)
 
+# === SERVICE WORKER ENDPOINT ===
+@app.route("/sw.js")
+def service_worker():
+    """Serve Service Worker from root directory"""
+    return send_from_directory(".", "sw.js", mimetype="application/javascript")
+
 # === HEALTH CHECK ENDPOINTS ===
 @app.route("/health")
 def health_check():

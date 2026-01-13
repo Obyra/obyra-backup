@@ -48,7 +48,7 @@ const OfflineManager = {
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('/static/js/sw.js', {
+                const registration = await navigator.serviceWorker.register('/sw.js', {
                     scope: '/'
                 });
 
@@ -188,7 +188,7 @@ const OfflineManager = {
 
         try {
             // Descargar obras del usuario
-            const obrasResponse = await fetch('/api/obras/mis-obras');
+            const obrasResponse = await fetch('/api/offline/mis-obras');
             if (obrasResponse.ok) {
                 const obrasData = await obrasResponse.json();
                 if (obrasData.obras) {
@@ -197,7 +197,7 @@ const OfflineManager = {
             }
 
             // Descargar tareas asignadas
-            const tareasResponse = await fetch('/api/tareas/mis-tareas');
+            const tareasResponse = await fetch('/api/offline/mis-tareas');
             if (tareasResponse.ok) {
                 const tareasData = await tareasResponse.json();
                 if (tareasData.tareas) {
@@ -206,7 +206,7 @@ const OfflineManager = {
             }
 
             // Descargar inventario básico (solo nombres y códigos para búsqueda)
-            const invResponse = await fetch('/api/inventario/lista-basica?limit=1000');
+            const invResponse = await fetch('/api/offline/inventario-basico?limit=1000');
             if (invResponse.ok) {
                 const invData = await invResponse.json();
                 if (invData.items) {
@@ -280,7 +280,7 @@ const OfflineManager = {
      * Sincronizar un avance
      */
     async syncAvance(avanceData) {
-        const response = await fetch('/api/avances/crear', {
+        const response = await fetch('/api/offline/crear-avance', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -303,7 +303,7 @@ const OfflineManager = {
      * Sincronizar actualización de tarea
      */
     async syncTarea(tareaData) {
-        return fetch(`/api/tareas/${tareaData.id}/actualizar`, {
+        return fetch(`/api/offline/actualizar-tarea/${tareaData.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -332,7 +332,7 @@ const OfflineManager = {
     async crearAvance(avanceData) {
         if (this.isOnline) {
             try {
-                const response = await fetch('/api/avances/crear', {
+                const response = await fetch('/api/offline/crear-avance', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
