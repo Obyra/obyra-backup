@@ -429,60 +429,10 @@ def lista():
                 )
             )
 
+        # OPTIMIZACIÓN: No hacer geocodificación síncrona aquí
+        # La geocodificación se hace automáticamente cuando el usuario
+        # hace clic en "Información del Clima" (lazy loading)
         obras = query.order_by(Obra.fecha_creacion.desc()).paginate(page=page, per_page=per_page, error_out=False)
-
-        geocoded = False
-        for obra in obras.items:
-            if (obra.latitud is not None and obra.longitud is not None) or not obra.direccion:
-                continue
-
-            status = (obra.geocode_status or '').lower()
-            if status == 'fail':
-                continue
-
-            try:
-                resolved = resolve_geocode(obra.direccion)
-            except Exception as exc:
-                current_app.logger.warning(
-                    'No se pudo geocodificar la obra %s (%s): %s',
-                    obra.id,
-                    obra.direccion,
-                    exc,
-                )
-                obra.geocode_status = 'fail'
-                geocoded = True
-                continue
-
-            if not resolved:
-                obra.geocode_status = 'fail'
-                geocoded = True
-                continue
-
-            lat_decimal = _to_coord_decimal(resolved.get('lat'))
-            lng_decimal = _to_coord_decimal(resolved.get('lng'))
-            if lat_decimal is not None and lng_decimal is not None:
-                obra.latitud = lat_decimal
-                obra.longitud = lng_decimal
-
-            obra.direccion_normalizada = resolved.get('normalized') or obra.direccion_normalizada
-            obra.geocode_place_id = resolved.get('place_id') or obra.geocode_place_id
-            obra.geocode_provider = resolved.get('provider') or obra.geocode_provider
-            obra.geocode_status = resolved.get('status') or 'ok'
-            raw_payload = resolved.get('raw')
-            if raw_payload:
-                try:
-                    obra.geocode_raw = json.dumps(raw_payload)
-                except (TypeError, ValueError):
-                    current_app.logger.debug('No se pudo serializar geocode_raw para la obra %s', obra.id)
-            obra.geocode_actualizado = datetime.utcnow()
-            geocoded = True
-
-        if geocoded:
-            try:
-                db.session.commit()
-            except Exception as exc:
-                current_app.logger.warning('No se pudieron guardar las coordenadas de obras: %s', exc)
-                db.session.rollback()
     else:
         flash('Selecciona una organización para ver tus obras.', 'warning')
         # Crear objeto de paginación vacío

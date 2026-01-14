@@ -313,18 +313,43 @@ L.Icon.Default.mergeOptions({
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🗺️ Iniciando mapa de obras...');
+    console.log('🗺️ Configurando mapa de obras (lazy loading)...');
     console.log('📊 Obras para mostrar:', {{ obras.items|length if obras else 0 }});
-    
-    // Esperar un poco para que el DOM esté completamente listo
-    setTimeout(function() {
-        if (typeof L !== 'undefined') {
-            console.log('✅ Leaflet disponible');
+
+    // OPTIMIZACIÓN: Cargar mapa solo cuando sea visible (Intersection Observer)
+    const contenedorMapa = document.getElementById('mapa');
+    if (!contenedorMapa) {
+        console.warn('⚠️ Contenedor de mapa no encontrado');
+        return;
+    }
+
+    // Placeholder mientras no se carga el mapa
+    contenedorMapa.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100 bg-light"><div class="text-center text-muted"><i class="fas fa-map-marked-alt fa-3x mb-2"></i><p>Haz scroll para cargar el mapa</p></div></div>';
+
+    let mapaInicializado = false;
+
+    const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && !mapaInicializado && typeof L !== 'undefined') {
+            console.log('✅ Mapa visible, inicializando...');
+            mapaInicializado = true;
+            contenedorMapa.innerHTML = ''; // Limpiar placeholder
             inicializarMapa();
-        } else {
-            console.error('❌ Error: Leaflet no está disponible');
+            observer.disconnect();
         }
-    }, 100);
+    }, { threshold: 0.1 });
+
+    observer.observe(contenedorMapa);
+
+    // Fallback: si después de 5 segundos el mapa no se ha cargado y el usuario está en la página
+    setTimeout(() => {
+        if (!mapaInicializado && typeof L !== 'undefined') {
+            console.log('⏱️ Timeout: inicializando mapa...');
+            mapaInicializado = true;
+            contenedorMapa.innerHTML = '';
+            inicializarMapa();
+            observer.disconnect();
+        }
+    }, 5000);
 });
 
 function inicializarMapa() {
