@@ -879,6 +879,54 @@ def geolocalizar_direccion(direccion):
     return None
 
 
+@obras_bp.route('/<int:id>/actualizar-coordenadas', methods=['POST'])
+@login_required
+def actualizar_coordenadas(id):
+    """Actualiza las coordenadas de una obra (usado por geocodificación automática del clima)"""
+    obra = Obra.query.get_or_404(id)
+
+    # Verificar permisos básicos (que el usuario tenga acceso a la obra)
+    if not obra.es_visible_para(current_user):
+        return jsonify({'error': 'No tienes permisos para modificar esta obra'}), 403
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Datos no proporcionados'}), 400
+
+        latitud = data.get('latitud')
+        longitud = data.get('longitud')
+
+        if latitud is None or longitud is None:
+            return jsonify({'error': 'Coordenadas incompletas'}), 400
+
+        # Validar que sean coordenadas válidas
+        try:
+            latitud = float(latitud)
+            longitud = float(longitud)
+            if not (-90 <= latitud <= 90) or not (-180 <= longitud <= 180):
+                raise ValueError("Coordenadas fuera de rango")
+        except (TypeError, ValueError) as e:
+            return jsonify({'error': f'Coordenadas inválidas: {str(e)}'}), 400
+
+        # Solo actualizar si no tenía coordenadas (no sobrescribir datos existentes)
+        if obra.latitud is None or obra.longitud is None:
+            obra.latitud = latitud
+            obra.longitud = longitud
+            obra.geocode_status = 'ok'
+            obra.geocode_provider = 'auto_clima'
+            db.session.commit()
+            current_app.logger.info(f'Coordenadas actualizadas para obra {id}: {latitud}, {longitud}')
+            return jsonify({'success': True, 'message': 'Coordenadas actualizadas'})
+        else:
+            return jsonify({'success': True, 'message': 'La obra ya tiene coordenadas'})
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error al actualizar coordenadas de obra {id}: {str(e)}')
+        return jsonify({'error': 'Error interno'}), 500
+
+
 @obras_bp.route('/<int:id>/agregar_etapas', methods=['POST'])
 @login_required
 def agregar_etapas(id):

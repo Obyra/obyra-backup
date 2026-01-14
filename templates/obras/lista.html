@@ -472,16 +472,10 @@ function verDetallesObra(obraId) {
 }
 
 // Función para abrir ventana de clima en pantalla completa
-function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
+async function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
     console.log(`☁️ Abriendo ventana de clima para ${nombreObra}: ${lat}, ${lng}`);
 
-    // Validar coordenadas
-    if (!lat || !lng || lat === 'null' || lng === 'null') {
-        alert('Esta obra no tiene coordenadas configuradas. Por favor, edita la obra y agrega una dirección válida.');
-        return;
-    }
-    
-    // Crear ventana modal de clima
+    // Crear ventana modal de clima (siempre mostrar, incluso si hay que geocodificar)
     const modalHTML = `
         <div class="modal fade" id="modalClima" tabindex="-1" aria-labelledby="modalClimaLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -495,7 +489,7 @@ function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
                     <div class="modal-body" id="contenidoClima">
                         <div class="text-center py-5">
                             <div class="spinner-border text-primary" role="status"></div>
-                            <p class="mt-2">Cargando información climática...</p>
+                            <p class="mt-2" id="mensajeCargaClima">Cargando información climática...</p>
                         </div>
                     </div>
                     <div class="modal-footer bg-light">
@@ -510,20 +504,85 @@ function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
             </div>
         </div>
     `;
-    
+
     // Agregar modal al DOM si no existe
     let modalExistente = document.getElementById('modalClima');
     if (modalExistente) {
         modalExistente.remove();
     }
-    
+
     document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
+
     // Mostrar modal
     const modal = new bootstrap.Modal(document.getElementById('modalClima'));
     modal.show();
-    
+
+    // Si no hay coordenadas, intentar geocodificar la dirección
+    if (!lat || !lng || lat === 'null' || lng === 'null' || lat === null || lng === null) {
+        console.log(`📍 Sin coordenadas, intentando geocodificar: ${direccion}`);
+
+        if (!direccion || direccion === 'Sin dirección') {
+            document.getElementById('contenidoClima').innerHTML = `
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading"><i class="fas fa-map-marker-alt me-2"></i>Sin ubicación</h5>
+                    <p class="mb-2">Esta obra no tiene una dirección configurada.</p>
+                    <p class="mb-0">Por favor, edita la obra y agrega una dirección para ver la información climática.</p>
+                    <hr>
+                    <a href="/obras/${obraId}/editar" class="btn btn-warning btn-sm">
+                        <i class="fas fa-edit me-1"></i>Editar Obra
+                    </a>
+                </div>
+            `;
+            return;
+        }
+
+        document.getElementById('mensajeCargaClima').textContent = 'Buscando ubicación de la obra...';
+
+        try {
+            // Intentar geocodificar la dirección
+            const response = await fetch(`/obras/api/buscar-direcciones?q=${encodeURIComponent(direccion)}`);
+            if (response.ok) {
+                const resultados = await response.json();
+                if (resultados && resultados.length > 0) {
+                    lat = resultados[0].lat;
+                    lng = resultados[0].lng;
+                    console.log(`✅ Geocodificación exitosa: ${lat}, ${lng}`);
+
+                    // Actualizar coordenadas en la base de datos (en background)
+                    fetch(`/obras/${obraId}/actualizar-coordenadas`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': CSRF_TOKEN
+                        },
+                        body: JSON.stringify({ latitud: lat, longitud: lng })
+                    }).catch(err => console.warn('No se pudieron guardar las coordenadas:', err));
+                } else {
+                    throw new Error('No se encontró la ubicación');
+                }
+            } else {
+                throw new Error('Error al buscar la dirección');
+            }
+        } catch (error) {
+            console.error('❌ Error al geocodificar:', error);
+            document.getElementById('contenidoClima').innerHTML = `
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Ubicación no encontrada</h5>
+                    <p class="mb-2">No se pudo determinar la ubicación de esta obra.</p>
+                    <p class="mb-0"><strong>Dirección registrada:</strong> ${direccion}</p>
+                    <hr>
+                    <p class="small mb-2">Prueba editando la obra con una dirección más específica (ej: "Av. Corrientes 1234, Buenos Aires").</p>
+                    <a href="/obras/${obraId}/editar" class="btn btn-warning btn-sm">
+                        <i class="fas fa-edit me-1"></i>Editar Obra
+                    </a>
+                </div>
+            `;
+            return;
+        }
+    }
+
     // Cargar datos del clima
+    document.getElementById('mensajeCargaClima').textContent = 'Cargando información climática...';
     cargarDatosClima(lat, lng, nombreObra, direccion);
 }
 
