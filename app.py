@@ -1088,6 +1088,13 @@ if 'privacidad' not in app.view_functions:
     app.add_url_rule('/privacidad', endpoint='privacidad',
                      view_func=lambda: render_template('legal/privacidad.html'))
 
+# --- Manual de usuario ---
+if 'manual' not in app.view_functions:
+    app.add_url_rule('/manual', endpoint='manual',
+                     view_func=lambda: render_template('ayuda/manual.html'))
+    app.add_url_rule('/ayuda', endpoint='ayuda',
+                     view_func=lambda: render_template('ayuda/manual.html'))
+
 if 'reportes.dashboard' not in app.view_functions:
     @app.route('/reportes/dashboard', endpoint='reportes.dashboard')
     @login_required

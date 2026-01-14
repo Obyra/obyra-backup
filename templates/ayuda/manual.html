@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+
+{% block title %}Manual de Usuario - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Sidebar de navegación -->
+        <div class="col-lg-3 col-md-4 d-none d-md-block">
+            <div class="card sticky-top" style="top: 80px;">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="fas fa-list me-2"></i>Contenido</h6>
+                </div>
+                <div class="card-body p-0">
+                    <nav class="nav flex-column nav-pills">
+                        <a class="nav-link" href="#introduccion"><i class="fas fa-home me-2"></i>Introducción</a>
+                        <a class="nav-link" href="#primeros-pasos"><i class="fas fa-play me-2"></i>Primeros Pasos</a>
+                        <a class="nav-link" href="#presupuestos"><i class="fas fa-file-invoice-dollar me-2"></i>Presupuestos</a>
+                        <a class="nav-link" href="#obras"><i class="fas fa-hard-hat me-2"></i>Obras</a>
+                        <a class="nav-link" href="#inventario"><i class="fas fa-boxes me-2"></i>Inventario</a>
+                        <a class="nav-link" href="#requerimientos"><i class="fas fa-clipboard-list me-2"></i>Requerimientos</a>
+                        <a class="nav-link" href="#equipos"><i class="fas fa-users me-2"></i>Equipos</a>
+                        <a class="nav-link" href="#clientes"><i class="fas fa-user-tie me-2"></i>Clientes</a>
+                        <a class="nav-link" href="#reportes"><i class="fas fa-chart-bar me-2"></i>Reportes</a>
+                        <a class="nav-link" href="#seguridad"><i class="fas fa-shield-alt me-2"></i>Seguridad</a>
+                        <a class="nav-link" href="#marketplace"><i class="fas fa-store me-2"></i>Marketplace</a>
+                        <a class="nav-link" href="#configuracion"><i class="fas fa-cog me-2"></i>Configuración</a>
+                        <a class="nav-link" href="#roles"><i class="fas fa-user-tag me-2"></i>Roles y Permisos</a>
+                        <a class="nav-link" href="#faq"><i class="fas fa-question-circle me-2"></i>Preguntas Frecuentes</a>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenido principal -->
+        <div class="col-lg-9 col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-book me-2"></i>Manual de Usuario - OBYRA IA
+                    </h1>
+                </div>
+                <div class="card-body">
+                    <p class="lead text-muted">Plataforma de Gestión Inteligente para Construcción</p>
+                </div>
+            </div>
+
+            <!-- Introducción -->
+            <div class="card mb-4" id="introduccion">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-home text-primary me-2"></i>1. Introducción</h4>
+                </div>
+                <div class="card-body">
+                    <h5>¿Qué es OBYRA IA?</h5>
+                    <p>OBYRA IA es una plataforma integral para gestionar proyectos de construcción. Permite:</p>
+                    <ul>
+                        <li><i class="fas fa-robot text-primary me-2"></i>Crear presupuestos con asistencia de Inteligencia Artificial</li>
+                        <li><i class="fas fa-tasks text-primary me-2"></i>Gestionar obras con seguimiento en tiempo real</li>
+                        <li><i class="fas fa-boxes text-primary me-2"></i>Controlar inventario de materiales</li>
+                        <li><i class="fas fa-users text-primary me-2"></i>Coordinar equipos de trabajo</li>
+                        <li><i class="fas fa-chart-line text-primary me-2"></i>Generar reportes y análisis</li>
+                    </ul>
+                    <div class="alert alert-info">
+                        <i class="fas fa-globe me-2"></i>
+                        <strong>Acceso:</strong>
+                        <a href="https://app.obyra.com.ar" target="_blank">app.obyra.com.ar</a> |
+                        <a href="https://www.obyra.com.ar" target="_blank">www.obyra.com.ar</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Primeros Pasos -->
+            <div class="card mb-4" id="primeros-pasos">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-play text-primary me-2"></i>2. Primeros Pasos</h4>
+                </div>
+                <div class="card-body">
+                    <h5><i class="fas fa-user-plus me-2"></i>Registro</h5>
+                    <ol>
+                        <li>Ingresa a <strong>app.obyra.com.ar</strong></li>
+                        <li>Haz clic en <strong>"Crear cuenta"</strong></li>
+                        <li>Completa tus datos (nombre, email, contraseña)</li>
+                        <li>También puedes registrarte con <strong>Google</strong></li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-sign-in-alt me-2"></i>Iniciar Sesión</h5>
+                    <ol>
+                        <li>Ingresa tu email y contraseña</li>
+                        <li>Haz clic en <strong>"Ingresar"</strong></li>
+                        <li>Si olvidaste tu contraseña, usa <strong>"¿Olvidaste tu contraseña?"</strong></li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-compass me-2"></i>Navegación Principal</h5>
+                    <p>El menú lateral izquierdo contiene todos los módulos:</p>
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="table-light">
+                                <tr><th>Icono</th><th>Módulo</th><th>Función</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><i class="fas fa-chart-pie"></i></td><td>Dashboard</td><td>Vista general y KPIs</td></tr>
+                                <tr><td><i class="fas fa-file-invoice-dollar"></i></td><td>Presupuestos</td><td>Crear y gestionar cotizaciones</td></tr>
+                                <tr><td><i class="fas fa-hard-hat"></i></td><td>Obras</td><td>Gestionar proyectos</td></tr>
+                                <tr><td><i class="fas fa-boxes"></i></td><td>Inventario</td><td>Control de materiales</td></tr>
+                                <tr><td><i class="fas fa-users"></i></td><td>Equipos</td><td>Gestión de personal</td></tr>
+                                <tr><td><i class="fas fa-store"></i></td><td>Marketplace</td><td>Comprar materiales</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Presupuestos -->
+            <div class="card mb-4" id="presupuestos">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>3. Módulo de Presupuestos</h4>
+                </div>
+                <div class="card-body">
+                    <p>Crear cotizaciones profesionales para tus clientes, con cálculo automático de materiales y mano de obra.</p>
+
+                    <h5><i class="fas fa-robot me-2"></i>Crear Presupuesto con IA (Recomendado)</h5>
+                    <ol>
+                        <li>Ve a <strong>Presupuestos → Crear con IA</strong></li>
+                        <li>Describe la obra: tipo de construcción, superficie, ubicación</li>
+                        <li>La IA calculará automáticamente etapas, materiales y costos</li>
+                        <li>Revisa y ajusta los valores</li>
+                        <li>Guarda el presupuesto</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-edit me-2"></i>Crear Presupuesto Manual</h5>
+                    <ol>
+                        <li>Ve a <strong>Presupuestos → Crear Manual</strong></li>
+                        <li>Completa cliente, descripción, ubicación</li>
+                        <li>Agrega items con descripción, cantidad, unidad y precio</li>
+                        <li>El sistema calcula subtotales automáticamente</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-tags me-2"></i>Estados del Presupuesto</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <tr><td><span class="badge bg-secondary">Borrador</span></td><td>En edición, no enviado</td></tr>
+                            <tr><td><span class="badge bg-info">Enviado</span></td><td>Enviado al cliente, esperando respuesta</td></tr>
+                            <tr><td><span class="badge bg-success">Aprobado</span></td><td>Cliente aceptó, listo para convertir en obra</td></tr>
+                            <tr><td><span class="badge bg-danger">Rechazado</span></td><td>Cliente no aceptó</td></tr>
+                            <tr><td><span class="badge bg-warning">Vencido</span></td><td>Pasó la fecha de vigencia</td></tr>
+                        </table>
+                    </div>
+
+                    <div class="alert alert-success mt-3">
+                        <i class="fas fa-lightbulb me-2"></i>
+                        <strong>Tip:</strong> Cuando el cliente aprueba un presupuesto, usa <strong>"Confirmar como Obra"</strong> para crear automáticamente la obra con todas sus etapas.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Obras -->
+            <div class="card mb-4" id="obras">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-hard-hat text-primary me-2"></i>4. Módulo de Obras</h4>
+                </div>
+                <div class="card-body">
+                    <p>Gestionar el ciclo completo de un proyecto de construcción: planificación, ejecución y seguimiento.</p>
+
+                    <h5><i class="fas fa-plus-circle me-2"></i>Crear una Obra</h5>
+                    <ol>
+                        <li>Ve a <strong>Obras → Crear Obra</strong></li>
+                        <li>Completa: nombre, cliente, dirección, fecha de inicio</li>
+                        <li>El sistema geolocaliza automáticamente la dirección</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-layer-group me-2"></i>Gestionar Etapas</h5>
+                    <p>Las etapas organizan el trabajo en fases:</p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success me-2"></i>Cimentación</li>
+                                <li><i class="fas fa-check text-success me-2"></i>Estructura</li>
+                                <li><i class="fas fa-check text-success me-2"></i>Cubierta</li>
+                                <li><i class="fas fa-check text-success me-2"></i>Cerramientos</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success me-2"></i>Instalaciones eléctricas</li>
+                                <li><i class="fas fa-check text-success me-2"></i>Instalaciones sanitarias</li>
+                                <li><i class="fas fa-check text-success me-2"></i>Terminaciones</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h5 class="mt-4"><i class="fas fa-tasks me-2"></i>Gestionar Tareas</h5>
+                    <ol>
+                        <li>Dentro de una etapa, haz clic en <strong>"Nueva Tarea"</strong></li>
+                        <li>Completa: nombre, cantidad, responsable, fecha límite</li>
+                        <li>Asigna la tarea a un miembro del equipo</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-chart-line me-2"></i>Registrar Avances</h5>
+                    <ol>
+                        <li>Abre la tarea</li>
+                        <li>Haz clic en <strong>"Registrar Avance"</strong></li>
+                        <li>Indica porcentaje, horas y sube fotos</li>
+                        <li>El progreso se calcula automáticamente</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-cloud-sun me-2"></i>Información del Clima</h5>
+                    <p>Cada obra muestra información climática en tiempo real. Haz clic en <strong>"Información del Clima"</strong> para ver el pronóstico de 7 días.</p>
+                </div>
+            </div>
+
+            <!-- Inventario -->
+            <div class="card mb-4" id="inventario">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-boxes text-primary me-2"></i>5. Módulo de Inventario</h4>
+                </div>
+                <div class="card-body">
+                    <p>Controlar el stock de materiales, herramientas y equipos.</p>
+
+                    <h5><i class="fas fa-plus me-2"></i>Agregar Item</h5>
+                    <ol>
+                        <li>Ve a <strong>Inventario → Nuevo Item</strong></li>
+                        <li>Completa: nombre, categoría, cantidad, precio</li>
+                        <li>Define stock mínimo para alertas</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-exchange-alt me-2"></i>Movimientos de Stock</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <tr><td><strong>Entrada</strong></td><td>Cuando compras o recibes material</td></tr>
+                            <tr><td><strong>Salida</strong></td><td>Cuando usas material en obra</td></tr>
+                            <tr><td><strong>Traslado</strong></td><td>Mover entre almacenes</td></tr>
+                            <tr><td><strong>Ajuste</strong></td><td>Corregir diferencias</td></tr>
+                        </table>
+                    </div>
+
+                    <h5 class="mt-4"><i class="fas fa-bell me-2"></i>Alertas de Stock</h5>
+                    <p>El sistema te avisa cuando un item baja del stock mínimo. Ve a <strong>Inventario → Alertas</strong>.</p>
+                </div>
+            </div>
+
+            <!-- Requerimientos -->
+            <div class="card mb-4" id="requerimientos">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-clipboard-list text-primary me-2"></i>6. Módulo de Requerimientos</h4>
+                </div>
+                <div class="card-body">
+                    <p>Solicitar compra de materiales cuando faltan en la obra.</p>
+
+                    <h5><i class="fas fa-file-alt me-2"></i>Crear Requerimiento</h5>
+                    <ol>
+                        <li>Ve a <strong>Requerimientos → Nuevo</strong></li>
+                        <li>Selecciona la obra que necesita el material</li>
+                        <li>Indica qué items necesitas y la prioridad</li>
+                        <li>Envía el requerimiento</li>
+                    </ol>
+
+                    <h5 class="mt-4"><i class="fas fa-stream me-2"></i>Flujo de Aprobación</h5>
+                    <div class="d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
+                        <span class="badge bg-secondary p-2">Pendiente</span>
+                        <i class="fas fa-arrow-right"></i>
+                        <span class="badge bg-success p-2">Aprobado</span>
+                        <i class="fas fa-arrow-right"></i>
+                        <span class="badge bg-info p-2">En proceso</span>
+                        <i class="fas fa-arrow-right"></i>
+                        <span class="badge bg-primary p-2">Completado</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Equipos -->
+            <div class="card mb-4" id="equipos">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-users text-primary me-2"></i>7. Módulo de Equipos</h4>
+                </div>
+                <div class="card-body">
+                    <p>Gestionar maquinaria y el equipo de trabajo.</p>
+
+                    <h5><i class="fas fa-truck me-2"></i>Equipos/Maquinaria</h5>
+                    <p>Registra excavadoras, hormigoneras y otros equipos. Asígnalos a obras específicas.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-user-plus me-2"></i>Usuarios del Sistema</h5>
+                    <ol>
+                        <li>Ve a <strong>Equipos → Usuarios</strong></li>
+                        <li>Haz clic en <strong>"Nuevo Usuario"</strong></li>
+                        <li>Completa datos y asigna un rol</li>
+                        <li>El usuario recibe email de invitación</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Clientes -->
+            <div class="card mb-4" id="clientes">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-user-tie text-primary me-2"></i>8. Módulo de Clientes</h4>
+                </div>
+                <div class="card-body">
+                    <p>Mantener una base de datos de tus clientes.</p>
+                    <ol>
+                        <li>Ve a <strong>Clientes → Nuevo</strong></li>
+                        <li>Completa: nombre, CUIT/DNI, teléfono, email, dirección</li>
+                        <li>Usa los clientes en presupuestos y obras</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Reportes -->
+            <div class="card mb-4" id="reportes">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>9. Módulo de Reportes</h4>
+                </div>
+                <div class="card-body">
+                    <h5><i class="fas fa-tachometer-alt me-2"></i>Dashboard Principal</h5>
+                    <p>Vista general con indicadores clave: obras activas, presupuestos pendientes, alertas.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-building me-2"></i>Reporte de Obras</h5>
+                    <p>Estado de cada obra, progreso vs planificado, retrasos detectados.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-dollar-sign me-2"></i>Reporte de Costos</h5>
+                    <p>Presupuesto vs ejecutado, desglose por etapa, rentabilidad.</p>
+
+                    <h5 class="mt-4"><i class="fas fa-warehouse me-2"></i>Reporte de Inventario</h5>
+                    <p>Items con bajo stock, movimientos recientes, valor total.</p>
+                </div>
+            </div>
+
+            <!-- Seguridad -->
+            <div class="card mb-4" id="seguridad">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-shield-alt text-primary me-2"></i>10. Módulo de Seguridad</h4>
+                </div>
+                <div class="card-body">
+                    <p>Gestionar la seguridad e higiene en las obras.</p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5><i class="fas fa-clipboard-check me-2"></i>Protocolos</h5>
+                            <p>Crear y asignar protocolos de seguridad a las obras.</p>
+
+                            <h5 class="mt-3"><i class="fas fa-list-ul me-2"></i>Checklists</h5>
+                            <p>Verificaciones diarias de seguridad.</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h5><i class="fas fa-exclamation-triangle me-2"></i>Incidentes</h5>
+                            <p>Reportar accidentes o incidentes con fotos.</p>
+
+                            <h5 class="mt-3"><i class="fas fa-certificate me-2"></i>Certificaciones</h5>
+                            <p>Registrar certificaciones del personal.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Marketplace -->
+            <div class="card mb-4" id="marketplace">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-store text-primary me-2"></i>11. Marketplace</h4>
+                </div>
+                <div class="card-body">
+                    <p>Comprar materiales directamente a proveedores.</p>
+
+                    <ol>
+                        <li><strong>Buscar:</strong> Usa el buscador o navega por categorías</li>
+                        <li><strong>Ver producto:</strong> Fotos, descripción, precio, stock</li>
+                        <li><strong>Agregar al carrito:</strong> Selecciona cantidad</li>
+                        <li><strong>Comprar:</strong> Completa datos de envío y confirma</li>
+                        <li><strong>Seguimiento:</strong> Ve el estado en "Mis Órdenes"</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Configuración -->
+            <div class="card mb-4" id="configuracion">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-cog text-primary me-2"></i>12. Configuración de Cuenta</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h5><i class="fas fa-user me-2"></i>Perfil</h5>
+                            <ul class="list-unstyled">
+                                <li>Editar nombre</li>
+                                <li>Cambiar foto</li>
+                                <li>Cambiar contraseña</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h5><i class="fas fa-file-invoice me-2"></i>Facturación</h5>
+                            <ul class="list-unstyled">
+                                <li>CUIT/DNI</li>
+                                <li>Razón social</li>
+                                <li>Condición IVA</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h5><i class="fas fa-building me-2"></i>Organización</h5>
+                            <ul class="list-unstyled">
+                                <li>Nombre empresa</li>
+                                <li>Logo</li>
+                                <li>Datos de contacto</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Roles -->
+            <div class="card mb-4" id="roles">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-user-tag text-primary me-2"></i>13. Roles y Permisos</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Rol</th>
+                                    <th>Descripción</th>
+                                    <th>Acceso</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><span class="badge bg-danger">Administrador</span></td>
+                                    <td>Acceso completo a todo el sistema</td>
+                                    <td>Todo</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-primary">Project Manager</span></td>
+                                    <td>Gestiona obras, presupuestos y equipos</td>
+                                    <td>Obras, Presupuestos, Equipos, Reportes</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-info">Técnico</span></td>
+                                    <td>Crea presupuestos, ve obras</td>
+                                    <td>Presupuestos, Obras, Inventario</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-secondary">Operario</span></td>
+                                    <td>Ve sus tareas, registra avances</td>
+                                    <td>Mis Tareas, Inventario (uso)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FAQ -->
+            <div class="card mb-4" id="faq">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-question-circle text-primary me-2"></i>14. Preguntas Frecuentes</h4>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="faqAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                    ¿Cómo recupero mi contraseña?
+                                </button>
+                            </h2>
+                            <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    En la pantalla de login, haz clic en "¿Olvidaste tu contraseña?" e ingresa tu email. Recibirás un enlace para crear una nueva.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                    ¿Puedo usar OBYRA en el celular?
+                                </button>
+                            </h2>
+                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Sí, OBYRA es una aplicación web responsiva. También puedes instalarla como app desde el navegador.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                    ¿Cómo invito a mi equipo?
+                                </button>
+                            </h2>
+                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Ve a <strong>Equipos → Usuarios → Nuevo Usuario</strong> y completa los datos. El usuario recibirá un email de invitación.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                    ¿Cómo funciona la IA para presupuestos?
+                                </button>
+                            </h2>
+                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    La IA analiza el tipo de obra y superficie para calcular automáticamente etapas, materiales y costos basándose en datos del mercado argentino.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+                                    ¿Mis datos están seguros?
+                                </button>
+                            </h2>
+                            <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Sí, OBYRA usa encriptación SSL, autenticación segura y cumple con estándares de seguridad de la industria.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Soporte -->
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-headset me-2"></i>Soporte</h4>
+                </div>
+                <div class="card-body text-center">
+                    <p class="lead">¿Necesitas ayuda?</p>
+                    <div class="row justify-content-center">
+                        <div class="col-md-4 mb-3">
+                            <i class="fas fa-envelope fa-2x text-primary mb-2"></i>
+                            <p><strong>Email</strong><br>soporte@obyra.com.ar</p>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <i class="fab fa-whatsapp fa-2x text-success mb-2"></i>
+                            <p><strong>WhatsApp</strong><br>
+                                <a href="https://wa.me/5491173685175" target="_blank">+54 9 11 7368-5175</a>
+                            </p>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <i class="fas fa-globe fa-2x text-info mb-2"></i>
+                            <p><strong>Web</strong><br>
+                                <a href="https://www.obyra.com.ar" target="_blank">www.obyra.com.ar</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+.nav-pills .nav-link {
+    color: #495057;
+    border-radius: 0;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+.nav-pills .nav-link:hover {
+    background-color: #e9ecef;
+}
+.nav-pills .nav-link.active {
+    background-color: #0d6efd;
+    color: white;
+}
+</style>
+
+<script>
+// Resaltar sección activa en el menú al hacer scroll
+document.addEventListener('DOMContentLoaded', function() {
+    const sections = document.querySelectorAll('.card[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    window.addEventListener('scroll', function() {
+        let current = '';
+        sections.forEach(section => {
+            const sectionTop = section.offsetTop;
+            if (scrollY >= sectionTop - 100) {
+                current = section.getAttribute('id');
+            }
+        });
+
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + current) {
+                link.classList.add('active');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
