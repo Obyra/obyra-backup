@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Obras - OBYRA</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 10mm 15mm 15mm 15mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 9pt;
+            color: #2c2c2c;
+            line-height: 1.4;
+        }
+
+        .header-wrapper {
+            position: relative;
+            height: 100px;
+            background: linear-gradient(135deg, #1A374D 0%, #1A374D 65%, #4CAF50 65%, #4CAF50 100%);
+            padding: 15px 25px;
+            margin: -10mm -15mm 15px -15mm;
+            width: calc(100% + 30mm);
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .company-logo {
+            font-size: 14pt;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .company-info {
+            font-size: 8pt;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 8px;
+        }
+
+        .company-info span {
+            margin-right: 15px;
+        }
+
+        .header-title {
+            font-size: 20pt;
+            font-weight: bold;
+            color: white;
+            margin-top: 5px;
+        }
+
+        .header-date {
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            color: white;
+            font-size: 9pt;
+            text-align: right;
+        }
+
+        /* KPIs */
+        .kpis-bar {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .kpi-item {
+            display: table-cell;
+            text-align: center;
+            padding: 5px 10px;
+            border-right: 1px solid #ddd;
+        }
+
+        .kpi-item:last-child {
+            border-right: none;
+        }
+
+        .kpi-value {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #1A374D;
+        }
+
+        .kpi-label {
+            font-size: 8pt;
+            color: #666;
+        }
+
+        .kpi-value.success { color: #28a745; }
+        .kpi-value.warning { color: #ffc107; }
+        .kpi-value.danger { color: #dc3545; }
+
+        /* Filtros aplicados */
+        .filters-info {
+            background: #fff8e1;
+            border: 1px solid #ffcc80;
+            padding: 6px 10px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 8pt;
+        }
+
+        /* Tabla */
+        table.report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        table.report-table thead {
+            background: #1A374D;
+        }
+
+        table.report-table th {
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 8pt;
+            font-weight: bold;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        table.report-table th.right {
+            text-align: right;
+        }
+
+        table.report-table th.center {
+            text-align: center;
+        }
+
+        table.report-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 8pt;
+        }
+
+        table.report-table td.right {
+            text-align: right;
+        }
+
+        table.report-table td.center {
+            text-align: center;
+        }
+
+        table.report-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        table.report-table tr {
+            page-break-inside: avoid;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 7pt;
+            font-weight: bold;
+        }
+
+        .badge-primary { background: #007bff; color: white; }
+        .badge-success { background: #28a745; color: white; }
+        .badge-warning { background: #ffc107; color: #333; }
+        .badge-danger { background: #dc3545; color: white; }
+        .badge-secondary { background: #6c757d; color: white; }
+
+        /* Progress bar */
+        .progress-container {
+            width: 80px;
+            height: 12px;
+            background: #e9ecef;
+            border-radius: 6px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 6px;
+        }
+
+        .progress-bar.bg-success { background: #28a745; }
+        .progress-bar.bg-info { background: #17a2b8; }
+        .progress-bar.bg-warning { background: #ffc107; }
+        .progress-bar.bg-danger { background: #dc3545; }
+
+        /* Footer */
+        .footer-section {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 2px solid #4CAF50;
+        }
+
+        .footer-info {
+            font-size: 7pt;
+            color: #666;
+            text-align: center;
+        }
+
+        .text-success { color: #28a745; }
+        .text-danger { color: #dc3545; }
+        .text-warning { color: #ffc107; }
+        .text-muted { color: #6c757d; }
+        .fw-bold { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header-wrapper">
+        <div class="header-content">
+            <div class="company-logo">
+                {{ organizacion.nombre if organizacion else 'OBYRA' }}
+            </div>
+            <div class="company-info">
+                {% if organizacion %}
+                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
+                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
+                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
+                {% endif %}
+            </div>
+            <div class="header-title">Reporte de Obras</div>
+        </div>
+        <div class="header-date">
+            Generado: {{ fecha_generacion }}<br>
+            <small>Usuario: {{ usuario.nombre if usuario else 'Sistema' }}</small>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpis-bar">
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.total_obras }}</div>
+            <div class="kpi-label">Total Obras</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value success">{{ estadisticas.obras_en_curso }}</div>
+            <div class="kpi-label">En Curso</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.obras_finalizadas }}</div>
+            <div class="kpi-label">Finalizadas</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">${{ '{:,.0f}'.format(estadisticas.total_presupuesto / 1000000) }}M</div>
+            <div class="kpi-label">Presupuesto Total</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value {% if estadisticas.desvio_promedio > 0 %}danger{% else %}success{% endif %}">
+                {{ '{:+.1f}'.format(estadisticas.desvio_promedio) }}%
+            </div>
+            <div class="kpi-label">Desvio Promedio</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value warning">{{ estadisticas.obras_retrasadas }}</div>
+            <div class="kpi-label">Retrasadas</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ '{:.0f}'.format(estadisticas.progreso_promedio) }}%</div>
+            <div class="kpi-label">Progreso Prom.</div>
+        </div>
+    </div>
+
+    <!-- Filtros aplicados -->
+    {% if filtros.estado or filtros.fecha_desde or filtros.fecha_hasta %}
+    <div class="filters-info">
+        <strong>Filtros aplicados:</strong>
+        {% if filtros.estado %}Estado: {{ filtros.estado }} | {% endif %}
+        {% if filtros.fecha_desde %}Desde: {{ filtros.fecha_desde }} | {% endif %}
+        {% if filtros.fecha_hasta %}Hasta: {{ filtros.fecha_hasta }}{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Tabla de obras -->
+    {% if obras_data %}
+    <table class="report-table">
+        <thead>
+            <tr>
+                <th style="width: 20%;">Obra</th>
+                <th style="width: 12%;">Cliente</th>
+                <th style="width: 10%;">Fechas</th>
+                <th class="right" style="width: 12%;">Presupuesto</th>
+                <th class="right" style="width: 12%;">Costo Real</th>
+                <th class="right" style="width: 8%;">Desvio</th>
+                <th class="center" style="width: 12%;">Progreso</th>
+                <th class="center" style="width: 8%;">Estado</th>
+                <th class="center" style="width: 6%;">Crono</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for data in obras_data %}
+            <tr>
+                <td>
+                    <strong>{{ data.obra.nombre }}</strong>
+                    {% if data.obra.direccion %}
+                    <br><small class="text-muted">{{ data.obra.direccion|truncate(30) }}</small>
+                    {% endif %}
+                </td>
+                <td>{{ data.obra.cliente or data.obra.cliente_nombre or '-' }}</td>
+                <td>
+                    {% if data.obra.fecha_inicio %}
+                    <small>{{ data.obra.fecha_inicio.strftime('%d/%m/%y') }}</small>
+                    {% endif %}
+                    {% if data.obra.fecha_fin_estimada %}
+                    <br><small class="text-muted">{{ data.obra.fecha_fin_estimada.strftime('%d/%m/%y') }}</small>
+                    {% endif %}
+                </td>
+                <td class="right">${{ '{:,.0f}'.format(data.presupuesto) }}</td>
+                <td class="right {% if data.desvio > 0 %}text-danger{% else %}text-success{% endif %}">
+                    ${{ '{:,.0f}'.format(data.costo_real) }}
+                </td>
+                <td class="right">
+                    <span class="{% if data.desvio > 10 %}text-danger fw-bold{% elif data.desvio > 0 %}text-warning{% else %}text-success{% endif %}">
+                        {{ '{:+.1f}'.format(data.desvio) }}%
+                    </span>
+                </td>
+                <td class="center">
+                    <div class="progress-container">
+                        <div class="progress-bar {% if data.obra.progreso >= 75 %}bg-success{% elif data.obra.progreso >= 50 %}bg-info{% elif data.obra.progreso >= 25 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width: {{ data.obra.progreso }}%"></div>
+                    </div>
+                    <span style="font-size: 7pt; margin-left: 3px;">{{ data.obra.progreso }}%</span>
+                </td>
+                <td class="center">
+                    {% if data.obra.estado == 'planificacion' %}
+                    <span class="badge badge-secondary">Plan</span>
+                    {% elif data.obra.estado == 'en_curso' %}
+                    <span class="badge badge-primary">En Curso</span>
+                    {% elif data.obra.estado == 'pausada' %}
+                    <span class="badge badge-warning">Pausada</span>
+                    {% elif data.obra.estado == 'finalizada' %}
+                    <span class="badge badge-success">Finalizada</span>
+                    {% elif data.obra.estado == 'cancelada' %}
+                    <span class="badge badge-danger">Cancelada</span>
+                    {% else %}
+                    <span class="badge badge-secondary">{{ data.obra.estado }}</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if data.estado_cronograma == 'completada' %}
+                    <span class="badge badge-success">OK</span>
+                    {% elif data.estado_cronograma == 'retrasada' %}
+                    <span class="badge badge-danger">Atraso</span>
+                    {% elif data.estado_cronograma == 'en_tiempo' %}
+                    <span class="badge badge-success">OK</span>
+                    {% else %}
+                    <span class="badge badge-secondary">-</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; color: #999; padding: 40px 0;">No hay obras que mostrar</p>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="footer-section">
+        <div class="footer-info">
+            Reporte generado por OBYRA - Sistema de Gestion de Obras | {{ fecha_generacion }}
+        </div>
+    </div>
+</body>
+</html>

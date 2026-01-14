@@ -15,8 +15,8 @@
                     <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i>Dashboard
                     </a>
-                    <button class="btn btn-success" onclick="exportarReporte()">
-                        <i class="fas fa-file-excel me-1"></i>Exportar
+                    <button class="btn btn-danger" onclick="exportarPDF()">
+                        <i class="fas fa-file-pdf me-1"></i>Exportar PDF
                     </button>
                 </div>
             </div>
@@ -382,10 +382,9 @@
 
 {% block scripts %}
 <script>
-function exportarReporte() {
+function exportarPDF() {
     const params = new URLSearchParams(window.location.search);
-    params.append('export', 'excel');
-    const exportUrl = `{{ url_for('reportes.reporte_costos') }}?${params.toString()}`;
+    const exportUrl = `{{ url_for('reportes.exportar_costos_pdf') }}?${params.toString()}`;
     window.location.href = exportUrl;
 }
 </script>

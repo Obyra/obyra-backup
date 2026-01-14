@@ -15,8 +15,8 @@
                     <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i>Dashboard
                     </a>
-                    <button class="btn btn-success" onclick="exportarReporte()">
-                        <i class="fas fa-file-excel me-1"></i>Exportar
+                    <button class="btn btn-danger" onclick="exportarPDF()">
+                        <i class="fas fa-file-pdf me-1"></i>Exportar PDF
                     </button>
                 </div>
             </div>
@@ -304,15 +304,14 @@
 
 {% block scripts %}
 <script>
-function exportarReporte() {
+function exportarPDF() {
     // Obtener los parámetros de filtro actuales
     const params = new URLSearchParams(window.location.search);
-    params.append('export', 'excel');
 
-    // Crear URL de exportación
-    const exportUrl = `{{ url_for('reportes.reporte_obras') }}?${params.toString()}`;
+    // Crear URL de exportación PDF
+    const exportUrl = `{{ url_for('reportes.exportar_obras_pdf') }}?${params.toString()}`;
 
-    // Abrir en nueva pestaña o descargar
+    // Descargar PDF
     window.location.href = exportUrl;
 }
 

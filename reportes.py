@@ -1,14 +1,22 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, send_file
 from flask_login import login_required, current_user
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
-                   AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario)
+                   AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario,
+                   Organizacion)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpiar_alertas_presupuestos_confirmados
 from services.alertas_dashboard import obtener_alertas_para_dashboard, contar_alertas_por_severidad
 from services.memberships import get_current_org_id
 from services.obras_filters import obras_visibles_clause
+import io
+
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
 
 try:  # pragma: no cover - optional dependency check
     import matplotlib  # noqa: F401
@@ -818,3 +826,435 @@ def reporte_inventario():
                          tipo=tipo,
                          stock_bajo=stock_bajo,
                          ordenar_por=ordenar_por)
+
+
+# ============================================
+# EXPORTACION PDF DE REPORTES
+# ============================================
+
+@reportes_bp.route('/obras/pdf')
+@login_required
+def exportar_obras_pdf():
+    """Exporta el reporte de obras a PDF"""
+    if not WEASYPRINT_AVAILABLE:
+        flash('La exportacion a PDF no esta disponible. Contacte al administrador.', 'warning')
+        return redirect(url_for('reportes.reporte_obras'))
+
+    if not current_user.puede_acceder_modulo('reportes'):
+        flash('No tienes permisos para exportar reportes.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    estado = request.args.get('estado', '')
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+
+    # Base query con filtro de organizacion
+    query = Obra.query.filter(Obra.organizacion_id == org_id)
+
+    if estado:
+        query = query.filter(Obra.estado == estado)
+
+    if fecha_desde:
+        try:
+            fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+            query = query.filter(Obra.fecha_inicio >= fecha_desde_obj)
+        except ValueError:
+            pass
+
+    if fecha_hasta:
+        try:
+            fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+            query = query.filter(Obra.fecha_inicio <= fecha_hasta_obj)
+        except ValueError:
+            pass
+
+    obras = query.order_by(desc(Obra.fecha_creacion)).all()
+
+    # Calcular estadisticas
+    total_obras = len(obras)
+    total_presupuesto = sum(float(obra.presupuesto_total or 0) for obra in obras)
+    total_costo_real = sum(float(obra.costo_real or 0) for obra in obras)
+    progreso_promedio = sum(obra.progreso or 0 for obra in obras) / total_obras if total_obras > 0 else 0
+
+    # Calcular estadisticas avanzadas por obra
+    obras_data = []
+    for obra in obras:
+        presupuesto = float(obra.presupuesto_total or 0)
+        costo_real = float(obra.costo_real or 0)
+        desvio = ((costo_real / presupuesto) - 1) * 100 if presupuesto > 0 else 0
+        rentabilidad = presupuesto - costo_real if presupuesto > 0 else 0
+
+        dias_transcurridos = 0
+        dias_estimados = 0
+        if obra.fecha_inicio:
+            fecha_fin = obra.fecha_fin_real or date.today()
+            dias_transcurridos = (fecha_fin - obra.fecha_inicio).days
+            if obra.fecha_fin_estimada:
+                dias_estimados = (obra.fecha_fin_estimada - obra.fecha_inicio).days
+
+        if obra.estado == 'finalizada':
+            estado_cronograma = 'completada'
+        elif dias_estimados > 0 and dias_transcurridos > dias_estimados:
+            estado_cronograma = 'retrasada'
+        elif (obra.progreso or 0) > 0 and dias_estimados > 0:
+            avance_esperado = (dias_transcurridos / dias_estimados) * 100
+            if (obra.progreso or 0) >= avance_esperado - 5:
+                estado_cronograma = 'en_tiempo'
+            else:
+                estado_cronograma = 'retrasada'
+        else:
+            estado_cronograma = 'sin_datos'
+
+        obras_data.append({
+            'obra': obra,
+            'presupuesto': presupuesto,
+            'costo_real': costo_real,
+            'desvio': desvio,
+            'rentabilidad': rentabilidad,
+            'dias_transcurridos': dias_transcurridos,
+            'dias_estimados': dias_estimados,
+            'estado_cronograma': estado_cronograma
+        })
+
+    obras_retrasadas = len([o for o in obras_data if o['estado_cronograma'] == 'retrasada'])
+
+    estadisticas = {
+        'total_obras': total_obras,
+        'total_presupuesto': total_presupuesto,
+        'total_costo_real': total_costo_real,
+        'progreso_promedio': progreso_promedio,
+        'desvio_promedio': ((total_costo_real / total_presupuesto) - 1) * 100 if total_presupuesto > 0 else 0,
+        'obras_retrasadas': obras_retrasadas,
+        'obras_en_curso': len([o for o in obras if o.estado == 'en_curso']),
+        'obras_finalizadas': len([o for o in obras if o.estado == 'finalizada']),
+    }
+
+    filtros = {
+        'estado': estado,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta
+    }
+
+    organizacion = Organizacion.query.get(org_id) if org_id else None
+
+    # Renderizar HTML
+    html_content = render_template('reportes/pdf_obras.html',
+                                   obras_data=obras_data,
+                                   estadisticas=estadisticas,
+                                   filtros=filtros,
+                                   organizacion=organizacion,
+                                   usuario=current_user,
+                                   fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
+
+    # Convertir a PDF
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_content).write_pdf(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    filename = f"reporte_obras_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@reportes_bp.route('/costos/pdf')
+@login_required
+def exportar_costos_pdf():
+    """Exporta el reporte de costos a PDF"""
+    if not WEASYPRINT_AVAILABLE:
+        flash('La exportacion a PDF no esta disponible. Contacte al administrador.', 'warning')
+        return redirect(url_for('reportes.reporte_costos'))
+
+    if not current_user.puede_acceder_modulo('reportes'):
+        flash('No tienes permisos para exportar reportes.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    obra_id = request.args.get('obra_id', '')
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+
+    obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
+
+    query = UsoInventario.query.join(ItemInventario).join(Obra).filter(
+        Obra.organizacion_id == org_id
+    )
+
+    obra_nombre = ''
+    if obra_id:
+        query = query.filter(UsoInventario.obra_id == obra_id)
+        obra_sel = Obra.query.get(obra_id)
+        obra_nombre = obra_sel.nombre if obra_sel else ''
+
+    if fecha_desde:
+        try:
+            fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+            query = query.filter(UsoInventario.fecha_uso >= fecha_desde_obj)
+        except ValueError:
+            pass
+
+    if fecha_hasta:
+        try:
+            fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+            query = query.filter(UsoInventario.fecha_uso <= fecha_hasta_obj)
+        except ValueError:
+            pass
+
+    usos = query.order_by(desc(UsoInventario.fecha_uso)).all()
+
+    # Calcular costos
+    costo_total_ars = 0
+    costos_por_obra = {}
+    costos_por_categoria = {}
+    materiales_mas_usados = {}
+
+    for uso in usos:
+        precio = float(uso.item.precio_promedio or 0)
+        cantidad = float(uso.cantidad_usada or 0)
+        costo_item = cantidad * precio
+        costo_total_ars += costo_item
+
+        obra_nombre_item = uso.obra.nombre if uso.obra else 'Sin obra'
+        if obra_nombre_item not in costos_por_obra:
+            costos_por_obra[obra_nombre_item] = {
+                'ars': 0, 'items': 0,
+                'presupuesto': float(uso.obra.presupuesto_total or 0) if uso.obra else 0,
+                'obra_id': uso.obra.id if uso.obra else None
+            }
+        costos_por_obra[obra_nombre_item]['ars'] += costo_item
+        costos_por_obra[obra_nombre_item]['items'] += 1
+
+        categoria_nombre = uso.item.categoria.nombre if uso.item.categoria else 'Sin categoria'
+        if categoria_nombre not in costos_por_categoria:
+            costos_por_categoria[categoria_nombre] = {'ars': 0, 'items': 0}
+        costos_por_categoria[categoria_nombre]['ars'] += costo_item
+        costos_por_categoria[categoria_nombre]['items'] += 1
+
+        material_nombre = uso.item.nombre
+        if material_nombre not in materiales_mas_usados:
+            materiales_mas_usados[material_nombre] = {
+                'cantidad': 0, 'costo_ars': 0,
+                'unidad': uso.item.unidad, 'codigo': uso.item.codigo
+            }
+        materiales_mas_usados[material_nombre]['cantidad'] += cantidad
+        materiales_mas_usados[material_nombre]['costo_ars'] += costo_item
+
+    top_materiales = sorted(
+        materiales_mas_usados.items(),
+        key=lambda x: x[1]['costo_ars'],
+        reverse=True
+    )[:10]
+
+    analisis_obras = []
+    for ob_nombre, datos in costos_por_obra.items():
+        presupuesto = datos['presupuesto']
+        costo_total_obra = datos['ars']
+        desvio = ((costo_total_obra / presupuesto) - 1) * 100 if presupuesto > 0 else 0
+        analisis_obras.append({
+            'nombre': ob_nombre,
+            'obra_id': datos['obra_id'],
+            'presupuesto': presupuesto,
+            'costo_real': costo_total_obra,
+            'desvio': desvio,
+            'items_usados': datos['items'],
+            'estado': 'sobrecosto' if desvio > 10 else 'alerta' if desvio > 0 else 'ok'
+        })
+    analisis_obras.sort(key=lambda x: x['desvio'], reverse=True)
+
+    estadisticas = {
+        'costo_total_ars': costo_total_ars,
+        'total_usos': len(usos),
+        'obras_con_costos': len(costos_por_obra),
+        'categorias': len(costos_por_categoria),
+        'promedio_diario': costo_total_ars / 30 if costo_total_ars > 0 else 0,
+    }
+
+    filtros = {
+        'obra_id': obra_id,
+        'obra_nombre': obra_nombre,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta
+    }
+
+    organizacion = Organizacion.query.get(org_id) if org_id else None
+
+    html_content = render_template('reportes/pdf_costos.html',
+                                   analisis_obras=analisis_obras,
+                                   costos_por_categoria=costos_por_categoria,
+                                   top_materiales=top_materiales,
+                                   estadisticas=estadisticas,
+                                   filtros=filtros,
+                                   organizacion=organizacion,
+                                   usuario=current_user,
+                                   fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
+
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_content).write_pdf(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    filename = f"reporte_costos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@reportes_bp.route('/inventario/pdf')
+@login_required
+def exportar_inventario_pdf():
+    """Exporta el reporte de inventario a PDF"""
+    if not WEASYPRINT_AVAILABLE:
+        flash('La exportacion a PDF no esta disponible. Contacte al administrador.', 'warning')
+        return redirect(url_for('reportes.reporte_inventario'))
+
+    if not current_user.puede_acceder_modulo('reportes'):
+        flash('No tienes permisos para exportar reportes.', 'danger')
+        return redirect(url_for('reportes.dashboard'))
+
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    tipo = request.args.get('tipo', '')
+    stock_bajo = request.args.get('stock_bajo', '')
+
+    query = ItemInventario.query.filter(ItemInventario.organizacion_id == org_id)
+
+    if tipo:
+        query = query.join(CategoriaInventario).filter(CategoriaInventario.tipo == tipo)
+
+    if stock_bajo:
+        query = query.filter(ItemInventario.stock_actual <= ItemInventario.stock_minimo)
+
+    items = query.filter(ItemInventario.activo == True).all()
+
+    items_data = []
+    valor_total_ars = 0
+    valor_total_usd = 0
+    items_criticos = 0
+    items_sin_movimiento = 0
+    fecha_90_dias = date.today() - timedelta(days=90)
+
+    for item in items:
+        stock = float(item.stock_actual or 0)
+        precio_ars = float(item.precio_promedio or 0)
+        precio_usd = float(item.precio_promedio_usd or 0)
+        valor_ars = stock * precio_ars
+        valor_usd = stock * precio_usd
+        valor_total_ars += valor_ars
+        valor_total_usd += valor_usd
+
+        necesita_reposicion = item.necesita_reposicion
+        if necesita_reposicion:
+            items_criticos += 1
+
+        usos_90_dias = db.session.query(
+            func.coalesce(func.sum(UsoInventario.cantidad_usada), 0)
+        ).filter(
+            UsoInventario.item_id == item.id,
+            UsoInventario.fecha_uso >= fecha_90_dias
+        ).scalar() or 0
+
+        if stock > 0 and float(usos_90_dias) > 0:
+            rotacion = (float(usos_90_dias) / stock) * 4
+        else:
+            rotacion = 0
+
+        ultimo_movimiento = db.session.query(
+            func.max(MovimientoInventario.fecha)
+        ).filter(
+            MovimientoInventario.item_id == item.id
+        ).scalar()
+
+        dias_sin_movimiento = None
+        if ultimo_movimiento:
+            dias_sin_movimiento = (datetime.now() - ultimo_movimiento).days
+            if dias_sin_movimiento > 90:
+                items_sin_movimiento += 1
+        else:
+            items_sin_movimiento += 1
+            dias_sin_movimiento = 999
+
+        items_data.append({
+            'item': item,
+            'stock': stock,
+            'precio_ars': precio_ars,
+            'precio_usd': precio_usd,
+            'valor_ars': valor_ars,
+            'valor_usd': valor_usd,
+            'usos_90_dias': float(usos_90_dias),
+            'rotacion': rotacion,
+            'dias_sin_movimiento': dias_sin_movimiento,
+            'necesita_reposicion': necesita_reposicion,
+            'categoria': item.categoria.nombre if item.categoria else 'Sin categoria'
+        })
+
+    # Clasificacion ABC
+    items_sorted_by_value = sorted(items_data, key=lambda x: x['valor_ars'], reverse=True)
+    valor_acumulado = 0
+    for item_data in items_sorted_by_value:
+        valor_acumulado += item_data['valor_ars']
+        porcentaje_acumulado = (valor_acumulado / valor_total_ars * 100) if valor_total_ars > 0 else 0
+        if porcentaje_acumulado <= 80:
+            item_data['clasificacion_abc'] = 'A'
+        elif porcentaje_acumulado <= 95:
+            item_data['clasificacion_abc'] = 'B'
+        else:
+            item_data['clasificacion_abc'] = 'C'
+
+    # Agrupar por categoria
+    por_categoria = {}
+    for item_data in items_data:
+        cat = item_data['categoria']
+        if cat not in por_categoria:
+            por_categoria[cat] = {'items': 0, 'valor_ars': 0, 'valor_usd': 0}
+        por_categoria[cat]['items'] += 1
+        por_categoria[cat]['valor_ars'] += item_data['valor_ars']
+        por_categoria[cat]['valor_usd'] += item_data['valor_usd']
+    por_categoria = dict(sorted(por_categoria.items(), key=lambda x: x[1]['valor_ars'], reverse=True))
+
+    items_criticos_lista = [i for i in items_data if i['necesita_reposicion']]
+
+    estadisticas = {
+        'total_items': len(items),
+        'valor_total_ars': valor_total_ars,
+        'valor_total_usd': valor_total_usd,
+        'items_criticos': items_criticos,
+        'items_sin_movimiento': items_sin_movimiento,
+        'items_clase_a': len([i for i in items_data if i.get('clasificacion_abc') == 'A']),
+        'items_clase_b': len([i for i in items_data if i.get('clasificacion_abc') == 'B']),
+        'items_clase_c': len([i for i in items_data if i.get('clasificacion_abc') == 'C']),
+        'categorias': len(por_categoria),
+    }
+
+    filtros = {
+        'tipo': tipo,
+        'stock_bajo': stock_bajo
+    }
+
+    organizacion = Organizacion.query.get(org_id) if org_id else None
+
+    html_content = render_template('reportes/pdf_inventario.html',
+                                   items_data=items_data,
+                                   estadisticas=estadisticas,
+                                   por_categoria=por_categoria,
+                                   items_criticos_lista=items_criticos_lista,
+                                   filtros=filtros,
+                                   organizacion=organizacion,
+                                   usuario=current_user,
+                                   fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'))
+
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_content).write_pdf(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    filename = f"reporte_inventario_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename
+    )

@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Inventario - OBYRA</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 10mm 15mm 15mm 15mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 9pt;
+            color: #2c2c2c;
+            line-height: 1.4;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        .header-wrapper {
+            position: relative;
+            height: 100px;
+            background: linear-gradient(135deg, #1A374D 0%, #1A374D 65%, #17a2b8 65%, #17a2b8 100%);
+            padding: 15px 25px;
+            margin: -10mm -15mm 15px -15mm;
+            width: calc(100% + 30mm);
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .company-logo {
+            font-size: 14pt;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .company-info {
+            font-size: 8pt;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 8px;
+        }
+
+        .company-info span {
+            margin-right: 15px;
+        }
+
+        .header-title {
+            font-size: 20pt;
+            font-weight: bold;
+            color: white;
+            margin-top: 5px;
+        }
+
+        .header-date {
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            color: white;
+            font-size: 9pt;
+            text-align: right;
+        }
+
+        /* KPIs */
+        .kpis-bar {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .kpi-item {
+            display: table-cell;
+            text-align: center;
+            padding: 5px 10px;
+            border-right: 1px solid #ddd;
+        }
+
+        .kpi-item:last-child {
+            border-right: none;
+        }
+
+        .kpi-value {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #1A374D;
+        }
+
+        .kpi-value.success { color: #28a745; }
+        .kpi-value.warning { color: #ffc107; }
+        .kpi-value.danger { color: #dc3545; }
+        .kpi-value.info { color: #17a2b8; }
+
+        .kpi-label {
+            font-size: 8pt;
+            color: #666;
+        }
+
+        /* Clasificacion ABC */
+        .abc-section {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .abc-item {
+            display: table-cell;
+            width: 33.33%;
+            padding: 5px;
+            text-align: center;
+        }
+
+        .abc-box {
+            border: 2px solid;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .abc-box.clase-a { border-color: #28a745; background: rgba(40, 167, 69, 0.1); }
+        .abc-box.clase-b { border-color: #ffc107; background: rgba(255, 193, 7, 0.1); }
+        .abc-box.clase-c { border-color: #6c757d; background: rgba(108, 117, 125, 0.1); }
+
+        .abc-value {
+            font-size: 18pt;
+            font-weight: bold;
+        }
+
+        .abc-box.clase-a .abc-value { color: #28a745; }
+        .abc-box.clase-b .abc-value { color: #ffc107; }
+        .abc-box.clase-c .abc-value { color: #6c757d; }
+
+        .abc-label {
+            font-size: 9pt;
+            font-weight: bold;
+        }
+
+        .abc-desc {
+            font-size: 7pt;
+            color: #666;
+        }
+
+        /* Filtros aplicados */
+        .filters-info {
+            background: #fff8e1;
+            border: 1px solid #ffcc80;
+            padding: 6px 10px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 8pt;
+        }
+
+        /* Secciones */
+        .section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .section-header {
+            background: #1A374D;
+            color: white;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 10pt;
+            margin-bottom: 0;
+        }
+
+        .section-header.warning {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .section-header.danger {
+            background: #dc3545;
+        }
+
+        /* Tabla */
+        table.report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        table.report-table thead {
+            background: #f8f8f8;
+        }
+
+        table.report-table th {
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 7pt;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            border-bottom: 2px solid #17a2b8;
+        }
+
+        table.report-table th.right {
+            text-align: right;
+        }
+
+        table.report-table th.center {
+            text-align: center;
+        }
+
+        table.report-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 7pt;
+        }
+
+        table.report-table td.right {
+            text-align: right;
+        }
+
+        table.report-table td.center {
+            text-align: center;
+        }
+
+        table.report-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        table.report-table tr {
+            page-break-inside: avoid;
+        }
+
+        table.report-table tr.warning-row {
+            background: #fff3cd;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 6pt;
+            font-weight: bold;
+        }
+
+        .badge-a { background: #28a745; color: white; }
+        .badge-b { background: #ffc107; color: #333; }
+        .badge-c { background: #6c757d; color: white; }
+        .badge-success { background: #28a745; color: white; }
+        .badge-warning { background: #ffc107; color: #333; }
+        .badge-danger { background: #dc3545; color: white; }
+
+        /* Footer */
+        .footer-section {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 2px solid #17a2b8;
+        }
+
+        .footer-info {
+            font-size: 7pt;
+            color: #666;
+            text-align: center;
+        }
+
+        .text-success { color: #28a745; }
+        .text-danger { color: #dc3545; }
+        .text-warning { color: #ffc107; }
+        .text-info { color: #17a2b8; }
+        .text-muted { color: #6c757d; }
+        .fw-bold { font-weight: bold; }
+
+        /* Categorias grid */
+        .categories-section {
+            margin-bottom: 15px;
+        }
+
+        .category-row {
+            display: table;
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .category-cell {
+            display: table-cell;
+            width: 50%;
+            padding: 3px;
+        }
+
+        .category-box {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+        }
+
+        .category-name {
+            font-weight: bold;
+            font-size: 8pt;
+        }
+
+        .category-stats {
+            font-size: 7pt;
+            color: #666;
+        }
+
+        .category-value {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #17a2b8;
+            float: right;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header-wrapper">
+        <div class="header-content">
+            <div class="company-logo">
+                {{ organizacion.nombre if organizacion else 'OBYRA' }}
+            </div>
+            <div class="company-info">
+                {% if organizacion %}
+                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
+                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
+                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
+                {% endif %}
+            </div>
+            <div class="header-title">Reporte de Inventario</div>
+        </div>
+        <div class="header-date">
+            Generado: {{ fecha_generacion }}<br>
+            <small>Usuario: {{ usuario.nombre if usuario else 'Sistema' }}</small>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpis-bar">
+        <div class="kpi-item">
+            <div class="kpi-value info">${{ '{:,.0f}'.format(estadisticas.valor_total_ars) }}</div>
+            <div class="kpi-label">Valor Total ARS</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.total_items }}</div>
+            <div class="kpi-label">Items</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.categorias }}</div>
+            <div class="kpi-label">Categorias</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value {% if estadisticas.items_criticos > 0 %}warning{% endif %}">
+                {{ estadisticas.items_criticos }}
+            </div>
+            <div class="kpi-label">Stock Bajo</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value {% if estadisticas.items_sin_movimiento > 0 %}danger{% endif %}">
+                {{ estadisticas.items_sin_movimiento }}
+            </div>
+            <div class="kpi-label">Sin Movimiento</div>
+        </div>
+    </div>
+
+    <!-- Clasificacion ABC -->
+    <div class="abc-section">
+        <div class="abc-item">
+            <div class="abc-box clase-a">
+                <div class="abc-value">{{ estadisticas.items_clase_a }}</div>
+                <div class="abc-label">Clase A</div>
+                <div class="abc-desc">80% del valor - Alta prioridad</div>
+            </div>
+        </div>
+        <div class="abc-item">
+            <div class="abc-box clase-b">
+                <div class="abc-value">{{ estadisticas.items_clase_b }}</div>
+                <div class="abc-label">Clase B</div>
+                <div class="abc-desc">15% del valor - Media prioridad</div>
+            </div>
+        </div>
+        <div class="abc-item">
+            <div class="abc-box clase-c">
+                <div class="abc-value">{{ estadisticas.items_clase_c }}</div>
+                <div class="abc-label">Clase C</div>
+                <div class="abc-desc">5% del valor - Baja prioridad</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros aplicados -->
+    {% if filtros.tipo or filtros.stock_bajo %}
+    <div class="filters-info">
+        <strong>Filtros aplicados:</strong>
+        {% if filtros.tipo %}Tipo: {{ filtros.tipo }} | {% endif %}
+        {% if filtros.stock_bajo %}Solo stock bajo{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Items Criticos (si hay) -->
+    {% if items_criticos_lista %}
+    <div class="section">
+        <div class="section-header warning">Items con Stock Bajo - Requieren Reposicion ({{ items_criticos_lista|length }})</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 30%;">Item</th>
+                    <th style="width: 15%;">Codigo</th>
+                    <th class="right" style="width: 15%;">Stock Actual</th>
+                    <th class="right" style="width: 15%;">Stock Min.</th>
+                    <th class="right" style="width: 12%;">Faltante</th>
+                    <th class="right" style="width: 13%;">Costo Repos.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in items_criticos_lista[:15] %}
+                {% set faltante = (data.item.stock_minimo or 0) - data.stock %}
+                <tr class="warning-row">
+                    <td><strong>{{ data.item.nombre }}</strong></td>
+                    <td><code>{{ data.item.codigo }}</code></td>
+                    <td class="right text-danger fw-bold">{{ '{:,.1f}'.format(data.stock) }} {{ data.item.unidad }}</td>
+                    <td class="right">{{ '{:,.1f}'.format(data.item.stock_minimo or 0) }}</td>
+                    <td class="right text-danger">{{ '{:,.1f}'.format(faltante if faltante > 0 else 0) }}</td>
+                    <td class="right">${{ '{:,.0f}'.format(faltante * data.precio_ars if faltante > 0 else 0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Por Categoria -->
+    {% if por_categoria %}
+    <div class="section">
+        <div class="section-header">Valor por Categoria</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%;">Categoria</th>
+                    <th class="right" style="width: 15%;">Items</th>
+                    <th class="right" style="width: 25%;">Valor ARS</th>
+                    <th class="right" style="width: 20%;">% del Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for categoria, datos in por_categoria.items() %}
+                {% set porcentaje = (datos.valor_ars / estadisticas.valor_total_ars * 100) if estadisticas.valor_total_ars > 0 else 0 %}
+                <tr>
+                    <td><strong>{{ categoria }}</strong></td>
+                    <td class="right">{{ datos.items }}</td>
+                    <td class="right text-info fw-bold">${{ '{:,.0f}'.format(datos.valor_ars) }}</td>
+                    <td class="right">{{ '{:.1f}'.format(porcentaje) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Listado de Items -->
+    {% if items_data %}
+    <div class="section">
+        <div class="section-header">Listado de Items ({{ items_data|length }} items)</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">ABC</th>
+                    <th style="width: 10%;">Codigo</th>
+                    <th style="width: 25%;">Item</th>
+                    <th style="width: 12%;">Categoria</th>
+                    <th class="right" style="width: 10%;">Stock</th>
+                    <th class="right" style="width: 12%;">Precio</th>
+                    <th class="right" style="width: 14%;">Valor</th>
+                    <th class="center" style="width: 6%;">Rot.</th>
+                    <th class="center" style="width: 6%;">Est.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in items_data %}
+                <tr {% if data.necesita_reposicion %}class="warning-row"{% endif %}>
+                    <td class="center">
+                        {% if data.clasificacion_abc == 'A' %}
+                        <span class="badge badge-a">A</span>
+                        {% elif data.clasificacion_abc == 'B' %}
+                        <span class="badge badge-b">B</span>
+                        {% else %}
+                        <span class="badge badge-c">C</span>
+                        {% endif %}
+                    </td>
+                    <td><code>{{ data.item.codigo }}</code></td>
+                    <td><strong>{{ data.item.nombre|truncate(25) }}</strong></td>
+                    <td>{{ data.categoria|truncate(12) }}</td>
+                    <td class="right">{{ '{:,.0f}'.format(data.stock) }} {{ data.item.unidad }}</td>
+                    <td class="right">${{ '{:,.0f}'.format(data.precio_ars) }}</td>
+                    <td class="right text-info fw-bold">${{ '{:,.0f}'.format(data.valor_ars) }}</td>
+                    <td class="center">
+                        {% if data.rotacion > 0 %}
+                        {{ '{:.1f}'.format(data.rotacion) }}x
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="center">
+                        {% if data.necesita_reposicion %}
+                        <span class="badge badge-warning">!</span>
+                        {% elif data.dias_sin_movimiento and data.dias_sin_movimiento > 90 %}
+                        <span class="badge badge-danger">X</span>
+                        {% else %}
+                        <span class="badge badge-success">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="footer-section">
+        <div class="footer-info">
+            Reporte generado por OBYRA - Sistema de Gestion de Obras | {{ fecha_generacion }}
+            <br>
+            <small>Leyenda: ! = Stock bajo | X = Sin movimiento +90 dias | OK = Normal</small>
+        </div>
+    </div>
+</body>
+</html>

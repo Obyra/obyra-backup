@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Costos - OBYRA</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 10mm 15mm 15mm 15mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 9pt;
+            color: #2c2c2c;
+            line-height: 1.4;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        .header-wrapper {
+            position: relative;
+            height: 100px;
+            background: linear-gradient(135deg, #1A374D 0%, #1A374D 65%, #28a745 65%, #28a745 100%);
+            padding: 15px 25px;
+            margin: -10mm -15mm 15px -15mm;
+            width: calc(100% + 30mm);
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .company-logo {
+            font-size: 14pt;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .company-info {
+            font-size: 8pt;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 8px;
+        }
+
+        .company-info span {
+            margin-right: 15px;
+        }
+
+        .header-title {
+            font-size: 20pt;
+            font-weight: bold;
+            color: white;
+            margin-top: 5px;
+        }
+
+        .header-date {
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            color: white;
+            font-size: 9pt;
+            text-align: right;
+        }
+
+        /* KPIs */
+        .kpis-bar {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .kpi-item {
+            display: table-cell;
+            text-align: center;
+            padding: 5px 10px;
+            border-right: 1px solid #ddd;
+        }
+
+        .kpi-item:last-child {
+            border-right: none;
+        }
+
+        .kpi-value {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #1A374D;
+        }
+
+        .kpi-value.success { color: #28a745; }
+        .kpi-label {
+            font-size: 8pt;
+            color: #666;
+        }
+
+        /* Filtros aplicados */
+        .filters-info {
+            background: #fff8e1;
+            border: 1px solid #ffcc80;
+            padding: 6px 10px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 8pt;
+        }
+
+        /* Secciones */
+        .section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .section-header {
+            background: #1A374D;
+            color: white;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 10pt;
+            margin-bottom: 0;
+        }
+
+        /* Tabla */
+        table.report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        table.report-table thead {
+            background: #f8f8f8;
+        }
+
+        table.report-table th {
+            padding: 6px 10px;
+            text-align: left;
+            font-size: 8pt;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            border-bottom: 2px solid #28a745;
+        }
+
+        table.report-table th.right {
+            text-align: right;
+        }
+
+        table.report-table th.center {
+            text-align: center;
+        }
+
+        table.report-table td {
+            padding: 5px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 8pt;
+        }
+
+        table.report-table td.right {
+            text-align: right;
+        }
+
+        table.report-table td.center {
+            text-align: center;
+        }
+
+        table.report-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        table.report-table tr {
+            page-break-inside: avoid;
+        }
+
+        table.report-table tfoot {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 7pt;
+            font-weight: bold;
+        }
+
+        .badge-success { background: #28a745; color: white; }
+        .badge-warning { background: #ffc107; color: #333; }
+        .badge-danger { background: #dc3545; color: white; }
+
+        /* Cards de categoria */
+        .categories-grid {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .category-card {
+            display: table-cell;
+            width: 33.33%;
+            padding: 5px;
+            vertical-align: top;
+        }
+
+        .category-card-inner {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .category-name {
+            font-weight: bold;
+            font-size: 9pt;
+            margin-bottom: 5px;
+        }
+
+        .category-value {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .category-items {
+            font-size: 7pt;
+            color: #666;
+        }
+
+        /* Footer */
+        .footer-section {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 2px solid #28a745;
+        }
+
+        .footer-info {
+            font-size: 7pt;
+            color: #666;
+            text-align: center;
+        }
+
+        .text-success { color: #28a745; }
+        .text-danger { color: #dc3545; }
+        .text-warning { color: #ffc107; }
+        .text-muted { color: #6c757d; }
+        .fw-bold { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header-wrapper">
+        <div class="header-content">
+            <div class="company-logo">
+                {{ organizacion.nombre if organizacion else 'OBYRA' }}
+            </div>
+            <div class="company-info">
+                {% if organizacion %}
+                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
+                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
+                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
+                {% endif %}
+            </div>
+            <div class="header-title">Reporte de Costos</div>
+        </div>
+        <div class="header-date">
+            Generado: {{ fecha_generacion }}<br>
+            <small>Usuario: {{ usuario.nombre if usuario else 'Sistema' }}</small>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpis-bar">
+        <div class="kpi-item">
+            <div class="kpi-value success">${{ '{:,.0f}'.format(estadisticas.costo_total_ars) }}</div>
+            <div class="kpi-label">Costo Total ARS</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.total_usos }}</div>
+            <div class="kpi-label">Registros de Uso</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.obras_con_costos }}</div>
+            <div class="kpi-label">Obras con Costos</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">{{ estadisticas.categorias }}</div>
+            <div class="kpi-label">Categorias</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-value">${{ '{:,.0f}'.format(estadisticas.promedio_diario) }}</div>
+            <div class="kpi-label">Promedio Diario</div>
+        </div>
+    </div>
+
+    <!-- Filtros aplicados -->
+    {% if filtros.obra_id or filtros.fecha_desde or filtros.fecha_hasta %}
+    <div class="filters-info">
+        <strong>Filtros aplicados:</strong>
+        {% if filtros.obra_nombre %}Obra: {{ filtros.obra_nombre }} | {% endif %}
+        {% if filtros.fecha_desde %}Desde: {{ filtros.fecha_desde }} | {% endif %}
+        {% if filtros.fecha_hasta %}Hasta: {{ filtros.fecha_hasta }}{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Costos por Obra -->
+    {% if analisis_obras %}
+    <div class="section">
+        <div class="section-header">Costos por Obra</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 35%;">Obra</th>
+                    <th class="right" style="width: 20%;">Costo Real</th>
+                    <th class="right" style="width: 20%;">Presupuesto</th>
+                    <th class="right" style="width: 12%;">Desvio</th>
+                    <th class="center" style="width: 13%;">Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for obra in analisis_obras %}
+                <tr>
+                    <td><strong>{{ obra.nombre }}</strong></td>
+                    <td class="right">${{ '{:,.0f}'.format(obra.costo_real) }}</td>
+                    <td class="right text-muted">${{ '{:,.0f}'.format(obra.presupuesto) }}</td>
+                    <td class="right">
+                        <span class="{% if obra.desvio > 10 %}text-danger fw-bold{% elif obra.desvio > 0 %}text-warning{% else %}text-success{% endif %}">
+                            {{ '{:+.1f}'.format(obra.desvio) }}%
+                        </span>
+                    </td>
+                    <td class="center">
+                        {% if obra.estado == 'sobrecosto' %}
+                        <span class="badge badge-danger">Sobrecosto</span>
+                        {% elif obra.estado == 'alerta' %}
+                        <span class="badge badge-warning">Alerta</span>
+                        {% else %}
+                        <span class="badge badge-success">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td><strong>TOTAL</strong></td>
+                    <td class="right"><strong>${{ '{:,.0f}'.format(estadisticas.costo_total_ars) }}</strong></td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Costos por Categoria -->
+    {% if costos_por_categoria %}
+    <div class="section">
+        <div class="section-header">Costos por Categoria</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%;">Categoria</th>
+                    <th class="right" style="width: 25%;">Costo Total</th>
+                    <th class="right" style="width: 15%;">Items</th>
+                    <th class="right" style="width: 20%;">% del Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cat_nombre, datos in costos_por_categoria.items() %}
+                {% set porcentaje = (datos.ars / estadisticas.costo_total_ars * 100) if estadisticas.costo_total_ars > 0 else 0 %}
+                <tr>
+                    <td><strong>{{ cat_nombre }}</strong></td>
+                    <td class="right text-success">${{ '{:,.0f}'.format(datos.ars) }}</td>
+                    <td class="right">{{ datos.items }}</td>
+                    <td class="right">{{ '{:.1f}'.format(porcentaje) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Top Materiales -->
+    {% if top_materiales %}
+    <div class="section">
+        <div class="section-header">Top 10 Materiales mas Usados</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 35%;">Material</th>
+                    <th style="width: 15%;">Codigo</th>
+                    <th class="right" style="width: 20%;">Cantidad</th>
+                    <th class="right" style="width: 25%;">Costo Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for material_nombre, datos in top_materiales %}
+                <tr>
+                    <td><strong>{{ loop.index }}</strong></td>
+                    <td><strong>{{ material_nombre }}</strong></td>
+                    <td><code>{{ datos.codigo or '-' }}</code></td>
+                    <td class="right">{{ '{:,.1f}'.format(datos.cantidad) }} {{ datos.unidad or '' }}</td>
+                    <td class="right text-success fw-bold">${{ '{:,.0f}'.format(datos.costo_ars) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="footer-section">
+        <div class="footer-info">
+            Reporte generado por OBYRA - Sistema de Gestion de Obras | {{ fecha_generacion }}
+        </div>
+    </div>
+</body>
+</html>
