@@ -71,6 +71,7 @@ def setup_security_headers(app):
             "https://apis.google.com "
             "https://nominatim.openstreetmap.org "
             "https://api.mercadopago.com "
+            "https://api.open-meteo.com "
             "https://cdn.jsdelivr.net "
             "wss: ws:",
             # Frames: permitir Google OAuth

@@ -589,20 +589,50 @@ async function abrirVentanaClima(lat, lng, nombreObra, direccion, obraId) {
 // Función para cargar datos de clima en el modal
 async function cargarDatosClima(lat, lng, nombreObra, direccion) {
     const contenidoDiv = document.getElementById('contenidoClima');
-    
+
+    console.log(`🌤️ Cargando clima para coordenadas: ${lat}, ${lng}`);
+
+    // Validar que las coordenadas sean números válidos
+    lat = parseFloat(lat);
+    lng = parseFloat(lng);
+
+    if (isNaN(lat) || isNaN(lng)) {
+        console.error('❌ Coordenadas inválidas:', lat, lng);
+        contenidoDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">Las coordenadas de la obra son inválidas. Por favor, edita la obra y corrige la dirección.</p>
+            </div>
+        `;
+        return;
+    }
+
     try {
         // API de Open-Meteo - clima actual + pronóstico 7 días
+        const urlActual = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&timezone=auto`;
+        const urlPronostico = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`;
+
+        console.log('📡 Consultando Open-Meteo:', urlActual);
+
         const [climaActual, pronostico] = await Promise.all([
-            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&timezone=auto`),
-            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`)
+            fetch(urlActual),
+            fetch(urlPronostico)
         ]);
-        
+
         if (!climaActual.ok || !pronostico.ok) {
-            throw new Error('Error al obtener datos del clima');
+            const errorText = await climaActual.text();
+            console.error('❌ Error de API:', climaActual.status, errorText);
+            throw new Error(`Error de API: ${climaActual.status}`);
         }
-        
+
         const dataActual = await climaActual.json();
         const dataPronostico = await pronostico.json();
+
+        console.log('✅ Datos recibidos:', dataActual, dataPronostico);
+
+        if (!dataActual.current_weather) {
+            throw new Error('La API no devolvió datos del clima actual');
+        }
         
         const clima = dataActual.current_weather;
         const pronos = dataPronostico.daily;
@@ -705,7 +735,13 @@ async function cargarDatosClima(lat, lng, nombreObra, direccion) {
         contenidoDiv.innerHTML = `
             <div class="alert alert-danger">
                 <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
-                <p class="mb-0">No se pudo cargar la información climática. Por favor, inténtalo de nuevo más tarde.</p>
+                <p class="mb-2">No se pudo cargar la información climática.</p>
+                <p class="mb-0 small"><strong>Detalle:</strong> ${error.message}</p>
+                <p class="mb-0 small"><strong>Coordenadas:</strong> ${lat}, ${lng}</p>
+                <hr>
+                <button class="btn btn-outline-danger btn-sm" onclick="cargarDatosClima(${lat}, ${lng}, '${nombreObra.replace(/'/g, "\\'")}', '${(direccion || '').replace(/'/g, "\\'")}')">
+                    <i class="fas fa-redo me-1"></i>Reintentar
+                </button>
             </div>
         `;
     }
