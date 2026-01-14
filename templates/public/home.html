@@ -96,6 +96,9 @@
                     <a href="{{ url_for('supplier_auth.login') }}" class="btn btn-outline-light btn-lg">
                         <i class="fas fa-store me-2"></i>PORTAL PROVEEDORES
                     </a>
+                    <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA" target="_blank" class="btn btn-whatsapp btn-lg">
+                        <i class="fab fa-whatsapp me-2"></i>RESERVA TU DEMO
+                    </a>
                 </div>
                 <!-- Botón Instalar App PWA -->
                 <div id="pwa-install-container" class="mt-3 d-none">
@@ -312,6 +315,25 @@
     background: rgba(255, 255, 255, 0.1);
     border-color: #4CAF50;
     color: #7CFC00;
+}
+
+/* Botón WhatsApp */
+.btn-whatsapp {
+    background: #25D366;
+    color: #ffffff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 30px;
+}
+
+.btn-whatsapp:hover {
+    background: #128C7E;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4);
 }
 
 /* Login Card */
