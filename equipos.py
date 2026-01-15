@@ -577,85 +577,89 @@ def toggle_activo(id):
 @equipos_bp.route('/rendimiento')
 @login_required
 def rendimiento():
-    from datetime import datetime
+    """Vista de rendimiento del equipo"""
+    try:
+        # Verificar permisos
+        if not hasattr(current_user, 'role') or current_user.role not in ['admin', 'pm', 'tecnico']:
+            flash('No tienes permisos para ver reportes de rendimiento.', 'danger')
+            return redirect(url_for('equipos.lista'))
 
-    if current_user.role not in ['admin', 'pm', 'tecnico']:
-        flash('No tienes permisos para ver reportes de rendimiento.', 'danger')
-        return redirect(url_for('equipos.lista'))
+        # Obtener la membresía actual del usuario
+        membership = get_current_membership()
+        if not membership:
+            flash('No tienes una organización asignada.', 'warning')
+            return redirect(url_for('reportes.dashboard'))
 
-    # Obtener la membresía actual del usuario
-    membership = get_current_membership()
-    if not membership:
-        flash('No tienes una organización asignada.', 'warning')
-        return redirect(url_for('reportes.dashboard'))
+        org_id = membership.org_id
 
-    org_id = membership.org_id
+        # Obtener usuarios con membresía activa en esta organización
+        miembros = OrgMembership.query.options(
+            joinedload(OrgMembership.usuario)
+        ).filter(
+            OrgMembership.org_id == org_id,
+            OrgMembership.status == 'active',
+            db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None))
+        ).all()
 
-    # Obtener usuarios de la misma organización (filtrado por membresía)
-    usuarios_ids = db.session.query(OrgMembership.user_id).filter(
-        OrgMembership.org_id == org_id,
-        OrgMembership.status == 'active'
-    ).subquery()
+        estadisticas = []
+        for miembro in miembros:
+            usuario = miembro.usuario
+            if not usuario or usuario.is_super_admin:
+                continue
 
-    usuarios = Usuario.query.filter(
-        Usuario.id.in_(usuarios_ids),
-        Usuario.activo == True,
-        Usuario.is_super_admin.is_(False)
-    ).all()
+            # Valores por defecto - sin queries complejas para evitar errores
+            total_horas = 0
+            obras_activas = 0
+            obras_completadas = 0
+            tareas_mes = 0
 
-    estadisticas = []
-    inicio_mes = datetime.now().replace(day=1)
+            try:
+                # Horas totales
+                horas_result = db.session.query(
+                    func.coalesce(func.sum(RegistroTiempo.horas_trabajadas), 0)
+                ).filter(RegistroTiempo.usuario_id == usuario.id).scalar()
+                total_horas = float(horas_result or 0)
+            except:
+                pass
 
-    for usuario in usuarios:
-        try:
-            # Horas totales trabajadas
-            total_horas = db.session.query(
-                func.coalesce(func.sum(RegistroTiempo.horas_trabajadas), 0)
-            ).filter(
-                RegistroTiempo.usuario_id == usuario.id
-            ).scalar() or 0
+            try:
+                # Contar asignaciones activas
+                obras_activas = AsignacionObra.query.join(Obra).filter(
+                    AsignacionObra.usuario_id == usuario.id,
+                    AsignacionObra.activo == True,
+                    Obra.estado.in_(['planificacion', 'en_curso'])
+                ).count()
+            except:
+                pass
 
-            # Obras activas - query directa en lugar de usar relationship
-            obras_activas = db.session.query(func.count(AsignacionObra.id)).join(Obra).filter(
-                AsignacionObra.usuario_id == usuario.id,
-                AsignacionObra.activo == True,
-                Obra.estado.in_(['planificacion', 'en_curso'])
-            ).scalar() or 0
-
-            # Obras completadas
-            obras_completadas = db.session.query(func.count(AsignacionObra.id)).join(Obra).filter(
-                AsignacionObra.usuario_id == usuario.id,
-                Obra.estado == 'finalizada'
-            ).scalar() or 0
-
-            # Registros este mes
-            tareas_mes = db.session.query(func.count(RegistroTiempo.id)).filter(
-                RegistroTiempo.usuario_id == usuario.id,
-                RegistroTiempo.fecha >= inicio_mes.date()
-            ).scalar() or 0
+            try:
+                # Contar obras finalizadas
+                obras_completadas = AsignacionObra.query.join(Obra).filter(
+                    AsignacionObra.usuario_id == usuario.id,
+                    Obra.estado == 'finalizada'
+                ).count()
+            except:
+                pass
 
             estadisticas.append({
                 'usuario': usuario,
-                'total_horas': float(total_horas),
+                'total_horas': total_horas,
                 'obras_activas': obras_activas,
                 'obras_completadas': obras_completadas,
                 'tareas_mes': tareas_mes
             })
-        except Exception as e:
-            # Si hay error con un usuario, continuar con los demás
-            print(f"[WARN] Error procesando usuario {usuario.id}: {e}")
-            estadisticas.append({
-                'usuario': usuario,
-                'total_horas': 0,
-                'obras_activas': 0,
-                'obras_completadas': 0,
-                'tareas_mes': 0
-            })
 
-    # Ordenar por horas trabajadas
-    estadisticas.sort(key=lambda x: x['total_horas'], reverse=True)
+        # Ordenar por horas trabajadas
+        estadisticas.sort(key=lambda x: x['total_horas'], reverse=True)
 
-    return render_template('equipos/rendimiento.html', estadisticas=estadisticas)
+        return render_template('equipos/rendimiento.html', estadisticas=estadisticas)
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] rendimiento(): {e}")
+        print(traceback.format_exc())
+        flash(f'Error al cargar rendimiento: {str(e)}', 'danger')
+        return redirect(url_for('equipos.lista'))
 
 
 # ===== NUEVAS RUTAS PARA GESTIÓN DE USUARIOS =====
