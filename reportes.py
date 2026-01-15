@@ -524,8 +524,12 @@ def reporte_costos():
     # Obtener obras de la organización
     obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
 
-    # Base query para uso de inventario
-    query = UsoInventario.query.join(ItemInventario).join(Obra).filter(
+    # OPTIMIZACION: Base query con EAGER LOADING para evitar N+1
+    from sqlalchemy.orm import joinedload
+    query = UsoInventario.query.options(
+        joinedload(UsoInventario.item).joinedload(ItemInventario.categoria),
+        joinedload(UsoInventario.obra)
+    ).join(ItemInventario).join(Obra).filter(
         Obra.organizacion_id == org_id
     )
 
@@ -671,8 +675,11 @@ def reporte_inventario():
     stock_bajo = request.args.get('stock_bajo', '')
     ordenar_por = request.args.get('ordenar', 'nombre')  # nombre, valor, rotacion, stock
 
-    # Base query con filtro de organización
-    query = ItemInventario.query.filter(ItemInventario.organizacion_id == org_id)
+    # Base query con filtro de organización y EAGER LOADING de categoria
+    from sqlalchemy.orm import joinedload
+    query = ItemInventario.query.options(
+        joinedload(ItemInventario.categoria)
+    ).filter(ItemInventario.organizacion_id == org_id)
 
     if tipo:
         query = query.join(CategoriaInventario).filter(CategoriaInventario.tipo == tipo)
@@ -682,15 +689,39 @@ def reporte_inventario():
 
     items = query.filter(ItemInventario.activo == True).all()
 
-    # Calcular métricas por item
+    # Período para análisis de rotación (últimos 90 días)
+    fecha_90_dias = date.today() - timedelta(days=90)
+
+    # OPTIMIZACION: Obtener todos los usos de los últimos 90 días en UNA sola query
+    item_ids = [item.id for item in items]
+    usos_query = db.session.query(
+        UsoInventario.item_id,
+        func.coalesce(func.sum(UsoInventario.cantidad_usada), 0).label('total_usos')
+    ).filter(
+        UsoInventario.item_id.in_(item_ids),
+        UsoInventario.fecha_uso >= fecha_90_dias
+    ).group_by(UsoInventario.item_id).all()
+
+    # Convertir a diccionario para acceso O(1)
+    usos_dict = {u.item_id: float(u.total_usos) for u in usos_query}
+
+    # OPTIMIZACION: Obtener últimos movimientos en UNA sola query
+    movimientos_query = db.session.query(
+        MovimientoInventario.item_id,
+        func.max(MovimientoInventario.fecha).label('ultima_fecha')
+    ).filter(
+        MovimientoInventario.item_id.in_(item_ids)
+    ).group_by(MovimientoInventario.item_id).all()
+
+    # Convertir a diccionario para acceso O(1)
+    movimientos_dict = {m.item_id: m.ultima_fecha for m in movimientos_query}
+
+    # Calcular métricas por item (sin queries adicionales en el loop)
     items_data = []
     valor_total_ars = 0
     valor_total_usd = 0
     items_criticos = 0
     items_sin_movimiento = 0
-
-    # Período para análisis de rotación (últimos 90 días)
-    fecha_90_dias = date.today() - timedelta(days=90)
 
     for item in items:
         stock = float(item.stock_actual or 0)
@@ -708,26 +739,17 @@ def reporte_inventario():
         if necesita_reposicion:
             items_criticos += 1
 
-        # Calcular rotación de inventario (usos en últimos 90 días)
-        usos_90_dias = db.session.query(
-            func.coalesce(func.sum(UsoInventario.cantidad_usada), 0)
-        ).filter(
-            UsoInventario.item_id == item.id,
-            UsoInventario.fecha_uso >= fecha_90_dias
-        ).scalar() or 0
+        # Obtener usos del diccionario (sin query)
+        usos_90_dias = usos_dict.get(item.id, 0)
 
         # Calcular índice de rotación
-        if stock > 0 and float(usos_90_dias) > 0:
-            rotacion = (float(usos_90_dias) / stock) * 4  # Anualizado
+        if stock > 0 and usos_90_dias > 0:
+            rotacion = (usos_90_dias / stock) * 4  # Anualizado
         else:
             rotacion = 0
 
-        # Items sin movimiento
-        ultimo_movimiento = db.session.query(
-            func.max(MovimientoInventario.fecha)
-        ).filter(
-            MovimientoInventario.item_id == item.id
-        ).scalar()
+        # Obtener último movimiento del diccionario (sin query)
+        ultimo_movimiento = movimientos_dict.get(item.id)
 
         dias_sin_movimiento = None
         if ultimo_movimiento:
@@ -746,7 +768,7 @@ def reporte_inventario():
             'precio_usd': precio_usd,
             'valor_ars': valor_ars,
             'valor_usd': valor_usd,
-            'usos_90_dias': float(usos_90_dias),
+            'usos_90_dias': usos_90_dias,
             'rotacion': rotacion,
             'dias_sin_movimiento': dias_sin_movimiento,
             'necesita_reposicion': necesita_reposicion,
@@ -980,7 +1002,12 @@ def exportar_costos_pdf():
 
     obras = Obra.query.filter(Obra.organizacion_id == org_id).order_by(Obra.nombre).all()
 
-    query = UsoInventario.query.join(ItemInventario).join(Obra).filter(
+    # OPTIMIZACION: Eager loading para evitar N+1
+    from sqlalchemy.orm import joinedload
+    query = UsoInventario.query.options(
+        joinedload(UsoInventario.item).joinedload(ItemInventario.categoria),
+        joinedload(UsoInventario.obra)
+    ).join(ItemInventario).join(Obra).filter(
         Obra.organizacion_id == org_id
     )
 
@@ -1121,7 +1148,11 @@ def exportar_inventario_pdf():
     tipo = request.args.get('tipo', '')
     stock_bajo = request.args.get('stock_bajo', '')
 
-    query = ItemInventario.query.filter(ItemInventario.organizacion_id == org_id)
+    # OPTIMIZACION: Eager loading de categoria
+    from sqlalchemy.orm import joinedload
+    query = ItemInventario.query.options(
+        joinedload(ItemInventario.categoria)
+    ).filter(ItemInventario.organizacion_id == org_id)
 
     if tipo:
         query = query.join(CategoriaInventario).filter(CategoriaInventario.tipo == tipo)
@@ -1131,12 +1162,34 @@ def exportar_inventario_pdf():
 
     items = query.filter(ItemInventario.activo == True).all()
 
+    # OPTIMIZACION: Queries batch para evitar N+1
+    fecha_90_dias = date.today() - timedelta(days=90)
+    item_ids = [item.id for item in items]
+
+    # Obtener usos en una sola query
+    usos_query = db.session.query(
+        UsoInventario.item_id,
+        func.coalesce(func.sum(UsoInventario.cantidad_usada), 0).label('total_usos')
+    ).filter(
+        UsoInventario.item_id.in_(item_ids),
+        UsoInventario.fecha_uso >= fecha_90_dias
+    ).group_by(UsoInventario.item_id).all()
+    usos_dict = {u.item_id: float(u.total_usos) for u in usos_query}
+
+    # Obtener movimientos en una sola query
+    movimientos_query = db.session.query(
+        MovimientoInventario.item_id,
+        func.max(MovimientoInventario.fecha).label('ultima_fecha')
+    ).filter(
+        MovimientoInventario.item_id.in_(item_ids)
+    ).group_by(MovimientoInventario.item_id).all()
+    movimientos_dict = {m.item_id: m.ultima_fecha for m in movimientos_query}
+
     items_data = []
     valor_total_ars = 0
     valor_total_usd = 0
     items_criticos = 0
     items_sin_movimiento = 0
-    fecha_90_dias = date.today() - timedelta(days=90)
 
     for item in items:
         stock = float(item.stock_actual or 0)
@@ -1151,23 +1204,15 @@ def exportar_inventario_pdf():
         if necesita_reposicion:
             items_criticos += 1
 
-        usos_90_dias = db.session.query(
-            func.coalesce(func.sum(UsoInventario.cantidad_usada), 0)
-        ).filter(
-            UsoInventario.item_id == item.id,
-            UsoInventario.fecha_uso >= fecha_90_dias
-        ).scalar() or 0
+        # Usar diccionarios en lugar de queries
+        usos_90_dias = usos_dict.get(item.id, 0)
 
-        if stock > 0 and float(usos_90_dias) > 0:
-            rotacion = (float(usos_90_dias) / stock) * 4
+        if stock > 0 and usos_90_dias > 0:
+            rotacion = (usos_90_dias / stock) * 4
         else:
             rotacion = 0
 
-        ultimo_movimiento = db.session.query(
-            func.max(MovimientoInventario.fecha)
-        ).filter(
-            MovimientoInventario.item_id == item.id
-        ).scalar()
+        ultimo_movimiento = movimientos_dict.get(item.id)
 
         dias_sin_movimiento = None
         if ultimo_movimiento:
@@ -1185,7 +1230,7 @@ def exportar_inventario_pdf():
             'precio_usd': precio_usd,
             'valor_ars': valor_ars,
             'valor_usd': valor_usd,
-            'usos_90_dias': float(usos_90_dias),
+            'usos_90_dias': usos_90_dias,
             'rotacion': rotacion,
             'dias_sin_movimiento': dias_sin_movimiento,
             'necesita_reposicion': necesita_reposicion,
