@@ -321,7 +321,7 @@ def crear():
         # Verificar límite de usuarios por organización
         membership = get_current_membership()
         if membership:
-            puede_agregar, mensaje_limite = verificar_limite_usuarios(membership.organizacion_id)
+            puede_agregar, mensaje_limite = verificar_limite_usuarios(membership.org_id)
             if not puede_agregar:
                 flash(mensaje_limite, 'danger')
                 return render_template('equipos/crear.html', roles=ROLES_DISPONIBLES)
@@ -589,7 +589,7 @@ def rendimiento():
         flash('No tienes una organización asignada.', 'warning')
         return redirect(url_for('reportes.dashboard'))
 
-    org_id = membership.organizacion_id
+    org_id = membership.org_id
 
     # Obtener usuarios de la misma organización (filtrado por membresía)
     usuarios_ids = db.session.query(OrgMembership.user_id).filter(
@@ -686,7 +686,7 @@ def usuarios_crear():
     # Verificar límite de usuarios por organización
     membership = get_current_membership()
     if membership:
-        puede_agregar, mensaje_limite = verificar_limite_usuarios(membership.organizacion_id)
+        puede_agregar, mensaje_limite = verificar_limite_usuarios(membership.org_id)
         if not puede_agregar:
             return jsonify(ok=False, error=mensaje_limite), 400
 
