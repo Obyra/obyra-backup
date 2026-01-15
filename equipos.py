@@ -668,11 +668,27 @@ def usuarios_listar():
     if current_user.role not in ['admin', 'pm']:
         flash('No tienes permisos para gestionar usuarios.', 'danger')
         return redirect(url_for('reportes.dashboard'))
-    
+
+    # Obtener la membresía actual para filtrar por organización correcta
+    membership = get_current_membership()
+    if not membership:
+        flash('No tienes una organización asignada.', 'warning')
+        return redirect(url_for('reportes.dashboard'))
+
+    org_id = membership.org_id
+
+    # Obtener usuarios que tienen membresía activa en esta organización
+    usuarios_ids = db.session.query(OrgMembership.user_id).filter(
+        OrgMembership.org_id == org_id,
+        OrgMembership.status == 'active',
+        db.or_(OrgMembership.archived.is_(False), OrgMembership.archived.is_(None))
+    ).subquery()
+
     users = Usuario.query.filter(
-        Usuario.organizacion_id == current_user.organizacion_id,
-        Usuario.is_super_admin.is_(False)  # Excluir super administradores del sistema
-    ).order_by(Usuario.id.desc()).all()
+        Usuario.id.in_(usuarios_ids),
+        Usuario.is_super_admin.is_(False)
+    ).order_by(Usuario.nombre, Usuario.apellido).all()
+
     return render_template('equipo/usuarios.html', users=users)
 
 @equipos_bp.route('/usuarios', methods=['POST'])
