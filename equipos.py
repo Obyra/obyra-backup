@@ -82,7 +82,7 @@ def contar_usuarios_organizacion(org_id):
         return 0
 
     return OrgMembership.query.filter(
-        OrgMembership.organizacion_id == org_id,
+        OrgMembership.org_id == org_id,
         OrgMembership.status == 'active'
     ).count()
 
@@ -592,8 +592,8 @@ def rendimiento():
     org_id = membership.organizacion_id
 
     # Obtener usuarios de la misma organización (filtrado por membresía)
-    usuarios_ids = db.session.query(OrgMembership.usuario_id).filter(
-        OrgMembership.organizacion_id == org_id,
+    usuarios_ids = db.session.query(OrgMembership.user_id).filter(
+        OrgMembership.org_id == org_id,
         OrgMembership.status == 'active'
     ).subquery()
 
