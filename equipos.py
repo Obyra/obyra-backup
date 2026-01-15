@@ -577,6 +577,8 @@ def toggle_activo(id):
 @equipos_bp.route('/rendimiento')
 @login_required
 def rendimiento():
+    from datetime import datetime
+
     if current_user.role not in ['admin', 'pm', 'tecnico']:
         flash('No tienes permisos para ver reportes de rendimiento.', 'danger')
         return redirect(url_for('equipos.lista'))
@@ -598,44 +600,61 @@ def rendimiento():
     usuarios = Usuario.query.filter(
         Usuario.id.in_(usuarios_ids),
         Usuario.activo == True,
-        Usuario.is_super_admin.is_(False)  # Excluir super administradores del sistema
+        Usuario.is_super_admin.is_(False)
     ).all()
-    
+
     estadisticas = []
+    inicio_mes = datetime.now().replace(day=1)
+
     for usuario in usuarios:
-        # Horas totales trabajadas
-        total_horas = db.session.query(db.func.sum(RegistroTiempo.horas_trabajadas)).filter_by(usuario_id=usuario.id).scalar() or 0
-        
-        # Obras activas
-        obras_activas = usuario.obras_asignadas.join(Obra).filter(
-            AsignacionObra.activo == True,
-            Obra.estado.in_(['planificacion', 'en_curso'])
-        ).count()
-        
-        # Obras completadas
-        obras_completadas = usuario.obras_asignadas.join(Obra).filter(
-            Obra.estado == 'finalizada'
-        ).count()
-        
-        # Tareas completadas (este mes)
-        from datetime import datetime, timedelta
-        inicio_mes = datetime.now().replace(day=1)
-        tareas_mes = db.session.query(db.func.count(RegistroTiempo.id)).filter(
-            RegistroTiempo.usuario_id == usuario.id,
-            RegistroTiempo.fecha >= inicio_mes.date()
-        ).scalar() or 0
-        
-        estadisticas.append({
-            'usuario': usuario,
-            'total_horas': float(total_horas),
-            'obras_activas': obras_activas,
-            'obras_completadas': obras_completadas,
-            'tareas_mes': tareas_mes
-        })
-    
+        try:
+            # Horas totales trabajadas
+            total_horas = db.session.query(
+                func.coalesce(func.sum(RegistroTiempo.horas_trabajadas), 0)
+            ).filter(
+                RegistroTiempo.usuario_id == usuario.id
+            ).scalar() or 0
+
+            # Obras activas - query directa en lugar de usar relationship
+            obras_activas = db.session.query(func.count(AsignacionObra.id)).join(Obra).filter(
+                AsignacionObra.usuario_id == usuario.id,
+                AsignacionObra.activo == True,
+                Obra.estado.in_(['planificacion', 'en_curso'])
+            ).scalar() or 0
+
+            # Obras completadas
+            obras_completadas = db.session.query(func.count(AsignacionObra.id)).join(Obra).filter(
+                AsignacionObra.usuario_id == usuario.id,
+                Obra.estado == 'finalizada'
+            ).scalar() or 0
+
+            # Registros este mes
+            tareas_mes = db.session.query(func.count(RegistroTiempo.id)).filter(
+                RegistroTiempo.usuario_id == usuario.id,
+                RegistroTiempo.fecha >= inicio_mes.date()
+            ).scalar() or 0
+
+            estadisticas.append({
+                'usuario': usuario,
+                'total_horas': float(total_horas),
+                'obras_activas': obras_activas,
+                'obras_completadas': obras_completadas,
+                'tareas_mes': tareas_mes
+            })
+        except Exception as e:
+            # Si hay error con un usuario, continuar con los demás
+            print(f"[WARN] Error procesando usuario {usuario.id}: {e}")
+            estadisticas.append({
+                'usuario': usuario,
+                'total_horas': 0,
+                'obras_activas': 0,
+                'obras_completadas': 0,
+                'tareas_mes': 0
+            })
+
     # Ordenar por horas trabajadas
     estadisticas.sort(key=lambda x: x['total_horas'], reverse=True)
-    
+
     return render_template('equipos/rendimiento.html', estadisticas=estadisticas)
 
 
