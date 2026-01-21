@@ -1,0 +1,780 @@
+/* ============================================
+   LANDING PAGE - ESTILOS EXCLUSIVOS
+   Solo se carga en la landing pública (home.html)
+   No afecta la aplicación interna
+   ============================================ */
+
+/* Header Sticky de Navegación */
+.landing-sticky-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(26, 55, 77, 0.97);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 0.75rem 0;
+    z-index: 1050;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+    border-bottom: 2px solid #4CAF50;
+}
+
+.landing-sticky-nav.visible {
+    transform: translateY(0);
+}
+
+.landing-nav-brand {
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: #fff;
+    text-decoration: none;
+    letter-spacing: 1px;
+}
+
+.landing-nav-brand:hover {
+    color: #7CFC00;
+}
+
+.landing-nav-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 2rem;
+}
+
+.landing-nav-links a {
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: color 0.2s ease;
+}
+
+.landing-nav-links a:hover {
+    color: #7CFC00;
+}
+
+.btn-cta-nav {
+    background: #25D366;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    padding: 0.5rem 1rem;
+    border-radius: 30px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-cta-nav:hover {
+    background: #1da851;
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+/* Vista PWA - Solo Login */
+.pwa-login-container {
+    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.pwa-login-container .login-card {
+    border-radius: 16px;
+}
+
+.pwa-login-container .card-header-custom {
+    border-radius: 16px 16px 0 0;
+}
+
+.pwa-login-container .btn-outline-secondary {
+    border-color: #d4d4d4;
+    border-left: none;
+}
+
+/* Hero Section - Mejorado */
+.landing-hero {
+    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+    position: relative;
+    overflow: hidden;
+    padding: 4rem 0 5rem;
+}
+
+.landing-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" patternUnits="userSpaceOnUse" width="25" height="25"><path d="M 25 0 L 0 0 0 25" fill="none" stroke="rgba(76,175,80,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>') repeat;
+    pointer-events: none;
+}
+
+.hero-badge {
+    display: inline-block;
+    background: rgba(76, 175, 80, 0.2);
+    color: #7CFC00;
+    padding: 0.5rem 1.25rem;
+    border-radius: 30px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    text-transform: uppercase;
+}
+
+.hero-title {
+    font-size: clamp(1.75rem, 5vw, 2.75rem);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+}
+
+.hero-subtitle {
+    font-size: clamp(1rem, 2.5vw, 1.125rem);
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.7;
+    max-width: 540px;
+}
+
+.text-yellow {
+    color: #7CFC00 !important;
+}
+
+.text-white-75 {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+/* CTA Principal - Destacado */
+.hero-cta-primary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.btn-cta-main {
+    background: linear-gradient(135deg, #25D366 0%, #1da851 100%);
+    color: #ffffff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 30px;
+    font-size: 1rem;
+    box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-cta-main:hover {
+    background: linear-gradient(135deg, #1da851 0%, #25D366 100%);
+    color: #ffffff;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 25px rgba(37, 211, 102, 0.5);
+}
+
+.cta-helper {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    padding-left: 0.5rem;
+}
+
+/* CTAs Secundarios */
+.hero-cta-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.btn-secondary-cta {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: 30px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary-cta:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #4CAF50;
+    color: #7CFC00;
+}
+
+.btn-tertiary-cta {
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+    font-size: 0.875rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: 30px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-tertiary-cta:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+}
+
+/* Legacy button styles (mantener compatibilidad) */
+.btn-yellow {
+    background: #4CAF50;
+    color: #ffffff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 30px;
+}
+
+.btn-yellow:hover {
+    background: #45a049;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+}
+
+.btn-outline-light {
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 30px;
+}
+
+.btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #4CAF50;
+    color: #7CFC00;
+}
+
+.btn-whatsapp {
+    background: #25D366;
+    color: #ffffff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 30px;
+}
+
+.btn-whatsapp:hover {
+    background: #128C7E;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4);
+}
+
+/* Login Card */
+.login-card {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.card-header-custom {
+    background: #1A374D;
+    color: #fff;
+    padding: 1.25rem;
+    border-bottom: 3px solid #4CAF50;
+}
+
+.card-header-custom h2 {
+    color: #fff;
+    letter-spacing: 1px;
+}
+
+.login-card .form-label {
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: #4a4a4a;
+    letter-spacing: 0.5px;
+}
+
+.login-card .input-group-text {
+    background: #f5f5f5;
+    border: 2px solid #d4d4d4;
+    border-right: none;
+    color: #6b6b6b;
+}
+
+.login-card .form-control {
+    border: 2px solid #d4d4d4;
+    border-left: none;
+    padding: 0.625rem 0.875rem;
+}
+
+.login-card .form-control:focus {
+    border-color: #4CAF50;
+    box-shadow: none;
+}
+
+.login-card .input-group:focus-within .input-group-text {
+    border-color: #4CAF50;
+}
+
+.login-card .form-check-input:checked {
+    background-color: #4CAF50;
+    border-color: #4CAF50;
+}
+
+.auth-link {
+    color: #6b6b6b;
+    text-decoration: none;
+}
+
+.auth-link:hover {
+    color: #4CAF50;
+}
+
+.divider-text {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #8a8a8a;
+    font-size: 0.8125rem;
+}
+
+.divider-text::before,
+.divider-text::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #d4d4d4;
+}
+
+.divider-text span {
+    padding: 0 1rem;
+}
+
+.btn-google {
+    background: #fff;
+    border: 2px solid #d4d4d4;
+    color: #4a4a4a;
+    font-weight: 600;
+    border-radius: 30px;
+}
+
+.btn-google:hover {
+    background: #f5f5f5;
+    border-color: #b0b0b0;
+}
+
+/* ============================================
+   SECCIONES DE LANDING
+   ============================================ */
+
+/* Header de secciones */
+.section-header {
+    margin-bottom: 3rem;
+}
+
+.section-title {
+    font-weight: 700;
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    color: #1A374D;
+    letter-spacing: -0.25px;
+    margin-bottom: 0.75rem;
+}
+
+.section-subtitle {
+    font-size: 1.0625rem;
+    color: #6b6b6b;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* Features Section */
+.landing-features {
+    background: #f5f7fa;
+    padding: 5rem 0;
+}
+
+.feature-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 2.25rem 1.75rem;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border-top: 3px solid #4CAF50;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.feature-icon {
+    width: 72px;
+    height: 72px;
+    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+}
+
+.feature-icon i {
+    font-size: 1.75rem;
+    color: #4CAF50;
+}
+
+.feature-title {
+    color: #1A374D;
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: 0.25px;
+    margin-bottom: 0.875rem;
+}
+
+.feature-description {
+    color: #6b6b6b;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    margin-bottom: 0;
+}
+
+/* Cómo Funciona Section */
+.landing-how-it-works {
+    background: #fff;
+    padding: 5rem 0;
+}
+
+.step-card {
+    text-align: center;
+    padding: 2rem 1.5rem;
+    position: relative;
+}
+
+.step-number {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 32px;
+    background: #4CAF50;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.875rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.step-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, rgba(26, 55, 77, 0.08) 0%, rgba(45, 90, 123, 0.08) 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 1.5rem auto 1.25rem;
+    border: 2px solid rgba(76, 175, 80, 0.2);
+}
+
+.step-icon i {
+    font-size: 2rem;
+    color: #1A374D;
+}
+
+.step-title {
+    color: #1A374D;
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+}
+
+.step-description {
+    color: #6b6b6b;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    margin-bottom: 0;
+}
+
+/* FAQ Section */
+.landing-faq {
+    background: #f5f7fa;
+    padding: 5rem 0;
+}
+
+.landing-faq .accordion-item {
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px !important;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.landing-faq .accordion-button {
+    font-weight: 600;
+    font-size: 0.9375rem;
+    color: #1A374D;
+    background: #fff;
+    padding: 1.125rem 1.25rem;
+    text-transform: none;
+}
+
+.landing-faq .accordion-button:not(.collapsed) {
+    color: #fff;
+    background: #1A374D;
+    box-shadow: none;
+}
+
+.landing-faq .accordion-button:focus {
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.25);
+}
+
+.landing-faq .accordion-button::after {
+    background-size: 1rem;
+}
+
+.landing-faq .accordion-button:not(.collapsed)::after {
+    filter: brightness(0) invert(1);
+}
+
+.landing-faq .accordion-body {
+    padding: 1.25rem;
+    color: #4a4a4a;
+    font-size: 0.9375rem;
+    line-height: 1.7;
+}
+
+/* Botón Instalar App */
+.btn-install-app {
+    background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+    color: #fff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    padding: 0.875rem 1.5rem;
+    border-radius: 30px;
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+    animation: pulse-install 2s infinite;
+}
+
+.btn-install-app:hover {
+    background: linear-gradient(135deg, #F7931E 0%, #FF6B35 100%);
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.5);
+}
+
+@keyframes pulse-install {
+    0%, 100% { box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4); }
+    50% { box-shadow: 0 4px 25px rgba(255, 107, 53, 0.6); }
+}
+
+/* iOS Install Banner */
+.ios-install-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
+    color: #fff;
+    padding: 1rem;
+    z-index: 9999;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    border-top: 3px solid #4CAF50;
+}
+
+.ios-install-banner .close-banner {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.25rem;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.ios-install-banner .close-banner:hover {
+    opacity: 1;
+}
+
+/* ============================================
+   RESPONSIVE - Mobile First Approach
+   ============================================ */
+
+/* Tablet y menor */
+@media (max-width: 991px) {
+    .landing-hero {
+        text-align: center;
+        padding: 3rem 0 4rem;
+    }
+
+    .hero-subtitle {
+        max-width: 100%;
+        margin: 0 auto 1.5rem;
+    }
+
+    .hero-cta-primary {
+        align-items: center;
+    }
+
+    .hero-cta-secondary {
+        justify-content: center;
+    }
+
+    .landing-sticky-nav {
+        padding: 0.625rem 0;
+    }
+
+    .btn-cta-nav {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.875rem;
+    }
+
+    .section-header {
+        margin-bottom: 2.5rem;
+    }
+
+    .landing-features,
+    .landing-how-it-works,
+    .landing-faq {
+        padding: 4rem 0;
+    }
+}
+
+/* Mobile */
+@media (max-width: 576px) {
+    .landing-hero {
+        padding: 2.5rem 0 3rem;
+    }
+
+    .hero-badge {
+        font-size: 0.625rem;
+        padding: 0.4rem 1rem;
+    }
+
+    .btn-cta-main {
+        width: 100%;
+        justify-content: center;
+        padding: 0.875rem 1.5rem;
+        font-size: 0.9375rem;
+    }
+
+    .btn-secondary-cta,
+    .btn-tertiary-cta {
+        width: 100%;
+        text-align: center;
+        justify-content: center;
+    }
+
+    .cta-helper {
+        text-align: center;
+        display: block;
+        padding-left: 0;
+    }
+
+    .feature-card {
+        padding: 1.75rem 1.25rem;
+    }
+
+    .step-card {
+        padding: 1.5rem 1rem;
+    }
+
+    .step-icon {
+        width: 70px;
+        height: 70px;
+    }
+
+    .step-icon i {
+        font-size: 1.75rem;
+    }
+
+    .landing-features,
+    .landing-how-it-works,
+    .landing-faq {
+        padding: 3rem 0;
+    }
+
+    .landing-faq .accordion-button {
+        font-size: 0.875rem;
+        padding: 1rem;
+    }
+
+    .landing-faq .accordion-body {
+        padding: 1rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* Mobile pequeño (320px - 375px) */
+@media (max-width: 375px) {
+    .landing-hero {
+        padding: 2rem 0 2.5rem;
+    }
+
+    .hero-badge {
+        font-size: 0.5625rem;
+    }
+
+    .hero-title {
+        font-size: 1.5rem;
+    }
+
+    .hero-subtitle {
+        font-size: 0.9375rem;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+    }
+
+    .section-subtitle {
+        font-size: 0.9375rem;
+    }
+}
+
+/* ============================================
+   ACCESIBILIDAD - Solo Landing
+   ============================================ */
+
+/* Focus states visibles */
+.landing-hero a:focus-visible,
+.landing-sticky-nav a:focus-visible,
+.landing-features a:focus-visible,
+.landing-how-it-works a:focus-visible,
+.landing-faq .accordion-button:focus-visible {
+    outline: 3px solid #7CFC00;
+    outline-offset: 2px;
+}
+
+/* Reducir movimiento */
+@media (prefers-reduced-motion: reduce) {
+    .landing-sticky-nav,
+    .feature-card,
+    .btn-cta-main,
+    .btn-install-app {
+        transition: none;
+        animation: none;
+    }
+}

@@ -1,8 +1,86 @@
 {% extends "base.html" %}
 
-{% block title %}Bienvenido a OBYRA IA{% endblock %}
+{% block title %}OBYRA - Software de Gestión para Constructoras y Obras | Argentina{% endblock %}
+
+{% block extra_head %}
+<!-- SEO Meta Tags - Solo Landing -->
+<meta name="description" content="OBYRA es el software de gestión para constructoras en Argentina. Controla presupuestos, equipos, inventario y compras de obra desde una sola plataforma con IA. Pedí tu demo gratis.">
+<meta name="keywords" content="software construcción Argentina, gestión de obras, presupuestos constructoras, control inventario obra, software constructoras LATAM">
+<meta name="author" content="OBYRA">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://www.obyra.com.ar/">
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.obyra.com.ar/">
+<meta property="og:title" content="OBYRA - Software de Gestión para Constructoras y Obras">
+<meta property="og:description" content="Controla presupuestos, equipos, inventario y compras de tu obra desde una sola plataforma con inteligencia artificial. Probá gratis.">
+<meta property="og:image" content="{{ url_for('static', filename='icons/og-image.png', _external=True) }}">
+<meta property="og:locale" content="es_AR">
+<meta property="og:site_name" content="OBYRA">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OBYRA - Software de Gestión para Constructoras y Obras">
+<meta name="twitter:description" content="Software de gestión para constructoras y obras. Controla presupuestos, equipos e inventario.">
+<meta name="twitter:image" content="{{ url_for('static', filename='icons/og-image.png', _external=True) }}">
+
+<!-- Schema.org JSON-LD - Solo Landing -->
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "OBYRA IA",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web, iOS, Android",
+    "description": "Software de gestión para constructoras y obras. Control de presupuestos, equipos, inventario y compras con inteligencia artificial.",
+    "url": "https://www.obyra.com.ar",
+    "author": {
+        "@type": "Organization",
+        "name": "OBYRA",
+        "url": "https://www.obyra.com.ar"
+    },
+    "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "ARS",
+        "description": "Prueba gratuita disponible"
+    }
+}
+</script>
+
+<!-- Preload Critical Resources - Solo Landing -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<!-- Landing CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v=1.0">
+{% endblock %}
 
 {% block content %}
+<!-- Header Sticky de Navegación - Solo visible en landing web -->
+<nav id="landing-nav" class="landing-sticky-nav d-none" role="navigation" aria-label="Navegación principal">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="#" class="landing-nav-brand" aria-label="OBYRA - Inicio">
+                <i class="fas fa-building me-2"></i>OBYRA
+            </a>
+            <ul class="landing-nav-links d-none d-md-flex">
+                <li><a href="#features-section" aria-label="Ver características">Características</a></li>
+                <li><a href="#como-funciona" aria-label="Cómo funciona OBYRA">Cómo Funciona</a></li>
+                <li><a href="#faq-section" aria-label="Preguntas frecuentes">FAQ</a></li>
+            </ul>
+            <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="btn btn-cta-nav"
+               aria-label="Pedir demo por WhatsApp">
+                <i class="fab fa-whatsapp me-1"></i>Pedir Demo
+            </a>
+        </div>
+    </div>
+</nav>
+
 <!-- Vista PWA (solo login) - se muestra cuando está instalada como app -->
 <div id="pwa-login-view" class="pwa-login-container d-none">
     <div class="container">
@@ -75,29 +153,40 @@
 </div>
 
 <!-- Vista Web (landing completa) - se muestra en navegador normal -->
-<div id="web-landing-view" class="landing-hero py-5">
+<div id="web-landing-view" class="landing-hero">
     <div class="container">
-        <div class="row align-items-center g-5">
+        <div class="row align-items-center g-4 g-lg-5">
             <div class="col-lg-7">
                 <div class="hero-badge mb-3">
-                    <i class="fas fa-hard-hat me-2"></i>PLATAFORMA DE GESTION
+                    <i class="fas fa-hard-hat me-2" aria-hidden="true"></i>PLATAFORMA DE GESTIÓN PARA CONSTRUCTORAS
                 </div>
-                <h1 class="display-4 fw-bold text-white mb-3">
-                    Gestiona tus <span class="text-yellow">obras</span> con inteligencia
+                <h1 class="hero-title text-white mb-4">
+                    Gestiona tus <span class="text-yellow">obras</span> con inteligencia artificial
                 </h1>
-                <p class="lead text-white-75 mb-4">
-                    Centraliza proyectos, coordina equipos y automatiza tareas desde una sola plataforma.
-                    Ingresa con tu cuenta de OBYRA IA o accede al portal dedicado para proveedores.
+                <p class="hero-subtitle mb-4">
+                    Centraliza presupuestos, coordina equipos, controla inventario y automatiza compras desde una sola plataforma.
+                    Más de 50 constructoras ya optimizan sus obras con OBYRA.
                 </p>
-                <div class="d-flex flex-wrap gap-3">
-                    <a href="{{ url_for('auth.register') }}" class="btn btn-yellow btn-lg">
-                        <i class="fas fa-user-plus me-2"></i>CREAR CUENTA
+
+                <!-- CTA Principal destacado -->
+                <div class="hero-cta-primary mb-3">
+                    <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="btn btn-cta-main btn-lg"
+                       aria-label="Reservar demo gratuita por WhatsApp">
+                        <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>PEDIR DEMO GRATIS
                     </a>
-                    <a href="{{ url_for('supplier_auth.login') }}" class="btn btn-outline-light btn-lg">
-                        <i class="fas fa-store me-2"></i>PORTAL PROVEEDORES
+                    <span class="cta-helper">Sin compromiso - Respuesta en menos de 24hs</span>
+                </div>
+
+                <!-- CTAs Secundarios -->
+                <div class="hero-cta-secondary">
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-secondary-cta" aria-label="Crear cuenta gratis">
+                        <i class="fas fa-user-plus me-2" aria-hidden="true"></i>Crear Cuenta
                     </a>
-                    <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA" target="_blank" class="btn btn-whatsapp btn-lg">
-                        <i class="fab fa-whatsapp me-2"></i>RESERVA TU DEMO
+                    <a href="{{ url_for('supplier_auth.login') }}" class="btn btn-tertiary-cta" aria-label="Acceder al portal de proveedores">
+                        <i class="fas fa-store me-2" aria-hidden="true"></i>Portal Proveedores
                     </a>
                 </div>
                 <!-- Botón Instalar App PWA -->
@@ -184,389 +273,172 @@
     </div>
 </div>
 
-<section id="features-section" class="landing-features py-5">
+<!-- Sección Características -->
+<section id="features-section" class="landing-features" aria-labelledby="features-title">
     <div class="container">
-        <div class="text-center mb-5">
-            <h2 class="section-title">POR QUE ELEGIR <span class="text-yellow">OBYRA</span></h2>
-            <p class="text-muted">Herramientas profesionales para la industria de la construccion</p>
-        </div>
+        <header class="section-header text-center">
+            <h2 id="features-title" class="section-title">Por qué elegir <span class="text-yellow">OBYRA</span></h2>
+            <p class="section-subtitle">Herramientas profesionales diseñadas para la industria de la construcción</p>
+        </header>
         <div class="row g-4">
             <div class="col-md-4">
-                <div class="feature-card h-100">
-                    <div class="feature-icon">
+                <article class="feature-card h-100">
+                    <div class="feature-icon" aria-hidden="true">
                         <i class="fas fa-chart-line"></i>
                     </div>
-                    <h3 class="h5 fw-bold">VISIBILIDAD TOTAL</h3>
-                    <p class="text-muted mb-0">Monitorea el avance de cada obra, controla presupuestos y detecta desvios en tiempo real.</p>
-                </div>
+                    <h3 class="feature-title">Visibilidad Total</h3>
+                    <p class="feature-description">Monitorea el avance de cada obra, controla presupuestos y detecta desvíos en tiempo real desde cualquier dispositivo.</p>
+                </article>
             </div>
             <div class="col-md-4">
-                <div class="feature-card h-100">
-                    <div class="feature-icon">
+                <article class="feature-card h-100">
+                    <div class="feature-icon" aria-hidden="true">
                         <i class="fas fa-users-cog"></i>
                     </div>
-                    <h3 class="h5 fw-bold">COLABORACION AGIL</h3>
-                    <p class="text-muted mb-0">Coordina equipos, asigna tareas y comparte documentacion con un flujo de trabajo integrado.</p>
-                </div>
+                    <h3 class="feature-title">Colaboración Ágil</h3>
+                    <p class="feature-description">Coordina equipos en obra y oficina, asigna tareas y comparte documentación con un flujo de trabajo integrado.</p>
+                </article>
             </div>
             <div class="col-md-4">
-                <div class="feature-card h-100">
-                    <div class="feature-icon">
+                <article class="feature-card h-100">
+                    <div class="feature-icon" aria-hidden="true">
                         <i class="fas fa-robot"></i>
                     </div>
-                    <h3 class="h5 fw-bold">AUTOMATIZACION IA</h3>
-                    <p class="text-muted mb-0">Aprovecha asistentes y reportes inteligentes para tomar decisiones basadas en datos.</p>
+                    <h3 class="feature-title">Automatización IA</h3>
+                    <p class="feature-description">Aprovecha asistentes inteligentes para presupuestos, análisis de costos y reportes que te ayudan a tomar mejores decisiones.</p>
+                </article>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Sección Cómo Funciona -->
+<section id="como-funciona" class="landing-how-it-works" aria-labelledby="como-funciona-title">
+    <div class="container">
+        <header class="section-header text-center">
+            <h2 id="como-funciona-title" class="section-title">Cómo funciona <span class="text-yellow">OBYRA</span></h2>
+            <p class="section-subtitle">Empezá a optimizar tus obras en 3 simples pasos</p>
+        </header>
+        <div class="row g-4 justify-content-center">
+            <div class="col-md-4">
+                <article class="step-card">
+                    <div class="step-number" aria-hidden="true">1</div>
+                    <div class="step-icon" aria-hidden="true">
+                        <i class="fas fa-user-plus"></i>
+                    </div>
+                    <h3 class="step-title">Creá tu cuenta</h3>
+                    <p class="step-description">Registrate gratis y configurá tu organización en menos de 5 minutos. Sin tarjeta de crédito.</p>
+                </article>
+            </div>
+            <div class="col-md-4">
+                <article class="step-card">
+                    <div class="step-number" aria-hidden="true">2</div>
+                    <div class="step-icon" aria-hidden="true">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <h3 class="step-title">Cargá tus obras</h3>
+                    <p class="step-description">Agregá tus proyectos activos, invitá a tu equipo y empezá a centralizar toda la información.</p>
+                </article>
+            </div>
+            <div class="col-md-4">
+                <article class="step-card">
+                    <div class="step-number" aria-hidden="true">3</div>
+                    <div class="step-icon" aria-hidden="true">
+                        <i class="fas fa-rocket"></i>
+                    </div>
+                    <h3 class="step-title">Optimizá tu gestión</h3>
+                    <p class="step-description">Controlá presupuestos, gestioná compras y tomá decisiones con datos en tiempo real.</p>
+                </article>
+            </div>
+        </div>
+        <div class="text-center mt-5">
+            <a href="https://wa.me/5491173685175?text=Hola! Me interesa reservar una demo de OBYRA"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="btn btn-cta-main btn-lg"
+               aria-label="Agendar demo personalizada por WhatsApp">
+                <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>Agendá tu Demo Personalizada
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Sección FAQ -->
+<section id="faq-section" class="landing-faq" aria-labelledby="faq-title">
+    <div class="container">
+        <header class="section-header text-center">
+            <h2 id="faq-title" class="section-title">Preguntas <span class="text-yellow">Frecuentes</span></h2>
+            <p class="section-subtitle">Respondemos las dudas más comunes sobre OBYRA</p>
+        </header>
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="accordion" id="faqAccordion">
+                    <div class="accordion-item">
+                        <h3 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1" aria-expanded="true" aria-controls="faq1">
+                                ¿Qué tipo de empresas pueden usar OBYRA?
+                            </button>
+                        </h3>
+                        <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                OBYRA está diseñado para constructoras, empresas de arquitectura, contratistas y cualquier organización que gestione obras de construcción. Funciona tanto para empresas pequeñas con 2-3 obras como para constructoras con múltiples proyectos simultáneos.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h3 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2" aria-expanded="false" aria-controls="faq2">
+                                ¿Cuánto cuesta OBYRA?
+                            </button>
+                        </h3>
+                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Ofrecemos una prueba gratuita de 14 días sin necesidad de tarjeta de crédito. Después, tenemos planes flexibles que se adaptan al tamaño de tu empresa y cantidad de obras. Pedí una demo para conocer el plan ideal para vos.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h3 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3" aria-expanded="false" aria-controls="faq3">
+                                ¿Puedo usarlo desde el celular en la obra?
+                            </button>
+                        </h3>
+                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Sí, OBYRA es una aplicación web progresiva (PWA) que podés instalar en tu celular y usar como una app nativa. Funciona en Android y iOS, y tiene modo offline para cuando no tenés conexión en la obra.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h3 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4" aria-expanded="false" aria-controls="faq4">
+                                ¿Cómo funciona la inteligencia artificial?
+                            </button>
+                        </h3>
+                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Nuestra IA te ayuda a generar presupuestos más rápido, analizar costos históricos, detectar desvíos y generar reportes automáticos. No reemplaza tu criterio profesional, sino que te da herramientas para tomar mejores decisiones más rápido.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h3 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5" aria-expanded="false" aria-controls="faq5">
+                                ¿Mis datos están seguros?
+                            </button>
+                        </h3>
+                        <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Absolutamente. Usamos encriptación de nivel bancario, servidores seguros y backups automáticos diarios. Tus datos son 100% privados y nunca los compartimos con terceros. Cumplimos con las normativas de protección de datos de Argentina.
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </section>
 
-<style>
-/* Vista PWA - Solo Login */
-.pwa-login-container {
-    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
-    min-height: 100vh;
-    padding: 2rem 1rem;
-    display: flex;
-    align-items: center;
-}
-
-.pwa-login-container .login-card {
-    border-radius: 16px;
-}
-
-.pwa-login-container .card-header-custom {
-    border-radius: 16px 16px 0 0;
-}
-
-.pwa-login-container .btn-outline-secondary {
-    border-color: #d4d4d4;
-    border-left: none;
-}
-
-/* Hero Section - Estilo Landing Page */
-.landing-hero {
-    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
-    position: relative;
-    overflow: hidden;
-}
-
-.landing-hero::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" patternUnits="userSpaceOnUse" width="25" height="25"><path d="M 25 0 L 0 0 0 25" fill="none" stroke="rgba(76,175,80,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>') repeat;
-    pointer-events: none;
-}
-
-.hero-badge {
-    display: inline-block;
-    background: rgba(76, 175, 80, 0.2);
-    color: #7CFC00;
-    padding: 0.5rem 1rem;
-    border-radius: 30px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    border: 1px solid rgba(76, 175, 80, 0.3);
-}
-
-.text-yellow {
-    color: #7CFC00 !important;
-}
-
-.text-white-75 {
-    color: rgba(255, 255, 255, 0.75);
-}
-
-/* Boton Verde Accent */
-.btn-yellow {
-    background: #4CAF50;
-    color: #ffffff;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 30px;
-}
-
-.btn-yellow:hover {
-    background: #45a049;
-    color: #ffffff;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
-}
-
-.btn-outline-light {
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    color: #fff;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-radius: 30px;
-}
-
-.btn-outline-light:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: #4CAF50;
-    color: #7CFC00;
-}
-
-/* Botón WhatsApp */
-.btn-whatsapp {
-    background: #25D366;
-    color: #ffffff;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 30px;
-}
-
-.btn-whatsapp:hover {
-    background: #128C7E;
-    color: #ffffff;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4);
-}
-
-/* Login Card */
-.login-card {
-    border-radius: 12px;
-    overflow: hidden;
-    background: #fff;
-}
-
-.card-header-custom {
-    background: #1A374D;
-    color: #fff;
-    padding: 1.25rem;
-    border-bottom: 3px solid #4CAF50;
-}
-
-.card-header-custom h2 {
-    color: #fff;
-    letter-spacing: 1px;
-}
-
-.login-card .form-label {
-    font-weight: 600;
-    font-size: 0.75rem;
-    color: #4a4a4a;
-    letter-spacing: 0.5px;
-}
-
-.login-card .input-group-text {
-    background: #f5f5f5;
-    border: 2px solid #d4d4d4;
-    border-right: none;
-    color: #6b6b6b;
-}
-
-.login-card .form-control {
-    border: 2px solid #d4d4d4;
-    border-left: none;
-    padding: 0.625rem 0.875rem;
-}
-
-.login-card .form-control:focus {
-    border-color: #4CAF50;
-    box-shadow: none;
-}
-
-.login-card .input-group:focus-within .input-group-text {
-    border-color: #4CAF50;
-}
-
-.login-card .form-check-input:checked {
-    background-color: #4CAF50;
-    border-color: #4CAF50;
-}
-
-.auth-link {
-    color: #6b6b6b;
-    text-decoration: none;
-}
-
-.auth-link:hover {
-    color: #4CAF50;
-}
-
-.divider-text {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    color: #8a8a8a;
-    font-size: 0.8125rem;
-}
-
-.divider-text::before,
-.divider-text::after {
-    content: '';
-    flex: 1;
-    border-bottom: 1px solid #d4d4d4;
-}
-
-.divider-text span {
-    padding: 0 1rem;
-}
-
-.btn-google {
-    background: #fff;
-    border: 2px solid #d4d4d4;
-    color: #4a4a4a;
-    font-weight: 600;
-    border-radius: 30px;
-}
-
-.btn-google:hover {
-    background: #f5f5f5;
-    border-color: #b0b0b0;
-}
-
-/* Features Section */
-.landing-features {
-    background: #f5f7fa;
-}
-
-.section-title {
-    font-weight: 700;
-    font-size: 1.75rem;
-    color: #1A374D;
-    letter-spacing: 1px;
-}
-
-.feature-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 2rem;
-    text-align: center;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-    border-top: 3px solid #4CAF50;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.feature-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-}
-
-.feature-icon {
-    width: 70px;
-    height: 70px;
-    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 1.25rem;
-}
-
-.feature-icon i {
-    font-size: 1.75rem;
-    color: #4CAF50;
-}
-
-.feature-card h3 {
-    color: #1A374D;
-    letter-spacing: 0.5px;
-    margin-bottom: 0.75rem;
-}
-
-/* Responsive */
-@media (max-width: 991px) {
-    .landing-hero {
-        text-align: center;
-        padding-top: 2rem;
-        padding-bottom: 3rem;
-    }
-
-    .landing-hero .d-flex {
-        justify-content: center;
-    }
-
-    .landing-hero .btn {
-        width: 100%;
-        max-width: 280px;
-    }
-
-    .hero-badge {
-        margin-bottom: 1rem;
-    }
-}
-
-@media (max-width: 576px) {
-    .landing-hero h1 {
-        font-size: 1.75rem;
-    }
-
-    .feature-card {
-        padding: 1.5rem;
-    }
-}
-
-/* Botón Instalar App */
-.btn-install-app {
-    background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-    color: #fff;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border: none;
-    padding: 0.875rem 1.5rem;
-    border-radius: 30px;
-    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
-    animation: pulse-install 2s infinite;
-}
-
-.btn-install-app:hover {
-    background: linear-gradient(135deg, #F7931E 0%, #FF6B35 100%);
-    color: #fff;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.5);
-}
-
-@keyframes pulse-install {
-    0%, 100% { box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4); }
-    50% { box-shadow: 0 4px 25px rgba(255, 107, 53, 0.6); }
-}
-
-/* iOS Install Banner */
-.ios-install-banner {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(135deg, #1A374D 0%, #2D5A7B 100%);
-    color: #fff;
-    padding: 1rem;
-    z-index: 9999;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    border-top: 3px solid #4CAF50;
-}
-
-.ios-install-banner .close-banner {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 1.25rem;
-    cursor: pointer;
-    opacity: 0.7;
-}
-
-.ios-install-banner .close-banner:hover {
-    opacity: 1;
-}
-</style>
 
 <!-- Banner de instalación para iOS -->
 <div id="ios-install-banner" class="ios-install-banner d-none">
@@ -740,6 +612,54 @@ document.addEventListener('DOMContentLoaded', () => {
         // El botón se mostrará cuando se dispare beforeinstallprompt
         console.log('PWA: Esperando prompt de instalación en Android');
     }
+
+    // ============================================
+    // Sticky Header con Scroll
+    // ============================================
+    const landingNav = document.getElementById('landing-nav');
+    const heroSection = document.getElementById('web-landing-view');
+
+    if (landingNav && heroSection && !isInstalledPWA()) {
+        const heroHeight = heroSection.offsetHeight * 0.4;
+
+        const handleScroll = () => {
+            if (window.scrollY > heroHeight) {
+                landingNav.classList.add('visible');
+                landingNav.classList.remove('d-none');
+            } else {
+                landingNav.classList.remove('visible');
+            }
+        };
+
+        // Inicialmente oculto pero listo
+        landingNav.classList.remove('d-none');
+        landingNav.style.visibility = 'visible';
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        handleScroll(); // Check inicial
+    }
+
+    // ============================================
+    // Smooth Scroll para anchors
+    // ============================================
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            const targetId = this.getAttribute('href');
+            if (targetId === '#') return;
+
+            const targetElement = document.querySelector(targetId);
+            if (targetElement) {
+                e.preventDefault();
+                const navHeight = landingNav ? landingNav.offsetHeight : 0;
+                const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - navHeight - 20;
+
+                window.scrollTo({
+                    top: targetPosition,
+                    behavior: 'smooth'
+                });
+            }
+        });
+    });
 });
 </script>
 {% endblock %}

@@ -1,0 +1,15 @@
+# robots.txt para OBYRA - www.obyra.com.ar
+# Generado: 2025-01
+
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /static/js/
+Disallow: /_debug/
+
+# Sitemap
+Sitemap: https://www.obyra.com.ar/sitemap.xml
+
+# Crawl-delay para ser amigable con el servidor
+Crawl-delay: 1

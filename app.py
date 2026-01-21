@@ -481,6 +481,18 @@ def offline_page():
     return render_template('offline.html')
 
 
+@app.route('/robots.txt')
+def robots_txt():
+    """Servir robots.txt para SEO."""
+    return app.send_static_file('robots.txt')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    """Servir sitemap.xml para SEO."""
+    return app.send_static_file('sitemap.xml')
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Landing principal con acceso a inicio de sesión y portal de proveedores."""
