@@ -10,6 +10,7 @@ from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpia
 from services.alertas_dashboard import obtener_alertas_para_dashboard, contar_alertas_por_severidad
 from services.memberships import get_current_org_id
 from services.obras_filters import obras_visibles_clause
+from config.cache_config import cache_query
 import io
 
 try:
@@ -84,20 +85,17 @@ def dashboard():
         Presupuesto.organizacion_id == org_id
     ).order_by(desc(Presupuesto.fecha_creacion)).limit(5).all()
 
-    # Buscar presupuestos que necesitan actualización de estado a "vencido"
-    presupuestos_expirados = Presupuesto.query.filter(
+    # Bulk update: marcar presupuestos expirados como vencidos en una sola query
+    cambios_estado = Presupuesto.query.filter(
         Presupuesto.organizacion_id == org_id,
         Presupuesto.deleted_at.is_(None),
         Presupuesto.fecha_vigencia.isnot(None),
         Presupuesto.fecha_vigencia < date.today(),
-        # Solo buscar presupuestos en estados que necesitan actualización
         Presupuesto.estado.in_(['borrador', 'enviado', 'rechazado'])
-    ).all()
-
-    cambios_estado = 0
-    for presupuesto in presupuestos_expirados:
-        presupuesto.estado = 'vencido'
-        cambios_estado += 1
+    ).update(
+        {Presupuesto.estado: 'vencido'},
+        synchronize_session=False
+    )
 
     if cambios_estado:
         db.session.commit()

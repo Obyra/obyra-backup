@@ -260,7 +260,7 @@ def usuarios_nuevo():
         # Overrides de módulos (opcional)
         if customize:
             # Esperamos checkboxes tipo modules[obras][view]=on / modules[obras][edit]=on
-            for module in ["obras","presupuestos","equipos","inventario","marketplaces","reportes","documentos"]:
+            for module in ["obras","presupuestos","equipos","inventario","marketplaces","reportes"]:
                 view = bool(request.form.get(f"modules[{module}][view]"))
                 edit = bool(request.form.get(f"modules[{module}][edit]"))
                 upsert_user_module(user.id, module, view, edit)

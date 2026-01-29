@@ -153,22 +153,19 @@ def seed_default_role_permissions():
             'equipos': {'view': True, 'edit': True},
             'inventario': {'view': True, 'edit': True},
             'marketplaces': {'view': True, 'edit': True},
-            'reportes': {'view': True, 'edit': True},
-            'documentos': {'view': True, 'edit': True}
+            'reportes': {'view': True, 'edit': True}
         },
         'tecnico': {
             'obras': {'view': True, 'edit': True},
             'presupuestos': {'view': True, 'edit': True},
             'inventario': {'view': True, 'edit': True},
             'marketplaces': {'view': True, 'edit': False},
-            'reportes': {'view': True, 'edit': False},
-            'documentos': {'view': True, 'edit': True}
+            'reportes': {'view': True, 'edit': False}
         },
         'operario': {
             'obras': {'view': True, 'edit': False},
             'inventario': {'view': True, 'edit': False},
-            'marketplaces': {'view': True, 'edit': False},
-            'documentos': {'view': True, 'edit': False}
+            'marketplaces': {'view': True, 'edit': False}
         },
         'jefe_obra': {
             'obras': {'view': True, 'edit': True},
@@ -176,8 +173,7 @@ def seed_default_role_permissions():
             'equipos': {'view': True, 'edit': False},
             'inventario': {'view': True, 'edit': True},
             'marketplaces': {'view': True, 'edit': True},
-            'reportes': {'view': True, 'edit': False},
-            'documentos': {'view': True, 'edit': True}
+            'reportes': {'view': True, 'edit': False}
         },
         'compras': {
             'inventario': {'view': True, 'edit': True},

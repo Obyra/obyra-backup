@@ -345,10 +345,10 @@ class Usuario(UserMixin, db.Model):
 
         # Permisos por defecto según role unificado
         permisos = {
-            'admin': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
-            'pm': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
-            'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'],
-            'operario': ['obras', 'inventario', 'marketplaces', 'asistente', 'documentos']
+            'admin': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'seguridad'],
+            'pm': ['obras', 'presupuestos', 'equipos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'seguridad'],
+            'tecnico': ['obras', 'presupuestos', 'inventario', 'marketplaces', 'reportes', 'asistente', 'cotizacion', 'seguridad'],
+            'operario': ['obras', 'inventario', 'marketplaces', 'asistente']
         }
 
         return modulo in permisos.get(self.role, [])

@@ -704,44 +704,44 @@ class UserService(BaseService[Usuario]):
             permisos[rol] = [
                 'obras', 'presupuestos', 'equipos', 'inventario',
                 'marketplaces', 'reportes', 'asistente', 'cotizacion',
-                'documentos', 'seguridad'
+                'seguridad'
             ]
 
         for rol in roles_tecnicos:
             permisos[rol] = [
                 'obras', 'presupuestos', 'inventario', 'marketplaces',
-                'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'
+                'reportes', 'asistente', 'cotizacion', 'seguridad'
             ]
 
         for rol in roles_supervision:
             permisos[rol] = [
                 'obras', 'inventario', 'marketplaces', 'reportes',
-                'asistente', 'documentos', 'seguridad'
+                'asistente', 'seguridad'
             ]
 
         for rol in roles_administrativos:
             permisos[rol] = [
                 'obras', 'presupuestos', 'inventario', 'marketplaces',
-                'reportes', 'cotizacion', 'documentos'
+                'reportes', 'cotizacion'
             ]
 
         for rol in roles_operativos:
             permisos[rol] = [
-                'obras', 'inventario', 'marketplaces', 'asistente', 'documentos'
+                'obras', 'inventario', 'marketplaces', 'asistente'
             ]
 
         permisos.update({
             'administrador': [
                 'obras', 'presupuestos', 'equipos', 'inventario',
                 'marketplaces', 'reportes', 'asistente', 'cotizacion',
-                'documentos', 'seguridad'
+                'seguridad'
             ],
             'tecnico': [
                 'obras', 'presupuestos', 'inventario', 'marketplaces',
-                'reportes', 'asistente', 'cotizacion', 'documentos', 'seguridad'
+                'reportes', 'asistente', 'cotizacion', 'seguridad'
             ],
             'operario': [
-                'obras', 'inventario', 'marketplaces', 'asistente', 'documentos'
+                'obras', 'inventario', 'marketplaces', 'asistente'
             ]
         })
 

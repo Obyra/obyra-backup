@@ -83,7 +83,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {% for m in ["obras","presupuestos","equipos","inventario","marketplaces","reportes","documentos"] %}
+                                            {% for m in ["obras","presupuestos","equipos","inventario","marketplaces","reportes"] %}
                                             {% set rp = (role_perms | selectattr('module','equalto',m) | list | first) if role_perms else none %}
                                             <tr>
                                                 <td>{{ m|title }}</td>

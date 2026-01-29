@@ -934,7 +934,6 @@ for module_name, attr_name, prefix in [
     ('reportes', 'reportes_bp', '/reportes'),
     ('asistente_ia', 'asistente_bp', '/asistente'),
     ('cotizacion_inteligente', 'cotizacion_bp', '/cotizacion'),
-    ('control_documentos', 'documentos_bp', '/documentos'),
     ('seguridad_cumplimiento', 'seguridad_bp', '/seguridad'),
     ('planes', 'planes_bp', None),
     ('events_service', 'events_bp', None),

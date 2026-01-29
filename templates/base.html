@@ -41,7 +41,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{{ url_for('obras.mis_tareas') if current_user.is_authenticated and current_user.role=='operario' else url_for('index') }}">
-                <i class="fas fa-building me-2"></i>OBYRA IA
+                <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="OBYRA IA" height="38" class="me-2" style="max-width: 160px; object-fit: contain;">
             </a>
             
             {% if current_user.is_authenticated %}
@@ -180,30 +180,6 @@
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_costos') }}">Reporte de Costos</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('reportes.reporte_inventario') }}">Reporte de Inventario</a></li>
-                        </ul>
-                    </li>
-                    {% endif %}
-                    
-                    <!-- Documentos - Solo para Super Admin -->
-                    {% if current_user.is_super_admin and has_endpoint('documentos.dashboard') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDocumentos" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-folder me-1"></i>Documentos
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.dashboard') }}">
-                                <i class="fas fa-tachometer-alt me-2"></i>Control Center
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.biblioteca') }}">
-                                <i class="fas fa-book me-2"></i>Biblioteca Digital
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.subir_documento') }}">
-                                <i class="fas fa-upload me-2"></i>Subir Documento
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('documentos.configuracion_tipos') }}">
-                                <i class="fas fa-cog me-2"></i>Configurar Tipos
-                            </a></li>
                         </ul>
                     </li>
                     {% endif %}
@@ -363,8 +339,10 @@
     <footer class="mt-4 py-3 border-top" style="background-color: #f8f9fa;">
         <div class="container">
             <div class="text-center">
+                <div class="mb-2">
+                    <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="OBYRA IA" height="40" style="max-width: 170px; object-fit: contain;">
+                </div>
                 <p class="mb-1">
-                    <strong>OBYRA IA</strong><br>
                     <small>Plataforma inteligente de planificación y compras para obras en LATAM</small>
                 </p>
                 <p class="mb-1">

@@ -24,7 +24,7 @@ presupuestos_bp = Blueprint('presupuestos', __name__)
 def buscar_item_inventario_por_nombre(descripcion, org_id):
     """
     Busca un item de inventario que coincida con la descripción del material.
-    Usa búsqueda fuzzy normalizada para encontrar coincidencias.
+    Optimizado: primero busca en BD, solo hace fuzzy en memoria si es necesario.
 
     Args:
         descripcion: Descripción del material del presupuesto
@@ -34,67 +34,86 @@ def buscar_item_inventario_por_nombre(descripcion, org_id):
         ItemInventario o None si no encuentra coincidencia
     """
     from models.inventory import ItemInventario
+    from sqlalchemy import func
 
     if not descripcion:
         return None
 
-    # Normalizar descripción: lowercase, sin acentos, sin caracteres especiales
+    descripcion = descripcion.strip()
+    if not descripcion:
+        return None
+
+    # 1. Búsqueda exacta (case insensitive) - muy rápida con índice
+    item = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == org_id,
+        ItemInventario.activo == True,
+        func.lower(ItemInventario.nombre) == descripcion.lower()
+    ).first()
+    if item:
+        return item
+
+    # 2. Búsqueda parcial: descripción contenida en nombre o viceversa
+    item = ItemInventario.query.filter(
+        ItemInventario.organizacion_id == org_id,
+        ItemInventario.activo == True,
+        func.lower(ItemInventario.nombre).contains(descripcion.lower())
+    ).first()
+    if item:
+        return item
+
+    # 3. Búsqueda por palabras clave (primeras 2-3 palabras significativas)
+    palabras = [p for p in descripcion.lower().split() if len(p) > 2][:3]
+    if palabras:
+        for palabra in palabras:
+            item = ItemInventario.query.filter(
+                ItemInventario.organizacion_id == org_id,
+                ItemInventario.activo == True,
+                func.lower(ItemInventario.nombre).contains(palabra)
+            ).first()
+            if item:
+                return item
+
+    # 4. Fuzzy search limitado (solo si las búsquedas anteriores fallaron)
+    # Limitar a 100 items para evitar cargar toda la BD en memoria
+    items = ItemInventario.query.filter_by(
+        organizacion_id=org_id,
+        activo=True
+    ).limit(100).all()
+
     def normalizar(texto):
         if not texto:
             return ''
         texto = texto.lower().strip()
-        # Remover acentos
-        reemplazos = {
-            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-            'ñ': 'n', 'ü': 'u'
-        }
+        reemplazos = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n', 'ü': 'u'}
         for acento, sin_acento in reemplazos.items():
             texto = texto.replace(acento, sin_acento)
-        # Remover caracteres especiales, dejar solo letras, números y espacios
         texto = re.sub(r'[^a-z0-9\s]', '', texto)
-        # Remover espacios múltiples
-        texto = re.sub(r'\s+', ' ', texto)
-        return texto
+        return re.sub(r'\s+', ' ', texto)
 
     desc_normalizada = normalizar(descripcion)
-
-    # Obtener todos los items de inventario de la organización
-    items = ItemInventario.query.filter_by(
-        organizacion_id=org_id,
-        activo=True
-    ).all()
-
     mejor_match = None
     mejor_score = 0
 
     for item in items:
         nombre_normalizado = normalizar(item.nombre)
+        if not nombre_normalizado:
+            continue
 
-        # Coincidencia exacta
+        # Coincidencia exacta normalizada
         if desc_normalizada == nombre_normalizado:
             return item
 
-        # Verificar si una contiene a la otra
-        if desc_normalizada in nombre_normalizado or nombre_normalizado in desc_normalizada:
-            # Calcular score basado en longitud de coincidencia
-            score = len(nombre_normalizado) if nombre_normalizado in desc_normalizada else len(desc_normalizada)
-            if score > mejor_score:
-                mejor_score = score
-                mejor_match = item
-
-        # Buscar por palabras clave principales
+        # Calcular score por palabras en común
         palabras_desc = set(desc_normalizada.split())
         palabras_item = set(nombre_normalizado.split())
-
-        # Calcular coincidencia de palabras
         coincidencias = palabras_desc & palabras_item
-        if len(coincidencias) >= 2:  # Al menos 2 palabras en común
+
+        if len(coincidencias) >= 2:
             score = len(coincidencias) * 10
             if score > mejor_score:
                 mejor_score = score
                 mejor_match = item
 
-    # Solo devolver si hay una coincidencia razonable
     return mejor_match if mejor_score >= 5 else None
 
 
