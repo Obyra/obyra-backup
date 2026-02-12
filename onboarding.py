@@ -26,17 +26,28 @@ def _resolve_after_onboarding() -> str:
 def profile():
     status = current_user.ensure_onboarding_status()
 
-    if status.profile_completed and not status.billing_completed and request.method != 'POST':
+    # Solo admins necesitan completar billing
+    requiere_billing = current_user.role == 'admin'
+
+    if status.profile_completed and requiere_billing and not status.billing_completed and request.method != 'POST':
         return redirect(url_for('onboarding.billing'))
 
-    if status.profile_completed and status.billing_completed:
+    if status.profile_completed and (not requiere_billing or status.billing_completed):
         return redirect(_resolve_after_onboarding())
 
     if request.method == 'POST':
         exito, mensaje = update_profile_from_form(current_user, request.form)
         if exito:
-            flash('Perfil guardado. Ahora completá tus datos de facturación.', 'success')
-            return redirect(url_for('onboarding.billing'))
+            if requiere_billing:
+                flash('Perfil guardado. Ahora completá tus datos de facturación.', 'success')
+                return redirect(url_for('onboarding.billing'))
+            else:
+                # Operarios y PMs no necesitan billing, marcar como completo
+                status.mark_billing_completed()
+                from extensions import db
+                db.session.commit()
+                flash('Perfil guardado correctamente. ¡Ya podés comenzar a usar OBYRA IA!', 'success')
+                return redirect(_resolve_after_onboarding())
         flash(mensaje, 'danger')
 
     return render_template(
@@ -51,6 +62,11 @@ def profile():
 @login_required
 def billing():
     status = current_user.ensure_onboarding_status()
+
+    # Solo los administradores necesitan completar billing
+    if current_user.role != 'admin':
+        flash('Los datos de facturación son gestionados por el administrador principal.', 'info')
+        return redirect(_resolve_after_onboarding())
 
     if not status.profile_completed:
         flash('Completá tu perfil antes de continuar con la facturación.', 'warning')

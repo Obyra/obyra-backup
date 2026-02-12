@@ -170,8 +170,12 @@ def _determine_onboarding_redirect(usuario: Usuario) -> Optional[str]:
 
     if not status.profile_completed:
         return url_for('onboarding.profile')
-    if not status.billing_completed:
+
+    # Solo los administradores necesitan completar datos de facturación
+    # Los operarios y PMs están vinculados al administrador principal
+    if usuario.role == 'admin' and not status.billing_completed:
         return url_for('onboarding.billing')
+
     return None
 
 def _post_login_destination(usuario: Usuario, next_page: Optional[str] = None) -> str:
