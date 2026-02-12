@@ -73,7 +73,8 @@
       "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
       "Bash(git rm:*)",
       "Bash(grep:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []
