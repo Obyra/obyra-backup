@@ -94,10 +94,18 @@ async function setRol(e, uid){
 document.getElementById('frmNuevo')?.addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const r = await fetch('/equipos/usuarios', {method:'POST', body:fd});
-    const j = await r.json();
-    if(!j.ok) return alert(j.error||'No se pudo crear');
-    location.reload();
+    try {
+        const r = await fetch('/equipos/usuarios', {method:'POST', body:fd});
+        console.log('Status:', r.status);
+        const text = await r.text();
+        console.log('Response:', text);
+        const j = JSON.parse(text);
+        if(!j.ok) return alert(j.error||'No se pudo crear');
+        location.reload();
+    } catch(err) {
+        console.error('Error completo:', err);
+        alert('Error al crear usuario. Ver consola para detalles.');
+    }
 });
 </script>
 {% endblock %}
