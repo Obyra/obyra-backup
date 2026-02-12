@@ -41,7 +41,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{{ url_for('obras.mis_tareas') if current_user.is_authenticated and current_user.role=='operario' else url_for('index') }}">
-                <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="OBYRA IA" height="38" class="me-2" style="max-width: 160px; object-fit: contain;">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="OBYRA IA" height="38" class="me-2" style="max-width: 160px; object-fit: contain;">
             </a>
             
             {% if current_user.is_authenticated %}
@@ -340,7 +340,7 @@
         <div class="container">
             <div class="text-center">
                 <div class="mb-2">
-                    <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="OBYRA IA" height="40" style="max-width: 170px; object-fit: contain;">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="OBYRA IA" height="40" style="max-width: 170px; object-fit: contain;">
                 </div>
                 <p class="mb-1">
                     <small>Plataforma inteligente de planificación y compras para obras en LATAM</small>
