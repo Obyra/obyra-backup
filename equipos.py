@@ -773,8 +773,53 @@ def usuarios_cambiar_rol(uid):
     # Verificar permisos admin/pm
     if current_user.role not in ['admin', 'pm']:
         return jsonify(ok=False, error="Sin permisos"), 403
-    
+
     u = Usuario.query.get_or_404(uid)
     u.role = request.form.get('role', 'operario')
     db.session.commit()
     return jsonify(ok=True)
+
+@equipos_bp.route('/usuarios/<int:uid>', methods=['POST'])
+@login_required
+def usuarios_editar(uid):
+    """Editar datos de usuario específico"""
+    # Verificar permisos admin/pm
+    if current_user.role not in ['admin', 'pm']:
+        return jsonify(ok=False, error="Sin permisos"), 403
+
+    u = Usuario.query.get_or_404(uid)
+    f = request.form
+
+    # Actualizar campos básicos
+    u.nombre = f.get('nombre', '').strip()
+    u.apellido = f.get('apellido', '').strip()
+
+    # Actualizar email (verificar que no exista otro usuario con ese email)
+    new_email = f.get('email', '').lower().strip()
+    if new_email != u.email:
+        existing = Usuario.query.filter_by(email=new_email).first()
+        if existing:
+            return jsonify(ok=False, error="El email ya existe"), 400
+        u.email = new_email
+
+    # Actualizar rol con normalización
+    role = (f.get('role') or 'operario').strip()
+    if role in ('admin', 'administrador'):
+        normalized_role = 'admin'
+        rol_legado = 'administrador'
+    elif role == 'pm':
+        normalized_role = 'pm'
+        rol_legado = 'tecnico'
+    else:
+        normalized_role = 'operario'
+        rol_legado = 'operario'
+
+    u.role = normalized_role
+    u.rol = rol_legado
+
+    try:
+        db.session.commit()
+        return jsonify(ok=True)
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify(ok=False, error="Error al actualizar usuario"), 400

@@ -16,7 +16,7 @@
                 <th>Nombre</th>
                 <th>Email</th>
                 <th>Rol</th>
-                <th></th>
+                <th>Acciones</th>
             </tr>
         </thead>
         <tbody>
@@ -34,7 +34,18 @@
                         <button class="btn btn-sm btn-outline-secondary">Guardar</button>
                     </form>
                 </td>
-                <td></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalEditar"
+                            data-uid="{{u.id}}"
+                            data-nombre="{{u.nombre}}"
+                            data-apellido="{{u.apellido}}"
+                            data-email="{{u.email}}"
+                            data-role="{{u.role}}">
+                        Editar
+                    </button>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -80,6 +91,45 @@
             </form>
         </div>
     </div>
+
+    <!-- Modal editar -->
+    <div class="modal fade" id="modalEditar" tabindex="-1">
+        <div class="modal-dialog">
+            <form class="modal-content" id="frmEditar">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="uid" id="editUid">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar usuario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <input class="form-control" name="nombre" id="editNombre" placeholder="Nombre" required>
+                        </div>
+                        <div class="col-md-6">
+                            <input class="form-control" name="apellido" id="editApellido" placeholder="Apellido">
+                        </div>
+                        <div class="col-12">
+                            <input class="form-control" type="email" name="email" id="editEmail" placeholder="Email" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Rol</label>
+                            <select class="form-select" name="role" id="editRole">
+                                <option value="operario">Operario</option>
+                                <option value="pm">PM</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+                    <button class="btn btn-primary" type="submit">Guardar cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -106,6 +156,41 @@ document.getElementById('frmNuevo')?.addEventListener('submit', async (e)=>{
     } catch(err) {
         console.error('Error completo:', err);
         alert('Error al crear usuario. Ver consola para detalles.');
+    }
+});
+
+// Llenar el modal de edición con los datos del usuario
+document.getElementById('modalEditar')?.addEventListener('show.bs.modal', function(event) {
+    const button = event.relatedTarget;
+    const uid = button.getAttribute('data-uid');
+    const nombre = button.getAttribute('data-nombre');
+    const apellido = button.getAttribute('data-apellido');
+    const email = button.getAttribute('data-email');
+    const role = button.getAttribute('data-role');
+
+    document.getElementById('editUid').value = uid;
+    document.getElementById('editNombre').value = nombre;
+    document.getElementById('editApellido').value = apellido || '';
+    document.getElementById('editEmail').value = email;
+    document.getElementById('editRole').value = role;
+});
+
+// Enviar el formulario de edición
+document.getElementById('frmEditar')?.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const uid = fd.get('uid');
+    try {
+        const r = await fetch(`/equipos/usuarios/${uid}`, {method:'POST', body:fd});
+        console.log('Status:', r.status);
+        const text = await r.text();
+        console.log('Response:', text);
+        const j = JSON.parse(text);
+        if(!j.ok) return alert(j.error||'No se pudo actualizar');
+        location.reload();
+    } catch(err) {
+        console.error('Error completo:', err);
+        alert('Error al actualizar usuario. Ver consola para detalles.');
     }
 });
 </script>
