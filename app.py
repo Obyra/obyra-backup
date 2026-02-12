@@ -458,22 +458,42 @@ def verificar_periodo_prueba():
         'auth.login', 'auth.register', 'auth.logout',
         'supplier_auth.login', 'static', 'index'
     ]
-    if (current_user.is_authenticated and 
+    if (current_user.is_authenticated and
         request.endpoint and
-        request.endpoint not in rutas_excluidas and 
+        request.endpoint not in rutas_excluidas and
         not request.endpoint.startswith('static')):
-        
+
         # Super admin bypass - uses is_super_admin flag instead of hardcoded emails
         if current_user.is_super_admin:
             app.logger.info(f"Super admin access granted for: {current_user.email}")
             return  # Acceso completo sin restricciones de plan
-        
-        # Verificar si el usuario está en periodo de prueba y ya expiró
-        if (getattr(current_user, "plan_activo", None) == 'prueba' and
-            hasattr(current_user, "esta_en_periodo_prueba") and
-            not current_user.esta_en_periodo_prueba()):
-            flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
-            return redirect(url_for('planes.mostrar_planes'))
+
+        # Determinar el plan a verificar según el contexto del usuario
+        plan_a_verificar = None
+        entidad_con_plan = None
+
+        # Operarios y PMs heredan el plan de su organización
+        if current_user.role in ['operario', 'pm']:
+            membership = get_current_membership()
+            if membership and membership.organizacion:
+                plan_a_verificar = getattr(membership.organizacion, 'plan_activo', None)
+                entidad_con_plan = membership.organizacion
+        else:
+            # Admins verifican su propio plan
+            plan_a_verificar = getattr(current_user, "plan_activo", None)
+            entidad_con_plan = current_user
+
+        # Verificar si el plan es de prueba y ya expiró
+        if plan_a_verificar == 'prueba' and entidad_con_plan:
+            if hasattr(entidad_con_plan, "esta_en_periodo_prueba") and not entidad_con_plan.esta_en_periodo_prueba():
+                # Solo mostrar mensaje si es el admin (quien debe contratar)
+                if current_user.role == 'admin':
+                    flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
+                    return redirect(url_for('planes.mostrar_planes'))
+                else:
+                    # Operarios/PMs: el admin debe renovar
+                    flash('El período de prueba de tu organización ha expirado. Contacta al administrador.', 'warning')
+                    return redirect(url_for('index'))
 
 @app.route('/offline')
 def offline_page():
