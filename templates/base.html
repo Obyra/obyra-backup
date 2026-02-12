@@ -50,8 +50,8 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             
-            <div class="collapse navbar-collapse justify-content-between" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+            <div class="collapse navbar-collapse justify-content-center" id="navbarNav">
+                <ul class="navbar-nav">
                     {# 1. Dashboard - solo para admin/pm #}
                     {% if current_user.is_authenticated and current_user.role in ['admin','pm'] %}
                     <li class="nav-item">
