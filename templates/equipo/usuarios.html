@@ -44,6 +44,7 @@
     <div class="modal fade" id="modalNuevo" tabindex="-1">
         <div class="modal-dialog">
             <form class="modal-content" id="frmNuevo">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-header">
                     <h5 class="modal-title">Nuevo usuario</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
