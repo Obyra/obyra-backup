@@ -716,14 +716,28 @@ def usuarios_crear():
 
     raw_password = (f.get('password', '').strip() or 'temp123456')
 
-    normalized_role = 'admin' if role in ('admin', 'administrador') else 'operario'
+    # Normalizar rol: mapear admin/administrador -> admin, pm -> pm, resto -> operario
+    if role in ('admin', 'administrador'):
+        normalized_role = 'admin'
+    elif role == 'pm':
+        normalized_role = 'pm'
+    else:
+        normalized_role = 'operario'
+
+    # Mapear rol para campo legado
+    if normalized_role == 'admin':
+        rol_legado = 'administrador'
+    elif normalized_role == 'pm':
+        rol_legado = 'tecnico'  # PM se mapea a técnico en el sistema legado
+    else:
+        rol_legado = 'operario'
 
     u = Usuario(
         nombre=f.get('nombre', '').strip(),
         apellido=f.get('apellido', '').strip(),
         email=f.get('email', '').lower().strip(),
         role=normalized_role,
-        rol='administrador' if normalized_role == 'admin' else 'operario',  # Mantener rol legado por compatibilidad
+        rol=rol_legado,  # Mantener rol legado por compatibilidad
         organizacion_id=org_id,
         primary_org_id=org_id,
         auth_provider='manual',
