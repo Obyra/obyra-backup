@@ -347,7 +347,7 @@ def resumen_tarea(t):
         .scalar() or 0
     )
 
-    pct = (ejec/plan*100.0) if plan > 0 else 0.0
+    pct = min((ejec/plan*100.0), 100.0) if plan > 0 else 0.0
     restante = max(plan - ejec, 0.0)
 
     atrasada = bool(t.fecha_fin_plan and date.today() > t.fecha_fin_plan and restante > 0)
@@ -1430,6 +1430,20 @@ def crear_avance(tarea_id):
             return jsonify(ok=False, error="❌ La cantidad debe ser mayor a 0. Ingresá un valor positivo para el avance."), 400
     except (ValueError, TypeError):
         return jsonify(ok=False, error="❌ Cantidad inválida. Ingresá un número válido (ej: 10 o 10.5)."), 400
+
+    # Validar que no se exceda la cantidad planificada
+    plan = float(tarea.cantidad_planificada or 0)
+    if plan > 0:
+        ejecutado = float(
+            db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+            .filter(TareaAvance.tarea_id == tarea.id, TareaAvance.status == 'aprobado')
+            .scalar() or 0
+        )
+        disponible = plan - ejecutado
+        if disponible <= 0:
+            return jsonify(ok=False, error=f"❌ Esta tarea ya alcanzó el 100% de avance ({plan} {tarea.unidad}). No se pueden registrar más avances."), 400
+        if cantidad > disponible:
+            return jsonify(ok=False, error=f"❌ La cantidad ({cantidad}) supera lo restante ({disponible:.2f} {tarea.unidad}). Máximo permitido: {disponible:.2f}."), 400
 
     unidad = normalize_unit(tarea.unidad)
     horas = request.form.get("horas", type=float)
@@ -3375,12 +3389,25 @@ def aprobar_avance(avance_id):
     if av.status == "aprobado":
         return jsonify(ok=True)
 
+    # Validar que al aprobar no se exceda el 100% planificado
+    tarea = TareaEtapa.query.get(av.tarea_id)
+    plan = float(tarea.cantidad_planificada or 0) if tarea else 0
+    if plan > 0:
+        ya_aprobado = float(
+            db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+            .filter(TareaAvance.tarea_id == av.tarea_id, TareaAvance.status == 'aprobado')
+            .scalar() or 0
+        )
+        if ya_aprobado + float(av.cantidad) > plan:
+            disponible = plan - ya_aprobado
+            return jsonify(ok=False, error=f"No se puede aprobar: la cantidad ({float(av.cantidad)}) supera lo restante ({disponible:.2f}). Use 'Corregir' para ajustar la cantidad."), 400
+
     try:
         av.status = "aprobado"
         av.confirmed_by = current_user.id
         av.confirmed_at = datetime.utcnow()
 
-        t = TareaEtapa.query.get(av.tarea_id)
+        t = tarea
         if t and not t.fecha_inicio_real:
             t.fecha_inicio_real = datetime.utcnow()
 
@@ -3440,6 +3467,19 @@ def corregir_avance(avance_id):
             return jsonify(ok=False, error="La cantidad no puede ser negativa"), 400
     except (ValueError, TypeError):
         return jsonify(ok=False, error="Cantidad inválida"), 400
+
+    # Validar que la corrección no exceda la cantidad planificada
+    tarea = TareaEtapa.query.get(av.tarea_id)
+    plan = float(tarea.cantidad_planificada or 0) if tarea else 0
+    if plan > 0:
+        otros_aprobados = float(
+            db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
+            .filter(TareaAvance.tarea_id == av.tarea_id, TareaAvance.status == 'aprobado', TareaAvance.id != av.id)
+            .scalar() or 0
+        )
+        disponible = plan - otros_aprobados
+        if cantidad_corregida > disponible:
+            return jsonify(ok=False, error=f"La cantidad corregida ({cantidad_corregida}) supera lo disponible ({disponible:.2f}). Máximo: {disponible:.2f}."), 400
 
     try:
         # Guardar cantidad original para registro
