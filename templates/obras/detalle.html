@@ -1203,7 +1203,15 @@
             <form id="formAvanceDetalle" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
-                    
+
+                    <div class="mb-3 p-3 bg-light rounded d-flex align-items-center">
+                        <i class="fas fa-user-hard-hat me-2 text-primary" style="font-size: 1.2rem;"></i>
+                        <div>
+                            <small class="text-muted d-block">Operario</small>
+                            <strong>{{ current_user.nombre }} {{ current_user.apellido }}</strong>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label">Tarea</label>
                         <p id="avance_tarea_nombre_detalle" class="form-control-plaintext text-muted"></p>
@@ -2109,7 +2117,6 @@ document.getElementById('formAsignacionMasiva')?.addEventListener('submit', asyn
 
     const sel = document.getElementById('unidad_ingresada');
     if ([...sel.options].some(o => o.value === base)) sel.value = base;
-    sel.disabled = true;
 
     const qty = document.getElementById('cantidad');
     const hrs = document.getElementById('horas');

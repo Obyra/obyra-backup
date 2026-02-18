@@ -196,6 +196,14 @@
                 <div class="modal-body">
                     <input type="hidden" id="tarea_id_modal" value="{{ tarea.id }}">
 
+                    <div class="mb-3 p-3 bg-light rounded d-flex align-items-center">
+                        <i class="fas fa-user-hard-hat me-2 text-primary" style="font-size: 1.2rem;"></i>
+                        <div>
+                            <small class="text-muted d-block">Operario</small>
+                            <strong>{{ current_user.nombre }} {{ current_user.apellido }}</strong>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label">Tarea</label>
                         <p class="form-control-plaintext text-muted">{{ detalle.nombre }}</p>

@@ -1445,7 +1445,9 @@ def crear_avance(tarea_id):
         if cantidad > disponible:
             return jsonify(ok=False, error=f"❌ La cantidad ({cantidad}) supera lo restante ({disponible:.2f} {tarea.unidad}). Máximo permitido: {disponible:.2f}."), 400
 
-    unidad = normalize_unit(tarea.unidad)
+    # Usar la unidad seleccionada por el usuario, con fallback a la de la tarea
+    unidad_form = request.form.get("unidad_ingresada", "").strip()
+    unidad = normalize_unit(unidad_form) if unidad_form else normalize_unit(tarea.unidad)
     horas = request.form.get("horas", type=float)
     notas = request.form.get("notas", "")
 
@@ -1458,7 +1460,7 @@ def crear_avance(tarea_id):
             horas=horas,
             notas=notas,
             cantidad_ingresada=cantidad,
-            unidad_ingresada=unidad
+            unidad_ingresada=unidad_form or unidad
         )
 
         if roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
