@@ -2737,6 +2737,7 @@ def api_curva_s_tarea(tarea_id):
 
 
 @obras_bp.route('/tareas/eliminar/<int:tarea_id>', methods=['POST'])
+@csrf.exempt
 @login_required
 @limiter.limit("20 per minute")
 def eliminar_tarea(tarea_id):
@@ -2746,18 +2747,26 @@ def eliminar_tarea(tarea_id):
     if not can_manage_obra(obra):
         return jsonify({'success': False, 'error': 'Sin permisos para gestionar esta obra'}), 403
 
-    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if obra.organizacion_id != org_id:
         return jsonify({'success': False, 'error': 'Sin permisos'}), 403
 
     try:
-        obra = tarea.etapa.obra
+        # Limpiar registros relacionados que no tienen cascade automático
+        from models.utils import RegistroTiempo
+        from models.templates import WorkCertificationItem
+        RegistroTiempo.query.filter_by(tarea_id=tarea_id).delete()
+        WorkCertificationItem.query.filter_by(tarea_id=tarea_id).delete()
+        TareaResponsables.query.filter_by(tarea_id=tarea_id).delete()
+
         db.session.delete(tarea)
         obra.calcular_progreso_automatico()
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        current_app.logger.exception("Error al eliminar tarea %d", tarea_id)
+        return jsonify({'success': False, 'error': 'Error al eliminar la tarea. Intente nuevamente.'}), 500
 
 
 @obras_bp.route('/api/tareas/bulk_delete', methods=['POST'])
