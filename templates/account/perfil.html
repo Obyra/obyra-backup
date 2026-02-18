@@ -27,6 +27,7 @@
                             {{ current_user.plan_activo|capitalize }}
                         </span>
                     </p>
+                    {% if current_user.role == 'admin' %}
                     {% if current_user.plan_activo == 'prueba' %}
                     <p class="mb-2 text-muted small">
                         <i class="fas fa-clock me-1"></i>{{ current_user.dias_restantes_prueba() }} dias restantes
@@ -40,6 +41,7 @@
                     <a href="{{ url_for('planes.mostrar_planes') }}" class="btn btn-outline-success w-100 mb-2">
                         <i class="fas fa-crown me-2"></i>Ver Planes
                     </a>
+                    {% endif %}
                     {% endif %}
                     <button type="button" class="btn btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#modalCambiarPassword">
                         <i class="fas fa-key me-2"></i>Cambiar Contraseña

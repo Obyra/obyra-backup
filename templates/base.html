@@ -261,7 +261,7 @@
                             <span>{{ current_user.nombre }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            {% if current_user.plan_activo == 'prueba' and not current_user.is_super_admin %}
+                            {% if current_user.role == 'admin' and current_user.plan_activo == 'prueba' and not current_user.is_super_admin %}
                             <li class="dropdown-item-text bg-warning text-dark small">
                                 <i class="fas fa-clock me-1"></i>
                                 Prueba: {{ current_user.dias_restantes_prueba() }} días restantes
@@ -291,9 +291,11 @@
                             <li><a class="dropdown-item" href="{{ url_for('account.perfil') }}">
                                 <i class="fas fa-id-badge me-2"></i>Perfil
                             </a></li>
+                            {% if current_user.role == 'admin' %}
                             <li><a class="dropdown-item" href="{{ url_for('account.facturacion') }}">
                                 <i class="fas fa-file-invoice-dollar me-2"></i>Facturación
                             </a></li>
+                            {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión

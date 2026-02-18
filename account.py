@@ -211,6 +211,11 @@ def perfil():
 @account_bp.route('/facturacion', methods=['GET', 'POST'])
 @login_required
 def facturacion():
+    # Solo los administradores pueden acceder a facturación
+    if current_user.role not in ('admin',):
+        flash('Los datos de facturación son gestionados por el administrador de tu organización.', 'info')
+        return redirect(url_for('account.perfil'))
+
     import os
     from flask import current_app
     from werkzeug.utils import secure_filename
