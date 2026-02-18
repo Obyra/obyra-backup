@@ -7,7 +7,7 @@ import json
 import requests
 import logging
 from app import db
-from extensions import limiter
+from extensions import limiter, csrf
 from sqlalchemy import text, func
 from sqlalchemy.exc import ProgrammingError
 from utils.pagination import Pagination
@@ -3362,6 +3362,7 @@ def cambiar_estado_etapa(etapa_id):
 # ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
 
 @obras_bp.route("/avances/<int:avance_id>/aprobar", methods=['POST'])
+@csrf.exempt
 @login_required
 def aprobar_avance(avance_id):
     from utils.permissions import can_approve_avance
@@ -3393,6 +3394,7 @@ def aprobar_avance(avance_id):
 
 
 @obras_bp.route("/avances/<int:avance_id>/rechazar", methods=['POST'])
+@csrf.exempt
 @login_required
 def rechazar_avance(avance_id):
     from utils.permissions import can_approve_avance
@@ -3414,6 +3416,56 @@ def rechazar_avance(avance_id):
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Error en rechazar_avance")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
+@obras_bp.route("/avances/<int:avance_id>/corregir", methods=['POST'])
+@csrf.exempt
+@login_required
+def corregir_avance(avance_id):
+    """Corregir la cantidad de un avance y aprobarlo."""
+    from utils.permissions import can_approve_avance
+
+    av = TareaAvance.query.get_or_404(avance_id)
+
+    if not can_approve_avance(current_user, av):
+        return jsonify(ok=False, error="Sin permiso"), 403
+
+    cantidad_str = request.form.get("cantidad_corregida", "").replace(",", ".")
+    motivo = request.form.get("motivo", "")
+
+    try:
+        cantidad_corregida = float(cantidad_str)
+        if cantidad_corregida < 0:
+            return jsonify(ok=False, error="La cantidad no puede ser negativa"), 400
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error="Cantidad inválida"), 400
+
+    try:
+        # Guardar cantidad original para registro
+        cantidad_original = float(av.cantidad)
+
+        # Corregir la cantidad y aprobar
+        av.cantidad = cantidad_corregida
+        av.status = "aprobado"
+        av.confirmed_by = current_user.id
+        av.confirmed_at = datetime.utcnow()
+        av.reject_reason = f"Corregido por admin: {cantidad_original} -> {cantidad_corregida}. {motivo}"
+
+        t = TareaEtapa.query.get(av.tarea_id)
+        if t and not t.fecha_inicio_real:
+            t.fecha_inicio_real = datetime.utcnow()
+
+        db.session.commit()
+        current_app.logger.info(
+            "Avance %d corregido: %s -> %s por %s",
+            avance_id, cantidad_original, cantidad_corregida, current_user.email
+        )
+        return jsonify(ok=True)
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error en corregir_avance")
         return jsonify(ok=False, error="Error interno"), 500
 
 

@@ -2417,8 +2417,15 @@ async function aprobarAvance(button) {
 
 function rechazarAvance(button) {
     const avanceId = button.getAttribute('data-avance-id');
+    const item = button.closest('.avance-item');
+    const cantidad = item?.querySelector('.cantidad-valor')?.textContent || '—';
+    const unidad = item?.querySelector('.unidad-texto')?.textContent || '';
     currentAvanceToReject = { avanceId, button };
     document.getElementById('motivo-rechazo').value = '';
+    document.getElementById('cantidad-corregida').value = '';
+    document.getElementById('cantidad-reportada').textContent = cantidad;
+    document.getElementById('unidad-reportada').textContent = unidad;
+    document.getElementById('unidad-corregida').textContent = unidad;
     new bootstrap.Modal(document.getElementById('modalRechazarAvance')).show();
 }
 
@@ -2448,6 +2455,40 @@ async function confirmarRechazo() {
         } else { throw new Error(j.error || 'Error al rechazar el avance'); }
     } catch (err) {
         alert('Error al rechazar el avance: ' + err.message);
+        button.disabled = false; button.innerHTML = original;
+    } finally { currentAvanceToReject = null; }
+}
+
+async function confirmarCorreccion() {
+    if (!currentAvanceToReject) return;
+    const motivo = document.getElementById('motivo-rechazo').value.trim();
+    const cantidadCorregida = document.getElementById('cantidad-corregida').value.trim();
+    if (!cantidadCorregida || parseFloat(cantidadCorregida) < 0) { alert('Ingrese la cantidad real ejecutada para corregir'); return; }
+    if (!motivo) { alert('Por favor ingrese un motivo para la corrección'); return; }
+    const { avanceId, button } = currentAvanceToReject;
+    bootstrap.Modal.getInstance(document.getElementById('modalRechazarAvance')).hide();
+    const original = button.innerHTML; button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Corrigiendo...';
+    try {
+        const fd = new FormData();
+        fd.append('cantidad_corregida', cantidadCorregida);
+        fd.append('motivo', motivo);
+        const r = await fetch(`/obras/avances/${avanceId}/corregir`, { method: 'POST', body: fd });
+        const j = await r.json();
+        if (j.ok) {
+            const item = button.closest('.avance-item'); item.style.opacity = '0.5';
+            const s = document.createElement('div'); s.className = 'alert alert-info mt-2';
+            s.innerHTML = '<i class="fas fa-check-double me-2"></i>Avance corregido a ' + cantidadCorregida + ' y aprobado';
+            item.appendChild(s);
+            setTimeout(() => {
+                item.remove();
+                if (document.querySelectorAll('.avance-item').length === 0) {
+                    bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes')).hide();
+                    location.reload();
+                }
+            }, 2000);
+        } else { throw new Error(j.error || 'Error al corregir el avance'); }
+    } catch (err) {
+        alert('Error al corregir el avance: ' + err.message);
         button.disabled = false; button.innerHTML = original;
     } finally { currentAvanceToReject = null; }
 }

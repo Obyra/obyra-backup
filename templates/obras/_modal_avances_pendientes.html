@@ -96,25 +96,41 @@
     </div>
 </template>
 
-<!-- Modal para rechazar avance -->
+<!-- Modal para rechazar/corregir avance -->
 <div class="modal fade" id="modalRechazarAvance" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
+            <div class="modal-header bg-warning text-dark">
                 <h5 class="modal-title">
-                    <i class="fas fa-times-circle me-2"></i>
-                    Rechazar Avance
+                    <i class="fas fa-edit me-2"></i>
+                    Corregir / Rechazar Avance
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="form-rechazar-avance">
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <small class="text-muted d-block mb-1">Cantidad reportada por el operario:</small>
+                        <strong id="cantidad-reportada" class="fs-5">—</strong>
+                        <span id="unidad-reportada" class="text-muted"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cantidad-corregida" class="form-label">
+                            <strong>Cantidad real ejecutada:</strong>
+                        </label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="cantidad-corregida" name="cantidad_corregida"
+                                   step="0.01" min="0" placeholder="Ingrese la cantidad real...">
+                            <span class="input-group-text" id="unidad-corregida"></span>
+                        </div>
+                        <div class="form-text">Deje vacío para rechazar completamente el avance. Complete con la cantidad real para corregir y aprobar.</div>
+                    </div>
                     <div class="mb-3">
                         <label for="motivo-rechazo" class="form-label">
-                            <strong>Motivo del rechazo:</strong>
+                            <strong>Motivo de la corrección/rechazo:</strong>
                         </label>
-                        <textarea class="form-control" id="motivo-rechazo" name="motivo" rows="3" 
-                                  placeholder="Explique por qué se rechaza este avance..." required></textarea>
+                        <textarea class="form-control" id="motivo-rechazo" name="motivo" rows="3"
+                                  placeholder="Explique el motivo de la corrección..." required></textarea>
                         <div class="form-text">Este motivo será visible para el operario.</div>
                     </div>
                 </form>
@@ -123,7 +139,11 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-danger" onclick="confirmarRechazo()">
                     <i class="fas fa-times me-1"></i>
-                    Confirmar Rechazo
+                    Rechazar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="confirmarCorreccion()">
+                    <i class="fas fa-check-double me-1"></i>
+                    Corregir y Aprobar
                 </button>
             </div>
         </div>
