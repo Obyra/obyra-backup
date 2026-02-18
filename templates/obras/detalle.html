@@ -2316,15 +2316,23 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre) {
         const response = await fetch(`/obras/api/tareas/${tareaId}/avances-pendientes`);
         const data = await response.json();
         document.getElementById('loading-avances').style.display = 'none';
-        if (!data.ok) { document.getElementById('no-avances').style.display = 'block'; return; }
+        if (!data.ok) {
+            document.getElementById('no-avances').style.display = 'block';
+            if (data.error) {
+                document.querySelector('#no-avances h5').textContent = 'Error';
+                document.querySelector('#no-avances p').textContent = data.error;
+            }
+            return;
+        }
         if ((data.avances || []).length === 0) { document.getElementById('no-avances').style.display = 'block'; return; }
         document.getElementById('avances-container').style.display = 'block';
         renderAvancesPendientes(data.avances);
-    } catch {
+    } catch (err) {
         document.getElementById('loading-avances').style.display = 'none';
         document.getElementById('no-avances').style.display = 'block';
         document.querySelector('#no-avances h5').textContent = 'Error al cargar avances';
         document.querySelector('#no-avances p').textContent = 'No se pudieron cargar los avances pendientes. Inténtalo de nuevo.';
+        console.error('Error cargando avances pendientes:', err);
     }
 }
 

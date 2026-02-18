@@ -1977,7 +1977,9 @@ def obtener_avances_pendientes(tarea_id):
 
     tarea = TareaEtapa.query.get_or_404(tarea_id)
 
-    if tarea.etapa.obra.organizacion_id != current_user.organizacion_id:
+    # Verificar pertenencia a la organización usando membresía activa o fallback
+    org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
+    if tarea.etapa.obra.organizacion_id != org_id:
         return jsonify(ok=False, error="Sin permiso"), 403
 
     try:
