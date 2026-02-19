@@ -505,10 +505,17 @@ async function descargarPDF(presupuestoId, numero) {
     btn.disabled = true;
 
     try {
-        const response = await fetch(`/presupuestos/${presupuestoId}/pdf`);
-        if (!response.ok) {
-            throw new Error('Error al generar el PDF');
+        const response = await fetch(`/presupuestos/${presupuestoId}/pdf`, {
+            credentials: 'same-origin'
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+
+        if (!response.ok || !contentType.includes('application/pdf')) {
+            window.open(`/presupuestos/${presupuestoId}/pdf`, '_blank');
+            return;
         }
+
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -520,7 +527,7 @@ async function descargarPDF(presupuestoId, numero) {
         a.remove();
     } catch (error) {
         console.error('Error descargando PDF:', error);
-        alert('Error al descargar el PDF. Intente nuevamente.');
+        window.open(`/presupuestos/${presupuestoId}/pdf`, '_blank');
     } finally {
         btn.innerHTML = originalHTML;
         btn.disabled = false;
