@@ -21,6 +21,41 @@ from flask_mail import Message
 presupuestos_bp = Blueprint('presupuestos', __name__)
 
 
+def _limpiar_metadata_pdf(pdf_buffer, presupuesto, organizacion):
+    """Reescribe metadatos del PDF para evitar falsos positivos de antivirus.
+
+    Avast y otros antivirus detectan PDFs generados por WeasyPrint como
+    'PDF:MalwareX-gen [Phish]' por los metadatos Producer/Creator.
+    Esta función los reemplaza con datos legítimos de la empresa.
+    """
+    try:
+        from PyPDF2 import PdfReader, PdfWriter
+        reader = PdfReader(pdf_buffer)
+        writer = PdfWriter()
+
+        for page in reader.pages:
+            writer.add_page(page)
+
+        # Reemplazar metadatos sospechosos con datos de la empresa
+        nombre_org = organizacion.nombre if organizacion else 'OBYRA'
+        writer.add_metadata({
+            '/Title': f'Presupuesto {presupuesto.numero}',
+            '/Author': nombre_org,
+            '/Creator': nombre_org,
+            '/Producer': f'{nombre_org} - Sistema de Gestion',
+            '/Subject': f'Presupuesto comercial N° {presupuesto.numero}',
+        })
+
+        output = io.BytesIO()
+        writer.write(output)
+        output.seek(0)
+        return output
+    except Exception:
+        # Si falla el post-procesado, devolver el PDF original
+        pdf_buffer.seek(0)
+        return pdf_buffer
+
+
 def buscar_item_inventario_por_nombre(descripcion, org_id):
     """
     Busca un item de inventario que coincida con la descripción del material.
@@ -984,13 +1019,16 @@ def generar_pdf(id):
             raise Exception(f"Error al renderizar template: {str(render_error)}")
 
         try:
-            # Generar PDF con WeasyPrint (sin base_url para evitar falsos positivos de antivirus)
-            pdf_buffer = io.BytesIO()
+            # Generar PDF con WeasyPrint
+            pdf_raw = io.BytesIO()
             HTML(string=html_string).write_pdf(
-                pdf_buffer,
+                pdf_raw,
                 presentational_hints=True
             )
-            pdf_buffer.seek(0)
+            pdf_raw.seek(0)
+
+            # Post-procesar: limpiar metadatos para evitar falsos positivos de antivirus
+            pdf_buffer = _limpiar_metadata_pdf(pdf_raw, presupuesto, organizacion)
         except Exception as pdf_error:
             current_app.logger.error(f"Error al generar PDF con WeasyPrint: {pdf_error}", exc_info=True)
             raise Exception(f"Error al generar PDF: {str(pdf_error)}")
@@ -1167,14 +1205,15 @@ Saludos cordiales,
             superficie_m2=superficie_m2
         )
 
-        # Generar PDF sin base_url para evitar falsos positivos de antivirus
-        pdf_buffer = io.BytesIO()
+        # Generar PDF y limpiar metadatos para evitar falsos positivos de antivirus
+        pdf_raw = io.BytesIO()
         HTML(string=html_string).write_pdf(
-            pdf_buffer,
+            pdf_raw,
             presentational_hints=True
         )
-        pdf_buffer.seek(0)
-        pdf_bytes = pdf_buffer.read()
+        pdf_raw.seek(0)
+        pdf_clean = _limpiar_metadata_pdf(pdf_raw, presupuesto, organizacion)
+        pdf_bytes = pdf_clean.read()
 
         # Preparar datos del remitente
         user_email = current_user.email if current_user.is_authenticated else None
