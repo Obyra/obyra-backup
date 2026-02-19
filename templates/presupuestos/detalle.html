@@ -49,10 +49,9 @@
                         </a>
                         {% endif %}
                         {% if presupuesto.items.count() > 0 %}
-                        <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
-                           class="btn btn-success" target="_blank">
+                        <button type="button" class="btn btn-success" onclick="descargarPDF({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                             <i class="fas fa-file-pdf me-1"></i>PDF
-                        </a>
+                        </button>
                         <button type="button" class="btn btn-info" onclick="enviarPorCorreo({{ presupuesto.id }})">
                             <i class="fas fa-envelope me-1"></i>Enviar por Correo
                         </button>
@@ -1794,6 +1793,35 @@ function showAlert(message, type) {
             alertDiv.remove();
         }
     }, 3000);
+}
+
+async function descargarPDF(presupuestoId, numero) {
+    const btn = event.currentTarget;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generando...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`/presupuestos/${presupuestoId}/pdf`);
+        if (!response.ok) {
+            throw new Error('Error al generar el PDF');
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `presupuesto_${numero}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (error) {
+        console.error('Error descargando PDF:', error);
+        alert('Error al descargar el PDF. Intente nuevamente.');
+    } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+    }
 }
 
 async function enviarPorCorreo(presupuestoId) {

@@ -232,10 +232,10 @@
                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                             </a>
                             {% if presupuesto.items.count() > 0 %}
-                            <a href="{{ url_for('presupuestos.generar_pdf', id=presupuesto.id) }}"
-                               class="btn btn-outline-success btn-sm w-100" target="_blank">
+                            <button type="button" class="btn btn-outline-success btn-sm w-100"
+                                    onclick="descargarPDF({{ presupuesto.id }}, '{{ presupuesto.numero }}')">
                                 <i class="fas fa-file-pdf me-1"></i>Descargar PDF
-                            </a>
+                            </button>
                             {# El botón de enviar por correo aparece si el presupuesto NO está confirmado como obra #}
                             {% if not presupuesto.confirmado_como_obra %}
                             <a href="{{ url_for('presupuestos.enviar_email', id=presupuesto.id) }}" class="btn btn-outline-info btn-sm w-100">
@@ -498,6 +498,35 @@
 
 {% block scripts %}
 <script>
+async function descargarPDF(presupuestoId, numero) {
+    const btn = event.currentTarget;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generando...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`/presupuestos/${presupuestoId}/pdf`);
+        if (!response.ok) {
+            throw new Error('Error al generar el PDF');
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `presupuesto_${numero}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (error) {
+        console.error('Error descargando PDF:', error);
+        alert('Error al descargar el PDF. Intente nuevamente.');
+    } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+    }
+}
+
 const confirmModalEl = document.getElementById('modalConfirmarPresupuesto');
 const confirmModal = confirmModalEl ? new bootstrap.Modal(confirmModalEl) : null;
 const confirmForm = document.getElementById('confirmarPresupuestoForm');
