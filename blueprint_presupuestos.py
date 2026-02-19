@@ -984,9 +984,9 @@ def generar_pdf(id):
             raise Exception(f"Error al renderizar template: {str(render_error)}")
 
         try:
-            # Generar PDF con WeasyPrint (ignorar warnings de fontconfig)
+            # Generar PDF con WeasyPrint (sin base_url para evitar falsos positivos de antivirus)
             pdf_buffer = io.BytesIO()
-            HTML(string=html_string, base_url=request.url_root).write_pdf(
+            HTML(string=html_string).write_pdf(
                 pdf_buffer,
                 presentational_hints=True
             )
@@ -1134,6 +1134,20 @@ Saludos cordiales,
             if etapa not in etapas_ordenadas_email:
                 etapas_ordenadas_email[etapa] = total
 
+        # Parsear datos_proyecto para la template
+        import json as json_mod
+        nombre_proyecto = None
+        tipo_construccion = None
+        superficie_m2 = None
+        if presupuesto.datos_proyecto:
+            try:
+                datos_proy = json_mod.loads(presupuesto.datos_proyecto) if isinstance(presupuesto.datos_proyecto, str) else presupuesto.datos_proyecto
+                nombre_proyecto = datos_proy.get('nombre_obra') or datos_proy.get('nombre')
+                tipo_construccion = datos_proy.get('tipo_construccion')
+                superficie_m2 = datos_proy.get('superficie_m2')
+            except (json_mod.JSONDecodeError, TypeError):
+                pass
+
         # Generar PDF
         html_string = render_template(
             'presupuestos/pdf_template.html',
@@ -1147,11 +1161,15 @@ Saludos cordiales,
             moneda_alternativa=moneda_alternativa,
             cotizacion_dolar=cotizacion_dolar,
             fecha_cotizacion=fecha_cotizacion,
-            factor_conversion=factor_conversion
+            factor_conversion=factor_conversion,
+            nombre_proyecto=nombre_proyecto,
+            tipo_construccion=tipo_construccion,
+            superficie_m2=superficie_m2
         )
 
+        # Generar PDF sin base_url para evitar falsos positivos de antivirus
         pdf_buffer = io.BytesIO()
-        HTML(string=html_string, base_url=request.url_root).write_pdf(
+        HTML(string=html_string).write_pdf(
             pdf_buffer,
             presentational_hints=True
         )

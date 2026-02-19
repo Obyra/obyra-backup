@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v3.0.0';  // Updated for mobile responsive tables fix
+const CACHE_VERSION = 'v3.1.0';  // Fix: exclude PDF/email routes from offline interception
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
@@ -404,6 +404,10 @@ function isAPIRequest(url) {
 }
 
 function isOfflineRoute(url) {
+    // Excluir rutas de descarga de PDF y envío de email (no deben ser interceptadas)
+    if (url.pathname.endsWith('/pdf') || url.pathname.endsWith('/enviar-email')) {
+        return false;
+    }
     return OFFLINE_ROUTES.some(route => url.pathname.startsWith(route));
 }
 
