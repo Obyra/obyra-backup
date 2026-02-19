@@ -4,23 +4,114 @@
         <div class="modal-content">
             <div class="modal-header bg-warning text-dark">
                 <h5 class="modal-title">
-                    <i class="fas fa-hourglass-half me-2"></i>
-                    Avances Pendientes - <span id="tarea-nombre-pendiente"></span>
+                    <i class="fas fa-tasks me-2"></i>
+                    Gestionar Avances - <span id="tarea-nombre-pendiente"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+
+                <!-- Formulario de registro de nuevo avance (colapsable) -->
+                {% if current_user.role in ['admin', 'pm'] %}
+                <div class="mb-4">
+                    <button class="btn btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNuevoAvance">
+                        <i class="fas fa-plus me-2"></i>Registrar Nuevo Avance
+                    </button>
+                    <div class="collapse mt-3" id="collapseNuevoAvance">
+                        <div class="card card-body border-primary">
+                            <form id="formAvanceEnModal" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" id="modal_tarea_id" name="tarea_id" value="">
+                                <input type="hidden" id="modal_unidad_base" value="">
+                                <input type="hidden" id="modal_rendimiento" value="">
+
+                                <!-- Selector de operario -->
+                                <div class="mb-3">
+                                    <label for="modal_operario_id" class="form-label">
+                                        <i class="fas fa-user-hard-hat me-2 text-primary"></i>
+                                        <strong>Operario *</strong>
+                                    </label>
+                                    <select id="modal_operario_id" name="operario_id" class="form-select" required>
+                                        <option value="">Seleccionar operario...</option>
+                                        <!-- Se llenará dinámicamente con miembros de la tarea -->
+                                    </select>
+                                    <small class="text-muted">Seleccione el operario que realizó el trabajo</small>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="modal_cantidad" class="form-label">Cantidad ejecutada *</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="modal_cantidad" name="cantidad"
+                                                   step="0.01" min="0.01" required>
+                                            <select id="modal_unidad_ingresada" name="unidad_ingresada" class="form-select" style="max-width:120px" required>
+                                                <option value="">Unidad...</option>
+                                                <option value="m2">m2</option>
+                                                <option value="ml">ml</option>
+                                                <option value="m3">m3</option>
+                                                <option value="un">un</option>
+                                                <option value="kg">kg</option>
+                                                <option value="tn">tn</option>
+                                                <option value="lt">lt</option>
+                                                <option value="gl">gl</option>
+                                                <option value="hrs">hrs</option>
+                                                <option value="jor">jor</option>
+                                                <option value="pza">pza</option>
+                                                <option value="bol">bol</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="modal_horas" class="form-label">Horas trabajadas *</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="modal_horas" name="horas"
+                                                   step="0.25" min="0.25" required>
+                                            <span class="input-group-text">h</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="modal_notas" class="form-label">Notas (opcional)</label>
+                                    <textarea class="form-control" id="modal_notas" name="notas" rows="2"
+                                              placeholder="Describir el trabajo realizado..."></textarea>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="modal_fotos" class="form-label">Fotos del avance (opcional)</label>
+                                    <input type="file" class="form-control" id="modal_fotos" name="fotos"
+                                           multiple accept="image/*">
+                                </div>
+
+                                <div class="text-end">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save me-1"></i>Registrar Avance
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                {% endif %}
+
+                <!-- Sección de avances pendientes -->
+                <h6 class="mb-3">
+                    <i class="fas fa-hourglass-half me-2 text-warning"></i>
+                    Avances pendientes de aprobación
+                </h6>
+
                 <div id="loading-avances" class="text-center py-4">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Cargando...</span>
                     </div>
                     <div class="mt-2">Cargando avances pendientes...</div>
                 </div>
-                
+
                 <div id="avances-container" style="display: none;">
                     <!-- Los avances se cargarán dinámicamente aquí -->
                 </div>
-                
+
                 <div id="no-avances" class="text-center py-4" style="display: none;">
                     <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
                     <h5>No hay avances pendientes</h5>
@@ -42,15 +133,15 @@
                         <span class="operario-nombre"></span>
                         <small class="text-muted fecha-registro ms-2"></small>
                     </h6>
-                    
+
                     <div class="avance-detalles">
                         <div class="mb-2">
-                            <strong>Cantidad:</strong> 
+                            <strong>Cantidad:</strong>
                             <span class="cantidad-valor"></span>
                             <span class="unidad-texto"></span>
                         </div>
                         <div class="mb-2 horas-container" style="display: none;">
-                            <strong>Horas trabajadas:</strong> 
+                            <strong>Horas trabajadas:</strong>
                             <span class="horas-valor"></span>h
                         </div>
                         <div class="notas-container" style="display: none;">
@@ -61,7 +152,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="col-md-6">
                     <div class="fotos-container" style="display: none;">
                         <h6 class="mb-2">
@@ -72,16 +163,16 @@
                             <!-- Fotos se cargarán aquí dinámicamente -->
                         </div>
                     </div>
-                    
+
                     <div class="sin-fotos text-muted text-center py-3" style="display: none;">
                         <i class="fas fa-camera-slash fa-2x mb-2 opacity-50"></i>
                         <div>Sin fotos adjuntas</div>
                     </div>
                 </div>
             </div>
-            
+
             <hr>
-            
+
             <div class="acciones-aprovacion d-flex gap-2 justify-content-end">
                 <button type="button" class="btn btn-success" onclick="aprobarAvance(this)" data-avance-id="">
                     <i class="fas fa-check me-1"></i>
@@ -111,7 +202,7 @@
                 <form id="form-rechazar-avance">
                     <div class="mb-3 p-3 bg-light rounded">
                         <small class="text-muted d-block mb-1">Cantidad reportada por el operario:</small>
-                        <strong id="cantidad-reportada" class="fs-5">—</strong>
+                        <strong id="cantidad-reportada" class="fs-5">&mdash;</strong>
                         <span id="unidad-reportada" class="text-muted"></span>
                     </div>
                     <div class="mb-3">

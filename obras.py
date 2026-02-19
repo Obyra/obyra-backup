@@ -1451,10 +1451,20 @@ def crear_avance(tarea_id):
     horas = request.form.get("horas", type=float)
     notas = request.form.get("notas", "")
 
+    # Si admin/PM especifica un operario_id, usar ese como user_id del avance
+    avance_user_id = current_user.id
+    operario_id = request.form.get("operario_id", type=int)
+    if operario_id and roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
+        # Validar que el operario sea miembro o responsable de la tarea
+        is_resp = tarea.responsable_id == operario_id
+        is_member = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=operario_id).first()
+        if is_resp or is_member:
+            avance_user_id = operario_id
+
     try:
         av = TareaAvance(
             tarea_id=tarea.id,
-            user_id=current_user.id,
+            user_id=avance_user_id,
             cantidad=cantidad,
             unidad=unidad,
             horas=horas,
@@ -1463,7 +1473,11 @@ def crear_avance(tarea_id):
             unidad_ingresada=unidad_form or unidad
         )
 
-        if roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
+        # Avances registrados desde el modal de pendientes quedan como "pendiente"
+        # para que el admin los apruebe/rechace explícitamente
+        if operario_id and roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
+            av.status = "pendiente"
+        elif roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
             av.status = "aprobado"
             av.confirmed_by = current_user.id
             av.confirmed_at = datetime.utcnow()
@@ -2034,6 +2048,21 @@ def obtener_avances_pendientes(tarea_id):
                 'fotos_count': len(fotos)
             })
 
+        # Obtener miembros y responsable de la tarea para el selector de operario
+        miembros_data = []
+        responsable_data = None
+        seen_ids = set()
+
+        if tarea.responsable:
+            responsable_data = {'id': tarea.responsable.id, 'nombre': tarea.responsable.nombre_completo}
+            miembros_data.append(responsable_data)
+            seen_ids.add(tarea.responsable.id)
+
+        for m in tarea.miembros:
+            if m.usuario and m.user_id not in seen_ids:
+                miembros_data.append({'id': m.usuario.id, 'nombre': m.usuario.nombre_completo})
+                seen_ids.add(m.user_id)
+
         return jsonify({
             'ok': True,
             'tarea': {
@@ -2042,7 +2071,9 @@ def obtener_avances_pendientes(tarea_id):
                 'unidad': tarea.unidad
             },
             'avances': avances_data,
-            'total': len(avances_data)
+            'total': len(avances_data),
+            'miembros': miembros_data,
+            'responsable_id': tarea.responsable_id
         })
 
     except Exception as e:

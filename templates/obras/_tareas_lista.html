@@ -147,43 +147,39 @@
                             <!-- Métricas adicionales -->
                             <div class="mt-2 d-flex gap-3">
                                 <small class="text-muted" style="cursor: pointer;" 
-                                       onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')"
+                                       onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')"
                                        title="Ver todos los avances de esta tarea">
                                     <i class="fas fa-chart-line me-1"></i>
                                     {{ tarea.avances|length or 0 }} registros
                                 </small>
                             </div>
                             
-                            <!-- Avances pendientes (solo para PM/Admin y si la tarea NO está completa) -->
+                            <!-- Avances: botones para Admin/PM -->
                             {% if current_user.role in ['admin', 'pm'] and tarea.estado != 'completada' and tarea.porcentaje_avance < 100 %}
                                 {% set avances_pendientes = tarea.avances|selectattr('status', 'equalto', 'pendiente')|list %}
-                                {% if avances_pendientes %}
-                                <div class="mt-2">
-                                    <span class="badge bg-warning text-dark me-2" style="cursor: pointer;"
-                                          onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')">
-                                        <i class="fas fa-hourglass-half me-1"></i>
-                                        ⚑ Pendientes ({{ avances_pendientes|length }})
-                                    </span>
+                                <div class="mt-2 d-flex gap-1 flex-wrap">
+                                    {% if avances_pendientes %}
+                                    <button class="btn btn-sm btn-success"
+                                            onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')">
+                                        <i class="fas fa-check me-1"></i>APROBAR ({{ avances_pendientes|length }})
+                                    </button>
+                                    <button class="btn btn-sm btn-danger"
+                                            onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')">
+                                        <i class="fas fa-times me-1"></i>RECHAZAR ({{ avances_pendientes|length }})
+                                    </button>
+                                    {% endif %}
+                                    <button class="btn btn-sm btn-outline-success"
+                                            onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')">
+                                        <i class="fas fa-plus me-1"></i>Avance
+                                    </button>
                                 </div>
-                                {% endif %}
                             {% endif %}
                             
                             <!-- Acciones rápidas -->
                             {% if tarea.estado != 'completada' %}
                             <div class="btn-group btn-group-sm mt-2" role="group">
-                                <!-- Botón de avance: Admin/PM siempre pueden, operarios solo desde su dashboard -->
-                                {% if current_user.role in ['admin', 'pm'] %}
-                                <button class="btn btn-outline-success btn-sm btn-avance" 
-                                        data-tarea-id="{{ tarea.id }}"
-                                        data-tarea-nombre="{{ tarea.nombre }}"
-                                        data-unidad="{{ tarea.unidad or 'un' }}"
-                                        data-rendimiento="{{ tarea.rendimiento or '' }}"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#modalAvanceDetalle"
-                                        title="Registrar avance">
-                                    <i class="fas fa-plus fa-xs"></i> Avance
-                                </button>
-                                {% elif current_user.rol == 'operario' and request.endpoint == 'obras.mis_tareas' %}
+                                <!-- Botón de avance: Admin/PM registran desde modal de pendientes; operarios desde su dashboard -->
+                                {% if current_user.rol == 'operario' and request.endpoint == 'obras.mis_tareas' %}
                                     <!-- Operarios solo pueden registrar avances desde su dashboard -->
                                     {% set es_responsable = tarea.responsable_id == current_user.id %}
                                     {% set es_asignado = tarea.miembros|selectattr('user_id', 'equalto', current_user.id)|list|length > 0 %}

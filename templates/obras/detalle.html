@@ -2311,13 +2311,45 @@ document.getElementById('formAvanceDetalle')?.addEventListener('submit', async f
 
 /* -------- Avances pendientes (aprobar / rechazar) -------- */
 let currentAvanceToReject = null;
+let currentModalTareaId = null;
 
-async function mostrarAvancesPendientes(tareaId, tareaNombre) {
+async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimiento) {
     const modal = new bootstrap.Modal(document.getElementById('modalAvancesPendientes'));
     document.getElementById('tarea-nombre-pendiente').textContent = tareaNombre;
     document.getElementById('loading-avances').style.display = 'block';
     document.getElementById('avances-container').style.display = 'none';
     document.getElementById('no-avances').style.display = 'none';
+
+    // Configurar formulario de registro dentro del modal
+    currentModalTareaId = tareaId;
+    const tareaIdInput = document.getElementById('modal_tarea_id');
+    const unidadBase = document.getElementById('modal_unidad_base');
+    const rendInput = document.getElementById('modal_rendimiento');
+    const unidadSel = document.getElementById('modal_unidad_ingresada');
+    if (tareaIdInput) tareaIdInput.value = tareaId;
+    if (unidadBase) unidadBase.value = unidad || 'un';
+    if (rendInput) rendInput.value = rendimiento || '';
+    if (unidadSel && [...unidadSel.options].some(o => o.value === unidad)) unidadSel.value = unidad;
+
+    // Autoconversión rendimiento en modal
+    const mqty = document.getElementById('modal_cantidad');
+    const mhrs = document.getElementById('modal_horas');
+    if (mqty && mhrs) {
+        const rr = parseFloat(rendimiento);
+        mqty.oninput = mhrs.oninput = null;
+        if (!isNaN(rr) && rr > 0) {
+            mhrs.oninput = () => { if (mhrs.value && !mqty.value) mqty.value = (parseFloat(mhrs.value)*rr).toFixed(2); };
+            mqty.oninput = () => { if (mqty.value && !mhrs.value) mhrs.value = (parseFloat(mqty.value)/rr).toFixed(2); };
+        }
+    }
+
+    // Colapsar el formulario al abrir
+    const collapseEl = document.getElementById('collapseNuevoAvance');
+    if (collapseEl) {
+        const bsCollapse = bootstrap.Collapse.getInstance(collapseEl);
+        if (bsCollapse) bsCollapse.hide();
+    }
+
     modal.show();
     try {
         const response = await fetch(`/obras/api/tareas/${tareaId}/avances-pendientes`);
@@ -2331,6 +2363,21 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre) {
             }
             return;
         }
+
+        // Popular selector de operario con miembros de la tarea
+        const operarioSel = document.getElementById('modal_operario_id');
+        if (operarioSel && data.miembros) {
+            operarioSel.innerHTML = '<option value="">Seleccionar operario...</option>';
+            (data.miembros || []).forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.nombre;
+                operarioSel.appendChild(opt);
+            });
+            // Pre-seleccionar el responsable
+            if (data.responsable_id) operarioSel.value = data.responsable_id;
+        }
+
         if ((data.avances || []).length === 0) { document.getElementById('no-avances').style.display = 'block'; return; }
         document.getElementById('avances-container').style.display = 'block';
         renderAvancesPendientes(data.avances);
@@ -2499,6 +2546,59 @@ async function confirmarCorreccion() {
         button.disabled = false; button.innerHTML = original;
     } finally { currentAvanceToReject = null; }
 }
+
+/* -------- Formulario de avance dentro del modal de pendientes -------- */
+document.getElementById('formAvanceEnModal')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const tareaId = document.getElementById('modal_tarea_id').value;
+    const cantidad = document.getElementById('modal_cantidad').value;
+    const unidad = document.getElementById('modal_unidad_ingresada').value;
+    const horas = document.getElementById('modal_horas').value;
+    const operarioId = document.getElementById('modal_operario_id').value;
+
+    if (!cantidad || !unidad || !horas) {
+        alert('Debe completar todos los campos obligatorios: cantidad, unidad y horas.');
+        return;
+    }
+    if (!operarioId) {
+        alert('Debe seleccionar un operario.');
+        return;
+    }
+
+    const formData = new FormData(this);
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Registrando...';
+
+    try {
+        const response = await fetch(`/obras/tareas/${tareaId}/avances`, { method: 'POST', body: formData });
+        const result = await response.json();
+        if (result.ok) {
+            // Limpiar formulario
+            this.reset();
+            document.getElementById('modal_tarea_id').value = tareaId;
+            // Colapsar el formulario
+            const collapseEl = document.getElementById('collapseNuevoAvance');
+            if (collapseEl) bootstrap.Collapse.getInstance(collapseEl)?.hide();
+            // Recargar avances pendientes en el modal
+            alert('Avance registrado exitosamente como pendiente de aprobación.');
+            // Recargar la lista de avances pendientes
+            const tareaNombre = document.getElementById('tarea-nombre-pendiente').textContent;
+            const unidadBase = document.getElementById('modal_unidad_base').value;
+            const rendimiento = document.getElementById('modal_rendimiento').value;
+            bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes'))?.hide();
+            setTimeout(() => mostrarAvancesPendientes(tareaId, tareaNombre, unidadBase, rendimiento), 300);
+        } else {
+            alert(result.error || 'Error al registrar el avance');
+        }
+    } catch (error) {
+        alert('Error de conexión al registrar el avance');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
 
 /* HOTFIX: Sin preventDefault global — dejamos que los forms tradicionales funcionen si no hay JS específico. */
 console.log('🔧 HOTFIX activo: envíos tradicionales permitidos cuando corresponde.');
