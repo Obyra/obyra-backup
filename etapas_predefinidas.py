@@ -3,111 +3,36 @@ Etapas predefinidas para proyectos de construcción - OBYRA IA
 """
 
 ETAPAS_CONSTRUCCION = [
-    {
-        "id": 1, 
-        "slug": "excavacion", 
-        "nombre": "Excavación", 
-        "descripcion": "Movimiento de suelos y preparación del terreno", 
-        "orden": 10
-    },
-    {
-        "id": 2, 
-        "slug": "fundaciones", 
-        "nombre": "Fundaciones", 
-        "descripcion": "Cimientos y estructuras de base", 
-        "orden": 20
-    },
-    {
-        "id": 3, 
-        "slug": "estructura", 
-        "nombre": "Estructura", 
-        "descripcion": "Hormigón / acero", 
-        "orden": 30
-    },
-    {
-        "id": 4, 
-        "slug": "mamposteria", 
-        "nombre": "Mampostería", 
-        "descripcion": "Muros y paredes", 
-        "orden": 40
-    },
-    {
-        "id": 5, 
-        "slug": "techos", 
-        "nombre": "Techos", 
-        "descripcion": "Cubiertas e impermeabilización", 
-        "orden": 50
-    },
-    {
-        "id": 6, 
-        "slug": "instalaciones-electricas", 
-        "nombre": "Instalaciones Eléctricas", 
-        "descripcion": "Sistema eléctrico", 
-        "orden": 60
-    },
-    {
-        "id": 7, 
-        "slug": "instalaciones-sanitarias", 
-        "nombre": "Instalaciones Sanitarias", 
-        "descripcion": "Agua y desagües", 
-        "orden": 70
-    },
-    {
-        "id": 8, 
-        "slug": "instalaciones-gas", 
-        "nombre": "Instalaciones de Gas", 
-        "descripcion": "Sistema de gas natural", 
-        "orden": 80
-    },
-    {
-        "id": 9, 
-        "slug": "revoque-grueso", 
-        "nombre": "Revoque Grueso", 
-        "descripcion": "Base en paredes", 
-        "orden": 90
-    },
-    {
-        "id": 10, 
-        "slug": "revoque-fino", 
-        "nombre": "Revoque Fino", 
-        "descripcion": "Terminación", 
-        "orden": 100
-    },
-    {
-        "id": 11, 
-        "slug": "pisos", 
-        "nombre": "Pisos", 
-        "descripcion": "Colocación y revestimientos", 
-        "orden": 110
-    },
-    {
-        "id": 12, 
-        "slug": "carpinteria", 
-        "nombre": "Carpintería", 
-        "descripcion": "Puertas, ventanas, muebles", 
-        "orden": 120
-    },
-    {
-        "id": 13, 
-        "slug": "pintura", 
-        "nombre": "Pintura", 
-        "descripcion": "Interior y exterior", 
-        "orden": 130
-    },
-    {
-        "id": 14, 
-        "slug": "instalaciones-complementarias", 
-        "nombre": "Instalaciones Complementarias", 
-        "descripcion": "A/A, calefacción, etc.", 
-        "orden": 140
-    },
-    {
-        "id": 15, 
-        "slug": "limpieza-final", 
-        "nombre": "Limpieza Final", 
-        "descripcion": "Acondicionamiento final", 
-        "orden": 150
-    }
+    # --- Etapas iniciales (antes de excavación) ---
+    {"id": 16, "slug": "preliminares-obrador", "nombre": "Preliminares y Obrador", "descripcion": "Permisos, obrador y replanteo general", "orden": 5},
+    {"id": 17, "slug": "demoliciones", "nombre": "Demoliciones", "descripcion": "Demolición de estructuras existentes", "orden": 6},
+    {"id": 18, "slug": "movimiento-de-suelos", "nombre": "Movimiento de Suelos", "descripcion": "Excavación masiva, rellenos y compactación", "orden": 7},
+    {"id": 19, "slug": "apuntalamientos", "nombre": "Apuntalamientos", "descripcion": "Sostenimiento provisorio de estructuras", "orden": 8},
+    {"id": 20, "slug": "depresion-de-napa", "nombre": "Depresión de Napa / Bombeo", "descripcion": "Control de nivel freático y achique", "orden": 9},
+    # --- Etapas existentes ---
+    {"id": 1, "slug": "excavacion", "nombre": "Excavación", "descripcion": "Movimiento de suelos y preparación del terreno", "orden": 10},
+    {"id": 2, "slug": "fundaciones", "nombre": "Fundaciones", "descripcion": "Cimientos y estructuras de base", "orden": 20},
+    {"id": 3, "slug": "estructura", "nombre": "Estructura", "descripcion": "Hormigón / acero", "orden": 30},
+    {"id": 4, "slug": "mamposteria", "nombre": "Mampostería", "descripcion": "Muros y paredes", "orden": 40},
+    {"id": 21, "slug": "construccion-en-seco", "nombre": "Construcción en Seco", "descripcion": "Steel/wood frame, placas de yeso (Durlock)", "orden": 42},
+    {"id": 5, "slug": "techos", "nombre": "Techos", "descripcion": "Cubiertas e impermeabilización", "orden": 50},
+    {"id": 6, "slug": "instalaciones-electricas", "nombre": "Instalaciones Eléctricas", "descripcion": "Sistema eléctrico", "orden": 60},
+    {"id": 7, "slug": "instalaciones-sanitarias", "nombre": "Instalaciones Sanitarias", "descripcion": "Agua y desagües", "orden": 70},
+    {"id": 8, "slug": "instalaciones-gas", "nombre": "Instalaciones de Gas", "descripcion": "Sistema de gas natural", "orden": 80},
+    {"id": 22, "slug": "ventilaciones-conductos", "nombre": "Ventilaciones y Conductos", "descripcion": "Conductos de ventilación, extracción y tiro", "orden": 82},
+    {"id": 23, "slug": "impermeabilizaciones-aislaciones", "nombre": "Impermeabilizaciones y Aislaciones", "descripcion": "Membranas, hidrófugos, aislación térmica y acústica", "orden": 85},
+    {"id": 9, "slug": "revoque-grueso", "nombre": "Revoque Grueso", "descripcion": "Base en paredes", "orden": 90},
+    {"id": 24, "slug": "cielorrasos", "nombre": "Cielorrasos", "descripcion": "Cielorrasos aplicados, suspendidos y desmontables", "orden": 95},
+    {"id": 25, "slug": "yeseria-enlucidos", "nombre": "Yesería y Enlucidos", "descripcion": "Enlucido de yeso, estucados y molduras", "orden": 98},
+    {"id": 10, "slug": "revoque-fino", "nombre": "Revoque Fino", "descripcion": "Terminación", "orden": 100},
+    {"id": 26, "slug": "contrapisos-carpetas", "nombre": "Contrapisos y Carpetas", "descripcion": "Contrapisos, carpetas de nivelación y pendientes", "orden": 105},
+    {"id": 11, "slug": "pisos", "nombre": "Pisos", "descripcion": "Colocación y revestimientos", "orden": 110},
+    {"id": 27, "slug": "revestimientos", "nombre": "Revestimientos", "descripcion": "Cerámicos, porcellanato, piedra y terminaciones", "orden": 112},
+    {"id": 12, "slug": "carpinteria", "nombre": "Carpintería", "descripcion": "Puertas, ventanas, muebles", "orden": 120},
+    {"id": 13, "slug": "pintura", "nombre": "Pintura", "descripcion": "Interior y exterior", "orden": 130},
+    {"id": 28, "slug": "provisiones-colocaciones", "nombre": "Provisiones y Colocaciones", "descripcion": "Griferías, sanitarios, accesorios y terminaciones", "orden": 135},
+    {"id": 14, "slug": "instalaciones-complementarias", "nombre": "Instalaciones Complementarias", "descripcion": "A/A, calefacción, etc.", "orden": 140},
+    {"id": 15, "slug": "limpieza-final", "nombre": "Limpieza Final", "descripcion": "Acondicionamiento final", "orden": 150},
 ]
 
 def obtener_etapas_disponibles():
