@@ -130,7 +130,7 @@
             margin-bottom: 0;
         }
 
-        /* Tabla de items - compacta */
+        /* Tabla de etapas - limpia */
         table.items-table {
             width: 100%;
             border-collapse: collapse;
@@ -142,9 +142,9 @@
         }
 
         table.items-table th {
-            padding: 5px 8px;
+            padding: 6px 12px;
             text-align: left;
-            font-size: 7pt;
+            font-size: 8pt;
             font-weight: bold;
             color: #666;
             text-transform: uppercase;
@@ -156,9 +156,9 @@
         }
 
         table.items-table td {
-            padding: 5px 8px;
+            padding: 8px 12px;
             border-bottom: 1px solid #eee;
-            font-size: 8pt;
+            font-size: 9pt;
         }
 
         table.items-table td.right {
@@ -167,6 +167,16 @@
 
         table.items-table tr {
             page-break-inside: avoid;
+        }
+
+        table.items-table tr.etapa-row:nth-child(even) {
+            background: #fafafa;
+        }
+
+        table.items-table .etapa-numero {
+            color: #999;
+            font-size: 8pt;
+            margin-right: 8px;
         }
 
         /* Observaciones */
@@ -320,11 +330,11 @@
 </head>
 <body>
     {# ============================================
-       PÁGINA 1: MONEDA PRINCIPAL
+       PAGINA 1: MONEDA PRINCIPAL
        ============================================ #}
 
     <!-- Header con datos de la empresa -->
-    {% set nombre_org = organizacion.nombre|replace('Organización de ', '')|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
+    {% set nombre_org = organizacion.nombre|replace('Organizacion de ', '')|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
     <div class="header-wrapper">
         <div class="header-content">
             <div class="company-logo">
@@ -349,20 +359,20 @@
         </div>
     </div>
 
-    <!-- Barra de información del cliente -->
+    <!-- Barra de informacion del cliente -->
     <div class="info-bar">
         <table>
             <tr>
                 <td class="label">Cliente:</td>
                 <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
-                <td class="label">Nº Presupuesto:</td>
+                <td class="label">N. Presupuesto:</td>
                 <td class="value"><strong>{{ presupuesto.numero }}</strong></td>
             </tr>
             <tr>
                 <td class="label">Fecha:</td>
                 <td class="value">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</td>
                 <td class="label">Vigencia:</td>
-                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
+                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin limite' }}</td>
             </tr>
             {% if nombre_proyecto %}
             <tr>
@@ -376,13 +386,36 @@
     {% if tipo_construccion or superficie_m2 %}
     <div class="proyecto-info">
         {% if tipo_construccion %}<strong>Tipo:</strong> {{ tipo_construccion }} | {% endif %}
-        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m² | {% endif %}
+        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m2 | {% endif %}
         <strong>Moneda:</strong> {{ moneda_principal }}
     </div>
     {% endif %}
 
-    <!-- Contenido principal - MONEDA PRINCIPAL -->
-    {% if items %}
+    <!-- Contenido principal - Resumen por etapas en MONEDA PRINCIPAL -->
+    {% if etapas_totales %}
+    <div class="service-section">
+        <div class="service-header">Detalle por Etapas</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 8%;">N.</th>
+                    <th style="width: 62%;">Etapa</th>
+                    <th class="right" style="width: 30%;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for etapa_nombre, total_etapa in etapas_totales.items() %}
+                <tr class="etapa-row">
+                    <td><span class="etapa-numero">{{ loop.index }}</span></td>
+                    <td><strong>{{ etapa_nombre }}</strong></td>
+                    <td class="right"><strong>{{ moneda_principal }} {{ "{:,.2f}".format(total_etapa|float) }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif items %}
+    {# Fallback: si no hay etapas, mostrar items agrupados por tipo #}
     {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
     {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
     {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
@@ -390,24 +423,18 @@
 
     {% if materiales %}
     <div class="service-section">
-        <div class="service-header">Materiales ({{ materiales|length }} items)</div>
+        <div class="service-header">Materiales</div>
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
+                    <th style="width: 70%;">Descripcion</th>
+                    <th class="right" style="width: 30%;">Subtotal</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in materiales %}
                 <tr>
                     <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
                     <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
                 </tr>
                 {% endfor %}
@@ -418,24 +445,18 @@
 
     {% if mano_obra %}
     <div class="service-section">
-        <div class="service-header">Mano de Obra ({{ mano_obra|length }} items)</div>
+        <div class="service-header">Mano de Obra</div>
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Jornales</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
+                    <th style="width: 70%;">Descripcion</th>
+                    <th class="right" style="width: 30%;">Subtotal</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in mano_obra %}
                 <tr>
                     <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.1f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
                     <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
                 </tr>
                 {% endfor %}
@@ -446,24 +467,18 @@
 
     {% if equipos %}
     <div class="service-section">
-        <div class="service-header">Equipos y Maquinaria ({{ equipos|length }} items)</div>
+        <div class="service-header">Equipos y Maquinaria</div>
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
+                    <th style="width: 70%;">Descripcion</th>
+                    <th class="right" style="width: 30%;">Subtotal</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in equipos %}
                 <tr>
                     <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
                     <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
                 </tr>
                 {% endfor %}
@@ -471,33 +486,8 @@
         </table>
     </div>
     {% endif %}
-
-    {% if otros %}
-    <div class="service-section">
-        <div class="service-header">Otros ({{ otros|length }} items)</div>
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in otros %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad or '-' }}</td>
-                    <td class="right">{{ "{:,.2f}".format(item.precio_unitario|float) if item.precio_unitario else '-' }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    {% else %}
+    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
     {% endif %}
 
     {% if presupuesto.observaciones %}
@@ -507,11 +497,7 @@
     </div>
     {% endif %}
 
-    {% else %}
-    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
-    {% endif %}
-
-    <!-- FOOTER PÁGINA 1: Totales en moneda principal -->
+    <!-- FOOTER PAGINA 1: Totales en moneda principal -->
     <div class="footer-section">
         <div class="totals-bar">
             <table>
@@ -536,7 +522,7 @@
                         {% if organizacion.cuit %}
                         <div>CUIT: {{ organizacion.cuit }}</div>
                         {% endif %}
-                        <div>{{ organizacion.direccion or 'Dirección no especificada' }}</div>
+                        <div>{{ organizacion.direccion or 'Direccion no especificada' }}</div>
                     </td>
                     <td class="footer-center" style="width: 34%;">
                         <div class="footer-title">Contacto</div>
@@ -553,7 +539,7 @@
         </div>
 
         <div class="paridad-footer">
-            <strong>Paridad Banco Nación (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
+            <strong>Paridad Banco Nacion (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
         </div>
 
         <div class="total-final-bar">
@@ -567,12 +553,12 @@
     </div>
 
     {# ============================================
-       PÁGINA 2: MONEDA ALTERNATIVA
+       PAGINA 2: MONEDA ALTERNATIVA
        ============================================ #}
 
     <div class="page-break"></div>
 
-    <!-- Header página 2 -->
+    <!-- Header pagina 2 -->
     <div class="header-wrapper">
         <div class="header-content">
             <div class="company-logo">
@@ -597,20 +583,20 @@
         </div>
     </div>
 
-    <!-- Barra de información del cliente -->
+    <!-- Barra de informacion del cliente -->
     <div class="info-bar">
         <table>
             <tr>
                 <td class="label">Cliente:</td>
                 <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
-                <td class="label">Nº Presupuesto:</td>
+                <td class="label">N. Presupuesto:</td>
                 <td class="value"><strong>{{ presupuesto.numero }}</strong></td>
             </tr>
             <tr>
                 <td class="label">Fecha:</td>
                 <td class="value">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</td>
                 <td class="label">Vigencia:</td>
-                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin límite' }}</td>
+                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin limite' }}</td>
             </tr>
             {% if nombre_proyecto %}
             <tr>
@@ -624,40 +610,48 @@
     {% if tipo_construccion or superficie_m2 %}
     <div class="proyecto-info">
         {% if tipo_construccion %}<strong>Tipo:</strong> {{ tipo_construccion }} | {% endif %}
-        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m² | {% endif %}
+        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m2 | {% endif %}
         <strong>Moneda:</strong> {{ moneda_alternativa }} (convertido)
     </div>
     {% endif %}
 
-    <!-- Contenido principal - MONEDA ALTERNATIVA (convertida) -->
-    {% if items %}
-    {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
-    {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
-    {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
-    {% set otros = items|rejectattr('tipo', 'in', ['material', 'mano_obra', 'equipo'])|list %}
-
-    {% if materiales %}
+    <!-- Contenido principal - Resumen por etapas en MONEDA ALTERNATIVA -->
+    {% if etapas_totales %}
     <div class="service-section">
-        <div class="service-header">Materiales ({{ materiales|length }} items)</div>
+        <div class="service-header">Detalle por Etapas</div>
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
+                    <th style="width: 8%;">N.</th>
+                    <th style="width: 62%;">Etapa</th>
+                    <th class="right" style="width: 30%;">Total</th>
                 </tr>
             </thead>
             <tbody>
-                {% for item in materiales %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
+                {% for etapa_nombre, total_etapa in etapas_totales.items() %}
+                <tr class="etapa-row">
+                    <td><span class="etapa-numero">{{ loop.index }}</span></td>
+                    <td><strong>{{ etapa_nombre }}</strong></td>
+                    <td class="right"><strong>{{ moneda_alternativa }} {{ "{:,.2f}".format((total_etapa|float) * factor_conversion) }}</strong></td>
                 </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif items %}
+    {# Fallback: si no hay etapas, mostrar items agrupados por tipo #}
+    {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
+    {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
+    {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
+
+    {% if materiales %}
+    <div class="service-section">
+        <div class="service-header">Materiales</div>
+        <table class="items-table">
+            <thead><tr><th style="width: 70%;">Descripcion</th><th class="right" style="width: 30%;">Subtotal</th></tr></thead>
+            <tbody>
+                {% for item in materiales %}
+                <tr><td>{{ item.descripcion }}</td><td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -666,26 +660,12 @@
 
     {% if mano_obra %}
     <div class="service-section">
-        <div class="service-header">Mano de Obra ({{ mano_obra|length }} items)</div>
+        <div class="service-header">Mano de Obra</div>
         <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Jornales</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
-                </tr>
-            </thead>
+            <thead><tr><th style="width: 70%;">Descripcion</th><th class="right" style="width: 30%;">Subtotal</th></tr></thead>
             <tbody>
                 {% for item in mano_obra %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.1f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
-                </tr>
+                <tr><td>{{ item.descripcion }}</td><td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -694,58 +674,19 @@
 
     {% if equipos %}
     <div class="service-section">
-        <div class="service-header">Equipos y Maquinaria ({{ equipos|length }} items)</div>
+        <div class="service-header">Equipos y Maquinaria</div>
         <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
-                </tr>
-            </thead>
+            <thead><tr><th style="width: 70%;">Descripcion</th><th class="right" style="width: 30%;">Subtotal</th></tr></thead>
             <tbody>
                 {% for item in equipos %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad }}</td>
-                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
-                </tr>
+                <tr><td>{{ item.descripcion }}</td><td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% endif %}
-
-    {% if otros %}
-    <div class="service-section">
-        <div class="service-header">Otros ({{ otros|length }} items)</div>
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 50%;">Descripción</th>
-                    <th class="right" style="width: 12%;">Cantidad</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th class="right" style="width: 14%;">P. Unit.</th>
-                    <th class="right" style="width: 14%;">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in otros %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right">{{ "%.2f"|format(item.cantidad) }}</td>
-                    <td>{{ item.unidad or '-' }}</td>
-                    <td class="right">{{ "{:,.2f}".format((item.precio_unitario|float) * factor_conversion) if item.precio_unitario else '-' }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    {% else %}
+    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
     {% endif %}
 
     {% if presupuesto.observaciones %}
@@ -755,11 +696,7 @@
     </div>
     {% endif %}
 
-    {% else %}
-    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
-    {% endif %}
-
-    <!-- FOOTER PÁGINA 2: Totales en moneda alternativa -->
+    <!-- FOOTER PAGINA 2: Totales en moneda alternativa -->
     <div class="footer-section">
         <div class="totals-bar">
             <table>
@@ -784,7 +721,7 @@
                         {% if organizacion.cuit %}
                         <div>CUIT: {{ organizacion.cuit }}</div>
                         {% endif %}
-                        <div>{{ organizacion.direccion or 'Dirección no especificada' }}</div>
+                        <div>{{ organizacion.direccion or 'Direccion no especificada' }}</div>
                     </td>
                     <td class="footer-center" style="width: 34%;">
                         <div class="footer-title">Contacto</div>
@@ -801,7 +738,7 @@
         </div>
 
         <div class="paridad-footer">
-            <strong>Paridad Banco Nación (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
+            <strong>Paridad Banco Nacion (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
         </div>
 
         <div class="total-final-bar">

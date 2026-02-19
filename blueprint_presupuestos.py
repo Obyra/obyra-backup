@@ -933,6 +933,33 @@ def generar_pdf(id):
             except (json.JSONDecodeError, TypeError) as e:
                 current_app.logger.warning(f"Error parseando datos_proyecto en PDF: {e}")
 
+        # Agrupar items por etapa para vista simplificada del cliente
+        from collections import OrderedDict
+        from decimal import Decimal
+
+        etapas_orden_pdf = [
+            'Trabajos preliminares', 'Excavación', 'Fundaciones', 'Estructura',
+            'Mampostería', 'Techos y cubiertas', 'Instalación eléctrica',
+            'Instalación sanitaria', 'Instalación de gas', 'Pisos y revestimientos',
+            'Carpintería', 'Pintura', 'Equipamiento', 'Terminaciones', 'Otros'
+        ]
+
+        etapas_totales = OrderedDict()
+        for item in items_ordenados:
+            nombre_etapa = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Otros')
+            if nombre_etapa not in etapas_totales:
+                etapas_totales[nombre_etapa] = Decimal('0')
+            etapas_totales[nombre_etapa] += item.total or Decimal('0')
+
+        # Ordenar: primero las etapas conocidas, luego el resto
+        etapas_ordenadas = OrderedDict()
+        for etapa in etapas_orden_pdf:
+            if etapa in etapas_totales:
+                etapas_ordenadas[etapa] = etapas_totales[etapa]
+        for etapa, total in etapas_totales.items():
+            if etapa not in etapas_ordenadas:
+                etapas_ordenadas[etapa] = total
+
         try:
             # Renderizar HTML
             html_string = render_template(
@@ -942,6 +969,7 @@ def generar_pdf(id):
                 usuario=current_user,
                 now=datetime.now(),
                 items=items_ordenados,
+                etapas_totales=etapas_ordenadas,
                 moneda_principal=moneda_principal,
                 moneda_alternativa=moneda_alternativa,
                 cotizacion_dolar=cotizacion_dolar,
@@ -1081,6 +1109,31 @@ Saludos cordiales,
         else:
             factor_conversion = cotizacion_dolar
 
+        # Agrupar items por etapa para vista simplificada del cliente
+        from collections import OrderedDict
+        from decimal import Decimal as Dec
+
+        etapas_orden_email = [
+            'Trabajos preliminares', 'Excavación', 'Fundaciones', 'Estructura',
+            'Mampostería', 'Techos y cubiertas', 'Instalación eléctrica',
+            'Instalación sanitaria', 'Instalación de gas', 'Pisos y revestimientos',
+            'Carpintería', 'Pintura', 'Equipamiento', 'Terminaciones', 'Otros'
+        ]
+        etapas_totales_email = OrderedDict()
+        for item in items_ordenados:
+            nombre_etapa = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Otros')
+            if nombre_etapa not in etapas_totales_email:
+                etapas_totales_email[nombre_etapa] = Dec('0')
+            etapas_totales_email[nombre_etapa] += item.total or Dec('0')
+
+        etapas_ordenadas_email = OrderedDict()
+        for etapa in etapas_orden_email:
+            if etapa in etapas_totales_email:
+                etapas_ordenadas_email[etapa] = etapas_totales_email[etapa]
+        for etapa, total in etapas_totales_email.items():
+            if etapa not in etapas_ordenadas_email:
+                etapas_ordenadas_email[etapa] = total
+
         # Generar PDF
         html_string = render_template(
             'presupuestos/pdf_template.html',
@@ -1089,6 +1142,7 @@ Saludos cordiales,
             usuario=current_user,
             now=datetime.now(),
             items=items_ordenados,
+            etapas_totales=etapas_ordenadas_email,
             moneda_principal=moneda_principal,
             moneda_alternativa=moneda_alternativa,
             cotizacion_dolar=cotizacion_dolar,
