@@ -178,8 +178,9 @@
                                             </a>
                                             {% endif %}
                                             {% if current_user.rol == 'administrador' %}
-                                            <button class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarObra({{ obra.id }}, '{{ obra.nombre }}')">
-                                                <i class="fas fa-trash"></i>
+                                            <button class="btn btn-sm btn-outline-danger d-flex align-items-center" onclick="confirmarEliminarObra({{ obra.id }}, '{{ obra.nombre }}')" title="Eliminar obra">
+                                                <i class="fas fa-trash-alt"></i>
+                                                <span class="d-none d-md-inline ms-1">Eliminar</span>
                                             </button>
                                             {% endif %}
                                         </div>
