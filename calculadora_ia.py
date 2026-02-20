@@ -473,6 +473,48 @@ PRECIO_REFERENCIA = {
     'EQ-ANDAMIOS-LIV': 19000.0,
     'EQ-ELEVADOR': 78500.0,
     'EQ-HIDROLAVADORA': 15500.0,
+    # Nuevos precios para etapas agregadas
+    'MAT-OBRADOR': 45000.0,
+    'MAT-MEMBRANA-IMP': 15700.0,
+    'MAT-HIDROFUGO': 9800.0,
+    'MAT-DURLOCK': 14200.0,
+    'MAT-PERFIL-STEEL': 11500.0,
+    'MAT-CONDUCTO-VENT': 8200.0,
+    'MAT-REJILLA-VENT': 4800.0,
+    'MAT-PLACA-YESO-CR': 13800.0,
+    'MAT-PERFILERIA-CR': 7600.0,
+    'MAT-YESO-PROY': 6200.0,
+    'MAT-CONTRAPISO': 9500.0,
+    'MAT-CARPETA': 7800.0,
+    'MAT-CERAMICO-REV': 19200.0,
+    'MAT-ADHESIVO': 6500.0,
+    'MAT-GRIFERIA': 38000.0,
+    'MAT-SANITARIO': 52000.0,
+    'MAT-ACCESORIOS': 12000.0,
+    'MO-PRELIM': 38000.0,
+    'MO-DEMOL': 44000.0,
+    'MO-APUNT': 46000.0,
+    'MO-BOMBEO': 48000.0,
+    'MO-SECO': 45000.0,
+    'MO-VENT': 43000.0,
+    'MO-IMP': 44500.0,
+    'MO-CIELORRASO': 43000.0,
+    'MO-YESERO': 42000.0,
+    'MO-CONTRAPISO': 41000.0,
+    'MO-REVESTIMIENTO': 43500.0,
+    'MO-PROVISIONES': 44000.0,
+    'EQ-DEMOLICION': 85000.0,
+    'EQ-APUNTALAMIENTO': 32000.0,
+    'EQ-BOMBEO': 65000.0,
+    'EQ-ATORNILLADOR': 8500.0,
+    'MAT-HIERRO-ESTRUC': 2800.0,
+    'MAT-REJAS': 42000.0,
+    'MAT-INCENDIO': 35000.0,
+    'MAT-ALARMA': 28000.0,
+    'MO-SEG': 45000.0,
+    'MO-HERR': 48000.0,
+    'EQ-SEGURIDAD': 22000.0,
+    'EQ-SOLDADORA': 18000.0,
 }
 
 # ================================================================================
@@ -613,6 +655,79 @@ FACTORES_SUPERFICIE_ETAPA = {
         'unidad_default': 'm²',
         'descripcion': 'Igual a superficie cubierta',
         'notas': 'Limpieza de toda la obra'
+    },
+    # Etapas nuevas
+    'preliminares-obrador': {
+        'factor': 1.0,
+        'unidad_default': 'global',
+        'descripcion': 'Basado en superficie cubierta',
+        'notas': 'Obrador, cerco, replanteo y servicios provisorios'
+    },
+    'demoliciones': {
+        'factor': 0.3,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie a demoler (aprox 30% del área)',
+        'notas': 'Demoliciones parciales, picados y retiro'
+    },
+    'movimiento-de-suelos': {
+        'factor': 1.2,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie + bordes de excavación',
+        'notas': 'Excavación masiva con taludes'
+    },
+    'apuntalamientos': {
+        'factor': 0.4,
+        'unidad_default': 'ml',
+        'descripcion': 'Metros lineales de medianeras a apuntalar',
+        'notas': 'Depende de cantidad de linderos'
+    },
+    'depresion-de-napa': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de platea a deprimir',
+        'notas': 'Depende de nivel freático'
+    },
+    'construccion-en-seco': {
+        'factor': 0.4,
+        'unidad_default': 'm²',
+        'descripcion': 'Tabiques de placas de yeso (aprox 40% del área)',
+        'notas': 'Tabiques interiores no portantes'
+    },
+    'ventilaciones-conductos': {
+        'factor': 0.1,
+        'unidad_default': 'ml',
+        'descripcion': 'Metros de conductos (aprox 10% del área)',
+        'notas': 'Ventilación natural y extracción mecánica'
+    },
+    'impermeabilizaciones-aislaciones': {
+        'factor': 1.2,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie a impermeabilizar/aislar',
+        'notas': 'Techos + subsuelos + muros enterrados'
+    },
+    'yeseria-enlucidos': {
+        'factor': 1.6,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de paredes + cielorrasos a enlucir',
+        'notas': 'Similar a revoque fino'
+    },
+    'contrapisos-carpetas': {
+        'factor': 1.0,
+        'unidad_default': 'm²',
+        'descripcion': 'Igual a superficie cubierta',
+        'notas': 'Contrapiso + carpeta en toda la planta'
+    },
+    'revestimientos': {
+        'factor': 0.35,
+        'unidad_default': 'm²',
+        'descripcion': 'Superficie de áreas húmedas + fachadas',
+        'notas': 'Cerámicos en baños/cocinas y revestimiento exterior'
+    },
+    'provisiones-colocaciones': {
+        'factor': 1.0,
+        'unidad_default': 'unidades',
+        'descripcion': 'Basado en superficie cubierta',
+        'notas': 'Griferías, sanitarios y accesorios'
     },
     # Aliases comunes
     'albanileria': {
@@ -931,6 +1046,178 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'EQ-SOLDADORA', 'descripcion': 'Soldadora y amoladora', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
         ],
         'notas': 'Rejas, portones, barandas, escaleras metálicas y estructuras de herrería.'
+    },
+    # =============================================
+    # Etapas nuevas (IDs 16-28)
+    # =============================================
+    'preliminares-obrador': {
+        'nombre': 'Preliminares y Obrador',
+        'materiales': [
+            {'codigo': 'MAT-OBRADOR', 'material_key': 'obrador', 'descripcion': 'Obrador provisorio (contenedor, baños, cerco)', 'unidad': 'global', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-MADERA', 'material_key': 'madera_estructural', 'descripcion': 'Madera para cercos y protecciones', 'unidad': 'm³', 'coef_por_m2': 0.01},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-PRELIM', 'descripcion': 'Cuadrilla de armado de obrador', 'unidad': 'jornal', 'coef_por_m2': 0.10}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora para limpieza de terreno', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Permisos, obrador, cerco de obra, replanteo y servicios provisorios.'
+    },
+    'demoliciones': {
+        'nombre': 'Demoliciones',
+        'materiales': [],
+        'mano_obra': [
+            {'codigo': 'MO-DEMOL', 'descripcion': 'Cuadrilla de demolición', 'unidad': 'jornal', 'coef_por_m2': 0.15}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-DEMOLICION', 'descripcion': 'Martillo neumático y miniretro', 'unidad': 'día', 'dias_por_m2': 0.006, 'min_dias': 1}
+        ],
+        'notas': 'Demolición de estructuras existentes, retiro de escombros y volquetes.'
+    },
+    'movimiento-de-suelos': {
+        'nombre': 'Movimiento de Suelos',
+        'materiales': [
+            {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena para relleno y compactación', 'unidad': 'm³', 'coef_por_m2': 0.06},
+            {'codigo': 'MAT-PIEDRA', 'material_key': 'piedra', 'descripcion': 'Tosca / suelo seleccionado para relleno', 'unidad': 'm³', 'coef_por_m2': 0.04},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-MOVSUE', 'descripcion': 'Cuadrilla movimiento de suelos', 'unidad': 'jornal', 'coef_por_m2': 0.20}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-RETRO', 'descripcion': 'Retroexcavadora con operador', 'unidad': 'día', 'dias_por_m2': 0.010, 'min_dias': 1}
+        ],
+        'notas': 'Excavación masiva, perfilado, rellenos y compactación mecánica.'
+    },
+    'apuntalamientos': {
+        'nombre': 'Apuntalamientos',
+        'materiales': [
+            {'codigo': 'MAT-MADERA', 'material_key': 'madera_estructural', 'descripcion': 'Madera para puntales y tablestacas', 'unidad': 'm³', 'coef_por_m2': 0.03},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-APUNT', 'descripcion': 'Cuadrilla de apuntalamiento', 'unidad': 'jornal', 'coef_por_m2': 0.12}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-APUNTALAMIENTO', 'descripcion': 'Puntales metálicos telescópicos', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 2}
+        ],
+        'notas': 'Sostenimiento provisorio de medianeras, tabiques y estructuras linderas.'
+    },
+    'depresion-de-napa': {
+        'nombre': 'Depresión de Napa / Bombeo',
+        'materiales': [],
+        'mano_obra': [
+            {'codigo': 'MO-BOMBEO', 'descripcion': 'Operación de equipos de bombeo', 'unidad': 'jornal', 'coef_por_m2': 0.08}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-BOMBEO', 'descripcion': 'Equipo de wellpoints y bombas sumergibles', 'unidad': 'día', 'dias_por_m2': 0.012, 'min_dias': 5}
+        ],
+        'notas': 'Instalación de pozos, bombas y mantenimiento para control de nivel freático.'
+    },
+    'construccion-en-seco': {
+        'nombre': 'Construcción en Seco',
+        'materiales': [
+            {'codigo': 'MAT-DURLOCK', 'material_key': 'durlock', 'descripcion': 'Placas de yeso (Durlock/Knauf)', 'unidad': 'm²', 'coef_por_m2': 0.45},
+            {'codigo': 'MAT-PERFIL-STEEL', 'material_key': 'perfileria_steel', 'descripcion': 'Perfilería galvanizada (montantes y soleras)', 'unidad': 'ml', 'coef_por_m2': 1.8},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-SECO', 'descripcion': 'Oficial especializado en drywall', 'unidad': 'jornal', 'coef_por_m2': 0.16}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-ATORNILLADOR', 'descripcion': 'Atornillador y herramientas de corte', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Tabiques y cielorrasos de placas de yeso, steel framing.'
+    },
+    'ventilaciones-conductos': {
+        'nombre': 'Ventilaciones y Conductos',
+        'materiales': [
+            {'codigo': 'MAT-CONDUCTO-VENT', 'material_key': 'conducto_vent', 'descripcion': 'Conductos de chapa galvanizada / PVC', 'unidad': 'ml', 'coef_por_m2': 0.8},
+            {'codigo': 'MAT-REJILLA-VENT', 'material_key': 'rejilla_vent', 'descripcion': 'Rejillas, sombrerete y accesorios', 'unidad': 'unidades', 'coef_por_m2': 0.06},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-VENT', 'descripcion': 'Instalador de ventilación', 'unidad': 'jornal', 'coef_por_m2': 0.10}
+        ],
+        'equipos': [],
+        'notas': 'Conductos de ventilación natural, extracción mecánica y tiro balanceado.'
+    },
+    'impermeabilizaciones-aislaciones': {
+        'nombre': 'Impermeabilizaciones y Aislaciones',
+        'materiales': [
+            {'codigo': 'MAT-MEMBRANA-IMP', 'material_key': 'membrana', 'descripcion': 'Membrana asfáltica con aluminio', 'unidad': 'm²', 'coef_por_m2': 0.9},
+            {'codigo': 'MAT-HIDROFUGO', 'material_key': 'hidrofugo', 'descripcion': 'Hidrófugo cementicio / pintura asfáltica', 'unidad': 'litros', 'coef_por_m2': 0.25},
+            {'codigo': 'MAT-AISLACION', 'material_key': 'aislacion_termica', 'descripcion': 'Aislación térmica EPS / lana de vidrio', 'unidad': 'm²', 'coef_por_m2': 0.85},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-IMP', 'descripcion': 'Oficial aplicador de membranas', 'unidad': 'jornal', 'coef_por_m2': 0.14}
+        ],
+        'equipos': [],
+        'notas': 'Membranas en techos, hidrófugos en muros y fundaciones, aislación térmica/acústica.'
+    },
+    'cielorrasos': {
+        'nombre': 'Cielorrasos',
+        'materiales': [
+            {'codigo': 'MAT-PLACA-YESO-CR', 'material_key': 'placa_yeso_cr', 'descripcion': 'Placas de yeso para cielorraso', 'unidad': 'm²', 'coef_por_m2': 1.05},
+            {'codigo': 'MAT-PERFILERIA-CR', 'material_key': 'perfileria_cr', 'descripcion': 'Perfilería suspendida (omega, varillas)', 'unidad': 'ml', 'coef_por_m2': 2.2},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-CIELORRASO', 'descripcion': 'Oficial cielorrasista', 'unidad': 'jornal', 'coef_por_m2': 0.17}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-ANDAMIOS-LIV', 'descripcion': 'Andamios y escaleras', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Cielorrasos aplicados de yeso, suspendidos de Durlock y desmontables.'
+    },
+    'yeseria-enlucidos': {
+        'nombre': 'Yesería y Enlucidos',
+        'materiales': [
+            {'codigo': 'MAT-YESO-PROY', 'material_key': 'yeso_proyectado', 'descripcion': 'Yeso proyectado / enlucido de yeso', 'unidad': 'kg', 'coef_por_m2': 4.5},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-YESERO', 'descripcion': 'Yesero proyectista', 'unidad': 'jornal', 'coef_por_m2': 0.14}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Proyectora de yeso', 'unidad': 'día', 'dias_por_m2': 0.002, 'min_dias': 1}
+        ],
+        'notas': 'Enlucido de yeso proyectado en paredes y cielorrasos, cantoneras.'
+    },
+    'contrapisos-carpetas': {
+        'nombre': 'Contrapisos y Carpetas',
+        'materiales': [
+            {'codigo': 'MAT-CONTRAPISO', 'material_key': 'contrapiso', 'descripcion': 'Hormigón pobre para contrapiso', 'unidad': 'm³', 'coef_por_m2': 0.08},
+            {'codigo': 'MAT-CARPETA', 'material_key': 'carpeta', 'descripcion': 'Mortero para carpeta de nivelación', 'unidad': 'm³', 'coef_por_m2': 0.03},
+            {'codigo': 'MAT-ARENA', 'material_key': 'arena', 'descripcion': 'Arena para mezcla', 'unidad': 'm³', 'coef_por_m2': 0.04},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-CONTRAPISO', 'descripcion': 'Oficial albañil + ayudante', 'unidad': 'jornal', 'coef_por_m2': 0.18}
+        ],
+        'equipos': [
+            {'codigo': 'EQ-MEZCLADORA', 'descripcion': 'Mezcladora / hormigonera', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1}
+        ],
+        'notas': 'Contrapiso de hormigón, carpeta de cemento alisado con pendientes.'
+    },
+    'revestimientos': {
+        'nombre': 'Revestimientos',
+        'materiales': [
+            {'codigo': 'MAT-CERAMICO-REV', 'material_key': 'ceramico_rev', 'descripcion': 'Cerámico / porcellanato para revestimiento', 'unidad': 'm²', 'coef_por_m2': 0.35},
+            {'codigo': 'MAT-ADHESIVO', 'material_key': 'adhesivo', 'descripcion': 'Adhesivo cementicio para colocación', 'unidad': 'kg', 'coef_por_m2': 1.8},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-REVESTIMIENTO', 'descripcion': 'Colocador de revestimientos', 'unidad': 'jornal', 'coef_por_m2': 0.16}
+        ],
+        'equipos': [],
+        'notas': 'Revestimientos cerámicos, porcellanato, piedra en fachadas y áreas húmedas.'
+    },
+    'provisiones-colocaciones': {
+        'nombre': 'Provisiones y Colocaciones',
+        'materiales': [
+            {'codigo': 'MAT-GRIFERIA', 'material_key': 'griferia', 'descripcion': 'Griferías (cocina, baños)', 'unidad': 'unidades', 'coef_por_m2': 0.025},
+            {'codigo': 'MAT-SANITARIO', 'material_key': 'sanitario', 'descripcion': 'Artefactos sanitarios (inodoro, bidet, lavatorio)', 'unidad': 'unidades', 'coef_por_m2': 0.02},
+            {'codigo': 'MAT-ACCESORIOS', 'material_key': 'accesorios', 'descripcion': 'Accesorios de baño y cocina', 'unidad': 'unidades', 'coef_por_m2': 0.04},
+        ],
+        'mano_obra': [
+            {'codigo': 'MO-PROVISIONES', 'descripcion': 'Oficial instalador', 'unidad': 'jornal', 'coef_por_m2': 0.12}
+        ],
+        'equipos': [],
+        'notas': 'Provisión y colocación de griferías, sanitarios, mesadas, perfiles y herrajes.'
     },
 }
 
