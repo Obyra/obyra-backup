@@ -2684,6 +2684,7 @@ def guardar_presupuesto():
 
 
 @presupuestos_bp.route('/ia/calcular/etapas', methods=['POST'])
+@csrf.exempt
 @login_required
 def calcular_etapas_ia():
     """

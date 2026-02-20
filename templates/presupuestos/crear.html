@@ -1225,7 +1225,14 @@ function solicitarCalculoEtapas(etapas) {
         headers: headers,
         body: JSON.stringify(payload)
     })
-        .then(resp => resp.json())
+        .then(resp => {
+            if (!resp.ok) {
+                return resp.text().then(text => {
+                    throw new Error(`Error del servidor (${resp.status}): ${text.substring(0, 200)}`);
+                });
+            }
+            return resp.json();
+        })
         .then(data => {
             if (!data || data.ok === false) {
                 const mensaje = data && data.error ? data.error : 'No se pudo calcular las etapas seleccionadas.';
@@ -1239,14 +1246,14 @@ function solicitarCalculoEtapas(etapas) {
             const hidden = document.getElementById('iaEtapasPayload');
             if (hidden) {
                 hidden.value = JSON.stringify(data);
-                console.log('✅ Payload IA guardado automáticamente:', data);
+                console.log('Payload IA guardado automaticamente:', data);
             }
 
             renderResultadoEtapasIA(data);
         })
         .catch(error => {
             console.error('Error IA etapas:', error);
-            document.getElementById('resultadoEtapasIAContenido').innerHTML = `<div class="alert alert-danger mb-0">Error de conexión con la IA: ${error.message}</div>`;
+            document.getElementById('resultadoEtapasIAContenido').innerHTML = `<div class="alert alert-danger mb-0">Error al calcular: ${error.message}</div>`;
         });
 }
 
@@ -1387,13 +1394,20 @@ function aplicarResultadosEtapasIA() {
             headers: persistHeaders,
             body: JSON.stringify(persistPayload)
         })
-            .then(resp => resp.json())
+            .then(resp => {
+                if (!resp.ok) {
+                    return resp.text().then(text => {
+                        throw new Error(`Error del servidor (${resp.status})`);
+                    });
+                }
+                return resp.json();
+            })
             .then(respuesta => {
                 if (!respuesta || respuesta.ok === false) {
-                    console.error('No se pudo guardar el cálculo IA en el presupuesto existente:', respuesta);
-                    alert(respuesta && respuesta.error ? respuesta.error : 'No pudimos guardar los ítems calculados. Intentalo nuevamente.');
+                    console.error('No se pudo guardar el calculo IA en el presupuesto existente:', respuesta);
+                    alert(respuesta && respuesta.error ? respuesta.error : 'No pudimos guardar los items calculados. Intentalo nuevamente.');
                 } else {
-                    console.log('🧾 Resultados IA guardados en presupuesto', respuesta);
+                    console.log('Resultados IA guardados en presupuesto', respuesta);
                 }
             })
             .catch(error => {
