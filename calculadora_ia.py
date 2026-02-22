@@ -11,7 +11,7 @@ import math
 from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from unicodedata import normalize
 
 # --- OpenAI opcional (se usa sólo si está instalada y hay API key) ---
@@ -1438,6 +1438,110 @@ ETAPA_REGLAS_BASE = {
 
 STAGE_CALC_CACHE: Dict[str, Any] = {}
 
+# Cache de precios por organización (inventario + constructoras)
+# Estructura: {org_id: {'data': {codigo: (precio, fuente, detalle)}, 'ts': datetime}}
+_PRICE_CACHE: Dict[int, Any] = {}
+_PRICE_CACHE_TTL = 300  # 5 minutos
+
+
+def _build_price_cache(org_id: int) -> Dict[str, Tuple[Decimal, str, str]]:
+    """
+    Construye cache de precios para una organización con dos queries:
+    1. Precios del inventario (ItemInventario.precio_promedio)
+    2. Promedio de precios importados de constructoras (ItemPresupuesto)
+
+    Retorna dict: {codigo: (precio, fuente, detalle)}
+    fuente = 'inventario' | 'constructora'
+    """
+    from extensions import db
+    from models import ItemInventario
+    from models.budgets import Presupuesto, ItemPresupuesto
+    from sqlalchemy import func
+
+    result: Dict[str, Tuple[Decimal, str, str]] = {}
+
+    # --- Query 1: Precios del inventario ---
+    inv_items = ItemInventario.query.filter_by(
+        organizacion_id=org_id,
+        activo=True
+    ).all()
+
+    inv_price_map: Dict[str, Tuple[Decimal, str, int]] = {}  # codigo -> (precio, nombre, id)
+    id_to_codigo: Dict[int, str] = {}
+
+    for item in inv_items:
+        if item.codigo and item.precio_promedio and float(item.precio_promedio) > 0:
+            inv_price_map[item.codigo] = (
+                Decimal(str(item.precio_promedio)),
+                item.nombre,
+                item.id
+            )
+            id_to_codigo[item.id] = item.codigo
+
+    # --- Query 2: Promedio de precios de constructoras importadas ---
+    constructora_map: Dict[str, Tuple[Decimal, int]] = {}  # codigo -> (avg_precio, count)
+
+    try:
+        imported_prices = (
+            db.session.query(
+                ItemPresupuesto.item_inventario_id,
+                func.avg(ItemPresupuesto.precio_unitario).label('avg_price'),
+                func.count(ItemPresupuesto.id).label('sample_count'),
+            )
+            .join(Presupuesto, ItemPresupuesto.presupuesto_id == Presupuesto.id)
+            .filter(
+                Presupuesto.organizacion_id == org_id,
+                Presupuesto.deleted_at.is_(None),
+                ItemPresupuesto.origen == 'importado',
+                ItemPresupuesto.item_inventario_id.isnot(None),
+                ItemPresupuesto.precio_unitario > 0,
+            )
+            .group_by(ItemPresupuesto.item_inventario_id)
+            .all()
+        )
+
+        for row in imported_prices:
+            codigo = id_to_codigo.get(row.item_inventario_id)
+            if codigo and row.avg_price:
+                constructora_map[codigo] = (
+                    Decimal(str(round(float(row.avg_price), 2))),
+                    row.sample_count
+                )
+    except Exception as e:
+        logging.warning(f"Error consultando precios de constructoras: {e}")
+
+    # --- Merge con prioridad: inventario > constructora ---
+    all_codigos = set(inv_price_map.keys()) | set(constructora_map.keys())
+
+    for codigo in all_codigos:
+        inv = inv_price_map.get(codigo)
+        constr = constructora_map.get(codigo)
+
+        if inv and inv[0] > 0:
+            result[codigo] = (inv[0], 'inventario', f"{inv[1]}")
+        elif constr and constr[0] > 0:
+            result[codigo] = (constr[0], 'constructora', f"Promedio de {constr[1]} presupuestos importados")
+
+    logging.info(
+        f"Cache de precios org={org_id}: {len(result)} codigos "
+        f"({sum(1 for v in result.values() if v[1] == 'inventario')} inventario, "
+        f"{sum(1 for v in result.values() if v[1] == 'constructora')} constructora)"
+    )
+    return result
+
+
+def _get_price_cache(org_id: int) -> Dict[str, Tuple[Decimal, str, str]]:
+    """Retorna cache de precios, reconstruyendo si expiró (TTL 5 min)."""
+    now = datetime.utcnow()
+    cached = _PRICE_CACHE.get(org_id)
+    if cached and (now - cached['ts']).total_seconds() < _PRICE_CACHE_TTL:
+        return cached['data']
+
+    data = _build_price_cache(org_id)
+    _PRICE_CACHE[org_id] = {'data': data, 'ts': now}
+    return data
+
+
 # ----------------- Funciones base -----------------
 
 def slugify_etapa(nombre):
@@ -1459,54 +1563,35 @@ def obtener_multiplicador_tipo(tipo):
     return 1.0, clave.title()
 
 
-def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[int] = None) -> Decimal:
+def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[int] = None) -> Tuple[Decimal, str]:
     """
-    Obtiene el precio de referencia, intentando primero consultar el inventario real
-    de la organización, y si no está disponible, usa los precios de referencia hardcodeados.
+    Obtiene el precio de referencia con 3 niveles de prioridad:
+    1. Inventario de la organización (precio_promedio de ItemInventario)
+    2. Promedio de presupuestos importados de constructoras
+    3. Precio de referencia hardcodeado (PRECIO_REFERENCIA)
+
+    Los precios de inventario y constructoras ya están en ARS actuales,
+    por lo que NO se les aplica multiplicador CAC. El multiplicador CAC
+    solo se aplica al fallback hardcodeado.
+
+    Retorna: (precio_decimal, fuente)
+    fuente = 'inventario' | 'constructora' | 'referencia'
     """
-    # Intentar obtener precio real del inventario
+    # Tier 1 y 2: Inventario y constructoras (via cache)
     if org_id:
         try:
-            from models import ItemInventario
-            from extensions import db
-
-            # Mapeo de códigos a búsquedas en inventario
-            busquedas_inventario = {
-                'MAT-CEMENTO': ['cemento', 'portland'],
-                'MAT-ARENA': ['arena'],
-                'MAT-PIEDRA': ['piedra', 'canto rodado'],
-                'MAT-LADRILLO': ['ladrillo', 'ladrillos'],
-                'MAT-HIERRO8': ['hierro 8', 'hierro', 'varilla 8'],
-                'MAT-PINTURA-INT': ['pintura interior', 'pintura lavable', 'latex interior'],
-                'MAT-PINTURA-EXT': ['pintura exterior', 'revestimiento', 'acrilico exterior'],
-                'MAT-SELLADOR': ['sellador', 'fijador', 'imprimacion'],
-                'MAT-YESO': ['yeso', 'enduido'],
-                'MAT-CABLE': ['cable', 'cable electrico'],
-                'MAT-CAÑO-AGUA': ['caño agua', 'caño pvc', 'tuberia agua'],
-                'MAT-CAÑO-GAS': ['caño gas', 'tuberia gas'],
-                'MAT-CAÑO-CLOACA': ['caño cloaca', 'caño desague', 'tuberia cloaca'],
-            }
-
-            if codigo in busquedas_inventario:
-                terminos = busquedas_inventario[codigo]
-                for termino in terminos:
-                    # Buscar en inventario (case-insensitive)
-                    item = ItemInventario.query.filter(
-                        ItemInventario.organizacion_id == org_id,
-                        ItemInventario.nombre.ilike(f'%{termino}%')
-                    ).first()
-
-                    if item and item.precio_unitario:
-                        precio_real = _to_decimal(item.precio_unitario, '0')
-                        if precio_real > DECIMAL_ZERO:
-                            logging.info(f"📦 Usando precio real del inventario para {codigo}: {item.nombre} = ${precio_real}")
-                            return _quantize_currency(precio_real * cac_context.multiplier)
+            price_cache = _get_price_cache(org_id)
+            entry = price_cache.get(codigo)
+            if entry:
+                precio, fuente, _detalle = entry
+                # Precios reales: no aplicar CAC (ya son ARS actuales)
+                return _quantize_currency(precio), fuente
         except Exception as e:
-            logging.warning(f"No se pudo consultar inventario para {codigo}: {e}")
+            logging.warning(f"Error consultando cache de precios para {codigo}: {e}")
 
-    # Fallback: usar precio de referencia hardcodeado
+    # Tier 3: Precio de referencia hardcodeado (aplicar CAC)
     base = _to_decimal(PRECIO_REFERENCIA.get(codigo), '0')
-    return _quantize_currency(base * cac_context.multiplier)
+    return _quantize_currency(base * cac_context.multiplier), 'referencia'
 
 
 def _redondear(valor: Decimal, ndigits: int = 2) -> Decimal:
@@ -1740,7 +1825,7 @@ def calcular_etapa_por_reglas(
             cantidad_final = Decimal(str(math.ceil(float(cantidad_base))))
             justificacion = 'Coeficiente por m² (cantidad neta)'
 
-        precio = _precio_referencia(material['codigo'], cac_context, org_id)
+        precio, precio_fuente = _precio_referencia(material['codigo'], cac_context, org_id)
         precio_moneda = _convert_currency(precio, currency, tasa)
 
         # Item con cantidad (incluye desperdicio si está habilitado)
@@ -1755,6 +1840,7 @@ def calcular_etapa_por_reglas(
             'precio_unit': float(precio_moneda),
             'precio_unit_ars': float(precio),
             'origen': 'ia',
+            'precio_fuente': precio_fuente,
             'just': justificacion,
             'material_key': material.get('material_key'),
             'moneda': currency,
@@ -1774,7 +1860,7 @@ def calcular_etapa_por_reglas(
             cantidad = Decimal(str(max(1, math.ceil(float(cantidad_base)))))
             justificacion = 'Escala de jornales por m² (sin margen)'
 
-        precio = _precio_referencia(mano_obra['codigo'], cac_context, org_id)
+        precio, precio_fuente = _precio_referencia(mano_obra['codigo'], cac_context, org_id)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_mano_obra += _quantize_currency(cantidad * precio_moneda)
         items.append({
@@ -1786,6 +1872,7 @@ def calcular_etapa_por_reglas(
             'precio_unit': float(precio_moneda),
             'precio_unit_ars': float(precio),
             'origen': 'ia',
+            'precio_fuente': precio_fuente,
             'just': justificacion,
             'moneda': currency,
             'subtotal': float(_quantize_currency(cantidad * precio_moneda)),
@@ -1799,7 +1886,7 @@ def calcular_etapa_por_reglas(
         dias = dias if dias > DECIMAL_ZERO else base
         # Redondear días de equipos siempre hacia arriba (2.25 -> 3)
         dias = Decimal(str(math.ceil(float(dias))))
-        precio = _precio_referencia(equipo['codigo'], cac_context, org_id)
+        precio, precio_fuente = _precio_referencia(equipo['codigo'], cac_context, org_id)
         precio_moneda = _convert_currency(precio, currency, tasa)
         subtotal_equipos += _quantize_currency(dias * precio_moneda)
         items.append({
@@ -1811,6 +1898,7 @@ def calcular_etapa_por_reglas(
             'precio_unit': float(precio_moneda),
             'precio_unit_ars': float(precio),
             'origen': 'ia',
+            'precio_fuente': precio_fuente,
             'just': 'Dimensionamiento de apoyo mecánico por superficie',
             'moneda': currency,
             'subtotal': float(_quantize_currency(dias * precio_moneda)),
@@ -1849,7 +1937,7 @@ def calcular_etapa_por_reglas(
                 cantidad = specs['cantidad']
                 dias = int(Decimal(str(specs['dias'])) * factor_dias)
                 # Precio estimado para maquinaria (40-60% del precio de equipos estándar)
-                precio_base = _precio_referencia('EQ-MEZCLADORA', cac_context, org_id)
+                precio_base, _ = _precio_referencia('EQ-MEZCLADORA', cac_context, org_id)
                 precio_moneda = _convert_currency(precio_base * Decimal('0.5'), currency, tasa)
                 subtotal_equipos += _quantize_currency(Decimal(str(dias)) * precio_moneda)
                 items.append({
@@ -1873,7 +1961,8 @@ def calcular_etapa_por_reglas(
                     cantidad_herr = int(cantidad_herr * 1.2)
                 dias_herr = int(Decimal(str(specs['dias'])) * factor_dias)
                 # Precio estimado para herramientas (menor que maquinaria)
-                precio_base_herr = _precio_referencia('EQ-MEZCLADORA', cac_context, org_id) * Decimal('0.15')
+                precio_base_herr, _ = _precio_referencia('EQ-MEZCLADORA', cac_context, org_id)
+                precio_base_herr = precio_base_herr * Decimal('0.15')
                 precio_moneda_herr = _convert_currency(precio_base_herr, currency, tasa)
                 costo_herr = Decimal(str(cantidad_herr)) * precio_moneda_herr
                 subtotal_equipos += _quantize_currency(costo_herr)
