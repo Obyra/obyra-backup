@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 from jinja2 import TemplateNotFound
 
 from app import db
+from extensions import csrf
 from models import (
     ItemInventario,
     CategoriaInventario,
@@ -2050,3 +2051,129 @@ def alertas_stock():
         conteo=resumen['conteo'],
         items=resumen['todos_los_items']
     )
+
+
+@inventario_bp.route('/seed-items-ia', methods=['POST'])
+@csrf.exempt
+@login_required
+def seed_items_ia():
+    """Carga items de la calculadora IA al inventario de la organización."""
+    if current_user.rol != 'administrador':
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    if not org_id:
+        return jsonify({'ok': False, 'error': 'Sin organización activa'}), 400
+
+    try:
+        from calculadora_ia import ETAPA_REGLAS_BASE, PRECIO_REFERENCIA
+
+        # Recopilar todos los códigos únicos con sus datos
+        items_data = {}  # codigo -> {descripcion, unidad, precio, tipo}
+
+        for slug, regla in ETAPA_REGLAS_BASE.items():
+            for mat in regla.get('materiales', []):
+                codigo = mat['codigo']
+                if codigo not in items_data:
+                    items_data[codigo] = {
+                        'descripcion': mat['descripcion'],
+                        'unidad': mat.get('unidad', 'unidades'),
+                        'precio': PRECIO_REFERENCIA.get(codigo, 0),
+                        'tipo': 'material',
+                    }
+
+            for mo in regla.get('mano_obra', []):
+                codigo = mo['codigo']
+                if codigo not in items_data:
+                    items_data[codigo] = {
+                        'descripcion': mo['descripcion'],
+                        'unidad': mo.get('unidad', 'jornal'),
+                        'precio': PRECIO_REFERENCIA.get(codigo, 0),
+                        'tipo': 'mano_obra',
+                    }
+
+            for eq in regla.get('equipos', []):
+                codigo = eq['codigo']
+                if codigo not in items_data:
+                    items_data[codigo] = {
+                        'descripcion': eq['descripcion'],
+                        'unidad': eq.get('unidad', 'día'),
+                        'precio': PRECIO_REFERENCIA.get(codigo, 0),
+                        'tipo': 'equipo',
+                    }
+
+        # Agregar items de PRECIO_REFERENCIA que no vinieron de reglas
+        for codigo, precio in PRECIO_REFERENCIA.items():
+            if codigo not in items_data:
+                tipo = 'material' if codigo.startswith('MAT-') else (
+                    'mano_obra' if codigo.startswith('MO-') else 'equipo')
+                items_data[codigo] = {
+                    'descripcion': codigo.replace('MAT-', '').replace('MO-', '').replace('EQ-', '').replace('-', ' ').title(),
+                    'unidad': 'jornal' if tipo == 'mano_obra' else ('día' if tipo == 'equipo' else 'unidades'),
+                    'precio': precio,
+                    'tipo': tipo,
+                }
+
+        # Buscar/crear categorías
+        cat_map = {}
+        categorias_config = {
+            'material': 'Material de Construcción',
+            'mano_obra': 'Mano de Obra',
+            'equipo': 'Maquinarias y Equipos',
+        }
+        for tipo, cat_nombre in categorias_config.items():
+            cat = InventoryCategory.query.filter_by(
+                company_id=org_id, nombre=cat_nombre
+            ).first()
+            if not cat:
+                cat = InventoryCategory(
+                    company_id=org_id,
+                    nombre=cat_nombre,
+                    is_active=True,
+                    is_global=False,
+                    sort_order=0,
+                )
+                db.session.add(cat)
+                db.session.flush()
+            cat_map[tipo] = cat.id
+
+        # Crear items
+        creados = 0
+        omitidos = 0
+
+        for codigo, data in sorted(items_data.items()):
+            existing = ItemInventario.query.filter_by(
+                codigo=codigo, organizacion_id=org_id
+            ).first()
+            if existing:
+                omitidos += 1
+                continue
+
+            item = ItemInventario(
+                organizacion_id=org_id,
+                categoria_id=cat_map.get(data['tipo']),
+                codigo=codigo,
+                nombre=data['descripcion'],
+                descripcion=f"Item de calculadora IA - {data['tipo'].replace('_', ' ').title()}",
+                unidad=data['unidad'],
+                precio_promedio=data['precio'],
+                stock_actual=0,
+                stock_minimo=0,
+                activo=True,
+            )
+            db.session.add(item)
+            creados += 1
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'creados': creados,
+            'omitidos': omitidos,
+            'total': len(items_data),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en seed_items_ia: {e}", exc_info=True)
+        return jsonify({'ok': False, 'error': str(e)}), 500

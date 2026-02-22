@@ -28,6 +28,9 @@
                     <a href="{{ url_for('inventario.categorias') }}" class="btn btn-outline-secondary ms-1">
                         <i class="fas fa-cog me-1"></i>Gestión Global
                     </a>
+                    <button type="button" class="btn btn-outline-info ms-1" id="btnSeedIA" onclick="seedItemsIA()">
+                        <i class="fas fa-robot me-1"></i>Cargar Items IA
+                    </button>
                     {% endif %}
                 </div>
             </div>
@@ -843,5 +846,36 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(err => console.log('Error cargando alertas:', err));
 });
+
+function seedItemsIA() {
+    const btn = document.getElementById('btnSeedIA');
+    if (!confirm('¿Cargar todos los items de la calculadora IA al inventario?\n\nEsto creará materiales, mano de obra y equipos con precios de referencia.')) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cargando...';
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+    fetch('{{ url_for("inventario.seed_items_ia") }}', { method: 'POST', headers })
+        .then(resp => {
+            if (!resp.ok) return resp.text().then(t => { throw new Error('Error del servidor (' + resp.status + ')'); });
+            return resp.json();
+        })
+        .then(data => {
+            if (data.ok) {
+                alert('Items cargados: ' + data.creados + ' nuevos, ' + data.omitidos + ' ya existentes (total: ' + data.total + ')');
+                if (data.creados > 0) location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(err => alert('Error: ' + err.message))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-robot me-1"></i>Cargar Items IA';
+        });
+}
 </script>
 {% endblock %}
