@@ -1983,11 +1983,26 @@ def calcular_etapa_por_reglas(
     subtotal_total = subtotal_materiales + subtotal_mano_obra + subtotal_equipos
     confianza = min(0.6 + 0.03 * len(items), 0.9)
 
+    # --- Items de referencia de constructoras ---
+    items_constructora = []
+    if org_id:
+        try:
+            from models.budgets import ItemReferenciaConstructora
+            refs = ItemReferenciaConstructora.query.filter_by(
+                organizacion_id=org_id,
+                etapa_nombre=nombre,
+                activo=True,
+            ).order_by(ItemReferenciaConstructora.codigo_excel).all()
+            items_constructora = [r.to_dict() for r in refs]
+        except Exception as e:
+            logging.warning(f"Error consultando items constructora para {nombre}: {e}")
+
     return {
         'slug': etapa_slug,
         'nombre': nombre,
         'etapa_id': etapa_id,
         'items': items,
+        'items_constructora': items_constructora,
         'subtotal_materiales': float(_quantize_currency(subtotal_materiales)),
         'subtotal_mano_obra': float(_quantize_currency(subtotal_mano_obra)),
         'subtotal_equipos': float(_quantize_currency(subtotal_equipos)),

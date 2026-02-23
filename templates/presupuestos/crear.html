@@ -1328,6 +1328,37 @@ function renderResultadoEtapasIA(data) {
                     </div>
                 ` : '<div class="alert alert-warning mb-0">Sin items sugeridos para esta etapa.</div>'}
                 ${etapa.notas ? `<p class="small text-muted mt-2 mb-0">${etapa.notas}</p>` : ''}
+                ${(etapa.items_constructora && etapa.items_constructora.length) ? `
+                    <details class="mt-3">
+                        <summary class="fw-bold text-success" style="cursor:pointer; font-size: 0.85rem;">
+                            <i class="fas fa-hard-hat me-1"></i>Referencia Constructoras (${etapa.items_constructora.length} items)
+                        </summary>
+                        <div class="table-responsive mt-2" style="overflow-x: auto;">
+                            <table class="table table-sm table-bordered align-middle" style="font-size: 0.75rem; white-space: nowrap;">
+                                <thead class="table-success">
+                                    <tr>
+                                        <th style="padding: 0.3rem;">Constructora</th>
+                                        <th style="padding: 0.3rem;">Código</th>
+                                        <th style="padding: 0.3rem; min-width: 200px;">Descripción</th>
+                                        <th style="padding: 0.3rem;">Unidad</th>
+                                        <th class="text-end" style="padding: 0.3rem;">P. Unit.</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${etapa.items_constructora.map(ic => `
+                                        <tr>
+                                            <td style="padding: 0.3rem;"><span class="badge bg-success-subtle text-success">${ic.constructora}</span></td>
+                                            <td style="padding: 0.3rem;">${ic.codigo || '-'}</td>
+                                            <td style="padding: 0.3rem; white-space: normal; max-width: 300px;">${ic.descripcion}</td>
+                                            <td style="padding: 0.3rem;">${ic.unidad || '-'}</td>
+                                            <td class="text-end" style="padding: 0.3rem;">${ic.precio_unitario ? currencyFormatter.format(ic.precio_unitario) : '-'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                ` : ''}
             </div>
         `;
     }).join('');

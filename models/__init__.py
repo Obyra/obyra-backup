@@ -57,6 +57,7 @@ from models.budgets import (
     PricingIndex,
     Presupuesto,
     ItemPresupuesto,
+    ItemReferenciaConstructora,
     GeocodeCache,
     WizardStageVariant,
     WizardStageCoefficient,

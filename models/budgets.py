@@ -272,6 +272,44 @@ class ItemPresupuesto(db.Model):
         return f'<ItemPresupuesto {self.descripcion}>'
 
 
+class ItemReferenciaConstructora(db.Model):
+    """Items de obra cotizados por constructoras reales (parseados de Excel).
+    Sirven como referencia de mercado para la calculadora IA."""
+    __tablename__ = 'items_referencia_constructora'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    constructora = db.Column(db.String(200), nullable=False)
+    etapa_nombre = db.Column(db.String(100), nullable=False)
+    codigo_excel = db.Column(db.String(50))
+    descripcion = db.Column(db.String(500), nullable=False)
+    unidad = db.Column(db.String(20))
+    precio_unitario = db.Column(db.Numeric(15, 2), default=0)
+    planilla = db.Column(db.String(50))
+    fecha_carga = db.Column(db.DateTime, default=datetime.utcnow)
+    activo = db.Column(db.Boolean, default=True)
+
+    organizacion = db.relationship('Organizacion', backref='items_referencia_constructora')
+
+    __table_args__ = (
+        db.Index('ix_ref_constr_org_etapa', 'organizacion_id', 'etapa_nombre'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'constructora': self.constructora,
+            'etapa_nombre': self.etapa_nombre,
+            'codigo': self.codigo_excel,
+            'descripcion': self.descripcion,
+            'unidad': self.unidad,
+            'precio_unitario': float(self.precio_unitario or 0),
+        }
+
+    def __repr__(self):
+        return f'<ItemRefConstructora {self.constructora}: {self.descripcion[:40]}>'
+
+
 class GeocodeCache(db.Model):
     __tablename__ = 'geocode_cache'
 

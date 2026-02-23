@@ -696,12 +696,22 @@ def crear_manual():
 
 
 # ==========================================
-# IMPORTAR DESDE EXCEL
+# IMPORTAR DESDE EXCEL (deshabilitado - ahora se carga desde inventario)
 # ==========================================
+
 
 @presupuestos_bp.route('/importar-excel', methods=['GET'])
 @login_required
 def importar_excel():
+    """Redirige al inventario - la carga de constructoras se hace desde ahí."""
+    flash('La carga de presupuestos de constructoras se realiza desde el módulo de Inventario.', 'info')
+    return redirect(url_for('inventario.lista'))
+
+
+    pass  # Rutas legacy de preview/confirmar eliminadas
+
+
+if False:
     """Mostrar formulario de importación desde Excel."""
     if not current_user.puede_gestionar():
         flash('No tienes permisos para crear presupuestos', 'danger')

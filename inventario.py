@@ -23,6 +23,7 @@ from models import (
     CategoriaInventario,
     MovimientoInventario,
     UsoInventario,
+    ItemReferenciaConstructora,
     Obra,
     # Nuevo sistema de ubicaciones
     Location,
@@ -2176,4 +2177,98 @@ def seed_items_ia():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error en seed_items_ia: {e}", exc_info=True)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@inventario_bp.route('/cargar-constructora', methods=['POST'])
+@csrf.exempt
+@login_required
+def cargar_constructora():
+    """Carga items de referencia desde un Excel de constructora.
+    Parsea el archivo y almacena items por etapa para usar como referencia en la calculadora IA."""
+    if current_user.rol != 'administrador':
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+
+    org_id = get_current_org_id() or current_user.organizacion_id
+    if not org_id:
+        return jsonify({'ok': False, 'error': 'Sin organizacion activa'}), 400
+
+    archivo = request.files.get('archivo')
+    constructora_nombre = request.form.get('constructora', '').strip()
+
+    if not archivo:
+        return jsonify({'ok': False, 'error': 'No se envio archivo'}), 400
+    if not constructora_nombre:
+        return jsonify({'ok': False, 'error': 'Falta nombre de constructora'}), 400
+
+    filename = archivo.filename or 'upload.xlsx'
+    if not filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify({'ok': False, 'error': 'Solo archivos .xlsx o .xls'}), 400
+
+    try:
+        from services.excel_budget_parser import parse_excel_file
+
+        result = parse_excel_file(archivo.stream, filename)
+
+        if not result.items_by_vendor:
+            return jsonify({'ok': False, 'error': 'No se encontraron items en el archivo'}), 400
+
+        # Usar el primer vendor (o el unico) del archivo
+        vendor_key = list(result.items_by_vendor.keys())[0]
+        items = result.items_by_vendor[vendor_key]
+
+        creados = 0
+        actualizados = 0
+        omitidos = 0
+
+        for item in items:
+            if item.es_subtotal or not item.descripcion.strip():
+                omitidos += 1
+                continue
+
+            # Buscar si ya existe este item (mismo org + constructora + etapa + codigo)
+            existing = ItemReferenciaConstructora.query.filter_by(
+                organizacion_id=org_id,
+                constructora=constructora_nombre,
+                etapa_nombre=item.rubro_nombre,
+                codigo_excel=item.codigo,
+            ).first()
+
+            if existing:
+                # Actualizar precio si cambio
+                if item.precio_unitario and item.precio_unitario > 0:
+                    existing.precio_unitario = item.precio_unitario
+                    existing.descripcion = item.descripcion
+                    existing.unidad = item.unidad
+                    actualizados += 1
+                else:
+                    omitidos += 1
+            else:
+                nuevo = ItemReferenciaConstructora(
+                    organizacion_id=org_id,
+                    constructora=constructora_nombre,
+                    etapa_nombre=item.rubro_nombre,
+                    codigo_excel=item.codigo,
+                    descripcion=item.descripcion,
+                    unidad=item.unidad,
+                    precio_unitario=item.precio_unitario if item.precio_unitario > 0 else 0,
+                    planilla=item.planilla,
+                )
+                db.session.add(nuevo)
+                creados += 1
+
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'creados': creados,
+            'actualizados': actualizados,
+            'omitidos': omitidos,
+            'total': len(items),
+            'constructora': constructora_nombre,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en cargar_constructora: {e}", exc_info=True)
         return jsonify({'ok': False, 'error': str(e)}), 500
