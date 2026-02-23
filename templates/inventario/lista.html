@@ -278,15 +278,15 @@
                             <td class="text-center">
                                 <div class="d-flex justify-content-center gap-1 flex-wrap">
                                     <a href="{{ url_for('inventario.detalle', id=item.id) }}"
-                                       class="btn btn-outline-primary btn-sm"
-                                       title="Ver detalles">
-                                        <i class="fas fa-eye"></i>
+                                       class="btn btn-primary btn-sm"
+                                       title="Ver detalles del item">
+                                        <i class="fas fa-eye me-1"></i>Ver
                                     </a>
                                     {% if current_user.rol in ['administrador', 'tecnico'] %}
-                                    <button type="button" class="btn btn-outline-secondary btn-sm"
-                                            title="Acciones"
+                                    <button type="button" class="btn btn-secondary btn-sm"
+                                            title="Baja, traslado, eliminar"
                                             onclick="abrirModalAcciones('{{ item.id }}', '{{ item.nombre }}', '{{ item.codigo }}', {{ item.stock_actual|float }})">
-                                        <i class="fas fa-ellipsis-v"></i>
+                                        <i class="fas fa-cog me-1"></i>Acciones
                                     </button>
                                     {% endif %}
                                 </div>
@@ -808,19 +808,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ===== Eliminar Item =====
 function confirmarEliminar(itemId, itemNombre, itemCodigo, stockActual) {
-    let mensaje = `¿Estás seguro de que deseas eliminar el item "${itemNombre}" (${itemCodigo})?`;
+    let mensaje = `¿Eliminar "${itemNombre}" (${itemCodigo})?`;
 
     if (stockActual > 0) {
-        mensaje += `\n\n⚠️ ADVERTENCIA: Este item tiene ${stockActual.toFixed(2)} unidades en stock.`;
-        mensaje += `\nSi lo eliminas, el stock quedará registrado pero el item no aparecerá en la lista.`;
+        mensaje += `\n\nEste item tiene ${stockActual.toFixed(0)} unidades en stock.`;
+        mensaje += `\nEl stock se vaciará automáticamente y se registrará como baja.`;
     }
 
     mensaje += `\n\nEsta acción no se puede deshacer.`;
 
     if (confirm(mensaje)) {
-        // Enviar formulario de eliminación
         const form = document.getElementById('formEliminar');
         form.action = `/inventario/${itemId}/eliminar`;
+        // Si tiene stock, agregar campo para forzar eliminación
+        if (stockActual > 0) {
+            let input = form.querySelector('input[name="forzar_eliminar"]');
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'forzar_eliminar';
+                form.appendChild(input);
+            }
+            input.value = '1';
+        }
         form.submit();
     }
 }

@@ -418,11 +418,26 @@ def eliminar(id):
         flash('No tienes permisos para eliminar este item.', 'danger')
         return redirect(url_for('inventario.lista'))
 
-    # Verificar si tiene stock actual
+    # Si tiene stock, el admin puede forzar eliminación (vacía stock automáticamente)
     if item.stock_actual and float(item.stock_actual) > 0:
-        flash(f'No se puede eliminar "{item.nombre}" porque tiene stock ({item.stock_actual} {item.unidad}). '
-              f'Primero da de baja todo el stock.', 'warning')
-        return redirect(url_for('inventario.lista'))
+        forzar = request.form.get('forzar_eliminar') == '1'
+        if not forzar:
+            flash(f'No se puede eliminar "{item.nombre}" porque tiene stock ({item.stock_actual} {item.unidad}). '
+                  f'Primero da de baja todo el stock.', 'warning')
+            return redirect(url_for('inventario.lista'))
+        # Admin forzó: registrar baja del stock y continuar
+        from datetime import datetime as dt_now
+        baja = MovimientoInventario(
+            item_id=item.id,
+            tipo='salida',
+            cantidad=item.stock_actual,
+            motivo=f'Eliminación forzada por admin - stock vaciado',
+            fecha=dt_now.utcnow(),
+            usuario_id=current_user.id,
+        )
+        db.session.add(baja)
+        item.stock_actual = 0
+        db.session.flush()
 
     # Verificar si tiene movimientos o usos recientes (últimos 30 días)
     from datetime import datetime as dt, timedelta
