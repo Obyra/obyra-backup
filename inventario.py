@@ -2083,10 +2083,13 @@ def seed_items_ia():
     try:
         from calculadora_ia import ETAPA_REGLAS_BASE, PRECIO_REFERENCIA
 
-        # Recopilar todos los códigos únicos con sus datos
-        items_data = {}  # codigo -> {descripcion, unidad, precio, tipo}
+        # Recopilar items por etapa de construcción
+        # codigo -> {descripcion, unidad, precio, etapa_nombre}
+        items_data = {}
 
         for slug, regla in ETAPA_REGLAS_BASE.items():
+            etapa_nombre = regla.get('nombre', slug.replace('-', ' ').title())
+
             for mat in regla.get('materiales', []):
                 codigo = mat['codigo']
                 if codigo not in items_data:
@@ -2094,7 +2097,7 @@ def seed_items_ia():
                         'descripcion': mat['descripcion'],
                         'unidad': mat.get('unidad', 'unidades'),
                         'precio': PRECIO_REFERENCIA.get(codigo, 0),
-                        'tipo': 'material',
+                        'etapa': etapa_nombre,
                     }
 
             for mo in regla.get('mano_obra', []):
@@ -2104,7 +2107,7 @@ def seed_items_ia():
                         'descripcion': mo['descripcion'],
                         'unidad': mo.get('unidad', 'jornal'),
                         'precio': PRECIO_REFERENCIA.get(codigo, 0),
-                        'tipo': 'mano_obra',
+                        'etapa': etapa_nombre,
                     }
 
             for eq in regla.get('equipos', []):
@@ -2114,43 +2117,37 @@ def seed_items_ia():
                         'descripcion': eq['descripcion'],
                         'unidad': eq.get('unidad', 'día'),
                         'precio': PRECIO_REFERENCIA.get(codigo, 0),
-                        'tipo': 'equipo',
+                        'etapa': etapa_nombre,
                     }
 
-        # Agregar items de PRECIO_REFERENCIA que no vinieron de reglas
+        # Items de PRECIO_REFERENCIA que no están en ninguna etapa → "Otros"
         for codigo, precio in PRECIO_REFERENCIA.items():
             if codigo not in items_data:
-                tipo = 'material' if codigo.startswith('MAT-') else (
-                    'mano_obra' if codigo.startswith('MO-') else 'equipo')
                 items_data[codigo] = {
                     'descripcion': codigo.replace('MAT-', '').replace('MO-', '').replace('EQ-', '').replace('-', ' ').title(),
-                    'unidad': 'jornal' if tipo == 'mano_obra' else ('día' if tipo == 'equipo' else 'unidades'),
+                    'unidad': 'jornal' if codigo.startswith('MO-') else ('día' if codigo.startswith('EQ-') else 'unidades'),
                     'precio': precio,
-                    'tipo': tipo,
+                    'etapa': 'Otros',
                 }
 
-        # Buscar/crear categorías
-        cat_map = {}
-        categorias_config = {
-            'material': 'Material de Construcción',
-            'mano_obra': 'Mano de Obra',
-            'equipo': 'Maquinarias y Equipos',
-        }
-        for tipo, cat_nombre in categorias_config.items():
+        # Crear categorías por etapa de construcción
+        etapas_unicas = sorted(set(d['etapa'] for d in items_data.values()))
+        cat_map = {}  # etapa_nombre -> category_id
+        for idx, etapa_nombre in enumerate(etapas_unicas):
             cat = InventoryCategory.query.filter_by(
-                company_id=org_id, nombre=cat_nombre
+                company_id=org_id, nombre=etapa_nombre
             ).first()
             if not cat:
                 cat = InventoryCategory(
                     company_id=org_id,
-                    nombre=cat_nombre,
+                    nombre=etapa_nombre,
                     is_active=True,
                     is_global=False,
-                    sort_order=0,
+                    sort_order=idx,
                 )
                 db.session.add(cat)
                 db.session.flush()
-            cat_map[tipo] = cat.id
+            cat_map[etapa_nombre] = cat.id
 
         # Crear items
         creados = 0
@@ -2166,10 +2163,10 @@ def seed_items_ia():
 
             item = ItemInventario(
                 organizacion_id=org_id,
-                categoria_id=cat_map.get(data['tipo']),
+                categoria_id=cat_map.get(data['etapa']),
                 codigo=codigo,
                 nombre=data['descripcion'],
-                descripcion=f"Item de calculadora IA - {data['tipo'].replace('_', ' ').title()}",
+                descripcion=f"Etapa: {data['etapa']}",
                 unidad=data['unidad'],
                 precio_promedio=data['precio'],
                 stock_actual=0,
