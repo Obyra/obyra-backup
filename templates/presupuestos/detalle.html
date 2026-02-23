@@ -1462,6 +1462,12 @@ function renderItemDisplay(row) {
         const personas = parseInt(row.dataset.itemPersonas || '1', 10) || 1;
         const dias = parseDecimalString(row.dataset.itemDias, 1);
         const jornales = parseDecimalString(row.dataset.itemJornales, personas * dias);
+        const totalUsdHtml = Number.isFinite(total)
+            ? `<td class="text-end fw-bold text-success">${formatCurrencyValue(total, 'USD')}</td>`
+            : `<td class="text-end fw-bold text-success">-</td>`;
+        const totalArsHtml = Number.isFinite(totalArs)
+            ? `<td class="text-end fw-bold text-primary">${formatCurrencyValue(totalArs, 'ARS')}</td>`
+            : `<td class="text-end fw-bold text-primary">${formatCurrencyValue(total, 'ARS')}</td>`;
         const cells = [
             `<td>${descripcion}</td>`,
             `<td class="text-center">${personas}</td>`,
@@ -1469,37 +1475,28 @@ function renderItemDisplay(row) {
             `<td class="text-end">${formatNumber(jornales, 1)}</td>`,
             `<td>${unidad}</td>`,
             `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`,
-            `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}</td>`
+            totalUsdHtml,
+            totalArsHtml
         ];
-        // Add ARS column if presupuesto is in USD
-        if (resumenCurrency === 'USD') {
-            const arsCell = Number.isFinite(totalArs)
-                ? `<td class="text-end fw-bold text-muted">${formatCurrencyValue(totalArs, 'ARS')}</td>`
-                : `<td class="text-end fw-bold text-muted">-</td>`;
-            cells.push(arsCell);
-        }
         const actionCell = getActionCellHtml(row, itemId);
         row.innerHTML = cells.join('') + actionCell;
         return;
     }
 
-    const quantityCell = `<td class="text-end">${formatNumber(cantidad, 2)}</td>`;
-    const priceCell = `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`;
-    const totalCell = `<td class="text-end fw-bold">${formatCurrencyValue(total, currency)}</td>`;
+    const totalUsdHtml = Number.isFinite(total)
+        ? `<td class="text-end fw-bold text-success">${formatCurrencyValue(total, 'USD')}</td>`
+        : `<td class="text-end fw-bold text-success">-</td>`;
+    const totalArsHtml = Number.isFinite(totalArs)
+        ? `<td class="text-end fw-bold text-primary">${formatCurrencyValue(totalArs, 'ARS')}</td>`
+        : `<td class="text-end fw-bold text-primary">${formatCurrencyValue(total, 'ARS')}</td>`;
     const cells = [
         `<td>${descripcion}</td>`,
         `<td>${unidad}</td>`,
-        quantityCell,
-        priceCell,
-        totalCell
+        `<td class="text-end">${formatNumber(cantidad, 2)}</td>`,
+        `<td class="text-end">${formatCurrencyValue(precio, currency)}${approxPrecioHtml}</td>`,
+        totalUsdHtml,
+        totalArsHtml
     ];
-    // Add ARS column if presupuesto is in USD
-    if (resumenCurrency === 'USD') {
-        const arsCell = Number.isFinite(totalArs)
-            ? `<td class="text-end fw-bold text-muted">${formatCurrencyValue(totalArs, 'ARS')}</td>`
-            : `<td class="text-end fw-bold text-muted">-</td>`;
-        cells.push(arsCell);
-    }
     const actionCell = getActionCellHtml(row, itemId);
     row.innerHTML = cells.join('') + actionCell;
 }
@@ -1536,14 +1533,15 @@ function editarItem(itemId) {
                     <input type="number" class="form-control text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionJornales(${itemId})">
                 </div>
             </td>
-            <td class="text-end"><span id="edit-total-${itemId}">${totalEstimado.toFixed(2)}</span></td>
+            <td class="text-end text-success fw-bold"><span id="edit-total-usd-${itemId}">-</span></td>
+            <td class="text-end text-primary fw-bold"><span id="edit-total-${itemId}">${totalEstimado.toLocaleString('es-AR', {minimumFractionDigits: 2})}</span></td>
             <td class="text-end">
                 <div class="d-flex gap-2 justify-content-end">
-                    <button class="btn btn-success btn-sm" onclick="guardarItem(${itemId})">
-                        <i class="fas fa-save"></i>
+                    <button class="btn btn-success btn-sm" onclick="guardarItem(${itemId})" title="Guardar">
+                        <i class="fas fa-save me-1"></i>Guardar
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId})">
-                        <i class="fas fa-times"></i>
+                    <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId})" title="Cancelar">
+                        <i class="fas fa-times me-1"></i>Cancelar
                     </button>
                 </div>
             </td>
@@ -1577,14 +1575,16 @@ function editarItem(itemId) {
                 <input type="number" class="form-control text-end" value="${precioUnitario.toFixed(2)}" step="0.01" id="edit-precio-${itemId}" oninput="actualizarEdicionTotalSimple(${itemId})">
             </div>
         </td>
-        <td class="text-end"><span id="edit-total-${itemId}">${totalEstimado.toFixed(2)}</span></td>
+        <td class="text-end text-success fw-bold"><span id="edit-total-usd-${itemId}">-</span></td>
+        <td class="text-end text-primary fw-bold"><span id="edit-total-${itemId}">${totalEstimado.toLocaleString('es-AR', {minimumFractionDigits: 2})}</span></td>
         <td class="text-end">
             <div class="d-flex gap-2 justify-content-end">
-                <button class="btn btn-success btn-sm" onclick="guardarItem(${itemId})">
-                    <i class="fas fa-save"></i>
+                <button class="btn btn-success btn-sm" onclick="guardarItem(${itemId})" title="Guardar">
+                    <i class="fas fa-save me-1"></i>Guardar
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId})">
-                    <i class="fas fa-times"></i>
+                <button class="btn btn-secondary btn-sm" onclick="cancelarEditarItem(${itemId})" title="Cancelar">
+                    <i class="fas fa-times me-1"></i>Cancelar
+                </button>
                 </button>
             </div>
         </td>
