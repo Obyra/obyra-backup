@@ -232,6 +232,7 @@ __all__ = [
     'PricingIndex',
     'Presupuesto',
     'ItemPresupuesto',
+    'ItemReferenciaConstructora',
     'GeocodeCache',
     'WizardStageVariant',
     'WizardStageCoefficient',
