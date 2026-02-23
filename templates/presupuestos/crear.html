@@ -106,7 +106,7 @@
                                 </div>
                                 <div id="ubicacion_sugerencias" class="list-group shadow-sm mt-2 d-none"></div>
                                 <div id="ubicacion_mapa_wrapper" class="mt-3 d-none">
-                                    <div id="ubicacion_mapa" style="height: 220px; border-radius: 12px;"></div>
+                                    <div id="ubicacion_mapa" style="height: 220px; border-radius: 12px; border: 1px solid #dee2e6; background: #f8f9fa; z-index: 1;"></div>
                                     <small class="text-muted d-block mt-2" id="ubicacion_meta"></small>
                                 </div>
                                 <input type="hidden" id="ubicacion_lat" name="ubicacion_lat">
@@ -724,10 +724,16 @@ function inicializarMapaUbicacion(lat, lng) {
         console.warn('Leaflet no está disponible.');
         return;
     }
+    // Asegurar que el contenedor sea visible antes de inicializar
+    if (ubicacionMapaWrapper) {
+        ubicacionMapaWrapper.classList.remove('d-none');
+    }
     if (!ubicacionMap) {
-        ubicacionMap = L.map('ubicacion_mapa');
+        ubicacionMap = L.map('ubicacion_mapa', {
+            scrollWheelZoom: false,
+        });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
+            attribution: '&copy; OpenStreetMap',
             maxZoom: 19,
         }).addTo(ubicacionMap);
     }
@@ -737,7 +743,12 @@ function inicializarMapaUbicacion(lat, lng) {
     } else {
         ubicacionMarker = L.marker([lat, lng]).addTo(ubicacionMap);
     }
-    setTimeout(() => ubicacionMap.invalidateSize(), 150);
+    // Forzar recalculo de tamaño varias veces para asegurar renderizado
+    requestAnimationFrame(() => {
+        ubicacionMap.invalidateSize();
+        setTimeout(() => ubicacionMap.invalidateSize(), 300);
+        setTimeout(() => ubicacionMap.invalidateSize(), 800);
+    });
 }
 
 function renderSugerencias(selectedIndex = null) {
