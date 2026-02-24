@@ -27,6 +27,7 @@ class Organizacion(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     token_invitacion = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     activa = db.Column(db.Boolean, default=True)
+    logo_url = db.Column(db.String(500), nullable=True)  # Ruta relativa del logo (ej: uploads/logos/1/logo.png)
 
     # Plan de suscripción
     plan_tipo = db.Column(db.String(50), default='prueba')  # prueba, estandar, premium, full_premium

@@ -1,10 +1,13 @@
 from datetime import datetime
+import os
 import re
+import uuid
 from typing import Tuple
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for, jsonify
+from flask import Blueprint, flash, redirect, render_template, request, url_for, jsonify, current_app
 from flask_login import current_user, login_required
 from sqlalchemy import func
+from werkzeug.utils import secure_filename
 
 from extensions import db, csrf
 from models import PerfilUsuario, Usuario
@@ -383,6 +386,33 @@ def organizacion():
         organizacion.direccion = request.form.get('direccion', '').strip()
         organizacion.telefono = request.form.get('telefono', '').strip()
         organizacion.email = request.form.get('email', '').strip()
+
+        # Manejar upload de logo
+        logo_file = request.files.get('logo')
+        if logo_file and logo_file.filename:
+            allowed_ext = {'png', 'jpg', 'jpeg', 'webp'}
+            ext = logo_file.filename.rsplit('.', 1)[-1].lower() if '.' in logo_file.filename else ''
+            if ext in allowed_ext:
+                logo_dir = os.path.join(current_app.static_folder, 'uploads', 'logos', str(org_id))
+                os.makedirs(logo_dir, exist_ok=True)
+                # Eliminar logo anterior si existe
+                if organizacion.logo_url:
+                    old_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                safe_name = f"logo_{uuid.uuid4().hex[:8]}.{ext}"
+                filepath = os.path.join(logo_dir, safe_name)
+                logo_file.save(filepath)
+                organizacion.logo_url = f"uploads/logos/{org_id}/{safe_name}"
+            else:
+                flash('El logo debe ser PNG, JPG o WEBP', 'warning')
+
+        # Eliminar logo si se pidió
+        if request.form.get('eliminar_logo') == '1' and organizacion.logo_url:
+            old_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+            if os.path.exists(old_path):
+                os.remove(old_path)
+            organizacion.logo_url = None
 
         try:
             db.session.commit()

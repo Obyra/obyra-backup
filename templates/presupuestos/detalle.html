@@ -524,7 +524,7 @@
                                     <th>Descripcion</th>
                                     <th>Unidad</th>
                                     <th class="text-end">Cantidad</th>
-                                    <th class="text-end">P. Unitario</th>
+                                    <th class="text-end">P. Unit (ARS)</th>
                                     <th class="text-end">Total USD</th>
                                     <th class="text-end">Total ARS</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
@@ -553,7 +553,8 @@
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|entero }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
-                                    <td class="text-end fw-bold text-success">{{ (item.total_currency or 0)|moneda('USD') }}</td>
+                                    {% set item_total_usd = item.total_currency if (item.total_currency and item.total_currency > 0) else (((item.total_ars or item.total or 0)|float / tasa_usd|float) if tasa_usd and tasa_usd > 0 else 0) %}
+                                    <td class="text-end fw-bold text-success">{{ item_total_usd|moneda('USD') }}</td>
                                     <td class="text-end fw-bold text-primary">{{ (item.total_ars or item.total or 0)|moneda('ARS') }}</td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td class="text-end">
@@ -622,7 +623,7 @@
                                     <th class="text-center">Dias</th>
                                     <th class="text-end">Jornales</th>
                                     <th>Unidad</th>
-                                    <th class="text-end">P. Unitario</th>
+                                    <th class="text-end">P. Unit (ARS)</th>
                                     <th class="text-end">Total USD</th>
                                     <th class="text-end">Total ARS</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
@@ -656,7 +657,8 @@
                                     <td class="text-end">{{ (item.jornales or item.cantidad)|entero }}</td>
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
-                                    <td class="text-end fw-bold text-success">{{ (item.total_currency or 0)|moneda('USD') }}</td>
+                                    {% set item_total_usd = item.total_currency if (item.total_currency and item.total_currency > 0) else (((item.total_ars or item.total or 0)|float / tasa_usd|float) if tasa_usd and tasa_usd > 0 else 0) %}
+                                    <td class="text-end fw-bold text-success">{{ item_total_usd|moneda('USD') }}</td>
                                     <td class="text-end fw-bold text-primary">{{ (item.total_ars or item.total or 0)|moneda('ARS') }}</td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td class="text-end">
@@ -723,7 +725,7 @@
                                     <th>Descripcion</th>
                                     <th>Unidad</th>
                                     <th class="text-end">Cantidad</th>
-                                    <th class="text-end">P. Unitario</th>
+                                    <th class="text-end">P. Unit (ARS)</th>
                                     <th class="text-end">Total USD</th>
                                     <th class="text-end">Total ARS</th>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
@@ -752,7 +754,8 @@
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">{{ item.cantidad|entero }}</td>
                                     <td class="text-end">{{ (item.price_unit_ars or item.precio_unitario)|moneda('ARS') }}</td>
-                                    <td class="text-end fw-bold text-success">{{ (item.total_currency or 0)|moneda('USD') }}</td>
+                                    {% set item_total_usd = item.total_currency if (item.total_currency and item.total_currency > 0) else (((item.total_ars or item.total or 0)|float / tasa_usd|float) if tasa_usd and tasa_usd > 0 else 0) %}
+                                    <td class="text-end fw-bold text-success">{{ item_total_usd|moneda('USD') }}</td>
                                     <td class="text-end fw-bold text-primary">{{ (item.total_ars or item.total or 0)|moneda('ARS') }}</td>
                                     {% if current_user.rol in ['administrador', 'tecnico'] and presupuesto.estado == 'borrador' %}
                                     <td class="text-end">

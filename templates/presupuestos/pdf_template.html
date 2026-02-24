@@ -6,7 +6,7 @@
     <style>
         @page {
             size: A4;
-            margin: 10mm 15mm 15mm 15mm;
+            margin: 8mm 12mm 10mm 12mm;
         }
 
         * {
@@ -17,82 +17,75 @@
 
         body {
             font-family: 'Arial', 'Helvetica', sans-serif;
-            font-size: 9pt;
+            font-size: 8pt;
             color: #2c2c2c;
-            line-height: 1.4;
+            line-height: 1.3;
         }
 
-        /* Salto de página */
-        .page-break {
-            page-break-before: always;
-        }
-
-        /* Header con diseño diagonal */
+        /* Header compacto */
         .header-wrapper {
-            position: relative;
-            height: 130px;
-            background: linear-gradient(135deg, #1A374D 0%, #1A374D 65%, #4CAF50 65%, #4CAF50 100%);
-            padding: 15px 25px;
-            margin: -10mm -15mm 15px -15mm;
-            width: calc(100% + 30mm);
+            background: #1A374D;
+            padding: 10px 18px;
+            margin: -8mm -12mm 8px -12mm;
+            width: calc(100% + 24mm);
+            display: table;
+            table-layout: fixed;
         }
 
-        .header-content {
-            position: relative;
-            z-index: 2;
+        .header-left {
+            display: table-cell;
+            vertical-align: middle;
+            width: 65%;
         }
 
-        .company-logo {
-            font-size: 14pt;
+        .header-right {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: right;
+            width: 35%;
+        }
+
+        .company-name {
+            font-size: 13pt;
             font-weight: bold;
             color: white;
             margin-bottom: 2px;
         }
 
-        .company-info {
-            font-size: 8pt;
-            color: rgba(255,255,255,0.9);
-            margin-bottom: 8px;
-        }
-
-        .company-info span {
-            margin-right: 15px;
-        }
-
-        .header-title {
-            font-size: 22pt;
-            font-weight: bold;
-            color: white;
-            margin-top: 5px;
-        }
-
-        /* Badge de moneda */
-        .currency-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 15px;
-            font-size: 10pt;
-            font-weight: bold;
-            margin-left: 10px;
+        .company-logo-img {
+            max-height: 50px;
+            max-width: 140px;
+            margin-right: 10px;
             vertical-align: middle;
         }
 
-        .currency-badge-usd {
-            background: #d4edda;
-            color: #155724;
+        .company-info {
+            font-size: 7pt;
+            color: rgba(255,255,255,0.85);
         }
 
-        .currency-badge-ars {
-            background: #cce5ff;
-            color: #004085;
+        .company-info span {
+            margin-right: 10px;
         }
 
-        /* Información del cliente y fecha */
+        .header-presupuesto {
+            font-size: 11pt;
+            font-weight: bold;
+            color: white;
+        }
+
+        .header-numero {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        /* Barra info cliente */
         .info-bar {
             background: #f5f5f5;
-            padding: 10px 15px;
-            margin-bottom: 15px;
-            border-radius: 4px;
+            padding: 6px 10px;
+            margin-bottom: 8px;
+            border-radius: 3px;
         }
 
         .info-bar table {
@@ -101,52 +94,60 @@
         }
 
         .info-bar td {
-            padding: 2px 5px;
-            font-size: 8pt;
+            padding: 1px 4px;
+            font-size: 7.5pt;
         }
 
         .info-bar .label {
             font-weight: bold;
             color: #666;
-            width: 100px;
+            width: 90px;
         }
 
         .info-bar .value {
             color: #2c2c2c;
         }
 
-        /* Secciones de servicios */
-        .service-section {
-            margin-bottom: 12px;
-            page-break-inside: avoid;
+        /* Info proyecto */
+        .proyecto-info {
+            background: #fff8e1;
+            border: 1px solid #ffcc80;
+            padding: 4px 8px;
+            margin-bottom: 8px;
+            border-radius: 3px;
+            font-size: 7.5pt;
         }
 
+        .proyecto-info strong {
+            color: #e65100;
+        }
+
+        /* Tabla de etapas */
         .service-header {
             background: #1A374D;
             color: white;
-            padding: 5px 12px;
+            padding: 4px 10px;
             font-weight: bold;
-            font-size: 9pt;
+            font-size: 8pt;
             margin-bottom: 0;
         }
 
-        /* Tabla de etapas - limpia */
         table.items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         table.items-table thead {
-            background: #f8f8f8;
+            background: #f0f0f0;
         }
 
         table.items-table th {
-            padding: 6px 12px;
+            padding: 4px 8px;
             text-align: left;
-            font-size: 8pt;
+            font-size: 7pt;
             font-weight: bold;
-            color: #666;
+            color: #555;
             text-transform: uppercase;
             border-bottom: 2px solid #4CAF50;
         }
@@ -156,9 +157,9 @@
         }
 
         table.items-table td {
-            padding: 8px 12px;
+            padding: 4px 8px;
             border-bottom: 1px solid #eee;
-            font-size: 9pt;
+            font-size: 8pt;
         }
 
         table.items-table td.right {
@@ -173,57 +174,38 @@
             background: #fafafa;
         }
 
-        table.items-table .etapa-numero {
+        .etapa-numero {
             color: #999;
-            font-size: 8pt;
-            margin-right: 8px;
+            font-size: 7pt;
         }
 
         /* Observaciones */
         .observaciones {
-            margin-top: 12px;
-            padding: 8px;
+            margin-top: 6px;
+            padding: 5px 8px;
             background: #f8f8f8;
             border-left: 3px solid #1A374D;
             page-break-inside: avoid;
-            font-size: 8pt;
+            font-size: 7.5pt;
         }
 
         .observaciones-title {
             font-weight: bold;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
             color: #666;
-            font-size: 8pt;
+            font-size: 7.5pt;
         }
 
-        /* Proyecto info */
-        .proyecto-info {
-            background: #fff8e1;
-            border: 1px solid #ffcc80;
-            padding: 6px 10px;
-            margin-bottom: 12px;
-            border-radius: 4px;
-            font-size: 8pt;
-        }
-
-        .proyecto-info strong {
-            color: #e65100;
-        }
-
-        /* ========================================
-           FOOTER CON TOTALES - Siempre al final
-           ======================================== */
+        /* Footer con totales */
         .footer-section {
-            margin-top: 30px;
+            margin-top: 12px;
             page-break-inside: avoid;
         }
 
-        /* Barra de totales */
         .totals-bar {
             background: #f5f5f5;
-            padding: 10px 15px;
+            padding: 6px 10px;
             border-top: 2px solid #4CAF50;
-            margin-bottom: 0;
         }
 
         .totals-bar table {
@@ -232,14 +214,14 @@
         }
 
         .totals-bar td {
-            padding: 3px 10px;
-            font-size: 9pt;
+            padding: 2px 8px;
+            font-size: 8pt;
         }
 
         .totals-bar .label-col {
             text-align: right;
             color: #666;
-            width: 70%;
+            width: 40%;
         }
 
         .totals-bar .value-col {
@@ -248,10 +230,10 @@
             width: 30%;
         }
 
-        /* Total final destacado */
+        /* Total final */
         .total-final-bar {
             background: #1A374D;
-            padding: 12px 15px;
+            padding: 8px 10px;
         }
 
         .total-final-bar table {
@@ -260,32 +242,39 @@
         }
 
         .total-final-bar td {
-            padding: 0;
+            padding: 2px 8px;
         }
 
         .total-final-bar .label-col {
             text-align: right;
             color: white;
-            font-size: 14pt;
+            font-size: 10pt;
             font-weight: bold;
-            width: 70%;
-            padding-right: 15px;
+            width: 40%;
         }
 
         .total-final-bar .value-col {
             text-align: right;
-            color: #4CAF50;
-            font-size: 18pt;
             font-weight: bold;
             width: 30%;
+            font-size: 12pt;
         }
 
-        /* Datos de la empresa en el footer */
+        .total-final-bar .value-ars {
+            color: #90CAF9;
+        }
+
+        .total-final-bar .value-usd {
+            color: #4CAF50;
+        }
+
+        /* Footer empresa */
         .empresa-footer {
             background: #1A374D;
             color: white;
-            padding: 12px 20px;
+            padding: 8px 15px;
             font-size: 7pt;
+            border-top: 1px solid #2d5a7b;
         }
 
         .empresa-footer table {
@@ -295,13 +284,13 @@
 
         .empresa-footer td {
             vertical-align: top;
-            padding: 0 10px;
+            padding: 0 8px;
         }
 
         .empresa-footer .footer-title {
             font-weight: bold;
-            margin-bottom: 3px;
-            font-size: 8pt;
+            margin-bottom: 2px;
+            font-size: 7.5pt;
             color: #4CAF50;
         }
 
@@ -313,12 +302,11 @@
             text-align: right;
         }
 
-        /* Paridad en footer */
         .paridad-footer {
             background: #0f2940;
             color: #aaa;
-            padding: 6px 15px;
-            font-size: 7pt;
+            padding: 4px 10px;
+            font-size: 6.5pt;
             text-align: center;
             border-top: 1px solid #333;
         }
@@ -329,19 +317,20 @@
     </style>
 </head>
 <body>
-    {# ============================================
-       PAGINA 1: MONEDA PRINCIPAL
-       ============================================ #}
-
-    <!-- Header con datos de la empresa -->
     {% set nombre_org = organizacion.nombre|replace('Organizacion de ', '')|replace('Organizacion de ', '') if organizacion.nombre else 'Empresa' %}
+
+    <!-- Header compacto -->
     <div class="header-wrapper">
-        <div class="header-content">
-            <div class="company-logo">
-                <svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 5px;">
+        <div class="header-left">
+            <div class="company-name">
+                {% if logo_base64 %}
+                <img src="data:image/png;base64,{{ logo_base64 }}" class="company-logo-img" alt="Logo">
+                {% else %}
+                <svg width="20" height="20" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;">
                     <circle cx="12" cy="12" r="12" fill="white"/>
                     <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ nombre_org[0] }}</text>
                 </svg>
+                {% endif %}
                 {{ nombre_org }}
             </div>
             <div class="company-info">
@@ -350,25 +339,19 @@
                 {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
                 {% if organizacion.email %}<span>{{ organizacion.email }}</span>{% endif %}
             </div>
-            <div class="header-title">
-                Presupuesto
-                <span class="currency-badge {% if moneda_principal == 'USD' %}currency-badge-usd{% else %}currency-badge-ars{% endif %}">
-                    {{ moneda_principal }}
-                </span>
-            </div>
+        </div>
+        <div class="header-right">
+            <div class="header-presupuesto">PRESUPUESTO</div>
+            <div class="header-numero">N. {{ presupuesto.numero }}</div>
         </div>
     </div>
 
-    <!-- Barra de informacion del cliente -->
+    <!-- Info del cliente -->
     <div class="info-bar">
         <table>
             <tr>
                 <td class="label">Cliente:</td>
                 <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
-                <td class="label">N. Presupuesto:</td>
-                <td class="value"><strong>{{ presupuesto.numero }}</strong></td>
-            </tr>
-            <tr>
                 <td class="label">Fecha:</td>
                 <td class="value">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</td>
                 <td class="label">Vigencia:</td>
@@ -377,7 +360,7 @@
             {% if nombre_proyecto %}
             <tr>
                 <td class="label">Proyecto:</td>
-                <td class="value" colspan="3"><strong>{{ nombre_proyecto }}</strong></td>
+                <td class="value" colspan="5"><strong>{{ nombre_proyecto }}</strong></td>
             </tr>
             {% endif %}
         </table>
@@ -386,21 +369,21 @@
     {% if tipo_construccion or superficie_m2 %}
     <div class="proyecto-info">
         {% if tipo_construccion %}<strong>Tipo:</strong> {{ tipo_construccion }} | {% endif %}
-        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m2 | {% endif %}
-        <strong>Moneda:</strong> {{ moneda_principal }}
+        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m2{% endif %}
     </div>
     {% endif %}
 
-    <!-- Contenido principal - Resumen por etapas en MONEDA PRINCIPAL -->
+    <!-- Tabla principal con ambas monedas -->
     {% if etapas_totales %}
     <div class="service-section">
         <div class="service-header">Detalle por Etapas</div>
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 8%;">N.</th>
-                    <th style="width: 62%;">Etapa</th>
-                    <th class="right" style="width: 30%;">Total</th>
+                    <th style="width: 6%;">N.</th>
+                    <th style="width: 48%;">Etapa</th>
+                    <th class="right" style="width: 23%;">Total ARS</th>
+                    <th class="right" style="width: 23%;">Total USD</th>
                 </tr>
             </thead>
             <tbody>
@@ -408,86 +391,56 @@
                 <tr class="etapa-row">
                     <td><span class="etapa-numero">{{ loop.index }}</span></td>
                     <td><strong>{{ etapa_nombre }}</strong></td>
-                    <td class="right"><strong>{{ moneda_principal }} {{ "{:,.2f}".format(total_etapa|float) }}</strong></td>
+                    {% if moneda_principal == 'ARS' %}
+                    <td class="right"><strong>$ {{ "{:,.2f}".format(total_etapa|float) }}</strong></td>
+                    <td class="right" style="color: #2e7d32;">U$D {{ "{:,.2f}".format((total_etapa|float) * factor_conversion) }}</td>
+                    {% else %}
+                    <td class="right">$ {{ "{:,.2f}".format((total_etapa|float) * factor_conversion) }}</td>
+                    <td class="right" style="color: #2e7d32;"><strong>U$D {{ "{:,.2f}".format(total_etapa|float) }}</strong></td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% elif items %}
-    {# Fallback: si no hay etapas, mostrar items agrupados por tipo #}
+    {# Fallback: items agrupados por tipo #}
     {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
     {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
     {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
-    {% set otros = items|rejectattr('tipo', 'in', ['material', 'mano_obra', 'equipo'])|list %}
 
-    {% if materiales %}
+    {% for grupo_nombre, grupo_items in [('Materiales', materiales), ('Mano de Obra', mano_obra), ('Equipos y Maquinaria', equipos)] %}
+    {% if grupo_items %}
     <div class="service-section">
-        <div class="service-header">Materiales</div>
+        <div class="service-header">{{ grupo_nombre }}</div>
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 70%;">Descripcion</th>
-                    <th class="right" style="width: 30%;">Subtotal</th>
+                    <th style="width: 54%;">Descripcion</th>
+                    <th class="right" style="width: 23%;">Total ARS</th>
+                    <th class="right" style="width: 23%;">Total USD</th>
                 </tr>
             </thead>
             <tbody>
-                {% for item in materiales %}
+                {% for item in grupo_items %}
                 <tr>
                     <td>{{ item.descripcion }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                    {% if moneda_principal == 'ARS' %}
+                    <td class="right"><strong>$ {{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                    <td class="right" style="color: #2e7d32;">U$D {{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</td>
+                    {% else %}
+                    <td class="right">$ {{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</td>
+                    <td class="right" style="color: #2e7d32;"><strong>U$D {{ "{:,.2f}".format(item.total|float) }}</strong></td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% endif %}
-
-    {% if mano_obra %}
-    <div class="service-section">
-        <div class="service-header">Mano de Obra</div>
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 70%;">Descripcion</th>
-                    <th class="right" style="width: 30%;">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in mano_obra %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    {% if equipos %}
-    <div class="service-section">
-        <div class="service-header">Equipos y Maquinaria</div>
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 70%;">Descripcion</th>
-                    <th class="right" style="width: 30%;">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in equipos %}
-                <tr>
-                    <td>{{ item.descripcion }}</td>
-                    <td class="right"><strong>{{ "{:,.2f}".format(item.total|float) }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+    {% endfor %}
     {% else %}
-    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
+    <p style="text-align: center; color: #999; padding: 20px 0;">No hay items en este presupuesto</p>
     {% endif %}
 
     {% if presupuesto.observaciones %}
@@ -497,20 +450,48 @@
     </div>
     {% endif %}
 
-    <!-- FOOTER PAGINA 1: Totales en moneda principal -->
+    <!-- FOOTER: Totales en ambas monedas -->
     <div class="footer-section">
         <div class="totals-bar">
             <table>
                 <tr>
                     <td class="label-col">Subtotal:</td>
-                    <td class="value-col">{{ moneda_principal }} {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</td>
+                    {% if moneda_principal == 'ARS' %}
+                    <td class="value-col">$ {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</td>
+                    <td class="value-col" style="color: #2e7d32;">U$D {{ "{:,.2f}".format((presupuesto.total_sin_iva|float) * factor_conversion) }}</td>
+                    {% else %}
+                    <td class="value-col">$ {{ "{:,.2f}".format((presupuesto.total_sin_iva|float) * factor_conversion) }}</td>
+                    <td class="value-col" style="color: #2e7d32;">U$D {{ "{:,.2f}".format(presupuesto.total_sin_iva|float) }}</td>
+                    {% endif %}
                 </tr>
                 {% if presupuesto.iva_porcentaje and presupuesto.iva_porcentaje > 0 %}
                 <tr>
                     <td class="label-col">IVA ({{ "%.2f"|format(presupuesto.iva_porcentaje) }}%):</td>
-                    <td class="value-col">{{ moneda_principal }} {{ "{:,.2f}".format((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) }}</td>
+                    {% set iva_monto = (presupuesto.total_con_iva - presupuesto.total_sin_iva)|float %}
+                    {% if moneda_principal == 'ARS' %}
+                    <td class="value-col">$ {{ "{:,.2f}".format(iva_monto) }}</td>
+                    <td class="value-col" style="color: #2e7d32;">U$D {{ "{:,.2f}".format(iva_monto * factor_conversion) }}</td>
+                    {% else %}
+                    <td class="value-col">$ {{ "{:,.2f}".format(iva_monto * factor_conversion) }}</td>
+                    <td class="value-col" style="color: #2e7d32;">U$D {{ "{:,.2f}".format(iva_monto) }}</td>
+                    {% endif %}
                 </tr>
                 {% endif %}
+            </table>
+        </div>
+
+        <div class="total-final-bar">
+            <table>
+                <tr>
+                    <td class="label-col">TOTAL</td>
+                    {% if moneda_principal == 'ARS' %}
+                    <td class="value-col value-ars">$ {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</td>
+                    <td class="value-col value-usd">U$D {{ "{:,.2f}".format((presupuesto.total_con_iva|float) * factor_conversion) }}</td>
+                    {% else %}
+                    <td class="value-col value-ars">$ {{ "{:,.2f}".format((presupuesto.total_con_iva|float) * factor_conversion) }}</td>
+                    <td class="value-col value-usd">U$D {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</td>
+                    {% endif %}
+                </tr>
             </table>
         </div>
 
@@ -518,11 +499,11 @@
             <table>
                 <tr>
                     <td style="width: 33%;">
-                        <div class="footer-title">{{ organizacion.nombre }}</div>
+                        <div class="footer-title">{{ nombre_org }}</div>
                         {% if organizacion.cuit %}
                         <div>CUIT: {{ organizacion.cuit }}</div>
                         {% endif %}
-                        <div>{{ organizacion.direccion or 'Direccion no especificada' }}</div>
+                        <div>{{ organizacion.direccion or '' }}</div>
                     </td>
                     <td class="footer-center" style="width: 34%;">
                         <div class="footer-title">Contacto</div>
@@ -540,214 +521,6 @@
 
         <div class="paridad-footer">
             <strong>Paridad Banco Nacion (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
-        </div>
-
-        <div class="total-final-bar">
-            <table>
-                <tr>
-                    <td class="label-col">TOTAL {{ moneda_principal }}</td>
-                    <td class="value-col">{{ moneda_principal }} {{ "{:,.2f}".format(presupuesto.total_con_iva|float) }}</td>
-                </tr>
-            </table>
-        </div>
-    </div>
-
-    {# ============================================
-       PAGINA 2: MONEDA ALTERNATIVA
-       ============================================ #}
-
-    <div class="page-break"></div>
-
-    <!-- Header pagina 2 -->
-    <div class="header-wrapper">
-        <div class="header-content">
-            <div class="company-logo">
-                <svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 5px;">
-                    <circle cx="12" cy="12" r="12" fill="white"/>
-                    <text x="12" y="16" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A374D">{{ nombre_org[0] }}</text>
-                </svg>
-                {{ nombre_org }}
-            </div>
-            <div class="company-info">
-                {% if organizacion.cuit %}<span>CUIT: {{ organizacion.cuit }}</span>{% endif %}
-                {% if organizacion.direccion %}<span>{{ organizacion.direccion }}</span>{% endif %}
-                {% if organizacion.telefono %}<span>Tel: {{ organizacion.telefono }}</span>{% endif %}
-                {% if organizacion.email %}<span>{{ organizacion.email }}</span>{% endif %}
-            </div>
-            <div class="header-title">
-                Presupuesto
-                <span class="currency-badge {% if moneda_alternativa == 'USD' %}currency-badge-usd{% else %}currency-badge-ars{% endif %}">
-                    {{ moneda_alternativa }}
-                </span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Barra de informacion del cliente -->
-    <div class="info-bar">
-        <table>
-            <tr>
-                <td class="label">Cliente:</td>
-                <td class="value">{{ presupuesto.cliente.nombre_completo if presupuesto.cliente else 'Sin cliente asignado' }}</td>
-                <td class="label">N. Presupuesto:</td>
-                <td class="value"><strong>{{ presupuesto.numero }}</strong></td>
-            </tr>
-            <tr>
-                <td class="label">Fecha:</td>
-                <td class="value">{{ presupuesto.fecha.strftime('%d/%m/%Y') }}</td>
-                <td class="label">Vigencia:</td>
-                <td class="value">{{ presupuesto.fecha_vigencia.strftime('%d/%m/%Y') if presupuesto.fecha_vigencia else 'Sin limite' }}</td>
-            </tr>
-            {% if nombre_proyecto %}
-            <tr>
-                <td class="label">Proyecto:</td>
-                <td class="value" colspan="3"><strong>{{ nombre_proyecto }}</strong></td>
-            </tr>
-            {% endif %}
-        </table>
-    </div>
-
-    {% if tipo_construccion or superficie_m2 %}
-    <div class="proyecto-info">
-        {% if tipo_construccion %}<strong>Tipo:</strong> {{ tipo_construccion }} | {% endif %}
-        {% if superficie_m2 %}<strong>Superficie:</strong> {{ superficie_m2 }} m2 | {% endif %}
-        <strong>Moneda:</strong> {{ moneda_alternativa }} (convertido)
-    </div>
-    {% endif %}
-
-    <!-- Contenido principal - Resumen por etapas en MONEDA ALTERNATIVA -->
-    {% if etapas_totales %}
-    <div class="service-section">
-        <div class="service-header">Detalle por Etapas</div>
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 8%;">N.</th>
-                    <th style="width: 62%;">Etapa</th>
-                    <th class="right" style="width: 30%;">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for etapa_nombre, total_etapa in etapas_totales.items() %}
-                <tr class="etapa-row">
-                    <td><span class="etapa-numero">{{ loop.index }}</span></td>
-                    <td><strong>{{ etapa_nombre }}</strong></td>
-                    <td class="right"><strong>{{ moneda_alternativa }} {{ "{:,.2f}".format((total_etapa|float) * factor_conversion) }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% elif items %}
-    {# Fallback: si no hay etapas, mostrar items agrupados por tipo #}
-    {% set materiales = items|selectattr('tipo', 'equalto', 'material')|list %}
-    {% set mano_obra = items|selectattr('tipo', 'equalto', 'mano_obra')|list %}
-    {% set equipos = items|selectattr('tipo', 'equalto', 'equipo')|list %}
-
-    {% if materiales %}
-    <div class="service-section">
-        <div class="service-header">Materiales</div>
-        <table class="items-table">
-            <thead><tr><th style="width: 70%;">Descripcion</th><th class="right" style="width: 30%;">Subtotal</th></tr></thead>
-            <tbody>
-                {% for item in materiales %}
-                <tr><td>{{ item.descripcion }}</td><td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    {% if mano_obra %}
-    <div class="service-section">
-        <div class="service-header">Mano de Obra</div>
-        <table class="items-table">
-            <thead><tr><th style="width: 70%;">Descripcion</th><th class="right" style="width: 30%;">Subtotal</th></tr></thead>
-            <tbody>
-                {% for item in mano_obra %}
-                <tr><td>{{ item.descripcion }}</td><td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    {% if equipos %}
-    <div class="service-section">
-        <div class="service-header">Equipos y Maquinaria</div>
-        <table class="items-table">
-            <thead><tr><th style="width: 70%;">Descripcion</th><th class="right" style="width: 30%;">Subtotal</th></tr></thead>
-            <tbody>
-                {% for item in equipos %}
-                <tr><td>{{ item.descripcion }}</td><td class="right"><strong>{{ "{:,.2f}".format((item.total|float) * factor_conversion) }}</strong></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-    {% else %}
-    <p style="text-align: center; color: #999; padding: 40px 0;">No hay items en este presupuesto</p>
-    {% endif %}
-
-    {% if presupuesto.observaciones %}
-    <div class="observaciones">
-        <div class="observaciones-title">Observaciones:</div>
-        <div>{{ presupuesto.observaciones }}</div>
-    </div>
-    {% endif %}
-
-    <!-- FOOTER PAGINA 2: Totales en moneda alternativa -->
-    <div class="footer-section">
-        <div class="totals-bar">
-            <table>
-                <tr>
-                    <td class="label-col">Subtotal:</td>
-                    <td class="value-col">{{ moneda_alternativa }} {{ "{:,.2f}".format((presupuesto.total_sin_iva|float) * factor_conversion) }}</td>
-                </tr>
-                {% if presupuesto.iva_porcentaje and presupuesto.iva_porcentaje > 0 %}
-                <tr>
-                    <td class="label-col">IVA ({{ "%.2f"|format(presupuesto.iva_porcentaje) }}%):</td>
-                    <td class="value-col">{{ moneda_alternativa }} {{ "{:,.2f}".format(((presupuesto.total_con_iva - presupuesto.total_sin_iva)|float) * factor_conversion) }}</td>
-                </tr>
-                {% endif %}
-            </table>
-        </div>
-
-        <div class="empresa-footer">
-            <table>
-                <tr>
-                    <td style="width: 33%;">
-                        <div class="footer-title">{{ organizacion.nombre }}</div>
-                        {% if organizacion.cuit %}
-                        <div>CUIT: {{ organizacion.cuit }}</div>
-                        {% endif %}
-                        <div>{{ organizacion.direccion or 'Direccion no especificada' }}</div>
-                    </td>
-                    <td class="footer-center" style="width: 34%;">
-                        <div class="footer-title">Contacto</div>
-                        <div>Tel: {{ organizacion.telefono or '-' }}</div>
-                        <div>Email: {{ organizacion.email or '-' }}</div>
-                    </td>
-                    <td class="footer-right" style="width: 33%;">
-                        <div class="footer-title">Medios de pago</div>
-                        <div>Transferencia bancaria</div>
-                        <div>Efectivo</div>
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="paridad-footer">
-            <strong>Paridad Banco Nacion (vendedor):</strong> 1 USD = {{ "{:,.2f}".format(cotizacion_dolar) }} ARS | Fecha: {{ fecha_cotizacion }}
-        </div>
-
-        <div class="total-final-bar">
-            <table>
-                <tr>
-                    <td class="label-col">TOTAL {{ moneda_alternativa }}</td>
-                    <td class="value-col">{{ moneda_alternativa }} {{ "{:,.2f}".format((presupuesto.total_con_iva|float) * factor_conversion) }}</td>
-                </tr>
-            </table>
         </div>
     </div>
 </body>

@@ -1,6 +1,7 @@
 """
 Blueprint de Presupuestos - Gestión de presupuestos y cotizaciones
 """
+import os
 from flask import (Blueprint, render_template, request, flash, redirect,
                    url_for, jsonify, current_app, abort, send_file)
 from flask_login import login_required, current_user
@@ -821,11 +822,21 @@ def detalle(id):
         subtotal_mano_obra = sum(i.total for i in items_mano_obra)
         subtotal_equipos = sum(i.total for i in items_equipos)
 
-        # Calcular subtotales en USD (usando total_currency si existe, o total_ars con conversión)
+        # Calcular subtotales en USD (usando total_currency si existe, o total_ars/tasa como fallback)
         tasa_usd = presupuesto.tasa_usd_venta or Decimal('0')
-        subtotal_materiales_usd = sum((i.total_currency or Decimal('0')) for i in items_materiales)
-        subtotal_mano_obra_usd = sum((i.total_currency or Decimal('0')) for i in items_mano_obra)
-        subtotal_equipos_usd = sum((i.total_currency or Decimal('0')) for i in items_equipos)
+
+        def _item_usd(item):
+            """Obtener total USD de un item, calculando si no existe."""
+            if item.total_currency and item.total_currency > 0:
+                return item.total_currency
+            if tasa_usd > 0:
+                ars = item.total_ars or item.total or Decimal('0')
+                return (ars / tasa_usd).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            return Decimal('0')
+
+        subtotal_materiales_usd = sum(_item_usd(i) for i in items_materiales)
+        subtotal_mano_obra_usd = sum(_item_usd(i) for i in items_mano_obra)
+        subtotal_equipos_usd = sum(_item_usd(i) for i in items_equipos)
 
         # Calcular subtotales en ARS
         subtotal_materiales_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items_materiales)
@@ -834,7 +845,7 @@ def detalle(id):
 
         # Calcular total general del presupuesto
         subtotal = sum(i.total for i in items)
-        subtotal_usd = sum((i.total_currency or Decimal('0')) for i in items)
+        subtotal_usd = sum(_item_usd(i) for i in items)
         subtotal_ars = sum((i.total_ars or i.total or Decimal('0')) for i in items)
         iva_monto = subtotal * (presupuesto.iva_porcentaje / Decimal('100'))
         iva_monto_usd = subtotal_usd * (presupuesto.iva_porcentaje / Decimal('100'))
@@ -896,7 +907,8 @@ def detalle(id):
                              total_con_iva_usd=total_con_iva_usd,
                              total_con_iva_ars=total_con_iva_ars,
                              datos_proyecto=datos_proyecto,
-                             items_inventario=items_inventario)
+                             items_inventario=items_inventario,
+                             tasa_usd=tasa_usd)
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.detalle: {e}")
@@ -1008,6 +1020,18 @@ def generar_pdf(id):
             if etapa not in etapas_ordenadas:
                 etapas_ordenadas[etapa] = total
 
+        # Cargar logo como base64 para embeber en el PDF
+        logo_base64 = None
+        if organizacion.logo_url:
+            try:
+                import base64
+                logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+                if os.path.exists(logo_path):
+                    with open(logo_path, 'rb') as f:
+                        logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo cargar logo para PDF: {e}")
+
         try:
             # Renderizar HTML
             html_string = render_template(
@@ -1025,7 +1049,8 @@ def generar_pdf(id):
                 factor_conversion=factor_conversion,
                 nombre_proyecto=nombre_proyecto,
                 tipo_construccion=tipo_construccion,
-                superficie_m2=superficie_m2
+                superficie_m2=superficie_m2,
+                logo_base64=logo_base64
             )
         except Exception as render_error:
             current_app.logger.error(f"Error al renderizar template PDF: {render_error}", exc_info=True)
@@ -1199,6 +1224,18 @@ Saludos cordiales,
             except (json_mod.JSONDecodeError, TypeError):
                 pass
 
+        # Cargar logo como base64 para embeber en el PDF
+        logo_base64 = None
+        if organizacion.logo_url:
+            try:
+                import base64
+                logo_path = os.path.join(current_app.static_folder, organizacion.logo_url)
+                if os.path.exists(logo_path):
+                    with open(logo_path, 'rb') as f:
+                        logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo cargar logo para PDF email: {e}")
+
         # Generar PDF
         html_string = render_template(
             'presupuestos/pdf_template.html',
@@ -1215,7 +1252,8 @@ Saludos cordiales,
             factor_conversion=factor_conversion,
             nombre_proyecto=nombre_proyecto,
             tipo_construccion=tipo_construccion,
-            superficie_m2=superficie_m2
+            superficie_m2=superficie_m2,
+            logo_base64=logo_base64
         )
 
         # Generar PDF y limpiar metadatos para evitar falsos positivos de antivirus
@@ -1753,18 +1791,28 @@ def agregar_item(id):
         # Calcular total
         total = cantidad * precio_unitario
 
-        # Si la moneda es USD, calcular equivalente en ARS (usando tasa si existe)
+        # Calcular equivalentes en ARS y USD
         price_unit_ars = precio_unitario
         total_ars = total
+        price_unit_usd = Decimal('0')
+        total_usd = Decimal('0')
 
-        if currency == 'USD' and presupuesto.tasa_usd_venta:
-            # Usar calculadora centralizada para conversión de moneda
-            tasa = Decimal(str(presupuesto.tasa_usd_venta))
-            if tasa <= 0:
-                flash('Tasa de cambio USD inválida. Configure el tipo de cambio.', 'warning')
-            else:
+        tasa = Decimal(str(presupuesto.tasa_usd_venta)) if presupuesto.tasa_usd_venta else Decimal('0')
+
+        if currency == 'USD':
+            # Precio ingresado en USD
+            price_unit_usd = precio_unitario
+            total_usd = total
+            if tasa > 0:
                 price_unit_ars = BudgetCalculator.convertir_moneda(precio_unitario, tasa)
                 total_ars = BudgetCalculator.convertir_moneda(total, tasa)
+        else:
+            # Precio ingresado en ARS → calcular equivalente USD
+            price_unit_ars = precio_unitario
+            total_ars = total
+            if tasa > 0:
+                price_unit_usd = (precio_unitario / tasa).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                total_usd = (total / tasa).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
         # Crear item
         item = ItemPresupuesto(
@@ -1776,6 +1824,8 @@ def agregar_item(id):
             precio_unitario=precio_unitario,
             total=total,
             currency=currency,
+            price_unit_currency=price_unit_usd,
+            total_currency=total_usd,
             price_unit_ars=price_unit_ars,
             total_ars=total_ars,
             origen='manual',
@@ -1839,21 +1889,27 @@ def editar_item(id):
         # Recalcular total
         item.total = item.cantidad * item.precio_unitario
 
-        # Calcular equivalente en ARS según la moneda
-        if item.currency == 'USD' and presupuesto.tasa_usd_venta:
-            # Usar calculadora centralizada para conversión de moneda
-            tasa = Decimal(str(presupuesto.tasa_usd_venta))
+        # Calcular equivalentes en ARS y USD
+        tasa = Decimal(str(presupuesto.tasa_usd_venta)) if presupuesto.tasa_usd_venta else Decimal('0')
+
+        if item.currency == 'USD':
+            item.price_unit_currency = item.precio_unitario
+            item.total_currency = item.total
             if tasa > 0:
                 item.price_unit_ars = BudgetCalculator.convertir_moneda(item.precio_unitario, tasa)
                 item.total_ars = BudgetCalculator.convertir_moneda(item.total, tasa)
             else:
-                # Tasa inválida, copiar sin conversión
                 item.price_unit_ars = item.precio_unitario
                 item.total_ars = item.total
         else:
-            # Si es ARS, copiar los valores directamente
             item.price_unit_ars = item.precio_unitario
             item.total_ars = item.total
+            if tasa > 0:
+                item.price_unit_currency = (item.precio_unitario / tasa).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                item.total_currency = (item.total / tasa).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            else:
+                item.price_unit_currency = Decimal('0')
+                item.total_currency = Decimal('0')
 
         # Actualizar totales del presupuesto
         presupuesto.calcular_totales()
