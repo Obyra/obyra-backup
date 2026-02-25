@@ -63,7 +63,7 @@ def generate_dashboard_report():
 
     try:
         # Verificar permisos
-        if current_user.rol not in ['administrador', 'gestor']:
+        if current_user.role not in ['admin', 'pm']:
             return jsonify({'error': 'Sin permisos para generar reportes'}), 403
         
         data = request.get_json() or {}

@@ -295,17 +295,17 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
         Obra.fecha_creacion >= primer_dia_mes
     ).count()
 
-    # Costo total de obras activas (en millones)
-    costo_total = db.session.query(
+    # Presupuesto total de obras activas (en millones)
+    presupuesto_total = db.session.query(
         func.sum(Obra.presupuesto_total)
     ).filter(
         Obra.organizacion_id == org_id,
         visible_clause,
         Obra.estado.in_(['planificacion', 'en_curso'])
     ).scalar() or 0
-    costo_total_millones = float(costo_total) / 1000000 if costo_total else 0
-    
-    # Variación vs presupuesto
+    costo_total_millones = float(presupuesto_total) / 1000000 if presupuesto_total else 0
+
+    # Costo real total
     costo_real_total = db.session.query(
         func.sum(Obra.costo_real)
     ).filter(
@@ -314,10 +314,11 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
         Obra.estado.in_(['planificacion', 'en_curso']),
         Obra.costo_real.isnot(None)
     ).scalar() or 0
-    
+
+    # Porcentaje del presupuesto ejecutado (costo_real / presupuesto * 100)
     variacion_presupuesto = 0
-    if costo_total > 0 and costo_real_total > 0:
-        variacion_presupuesto = ((float(costo_real_total) - float(costo_total)) / float(costo_total)) * 100
+    if float(presupuesto_total) > 0 and float(costo_real_total) > 0:
+        variacion_presupuesto = (float(costo_real_total) / float(presupuesto_total)) * 100
     
     # Avance promedio de obras activas
     avance_promedio = db.session.query(

@@ -74,9 +74,9 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h3 class="mb-0 fw-bold">${{ kpis.costo_total|default('0.0')|round(1) }}M</h3>
-                            <p class="mb-0 text-muted">Costo Total</p>
-                            <small class="{% if kpis.variacion_presupuesto >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                {{ kpis.variacion_presupuesto|default(0)|round(1) }}% vs presupuesto
+                            <p class="mb-0 text-muted">Presupuesto Total</p>
+                            <small class="{% if kpis.variacion_presupuesto <= 100 %}text-success{% else %}text-danger{% endif %}">
+                                {{ kpis.variacion_presupuesto|default(0)|round(1) }}% ejecutado
                             </small>
                         </div>
                         <div class="d-flex align-items-center">
