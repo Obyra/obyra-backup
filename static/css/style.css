@@ -407,7 +407,7 @@ body {
 .btn-outline-primary {
     color: var(--accent);
     border: 2px solid var(--accent);
-    background: transparent;
+    background: rgba(76, 175, 80, 0.08);
 }
 
 .btn-outline-primary:hover,
@@ -419,7 +419,7 @@ body {
 .btn-outline-secondary {
     color: var(--carbon-600);
     border: 2px solid var(--carbon-400);
-    background: transparent;
+    background: rgba(74, 74, 74, 0.06);
 }
 
 .btn-outline-secondary:hover,
@@ -431,7 +431,7 @@ body {
 .btn-outline-success {
     color: var(--success);
     border: 2px solid var(--success);
-    background: transparent;
+    background: rgba(76, 175, 80, 0.08);
 }
 
 .btn-outline-success:hover,
@@ -443,7 +443,7 @@ body {
 .btn-outline-danger {
     color: var(--danger);
     border: 2px solid var(--danger);
-    background: transparent;
+    background: rgba(198, 40, 40, 0.06);
 }
 
 .btn-outline-danger:hover,
