@@ -1552,6 +1552,11 @@ def not_found(error):
 
 @app.errorhandler(500)
 def internal_error(error):
+    import traceback, sys
+    # Forzar output a stderr para que Railway lo muestre en logs
+    print(f'===== 500 ERROR: {request.url} =====', file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+    print(f'===== END 500 ERROR =====', file=sys.stderr, flush=True)
     app.logger.error(f'500 Internal Server Error: {request.url}', exc_info=True)
     db.session.rollback()
     try:
