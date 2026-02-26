@@ -3005,11 +3005,21 @@ def eliminar_obra(obra_id):
         AsignacionObra.query.filter_by(obra_id=obra_id).delete()
 
         # 5. Eliminar otras relaciones — solo si la tabla existe en la BD
+        # Formato: (tabla, condicion_sql, [tablas_requeridas_en_subquery])
+        # IMPORTANTE: tablas hijas ANTES que sus padres
         _optional_deletes = [
+            # --- Hijos de checklists_seguridad ---
+            ("items_checklist", "checklist_id IN (SELECT id FROM checklists_seguridad WHERE obra_id = :obra_id)", ["checklists_seguridad"]),
+            # --- Hijos de documentos_obra ---
+            ("versiones_documento", "documento_id IN (SELECT id FROM documentos_obra WHERE obra_id = :obra_id)", ["documentos_obra"]),
+            ("permisos_documento", "documento_id IN (SELECT id FROM documentos_obra WHERE obra_id = :obra_id)", ["documentos_obra"]),
+            # --- Hijos de work_certifications ---
+            ("work_certification_items", "certificacion_id IN (SELECT id FROM work_certifications WHERE obra_id = :obra_id)", ["work_certifications"]),
+            # --- Tablas padre con obra_id directo ---
+            ("work_payments", "obra_id = :obra_id"),
+            ("work_certifications", "obra_id = :obra_id"),
             ("certificaciones_avance", "obra_id = :obra_id"),
             ("documentos_obra", "obra_id = :obra_id"),
-            ("work_certifications", "obra_id = :obra_id"),
-            ("work_payments", "obra_id = :obra_id"),
             ("incidentes_seguridad", "obra_id = :obra_id"),
             ("checklists_seguridad", "obra_id = :obra_id"),
             ("auditorias_seguridad", "obra_id = :obra_id"),
@@ -3021,11 +3031,14 @@ def eliminar_obra(obra_id):
             ("equipment_usage", "project_id = :obra_id"),
             ("stock_movement", "project_id = :obra_id"),
             ("stock_reservation", "project_id = :obra_id"),
-            ("movimientos_stock_obra", "stock_obra_id IN (SELECT id FROM stock_obra WHERE obra_id = :obra_id)"),
+            # --- stock_obra y sus hijos ---
+            ("movimientos_stock_obra", "stock_obra_id IN (SELECT id FROM stock_obra WHERE obra_id = :obra_id)", ["stock_obra"]),
             ("stock_obra", "obra_id = :obra_id"),
         ]
-        for table, condition in _optional_deletes:
-            if _tabla_existe(table):
+        for entry in _optional_deletes:
+            table, condition = entry[0], entry[1]
+            deps = entry[2] if len(entry) > 2 else []
+            if _tabla_existe(table) and all(_tabla_existe(d) for d in deps):
                 db.session.execute(db.text(f"DELETE FROM {table} WHERE {condition}"), {"obra_id": obra_id})
 
         # 6. Finalmente eliminar la obra
