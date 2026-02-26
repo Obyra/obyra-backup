@@ -806,6 +806,34 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Plan columns migration skipped: {e}")
 
+    # Migración automática: columnas faltantes en Railway
+    try:
+        missing_cols_sql = """
+        DO $$
+        BEGIN
+            -- logo_url en organizaciones
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='logo_url') THEN
+                ALTER TABLE organizaciones ADD COLUMN logo_url VARCHAR(500);
+            END IF;
+            -- logo_url en proveedores
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='proveedores' AND column_name='logo_url') THEN
+                ALTER TABLE proveedores ADD COLUMN logo_url VARCHAR(500);
+            END IF;
+            -- confirmado_como_obra en presupuestos
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='presupuestos' AND column_name='confirmado_como_obra') THEN
+                ALTER TABLE presupuestos ADD COLUMN confirmado_como_obra BOOLEAN DEFAULT false;
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(missing_cols_sql))
+        db.session.commit()
+        print("[OK] Missing columns migration applied (logo_url, confirmado_como_obra)")
+    except Exception as e:
+        print(f"[WARN] Missing columns migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
