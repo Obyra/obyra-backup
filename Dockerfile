@@ -84,14 +84,17 @@ USER obyra
 # Environment variables
 ENV FLASK_APP=app.py \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PORT=5000
+    PYTHONDONTWRITEBYTECODE=1
 
 # Expose port
 EXPOSE 5000
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
 # Use entrypoint script
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# Default command - usa $PORT para Railway (default 5000 para local)
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile - app:app"]
+# Default command (can be overridden in docker-compose)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
