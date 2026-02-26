@@ -1414,15 +1414,20 @@ function renderResultadoEtapasIA(data) {
                             <i class="fas fa-layer-group me-1"></i>Desglose por Nivel (${etapa.desglose_niveles.length} niveles)
                         </summary>
                         <div class="mt-2">
-                            ${etapa.desglose_niveles.map(dn => `
-                                <div class="mb-2 ms-2 border-start border-3 border-primary ps-2">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <span class="fw-bold small">${dn.nivel_nombre || 'Nivel'}</span>
-                                        <span class="badge bg-primary-subtle text-primary small">${dn.subtotal ? currencyFormatter.format(dn.subtotal) : '-'} · ${dn.m2_efectivo ? dn.m2_efectivo.toFixed(0) + ' m²' : ''}</span>
-                                    </div>
-                                    <div class="small text-muted">${(dn.items || []).length} items · Factor: ${dn.factor || '-'}</div>
-                                </div>
-                            `).join('')}
+                            ${etapa.desglose_niveles.map(dn => {
+                                const hm3 = dn.hormigon_m3 || 0;
+                                const am2 = dn.albanileria_m2 || 0;
+                                let matInfo = '';
+                                if (hm3 > 0) matInfo += 'H° ' + hm3 + ' m³ ';
+                                if (am2 > 0) matInfo += 'Alb. ' + am2 + ' m² ';
+                                return '<div class="mb-2 ms-2 border-start border-3 border-primary ps-2">' +
+                                    '<div class="d-flex justify-content-between align-items-center">' +
+                                        '<span class="fw-bold small">' + (dn.nivel_nombre || 'Nivel') + '</span>' +
+                                        '<span class="badge bg-primary-subtle text-primary small">' + (dn.subtotal ? currencyFormatter.format(dn.subtotal) : '-') + ' · ' + (dn.m2_efectivo ? dn.m2_efectivo.toFixed(0) + ' m² ef.' : '') + '</span>' +
+                                    '</div>' +
+                                    '<div class="small text-muted">' + (typeof dn.items === 'number' ? dn.items : 0) + ' items' + (matInfo ? ' · ' + matInfo : '') + '</div>' +
+                                '</div>';
+                            }).join('')}
                         </div>
                     </details>
                 ` : ''}
@@ -1788,7 +1793,8 @@ function generarNivelesDefault() {
             orden: orden++,
             repeticiones: 1,
             area_m2: 0,
-            sistema_constructivo: 'hormigon',
+            hormigon_m3: 0,
+            albanileria_m2: 0,
             atributos: {}
         });
     }
@@ -1801,7 +1807,8 @@ function generarNivelesDefault() {
             orden: orden++,
             repeticiones: 1,
             area_m2: 0,
-            sistema_constructivo: 'mixto',
+            hormigon_m3: 0,
+            albanileria_m2: 0,
             atributos: {}
         });
     }
@@ -1814,7 +1821,8 @@ function generarNivelesDefault() {
             orden: orden++,
             repeticiones: pisosTipo,
             area_m2: 0,
-            sistema_constructivo: 'hormigon',
+            hormigon_m3: 0,
+            albanileria_m2: 0,
             atributos: {}
         });
     }
@@ -1827,7 +1835,8 @@ function generarNivelesDefault() {
             orden: orden++,
             repeticiones: 1,
             area_m2: 0,
-            sistema_constructivo: 'hormigon',
+            hormigon_m3: 0,
+            albanileria_m2: 0,
             atributos: {}
         });
     }
@@ -1847,7 +1856,6 @@ function actualizarChipsNiveles() {
         return;
     }
 
-    const sistemaLabel = { hormigon: 'H°A°', albanileria: 'Alb.', mixto: 'Mixto' };
     const tipoColor = { subsuelo: 'secondary', pb: 'primary', piso_tipo: 'info', piso_especial: 'warning', terraza: 'success' };
 
     let totalM2 = 0;
@@ -1857,7 +1865,12 @@ function actualizarChipsNiveles() {
         const color = tipoColor[n.tipo_nivel] || 'dark';
         const rep = n.repeticiones > 1 ? ` ×${n.repeticiones}` : '';
         const areaText = n.area_m2 > 0 ? ` ${n.area_m2} m²${rep}` : '';
-        return `<span class="badge bg-${color}">${n.nombre}${areaText} ${sistemaLabel[n.sistema_constructivo] || ''}</span>`;
+        const hm3 = parseFloat(n.hormigon_m3) || 0;
+        const am2 = parseFloat(n.albanileria_m2) || 0;
+        let matText = '';
+        if (hm3 > 0) matText += ` H°${hm3}m³`;
+        if (am2 > 0) matText += ` Alb.${am2}m²`;
+        return `<span class="badge bg-${color}">${n.nombre}${areaText}${matText}</span>`;
     });
 
     if (totalM2 > 0) {
@@ -1879,16 +1892,10 @@ function renderTablaModalNiveles() {
 
     const niveles = window.nivelesConfig || [];
     if (niveles.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No hay niveles configurados. Ajusta los controles de la sección edificio.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay niveles configurados. Ajusta los controles de la sección edificio.</td></tr>';
         actualizarTotalModalNiveles();
         return;
     }
-
-    const sistemaOptions = `
-        <option value="hormigon">Hormigón Armado</option>
-        <option value="albanileria">Albañilería</option>
-        <option value="mixto">Mixto</option>
-    `;
 
     tbody.innerHTML = niveles.map((n, i) => {
         const supTotal = (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
@@ -1896,24 +1903,28 @@ function renderTablaModalNiveles() {
         <tr data-nivel-index="${i}">
             <td>
                 <input type="text" class="form-control form-control-sm" value="${n.nombre}"
-                       onchange="window.nivelesConfig[${i}].nombre = this.value" style="width: 90px;">
+                       onchange="window.nivelesConfig[${i}].nombre = this.value" style="width: 85px;">
             </td>
-            <td><span class="badge bg-secondary">${n.tipo_nivel}</span></td>
+            <td><span class="badge bg-secondary" style="font-size: 0.7rem;">${n.tipo_nivel}</span></td>
             <td>
                 <input type="number" class="form-control form-control-sm text-center" value="${n.repeticiones}"
-                       min="1" max="50" style="width: 65px;"
+                       min="1" max="50" style="width: 60px;"
                        onchange="window.nivelesConfig[${i}].repeticiones = parseInt(this.value) || 1; actualizarFilaSupNivel(${i});">
             </td>
             <td>
                 <input type="number" class="form-control form-control-sm" value="${n.area_m2}"
-                       min="0" step="0.01" style="width: 100px;"
+                       min="0" step="0.01" style="width: 95px;" placeholder="m²"
                        onchange="window.nivelesConfig[${i}].area_m2 = parseFloat(this.value) || 0; actualizarFilaSupNivel(${i});">
             </td>
             <td>
-                <select class="form-select form-select-sm" style="width: 130px;"
-                        onchange="window.nivelesConfig[${i}].sistema_constructivo = this.value;">
-                    ${sistemaOptions.replace(`value="${n.sistema_constructivo}"`, `value="${n.sistema_constructivo}" selected`)}
-                </select>
+                <input type="number" class="form-control form-control-sm" value="${n.hormigon_m3 || ''}"
+                       min="0" step="0.01" style="width: 95px;" placeholder="m³"
+                       onchange="window.nivelesConfig[${i}].hormigon_m3 = parseFloat(this.value) || 0;">
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm" value="${n.albanileria_m2 || ''}"
+                       min="0" step="0.01" style="width: 95px;" placeholder="m²"
+                       onchange="window.nivelesConfig[${i}].albanileria_m2 = parseFloat(this.value) || 0;">
             </td>
             <td>
                 <button type="button" class="btn btn-sm btn-outline-secondary" title="Opciones avanzadas"
@@ -1924,7 +1935,7 @@ function renderTablaModalNiveles() {
             <td class="text-end fw-bold" id="supTotalNivel_${i}">${supTotal.toFixed(2)} m²</td>
         </tr>
         <tr id="opcionesAvanzadas_${i}" style="display: none;" class="table-light">
-            <td colspan="7" class="p-2">
+            <td colspan="8" class="p-2">
                 <div class="row g-2">
                     <div class="col-auto">
                         <label class="form-label small mb-0">Napa freática</label>
@@ -2063,27 +2074,28 @@ window.actualizarSelectorCliente = function(clienteData) {
             <div class="modal-body">
                 <div class="alert alert-info py-2 small mb-3">
                     <i class="fas fa-info-circle me-1"></i>
-                    Configura el <strong>área m²</strong> y <strong>sistema constructivo</strong> de cada nivel.
-                    El botón <i class="fas fa-cog"></i> expande opciones avanzadas (napa, cocheras, espesor losa, etc.).
+                    Configura el <strong>área m²</strong>, <strong>hormigón (m³)</strong> y <strong>albañilería (m²)</strong> de cada nivel.
+                    Puedes completar ambos para el mismo nivel. El botón <i class="fas fa-cog"></i> expande opciones avanzadas.
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 100px;">Nivel</th>
-                                <th style="width: 90px;">Tipo</th>
-                                <th style="width: 75px;" class="text-center">Rep.</th>
-                                <th style="width: 110px;">Área m²</th>
-                                <th style="width: 140px;">Sistema Constructivo</th>
-                                <th style="width: 50px;"></th>
-                                <th style="width: 110px;" class="text-end">Sup. Total</th>
+                                <th style="width: 90px;">Nivel</th>
+                                <th style="width: 80px;">Tipo</th>
+                                <th style="width: 60px;" class="text-center">Rep.</th>
+                                <th style="width: 100px;">Área m²</th>
+                                <th style="width: 100px;">Hormigón m³</th>
+                                <th style="width: 100px;">Albañilería m²</th>
+                                <th style="width: 40px;"></th>
+                                <th style="width: 100px;" class="text-end">Sup. Total</th>
                             </tr>
                         </thead>
                         <tbody id="nivelesModalTbody">
                         </tbody>
                         <tfoot class="table-dark">
                             <tr>
-                                <td colspan="6" class="text-end fw-bold">TOTAL</td>
+                                <td colspan="7" class="text-end fw-bold">TOTAL</td>
                                 <td class="text-end fw-bold" id="totalSuperficieNiveles">0.00 m²</td>
                             </tr>
                         </tfoot>

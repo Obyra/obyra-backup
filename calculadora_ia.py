@@ -2290,7 +2290,7 @@ COEFICIENTES_POR_NIVEL = {
     },
 }
 
-# Coeficientes estructurales extras por sistema constructivo
+# Coeficientes estructurales extras por sistema constructivo (legacy/fallback)
 COEF_SISTEMA_CONSTRUCTIVO = {
     'hormigon': {
         'hormigon_m3_por_m2': 0.20,
@@ -2309,6 +2309,37 @@ COEF_SISTEMA_CONSTRUCTIVO = {
         'mamposteria_m2_por_m2': 0.8,
     },
 }
+
+# Relación kg acero por m³ de hormigón (para derivar acero de m³ explícitos)
+ACERO_KG_POR_M3_HORMIGON = 120.0
+# Relación m² encofrado por m³ de hormigón
+ENCOFRADO_M2_POR_M3_HORMIGON = 9.0
+
+
+def _buscar_precio_material(descripcion_hint: str, currency: str, fx_rate, org_id) -> Optional[Decimal]:
+    """Busca precio de referencia para items estructurales explícitos (hormigón/acero/albañilería)."""
+    cac_ctx = _get_cac_context_cached()
+    hint = descripcion_hint.lower()
+
+    # Mapear hints a códigos PRECIO_REFERENCIA
+    if 'hormigon' in hint:
+        precio, _ = _precio_referencia('MAT-HORMIGON', cac_ctx, org_id)
+    elif 'acero' in hint or 'hierro' in hint:
+        precio, _ = _precio_referencia('MAT-HIERRO-ESTRUC', cac_ctx, org_id)
+    elif 'encofrado' in hint:
+        precio, _ = _precio_referencia('MAT-MADERA-ENCOFRADO', cac_ctx, org_id)
+    elif 'mamposteria' in hint or 'ladrillo' in hint or 'albanileria' in hint:
+        # Precio por m² de mampostería (aprox 55 ladrillos × precio unitario)
+        precio_ladrillo, _ = _precio_referencia('MAT-LADRILLO', cac_ctx, org_id)
+        precio = precio_ladrillo * Decimal('55')  # ladrillos por m²
+    else:
+        return None
+
+    if precio and precio > 0:
+        if currency == 'USD' and fx_rate:
+            return _quantize_currency(precio / Decimal(str(fx_rate)))
+        return precio
+    return None
 
 
 def calcular_etapas_por_niveles(
@@ -2394,6 +2425,80 @@ def calcular_etapas_por_niveles(
                 item['nivel_nombre'] = f"{nivel_nombre}{rep_label}"
                 items_etapa.append(item)
 
+            # --- Items estructurales explícitos (hormigón m³ / albañilería m²) ---
+            h_m3 = float(nivel.get('hormigon_m3', 0) or 0) * reps
+            a_m2 = float(nivel.get('albanileria_m2', 0) or 0) * reps
+            etapas_estructurales = {'estructura', 'fundaciones', 'estructura-de-hormigon', 'estructura-hormigon'}
+
+            if slug in etapas_estructurales and (h_m3 > 0 or a_m2 > 0):
+                label = f"{nivel_nombre}{rep_label}"
+                extra_subtotal = DECIMAL_ZERO
+
+                if h_m3 > 0:
+                    # Hormigón elaborado
+                    precio_h = _buscar_precio_material('hormigon elaborado H21', currency, fx_rate, org_id)
+                    if not precio_h:
+                        precio_h = Decimal('95000') if currency == 'ARS' else Decimal('85')
+                    sub_h = _quantize_currency(Decimal(str(h_m3)) * precio_h)
+                    items_etapa.append({
+                        'tipo': 'material', 'codigo': 'HORM-M3',
+                        'descripcion': f'Hormigón elaborado H21 — {label}',
+                        'cantidad': round(h_m3, 2), 'unidad': 'm³',
+                        'precio_unit': float(precio_h), 'subtotal': float(sub_h),
+                        'just': f'Ingreso manual {h_m3:.2f} m³',
+                        'nivel_nombre': label,
+                    })
+                    extra_subtotal += sub_h
+
+                    # Acero derivado de m³
+                    kg_acero = h_m3 * ACERO_KG_POR_M3_HORMIGON
+                    precio_acero = _buscar_precio_material('acero adn 420', currency, fx_rate, org_id)
+                    if not precio_acero:
+                        precio_acero = Decimal('950') if currency == 'ARS' else Decimal('0.85')
+                    sub_acero = _quantize_currency(Decimal(str(kg_acero)) * precio_acero)
+                    items_etapa.append({
+                        'tipo': 'material', 'codigo': 'ACERO-KG',
+                        'descripcion': f'Acero ADN 420 — {label}',
+                        'cantidad': round(kg_acero, 2), 'unidad': 'kg',
+                        'precio_unit': float(precio_acero), 'subtotal': float(sub_acero),
+                        'just': f'Derivado de {h_m3:.2f} m³ H° × {ACERO_KG_POR_M3_HORMIGON} kg/m³',
+                        'nivel_nombre': label,
+                    })
+                    extra_subtotal += sub_acero
+
+                    # Encofrado derivado de m³
+                    m2_encofrado = h_m3 * ENCOFRADO_M2_POR_M3_HORMIGON
+                    precio_encof = _buscar_precio_material('encofrado', currency, fx_rate, org_id)
+                    if not precio_encof:
+                        precio_encof = Decimal('4500') if currency == 'ARS' else Decimal('4')
+                    sub_encof = _quantize_currency(Decimal(str(m2_encofrado)) * precio_encof)
+                    items_etapa.append({
+                        'tipo': 'material', 'codigo': 'ENCOF-M2',
+                        'descripcion': f'Encofrado — {label}',
+                        'cantidad': round(m2_encofrado, 2), 'unidad': 'm²',
+                        'precio_unit': float(precio_encof), 'subtotal': float(sub_encof),
+                        'just': f'Derivado de {h_m3:.2f} m³ H° × {ENCOFRADO_M2_POR_M3_HORMIGON} m²/m³',
+                        'nivel_nombre': label,
+                    })
+                    extra_subtotal += sub_encof
+
+                if a_m2 > 0:
+                    precio_alb = _buscar_precio_material('mamposteria ladrillo', currency, fx_rate, org_id)
+                    if not precio_alb:
+                        precio_alb = Decimal('18000') if currency == 'ARS' else Decimal('16')
+                    sub_alb = _quantize_currency(Decimal(str(a_m2)) * precio_alb)
+                    items_etapa.append({
+                        'tipo': 'material', 'codigo': 'ALB-M2',
+                        'descripcion': f'Mampostería de ladrillo — {label}',
+                        'cantidad': round(a_m2, 2), 'unidad': 'm²',
+                        'precio_unit': float(precio_alb), 'subtotal': float(sub_alb),
+                        'just': f'Ingreso manual {a_m2:.2f} m²',
+                        'nivel_nombre': label,
+                    })
+                    extra_subtotal += sub_alb
+
+                sub_mat += extra_subtotal
+
             nivel_subtotal = _to_decimal(resultado_nivel.get('subtotal_total'), '0')
             sub_mat += _to_decimal(resultado_nivel.get('subtotal_materiales'), '0')
             sub_mo += _to_decimal(resultado_nivel.get('subtotal_mano_obra'), '0')
@@ -2406,7 +2511,8 @@ def calcular_etapas_por_niveles(
                 'repeticiones': reps,
                 'm2_efectivo': round(m2_efectivo, 2),
                 'factor': round(factor, 2),
-                'sistema_constructivo': nivel.get('sistema_constructivo', 'hormigon'),
+                'hormigon_m3': float(nivel.get('hormigon_m3', 0) or 0),
+                'albanileria_m2': float(nivel.get('albanileria_m2', 0) or 0),
                 'subtotal': float(nivel_subtotal),
                 'items': len(resultado_nivel.get('items', [])),
             })

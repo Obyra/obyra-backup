@@ -288,7 +288,9 @@ class NivelPresupuesto(db.Model):
     orden = db.Column(db.Integer, nullable=False, default=0)
     repeticiones = db.Column(db.Integer, nullable=False, default=1)
     area_m2 = db.Column(db.Numeric(10, 2), nullable=False)
-    sistema_constructivo = db.Column(db.String(30), nullable=False, default='hormigon')  # hormigon, albanileria, mixto
+    sistema_constructivo = db.Column(db.String(30), nullable=False, default='hormigon')  # legacy, se mantiene por compat
+    hormigon_m3 = db.Column(db.Numeric(10, 2), nullable=True, default=0)  # m³ de hormigón para este nivel
+    albanileria_m2 = db.Column(db.Numeric(10, 2), nullable=True, default=0)  # m² de albañilería para este nivel
     atributos = db.Column(db.JSON, default=dict)  # napa, cocheras, altura_libre, espesor_losa, complejidad
 
     presupuesto = db.relationship('Presupuesto', back_populates='niveles')
@@ -311,6 +313,8 @@ class NivelPresupuesto(db.Model):
             'area_m2': float(self.area_m2),
             'superficie_total': self.superficie_total,
             'sistema_constructivo': self.sistema_constructivo,
+            'hormigon_m3': float(self.hormigon_m3 or 0),
+            'albanileria_m2': float(self.albanileria_m2 or 0),
             'atributos': self.atributos or {},
         }
 

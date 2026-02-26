@@ -356,6 +356,29 @@ def crear():
             db.session.add(presupuesto)
             db.session.flush()  # Get presupuesto.id before commit
 
+            # Guardar niveles del edificio si existen
+            niveles_json_str = request.form.get('niveles_json', '').strip()
+            if niveles_json_str:
+                try:
+                    from models import NivelPresupuesto
+                    niveles_data = json.loads(niveles_json_str)
+                    for ndata in niveles_data:
+                        nivel = NivelPresupuesto(
+                            presupuesto_id=presupuesto.id,
+                            tipo_nivel=ndata.get('tipo_nivel', 'piso_tipo'),
+                            nombre=ndata.get('nombre', ''),
+                            orden=int(ndata.get('orden', 0)),
+                            repeticiones=int(ndata.get('repeticiones', 1)),
+                            area_m2=Decimal(str(ndata.get('area_m2', 0))),
+                            hormigon_m3=Decimal(str(ndata.get('hormigon_m3', 0))),
+                            albanileria_m2=Decimal(str(ndata.get('albanileria_m2', 0))),
+                            atributos=ndata.get('atributos', {}),
+                        )
+                        db.session.add(nivel)
+                    current_app.logger.info(f"Guardados {len(niveles_data)} niveles para presupuesto {numero}")
+                except Exception as e:
+                    current_app.logger.error(f"Error guardando niveles: {e}")
+
             # Procesar items calculados por IA si existen
             if ia_payload_str:
                 try:
@@ -416,13 +439,14 @@ def crear():
                                 total=subtotal,
                                 origen='ia',
                                 currency=moneda_ia,
-                                price_unit_currency=price_unit_usd,  # Precio unitario en USD
-                                total_currency=total_usd,  # Total en USD
+                                price_unit_currency=price_unit_usd,
+                                total_currency=total_usd,
                                 price_unit_ars=precio_unit_ars,
                                 total_ars=total_ars,
-                                etapa_id=None,  # Se asignará al confirmar como obra
-                                etapa_nombre=nombre_etapa,  # Guardar nombre de etapa para mostrar
-                                item_inventario_id=item_inventario_id  # Vinculación automática
+                                etapa_id=None,
+                                etapa_nombre=nombre_etapa,
+                                nivel_nombre=item.get('nivel_nombre'),
+                                item_inventario_id=item_inventario_id
                             )
                             db.session.add(item_presupuesto)
 
