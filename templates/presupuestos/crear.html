@@ -1887,98 +1887,104 @@ function actualizarChipsNiveles() {
 }
 
 function renderTablaModalNiveles() {
-    const tbody = document.getElementById('nivelesModalTbody');
-    if (!tbody) return;
+    const container = document.getElementById('nivelesModalContainer');
+    if (!container) return;
 
     const niveles = window.nivelesConfig || [];
     if (niveles.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay niveles configurados. Ajusta los controles de la sección edificio.</td></tr>';
+        container.innerHTML = '<div class="text-center text-muted py-3">No hay niveles configurados. Ajusta los controles de la sección edificio.</div>';
         actualizarTotalModalNiveles();
         return;
     }
 
-    tbody.innerHTML = niveles.map((n, i) => {
+    const tipoColor = { subsuelo: 'secondary', pb: 'primary', piso_tipo: 'info', piso_especial: 'warning', terraza: 'success' };
+
+    container.innerHTML = niveles.map((n, i) => {
         const supTotal = (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
+        const color = tipoColor[n.tipo_nivel] || 'dark';
+        const attrs = n.atributos || {};
+
         return `
-        <tr data-nivel-index="${i}">
-            <td>
-                <input type="text" class="form-control form-control-sm" value="${n.nombre}"
-                       onchange="window.nivelesConfig[${i}].nombre = this.value" style="width: 85px;">
-            </td>
-            <td><span class="badge bg-secondary" style="font-size: 0.7rem;">${n.tipo_nivel}</span></td>
-            <td>
-                <input type="number" class="form-control form-control-sm text-center" value="${n.repeticiones}"
-                       min="1" max="50" style="width: 60px;"
-                       onchange="window.nivelesConfig[${i}].repeticiones = parseInt(this.value) || 1; actualizarFilaSupNivel(${i});">
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm" value="${n.area_m2}"
-                       min="0" step="0.01" style="width: 95px;" placeholder="m²"
-                       onchange="window.nivelesConfig[${i}].area_m2 = parseFloat(this.value) || 0; actualizarFilaSupNivel(${i});">
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm" value="${n.hormigon_m3 || ''}"
-                       min="0" step="0.01" style="width: 95px;" placeholder="m³"
-                       onchange="window.nivelesConfig[${i}].hormigon_m3 = parseFloat(this.value) || 0;">
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm" value="${n.albanileria_m2 || ''}"
-                       min="0" step="0.01" style="width: 95px;" placeholder="m²"
-                       onchange="window.nivelesConfig[${i}].albanileria_m2 = parseFloat(this.value) || 0;">
-            </td>
-            <td>
-                <button type="button" class="btn btn-sm btn-outline-secondary" title="Opciones avanzadas"
-                        onclick="toggleOpcionesAvanzadas(${i})">
-                    <i class="fas fa-cog"></i>
-                </button>
-            </td>
-            <td class="text-end fw-bold" id="supTotalNivel_${i}">${supTotal.toFixed(2)} m²</td>
-        </tr>
-        <tr id="opcionesAvanzadas_${i}" style="display: none;" class="table-light">
-            <td colspan="8" class="p-2">
-                <div class="row g-2">
-                    <div class="col-auto">
-                        <label class="form-label small mb-0">Napa freática</label>
-                        <select class="form-select form-select-sm" style="width: 80px;"
-                                onchange="setAtributoNivel(${i}, 'napa', this.value === '1')">
-                            <option value="0" ${!(n.atributos && n.atributos.napa) ? 'selected' : ''}>No</option>
-                            <option value="1" ${(n.atributos && n.atributos.napa) ? 'selected' : ''}>Sí</option>
-                        </select>
+        <div class="card mb-2 border-${color}" data-nivel-index="${i}">
+            <div class="card-header bg-${color} bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <input type="text" class="form-control form-control-sm d-inline-block fw-bold" value="${n.nombre}"
+                           onchange="window.nivelesConfig[${i}].nombre = this.value" style="width: 80px;">
+                    <span class="badge bg-${color} ms-1">${n.tipo_nivel}</span>
+                </div>
+                <span class="fw-bold" id="supTotalNivel_${i}">${supTotal.toFixed(2)} m²</span>
+            </div>
+            <div class="card-body py-2">
+                <div class="row g-2 mb-2">
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small mb-0 fw-bold">Repeticiones</label>
+                        <input type="number" class="form-control form-control-sm" value="${n.repeticiones}"
+                               min="1" max="50"
+                               onchange="window.nivelesConfig[${i}].repeticiones = parseInt(this.value) || 1; actualizarFilaSupNivel(${i});">
                     </div>
-                    <div class="col-auto">
-                        <label class="form-label small mb-0">Cocheras</label>
-                        <select class="form-select form-select-sm" style="width: 80px;"
-                                onchange="setAtributoNivel(${i}, 'cocheras', this.value === '1')">
-                            <option value="0" ${!(n.atributos && n.atributos.cocheras) ? 'selected' : ''}>No</option>
-                            <option value="1" ${(n.atributos && n.atributos.cocheras) ? 'selected' : ''}>Sí</option>
-                        </select>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small mb-0 fw-bold">Area m²</label>
+                        <input type="number" class="form-control form-control-sm" value="${n.area_m2}"
+                               min="0" step="0.01" placeholder="Superficie"
+                               onchange="window.nivelesConfig[${i}].area_m2 = parseFloat(this.value) || 0; actualizarFilaSupNivel(${i});">
                     </div>
-                    <div class="col-auto">
-                        <label class="form-label small mb-0">Altura libre (m)</label>
-                        <input type="number" class="form-control form-control-sm" style="width: 80px;"
-                               step="0.1" min="2" max="6"
-                               value="${(n.atributos && n.atributos.altura_libre) || ''}"
-                               onchange="setAtributoNivel(${i}, 'altura_libre', parseFloat(this.value) || null)">
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small mb-0 fw-bold text-primary">Hormigon m³</label>
+                        <input type="number" class="form-control form-control-sm border-primary" value="${n.hormigon_m3 || ''}"
+                               min="0" step="0.01" placeholder="Vol. hormigon"
+                               onchange="window.nivelesConfig[${i}].hormigon_m3 = parseFloat(this.value) || 0;">
                     </div>
-                    <div class="col-auto">
-                        <label class="form-label small mb-0">Espesor losa (cm)</label>
-                        <input type="number" class="form-control form-control-sm" style="width: 80px;"
-                               step="1" min="10" max="40"
-                               value="${(n.atributos && n.atributos.espesor_losa) || ''}"
-                               onchange="setAtributoNivel(${i}, 'espesor_losa', parseInt(this.value) || null)">
-                    </div>
-                    <div class="col-auto">
-                        <label class="form-label small mb-0">Complejidad</label>
-                        <select class="form-select form-select-sm" style="width: 100px;"
-                                onchange="setAtributoNivel(${i}, 'complejidad', this.value)">
-                            <option value="baja" ${(n.atributos && n.atributos.complejidad) === 'baja' ? 'selected' : ''}>Baja</option>
-                            <option value="media" ${!(n.atributos && n.atributos.complejidad) || (n.atributos && n.atributos.complejidad) === 'media' ? 'selected' : ''}>Media</option>
-                            <option value="alta" ${(n.atributos && n.atributos.complejidad) === 'alta' ? 'selected' : ''}>Alta</option>
-                        </select>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small mb-0 fw-bold text-success">Albanileria m²</label>
+                        <input type="number" class="form-control form-control-sm border-success" value="${n.albanileria_m2 || ''}"
+                               min="0" step="0.01" placeholder="Sup. albanileria"
+                               onchange="window.nivelesConfig[${i}].albanileria_m2 = parseFloat(this.value) || 0;">
                     </div>
                 </div>
-            </td>
-        </tr>
+                <details class="mt-1">
+                    <summary class="small text-muted" style="cursor:pointer;">Opciones avanzadas</summary>
+                    <div class="row g-2 mt-1">
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-0">Napa</label>
+                            <select class="form-select form-select-sm"
+                                    onchange="setAtributoNivel(${i}, 'napa', this.value === '1')">
+                                <option value="0" ${!attrs.napa ? 'selected' : ''}>No</option>
+                                <option value="1" ${attrs.napa ? 'selected' : ''}>Si</option>
+                            </select>
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-0">Cocheras</label>
+                            <select class="form-select form-select-sm"
+                                    onchange="setAtributoNivel(${i}, 'cocheras', this.value === '1')">
+                                <option value="0" ${!attrs.cocheras ? 'selected' : ''}>No</option>
+                                <option value="1" ${attrs.cocheras ? 'selected' : ''}>Si</option>
+                            </select>
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-0">Altura (m)</label>
+                            <input type="number" class="form-control form-control-sm"
+                                   step="0.1" min="2" max="6" value="${attrs.altura_libre || ''}"
+                                   onchange="setAtributoNivel(${i}, 'altura_libre', parseFloat(this.value) || null)">
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-0">Losa (cm)</label>
+                            <input type="number" class="form-control form-control-sm"
+                                   step="1" min="10" max="40" value="${attrs.espesor_losa || ''}"
+                                   onchange="setAtributoNivel(${i}, 'espesor_losa', parseInt(this.value) || null)">
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-0">Complejidad</label>
+                            <select class="form-select form-select-sm"
+                                    onchange="setAtributoNivel(${i}, 'complejidad', this.value)">
+                                <option value="baja" ${attrs.complejidad === 'baja' ? 'selected' : ''}>Baja</option>
+                                <option value="media" ${!attrs.complejidad || attrs.complejidad === 'media' ? 'selected' : ''}>Media</option>
+                                <option value="alta" ${attrs.complejidad === 'alta' ? 'selected' : ''}>Alta</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
         `;
     }).join('');
 
@@ -2001,11 +2007,6 @@ function actualizarTotalModalNiveles() {
         return sum + (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
     }, 0);
     el.textContent = total.toFixed(2) + ' m²';
-}
-
-function toggleOpcionesAvanzadas(index) {
-    const row = document.getElementById(`opcionesAvanzadas_${index}`);
-    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
 }
 
 function setAtributoNivel(index, key, value) {
@@ -2077,29 +2078,11 @@ window.actualizarSelectorCliente = function(clienteData) {
                     Configura el <strong>área m²</strong>, <strong>hormigón (m³)</strong> y <strong>albañilería (m²)</strong> de cada nivel.
                     Puedes completar ambos para el mismo nivel. El botón <i class="fas fa-cog"></i> expande opciones avanzadas.
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 90px;">Nivel</th>
-                                <th style="width: 80px;">Tipo</th>
-                                <th style="width: 60px;" class="text-center">Rep.</th>
-                                <th style="width: 100px;">Área m²</th>
-                                <th style="width: 100px;">Hormigón m³</th>
-                                <th style="width: 100px;">Albañilería m²</th>
-                                <th style="width: 40px;"></th>
-                                <th style="width: 100px;" class="text-end">Sup. Total</th>
-                            </tr>
-                        </thead>
-                        <tbody id="nivelesModalTbody">
-                        </tbody>
-                        <tfoot class="table-dark">
-                            <tr>
-                                <td colspan="7" class="text-end fw-bold">TOTAL</td>
-                                <td class="text-end fw-bold" id="totalSuperficieNiveles">0.00 m²</td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                <div id="nivelesModalContainer">
+                </div>
+                <div class="bg-dark text-white rounded p-2 mt-2 d-flex justify-content-between">
+                    <span class="fw-bold">TOTAL SUPERFICIE</span>
+                    <span class="fw-bold" id="totalSuperficieNiveles">0.00 m²</span>
                 </div>
             </div>
             <div class="modal-footer py-2">
