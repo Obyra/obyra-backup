@@ -2950,6 +2950,7 @@ def geocodificar_todas():
 
 
 @obras_bp.route('/eliminar/<int:obra_id>', methods=['POST'])
+@csrf.exempt
 @login_required
 @limiter.limit("10 per minute")
 def eliminar_obra(obra_id):
