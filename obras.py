@@ -2981,17 +2981,21 @@ def eliminar_obra(obra_id):
             # Poner etapa_id = NULL en items que referencian esta etapa
             ItemPresupuesto.query.filter_by(etapa_id=etapa.id).update({ItemPresupuesto.etapa_id: None})
 
+        # Helper: verificar si una tabla existe antes de intentar borrar
+        def _tabla_existe(nombre_tabla):
+            r = db.session.execute(db.text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema='public' AND table_name = :tbl)"
+            ), {"tbl": nombre_tabla})
+            return r.scalar()
+
         # 2. Eliminar dependencias de tareas y luego las tareas de cada etapa
         for etapa in obra.etapas:
             tareas_etapa = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
             for tarea in tareas_etapa:
                 for sub_table in ['tarea_miembros', 'tarea_avances']:
-                    try:
-                        sp = db.session.begin_nested()
+                    if _tabla_existe(sub_table):
                         db.session.execute(db.text(f"DELETE FROM {sub_table} WHERE tarea_id = :tid"), {"tid": tarea.id})
-                        sp.commit()
-                    except Exception:
-                        pass
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
         # 3. Eliminar etapas
@@ -3000,7 +3004,7 @@ def eliminar_obra(obra_id):
         # 4. Eliminar asignaciones
         AsignacionObra.query.filter_by(obra_id=obra_id).delete()
 
-        # 5. Eliminar otras relaciones usando SQL directo para tablas que pueden no existir
+        # 5. Eliminar otras relaciones — solo si la tabla existe en la BD
         _optional_deletes = [
             ("certificaciones_avance", "obra_id = :obra_id"),
             ("documentos_obra", "obra_id = :obra_id"),
@@ -3021,12 +3025,8 @@ def eliminar_obra(obra_id):
             ("stock_obra", "obra_id = :obra_id"),
         ]
         for table, condition in _optional_deletes:
-            try:
-                sp = db.session.begin_nested()
+            if _tabla_existe(table):
                 db.session.execute(db.text(f"DELETE FROM {table} WHERE {condition}"), {"obra_id": obra_id})
-                sp.commit()
-            except Exception:
-                pass  # Savepoint auto-rolled-back, tabla no existe — continuar
 
         # 6. Finalmente eliminar la obra
         db.session.delete(obra)
