@@ -2996,24 +2996,33 @@ def eliminar_obra(obra_id):
         # 4. Eliminar asignaciones
         AsignacionObra.query.filter_by(obra_id=obra_id).delete()
 
-        # 5. Eliminar otras relaciones usando SQL directo para tablas que pueden no tener modelo
-        db.session.execute(db.text("DELETE FROM certificaciones_avance WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM documentos_obra WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM work_certifications WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM work_payments WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM incidentes_seguridad WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM checklists_seguridad WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM auditorias_seguridad WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM configuraciones_inteligentes WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM obra_miembros WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM uso_inventario WHERE obra_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM events WHERE project_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM equipment_assignment WHERE project_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM equipment_usage WHERE project_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM stock_movement WHERE project_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM stock_reservation WHERE project_id = :obra_id"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM movimientos_stock_obra WHERE stock_obra_id IN (SELECT id FROM stock_obra WHERE obra_id = :obra_id)"), {"obra_id": obra_id})
-        db.session.execute(db.text("DELETE FROM stock_obra WHERE obra_id = :obra_id"), {"obra_id": obra_id})
+        # 5. Eliminar otras relaciones usando SQL directo para tablas que pueden no existir
+        _optional_deletes = [
+            ("certificaciones_avance", "obra_id = :obra_id"),
+            ("documentos_obra", "obra_id = :obra_id"),
+            ("work_certifications", "obra_id = :obra_id"),
+            ("work_payments", "obra_id = :obra_id"),
+            ("incidentes_seguridad", "obra_id = :obra_id"),
+            ("checklists_seguridad", "obra_id = :obra_id"),
+            ("auditorias_seguridad", "obra_id = :obra_id"),
+            ("configuraciones_inteligentes", "obra_id = :obra_id"),
+            ("obra_miembros", "obra_id = :obra_id"),
+            ("uso_inventario", "obra_id = :obra_id"),
+            ("events", "project_id = :obra_id"),
+            ("equipment_assignment", "project_id = :obra_id"),
+            ("equipment_usage", "project_id = :obra_id"),
+            ("stock_movement", "project_id = :obra_id"),
+            ("stock_reservation", "project_id = :obra_id"),
+            ("movimientos_stock_obra", "stock_obra_id IN (SELECT id FROM stock_obra WHERE obra_id = :obra_id)"),
+            ("stock_obra", "obra_id = :obra_id"),
+        ]
+        for table, condition in _optional_deletes:
+            try:
+                sp = db.session.begin_nested()
+                db.session.execute(db.text(f"DELETE FROM {table} WHERE {condition}"), {"obra_id": obra_id})
+                sp.commit()
+            except Exception:
+                pass  # Savepoint auto-rolled-back, tabla no existe — continuar
 
         # 6. Finalmente eliminar la obra
         db.session.delete(obra)
