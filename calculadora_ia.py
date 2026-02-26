@@ -2190,6 +2190,275 @@ def calcular_etapas_seleccionadas(
     STAGE_CALC_CACHE[cache_key] = deepcopy(respuesta)
     return respuesta
 
+# ═══════════════════════════════════════════════════════════════
+# EDIFICIO POR NIVELES - Coeficientes y cálculo por nivel
+# ═══════════════════════════════════════════════════════════════
+
+# Factor multiplicador por (tipo_nivel, etapa_slug).
+# 0 = la etapa NO aplica a ese tipo de nivel.
+COEFICIENTES_POR_NIVEL = {
+    'subsuelo': {
+        'excavacion': 1.5,
+        'fundaciones': 1.3,
+        'estructura': 1.2,
+        'mamposteria': 0.6,
+        'techos': 0.0,
+        'instalaciones-electricas': 0.7,
+        'instalaciones-sanitarias': 0.5,
+        'instalaciones-gas': 0.0,
+        'revoque-grueso': 0.5,
+        'revoque-fino': 0.3,
+        'pisos': 0.8,
+        'carpinteria': 0.3,
+        'pintura': 0.5,
+        'herreria-de-obra': 0.4,
+        'impermeabilizaciones-aislaciones': 1.8,
+        'seguridad': 1.0,
+        '_default': 0.5,
+    },
+    'pb': {
+        'excavacion': 0.3,
+        'fundaciones': 0.0,
+        'estructura': 1.0,
+        'mamposteria': 1.2,
+        'techos': 0.0,
+        'instalaciones-electricas': 1.2,
+        'instalaciones-sanitarias': 1.0,
+        'instalaciones-gas': 1.0,
+        'revoque-grueso': 1.0,
+        'revoque-fino': 1.0,
+        'pisos': 1.1,
+        'carpinteria': 1.2,
+        'pintura': 1.1,
+        'herreria-de-obra': 1.0,
+        'seguridad': 0.5,
+        '_default': 1.0,
+    },
+    'piso_tipo': {
+        'excavacion': 0.0,
+        'fundaciones': 0.0,
+        'estructura': 1.0,
+        'mamposteria': 1.0,
+        'techos': 0.0,
+        'instalaciones-electricas': 1.0,
+        'instalaciones-sanitarias': 1.0,
+        'instalaciones-gas': 0.8,
+        'revoque-grueso': 1.0,
+        'revoque-fino': 1.0,
+        'pisos': 1.0,
+        'carpinteria': 1.0,
+        'pintura': 1.0,
+        'herreria-de-obra': 0.8,
+        'seguridad': 0.3,
+        '_default': 1.0,
+    },
+    'piso_especial': {
+        'excavacion': 0.0,
+        'fundaciones': 0.0,
+        'estructura': 1.1,
+        'mamposteria': 1.1,
+        'techos': 0.0,
+        'instalaciones-electricas': 1.3,
+        'instalaciones-sanitarias': 1.2,
+        'revoque-grueso': 1.1,
+        'revoque-fino': 1.1,
+        'pisos': 1.2,
+        'carpinteria': 1.3,
+        'pintura': 1.2,
+        'herreria-de-obra': 1.0,
+        'seguridad': 0.3,
+        '_default': 1.1,
+    },
+    'terraza': {
+        'excavacion': 0.0,
+        'fundaciones': 0.0,
+        'estructura': 0.4,
+        'mamposteria': 0.2,
+        'techos': 1.5,
+        'instalaciones-electricas': 0.3,
+        'instalaciones-sanitarias': 0.2,
+        'instalaciones-gas': 0.0,
+        'revoque-grueso': 0.3,
+        'revoque-fino': 0.2,
+        'pisos': 0.7,
+        'carpinteria': 0.2,
+        'pintura': 0.4,
+        'herreria-de-obra': 0.5,
+        'impermeabilizaciones-aislaciones': 2.0,
+        'seguridad': 0.5,
+        '_default': 0.3,
+    },
+}
+
+# Coeficientes estructurales extras por sistema constructivo
+COEF_SISTEMA_CONSTRUCTIVO = {
+    'hormigon': {
+        'hormigon_m3_por_m2': 0.20,
+        'acero_kg_por_m2': 25.0,
+        'encofrado_m2_por_m2': 1.8,
+    },
+    'albanileria': {
+        'mamposteria_m2_por_m2': 1.4,
+        'hormigon_m3_por_m2': 0.05,
+        'acero_kg_por_m2': 8.0,
+    },
+    'mixto': {
+        'hormigon_m3_por_m2': 0.12,
+        'acero_kg_por_m2': 16.0,
+        'encofrado_m2_por_m2': 1.0,
+        'mamposteria_m2_por_m2': 0.8,
+    },
+}
+
+
+def calcular_etapas_por_niveles(
+    etapas_payload,
+    niveles,
+    tipo_calculo='Estándar',
+    contexto=None,
+    presupuesto_id=None,
+    currency: str = 'ARS',
+    fx_snapshot=None,
+    aplicar_desperdicio: bool = True,
+    org_id=None,
+):
+    """
+    Calcula presupuesto por etapas desglosado por niveles de edificio.
+
+    En vez de: superficie_global × coef_etapa
+    Hace:      Σ(nivel.area_m2 × nivel.repeticiones × coef_etapa × factor_nivel)
+    """
+    etapas_payload = etapas_payload or []
+    etapa_identificadores = []
+    for etapa in etapas_payload:
+        if isinstance(etapa, dict):
+            nombre = etapa.get('nombre')
+            slug = etapa.get('slug') or slugify_etapa(nombre)
+            etapa_identificadores.append({'slug': slug, 'nombre': nombre, 'id': etapa.get('id')})
+        else:
+            slug = slugify_etapa(etapa)
+            etapa_identificadores.append({'slug': slug, 'nombre': etapa, 'id': None})
+
+    if not etapa_identificadores:
+        raise ValueError('Debes seleccionar al menos una etapa para calcular')
+
+    currency = (currency or 'ARS').upper()
+    fx_rate = fx_snapshot.value if fx_snapshot else None
+    cac_context = _get_cac_context_cached()
+
+    etapas_resultado = []
+    total_parcial = DECIMAL_ZERO
+
+    for etapa in etapa_identificadores:
+        slug = etapa['slug']
+
+        # Calcular por cada nivel y agregar
+        items_etapa = []
+        desglose_niveles = []
+        sub_mat = DECIMAL_ZERO
+        sub_mo = DECIMAL_ZERO
+        sub_eq = DECIMAL_ZERO
+
+        for nivel in niveles:
+            tipo_nivel = nivel.get('tipo_nivel', 'piso_tipo')
+            coefs_nivel = COEFICIENTES_POR_NIVEL.get(tipo_nivel, {})
+            factor = coefs_nivel.get(slug, coefs_nivel.get('_default', 1.0))
+
+            if factor == 0:
+                continue
+
+            area = float(nivel.get('area_m2', 0))
+            reps = int(nivel.get('repeticiones', 1))
+            m2_efectivo = area * reps * factor
+            nivel_nombre = nivel.get('nombre', tipo_nivel)
+            rep_label = f" x{reps}" if reps > 1 else ""
+
+            if m2_efectivo <= 0:
+                continue
+
+            resultado_nivel = calcular_etapa_por_reglas(
+                slug,
+                m2_efectivo,
+                tipo_calculo,
+                contexto=contexto,
+                etiqueta=etapa.get('nombre'),
+                etapa_id=etapa.get('id'),
+                currency=currency,
+                fx_rate=fx_rate,
+                aplicar_desperdicio=aplicar_desperdicio,
+                org_id=org_id,
+            )
+
+            # Etiquetar items con el nombre del nivel
+            for item in resultado_nivel.get('items', []):
+                item['nivel_nombre'] = f"{nivel_nombre}{rep_label}"
+                items_etapa.append(item)
+
+            nivel_subtotal = _to_decimal(resultado_nivel.get('subtotal_total'), '0')
+            sub_mat += _to_decimal(resultado_nivel.get('subtotal_materiales'), '0')
+            sub_mo += _to_decimal(resultado_nivel.get('subtotal_mano_obra'), '0')
+            sub_eq += _to_decimal(resultado_nivel.get('subtotal_equipos'), '0')
+
+            desglose_niveles.append({
+                'nivel_nombre': f"{nivel_nombre}{rep_label}",
+                'tipo_nivel': tipo_nivel,
+                'area_m2': area,
+                'repeticiones': reps,
+                'm2_efectivo': round(m2_efectivo, 2),
+                'factor': round(factor, 2),
+                'sistema_constructivo': nivel.get('sistema_constructivo', 'hormigon'),
+                'subtotal': float(nivel_subtotal),
+                'items': len(resultado_nivel.get('items', [])),
+            })
+
+        subtotal_etapa = sub_mat + sub_mo + sub_eq
+        total_parcial += subtotal_etapa
+
+        etapas_resultado.append({
+            'slug': slug,
+            'nombre': etapa.get('nombre') or slug.replace('-', ' ').title(),
+            'etapa_id': etapa.get('id'),
+            'items': items_etapa,
+            'subtotal_materiales': float(_quantize_currency(sub_mat)),
+            'subtotal_mano_obra': float(_quantize_currency(sub_mo)),
+            'subtotal_equipos': float(_quantize_currency(sub_eq)),
+            'subtotal_total': float(_quantize_currency(subtotal_etapa)),
+            'confianza': 0.70,
+            'notas': f'Calculado por niveles ({len(desglose_niveles)} niveles)',
+            'metodo': 'niveles',
+            'desglose_niveles': desglose_niveles,
+        })
+
+    respuesta = {
+        'ok': True,
+        'etapas': etapas_resultado,
+        'total_parcial': float(_quantize_currency(total_parcial)),
+        'moneda': currency,
+        'metodo': 'niveles',
+        'presupuesto_id': presupuesto_id,
+        'tipo_cambio': None,
+    }
+
+    if fx_snapshot:
+        respuesta['tipo_cambio'] = {
+            'valor': float(_to_decimal(fx_snapshot.value, '0')),
+            'proveedor': fx_snapshot.provider,
+            'base_currency': fx_snapshot.base_currency,
+            'quote_currency': fx_snapshot.quote_currency,
+            'fetched_at': fx_snapshot.fetched_at.isoformat(),
+            'as_of': fx_snapshot.as_of_date.isoformat(),
+        }
+
+    respuesta['cac'] = {
+        'valor': float(cac_context.value),
+        'periodo': cac_context.period.isoformat(),
+        'multiplicador': float(cac_context.multiplier),
+        'proveedor': cac_context.provider,
+    }
+
+    return respuesta
+
+
 # ----------------- Orquestadores de presupuesto -----------------
 
 def generar_presupuesto_completo(superficie_m2, tipo_construccion, analisis_ia=None):

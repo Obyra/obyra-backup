@@ -88,6 +88,48 @@
                             </div>
                         </div>
 
+                        <!-- Configuración Edificio por Niveles -->
+                        <div id="seccion_edificio_niveles" style="display: none;" class="mb-4">
+                            <div class="card border-primary">
+                                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                                    <h6 class="mb-0"><i class="fas fa-layer-group"></i> Estructura por Niveles</h6>
+                                    <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalConfigurarNiveles">
+                                        <i class="fas fa-cog"></i> Configurar Niveles
+                                    </button>
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="row mb-2">
+                                        <div class="col-3">
+                                            <label class="form-label fw-bold small mb-1">Subsuelos</label>
+                                            <input type="number" class="form-control form-control-sm" id="cant_subsuelos" min="0" max="5" value="0" onchange="generarNivelesDefault()">
+                                        </div>
+                                        <div class="col-3">
+                                            <label class="form-label fw-bold small mb-1">Planta Baja</label>
+                                            <select class="form-select form-select-sm" id="tiene_pb" onchange="generarNivelesDefault()">
+                                                <option value="1">Si</option>
+                                                <option value="0">No</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-3">
+                                            <label class="form-label fw-bold small mb-1">Pisos Tipo</label>
+                                            <input type="number" class="form-control form-control-sm bg-light" id="cant_pisos_tipo" min="0" value="0" readonly>
+                                        </div>
+                                        <div class="col-3">
+                                            <label class="form-label fw-bold small mb-1">Terraza</label>
+                                            <select class="form-select form-select-sm" id="tiene_terraza" onchange="generarNivelesDefault()">
+                                                <option value="1">Si</option>
+                                                <option value="0">No</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div id="niveles_chips_container" class="d-flex flex-wrap gap-1">
+                                        <span class="text-muted small">Configura los niveles para ver el resumen...</span>
+                                    </div>
+                                    <input type="hidden" id="niveles_json" name="niveles_json">
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Segunda fila: Ubicación y Tipo de Construcción -->
                         <div class="row mb-4">
                             <div class="col-md-6">
@@ -574,30 +616,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const cantidadPisosInput = document.getElementById('cantidad_pisos');
     const rangoPisosText = document.getElementById('rango_pisos_text');
 
+    const seccionEdificioNiveles = document.getElementById('seccion_edificio_niveles');
+
     if (tipoObraSelect && campoCantidadPisos) {
         tipoObraSelect.addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             const minPisos = selectedOption.dataset.minPisos;
             const maxPisos = selectedOption.dataset.maxPisos;
+            const val = this.value;
+            const esEdificio = val.startsWith('edificio_');
 
             if (minPisos && maxPisos) {
-                // Es un edificio, mostrar campo
                 campoCantidadPisos.style.display = 'block';
                 cantidadPisosInput.min = minPisos;
                 cantidadPisosInput.max = maxPisos;
                 cantidadPisosInput.required = true;
-                // Sugerir valor medio del rango
                 const valorMedio = Math.round((parseInt(minPisos) + parseInt(maxPisos)) / 2);
                 cantidadPisosInput.value = valorMedio;
                 cantidadPisosInput.placeholder = `Entre ${minPisos} y ${maxPisos} pisos`;
                 rangoPisosText.textContent = `Rango permitido: ${minPisos} a ${maxPisos} pisos`;
             } else {
-                // No es edificio, ocultar campo
                 campoCantidadPisos.style.display = 'none';
                 cantidadPisosInput.required = false;
                 cantidadPisosInput.value = '';
             }
+
+            // Mostrar/ocultar sección de niveles para edificios
+            if (seccionEdificioNiveles) {
+                seccionEdificioNiveles.style.display = esEdificio ? 'block' : 'none';
+                if (esEdificio) {
+                    actualizarPisosTipo();
+                    generarNivelesDefault();
+                } else {
+                    window.nivelesConfig = [];
+                    actualizarChipsNiveles();
+                }
+            }
         });
+
+        // Cuando cambia cantidad de pisos, recalcular pisos tipo y regenerar niveles
+        if (cantidadPisosInput) {
+            cantidadPisosInput.addEventListener('change', function() {
+                actualizarPisosTipo();
+                generarNivelesDefault();
+            });
+        }
     }
 });
 
@@ -1213,6 +1276,13 @@ function solicitarCalculoEtapas(etapas) {
         aplicar_desperdicio: aplicarDesperdicio
     };
 
+    // Incluir niveles del edificio si están configurados
+    const nivelesData = window.nivelesConfig || [];
+    const nivelesConArea = nivelesData.filter(n => parseFloat(n.area_m2) > 0);
+    if (nivelesConArea.length > 0) {
+        payload.niveles = nivelesConArea;
+    }
+
     const modalEl = document.getElementById('modalResultadoEtapasIA');
     const modal = new bootstrap.Modal(modalEl);
     document.getElementById('resultadoEtapasIAContenido').innerHTML = `
@@ -1338,6 +1408,24 @@ function renderResultadoEtapasIA(data) {
                         <i class="fas fa-hand-point-right"></i> Desliza horizontalmente para ver más columnas
                     </div>
                 ` : '<div class="alert alert-warning mb-0">Sin items sugeridos para esta etapa.</div>'}
+                ${etapa.desglose_niveles && etapa.desglose_niveles.length ? `
+                    <details class="mt-3">
+                        <summary class="fw-bold text-primary" style="cursor:pointer; font-size: 0.85rem;">
+                            <i class="fas fa-layer-group me-1"></i>Desglose por Nivel (${etapa.desglose_niveles.length} niveles)
+                        </summary>
+                        <div class="mt-2">
+                            ${etapa.desglose_niveles.map(dn => `
+                                <div class="mb-2 ms-2 border-start border-3 border-primary ps-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold small">${dn.nivel_nombre || 'Nivel'}</span>
+                                        <span class="badge bg-primary-subtle text-primary small">${dn.subtotal ? currencyFormatter.format(dn.subtotal) : '-'} · ${dn.m2_efectivo ? dn.m2_efectivo.toFixed(0) + ' m²' : ''}</span>
+                                    </div>
+                                    <div class="small text-muted">${(dn.items || []).length} items · Factor: ${dn.factor || '-'}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </details>
+                ` : ''}
                 ${etapa.notas ? `<p class="small text-muted mt-2 mb-0">${etapa.notas}</p>` : ''}
                 ${(etapa.items_constructora && etapa.items_constructora.length) ? `
                     <details class="mt-3">
@@ -1605,6 +1693,11 @@ function limpiarFormulario() {
         etapasSeleccionadasIA.clear();
         limpiarResultadosEtapasIA();
         actualizarVistaEtapas();
+        // Limpiar niveles del edificio
+        window.nivelesConfig = [];
+        actualizarChipsNiveles();
+        const secEdif = document.getElementById('seccion_edificio_niveles');
+        if (secEdif) secEdif.style.display = 'none';
     }
 }
 
@@ -1662,6 +1755,272 @@ document.getElementById('nuevoPresupuestoForm').addEventListener('submit', funct
 });
 
 // Función global para actualizar selector cuando se crea un cliente desde ventana popup
+// ══════════════════════════════════════════════════════
+// EDIFICIO POR NIVELES — Funciones de gestión
+// ══════════════════════════════════════════════════════
+
+window.nivelesConfig = [];
+
+function actualizarPisosTipo() {
+    const cantPisos = parseInt(document.getElementById('cantidad_pisos').value || '0');
+    const tienePB = parseInt(document.getElementById('tiene_pb').value || '1');
+    const tieneTerraza = parseInt(document.getElementById('tiene_terraza').value || '1');
+    const cantSubsuelos = parseInt(document.getElementById('cant_subsuelos').value || '0');
+    const pisosTipo = Math.max(0, cantPisos - (tienePB ? 1 : 0) - (tieneTerraza ? 1 : 0));
+    document.getElementById('cant_pisos_tipo').value = pisosTipo;
+    return pisosTipo;
+}
+
+function generarNivelesDefault() {
+    const cantSubsuelos = parseInt(document.getElementById('cant_subsuelos').value || '0');
+    const tienePB = parseInt(document.getElementById('tiene_pb').value || '1');
+    const tieneTerraza = parseInt(document.getElementById('tiene_terraza').value || '1');
+    const pisosTipo = actualizarPisosTipo();
+
+    const niveles = [];
+    let orden = 0;
+
+    // Subsuelos
+    for (let i = cantSubsuelos; i >= 1; i--) {
+        niveles.push({
+            tipo_nivel: 'subsuelo',
+            nombre: `S-${i}`,
+            orden: orden++,
+            repeticiones: 1,
+            area_m2: 0,
+            sistema_constructivo: 'hormigon',
+            atributos: {}
+        });
+    }
+
+    // Planta Baja
+    if (tienePB) {
+        niveles.push({
+            tipo_nivel: 'pb',
+            nombre: 'PB',
+            orden: orden++,
+            repeticiones: 1,
+            area_m2: 0,
+            sistema_constructivo: 'mixto',
+            atributos: {}
+        });
+    }
+
+    // Pisos Tipo (agrupados como una sola fila con repeticiones)
+    if (pisosTipo > 0) {
+        niveles.push({
+            tipo_nivel: 'piso_tipo',
+            nombre: 'Pisos Tipo',
+            orden: orden++,
+            repeticiones: pisosTipo,
+            area_m2: 0,
+            sistema_constructivo: 'hormigon',
+            atributos: {}
+        });
+    }
+
+    // Terraza
+    if (tieneTerraza) {
+        niveles.push({
+            tipo_nivel: 'terraza',
+            nombre: 'Terraza',
+            orden: orden++,
+            repeticiones: 1,
+            area_m2: 0,
+            sistema_constructivo: 'hormigon',
+            atributos: {}
+        });
+    }
+
+    window.nivelesConfig = niveles;
+    actualizarChipsNiveles();
+}
+
+function actualizarChipsNiveles() {
+    const container = document.getElementById('niveles_chips_container');
+    if (!container) return;
+
+    const niveles = window.nivelesConfig || [];
+    if (niveles.length === 0) {
+        container.innerHTML = '<span class="text-muted small">Configura los niveles para ver el resumen...</span>';
+        document.getElementById('niveles_json').value = '';
+        return;
+    }
+
+    const sistemaLabel = { hormigon: 'H°A°', albanileria: 'Alb.', mixto: 'Mixto' };
+    const tipoColor = { subsuelo: 'secondary', pb: 'primary', piso_tipo: 'info', piso_especial: 'warning', terraza: 'success' };
+
+    let totalM2 = 0;
+    const chips = niveles.map(n => {
+        const supTotal = (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
+        totalM2 += supTotal;
+        const color = tipoColor[n.tipo_nivel] || 'dark';
+        const rep = n.repeticiones > 1 ? ` ×${n.repeticiones}` : '';
+        const areaText = n.area_m2 > 0 ? ` ${n.area_m2} m²${rep}` : '';
+        return `<span class="badge bg-${color}">${n.nombre}${areaText} ${sistemaLabel[n.sistema_constructivo] || ''}</span>`;
+    });
+
+    if (totalM2 > 0) {
+        chips.push(`<span class="badge bg-dark"><i class="fas fa-sigma"></i> ${totalM2.toFixed(0)} m² total</span>`);
+    }
+    container.innerHTML = chips.join(' ');
+
+    // Actualizar campo hidden y superficie total
+    document.getElementById('niveles_json').value = JSON.stringify(niveles);
+    if (totalM2 > 0) {
+        const supInput = document.getElementById('superficie_m2');
+        if (supInput) supInput.value = totalM2.toFixed(2);
+    }
+}
+
+function renderTablaModalNiveles() {
+    const tbody = document.getElementById('nivelesModalTbody');
+    if (!tbody) return;
+
+    const niveles = window.nivelesConfig || [];
+    if (niveles.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No hay niveles configurados. Ajusta los controles de la sección edificio.</td></tr>';
+        actualizarTotalModalNiveles();
+        return;
+    }
+
+    const sistemaOptions = `
+        <option value="hormigon">Hormigón Armado</option>
+        <option value="albanileria">Albañilería</option>
+        <option value="mixto">Mixto</option>
+    `;
+
+    tbody.innerHTML = niveles.map((n, i) => {
+        const supTotal = (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
+        return `
+        <tr data-nivel-index="${i}">
+            <td>
+                <input type="text" class="form-control form-control-sm" value="${n.nombre}"
+                       onchange="window.nivelesConfig[${i}].nombre = this.value" style="width: 90px;">
+            </td>
+            <td><span class="badge bg-secondary">${n.tipo_nivel}</span></td>
+            <td>
+                <input type="number" class="form-control form-control-sm text-center" value="${n.repeticiones}"
+                       min="1" max="50" style="width: 65px;"
+                       onchange="window.nivelesConfig[${i}].repeticiones = parseInt(this.value) || 1; actualizarFilaSupNivel(${i});">
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm" value="${n.area_m2}"
+                       min="0" step="0.01" style="width: 100px;"
+                       onchange="window.nivelesConfig[${i}].area_m2 = parseFloat(this.value) || 0; actualizarFilaSupNivel(${i});">
+            </td>
+            <td>
+                <select class="form-select form-select-sm" style="width: 130px;"
+                        onchange="window.nivelesConfig[${i}].sistema_constructivo = this.value;">
+                    ${sistemaOptions.replace(`value="${n.sistema_constructivo}"`, `value="${n.sistema_constructivo}" selected`)}
+                </select>
+            </td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="Opciones avanzadas"
+                        onclick="toggleOpcionesAvanzadas(${i})">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </td>
+            <td class="text-end fw-bold" id="supTotalNivel_${i}">${supTotal.toFixed(2)} m²</td>
+        </tr>
+        <tr id="opcionesAvanzadas_${i}" style="display: none;" class="table-light">
+            <td colspan="7" class="p-2">
+                <div class="row g-2">
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Napa freática</label>
+                        <select class="form-select form-select-sm" style="width: 80px;"
+                                onchange="setAtributoNivel(${i}, 'napa', this.value === '1')">
+                            <option value="0" ${!(n.atributos && n.atributos.napa) ? 'selected' : ''}>No</option>
+                            <option value="1" ${(n.atributos && n.atributos.napa) ? 'selected' : ''}>Sí</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Cocheras</label>
+                        <select class="form-select form-select-sm" style="width: 80px;"
+                                onchange="setAtributoNivel(${i}, 'cocheras', this.value === '1')">
+                            <option value="0" ${!(n.atributos && n.atributos.cocheras) ? 'selected' : ''}>No</option>
+                            <option value="1" ${(n.atributos && n.atributos.cocheras) ? 'selected' : ''}>Sí</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Altura libre (m)</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 80px;"
+                               step="0.1" min="2" max="6"
+                               value="${(n.atributos && n.atributos.altura_libre) || ''}"
+                               onchange="setAtributoNivel(${i}, 'altura_libre', parseFloat(this.value) || null)">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Espesor losa (cm)</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 80px;"
+                               step="1" min="10" max="40"
+                               value="${(n.atributos && n.atributos.espesor_losa) || ''}"
+                               onchange="setAtributoNivel(${i}, 'espesor_losa', parseInt(this.value) || null)">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Complejidad</label>
+                        <select class="form-select form-select-sm" style="width: 100px;"
+                                onchange="setAtributoNivel(${i}, 'complejidad', this.value)">
+                            <option value="baja" ${(n.atributos && n.atributos.complejidad) === 'baja' ? 'selected' : ''}>Baja</option>
+                            <option value="media" ${!(n.atributos && n.atributos.complejidad) || (n.atributos && n.atributos.complejidad) === 'media' ? 'selected' : ''}>Media</option>
+                            <option value="alta" ${(n.atributos && n.atributos.complejidad) === 'alta' ? 'selected' : ''}>Alta</option>
+                        </select>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        `;
+    }).join('');
+
+    actualizarTotalModalNiveles();
+}
+
+function actualizarFilaSupNivel(index) {
+    const n = window.nivelesConfig[index];
+    if (!n) return;
+    const supTotal = (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
+    const el = document.getElementById(`supTotalNivel_${index}`);
+    if (el) el.textContent = supTotal.toFixed(2) + ' m²';
+    actualizarTotalModalNiveles();
+}
+
+function actualizarTotalModalNiveles() {
+    const el = document.getElementById('totalSuperficieNiveles');
+    if (!el) return;
+    const total = (window.nivelesConfig || []).reduce((sum, n) => {
+        return sum + (parseFloat(n.area_m2) || 0) * (n.repeticiones || 1);
+    }, 0);
+    el.textContent = total.toFixed(2) + ' m²';
+}
+
+function toggleOpcionesAvanzadas(index) {
+    const row = document.getElementById(`opcionesAvanzadas_${index}`);
+    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+function setAtributoNivel(index, key, value) {
+    const n = window.nivelesConfig[index];
+    if (!n) return;
+    if (!n.atributos) n.atributos = {};
+    n.atributos[key] = value;
+}
+
+function aplicarConfigNiveles() {
+    // Validar que todos los niveles tengan area > 0
+    const sinArea = (window.nivelesConfig || []).filter(n => !n.area_m2 || parseFloat(n.area_m2) <= 0);
+    if (sinArea.length > 0) {
+        if (!confirm(`Hay ${sinArea.length} nivel(es) sin área configurada (${sinArea.map(n => n.nombre).join(', ')}). ¿Aplicar igual?`)) {
+            return;
+        }
+    }
+
+    actualizarChipsNiveles();
+
+    // Cerrar modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalConfigurarNiveles'));
+    if (modal) modal.hide();
+}
+
+// Función global para actualizar selector cuando se crea un cliente desde ventana popup
 window.actualizarSelectorCliente = function(clienteData) {
     const selector = document.getElementById('cliente_id');
     if (selector && clienteData && clienteData.id) {
@@ -1689,6 +2048,65 @@ window.actualizarSelectorCliente = function(clienteData) {
         }, 5000);
     }
 };
+</script>
+
+<!-- Modal Configurar Niveles del Edificio -->
+<div class="modal fade" id="modalConfigurarNiveles" tabindex="-1" aria-labelledby="modalConfigurarNivelesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title" id="modalConfigurarNivelesLabel">
+                    <i class="fas fa-layer-group me-2"></i>Configurar Niveles del Edificio
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Configura el <strong>área m²</strong> y <strong>sistema constructivo</strong> de cada nivel.
+                    El botón <i class="fas fa-cog"></i> expande opciones avanzadas (napa, cocheras, espesor losa, etc.).
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 100px;">Nivel</th>
+                                <th style="width: 90px;">Tipo</th>
+                                <th style="width: 75px;" class="text-center">Rep.</th>
+                                <th style="width: 110px;">Área m²</th>
+                                <th style="width: 140px;">Sistema Constructivo</th>
+                                <th style="width: 50px;"></th>
+                                <th style="width: 110px;" class="text-end">Sup. Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nivelesModalTbody">
+                        </tbody>
+                        <tfoot class="table-dark">
+                            <tr>
+                                <td colspan="6" class="text-end fw-bold">TOTAL</td>
+                                <td class="text-end fw-bold" id="totalSuperficieNiveles">0.00 m²</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="aplicarConfigNiveles()">
+                    <i class="fas fa-check"></i> Aplicar Configuración
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Render tabla al abrir el modal -->
+<script>
+document.getElementById('modalConfigurarNiveles').addEventListener('show.bs.modal', function() {
+    renderTablaModalNiveles();
+});
 </script>
 
 <!-- Modal para Crear Cliente -->

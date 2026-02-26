@@ -834,6 +834,38 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Missing columns migration skipped: {e}")
 
+    # Migración: tabla niveles_presupuesto y columna nivel_nombre
+    try:
+        niveles_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='niveles_presupuesto') THEN
+                CREATE TABLE niveles_presupuesto (
+                    id SERIAL PRIMARY KEY,
+                    presupuesto_id INTEGER NOT NULL REFERENCES presupuestos(id),
+                    tipo_nivel VARCHAR(30) NOT NULL,
+                    nombre VARCHAR(100) NOT NULL,
+                    orden INTEGER NOT NULL DEFAULT 0,
+                    repeticiones INTEGER NOT NULL DEFAULT 1,
+                    area_m2 NUMERIC(10,2) NOT NULL,
+                    sistema_constructivo VARCHAR(30) NOT NULL DEFAULT 'hormigon',
+                    atributos JSONB DEFAULT '{}'::jsonb
+                );
+                CREATE INDEX ix_niveles_pres_id ON niveles_presupuesto(presupuesto_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='items_presupuesto' AND column_name='nivel_nombre') THEN
+                ALTER TABLE items_presupuesto ADD COLUMN nivel_nombre VARCHAR(100);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(niveles_sql))
+        db.session.commit()
+        print("[OK] Niveles presupuesto migration applied")
+    except Exception as e:
+        print(f"[WARN] Niveles presupuesto migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions

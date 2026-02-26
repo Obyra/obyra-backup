@@ -124,6 +124,7 @@ class Presupuesto(db.Model):
     organizacion = db.relationship('Organizacion', overlaps="presupuestos")
     cliente = db.relationship('Cliente', back_populates='presupuestos')
     items = db.relationship('ItemPresupuesto', back_populates='presupuesto', cascade='all, delete-orphan', lazy='dynamic')
+    niveles = db.relationship('NivelPresupuesto', back_populates='presupuesto', cascade='all, delete-orphan', lazy='dynamic')
     exchange_rate = db.relationship('ExchangeRate', back_populates='presupuestos', lazy='joined')
 
     def __repr__(self):
@@ -263,6 +264,9 @@ class ItemPresupuesto(db.Model):
     # Si el material existe en inventario, se vincula directamente por ID
     item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
 
+    # Nivel del edificio al que pertenece este item (para presupuestos por niveles)
+    nivel_nombre = db.Column(db.String(100), nullable=True)
+
     # Relaciones
     presupuesto = db.relationship('Presupuesto', back_populates='items')
     etapa = db.relationship('EtapaObra', lazy='joined')
@@ -270,6 +274,48 @@ class ItemPresupuesto(db.Model):
 
     def __repr__(self):
         return f'<ItemPresupuesto {self.descripcion}>'
+
+
+class NivelPresupuesto(db.Model):
+    """Configuracion de niveles para presupuestos de edificios."""
+    __tablename__ = 'niveles_presupuesto'
+
+    id = db.Column(db.Integer, primary_key=True)
+    presupuesto_id = db.Column(db.Integer, db.ForeignKey('presupuestos.id'), nullable=False)
+
+    tipo_nivel = db.Column(db.String(30), nullable=False)  # subsuelo, pb, piso_tipo, piso_especial, terraza
+    nombre = db.Column(db.String(100), nullable=False)  # "S-1", "PB", "Pisos Tipo", "Terraza"
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    repeticiones = db.Column(db.Integer, nullable=False, default=1)
+    area_m2 = db.Column(db.Numeric(10, 2), nullable=False)
+    sistema_constructivo = db.Column(db.String(30), nullable=False, default='hormigon')  # hormigon, albanileria, mixto
+    atributos = db.Column(db.JSON, default=dict)  # napa, cocheras, altura_libre, espesor_losa, complejidad
+
+    presupuesto = db.relationship('Presupuesto', back_populates='niveles')
+
+    __table_args__ = (
+        db.Index('ix_niveles_pres_id', 'presupuesto_id'),
+    )
+
+    @property
+    def superficie_total(self):
+        return float(self.area_m2 or 0) * (self.repeticiones or 1)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tipo_nivel': self.tipo_nivel,
+            'nombre': self.nombre,
+            'orden': self.orden,
+            'repeticiones': self.repeticiones,
+            'area_m2': float(self.area_m2),
+            'superficie_total': self.superficie_total,
+            'sistema_constructivo': self.sistema_constructivo,
+            'atributos': self.atributos or {},
+        }
+
+    def __repr__(self):
+        return f'<NivelPresupuesto {self.nombre} ({self.area_m2}m2 x{self.repeticiones})>'
 
 
 class ItemReferenciaConstructora(db.Model):

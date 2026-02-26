@@ -2494,18 +2494,36 @@ def calcular_etapas_ia():
         # Obtener org_id del usuario actual para consultar inventario
         org_id = get_current_org_id()
 
-        # Llamar a la función de cálculo base
-        resultado = calcular_etapas_seleccionadas(
-            etapas_payload=etapa_ids,
-            superficie_m2=float(superficie_m2),
-            tipo_calculo=tipo_calculo,
-            contexto=parametros_contexto,
-            presupuesto_id=presupuesto_id,
-            currency='ARS',  # Siempre calcular en ARS base
-            fx_snapshot=None,  # No aplicar conversión aquí
-            aplicar_desperdicio=aplicar_desperdicio,
-            org_id=org_id  # Pasar org_id para consultar inventario real
-        )
+        # Verificar si hay niveles de edificio configurados
+        niveles = data.get('niveles')
+
+        if niveles and len(niveles) > 0 and any(float(n.get('area_m2', 0)) > 0 for n in niveles):
+            # Modo edificio por niveles
+            from calculadora_ia import calcular_etapas_por_niveles
+            resultado = calcular_etapas_por_niveles(
+                etapas_payload=etapa_ids,
+                niveles=niveles,
+                tipo_calculo=tipo_calculo,
+                contexto=parametros_contexto,
+                presupuesto_id=presupuesto_id,
+                currency='ARS',
+                fx_snapshot=None,
+                aplicar_desperdicio=aplicar_desperdicio,
+                org_id=org_id,
+            )
+        else:
+            # Modo global m² (sin cambios)
+            resultado = calcular_etapas_seleccionadas(
+                etapas_payload=etapa_ids,
+                superficie_m2=float(superficie_m2),
+                tipo_calculo=tipo_calculo,
+                contexto=parametros_contexto,
+                presupuesto_id=presupuesto_id,
+                currency='ARS',
+                fx_snapshot=None,
+                aplicar_desperdicio=aplicar_desperdicio,
+                org_id=org_id,
+            )
 
         if resultado.get('ok') and resultado.get('etapas'):
             # Aplicar redondeo de compras y precios duales
