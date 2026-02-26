@@ -2953,7 +2953,8 @@ def geocodificar_todas():
 @login_required
 @limiter.limit("10 per minute")
 def eliminar_obra(obra_id):
-    if not current_user.is_super_admin:
+    roles = _get_roles_usuario(current_user)
+    if not (current_user.is_super_admin or 'administrador' in roles or 'admin' in roles):
         flash('No tienes permisos para eliminar obras.', 'danger')
         return redirect(url_for('obras.lista'))
 
