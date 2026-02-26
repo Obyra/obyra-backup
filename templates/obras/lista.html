@@ -58,18 +58,6 @@
                     <input type="text" class="form-control" id="buscar" name="buscar"
                            value="{{ buscar }}" placeholder="Nombre, cliente o dirección...">
                 </div>
-{% if puede_ver_borradores %}
-                <div class="col-md-2 d-flex align-items-end">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch"
-                               id="mostrar_borradores" name="mostrar_borradores" value="1"
-                               {% if mostrar_borradores %}checked{% endif %}>
-                        <label class="form-check-label" for="mostrar_borradores">
-                            Mostrar borradores
-                        </label>
-                    </div>
-                </div>
-{% endif %}
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-outline-primary me-2">
                         <i class="fas fa-search me-1"></i>Filtrar
@@ -105,11 +93,6 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-list me-2"></i>📋 Lista de Obras
-                        {% if mostrar_borradores %}
-                            <span class="badge bg-warning text-dark ms-2" title="Incluye obras en borrador o sin presupuesto confirmado">
-                                Mostrando borradores
-                            </span>
-                        {% endif %}
                     </h5>
                 </div>
                 <div class="card-body">
@@ -207,19 +190,19 @@
                         <nav aria-label="Paginación" class="mt-4">
                             <ul class="pagination justify-content-center">
                                 <li class="page-item {% if not obras.has_prev %}disabled{% endif %}">
-                                    <a class="page-link" href="{{ url_for(request.endpoint, page=obras.prev_num, estado=estado, buscar=buscar, mostrar_borradores=request.args.get('mostrar_borradores')) }}">Anterior</a>
+                                    <a class="page-link" href="{{ url_for(request.endpoint, page=obras.prev_num, estado=estado, buscar=buscar) }}">Anterior</a>
                                 </li>
                                 {% for page_num in obras.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                                     {% if page_num %}
                                         <li class="page-item {% if page_num == obras.page %}active{% endif %}">
-                                            <a class="page-link" href="{{ url_for(request.endpoint, page=page_num, estado=estado, buscar=buscar, mostrar_borradores=request.args.get('mostrar_borradores')) }}">{{ page_num }}</a>
+                                            <a class="page-link" href="{{ url_for(request.endpoint, page=page_num, estado=estado, buscar=buscar) }}">{{ page_num }}</a>
                                         </li>
                                     {% else %}
                                         <li class="page-item disabled"><span class="page-link">...</span></li>
                                     {% endif %}
                                 {% endfor %}
                                 <li class="page-item {% if not obras.has_next %}disabled{% endif %}">
-                                    <a class="page-link" href="{{ url_for(request.endpoint, page=obras.next_num, estado=estado, buscar=buscar, mostrar_borradores=request.args.get('mostrar_borradores')) }}">Siguiente</a>
+                                    <a class="page-link" href="{{ url_for(request.endpoint, page=obras.next_num, estado=estado, buscar=buscar) }}">Siguiente</a>
                                 </li>
                             </ul>
                         </nav>

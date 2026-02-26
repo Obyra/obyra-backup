@@ -2983,11 +2983,13 @@ def eliminar_obra(obra_id):
         for etapa in obra.etapas:
             tareas_etapa = TareaEtapa.query.filter_by(etapa_id=etapa.id).all()
             for tarea in tareas_etapa:
-                # Eliminar miembros asignados a la tarea
-                db.session.execute(db.text("DELETE FROM tarea_miembros WHERE tarea_id = :tarea_id"), {"tarea_id": tarea.id})
-                # Eliminar avances de la tarea
-                db.session.execute(db.text("DELETE FROM tarea_avances WHERE tarea_id = :tarea_id"), {"tarea_id": tarea.id})
-            # Luego eliminar las tareas
+                for sub_table in ['tarea_miembros', 'tarea_avances']:
+                    try:
+                        sp = db.session.begin_nested()
+                        db.session.execute(db.text(f"DELETE FROM {sub_table} WHERE tarea_id = :tid"), {"tid": tarea.id})
+                        sp.commit()
+                    except Exception:
+                        pass
             TareaEtapa.query.filter_by(etapa_id=etapa.id).delete()
 
         # 3. Eliminar etapas
