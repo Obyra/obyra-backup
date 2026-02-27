@@ -281,7 +281,7 @@
     letter-spacing: 0.5px;
 }
 </style>
-<!-- Map version: 2026-02-27 - OpenStreetMap tiles -->
+<!-- Map version: 2026-02-27-v2 - Google Maps tiles -->
 <script>
 let mapa;
 let marcadores = [];
@@ -307,9 +307,10 @@ function inicializarMapa() {
             zoomControl: true
         }).setView([-34.6037, -58.3816], 11);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
+        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
+            subdomains: ['0', '1', '2', '3'],
+            attribution: '© Google Maps',
+            maxZoom: 20
         }).addTo(mapa);
 
         setTimeout(() => { mapa.invalidateSize(); }, 250);
