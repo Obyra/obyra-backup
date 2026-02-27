@@ -281,9 +281,8 @@
     letter-spacing: 0.5px;
 }
 </style>
-<!-- Map version: 2026-01-07-v2 - Google Maps tiles -->
+<!-- Map version: 2026-02-27 - OpenStreetMap tiles -->
 <script>
-// === MAPA GOOGLE MAPS v2 ===
 let mapa;
 let marcadores = [];
 const marcadoresPorId = {};
@@ -297,83 +296,23 @@ L.Icon.Default.mergeOptions({
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🗺️ Configurando mapa de obras (lazy loading)...');
-    console.log('📊 Obras para mostrar:', {{ obras.items|length if obras else 0 }});
-
-    // OPTIMIZACIÓN: Cargar mapa solo cuando sea visible (Intersection Observer)
     const contenedorMapa = document.getElementById('mapa');
-    if (!contenedorMapa) {
-        console.warn('⚠️ Contenedor de mapa no encontrado');
-        return;
-    }
-
-    // Placeholder mientras no se carga el mapa
-    contenedorMapa.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100 bg-light"><div class="text-center text-muted"><i class="fas fa-map-marked-alt fa-3x mb-2"></i><p>Haz scroll para cargar el mapa</p></div></div>';
-
-    let mapaInicializado = false;
-
-    const observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && !mapaInicializado && typeof L !== 'undefined') {
-            console.log('✅ Mapa visible, inicializando...');
-            mapaInicializado = true;
-            contenedorMapa.innerHTML = ''; // Limpiar placeholder
-            inicializarMapa();
-            observer.disconnect();
-        }
-    }, { threshold: 0.1 });
-
-    observer.observe(contenedorMapa);
-
-    // Fallback: si después de 5 segundos el mapa no se ha cargado y el usuario está en la página
-    setTimeout(() => {
-        if (!mapaInicializado && typeof L !== 'undefined') {
-            console.log('⏱️ Timeout: inicializando mapa...');
-            mapaInicializado = true;
-            contenedorMapa.innerHTML = '';
-            inicializarMapa();
-            observer.disconnect();
-        }
-    }, 5000);
+    if (!contenedorMapa || typeof L === 'undefined') return;
+    inicializarMapa();
 });
 
 function inicializarMapa() {
     try {
-        console.log('🗺️ Inicializando mapa...');
-        
-        // Verificar que el contenedor existe
-        const contenedor = document.getElementById('mapa');
-        if (!contenedor) {
-            console.error('❌ No se encontró el contenedor del mapa');
-            return;
-        }
-        
-        // Crear mapa centrado en Buenos Aires
         mapa = L.map('mapa', {
-            preferCanvas: false,
-            zoomControl: true,
-            attributionControl: false  // Deshabilitar atribución por defecto
+            zoomControl: true
         }).setView([-34.6037, -58.3816], 11);
 
-        // Agregar atribución personalizada
-        L.control.attribution({
-            prefix: false
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
         }).addTo(mapa);
 
-        console.log('✅ Mapa creado');
-
-        // Agregar capa base - Google Maps tiles
-        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
-            subdomains: ['0', '1', '2', '3'],
-            attribution: '© Google Maps',
-            maxZoom: 20
-        }).addTo(mapa);
-        console.log('✅ Capa base agregada');
-        
-        // Forzar redimensionamiento
-        setTimeout(() => {
-            mapa.invalidateSize();
-            console.log('🔄 Mapa redimensionado tras inicialización');
-        }, 250);
+        setTimeout(() => { mapa.invalidateSize(); }, 250);
         
         // Agregar marcadores de obras
         {% for obra in obras.items if obras %}
