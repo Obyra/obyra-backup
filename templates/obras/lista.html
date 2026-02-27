@@ -307,26 +307,11 @@ function inicializarMapa() {
             zoomControl: true
         }).setView([-34.6037, -58.3816], 11);
 
-        // Intentar Google Maps tiles, con fallback a CartoDB Voyager (estilo similar)
-        const googleLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
-            subdomains: ['0', '1', '2', '3'],
-            attribution: '© Google Maps',
-            maxZoom: 20
-        });
-
-        let fallbackActivado = false;
-        googleLayer.on('tileerror', function() {
-            if (!fallbackActivado) {
-                fallbackActivado = true;
-                mapa.removeLayer(googleLayer);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                    attribution: '© OpenStreetMap contributors, © CARTO',
-                    maxZoom: 20,
-                    subdomains: 'abcd'
-                }).addTo(mapa);
-            }
-        });
-        googleLayer.addTo(mapa);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO',
+            maxZoom: 20,
+            subdomains: 'abcd'
+        }).addTo(mapa);
 
         setTimeout(() => { mapa.invalidateSize(); }, 250);
         
