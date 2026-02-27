@@ -49,6 +49,9 @@ class Obra(db.Model):
     # Notas adicionales
     notas = db.Column(db.Text)
 
+    # Fichada / geolocalización
+    radio_fichada_metros = db.Column(db.Integer, default=200)
+
     # Relaciones
     organizacion = db.relationship('Organizacion', back_populates='obras')
     cliente_rel = db.relationship('Cliente', back_populates='obras')  # Nuevo: relación con Cliente
@@ -59,6 +62,7 @@ class Obra(db.Model):
     certificaciones = db.relationship('CertificacionAvance', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     work_certifications = db.relationship('WorkCertification', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
     work_payments = db.relationship('WorkPayment', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
+    fichadas = db.relationship('Fichada', back_populates='obra', cascade='all, delete-orphan', lazy='dynamic')
 
     def __repr__(self):
         return f'<Obra {self.nombre}>'
@@ -480,6 +484,33 @@ class ObraMiembro(db.Model):
 
     def __repr__(self):
         return f'<ObraMiembro Obra:{self.obra_id} Usuario:{self.usuario_id}>'
+
+
+class Fichada(db.Model):
+    """Registro de fichada (ingreso/egreso) con geolocalización"""
+    __tablename__ = 'fichadas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    tipo = db.Column(db.String(10), nullable=False)  # 'ingreso' o 'egreso'
+    fecha_hora = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    latitud = db.Column(db.Numeric(10, 8))
+    longitud = db.Column(db.Numeric(11, 8))
+    precision_gps = db.Column(db.Numeric(8, 2))  # metros
+    distancia_obra = db.Column(db.Numeric(8, 2))  # metros al punto de la obra
+    dentro_rango = db.Column(db.Boolean, default=False)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(300))
+    nota = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    usuario = db.relationship('Usuario', backref=db.backref('fichadas', lazy='dynamic'))
+    obra = db.relationship('Obra', back_populates='fichadas')
+
+    def __repr__(self):
+        return f'<Fichada {self.tipo} user={self.usuario_id} obra={self.obra_id} {self.fecha_hora}>'
 
 
 def resumen_tarea(t):

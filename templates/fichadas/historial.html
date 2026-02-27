@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Historial de Fichadas{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <div>
+                <h4 class="mb-1"><i class="fas fa-history me-2"></i>Historial de Fichadas</h4>
+                <p class="text-muted mb-0">
+                    {% if es_admin_o_pm %}Registro de asistencia de todo el equipo{% else %}Tu registro de asistencia{% endif %}
+                </p>
+            </div>
+            <a href="{{ url_for('fichadas.index') }}" class="btn btn-primary">
+                <i class="fas fa-fingerprint me-1"></i>Fichar
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <form method="GET" class="card">
+                <div class="card-body py-2">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small mb-1">Obra</label>
+                            <select name="obra_id" class="form-select form-select-sm">
+                                <option value="">Todas</option>
+                                {% for o in obras %}
+                                <option value="{{ o.id }}" {{ 'selected' if filtros.obra_id == o.id }}>{{ o.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% if es_admin_o_pm %}
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small mb-1">Usuario</label>
+                            <select name="usuario_id" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for u in usuarios %}
+                                <option value="{{ u.id }}" {{ 'selected' if filtros.usuario_id == u.id }}>{{ u.nombre_completo }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">Desde</label>
+                            <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ filtros.fecha_desde or '' }}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">Hasta</label>
+                            <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ filtros.fecha_hasta or '' }}">
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">
+                                <i class="fas fa-search me-1"></i>Filtrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de resultados -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-0">
+                    {% if fichadas.items %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha/Hora</th>
+                                    {% if es_admin_o_pm %}<th>Usuario</th>{% endif %}
+                                    <th>Obra</th>
+                                    <th>Tipo</th>
+                                    <th>Distancia</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for f in fichadas.items %}
+                                <tr>
+                                    <td>{{ f.fecha_hora.strftime('%d/%m/%Y %H:%M') }}</td>
+                                    {% if es_admin_o_pm %}
+                                    <td>{{ f.usuario.nombre_completo if f.usuario else '-' }}</td>
+                                    {% endif %}
+                                    <td>{{ f.obra.nombre if f.obra else '-' }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if f.tipo == 'ingreso' else 'danger' }}">
+                                            <i class="fas fa-{{ 'sign-in-alt' if f.tipo == 'ingreso' else 'sign-out-alt' }} me-1"></i>
+                                            {{ f.tipo|capitalize }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if f.distancia_obra is not none %}
+                                        {{ f.distancia_obra|round(0)|int }} m
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if f.dentro_rango %}
+                                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>En rango</span>
+                                        {% elif f.distancia_obra is not none %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Fuera de rango</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Sin GPS</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Paginación -->
+                    {% if fichadas.pages > 1 %}
+                    <div class="card-footer">
+                        <nav>
+                            <ul class="pagination pagination-sm mb-0 justify-content-center">
+                                {% if fichadas.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ fichadas.prev_num }}&obra_id={{ filtros.obra_id or '' }}&usuario_id={{ filtros.usuario_id or '' }}&fecha_desde={{ filtros.fecha_desde or '' }}&fecha_hasta={{ filtros.fecha_hasta or '' }}">Anterior</a>
+                                </li>
+                                {% endif %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">{{ fichadas.page }} / {{ fichadas.pages }}</span>
+                                </li>
+                                {% if fichadas.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ fichadas.next_num }}&obra_id={{ filtros.obra_id or '' }}&usuario_id={{ filtros.usuario_id or '' }}&fecha_desde={{ filtros.fecha_desde or '' }}&fecha_hasta={{ filtros.fecha_hasta or '' }}">Siguiente</a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <p class="mb-0">No hay fichadas registradas con estos filtros</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

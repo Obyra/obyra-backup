@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Fichada - Mis Obras{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="row mb-3">
+        <div class="col-12">
+            <h4 class="mb-1"><i class="fas fa-fingerprint me-2"></i>Fichada de Asistencia</h4>
+            <p class="text-muted mb-0">Selecciona una obra para registrar tu ingreso o egreso</p>
+        </div>
+    </div>
+
+    {% if not obras_info %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>No tenés obras asignadas activas.
+    </div>
+    {% else %}
+    <div class="row">
+        {% for info in obras_info %}
+        <div class="col-12 col-md-6 col-lg-4 mb-3">
+            <div class="card h-100 border-{{ 'success' if info.proximo_tipo == 'egreso' else 'primary' }}">
+                <div class="card-body">
+                    <h6 class="card-title fw-bold">
+                        <i class="fas fa-building me-1"></i>{{ info.obra.nombre }}
+                    </h6>
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-map-marker-alt me-1"></i>{{ info.obra.direccion or 'Sin dirección' }}
+                    </p>
+
+                    {% if info.ultima_fichada %}
+                    <div class="mb-2">
+                        <span class="badge bg-{{ 'success' if info.ultima_fichada.tipo == 'ingreso' else 'secondary' }}">
+                            <i class="fas fa-{{ 'sign-in-alt' if info.ultima_fichada.tipo == 'ingreso' else 'sign-out-alt' }} me-1"></i>
+                            Último {{ info.ultima_fichada.tipo }}: {{ info.ultima_fichada.fecha_hora.strftime('%H:%M') }}
+                        </span>
+                        {% if info.ultima_fichada.dentro_rango %}
+                        <span class="badge bg-success"><i class="fas fa-check-circle"></i></span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle"></i> Fuera de rango</span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="mb-2">
+                        <span class="badge bg-light text-dark">Sin fichada hoy</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{{ url_for('fichadas.fichar', obra_id=info.obra.id) }}"
+                       class="btn btn-{{ 'danger' if info.proximo_tipo == 'egreso' else 'primary' }} w-100">
+                        <i class="fas fa-{{ 'sign-out-alt' if info.proximo_tipo == 'egreso' else 'sign-in-alt' }} me-2"></i>
+                        Fichar {{ info.proximo_tipo|upper }}
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row mt-3">
+        <div class="col-12">
+            <a href="{{ url_for('fichadas.historial') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-history me-1"></i>Ver historial de fichadas
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -874,6 +874,45 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Niveles presupuesto migration skipped: {e}")
 
+    # Fichadas table + radio_fichada_metros column
+    try:
+        fichadas_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_schema='public' AND table_name='fichadas') THEN
+                CREATE TABLE fichadas (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    tipo VARCHAR(10) NOT NULL,
+                    fecha_hora TIMESTAMP NOT NULL DEFAULT NOW(),
+                    latitud NUMERIC(10,8),
+                    longitud NUMERIC(11,8),
+                    precision_gps NUMERIC(8,2),
+                    distancia_obra NUMERIC(8,2),
+                    dentro_rango BOOLEAN DEFAULT FALSE,
+                    ip_address VARCHAR(45),
+                    user_agent VARCHAR(300),
+                    nota TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX idx_fichadas_usuario ON fichadas(usuario_id);
+                CREATE INDEX idx_fichadas_obra ON fichadas(obra_id);
+                CREATE INDEX idx_fichadas_fecha ON fichadas(fecha_hora);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='obras' AND column_name='radio_fichada_metros') THEN
+                ALTER TABLE obras ADD COLUMN radio_fichada_metros INTEGER DEFAULT 200;
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(fichadas_sql))
+        db.session.commit()
+        print("[OK] Fichadas migration applied")
+    except Exception as e:
+        print(f"[WARN] Fichadas migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
@@ -1175,6 +1214,14 @@ try:
     print("[OK] Admin Equipos Proveedor blueprint registered successfully")
 except ImportError as e:
     print(f"[WARN] Admin Equipos Proveedor blueprint not available: {e}")
+
+# Fichadas (ingreso/egreso con geolocalización)
+try:
+    from fichadas import fichadas_bp
+    app.register_blueprint(fichadas_bp)
+    print("[OK] Fichadas blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Fichadas blueprint not available: {e}")
 
 _refresh_login_view()
 

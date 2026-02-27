@@ -4,6 +4,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import json
+import os
 import requests
 import logging
 from app import db
@@ -445,6 +446,7 @@ def lista():
         buscar=buscar,
         mostrar_borradores=mostrar_borradores,
         puede_ver_borradores=puede_ver_borradores,
+        google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''),
     )
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
@@ -3016,6 +3018,7 @@ def eliminar_obra(obra_id):
             # --- Hijos de work_certifications ---
             ("work_certification_items", "certificacion_id IN (SELECT id FROM work_certifications WHERE obra_id = :obra_id)", ["work_certifications"]),
             # --- Tablas padre con obra_id directo ---
+            ("fichadas", "obra_id = :obra_id"),
             ("work_payments", "obra_id = :obra_id"),
             ("work_certifications", "obra_id = :obra_id"),
             ("certificaciones_avance", "obra_id = :obra_id"),

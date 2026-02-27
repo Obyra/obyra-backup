@@ -217,6 +217,10 @@
 
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}"></script>
+<script src="https://unpkg.com/leaflet.gridlayer.googlemutant@latest/dist/Leaflet.GoogleMutant.js"></script>
+{% endif %}
 <style>
 /* Asegurar que el mapa se renderice correctamente */
 #mapa {
@@ -307,11 +311,16 @@ function inicializarMapa() {
             zoomControl: true
         }).setView([-34.6037, -58.3816], 11);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap contributors, © CARTO',
-            maxZoom: 20,
-            subdomains: 'abcd'
-        }).addTo(mapa);
+        // Google Maps oficial si hay API key, sino fallback CartoDB
+        if (typeof L.gridLayer.googleMutant === 'function') {
+            L.gridLayer.googleMutant({ type: 'roadmap' }).addTo(mapa);
+        } else {
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors, &copy; CARTO',
+                maxZoom: 20,
+                subdomains: 'abcd'
+            }).addTo(mapa);
+        }
 
         setTimeout(() => { mapa.invalidateSize(); }, 250);
         

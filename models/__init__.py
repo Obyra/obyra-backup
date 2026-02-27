@@ -45,6 +45,7 @@ from models.projects import (
     TareaResponsables,
     AsignacionObra,
     ObraMiembro,
+    Fichada,
     resumen_tarea,
     calcular_avance_tarea,
     calcular_avance_etapa,

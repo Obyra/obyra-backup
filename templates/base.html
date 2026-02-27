@@ -95,6 +95,15 @@
                     </li>
                     {% endif %}
 
+                    {# 3b. Fichada #}
+                    {% if current_user.puede_acceder_modulo('obras') or current_user.role in ['operario', 'pm'] %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('fichadas.index') }}">
+                            <i class="fas fa-fingerprint me-1"></i>Fichada
+                        </a>
+                    </li>
+                    {% endif %}
+
                     {# 4. Inventario #}
                     {% if current_user.puede_acceder_modulo('inventario') and has_endpoint('inventario.lista') %}
                     <li class="nav-item dropdown">
