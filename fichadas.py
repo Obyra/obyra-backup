@@ -1,6 +1,7 @@
 """Blueprint de Fichadas — ingreso/egreso con geolocalización"""
 
 import math
+import os
 from datetime import datetime, date
 from flask import (Blueprint, render_template, request, jsonify,
                    flash, redirect, url_for, current_app)
@@ -146,7 +147,8 @@ def fichar(obra_id):
                            obra=obra,
                            proximo_tipo=proximo_tipo,
                            fichadas_del_dia=fichadas_del_dia,
-                           es_admin=_es_admin(current_user))
+                           es_admin=_es_admin(current_user),
+                           google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
 
 # ---------------------------------------------------------------------------

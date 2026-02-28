@@ -505,7 +505,8 @@ def crear():
         return render_template('presupuestos/crear.html',
                              obras=obras,
                              numero_sugerido=numero_sugerido,
-                             clientes=clientes)
+                             clientes=clientes,
+                             google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
     except Exception as e:
         import traceback
@@ -712,7 +713,8 @@ def crear_manual():
         return render_template('presupuestos/crear_manual.html',
                              numero_sugerido=numero_sugerido,
                              clientes=clientes,
-                             items_inventario=items_inventario)
+                             items_inventario=items_inventario,
+                             google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
     except Exception as e:
         current_app.logger.error(f"Error en presupuestos.crear_manual: {e}")

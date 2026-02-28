@@ -478,11 +478,19 @@ function inicializarMapaUbicacion(lat, lng) {
         });
         // Agregar atribución personalizada sin "Leaflet |"
         L.control.attribution({ prefix: false }).addTo(ubicacionMap);
+        {% if google_maps_key %}
+        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
+            subdomains: ['0', '1', '2', '3'],
+            attribution: '© Google Maps',
+            maxZoom: 20,
+        }).addTo(ubicacionMap);
+        {% else %}
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap, &copy; CARTO',
             maxZoom: 20,
             subdomains: 'abcd',
         }).addTo(ubicacionMap);
+        {% endif %}
     }
     ubicacionMap.setView([lat, lng], 15);
     if (ubicacionMarker) {
