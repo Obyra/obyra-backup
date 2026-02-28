@@ -3,24 +3,15 @@
 {% block title %}Certificaciones · {{ obra.nombre }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4" x-data>
+<div class="container-fluid mt-4">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-4 gap-3">
         <div>
             <h2 class="h3 mb-1"><i class="fas fa-certificate me-2"></i>Certificaciones de obra</h2>
             <p class="text-muted mb-0">{{ obra.nombre }} · {{ obra.cliente }}</p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i>Volver a la obra
-            </a>
-            {% if puede_aprobar %}
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalConfirmarCertificacion"
-                    data-porcentaje="{{ porcentajes[2] }}" data-tipo="sugerido" data-label="Certificación manual"
-                    data-moneda="{{ contexto.currency }}">
-                <i class="fas fa-plus me-1"></i>Nueva certificación
-            </button>
-            {% endif %}
-        </div>
+        <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver a la obra
+        </a>
     </div>
 
     <div class="row g-3 mb-4">
@@ -61,10 +52,10 @@
                     <p class="text-muted text-uppercase small mb-1">Contexto monetario</p>
                     <h6 class="mb-0">Moneda base: {{ contexto.currency }}</h6>
                     {% if contexto.tasa_usd %}
-                    <small class="text-muted d-block">TC Banco Nación: {{ contexto.tasa_usd }}</small>
+                    <small class="text-muted d-block">TC Banco Nacion: {{ contexto.tasa_usd }}</small>
                     {% endif %}
                     {% if contexto.indice_cac %}
-                    <small class="text-muted">Índice CAC: {{ contexto.indice_cac }}</small>
+                    <small class="text-muted">Indice CAC: {{ contexto.indice_cac }}</small>
                     {% endif %}
                 </div>
             </div>
@@ -80,63 +71,49 @@
         </li>
     </ul>
     <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="certTabsContent">
+        <!-- Tab: A certificar -->
         <div class="tab-pane fade show active" id="pane-pendientes" role="tabpanel" aria-labelledby="tab-pendientes">
             <div class="p-3">
-                {% if pendientes %}
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0">
+
+                {# Borradores existentes #}
+                {% set borradores = pendientes|selectattr('tipo', 'equalto', 'borrador')|list %}
+                {% if borradores %}
+                <h6 class="text-muted mb-2"><i class="fas fa-file-alt me-1"></i>Borradores pendientes</h6>
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col">Tipo</th>
-                                <th scope="col">Período</th>
-                                <th scope="col">% Avance</th>
-                                <th scope="col">Monto (ARS)</th>
-                                <th scope="col">Monto (USD)</th>
-                                {% if puede_aprobar %}<th scope="col" class="text-end">Acciones</th>{% endif %}
+                                <th>Estado</th>
+                                <th>Periodo</th>
+                                <th>% Avance</th>
+                                <th>Monto (ARS)</th>
+                                {% if puede_aprobar %}<th class="text-end">Acciones</th>{% endif %}
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in pendientes %}
-                            <tr class="{% if item.tipo == 'sugerido' %}table-primary-subtle{% endif %}">
+                            {% for item in borradores %}
+                            <tr>
+                                <td><span class="badge bg-secondary">Borrador</span></td>
                                 <td>
-                                    {% if item.tipo == 'sugerido' %}
-                                    <span class="badge bg-info text-dark">Sugerido</span>
-                                    <div class="text-muted small">Avance reportado en tareas</div>
+                                    {% if item.periodo and (item.periodo[0] or item.periodo[1]) %}
+                                        {{ item.periodo[0].strftime('%d/%m/%Y') if item.periodo[0] else '-' }}
+                                        &rarr;
+                                        {{ item.periodo[1].strftime('%d/%m/%Y') if item.periodo[1] else '-' }}
                                     {% else %}
-                                    <span class="badge bg-secondary">Borrador</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if item.periodo %}
-                                        <div>
-                                            {% if item.periodo[0] %}{{ item.periodo[0].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
-                                            →
-                                            {% if item.periodo[1] %}{{ item.periodo[1].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
-                                        </div>
-                                    {% else %}
-                                        <span class="text-muted">Sin período</span>
+                                        <span class="text-muted">Sin periodo</span>
                                     {% endif %}
                                 </td>
                                 <td><strong>{{ item.porcentaje }}%</strong></td>
                                 <td>{{ item.monto_ars|moneda }}</td>
-                                <td>
-                                    {% if item.monto_usd %}
-                                        USD {{ item.monto_usd|float|round(2) }}
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
                                 {% if puede_aprobar %}
                                 <td class="text-end">
                                     <button type="button" class="btn btn-sm btn-primary"
                                             data-bs-toggle="modal" data-bs-target="#modalConfirmarCertificacion"
                                             data-porcentaje="{{ item.porcentaje }}"
                                             data-certificacion-id="{{ item.id or '' }}"
-                                            data-tipo="{{ item.tipo }}"
                                             data-monto-ars="{{ item.monto_ars }}"
-                                            data-monto-usd="{{ item.monto_usd }}"
-                                            data-moneda="{{ contexto.currency }}">
-                                        <i class="fas fa-check me-1"></i>Certificar
+                                            data-monto-usd="{{ item.monto_usd }}">
+                                        <i class="fas fa-check me-1"></i>Aprobar
                                     </button>
                                 </td>
                                 {% endif %}
@@ -145,14 +122,111 @@
                         </tbody>
                     </table>
                 </div>
-                {% else %}
+                {% endif %}
+
+                {# Desglose por etapa — nueva sección principal #}
+                {% if desglose_etapas and desglose_etapas.etapas %}
+                <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" id="formCertDesglose">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="aprobar" value="true">
+                    <input type="hidden" name="items_etapa" id="hiddenItemsEtapa">
+
+                    <h6 class="text-muted mb-2"><i class="fas fa-layer-group me-1"></i>Desglose por etapa (segun avance de tareas)</h6>
+
+                    {% if desglose_etapas.ya_certificado_ars > 0 %}
+                    <div class="alert alert-info small py-2 mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Ya certificado: <strong>{{ desglose_etapas.ya_certificado_ars|moneda }}</strong>
+                        de {{ desglose_etapas.presupuesto_total|moneda }} (presupuesto total)
+                    </div>
+                    {% endif %}
+
+                    <div class="table-responsive mb-3">
+                        <table class="table align-middle mb-0" id="tablaDesglose">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Etapa</th>
+                                    <th class="text-center">Avance</th>
+                                    <th class="text-end">Presupuestado</th>
+                                    <th class="text-end" style="min-width: 180px;">Monto a certificar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for etapa in desglose_etapas.etapas %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ etapa.etapa_nombre }}</div>
+                                        <small class="text-muted">{{ etapa.tareas_completadas }}/{{ etapa.tareas_total }} tareas</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <div class="progress flex-grow-1" style="height: 8px; max-width: 80px;">
+                                                <div class="progress-bar {% if etapa.porcentaje_avance >= 100 %}bg-success{% elif etapa.porcentaje_avance >= 50 %}bg-primary{% else %}bg-warning{% endif %}"
+                                                     style="width: {{ etapa.porcentaje_avance }}%"></div>
+                                            </div>
+                                            <span class="small fw-semibold">{{ etapa.porcentaje_avance }}%</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-end text-muted">{{ etapa.costo_presupuestado|moneda }}</td>
+                                    <td class="text-end">
+                                        <input type="number"
+                                               class="form-control form-control-sm text-end input-monto-etapa"
+                                               data-etapa-id="{{ etapa.etapa_id }}"
+                                               data-etapa-nombre="{{ etapa.etapa_nombre }}"
+                                               data-porcentaje="{{ etapa.porcentaje_avance }}"
+                                               value="{{ etapa.monto_certificable|float|round(2) }}"
+                                               step="0.01" min="0"
+                                               max="{{ etapa.costo_presupuestado|float|round(2) }}"
+                                               {% if not puede_aprobar %}disabled{% endif %}>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="fw-bold">
+                                    <td colspan="3" class="text-end">Total a certificar:</td>
+                                    <td class="text-end">
+                                        <span id="totalCertificar">{{ desglose_etapas.total_certificable|moneda }}</span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    {% if puede_aprobar %}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted">Periodo desde</label>
+                            <input type="date" class="form-control form-control-sm" name="periodo_desde">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted">Periodo hasta</label>
+                            <input type="date" class="form-control form-control-sm" name="periodo_hasta">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted">Notas</label>
+                            <input type="text" class="form-control form-control-sm" name="notas" placeholder="Detalle opcional...">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary" id="btnCertificarDesglose">
+                            <i class="fas fa-certificate me-1"></i>Certificar
+                        </button>
+                    </div>
+                    {% endif %}
+                </form>
+
+                {% elif not borradores %}
                 <div class="text-center py-5">
                     <i class="fas fa-layer-group fa-2x text-muted mb-2"></i>
-                    <p class="mb-0 text-muted">No hay certificaciones pendientes. El siguiente avance sugerido se calculará automáticamente cuando las tareas reporten progreso.</p>
+                    <p class="mb-0 text-muted">No hay montos a certificar. El desglose se calculara automaticamente cuando las tareas tengan presupuesto vinculado y reporten avance.</p>
                 </div>
                 {% endif %}
+
             </div>
         </div>
+
+        <!-- Tab: Certificadas -->
         <div class="tab-pane fade" id="pane-certificadas" role="tabpanel" aria-labelledby="tab-certificadas">
             <div class="p-3">
                 {% if certificaciones_aprobadas %}
@@ -160,7 +234,7 @@
                     <table class="table align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col">Período</th>
+                                <th scope="col">Periodo</th>
                                 <th scope="col">% Avance</th>
                                 <th scope="col">Certificado (ARS)</th>
                                 <th scope="col">Certificado (USD)</th>
@@ -177,11 +251,11 @@
                                     {% if row.periodo %}
                                         <div>
                                             {% if row.periodo[0] %}{{ row.periodo[0].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
-                                            →
+                                            &rarr;
                                             {% if row.periodo[1] %}{{ row.periodo[1].strftime('%d/%m/%Y') }}{% else %}-{% endif %}
                                         </div>
                                     {% else %}
-                                        <span class="text-muted">Sin período</span>
+                                        <span class="text-muted">Sin periodo</span>
                                     {% endif %}
                                     <div class="text-muted small">{{ row.aprobada_en|fecha }}</div>
                                 </td>
@@ -220,7 +294,7 @@
                 {% else %}
                 <div class="text-center py-5">
                     <i class="fas fa-file-invoice-dollar fa-2x text-muted mb-2"></i>
-                    <p class="mb-0 text-muted">Aún no se registraron certificaciones aprobadas.</p>
+                    <p class="mb-0 text-muted">Aun no se registraron certificaciones aprobadas.</p>
                 </div>
                 {% endif %}
             </div>
@@ -229,14 +303,14 @@
 </div>
 
 {% if puede_aprobar %}
-<!-- Modal crear/confirmar certificación -->
+<!-- Modal aprobar borrador -->
 <div class="modal fade" id="modalConfirmarCertificacion" tabindex="-1" aria-labelledby="modalConfirmarCertificacionLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
-                    <h5 class="modal-title" id="modalConfirmarCertificacionLabel"><i class="fas fa-check-circle me-2"></i>Confirmar certificación</h5>
+                    <h5 class="modal-title" id="modalConfirmarCertificacionLabel"><i class="fas fa-check-circle me-2"></i>Confirmar certificacion</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
@@ -290,7 +364,7 @@
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content">
             <form method="post">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalRegistrarPagoLabel"><i class="fas fa-coins me-2"></i>Registrar pago</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
@@ -308,7 +382,7 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Método de pago</label>
+                        <label class="form-label">Metodo de pago</label>
                         <select class="form-select" name="metodo" required>
                             <option value="transferencia">Transferencia</option>
                             <option value="efectivo">Efectivo</option>
@@ -343,6 +417,56 @@
 {% block extra_js %}
 <script>
 (function () {
+    // --- Desglose por etapa: recalcular total y serializar al submit ---
+    const form = document.getElementById('formCertDesglose');
+    const inputs = document.querySelectorAll('.input-monto-etapa');
+    const totalSpan = document.getElementById('totalCertificar');
+    const hiddenItems = document.getElementById('hiddenItemsEtapa');
+
+    function formatARS(value) {
+        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
+    }
+
+    function recalcularTotal() {
+        let total = 0;
+        inputs.forEach(function(input) {
+            total += parseFloat(input.value) || 0;
+        });
+        if (totalSpan) {
+            totalSpan.textContent = formatARS(total);
+        }
+    }
+
+    inputs.forEach(function(input) {
+        input.addEventListener('input', recalcularTotal);
+    });
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const items = [];
+            inputs.forEach(function(input) {
+                const monto = parseFloat(input.value) || 0;
+                if (monto > 0) {
+                    items.push({
+                        etapa_id: parseInt(input.dataset.etapaId),
+                        etapa_nombre: input.dataset.etapaNombre,
+                        porcentaje: parseFloat(input.dataset.porcentaje) || 0,
+                        monto: monto
+                    });
+                }
+            });
+
+            if (items.length === 0) {
+                e.preventDefault();
+                alert('No hay montos a certificar. Edita al menos un monto mayor a cero.');
+                return;
+            }
+
+            hiddenItems.value = JSON.stringify(items);
+        });
+    }
+
+    // --- Modal confirmar borrador ---
     const confirmModal = document.getElementById('modalConfirmarCertificacion');
     if (confirmModal) {
         confirmModal.addEventListener('show.bs.modal', function (event) {
@@ -353,12 +477,13 @@
             const certId = button?.dataset.certificacionId || '';
 
             confirmModal.querySelector('#inputPorcentaje').value = porcentaje;
-            confirmModal.querySelector('#inputMontoArs').value = montoArs ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(montoArs) : '';
+            confirmModal.querySelector('#inputMontoArs').value = montoArs ? formatARS(montoArs) : '';
             confirmModal.querySelector('#inputMontoUsd').value = montoUsd ? 'USD ' + parseFloat(montoUsd).toFixed(2) : '';
             confirmModal.querySelector('#inputCertificacionId').value = certId;
         });
     }
 
+    // --- Modal registrar pago ---
     const pagoModal = document.getElementById('modalRegistrarPago');
     if (pagoModal) {
         const actionTemplate = pagoModal.dataset.actionTemplate;

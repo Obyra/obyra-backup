@@ -365,3 +365,140 @@ def pending_alerts(org_id: int) -> int:
         WorkCertification.created_at < seven_days_ago,
     )
     return query.count()
+
+
+def compute_etapa_breakdown(obra: Obra) -> Dict:
+    """Calcula desglose de montos certificables por etapa basado en avance de tareas."""
+    from models.projects import calcular_avance_etapa, EtapaObra
+
+    context = resolve_budget_context(obra)
+
+    etapas = obra.etapas.order_by(EtapaObra.orden).all()
+    desglose = []
+    total_certificable = DecimalZero
+
+    for etapa in etapas:
+        avance = calcular_avance_etapa(etapa.id)
+        if not avance or avance['costo_total'] <= 0:
+            continue
+
+        monto_etapa = _quantize_money(avance['costo_completado'])
+
+        desglose.append({
+            'etapa_id': etapa.id,
+            'etapa_nombre': etapa.nombre,
+            'porcentaje_avance': avance['porcentaje'],
+            'costo_presupuestado': _quantize_money(avance['costo_total']),
+            'monto_certificable': monto_etapa,
+            'tareas_total': avance['tareas_total'],
+            'tareas_completadas': avance['tareas_completadas'],
+        })
+        total_certificable += monto_etapa
+
+    ya_certificado_ars = sum(
+        (_as_decimal(c.monto_certificado_ars)
+         for c in obra.work_certifications.filter_by(estado='aprobada')),
+        DecimalZero,
+    )
+
+    return {
+        'etapas': desglose,
+        'total_certificable': _quantize_money(total_certificable),
+        'ya_certificado_ars': _quantize_money(ya_certificado_ars),
+        'saldo_a_certificar': _quantize_money(max(total_certificable - ya_certificado_ars, DecimalZero)),
+        'currency': context.currency,
+        'tasa_usd': context.tasa_usd,
+        'presupuesto_total': context.amount_currency,
+    }
+
+
+def create_certification_con_desglose(
+    obra: Obra,
+    usuario,
+    items_etapa: List[Dict],
+    periodo: Optional[Tuple[Optional[date], Optional[date]]] = None,
+    notas: Optional[str] = None,
+    aprobar: bool = True,
+) -> WorkCertification:
+    """Crea certificación con desglose por etapa (montos editables)."""
+    context = resolve_budget_context(obra)
+
+    total_ars = sum((_quantize_money(_as_decimal(item['monto'])) for item in items_etapa), DecimalZero)
+
+    if total_ars <= DecimalZero:
+        raise ValueError('El monto total debe ser mayor a cero.')
+
+    # Calcular porcentaje equivalente sobre presupuesto total
+    if context.amount_currency > 0:
+        if context.currency == 'USD':
+            total_currency = _quantize_money(total_ars / (context.tasa_usd or Decimal('1')))
+        else:
+            total_currency = total_ars
+        porcentaje = _quantize_money((total_currency / context.amount_currency) * DecimalOneHundred)
+    else:
+        porcentaje = DecimalZero
+
+    # Validar que no supere 100%
+    pct_aprobado, pct_borrador, _ = pending_percentage(obra)
+    if pct_aprobado + pct_borrador + porcentaje > DecimalOneHundred + Decimal('0.5'):
+        raise ValueError('El monto total supera el presupuesto disponible.')
+
+    # Calcular montos en ambas monedas
+    if context.currency == 'USD':
+        monto_usd = total_currency
+        monto_ars = total_ars
+    else:
+        monto_ars = total_ars
+        monto_usd = (
+            _quantize_money(total_ars / (context.tasa_usd or Decimal('1')))
+            if context.tasa_usd else DecimalZero
+        )
+
+    cert = WorkCertification(
+        obra_id=obra.id,
+        organizacion_id=obra.organizacion_id,
+        porcentaje_avance=porcentaje,
+        monto_certificado_ars=monto_ars,
+        monto_certificado_usd=monto_usd,
+        moneda_base=context.currency,
+        tc_usd=context.tasa_usd,
+        indice_cac=context.indice_cac,
+        estado='aprobada' if aprobar else 'borrador',
+        periodo_desde=periodo[0] if periodo else None,
+        periodo_hasta=periodo[1] if periodo else None,
+        notas=notas,
+        created_by_id=usuario.id,
+    )
+    if aprobar:
+        cert.marcar_aprobada(usuario)
+
+    db.session.add(cert)
+    db.session.flush()
+
+    for item_data in items_etapa:
+        monto_item = _quantize_money(_as_decimal(item_data['monto']))
+        if monto_item <= DecimalZero:
+            continue
+
+        monto_item_usd = (
+            _quantize_money(monto_item / (context.tasa_usd or Decimal('1')))
+            if context.tasa_usd else DecimalZero
+        )
+
+        resumen = {
+            'etapa_nombre': item_data.get('etapa_nombre', ''),
+            'porcentaje_avance': str(item_data.get('porcentaje', 0)),
+        }
+
+        cert_item = WorkCertificationItem(
+            certificacion_id=cert.id,
+            etapa_id=int(item_data['etapa_id']),
+            porcentaje_aplicado=_as_decimal(item_data.get('porcentaje', 0)),
+            monto_ars=monto_item,
+            monto_usd=monto_item_usd,
+            fuente_avance='tareas',
+            resumen_avance=json_dumps(resumen),
+        )
+        db.session.add(cert_item)
+
+    return cert

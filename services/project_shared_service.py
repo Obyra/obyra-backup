@@ -385,20 +385,40 @@ class ProjectSharedService:
                     flash('Certificación actualizada correctamente.', 'success')
                     return redirect(url_for(f'{blueprint_name}.historial_certificaciones', id=obra_id))
 
-                porcentaje_raw = payload.get('porcentaje') or payload.get('porcentaje_avance')
-                if not porcentaje_raw:
-                    raise ValueError('Debes indicar el porcentaje de avance a certificar.')
+                # Flujo con desglose por etapa (montos editables)
+                items_etapa_raw = payload.get('items_etapa')
+                if items_etapa_raw:
+                    import json as _json
+                    if isinstance(items_etapa_raw, str):
+                        items_etapa = _json.loads(items_etapa_raw)
+                    else:
+                        items_etapa = items_etapa_raw
 
-                porcentaje = Decimal(str(porcentaje_raw).replace(',', '.'))
-                cert = create_certification_func(
-                    obra,
-                    current_user,
-                    porcentaje,
-                    periodo=periodo,
-                    notas=notas,
-                    aprobar=aprobar_flag,
-                    fuente=payload.get('fuente', 'tareas'),
-                )
+                    from services.certifications import create_certification_con_desglose
+                    cert = create_certification_con_desglose(
+                        obra,
+                        current_user,
+                        items_etapa,
+                        periodo=periodo,
+                        notas=notas,
+                        aprobar=aprobar_flag,
+                    )
+                else:
+                    # Flujo clásico por porcentaje global
+                    porcentaje_raw = payload.get('porcentaje') or payload.get('porcentaje_avance')
+                    if not porcentaje_raw:
+                        raise ValueError('Debes indicar el porcentaje de avance a certificar.')
+
+                    porcentaje = Decimal(str(porcentaje_raw).replace(',', '.'))
+                    cert = create_certification_func(
+                        obra,
+                        current_user,
+                        porcentaje,
+                        periodo=periodo,
+                        notas=notas,
+                        aprobar=aprobar_flag,
+                        fuente=payload.get('fuente', 'tareas'),
+                    )
                 db.session.commit()
                 response = {'ok': True, 'certificacion_id': cert.id, 'estado': cert.estado}
                 if request.is_json:
@@ -418,6 +438,9 @@ class ProjectSharedService:
         pct_aprobado, pct_borrador, pct_sugerido = pending_percentage_func(obra)
         context = resolve_budget_context_func(obra)
         puede_aprobar = membership and membership.role in ('admin', 'project_manager')
+
+        from services.certifications import compute_etapa_breakdown
+        desglose_etapas = compute_etapa_breakdown(obra)
 
         if request.args.get('format') == 'json':
             return jsonify(
@@ -456,6 +479,7 @@ class ProjectSharedService:
             porcentajes=(pct_aprobado, pct_borrador, pct_sugerido),
             puede_aprobar=bool(puede_aprobar),
             contexto=context,
+            desglose_etapas=desglose_etapas,
         )
 
     @staticmethod
