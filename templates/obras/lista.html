@@ -216,188 +216,88 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <style>
-/* Asegurar que el mapa se renderice correctamente */
-#mapa {
-    height: 500px !important;
-    width: 100% !important;
-    z-index: 1;
-}
-
-.leaflet-container {
-    height: 500px !important;
-    width: 100% !important;
-}
-
-/* Arreglar iconos de marcadores rotos */
-.leaflet-default-icon-path {
-    background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png);
-}
-
-/* Mejorar popups de Leaflet */
-.leaflet-popup-content-wrapper {
-    padding: 0 !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
-    border: none !important;
-}
-
-.leaflet-popup-content {
-    margin: 0 !important;
-    width: auto !important;
-    min-width: 280px;
-    max-width: 320px;
-    border-radius: 12px !important;
-}
-
-.leaflet-popup-tip {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-    border: none !important;
-}
-
-.leaflet-popup {
-    margin-bottom: 20px;
-}
-
-.popup-obra {
-    max-width: 320px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-/* Mejorar hover effects en botones del popup */
-.popup-obra .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transition: all 0.2s ease;
-}
-
-.popup-obra .progress {
-    background-color: rgba(0, 0, 0, 0.1);
-}
-
-.popup-obra .badge {
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
+#mapa { height: 500px !important; width: 100% !important; z-index: 1; }
+.leaflet-container { height: 500px !important; width: 100% !important; }
+.leaflet-popup-content-wrapper { padding: 0 !important; border-radius: 12px !important; }
+.leaflet-popup-content { margin: 0 !important; }
 </style>
-<!-- Map version: 2026-02-27-v2 - Google Maps tiles -->
 <script>
 let mapa;
 let marcadores = [];
 const marcadoresPorId = {};
 
-// Fix para iconos de marcadores
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
+// Datos de obras inyectados como JSON seguro (evita problemas con caracteres especiales)
+const OBRAS_DATA = [
+{% for obra in obras.items if obras %}
+{% if obra.latitud and obra.longitud %}
+{
+    id: {{ obra.id }},
+    lat: {{ obra.latitud|float }},
+    lng: {{ obra.longitud|float }},
+    nombre: {{ obra.nombre|tojson }},
+    cliente: {{ obra.cliente|tojson }},
+    direccion: {{ (obra.direccion or 'Sin dirección')|tojson }},
+    estado: {{ obra.estado|tojson }},
+    progreso: {{ obra.progreso or 0 }}
+},
+{% endif %}
+{% endfor %}
+];
 
 document.addEventListener('DOMContentLoaded', function() {
-    const contenedorMapa = document.getElementById('mapa');
-    if (!contenedorMapa || typeof L === 'undefined') return;
-    inicializarMapa();
-});
+    var el = document.getElementById('mapa');
+    if (!el) { el.innerHTML = '<p class="text-danger p-3">Contenedor no encontrado</p>'; return; }
+    if (typeof L === 'undefined') { el.innerHTML = '<p class="text-danger p-3">Error: Leaflet no cargó. Recargá la página (Ctrl+F5).</p>'; return; }
 
-function inicializarMapa() {
     try {
-        mapa = L.map('mapa', {
-            zoomControl: true
-        }).setView([-34.6037, -58.3816], 11);
+        // Fix iconos
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+            iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png'
+        });
+
+        mapa = L.map('mapa', { zoomControl: true }).setView([-34.6037, -58.3816], 11);
 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors, &copy; CARTO',
+            attribution: '&copy; OpenStreetMap, &copy; CARTO',
             maxZoom: 20,
             subdomains: 'abcd'
         }).addTo(mapa);
 
-        setTimeout(() => { mapa.invalidateSize(); }, 250);
-        
-        // Agregar marcadores de obras
-        {% for obra in obras.items if obras %}
-        {% if obra.latitud and obra.longitud %}
-        console.log('📍 Agregando marcador para: {{ obra.nombre }}');
-        
-        const marcador{{ loop.index }} = L.marker([{{ obra.latitud|float }}, {{ obra.longitud|float }}])
-            .addTo(mapa)
-            .bindPopup(`
-                <div class="popup-obra" style="padding: 16px; min-width: 280px; border-radius: 12px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
-                    <!-- Header con ícono y título -->
-                    <div class="d-flex align-items-center mb-3">
-                        <div class="me-3">
-                            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                <i class="fas fa-building text-white"></i>
-                            </div>
-                        </div>
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark">{{ obra.nombre }}</h6>
-                            <small class="text-muted">ID: #{{ obra.id }}</small>
-                        </div>
-                    </div>
-                    
-                    <!-- Información principal -->
-                    <div class="mb-3">
-                        <div class="d-flex align-items-center mb-2">
-                            <i class="fas fa-user text-primary me-2" style="width: 16px;"></i>
-                            <span class="small">{{ obra.cliente }}</span>
-                        </div>
-                        <div class="d-flex align-items-start mb-2">
-                            <i class="fas fa-map-marker-alt text-danger me-2 mt-1" style="width: 16px;"></i>
-                            <span class="small">{{ obra.direccion or 'Sin dirección especificada' }}</span>
-                        </div>
-                    </div>
-                    
-                    <!-- Estado y progreso -->
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="badge badge-pill px-3 py-2 text-white" style="background: {% if obra.estado == 'planificacion' %}#6c757d{% elif obra.estado == 'en_curso' %}#198754{% elif obra.estado == 'pausada' %}#fd7e14{% elif obra.estado == 'finalizada' %}#0dcaf0{% elif obra.estado == 'cancelada' %}#dc3545{% else %}#6c757d{% endif %}; font-size: 11px;">
-                                {{ obra.estado.replace('_', ' ').title() }}
-                            </span>
-                            <span class="fw-bold text-primary">{{ obra.progreso }}%</span>
-                        </div>
-                        <div class="progress" style="height: 6px; border-radius: 10px;">
-                            <div class="progress-bar progress-bar-striped" 
-                                 style="width: {{ obra.progreso }}%; background: linear-gradient(90deg, #0d6efd, #6f42c1);"
-                                 role="progressbar"></div>
-                        </div>
-                    </div>
+        setTimeout(function() { mapa.invalidateSize(); }, 300);
 
-                    <!-- Botones de acción -->
-                    <div class="d-grid gap-2">
-                        <button onclick="verDetallesObra({{ obra.id }})" 
-                                class="btn btn-primary btn-sm d-flex align-items-center justify-content-center"
-                                style="border-radius: 8px; padding: 8px 16px;">
-                            <i class="fas fa-eye me-2"></i>Ver Detalles Completos
-                        </button>
-                        <button onclick="abrirVentanaClima({{ obra.latitud or 'null' }}, {{ obra.longitud or 'null' }}, '{{ obra.nombre|replace("'", "\\'") }}', '{{ obra.direccion|replace("'", "\\'")|default("Sin dirección", true) }}', {{ obra.id }})" 
-                                class="btn btn-info btn-sm d-flex align-items-center justify-content-center"
-                                style="border-radius: 8px; padding: 8px 16px; background: linear-gradient(45deg, #17a2b8, #20c997); border: none;">
-                            <i class="fas fa-cloud-sun me-2"></i>Información del Clima
-                        </button>
-                    </div>
-                </div>
-            `);
+        // Agregar marcadores desde OBRAS_DATA
+        var colores = { planificacion: '#6c757d', en_curso: '#198754', pausada: '#fd7e14', finalizada: '#0dcaf0', cancelada: '#dc3545' };
 
-        marcadores.push(marcador{{ loop.index }});
-        marcadoresPorId[{{ obra.id }}] = marcador{{ loop.index }};
-        console.log('✅ Marcador agregado para: {{ obra.nombre }}');
-        {% endif %}
-        {% endfor %}
-        
-        console.log('✅ Mapa inicializado correctamente');
-        
-        // Ajustar vista si hay marcadores
+        OBRAS_DATA.forEach(function(o) {
+            var colorEstado = colores[o.estado] || '#6c757d';
+            var popup = '<div style="padding:12px;min-width:240px;">'
+                + '<h6 style="margin:0 0 6px;font-weight:bold;">' + o.nombre + '</h6>'
+                + '<p style="margin:0 0 4px;font-size:13px;color:#666;"><i class="fas fa-user me-1"></i>' + o.cliente + '</p>'
+                + '<p style="margin:0 0 8px;font-size:13px;color:#666;"><i class="fas fa-map-marker-alt me-1 text-danger"></i>' + o.direccion + '</p>'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                + '<span class="badge" style="background:' + colorEstado + ';color:#fff;">' + o.estado.replace('_', ' ') + '</span>'
+                + '<strong style="color:#0d6efd;">' + o.progreso + '%</strong></div>'
+                + '<div class="progress" style="height:5px;"><div class="progress-bar" style="width:' + o.progreso + '%;background:#0d6efd;"></div></div>'
+                + '<div style="margin-top:10px;"><a href="/obras/' + o.id + '" class="btn btn-primary btn-sm w-100"><i class="fas fa-eye me-1"></i>Ver Detalles</a></div>'
+                + '</div>';
+            var m = L.marker([o.lat, o.lng]).addTo(mapa).bindPopup(popup);
+            marcadores.push(m);
+            marcadoresPorId[o.id] = m;
+        });
+
         if (marcadores.length > 0) {
-            const grupo = new L.featureGroup(marcadores);
-            mapa.fitBounds(grupo.getBounds().pad(0.1));
+            mapa.fitBounds(L.featureGroup(marcadores).getBounds().pad(0.1));
         }
-        
-    } catch (error) {
-        console.error('❌ Error al inicializar mapa:', error);
+
+    } catch (err) {
+        el.innerHTML = '<div class="alert alert-danger m-3"><i class="fas fa-exclamation-triangle me-2"></i>Error al cargar mapa: ' + err.message + '</div>';
     }
-}
+});
 
 function centrarEnObra(obraId) {
     if (!mapa) {
