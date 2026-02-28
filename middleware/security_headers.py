@@ -44,40 +44,48 @@ def setup_security_headers(app):
         # En el futuro se pueden eliminar usando nonces
         csp_directives = [
             "default-src 'self'",
-            # Scripts: self + CDNs de Bootstrap, jQuery, FontAwesome, Chart.js
+            # Scripts: self + CDNs + Google Maps
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
             "https://cdn.jsdelivr.net "
             "https://cdnjs.cloudflare.com "
             "https://code.jquery.com "
             "https://unpkg.com "
             "https://accounts.google.com "
-            "https://apis.google.com",
-            # Estilos: self + CDNs + inline (Bootstrap requiere inline styles)
+            "https://apis.google.com "
+            "https://maps.googleapis.com "
+            "https://maps.gstatic.com",
+            # Estilos: self + CDNs + Google Maps/Fonts
             "style-src 'self' 'unsafe-inline' "
             "https://cdn.jsdelivr.net "
             "https://cdnjs.cloudflare.com "
             "https://fonts.googleapis.com "
-            "https://unpkg.com",
+            "https://unpkg.com "
+            "https://maps.googleapis.com "
+            "https://maps.gstatic.com",
             # Fuentes: self + Google Fonts + FontAwesome
             "font-src 'self' "
             "https://fonts.gstatic.com "
             "https://cdnjs.cloudflare.com "
             "data:",
-            # Imágenes: self + data URIs + blob (para previews)
+            # Imágenes: self + data URIs + blob + Google Maps tiles
             "img-src 'self' data: blob: https:",
-            # Conexiones: self + APIs externas necesarias
+            # Conexiones: self + APIs externas necesarias + Google Maps
             "connect-src 'self' "
             "https://accounts.google.com "
             "https://apis.google.com "
+            "https://maps.googleapis.com "
             "https://nominatim.openstreetmap.org "
             "https://api.mercadopago.com "
             "https://api.open-meteo.com "
             "https://cdn.jsdelivr.net "
+            "https://*.basemaps.cartocdn.com "
             "wss: ws:",
-            # Frames: permitir Google OAuth
+            # Frames: permitir Google OAuth + Google Maps
             "frame-src 'self' "
             "https://accounts.google.com "
-            "https://www.google.com",
+            "https://www.google.com "
+            "https://maps.google.com "
+            "https://maps.googleapis.com",
             # Formularios: solo a self
             "form-action 'self'",
             # Base URI: solo self
