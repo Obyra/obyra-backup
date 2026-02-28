@@ -62,7 +62,7 @@ def mis_obras():
             else:
                 # Operarios ven obras donde tienen tareas asignadas
                 obras = db.session.query(Obra).join(EtapaObra).join(TareaEtapa).join(TareaResponsables).filter(
-                    TareaResponsables.usuario_id == current_user.id,
+                    TareaResponsables.user_id == current_user.id,
                     Obra.activo == True
                 ).distinct().all()
         except Exception as query_error:
@@ -148,7 +148,7 @@ def mis_tareas():
         # Obtener tareas del usuario a través de TareaResponsables
         try:
             tareas = db.session.query(TareaEtapa).join(TareaResponsables).filter(
-                TareaResponsables.usuario_id == current_user.id,
+                TareaResponsables.user_id == current_user.id,
                 TareaEtapa.estado.in_(['pendiente', 'en_curso'])
             ).all()
         except Exception as query_error:
@@ -416,7 +416,7 @@ def sync_status():
 
         # Contar tareas del usuario
         tareas_count = db.session.query(TareaEtapa).join(TareaResponsables).filter(
-            TareaResponsables.usuario_id == current_user.id,
+            TareaResponsables.user_id == current_user.id,
             TareaEtapa.estado.in_(['pendiente', 'en_curso'])
         ).count()
 

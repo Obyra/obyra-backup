@@ -220,15 +220,18 @@
 #mapa { height: 500px !important; width: 100% !important; }
 .gm-style .gm-style-iw-c { padding: 0 !important; border-radius: 12px !important; }
 .gm-style .gm-style-iw-d { overflow: auto !important; }
+.leaflet-popup-content-wrapper { padding: 0 !important; border-radius: 12px !important; }
+.leaflet-popup-content { margin: 0 !important; }
 </style>
 <script>
-let mapa;
-let marcadores = [];
-const marcadoresPorId = {};
-let infoWindowActiva = null;
+var mapa = null;
+var marcadores = [];
+var marcadoresPorId = {};
+var infoWindowActiva = null;
+var mapaEngine = null; // 'google' o 'leaflet'
 
 // Datos de obras inyectados como JSON seguro
-const OBRAS_DATA = [
+var OBRAS_DATA = [
 {% for obra in obras.items if obras %}
 {% if obra.latitud and obra.longitud %}
 {
@@ -245,11 +248,37 @@ const OBRAS_DATA = [
 {% endfor %}
 ];
 
+var COLORES_ESTADO = {
+    planificacion: '#6c757d',
+    en_curso: '#198754',
+    pausada: '#fd7e14',
+    finalizada: '#0dcaf0',
+    cancelada: '#dc3545'
+};
+
+function buildPopupHTML(o) {
+    var c = COLORES_ESTADO[o.estado] || '#6c757d';
+    return '<div style="padding:12px;min-width:240px;">'
+        + '<h6 style="margin:0 0 6px;font-weight:bold;">' + o.nombre + '</h6>'
+        + '<p style="margin:0 0 4px;font-size:13px;color:#666;"><i class="fas fa-user me-1"></i>' + o.cliente + '</p>'
+        + '<p style="margin:0 0 8px;font-size:13px;color:#666;"><i class="fas fa-map-marker-alt me-1" style="color:#dc3545;"></i>' + o.direccion + '</p>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        + '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:' + c + ';color:#fff;">' + o.estado.replace('_', ' ') + '</span>'
+        + '<strong style="color:#0d6efd;">' + o.progreso + '%</strong></div>'
+        + '<div style="background:#e9ecef;border-radius:4px;height:5px;"><div style="width:' + o.progreso + '%;background:#0d6efd;height:5px;border-radius:4px;"></div></div>'
+        + '<div style="margin-top:10px;"><a href="/obras/' + o.id + '" style="display:block;text-align:center;background:#0d6efd;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:14px;"><i class="fas fa-eye me-1"></i>Ver Detalles</a></div>'
+        + '</div>';
+}
+
+/* ============================================================
+   OPCION 1: Google Maps JavaScript API (preferido)
+   ============================================================ */
 function initMap() {
     var el = document.getElementById('mapa');
     if (!el) return;
 
     try {
+        mapaEngine = 'google';
         mapa = new google.maps.Map(el, {
             center: { lat: -34.6037, lng: -58.3816 },
             zoom: 11,
@@ -263,50 +292,21 @@ function initMap() {
             }
         });
 
-        var colores = {
-            planificacion: '#6c757d',
-            en_curso: '#198754',
-            pausada: '#fd7e14',
-            finalizada: '#0dcaf0',
-            cancelada: '#dc3545'
-        };
-
         var bounds = new google.maps.LatLngBounds();
 
         OBRAS_DATA.forEach(function(o) {
-            var colorEstado = colores[o.estado] || '#6c757d';
             var pos = { lat: o.lat, lng: o.lng };
-
             var marker = new google.maps.Marker({
                 position: pos,
                 map: mapa,
-                title: o.nombre,
-                icon: {
-                    url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
-                }
+                title: o.nombre
             });
-
-            var contentString = '<div style="padding:12px;min-width:240px;">'
-                + '<h6 style="margin:0 0 6px;font-weight:bold;">' + o.nombre + '</h6>'
-                + '<p style="margin:0 0 4px;font-size:13px;color:#666;"><i class="fas fa-user me-1"></i>' + o.cliente + '</p>'
-                + '<p style="margin:0 0 8px;font-size:13px;color:#666;"><i class="fas fa-map-marker-alt me-1" style="color:#dc3545;"></i>' + o.direccion + '</p>'
-                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-                + '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:' + colorEstado + ';color:#fff;">' + o.estado.replace('_', ' ') + '</span>'
-                + '<strong style="color:#0d6efd;">' + o.progreso + '%</strong></div>'
-                + '<div style="background:#e9ecef;border-radius:4px;height:5px;"><div style="width:' + o.progreso + '%;background:#0d6efd;height:5px;border-radius:4px;"></div></div>'
-                + '<div style="margin-top:10px;"><a href="/obras/' + o.id + '" style="display:block;text-align:center;background:#0d6efd;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:14px;"><i class="fas fa-eye me-1"></i>Ver Detalles</a></div>'
-                + '</div>';
-
-            var infoWindow = new google.maps.InfoWindow({
-                content: contentString
-            });
-
+            var infoWindow = new google.maps.InfoWindow({ content: buildPopupHTML(o) });
             marker.addListener('click', function() {
                 if (infoWindowActiva) infoWindowActiva.close();
                 infoWindow.open(mapa, marker);
                 infoWindowActiva = infoWindow;
             });
-
             marcadores.push(marker);
             marcadoresPorId[o.id] = { marker: marker, infoWindow: infoWindow };
             bounds.extend(pos);
@@ -314,30 +314,100 @@ function initMap() {
 
         if (marcadores.length > 0) {
             mapa.fitBounds(bounds);
-            // No zoom demasiado cercano si hay una sola obra
             var listener = google.maps.event.addListener(mapa, 'idle', function() {
                 if (mapa.getZoom() > 16) mapa.setZoom(16);
                 google.maps.event.removeListener(listener);
             });
         }
+    } catch (err) {
+        console.error('Google Maps falló, usando fallback:', err);
+        initMapFallback();
+    }
+}
 
+// Si Google Maps tiene error de autenticación (API key inválida, API no habilitada, etc.)
+window.gm_authFailure = function() {
+    console.warn('Google Maps: error de autenticación. Usando mapa alternativo.');
+    initMapFallback();
+};
+
+/* ============================================================
+   OPCION 2: Leaflet + CartoDB Voyager (fallback garantizado)
+   ============================================================ */
+function initMapFallback() {
+    var el = document.getElementById('mapa');
+    if (!el) return;
+    // Limpiar contenido previo (Google Maps parcial)
+    el.innerHTML = '';
+
+    // Cargar Leaflet CSS si no existe
+    if (!document.querySelector('link[href*="leaflet"]')) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';
+        document.head.appendChild(css);
+    }
+
+    // Cargar Leaflet JS si no existe
+    if (typeof L === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+        script.onload = function() { _initLeafletMap(el); };
+        document.head.appendChild(script);
+    } else {
+        _initLeafletMap(el);
+    }
+}
+
+function _initLeafletMap(el) {
+    try {
+        mapaEngine = 'leaflet';
+        marcadores = [];
+        marcadoresPorId = {};
+
+        mapa = L.map(el, { zoomControl: true }).setView([-34.6037, -58.3816], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, &copy; CARTO',
+            maxZoom: 20,
+            subdomains: 'abcd'
+        }).addTo(mapa);
+
+        OBRAS_DATA.forEach(function(o) {
+            var m = L.marker([o.lat, o.lng]).addTo(mapa).bindPopup(buildPopupHTML(o));
+            marcadores.push(m);
+            marcadoresPorId[o.id] = m;
+        });
+
+        if (marcadores.length > 0) {
+            mapa.fitBounds(L.featureGroup(marcadores).getBounds().pad(0.1));
+        }
+        setTimeout(function() { mapa.invalidateSize(); }, 300);
     } catch (err) {
         el.innerHTML = '<div class="alert alert-danger m-3"><i class="fas fa-exclamation-triangle me-2"></i>Error al cargar mapa: ' + err.message + '</div>';
     }
 }
 
+/* ============================================================
+   Funciones compartidas (funcionan con ambos engines)
+   ============================================================ */
 function centrarEnObra(obraId) {
     if (!mapa) return;
-    var entry = marcadoresPorId[obraId];
-    if (!entry) return;
-    mapa.setZoom(16);
-    mapa.panTo(entry.marker.getPosition());
-    if (infoWindowActiva) infoWindowActiva.close();
-    entry.infoWindow.open(mapa, entry.marker);
-    infoWindowActiva = entry.infoWindow;
+    if (mapaEngine === 'google') {
+        var entry = marcadoresPorId[obraId];
+        if (!entry) return;
+        mapa.setZoom(16);
+        mapa.panTo(entry.marker.getPosition());
+        if (infoWindowActiva) infoWindowActiva.close();
+        entry.infoWindow.open(mapa, entry.marker);
+        infoWindowActiva = entry.infoWindow;
+    } else {
+        var m = marcadoresPorId[obraId];
+        if (!m) return;
+        mapa.setView(m.getLatLng(), 16);
+        m.openPopup();
+    }
 }
 
-// Función para ver detalles de la obra
 function verDetallesObra(obraId) {
     window.location.href = '/obras/' + obraId;
 }
@@ -704,6 +774,13 @@ function confirmarEliminarObra(obraId, obraNombre) {
     }
 }
 </script>
-<!-- Google Maps JavaScript API (oficial) -->
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap" async defer></script>
+{% if google_maps_key %}
+<!-- Google Maps JavaScript API (oficial) — si falla, cae a Leaflet+CartoDB automáticamente -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap&loading=async"
+        onerror="console.warn('No se pudo cargar Google Maps API'); initMapFallback();"
+        async defer></script>
+{% else %}
+<!-- Sin API key de Google Maps — usa Leaflet+CartoDB directamente -->
+<script>document.addEventListener('DOMContentLoaded', initMapFallback);</script>
+{% endif %}
 {% endblock %}
