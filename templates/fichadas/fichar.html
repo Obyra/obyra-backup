@@ -100,6 +100,7 @@ const OBRA_LNG = {{ obra.longitud|float if obra.longitud else 'null' }};
 const OBRA_ID = {{ obra.id }};
 const OBRA_RADIO = {{ obra.radio_fichada_metros or 200 }};
 const PROXIMO_TIPO = '{{ proximo_tipo }}';
+const ES_ADMIN = {{ 'true' if es_admin else 'false' }};
 
 let miLat = null, miLng = null, miPrecision = null;
 let mapa = null, marcadorObra = null, marcadorMio = null, circuloRadio = null;
@@ -113,6 +114,9 @@ document.addEventListener('DOMContentLoaded', function() {
         attribution: '&copy; OpenStreetMap, &copy; CARTO',
         maxZoom: 20, subdomains: 'abcd'
     }).addTo(mapa);
+
+    // Fix de renderizado: forzar recalcular tamaño del mapa
+    setTimeout(function() { mapa.invalidateSize(); }, 200);
 
     if (OBRA_LAT) {
         // Marcador de la obra (rojo)
@@ -175,10 +179,13 @@ function onPosicion(pos) {
         const dentro = dist <= OBRA_RADIO;
 
         if (dentro) {
-            actualizarEstado('ok', `Estás a ${Math.round(dist)} metros de la obra (dentro del rango de ${OBRA_RADIO}m)`);
+            actualizarEstado('ok', `Estás a ${Math.round(dist)}m de la obra (dentro del rango de ${OBRA_RADIO}m)`);
+            btn.disabled = false;
+        } else if (ES_ADMIN) {
+            actualizarEstado('warning', `Estás a ${Math.round(dist)}m de la obra (fuera del rango de ${OBRA_RADIO}m). Como admin podés fichar igualmente.`);
             btn.disabled = false;
         } else {
-            actualizarEstado('warning', `Estás a ${Math.round(dist)} metros de la obra. Necesitás estar dentro de ${OBRA_RADIO}m para fichar.`);
+            actualizarEstado('warning', `Estás a ${Math.round(dist)}m de la obra. Necesitás estar dentro de ${OBRA_RADIO}m para fichar.`);
             btn.disabled = true;
         }
     } else {

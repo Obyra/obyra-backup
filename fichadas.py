@@ -145,7 +145,8 @@ def fichar(obra_id):
     return render_template('fichadas/fichar.html',
                            obra=obra,
                            proximo_tipo=proximo_tipo,
-                           fichadas_del_dia=fichadas_del_dia)
+                           fichadas_del_dia=fichadas_del_dia,
+                           es_admin=_es_admin(current_user))
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +199,8 @@ def api_fichar():
         float(obra.latitud), float(obra.longitud))
     dentro_rango = distancia <= radio
 
-    if not dentro_rango:
+    # Operarios: deben estar dentro del rango. Admins: pueden fichar desde cualquier lugar.
+    if not dentro_rango and not _es_admin(current_user):
         return jsonify({
             'ok': False,
             'error': f'Estás a {round(distancia)}m de la obra. Necesitás estar dentro de {radio}m para fichar.',
