@@ -27,11 +27,31 @@ def calcular_distancia_metros(lat1, lon1, lat2, lon2):
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _es_admin(usuario):
+    """Verifica si el usuario es admin o super_admin."""
+    if getattr(usuario, 'is_super_admin', False):
+        return True
+    rol = getattr(usuario, 'role', '') or getattr(usuario, 'rol', '') or ''
+    return rol.lower() in ('admin', 'administrador')
+
+
 def _obras_asignadas(usuario):
-    """Devuelve las obras activas asignadas al usuario."""
+    """Devuelve las obras activas asignadas al usuario.
+
+    Admin/super_admin ven todas las obras activas de su organización.
+    Operarios/PMs solo ven las obras donde están asignados.
+    """
     org_id = getattr(usuario, 'organizacion_id', None)
     if not org_id:
         return []
+
+    # Admin/super_admin: todas las obras activas de la organización
+    if _es_admin(usuario):
+        return (Obra.query
+                .filter(Obra.organizacion_id == org_id,
+                        Obra.estado.in_(['en_curso', 'planificacion']))
+                .order_by(Obra.nombre)
+                .all())
 
     # Buscar por ObraMiembro
     obra_ids = {m.obra_id for m in
@@ -104,15 +124,16 @@ def fichar(obra_id):
     """Página mobile-first para fichar ingreso/egreso."""
     obra = Obra.query.get_or_404(obra_id)
 
-    # Verificar que el usuario está asignado
-    es_miembro = (ObraMiembro.query.filter_by(
-                      obra_id=obra_id, usuario_id=current_user.id).first()
-                  or AsignacionObra.query.filter_by(
-                      obra_id=obra_id, usuario_id=current_user.id,
-                      activo=True).first())
-    if not es_miembro and not current_user.is_super_admin:
-        flash('No estás asignado a esta obra.', 'danger')
-        return redirect(url_for('fichadas.index'))
+    # Verificar que el usuario está asignado (admin/super_admin acceden a todas)
+    if not _es_admin(current_user):
+        es_miembro = (ObraMiembro.query.filter_by(
+                          obra_id=obra_id, usuario_id=current_user.id).first()
+                      or AsignacionObra.query.filter_by(
+                          obra_id=obra_id, usuario_id=current_user.id,
+                          activo=True).first())
+        if not es_miembro:
+            flash('No estás asignado a esta obra.', 'danger')
+            return redirect(url_for('fichadas.index'))
 
     ultima = _ultima_fichada_hoy(current_user.id, obra_id)
     proximo_tipo = 'ingreso'
@@ -151,14 +172,15 @@ def api_fichar():
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
 
-    # Verificar asignación
-    es_miembro = (ObraMiembro.query.filter_by(
-                      obra_id=obra_id, usuario_id=current_user.id).first()
-                  or AsignacionObra.query.filter_by(
-                      obra_id=obra_id, usuario_id=current_user.id,
-                      activo=True).first())
-    if not es_miembro and not current_user.is_super_admin:
-        return jsonify({'ok': False, 'error': 'No estás asignado a esta obra'}), 403
+    # Verificar asignación (admin/super_admin acceden a todas)
+    if not _es_admin(current_user):
+        es_miembro = (ObraMiembro.query.filter_by(
+                          obra_id=obra_id, usuario_id=current_user.id).first()
+                      or AsignacionObra.query.filter_by(
+                          obra_id=obra_id, usuario_id=current_user.id,
+                          activo=True).first())
+        if not es_miembro:
+            return jsonify({'ok': False, 'error': 'No estás asignado a esta obra'}), 403
 
     # Calcular distancia si hay coordenadas de ambos
     distancia = None
