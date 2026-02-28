@@ -165,11 +165,24 @@ def api_fichar():
     dentro_rango = False
     radio = obra.radio_fichada_metros or 200
 
-    if lat and lng and obra.latitud and obra.longitud:
-        distancia = calcular_distancia_metros(
-            float(lat), float(lng),
-            float(obra.latitud), float(obra.longitud))
-        dentro_rango = distancia <= radio
+    if not lat or not lng:
+        return jsonify({'ok': False, 'error': 'No se pudo obtener tu ubicación GPS. Habilitá la geolocalización en tu navegador.'}), 400
+
+    if not obra.latitud or not obra.longitud:
+        return jsonify({'ok': False, 'error': 'La obra no tiene coordenadas configuradas. Contactá al administrador.'}), 400
+
+    distancia = calcular_distancia_metros(
+        float(lat), float(lng),
+        float(obra.latitud), float(obra.longitud))
+    dentro_rango = distancia <= radio
+
+    if not dentro_rango:
+        return jsonify({
+            'ok': False,
+            'error': f'Estás a {round(distancia)}m de la obra. Necesitás estar dentro de {radio}m para fichar.',
+            'distancia_metros': round(distancia, 1),
+            'radio_metros': radio,
+        }), 403
 
     fichada = Fichada(
         usuario_id=current_user.id,

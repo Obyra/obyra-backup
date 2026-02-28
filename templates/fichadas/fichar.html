@@ -168,22 +168,23 @@ function onPosicion(pos) {
         mapa.fitBounds(bounds.pad(0.3));
     }
 
-    // Calcular distancia
+    // Calcular distancia y habilitar/deshabilitar botón
+    const btn = document.getElementById('btnFichar');
     if (OBRA_LAT) {
         const dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
         const dentro = dist <= OBRA_RADIO;
 
         if (dentro) {
             actualizarEstado('ok', `Estás a ${Math.round(dist)} metros de la obra (dentro del rango de ${OBRA_RADIO}m)`);
+            btn.disabled = false;
         } else {
-            actualizarEstado('warning', `Estás a ${Math.round(dist)} metros de la obra (fuera del rango de ${OBRA_RADIO}m)`);
+            actualizarEstado('warning', `Estás a ${Math.round(dist)} metros de la obra. Necesitás estar dentro de ${OBRA_RADIO}m para fichar.`);
+            btn.disabled = true;
         }
     } else {
-        actualizarEstado('warning', 'La obra no tiene coordenadas configuradas. Se registrará tu ubicación.');
+        actualizarEstado('error', 'La obra no tiene coordenadas configuradas. Contactá al administrador.');
+        btn.disabled = true;
     }
-
-    // Habilitar botón
-    document.getElementById('btnFichar').disabled = false;
 }
 
 function onErrorGPS(err) {
@@ -192,8 +193,7 @@ function onErrorGPS(err) {
     else if (err.code === 2) msg = 'Ubicación no disponible';
     else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicación';
     actualizarEstado('error', msg);
-    // Permitir fichar sin GPS (se registra sin coordenadas)
-    document.getElementById('btnFichar').disabled = false;
+    document.getElementById('btnFichar').disabled = true;
 }
 
 function actualizarEstado(tipo, mensaje) {
