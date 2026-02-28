@@ -572,6 +572,16 @@ def detalle(id):
         abort(404)
     etapas = obra.etapas.order_by(EtapaObra.orden).all()
 
+    # Auto-actualizar estado de etapas según fecha de inicio
+    hoy = date.today()
+    etapas_actualizadas = False
+    for etapa in etapas:
+        if etapa.estado == 'pendiente' and etapa.fecha_inicio_estimada and etapa.fecha_inicio_estimada <= hoy:
+            etapa.estado = 'en_curso'
+            etapas_actualizadas = True
+    if etapas_actualizadas:
+        db.session.commit()
+
     # Calcular porcentaje de avance por etapa
     etapas_con_avance = {}
     for etapa in etapas:

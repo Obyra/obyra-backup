@@ -128,44 +128,16 @@
                             <div id="etapas-list">
                             {% if etapas %}
                                 {% for etapa in etapas %}
-                                <div class="border-bottom py-2">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div class="flex-grow-1">
-                                            <div class="d-flex align-items-center">
+                                <div class="card mb-2 border shadow-sm etapa-card">
+                                    <!-- Header clickeable para expandir/colapsar -->
+                                    <div class="card-header bg-white py-2 px-3" style="cursor:pointer;" onclick="toggleTareasEtapa({{ etapa.id }})">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div class="d-flex align-items-center flex-grow-1">
                                                 <span class="badge bg-primary me-2">{{ etapa.orden }}</span>
-                                                <h6 class="mb-1 cursor-pointer" onclick="toggleTareasEtapa({{ etapa.id }})">
-                                                    {{ etapa.nombre }}
-                                                    <i class="fas fa-chevron-down ms-1" id="chevron-{{ etapa.id }}"></i>
-                                                </h6>
+                                                <strong class="me-2">{{ etapa.nombre }}</strong>
+                                                <i class="fas fa-chevron-right text-muted transition-transform" id="chevron-{{ etapa.id }}" style="font-size:.75rem; transition: transform .2s;"></i>
                                             </div>
-                                            
-                                            {% if etapa.descripcion %}
-                                            <p class="text-muted small mb-2">{{ etapa.descripcion }}</p>
-                                            {% endif %}
-
-                                            <!-- Tareas Colapsibles -->
-                                            <div class="collapse ms-4" id="tareas-{{ etapa.id }}">
-                                                <div id="tareas-container-{{ etapa.id }}">
-                                                    <div class="text-center py-2">
-                                                        <div class="spinner-border spinner-border-sm" role="status">
-                                                            <span class="visually-hidden">Cargando...</span>
-                                                        </div>
-                                                        <small class="text-muted ms-2">Cargando tareas...</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {% if can_manage %}
-                                            <button class="btn btn-sm btn-outline-success mt-2" 
-                                                    onclick="abrirModalTarea({{ etapa.id }}, '{{ etapa.nombre }}')">
-                                                <i class="fas fa-plus me-1"></i>Agregar Tarea
-                                            </button>
-                                            {% endif %}
-                                        </div>
-                                        
-                                        <div class="text-end">
-                                            <div class="stage-actions d-flex align-items-center gap-2">
-                                                <!-- Checkbox fijo para selección múltiple de ETAPAS -->
+                                            <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation();">
                                                 {% if can_manage %}
                                                 <label class="form-check m-0" for="stageCheck{{ etapa.id }}">
                                                     <input type="checkbox"
@@ -175,60 +147,60 @@
                                                            value="{{ etapa.id }}">
                                                 </label>
                                                 {% endif %}
-                                                
-                                                <!-- Dropdown para cambiar estado -->
-                                                <div class="dropdown mb-2">
+
+                                                <!-- Dropdown estado -->
+                                                <div class="dropdown">
                                                     <button class="btn btn-sm badge {{ etapa.estado|estado_badge }} dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                                         {{ etapa.estado.replace('_', ' ').title() }}
                                                     </button>
-                                                    <ul class="dropdown-menu">
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        {% for est, label, color in [('pendiente','Pendiente','secondary'), ('en_curso','En Curso','primary'), ('pausada','Pausada','warning'), ('finalizada','Finalizada','success')] %}
                                                         <li>
-                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                                <input type="hidden" name="estado" value="pendiente">
+                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display:inline;">
+                                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                                <input type="hidden" name="estado" value="{{ est }}">
                                                                 <button class="dropdown-item" type="submit">
-                                                                    <span class="badge bg-secondary me-2">Pendiente</span>
+                                                                    <span class="badge bg-{{ color }} me-2">{{ label }}</span>
                                                                 </button>
                                                             </form>
                                                         </li>
-                                                        <li>
-                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                                <input type="hidden" name="estado" value="en_curso">
-                                                                <button class="dropdown-item" type="submit">
-                                                                    <span class="badge bg-primary me-2">En Curso</span>
-                                                                </button>
-                                                            </form>
-                                                        </li>
-                                                        <li>
-                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                                <input type="hidden" name="estado" value="pausada">
-                                                                <button class="dropdown-item" type="submit">
-                                                                    <span class="badge bg-warning me-2">Pausada</span>
-                                                                </button>
-                                                            </form>
-                                                        </li>
-                                                        <li>
-                                                            <form method="POST" action="{{ url_for('obras.cambiar_estado_etapa', etapa_id=etapa.id) }}" style="display: inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                                <input type="hidden" name="estado" value="finalizada">
-                                                                <button class="dropdown-item" type="submit">
-                                                                    <span class="badge bg-success me-2">Finalizada</span>
-                                                                </button>
-                                                            </form>
-                                                        </li>
+                                                        {% endfor %}
                                                     </ul>
                                                 </div>
-                                                
+
                                                 {% if can_manage %}
-                                                <button class="btn btn-sm btn-outline-danger" 
-                                                        onclick="confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
-                                                        title="Eliminar etapa">
-                                                    <i class="fas fa-trash fa-xs"></i>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        onclick="event.stopPropagation(); confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
+                                                        title="Eliminar etapa {{ etapa.nombre }}">
+                                                    <i class="fas fa-trash-alt fa-xs me-1"></i><span class="d-none d-md-inline">Eliminar</span>
                                                 </button>
                                                 {% endif %}
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Body colapsable con tareas -->
+                                    <div class="collapse" id="tareas-{{ etapa.id }}">
+                                        <div class="card-body py-2 px-3">
+                                            {% if etapa.descripcion %}
+                                            <p class="text-muted small mb-2">{{ etapa.descripcion }}</p>
+                                            {% endif %}
+
+                                            <div id="tareas-container-{{ etapa.id }}">
+                                                <div class="text-center py-2">
+                                                    <div class="spinner-border spinner-border-sm" role="status">
+                                                        <span class="visually-hidden">Cargando...</span>
+                                                    </div>
+                                                    <small class="text-muted ms-2">Cargando tareas...</small>
+                                                </div>
+                                            </div>
+
+                                            {% if can_manage %}
+                                            <button class="btn btn-sm btn-outline-success mt-2"
+                                                    onclick="abrirModalTarea({{ etapa.id }}, '{{ etapa.nombre }}')">
+                                                <i class="fas fa-plus me-1"></i>Agregar Tarea
+                                            </button>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 </div>
@@ -1658,15 +1630,13 @@ function toggleTareasEtapa(etapaId) {
     const tareasDiv = document.getElementById(`tareas-${etapaId}`);
     const chevron = document.getElementById(`chevron-${etapaId}`);
     const container = document.getElementById(`tareas-container-${etapaId}`);
-    
+
     if (tareasDiv.classList.contains('show')) {
         tareasDiv.classList.remove('show');
-        chevron.classList.remove('fa-chevron-up');
-        chevron.classList.add('fa-chevron-down');
+        chevron.style.transform = 'rotate(0deg)';
     } else {
         tareasDiv.classList.add('show');
-        chevron.classList.remove('fa-chevron-down');
-        chevron.classList.add('fa-chevron-up');
+        chevron.style.transform = 'rotate(90deg)';
         if (container.innerHTML.includes('spinner-border')) {
             cargarTareasEtapa(etapaId);
         }
