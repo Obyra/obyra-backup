@@ -582,13 +582,43 @@ def detalle(id):
     if etapas_actualizadas:
         db.session.commit()
 
-    # Calcular porcentaje de avance por etapa
+    # Pre-cargar todas las tareas de todas las etapas en UN solo query
+    etapa_ids = [e.id for e in etapas]
+    todas_tareas = []
+    tareas_por_etapa = {}
+    if etapa_ids:
+        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
+        for t in todas_tareas:
+            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+
+    # Calcular porcentaje de avance por etapa (sin queries adicionales)
     etapas_con_avance = {}
     for etapa in etapas:
-        etapas_con_avance[etapa.id] = pct_etapa(etapa)
+        tareas = tareas_por_etapa.get(etapa.id, [])
+        if not tareas:
+            etapas_con_avance[etapa.id] = 0
+            continue
+        total_meta = sum(float(t.cantidad_planificada or 0) for t in tareas)
+        if total_meta <= 0:
+            etapas_con_avance[etapa.id] = round(sum(float(t.porcentaje_avance or 0) for t in tareas) / len(tareas), 2)
+        else:
+            weighted = sum(float(t.cantidad_planificada or 0) * float(t.porcentaje_avance or 0) / 100 for t in tareas)
+            etapas_con_avance[etapa.id] = round((weighted / total_meta) * 100, 2)
 
-    # Calcular porcentaje total de la obra
-    porcentaje_obra = pct_obra(obra) if etapas else 0
+    # Calcular porcentaje total de la obra (sin queries adicionales)
+    if etapas:
+        total_meta_obra = sum(sum(float(t.cantidad_planificada or 0) for t in tareas_por_etapa.get(e.id, [])) for e in etapas)
+        if total_meta_obra > 0:
+            total_ej = sum(
+                sum(float(t.cantidad_planificada or 0) for t in tareas_por_etapa.get(e.id, []))
+                * (etapas_con_avance.get(e.id, 0) / 100)
+                for e in etapas
+            )
+            porcentaje_obra = round((total_ej / total_meta_obra) * 100, 2)
+        else:
+            porcentaje_obra = round(sum(etapas_con_avance.get(e.id, 0) for e in etapas) / len(etapas), 2)
+    else:
+        porcentaje_obra = 0
 
     asignaciones = obra.asignaciones.filter_by(activo=True).all()
     usuarios_disponibles = Usuario.query.filter(
@@ -644,37 +674,47 @@ def detalle(id):
     items_presupuesto = []
     if presupuesto:
         items_presupuesto = presupuesto.items.order_by(ItemPresupuesto.id.asc()).all()
-        current_app.logger.info(f"[DEBUG] Obra {obra.id} - Presupuesto {presupuesto.id} - Items: {len(items_presupuesto)}")
-    else:
-        current_app.logger.warning(f"[DEBUG] Obra {obra.id} - NO tiene presupuesto confirmado")
 
-    # Calcular avances de mano de obra por etapa (horas/jornales ejecutados)
+    # Calcular avances de mano de obra por etapa — UN solo query agregado
     avances_mano_obra = {}
-    for etapa in etapas:
-        tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else list(etapa.tareas)
-        horas_ejecutadas = Decimal('0')
-        jornales_ejecutados = Decimal('0')
-        for tarea in tareas:
-            # Sumar horas de avances aprobados o todos si no hay sistema de aprobación
-            avances = TareaAvance.query.filter_by(tarea_id=tarea.id).filter(
+    if etapa_ids:
+        from sqlalchemy import func as sa_func, case
+        horas_por_etapa = (
+            db.session.query(
+                EtapaObra.id,
+                sa_func.coalesce(sa_func.sum(
+                    case(
+                        (TareaAvance.horas_trabajadas.isnot(None), TareaAvance.horas_trabajadas),
+                        else_=sa_func.coalesce(TareaAvance.horas, 0)
+                    )
+                ), 0).label('total_horas')
+            )
+            .join(TareaEtapa, TareaEtapa.etapa_id == EtapaObra.id)
+            .join(TareaAvance, TareaAvance.tarea_id == TareaEtapa.id)
+            .filter(
+                EtapaObra.id.in_(etapa_ids),
                 TareaAvance.status.in_(['aprobado', 'pendiente'])
-            ).all()
-            for avance in avances:
-                if avance.horas_trabajadas:
-                    horas_ejecutadas += Decimal(str(avance.horas_trabajadas or 0))
-                elif avance.horas:
-                    horas_ejecutadas += Decimal(str(avance.horas or 0))
-        # Convertir horas a jornales (8 horas = 1 jornal)
-        jornales_ejecutados = (horas_ejecutadas / Decimal('8')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            )
+            .group_by(EtapaObra.id)
+            .all()
+        )
+        horas_map = {row[0]: float(row[1] or 0) for row in horas_por_etapa}
+    else:
+        horas_map = {}
+
+    for etapa in etapas:
+        h = horas_map.get(etapa.id, 0)
+        j = round(h / 8, 2)
         avances_mano_obra[etapa.id] = {
-            'horas_ejecutadas': float(horas_ejecutadas),
-            'jornales_ejecutados': float(jornales_ejecutados),
+            'horas_ejecutadas': h,
+            'jornales_ejecutados': j,
             'etapa_nombre': etapa.nombre
         }
 
-    # Obtener stock transferido a esta obra (desde inventario)
-    from models.inventory import StockObra
-    stock_obra_items = StockObra.query.filter_by(obra_id=obra.id).all()
+    # Obtener stock transferido a esta obra (desde inventario) — con eager load del item
+    from models.inventory import StockObra, ItemInventario as InvItem
+    from sqlalchemy.orm import joinedload
+    stock_obra_items = StockObra.query.options(joinedload(StockObra.item)).filter_by(obra_id=obra.id).all()
     # Crear diccionarios para acceso rápido por item_inventario_id y por nombre
     stock_transferido = {}
     stock_transferido_por_nombre = {}
