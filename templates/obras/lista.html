@@ -216,19 +216,18 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <style>
-#mapa { height: 500px !important; width: 100% !important; z-index: 1; }
-.leaflet-container { height: 500px !important; width: 100% !important; }
-.leaflet-popup-content-wrapper { padding: 0 !important; border-radius: 12px !important; }
-.leaflet-popup-content { margin: 0 !important; }
+#mapa { height: 500px !important; width: 100% !important; }
+.gm-style .gm-style-iw-c { padding: 0 !important; border-radius: 12px !important; }
+.gm-style .gm-style-iw-d { overflow: auto !important; }
 </style>
 <script>
 let mapa;
 let marcadores = [];
 const marcadoresPorId = {};
+let infoWindowActiva = null;
 
-// Datos de obras inyectados como JSON seguro (evita problemas con caracteres especiales)
+// Datos de obras inyectados como JSON seguro
 const OBRAS_DATA = [
 {% for obra in obras.items if obras %}
 {% if obra.latitud and obra.longitud %}
@@ -246,78 +245,101 @@ const OBRAS_DATA = [
 {% endfor %}
 ];
 
-document.addEventListener('DOMContentLoaded', function() {
+function initMap() {
     var el = document.getElementById('mapa');
-    if (!el) { el.innerHTML = '<p class="text-danger p-3">Contenedor no encontrado</p>'; return; }
-    if (typeof L === 'undefined') { el.innerHTML = '<p class="text-danger p-3">Error: Leaflet no cargó. Recargá la página (Ctrl+F5).</p>'; return; }
+    if (!el) return;
 
     try {
-        // Fix iconos
-        delete L.Icon.Default.prototype._getIconUrl;
-        L.Icon.Default.mergeOptions({
-            iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png'
+        mapa = new google.maps.Map(el, {
+            center: { lat: -34.6037, lng: -58.3816 },
+            zoom: 11,
+            mapTypeId: 'roadmap',
+            zoomControl: true,
+            streetViewControl: false,
+            fullscreenControl: true,
+            mapTypeControl: true,
+            mapTypeControlOptions: {
+                style: google.maps.MapTypeControlStyle.DROPDOWN_MENU
+            }
         });
 
-        mapa = L.map('mapa', { zoomControl: true }).setView([-34.6037, -58.3816], 11);
+        var colores = {
+            planificacion: '#6c757d',
+            en_curso: '#198754',
+            pausada: '#fd7e14',
+            finalizada: '#0dcaf0',
+            cancelada: '#dc3545'
+        };
 
-        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
-            subdomains: ['0','1','2','3'],
-            attribution: '&copy; Google Maps',
-            maxZoom: 20
-        }).addTo(mapa);
-
-        setTimeout(function() { mapa.invalidateSize(); }, 300);
-
-        // Agregar marcadores desde OBRAS_DATA
-        var colores = { planificacion: '#6c757d', en_curso: '#198754', pausada: '#fd7e14', finalizada: '#0dcaf0', cancelada: '#dc3545' };
+        var bounds = new google.maps.LatLngBounds();
 
         OBRAS_DATA.forEach(function(o) {
             var colorEstado = colores[o.estado] || '#6c757d';
-            var popup = '<div style="padding:12px;min-width:240px;">'
+            var pos = { lat: o.lat, lng: o.lng };
+
+            var marker = new google.maps.Marker({
+                position: pos,
+                map: mapa,
+                title: o.nombre,
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                }
+            });
+
+            var contentString = '<div style="padding:12px;min-width:240px;">'
                 + '<h6 style="margin:0 0 6px;font-weight:bold;">' + o.nombre + '</h6>'
                 + '<p style="margin:0 0 4px;font-size:13px;color:#666;"><i class="fas fa-user me-1"></i>' + o.cliente + '</p>'
-                + '<p style="margin:0 0 8px;font-size:13px;color:#666;"><i class="fas fa-map-marker-alt me-1 text-danger"></i>' + o.direccion + '</p>'
+                + '<p style="margin:0 0 8px;font-size:13px;color:#666;"><i class="fas fa-map-marker-alt me-1" style="color:#dc3545;"></i>' + o.direccion + '</p>'
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-                + '<span class="badge" style="background:' + colorEstado + ';color:#fff;">' + o.estado.replace('_', ' ') + '</span>'
+                + '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:' + colorEstado + ';color:#fff;">' + o.estado.replace('_', ' ') + '</span>'
                 + '<strong style="color:#0d6efd;">' + o.progreso + '%</strong></div>'
-                + '<div class="progress" style="height:5px;"><div class="progress-bar" style="width:' + o.progreso + '%;background:#0d6efd;"></div></div>'
-                + '<div style="margin-top:10px;"><a href="/obras/' + o.id + '" class="btn btn-primary btn-sm w-100"><i class="fas fa-eye me-1"></i>Ver Detalles</a></div>'
+                + '<div style="background:#e9ecef;border-radius:4px;height:5px;"><div style="width:' + o.progreso + '%;background:#0d6efd;height:5px;border-radius:4px;"></div></div>'
+                + '<div style="margin-top:10px;"><a href="/obras/' + o.id + '" style="display:block;text-align:center;background:#0d6efd;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:14px;"><i class="fas fa-eye me-1"></i>Ver Detalles</a></div>'
                 + '</div>';
-            var m = L.marker([o.lat, o.lng]).addTo(mapa).bindPopup(popup);
-            marcadores.push(m);
-            marcadoresPorId[o.id] = m;
+
+            var infoWindow = new google.maps.InfoWindow({
+                content: contentString
+            });
+
+            marker.addListener('click', function() {
+                if (infoWindowActiva) infoWindowActiva.close();
+                infoWindow.open(mapa, marker);
+                infoWindowActiva = infoWindow;
+            });
+
+            marcadores.push(marker);
+            marcadoresPorId[o.id] = { marker: marker, infoWindow: infoWindow };
+            bounds.extend(pos);
         });
 
         if (marcadores.length > 0) {
-            mapa.fitBounds(L.featureGroup(marcadores).getBounds().pad(0.1));
+            mapa.fitBounds(bounds);
+            // No zoom demasiado cercano si hay una sola obra
+            var listener = google.maps.event.addListener(mapa, 'idle', function() {
+                if (mapa.getZoom() > 16) mapa.setZoom(16);
+                google.maps.event.removeListener(listener);
+            });
         }
 
     } catch (err) {
         el.innerHTML = '<div class="alert alert-danger m-3"><i class="fas fa-exclamation-triangle me-2"></i>Error al cargar mapa: ' + err.message + '</div>';
     }
-});
+}
 
 function centrarEnObra(obraId) {
-    if (!mapa) {
-        return;
-    }
-    const marcador = marcadoresPorId[obraId];
-    if (!marcador) {
-        console.warn('No se encontró marcador para la obra', obraId);
-        return;
-    }
-    const posicion = marcador.getLatLng();
-    mapa.setView(posicion, 16);
-    marcador.openPopup();
-    console.log('🎯 Centrado en obra:', obraId, posicion);
+    if (!mapa) return;
+    var entry = marcadoresPorId[obraId];
+    if (!entry) return;
+    mapa.setZoom(16);
+    mapa.panTo(entry.marker.getPosition());
+    if (infoWindowActiva) infoWindowActiva.close();
+    entry.infoWindow.open(mapa, entry.marker);
+    infoWindowActiva = entry.infoWindow;
 }
 
 // Función para ver detalles de la obra
 function verDetallesObra(obraId) {
-    console.log(`🏗️ Abriendo detalles de obra ID: ${obraId}`);
-    window.location.href = `/obras/${obraId}`;
+    window.location.href = '/obras/' + obraId;
 }
 
 // Función para abrir ventana de clima en pantalla completa
@@ -663,37 +685,25 @@ function obtenerIconoClima(codigo) {
     return 'fas fa-cloud text-secondary';
 }
 
-// Redimensionar mapa cuando sea necesario
-window.addEventListener('resize', function() {
-    if (mapa) {
-        setTimeout(() => {
-            mapa.invalidateSize();
-            console.log('🔄 Mapa redimensionado');
-        }, 200);
-    }
-});
-
 // CSRF Token para formularios dinámicos
 const CSRF_TOKEN = "{{ csrf_token() }}";
 
 // Función para confirmar eliminación de obra
 function confirmarEliminarObra(obraId, obraNombre) {
-    if (confirm(`¿Estás seguro de que deseas eliminar la obra "${obraNombre}"?\n\nEsta acción eliminará:\n• La obra y todos sus datos\n• Todas las etapas y tareas asociadas\n• Todas las asignaciones de personal\n• Todas las certificaciones\n\nEsta acción NO se puede deshacer.`)) {
-        // Crear formulario dinámico para enviar eliminación
-        const form = document.createElement('form');
+    if (confirm('¿Estás seguro de que deseas eliminar la obra "' + obraNombre + '"?\n\nEsta acción eliminará:\n- La obra y todos sus datos\n- Todas las etapas y tareas asociadas\n- Todas las asignaciones de personal\n- Todas las certificaciones\n\nEsta acción NO se puede deshacer.')) {
+        var form = document.createElement('form');
         form.method = 'POST';
-        form.action = `/obras/eliminar/${obraId}`;
-
-        // Agregar token CSRF
-        const csrfInput = document.createElement('input');
+        form.action = '/obras/eliminar/' + obraId;
+        var csrfInput = document.createElement('input');
         csrfInput.type = 'hidden';
         csrfInput.name = 'csrf_token';
         csrfInput.value = CSRF_TOKEN;
         form.appendChild(csrfInput);
-
         document.body.appendChild(form);
         form.submit();
     }
 }
 </script>
+<!-- Google Maps JavaScript API (oficial) -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap" async defer></script>
 {% endblock %}
