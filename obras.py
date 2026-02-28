@@ -3483,6 +3483,11 @@ def aprobar_avance(avance_id):
             t.fecha_inicio_real = datetime.utcnow()
 
         db.session.commit()
+
+        # Recalcular porcentaje y auto-completar si llega al 100%
+        if av.tarea_id:
+            recalc_tarea_pct(av.tarea_id)
+
         return jsonify(ok=True)
 
     except Exception:
@@ -3509,6 +3514,11 @@ def rechazar_avance(avance_id):
         av.confirmed_at = datetime.utcnow()
 
         db.session.commit()
+
+        # Recalcular porcentaje tras rechazar
+        if av.tarea_id:
+            recalc_tarea_pct(av.tarea_id)
+
         return jsonify(ok=True)
 
     except Exception:
@@ -3568,6 +3578,11 @@ def corregir_avance(avance_id):
             t.fecha_inicio_real = datetime.utcnow()
 
         db.session.commit()
+
+        # Recalcular porcentaje y auto-completar si llega al 100%
+        if av.tarea_id:
+            recalc_tarea_pct(av.tarea_id)
+
         current_app.logger.info(
             "Avance %d corregido: %s -> %s por %s",
             avance_id, cantidad_original, cantidad_corregida, current_user.email
