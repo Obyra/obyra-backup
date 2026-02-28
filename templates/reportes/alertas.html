@@ -205,6 +205,44 @@
             </div>
         </div>
 
+        <!-- Tareas en Riesgo -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>Tareas en Riesgo
+                        <span class="badge bg-warning text-dark ms-2">{{ alertas_en_riesgo|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_en_riesgo %}
+                        {% for alerta in alertas_en_riesgo %}
+                        <a href="{{ alerta.url }}" class="text-decoration-none">
+                            <div class="alert-item mb-2 p-3 rounded"
+                                 style="background: linear-gradient(135deg, {% if alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#ffc107, #ffb300{% endif %});">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-grow-1 text-white">
+                                        <div class="fw-bold mb-1">{{ alerta.titulo }}</div>
+                                        <div class="small">{{ alerta.descripcion }}</div>
+                                        <div class="small opacity-75">{{ alerta.referencia }}</div>
+                                    </div>
+                                    <span class="badge bg-white text-{{ 'warning' if alerta.severidad == 'alta' else 'secondary' }}">
+                                        {{ alerta.severidad }}
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay tareas en riesgo</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         <!-- Sobrecostos -->
         <div class="col-lg-12">
             <div class="card border-0 shadow-sm">

@@ -125,6 +125,20 @@
                             </div>
                             {% endif %}
                             
+                            {% if hay_desfase_fechas and can_manage %}
+                            <div class="alert alert-warning d-flex align-items-center justify-content-between py-2 mb-3" role="alert">
+                                <div>
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Fechas superpuestas:</strong> Algunas etapas tienen fechas que se solapan con la etapa anterior.
+                                </div>
+                                <form method="POST" action="{{ url_for('obras.propagar_fechas', id=obra.id) }}" class="ms-3">
+                                    <button type="submit" class="btn btn-warning btn-sm text-nowrap">
+                                        <i class="fas fa-sync-alt me-1"></i>Recalcular fechas
+                                    </button>
+                                </form>
+                            </div>
+                            {% endif %}
+
                             <div id="etapas-list">
                             {% if etapas %}
                                 {% for etapa in etapas %}

@@ -771,9 +771,21 @@ def detalle(id):
         'total': float(Decimal(str(costo_materiales)) + costo_mano_obra)
     }
 
+    # Detectar desfase en fechas de etapas (para banner de recalcular)
+    hay_desfase_fechas = False
+    for i in range(1, len(etapas)):
+        ant = etapas[i - 1]
+        act = etapas[i]
+        if (ant.fecha_fin_estimada and act.fecha_inicio_estimada
+                and ant.fecha_fin_estimada >= act.fecha_inicio_estimada
+                and act.estado != 'finalizada'):
+            hay_desfase_fechas = True
+            break
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
+                         hay_desfase_fechas=hay_desfase_fechas,
                          etapas_con_avance=etapas_con_avance,
                          porcentaje_obra=porcentaje_obra,
                          asignaciones=asignaciones,
@@ -1434,6 +1446,92 @@ def pct_obra(obra):
     else:
         etapa_pcts = [pct_etapa(e) for e in etapas]
         return round(sum(etapa_pcts) / max(len(etapa_pcts), 1), 2)
+
+
+# === ETAPAS ENCADENADAS — PROPAGACIÓN DE FECHAS ===
+
+def propagar_fechas_etapas(obra_id):
+    """Propaga atrasos entre etapas encadenadas (por orden).
+
+    Cuando una etapa termina más tarde de lo planificado, todas las
+    etapas siguientes se desplazan hacia adelante manteniendo su duración.
+    Solo desplaza hacia adelante, nunca achica el cronograma.
+    Retorna dict con shifted_count y details.
+    """
+    from datetime import timedelta
+
+    etapas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
+    if len(etapas) < 2:
+        return {'shifted_count': 0, 'details': []}
+
+    shifted_count = 0
+    details = []
+
+    for i in range(1, len(etapas)):
+        anterior = etapas[i - 1]
+        actual = etapas[i]
+
+        # Saltar si faltan fechas o la etapa ya está finalizada
+        if not anterior.fecha_fin_estimada or not actual.fecha_inicio_estimada:
+            continue
+        if actual.estado == 'finalizada':
+            continue
+
+        # Fin efectivo de la etapa anterior
+        fin_efectivo = anterior.fecha_fin_estimada
+        if (anterior.fecha_fin_real
+                and anterior.estado == 'finalizada'
+                and anterior.fecha_fin_real > anterior.fecha_fin_estimada):
+            fin_efectivo = anterior.fecha_fin_real
+
+        nuevo_inicio = fin_efectivo + timedelta(days=1)
+
+        if nuevo_inicio > actual.fecha_inicio_estimada:
+            delta = nuevo_inicio - actual.fecha_inicio_estimada
+
+            # Preservar duración
+            duracion = None
+            if actual.fecha_fin_estimada:
+                duracion = actual.fecha_fin_estimada - actual.fecha_inicio_estimada
+
+            old_inicio = actual.fecha_inicio_estimada
+            actual.fecha_inicio_estimada = nuevo_inicio
+            if duracion is not None:
+                actual.fecha_fin_estimada = nuevo_inicio + duracion
+
+            details.append({
+                'etapa': actual.nombre,
+                'delta_dias': delta.days,
+                'old_inicio': str(old_inicio),
+                'new_inicio': str(nuevo_inicio),
+            })
+
+            # Propagar a tareas de esta etapa
+            _propagar_fechas_tareas(actual, delta)
+            shifted_count += 1
+
+    return {'shifted_count': shifted_count, 'details': details}
+
+
+def _propagar_fechas_tareas(etapa, delta):
+    """Desplaza fechas de tareas no completadas de una etapa por delta días."""
+    tareas = etapa.tareas.filter(
+        TareaEtapa.estado.notin_(['completada', 'cancelada'])
+    ).all()
+
+    for t in tareas:
+        if t.fecha_inicio_plan:
+            t.fecha_inicio_plan = t.fecha_inicio_plan + delta
+        if t.fecha_fin_plan:
+            t.fecha_fin_plan = t.fecha_fin_plan + delta
+        if t.fecha_inicio_estimada:
+            t.fecha_inicio_estimada = t.fecha_inicio_estimada + delta
+        if t.fecha_fin_estimada:
+            t.fecha_fin_estimada = t.fecha_fin_estimada + delta
+        if t.fecha_inicio:
+            t.fecha_inicio = t.fecha_inicio + delta
+        if t.fecha_fin:
+            t.fecha_fin = t.fecha_fin + delta
 
 
 UNIT_MAP = {
@@ -3481,10 +3579,21 @@ def cambiar_estado_etapa(etapa_id):
         if nuevo_estado == 'finalizada':
             for tarea in etapa.tareas.filter_by(estado='pendiente'):
                 tarea.estado = 'completada'
+            # Registrar fecha de finalización real
+            if not etapa.fecha_fin_real:
+                etapa.fecha_fin_real = date.today()
 
         etapa.obra.calcular_progreso_automatico()
 
         db.session.commit()
+
+        # Propagar atrasos a etapas siguientes
+        if nuevo_estado == 'finalizada':
+            result = propagar_fechas_etapas(etapa.obra_id)
+            if result['shifted_count'] > 0:
+                db.session.commit()
+                flash(f'Se ajustaron las fechas de {result["shifted_count"]} etapa(s) posterior(es) por atraso.', 'info')
+
         flash(f'Estado de etapa "{etapa.nombre}" cambiado de "{estado_anterior}" a "{nuevo_estado}".', 'success')
 
     except Exception as e:
@@ -3492,6 +3601,30 @@ def cambiar_estado_etapa(etapa_id):
         flash(f'Error al cambiar estado: {str(e)}', 'danger')
 
     return redirect(url_for('obras.detalle', id=etapa.obra_id))
+
+
+@obras_bp.route('/<int:id>/propagar_fechas', methods=['POST'])
+@login_required
+def propagar_fechas(id):
+    """Recalcular fechas de etapas encadenadas manualmente."""
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        flash('No tienes permisos para ajustar fechas.', 'danger')
+        return redirect(url_for('obras.detalle', id=id))
+
+    obra = Obra.query.get_or_404(id)
+    try:
+        result = propagar_fechas_etapas(obra.id)
+        if result['shifted_count'] > 0:
+            db.session.commit()
+            flash(f'Se ajustaron las fechas de {result["shifted_count"]} etapa(s).', 'success')
+        else:
+            flash('No fue necesario ajustar fechas.', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al propagar fechas: {str(e)}', 'danger')
+
+    return redirect(url_for('obras.detalle', id=id))
 
 
 # ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====

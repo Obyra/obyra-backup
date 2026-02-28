@@ -235,6 +235,7 @@ def ver_alertas():
         obtener_alertas_presupuestos_vencer,
         obtener_alertas_obras_demoradas,
         obtener_alertas_tareas_vencidas,
+        obtener_alertas_tareas_en_riesgo,
         obtener_alertas_sobrecosto,
         contar_alertas_por_severidad
     )
@@ -249,6 +250,7 @@ def ver_alertas():
     alertas_presupuestos = obtener_alertas_presupuestos_vencer(org_id, limite=20)
     alertas_obras = obtener_alertas_obras_demoradas(org_id, limite=20)
     alertas_tareas = obtener_alertas_tareas_vencidas(org_id, limite=20)
+    alertas_en_riesgo = obtener_alertas_tareas_en_riesgo(org_id, limite=20)
     alertas_sobrecosto = obtener_alertas_sobrecosto(org_id, limite=20)
     conteo = contar_alertas_por_severidad(org_id)
 
@@ -257,6 +259,7 @@ def ver_alertas():
                          alertas_presupuestos=alertas_presupuestos,
                          alertas_obras=alertas_obras,
                          alertas_tareas=alertas_tareas,
+                         alertas_en_riesgo=alertas_en_riesgo,
                          alertas_sobrecosto=alertas_sobrecosto,
                          conteo=conteo)
 

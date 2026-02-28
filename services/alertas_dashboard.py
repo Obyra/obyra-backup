@@ -195,6 +195,70 @@ def obtener_alertas_tareas_vencidas(org_id, limite=5):
     return alertas
 
 
+def obtener_alertas_tareas_en_riesgo(org_id, limite=5):
+    """
+    Obtiene tareas que estan en riesgo de no completarse a tiempo.
+    Criterios: fecha de fin dentro de los proximos 7 dias y avance insuficiente.
+    NO incluye tareas ya vencidas (eso lo cubre obtener_alertas_tareas_vencidas).
+    """
+    from models import TareaEtapa, EtapaObra, Obra
+
+    hoy = date.today()
+    en_7_dias = hoy + timedelta(days=7)
+
+    tareas = db.session.query(TareaEtapa).join(
+        EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
+    ).join(
+        Obra, EtapaObra.obra_id == Obra.id
+    ).filter(
+        Obra.organizacion_id == org_id,
+        Obra.estado.in_(['planificacion', 'en_curso']),
+        TareaEtapa.estado.in_(['pendiente', 'en_curso']),
+        or_(
+            and_(TareaEtapa.fecha_fin_plan.isnot(None),
+                 TareaEtapa.fecha_fin_plan >= hoy,
+                 TareaEtapa.fecha_fin_plan <= en_7_dias),
+            and_(TareaEtapa.fecha_fin_estimada.isnot(None),
+                 TareaEtapa.fecha_fin_estimada >= hoy,
+                 TareaEtapa.fecha_fin_estimada <= en_7_dias),
+            and_(TareaEtapa.fecha_fin.isnot(None),
+                 TareaEtapa.fecha_fin >= hoy,
+                 TareaEtapa.fecha_fin <= en_7_dias)
+        )
+    ).all()
+
+    alertas = []
+    for tarea in tareas:
+        avance = float(tarea.porcentaje_avance or 0)
+        fecha_venc = tarea.fecha_fin_plan or tarea.fecha_fin_estimada or tarea.fecha_fin
+        if not fecha_venc:
+            continue
+
+        dias_restantes = (fecha_venc - hoy).days
+
+        if dias_restantes <= 3 and avance < 50:
+            severidad = 'alta'
+        elif dias_restantes <= 7 and avance < 70:
+            severidad = 'media'
+        else:
+            continue
+
+        obra_nombre = tarea.etapa.obra.nombre if tarea.etapa and tarea.etapa.obra else 'Sin obra'
+
+        alertas.append({
+            'tipo': 'tarea_en_riesgo',
+            'severidad': severidad,
+            'titulo': f'En riesgo: {tarea.nombre[:30]}',
+            'descripcion': f'{dias_restantes} dia(s) restantes - Avance: {avance:.0f}%',
+            'referencia': obra_nombre[:30],
+            'url': f'/obras/{tarea.etapa.obra_id}' if tarea.etapa else '#',
+        })
+
+    orden_severidad = {'alta': 0, 'media': 1}
+    alertas.sort(key=lambda x: orden_severidad.get(x['severidad'], 2))
+    return alertas[:limite]
+
+
 def obtener_alertas_sobrecosto(org_id, limite=5, umbral_porcentaje=10):
     """
     Obtiene obras con sobrecosto respecto al presupuesto.
@@ -254,6 +318,7 @@ def obtener_todas_alertas(org_id, limite_por_tipo=3):
     alertas.extend(obtener_alertas_presupuestos_vencer(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_obras_demoradas(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_tareas_vencidas(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_tareas_en_riesgo(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_sobrecosto(org_id, limite_por_tipo))
 
     # Ordenar por severidad
