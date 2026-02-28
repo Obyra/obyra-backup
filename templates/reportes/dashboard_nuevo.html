@@ -228,11 +228,11 @@ function initMapaDashboard() {
     // Agregar atribución personalizada sin "Leaflet |"
     L.control.attribution({ prefix: false }).addTo(mapa);
 
-    // Agregar tiles - Google Maps
-    L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
-        subdomains: ['0', '1', '2', '3'],
-        attribution: '© Google Maps',
-        maxZoom: 20
+    // Agregar tiles - CartoDB Voyager
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap, &copy; CARTO',
+        maxZoom: 20,
+        subdomains: 'abcd'
     }).addTo(mapa);
     
     // Configurar cuando esté listo

@@ -295,10 +295,11 @@ function inicializarMapa() {
         
         console.log('✅ Mapa creado');
         
-        // Agregar capa base de OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
+        // Agregar capa base CartoDB Voyager
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, &copy; CARTO',
+            maxZoom: 20,
+            subdomains: 'abcd'
         }).addTo(mapa);
         
         console.log('✅ Capa base agregada');
