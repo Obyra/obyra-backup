@@ -262,10 +262,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         mapa = L.map('mapa', { zoomControl: true }).setView([-34.6037, -58.3816], 11);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap, &copy; CARTO',
-            maxZoom: 20,
-            subdomains: 'abcd'
+        L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
+            subdomains: ['0','1','2','3'],
+            attribution: '&copy; Google Maps',
+            maxZoom: 20
         }).addTo(mapa);
 
         setTimeout(function() { mapa.invalidateSize(); }, 300);
