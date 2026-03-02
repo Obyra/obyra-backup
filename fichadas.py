@@ -40,9 +40,28 @@ def _es_admin(usuario):
 
 
 def _geocodificar_direccion(direccion):
-    """Geocodifica una dirección usando Nominatim (OpenStreetMap). Sin API key."""
+    """Geocodifica una dirección. Usa Google Geocoding API si hay key, sino Nominatim."""
     if not direccion:
         return None, None
+
+    google_key = os.environ.get('GOOGLE_MAPS_API_KEY', '')
+
+    # Intentar con Google Maps Geocoding API primero (más preciso)
+    if google_key:
+        try:
+            url = 'https://maps.googleapis.com/maps/api/geocode/json?' + urllib.parse.urlencode({
+                'address': direccion, 'key': google_key
+            })
+            req = urllib.request.Request(url, headers={'User-Agent': 'OBYRA/1.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = _json.loads(response.read())
+                if data.get('status') == 'OK' and data.get('results'):
+                    loc = data['results'][0]['geometry']['location']
+                    return float(loc['lat']), float(loc['lng'])
+        except Exception:
+            pass
+
+    # Fallback: Nominatim (OpenStreetMap)
     try:
         url = 'https://nominatim.openstreetmap.org/search?' + urllib.parse.urlencode({
             'q': direccion, 'format': 'json', 'limit': 1
@@ -54,6 +73,7 @@ def _geocodificar_direccion(direccion):
                 return float(data[0]['lat']), float(data[0]['lon'])
     except Exception:
         pass
+
     return None, None
 
 

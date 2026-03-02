@@ -776,7 +776,7 @@ function confirmarEliminarObra(obraId, obraNombre) {
 </script>
 {% if google_maps_key %}
 <!-- Google Maps JavaScript API (oficial) — si falla, cae a Leaflet+CartoDB automáticamente -->
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap&loading=async"
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap"
         onerror="console.warn('No se pudo cargar Google Maps API'); initMapFallback();"
         async defer></script>
 {% else %}

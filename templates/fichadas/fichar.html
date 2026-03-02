@@ -123,13 +123,23 @@ function iniciarGPS() {
         return;
     }
 
-    navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
+    // 1) Primero intentar getCurrentPosition (respuesta rápida, acepta cache)
+    navigator.geolocation.getCurrentPosition(onPosicion, function(err) {
+        console.log('getCurrentPosition falló (code=' + err.code + '), esperando watchPosition...');
+    }, {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 5000
+        timeout: 10000,
+        maximumAge: 60000  // Acepta posición de hasta 1 minuto atrás
     });
 
-    // Fallback para admins si GPS no responde en 10s
+    // 2) En paralelo, watchPosition para actualizaciones continuas
+    navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 10000
+    });
+
+    // 3) Fallback para admins si GPS no responde en 15s
     setTimeout(function() {
         if (!gpsRespondio) {
             if (ES_ADMIN) {
@@ -139,7 +149,7 @@ function iniciarGPS() {
                 actualizarEstado('error', 'No se pudo obtener tu ubicacion. Verifica que el GPS este activado y que diste permiso de ubicacion.');
             }
         }
-    }, 10000);
+    }, 15000);
 }
 
 function onPosicion(pos) {
@@ -340,27 +350,85 @@ function actualizarMarcadorMio() {
     }
 }
 
+// Fallback a Leaflet si Google Maps falla
+var leafletFallbackIntentado = false;
+function initMapaFallback() {
+    if (leafletFallbackIntentado) return;
+    leafletFallbackIntentado = true;
+    console.warn('Google Maps no disponible, cargando mapa alternativo...');
+
+    var el = document.getElementById('mapaFichada');
+    el.innerHTML = '';
+
+    // Cargar Leaflet CSS
+    if (!document.querySelector('link[href*="leaflet"]')) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';
+        document.head.appendChild(css);
+    }
+
+    // Cargar Leaflet JS
+    if (typeof L === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+        script.onload = function() { _crearMapaLeaflet(el); };
+        script.onerror = function() {
+            el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>No se pudo cargar ningun mapa</span>';
+        };
+        document.head.appendChild(script);
+    } else {
+        _crearMapaLeaflet(el);
+    }
+}
+
+function _crearMapaLeaflet(el) {
+    try {
+        var centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG] : (miLat ? [miLat, miLng] : [-34.6037, -58.3816]);
+        var mapaLeaflet = L.map(el, { zoomControl: true }).setView(centro, OBRA_LAT ? 17 : 15);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, &copy; CARTO', maxZoom: 20, subdomains: 'abcd'
+        }).addTo(mapaLeaflet);
+
+        if (OBRA_LAT) {
+            L.marker([OBRA_LAT, OBRA_LNG], { title: OBRA_NOMBRE }).addTo(mapaLeaflet);
+            L.circle([OBRA_LAT, OBRA_LNG], { radius: OBRA_RADIO, color: '#0d6efd', weight: 2, fillOpacity: 0.1 }).addTo(mapaLeaflet);
+        }
+
+        if (miLat) {
+            var marcadorUsuario = L.marker([miLat, miLng], { title: 'Tu ubicacion' }).addTo(mapaLeaflet);
+            if (OBRA_LAT) {
+                mapaLeaflet.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [30, 30] });
+            }
+        }
+
+        // Guardar referencia para actualizaciones
+        mapa = mapaLeaflet;
+        mapa._esLeaflet = true;
+        googleMapsListo = false;
+
+        setTimeout(function() { mapaLeaflet.invalidateSize(); }, 300);
+    } catch (e) {
+        el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Error cargando mapa</span>';
+    }
+}
+
 // Si Google Maps falla al cargar (red, 404, etc.)
 function onGoogleMapsError() {
-    var el = document.getElementById('mapaFichada');
-    el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa no disponible</span>';
-    console.warn('Google Maps no pudo cargarse. GPS sigue funcionando.');
+    console.warn('Google Maps: error de carga de script');
+    initMapaFallback();
 }
 
 // Si la API key de Google Maps es inválida o sin billing
 function gm_authFailure() {
-    var el = document.getElementById('mapaFichada');
-    el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Error de autenticacion del mapa</span>';
-    console.warn('Google Maps API key inválida o sin billing. GPS sigue funcionando.');
+    console.warn('Google Maps: error de autenticacion (API key o billing)');
+    initMapaFallback();
 }
 
-// Timeout: si Google Maps no cargó en 8 segundos, mostrar mensaje
+// Timeout: si Google Maps no cargó en 8 segundos, usar fallback
 setTimeout(function() {
     if (!googleMapsListo) {
-        var el = document.getElementById('mapaFichada');
-        if (el.innerHTML.indexOf('Cargando mapa') > -1) {
-            el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa tardando en cargar...</span>';
-        }
+        initMapaFallback();
     }
 }, 8000);
 
