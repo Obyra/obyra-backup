@@ -92,10 +92,12 @@
 var OBRA_LAT = {{ obra.latitud|float if obra.latitud else 'null' }};
 var OBRA_LNG = {{ obra.longitud|float if obra.longitud else 'null' }};
 var OBRA_ID = {{ obra.id }};
-var OBRA_RADIO = {{ obra.radio_fichada_metros or 200 }};
+var OBRA_RADIO = {{ obra.radio_fichada_metros or 100 }};
 var PROXIMO_TIPO = '{{ proximo_tipo }}';
 var ES_ADMIN = {{ 'true' if es_admin else 'false' }};
 var GOOGLE_KEY = '{{ google_maps_key }}';
+var OBRA_DIRECCION = '{{ obra.direccion or "" }}';
+var OBRA_NOMBRE = '{{ obra.nombre }}';
 
 // ── Estado ──
 var miLat = null, miLng = null, miPrecision = null;
@@ -202,12 +204,20 @@ function initMap() {
     el.innerHTML = '';
     el.style.display = 'block';
 
-    var centro = OBRA_LAT ? { lat: OBRA_LAT, lng: OBRA_LNG } : { lat: -34.6037, lng: -58.3816 };
+    // Centro: obra si tiene coords, sino posición del usuario, sino Buenos Aires
+    var centro;
+    if (OBRA_LAT) {
+        centro = { lat: OBRA_LAT, lng: OBRA_LNG };
+    } else if (miLat !== null) {
+        centro = { lat: miLat, lng: miLng };
+    } else {
+        centro = { lat: -34.6037, lng: -58.3816 };
+    }
 
     try {
         mapa = new google.maps.Map(el, {
             center: centro,
-            zoom: 16,
+            zoom: OBRA_LAT ? 17 : 15,
             mapTypeId: 'roadmap',
             zoomControl: true,
             streetViewControl: false,
@@ -239,6 +249,60 @@ function initMap() {
         if (miLat !== null) {
             actualizarMarcadorMio();
         }
+
+        // Si la obra no tiene coords pero sí dirección, intentar geocodificar con Google
+        if (!OBRA_LAT && OBRA_DIRECCION) {
+            var geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ address: OBRA_DIRECCION }, function(results, status) {
+                if (status === 'OK' && results[0]) {
+                    OBRA_LAT = results[0].geometry.location.lat();
+                    OBRA_LNG = results[0].geometry.location.lng();
+
+                    // Agregar marcador y radio
+                    marcadorObra = new google.maps.Marker({
+                        position: { lat: OBRA_LAT, lng: OBRA_LNG },
+                        map: mapa,
+                        title: OBRA_NOMBRE,
+                        icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
+                    });
+                    circuloRadio = new google.maps.Circle({
+                        map: mapa,
+                        center: { lat: OBRA_LAT, lng: OBRA_LNG },
+                        radius: OBRA_RADIO,
+                        strokeColor: '#0d6efd',
+                        strokeWeight: 2,
+                        strokeOpacity: 0.8,
+                        fillColor: '#0d6efd',
+                        fillOpacity: 0.1
+                    });
+
+                    // Recalcular distancia si ya tenemos GPS
+                    if (miLat !== null) {
+                        actualizarMarcadorMio();
+                        var dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
+                        var dentro = dist <= OBRA_RADIO;
+                        var btn = document.getElementById('btnFichar');
+                        if (dentro) {
+                            actualizarEstado('ok', 'Estas a ' + Math.round(dist) + 'm de la obra (dentro del rango de ' + OBRA_RADIO + 'm)');
+                            btn.disabled = false;
+                        } else if (ES_ADMIN) {
+                            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm (fuera del rango de ' + OBRA_RADIO + 'm). Como admin podes fichar igualmente.');
+                            btn.disabled = false;
+                        } else {
+                            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm de la obra. Necesitas estar dentro de ' + OBRA_RADIO + 'm para fichar.');
+                            btn.disabled = true;
+                        }
+                    }
+
+                    // Guardar coords en el servidor para futuras visitas
+                    fetch('/fichadas/api/guardar_coords', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ obra_id: OBRA_ID, latitud: OBRA_LAT, longitud: OBRA_LNG })
+                    }).catch(function() {});
+                }
+            });
+        }
     } catch (e) {
         console.error('Error inicializando Google Maps:', e);
         el.innerHTML = '<span class="text-muted"><i class="fas fa-exclamation-triangle me-2"></i>Error cargando mapa</span>';
@@ -261,10 +325,15 @@ function actualizarMarcadorMio() {
         }
 
         if (OBRA_LAT) {
+            // Mostrar ambos: obra y usuario
             var bounds = new google.maps.LatLngBounds();
             bounds.extend({ lat: OBRA_LAT, lng: OBRA_LNG });
             bounds.extend({ lat: miLat, lng: miLng });
             mapa.fitBounds(bounds);
+        } else {
+            // Sin coords de obra: centrar en el usuario
+            mapa.setCenter({ lat: miLat, lng: miLng });
+            mapa.setZoom(15);
         }
     } catch (e) {
         console.error('Error actualizando marcador:', e);

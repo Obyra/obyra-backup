@@ -1,7 +1,10 @@
 """Blueprint de Fichadas — ingreso/egreso con geolocalización"""
 
+import json as _json
 import math
 import os
+import urllib.parse
+import urllib.request
 from datetime import datetime, date
 from flask import (Blueprint, render_template, request, jsonify,
                    flash, redirect, url_for, current_app)
@@ -34,6 +37,24 @@ def _es_admin(usuario):
         return True
     rol = getattr(usuario, 'role', '') or getattr(usuario, 'rol', '') or ''
     return rol.lower() in ('admin', 'administrador')
+
+
+def _geocodificar_direccion(direccion):
+    """Geocodifica una dirección usando Nominatim (OpenStreetMap). Sin API key."""
+    if not direccion:
+        return None, None
+    try:
+        url = 'https://nominatim.openstreetmap.org/search?' + urllib.parse.urlencode({
+            'q': direccion, 'format': 'json', 'limit': 1
+        })
+        req = urllib.request.Request(url, headers={'User-Agent': 'OBYRA/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = _json.loads(response.read())
+            if data:
+                return float(data[0]['lat']), float(data[0]['lon'])
+    except Exception:
+        pass
+    return None, None
 
 
 def _obras_asignadas(usuario):
@@ -136,6 +157,19 @@ def fichar(obra_id):
             flash('No estás asignado a esta obra.', 'danger')
             return redirect(url_for('fichadas.index'))
 
+    # Auto-geocodificar si la obra tiene dirección pero no coordenadas
+    if not obra.latitud and obra.direccion:
+        lat, lng = _geocodificar_direccion(obra.direccion)
+        if lat and lng:
+            obra.latitud = lat
+            obra.longitud = lng
+            try:
+                db.session.commit()
+                current_app.logger.info(
+                    f'Obra {obra.id} geocodificada: {lat}, {lng}')
+            except Exception:
+                db.session.rollback()
+
     ultima = _ultima_fichada_hoy(current_user.id, obra_id)
     proximo_tipo = 'ingreso'
     if ultima and ultima.tipo == 'ingreso':
@@ -188,7 +222,7 @@ def api_fichar():
     # Calcular distancia si hay coordenadas de ambos
     distancia = None
     dentro_rango = False
-    radio = obra.radio_fichada_metros or 200
+    radio = obra.radio_fichada_metros or 100
     es_admin = _es_admin(current_user)
 
     tiene_gps = lat is not None and lng is not None
@@ -249,6 +283,35 @@ def api_fichar():
             'radio_metros': radio,
         }
     })
+
+
+@fichadas_bp.route('/api/guardar_coords', methods=['POST'])
+@csrf.exempt
+@login_required
+def api_guardar_coords():
+    """Guarda coordenadas geocodificadas de una obra (solo admins)."""
+    if not _es_admin(current_user):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+
+    data = request.get_json(silent=True) or {}
+    obra_id = data.get('obra_id')
+    lat = data.get('latitud')
+    lng = data.get('longitud')
+
+    if not obra_id or lat is None or lng is None:
+        return jsonify({'ok': False, 'error': 'Datos incompletos'}), 400
+
+    obra = Obra.query.get(obra_id)
+    if not obra:
+        return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
+
+    # Solo guardar si la obra no tiene coords todavía
+    if not obra.latitud:
+        obra.latitud = float(lat)
+        obra.longitud = float(lng)
+        db.session.commit()
+
+    return jsonify({'ok': True})
 
 
 @fichadas_bp.route('/api/estado/<int:obra_id>')
