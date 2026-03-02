@@ -368,9 +368,8 @@
     </div>
 </div>
 
-<!-- Leaflet CSS y JS para mapa -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Google Maps API -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&loading=async" async defer></script>
 {% endblock %}
 
 {% block scripts %}
@@ -471,26 +470,30 @@ function ocultarSugerencias() {
 }
 
 function inicializarMapaUbicacion(lat, lng) {
-    if (typeof L === 'undefined') return;
+    if (typeof google === 'undefined' || !google.maps) return;
     if (!ubicacionMap) {
-        ubicacionMap = L.map('ubicacion_mapa', {
-            attributionControl: false
+        ubicacionMap = new google.maps.Map(document.getElementById('ubicacion_mapa'), {
+            center: { lat: lat, lng: lng },
+            zoom: 15,
+            mapTypeId: 'roadmap',
+            zoomControl: true,
+            streetViewControl: false,
+            fullscreenControl: false,
+            mapTypeControl: false,
+            scrollwheel: false
         });
-        // Agregar atribución personalizada sin "Leaflet |"
-        L.control.attribution({ prefix: false }).addTo(ubicacionMap);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap, &copy; CARTO',
-            maxZoom: 20,
-            subdomains: 'abcd',
-        }).addTo(ubicacionMap);
-    }
-    ubicacionMap.setView([lat, lng], 15);
-    if (ubicacionMarker) {
-        ubicacionMarker.setLatLng([lat, lng]);
     } else {
-        ubicacionMarker = L.marker([lat, lng]).addTo(ubicacionMap);
+        ubicacionMap.setCenter({ lat: lat, lng: lng });
+        ubicacionMap.setZoom(15);
     }
-    setTimeout(() => ubicacionMap.invalidateSize(), 150);
+    if (ubicacionMarker) {
+        ubicacionMarker.setPosition({ lat: lat, lng: lng });
+    } else {
+        ubicacionMarker = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: ubicacionMap
+        });
+    }
 }
 
 function renderSugerencias(selectedIndex = null) {

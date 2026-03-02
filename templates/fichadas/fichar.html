@@ -4,7 +4,6 @@
 
 {% block content %}
 <div class="container-fluid py-3">
-    <!-- Header -->
     <div class="row mb-3">
         <div class="col-12">
             <a href="{{ url_for('fichadas.index') }}" class="btn btn-sm btn-outline-secondary mb-2">
@@ -17,14 +16,12 @@
         </div>
     </div>
 
-    <!-- Mapa -->
     <div class="row mb-3">
         <div class="col-12">
             <div id="mapaFichada" style="height: 250px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6;"></div>
         </div>
     </div>
 
-    <!-- Estado de ubicacion -->
     <div class="row mb-3">
         <div class="col-12">
             <div id="estadoUbicacion" class="alert alert-info text-center">
@@ -33,7 +30,6 @@
         </div>
     </div>
 
-    <!-- Boton de fichada -->
     <div class="row mb-3">
         <div class="col-12">
             <button id="btnFichar"
@@ -47,7 +43,6 @@
         </div>
     </div>
 
-    <!-- Fichadas del dia -->
     {% if fichadas_del_dia %}
     <div class="row">
         <div class="col-12">
@@ -90,62 +85,57 @@
 {% endblock %}
 
 {% block scripts %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-.leaflet-container { border-radius: 12px; }
-</style>
 <script>
-const OBRA_LAT = {{ obra.latitud|float if obra.latitud else 'null' }};
-const OBRA_LNG = {{ obra.longitud|float if obra.longitud else 'null' }};
-const OBRA_ID = {{ obra.id }};
-const OBRA_RADIO = {{ obra.radio_fichada_metros or 200 }};
-const PROXIMO_TIPO = '{{ proximo_tipo }}';
-const ES_ADMIN = {{ 'true' if es_admin else 'false' }};
+var OBRA_LAT = {{ obra.latitud|float if obra.latitud else 'null' }};
+var OBRA_LNG = {{ obra.longitud|float if obra.longitud else 'null' }};
+var OBRA_ID = {{ obra.id }};
+var OBRA_RADIO = {{ obra.radio_fichada_metros or 200 }};
+var PROXIMO_TIPO = '{{ proximo_tipo }}';
+var ES_ADMIN = {{ 'true' if es_admin else 'false' }};
 
-let miLat = null, miLng = null, miPrecision = null;
-let mapa = null, marcadorObra = null, marcadorMio = null, circuloRadio = null;
-let gpsRespondio = false;
+var miLat = null, miLng = null, miPrecision = null;
+var mapa = null, marcadorObra = null, marcadorMio = null, circuloRadio = null;
+var gpsRespondio = false;
 
-// Inicializar mapa
-document.addEventListener('DOMContentLoaded', function() {
-    const centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG] : [-34.6037, -58.3816];
-    mapa = L.map('mapaFichada', { zoomControl: true }).setView(centro, 16);
+function initMap() {
+    var el = document.getElementById('mapaFichada');
+    var centro = OBRA_LAT ? { lat: OBRA_LAT, lng: OBRA_LNG } : { lat: -34.6037, lng: -58.3816 };
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap, &copy; CARTO',
-        maxZoom: 20, subdomains: 'abcd'
-    }).addTo(mapa);
-
-    // Fix de renderizado: forzar recalcular tamano del mapa
-    setTimeout(function() { mapa.invalidateSize(); }, 200);
-    setTimeout(function() { mapa.invalidateSize(); }, 600);
+    mapa = new google.maps.Map(el, {
+        center: centro,
+        zoom: 16,
+        mapTypeId: 'roadmap',
+        zoomControl: true,
+        streetViewControl: false,
+        fullscreenControl: false,
+        mapTypeControl: false
+    });
 
     if (OBRA_LAT) {
-        // Marcador de la obra (rojo)
-        const iconObra = L.divIcon({
-            html: '<i class="fas fa-building" style="color:#dc3545;font-size:24px;"></i>',
-            iconSize: [24, 24], iconAnchor: [12, 24], className: ''
+        marcadorObra = new google.maps.Marker({
+            position: { lat: OBRA_LAT, lng: OBRA_LNG },
+            map: mapa,
+            title: '{{ obra.nombre }}',
+            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
         });
-        marcadorObra = L.marker([OBRA_LAT, OBRA_LNG], { icon: iconObra })
-            .addTo(mapa)
-            .bindPopup('<b>{{ obra.nombre }}</b>');
 
-        // Circulo de radio permitido
-        circuloRadio = L.circle([OBRA_LAT, OBRA_LNG], {
+        circuloRadio = new google.maps.Circle({
+            map: mapa,
+            center: { lat: OBRA_LAT, lng: OBRA_LNG },
             radius: OBRA_RADIO,
-            color: '#0d6efd', fillColor: '#0d6efd', fillOpacity: 0.1,
-            weight: 2, dashArray: '5,5'
-        }).addTo(mapa);
+            strokeColor: '#0d6efd',
+            strokeWeight: 2,
+            strokeOpacity: 0.8,
+            fillColor: '#0d6efd',
+            fillOpacity: 0.1
+        });
     }
 
-    // Obtener ubicacion del usuario
+    // Iniciar GPS
     if (navigator.geolocation) {
         navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
             enableHighAccuracy: true, timeout: 20000, maximumAge: 5000
         });
-
-        // Fallback: si despues de 10 segundos no hay GPS, habilitar para admins
         setTimeout(function() {
             if (!gpsRespondio && ES_ADMIN) {
                 actualizarEstado('warning', 'No se pudo obtener tu ubicacion. Como admin podes fichar sin GPS.');
@@ -157,10 +147,10 @@ document.addEventListener('DOMContentLoaded', function() {
             actualizarEstado('warning', 'Tu navegador no soporta geolocalizacion. Como admin podes fichar igualmente.');
             document.getElementById('btnFichar').disabled = false;
         } else {
-            actualizarEstado('error', 'Tu navegador no soporta geolocalizacion');
+            actualizarEstado('error', 'Tu navegador no soporta geolocalizacion.');
         }
     }
-});
+}
 
 function onPosicion(pos) {
     gpsRespondio = true;
@@ -168,54 +158,50 @@ function onPosicion(pos) {
     miLng = pos.coords.longitude;
     miPrecision = pos.coords.accuracy;
 
-    // Marcador del usuario (azul)
-    const iconMio = L.divIcon({
-        html: '<i class="fas fa-user-circle" style="color:#0d6efd;font-size:22px;"></i>',
-        iconSize: [22, 22], iconAnchor: [11, 22], className: ''
-    });
-
     if (marcadorMio) {
-        marcadorMio.setLatLng([miLat, miLng]);
+        marcadorMio.setPosition({ lat: miLat, lng: miLng });
     } else {
-        marcadorMio = L.marker([miLat, miLng], { icon: iconMio })
-            .addTo(mapa).bindPopup('Tu ubicacion');
+        marcadorMio = new google.maps.Marker({
+            position: { lat: miLat, lng: miLng },
+            map: mapa,
+            title: 'Tu ubicacion',
+            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+        });
     }
 
-    // Ajustar vista para ver ambos marcadores
-    if (OBRA_LAT && marcadorObra) {
-        const bounds = L.latLngBounds([
-            [OBRA_LAT, OBRA_LNG], [miLat, miLng]
-        ]);
-        mapa.fitBounds(bounds.pad(0.3));
-    }
-
-    // Calcular distancia y habilitar/deshabilitar boton
-    const btn = document.getElementById('btnFichar');
     if (OBRA_LAT) {
-        const dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
-        const dentro = dist <= OBRA_RADIO;
+        var bounds = new google.maps.LatLngBounds();
+        bounds.extend({ lat: OBRA_LAT, lng: OBRA_LNG });
+        bounds.extend({ lat: miLat, lng: miLng });
+        mapa.fitBounds(bounds);
+    }
+
+    var btn = document.getElementById('btnFichar');
+    if (OBRA_LAT) {
+        var dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
+        var dentro = dist <= OBRA_RADIO;
 
         if (dentro) {
             actualizarEstado('ok', 'Estas a ' + Math.round(dist) + 'm de la obra (dentro del rango de ' + OBRA_RADIO + 'm)');
             btn.disabled = false;
         } else if (ES_ADMIN) {
-            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm de la obra (fuera del rango de ' + OBRA_RADIO + 'm). Como admin podes fichar igualmente.');
+            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm (fuera del rango). Como admin podes fichar igualmente.');
             btn.disabled = false;
         } else {
-            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm de la obra. Necesitas estar dentro de ' + OBRA_RADIO + 'm para fichar.');
+            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm. Necesitas estar dentro de ' + OBRA_RADIO + 'm.');
             btn.disabled = true;
         }
     } else {
-        actualizarEstado('error', 'La obra no tiene coordenadas configuradas. Contacta al administrador.');
+        actualizarEstado('error', 'La obra no tiene coordenadas configuradas.');
         btn.disabled = true;
     }
 }
 
 function onErrorGPS(err) {
-    let msg = 'No se pudo obtener tu ubicacion';
-    if (err.code === 1) msg = 'Permiso de ubicacion denegado. Habilita GPS en la configuracion del navegador.';
-    else if (err.code === 2) msg = 'Ubicacion no disponible. Asegurate de tener GPS activo.';
-    else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicacion. Intenta recargar la pagina.';
+    var msg = 'No se pudo obtener tu ubicacion.';
+    if (err.code === 1) msg = 'Permiso de ubicacion denegado. Habilita GPS en configuracion.';
+    else if (err.code === 2) msg = 'Ubicacion no disponible. Activa el GPS.';
+    else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicacion.';
 
     if (ES_ADMIN) {
         actualizarEstado('warning', msg + ' Como admin podes fichar igualmente.');
@@ -227,7 +213,7 @@ function onErrorGPS(err) {
 }
 
 function actualizarEstado(tipo, mensaje) {
-    const div = document.getElementById('estadoUbicacion');
+    var div = document.getElementById('estadoUbicacion');
     div.className = 'alert text-center';
     if (tipo === 'ok') {
         div.className += ' alert-success';
@@ -242,45 +228,33 @@ function actualizarEstado(tipo, mensaje) {
 }
 
 function calcularDistancia(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const rad = Math.PI / 180;
-    const dLat = (lat2 - lat1) * rad;
-    const dLon = (lon2 - lon1) * rad;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*rad) * Math.cos(lat2*rad) * Math.sin(dLon/2)**2;
+    var R = 6371000, rad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)*Math.sin(dLon/2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 async function registrarFichada() {
-    const btn = document.getElementById('btnFichar');
+    var btn = document.getElementById('btnFichar');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Registrando...';
 
     try {
-        const resp = await fetch('/fichadas/api/fichar', {
+        var resp = await fetch('/fichadas/api/fichar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                obra_id: OBRA_ID,
-                tipo: PROXIMO_TIPO,
-                latitud: miLat,
-                longitud: miLng,
-                precision_gps: miPrecision
+                obra_id: OBRA_ID, tipo: PROXIMO_TIPO,
+                latitud: miLat, longitud: miLng, precision_gps: miPrecision
             })
         });
-        const data = await resp.json();
+        var data = await resp.json();
 
         if (data.ok) {
-            const f = data.fichada;
-            let msg = PROXIMO_TIPO.toUpperCase() + ' registrado a las ' + f.fecha_hora;
-            if (f.distancia_metros !== null) {
-                msg += ' (' + f.distancia_metros + 'm de la obra)';
-            }
-            if (f.dentro_rango) {
-                actualizarEstado('ok', msg);
-            } else {
-                actualizarEstado('warning', msg + ' - FUERA DE RANGO');
-            }
-            // Recargar despues de 2 segundos
+            var f = data.fichada;
+            var msg = PROXIMO_TIPO.toUpperCase() + ' registrado a las ' + f.fecha_hora;
+            if (f.distancia_metros !== null) msg += ' (' + f.distancia_metros + 'm de la obra)';
+            actualizarEstado(f.dentro_rango ? 'ok' : 'warning', f.dentro_rango ? msg : msg + ' - FUERA DE RANGO');
             setTimeout(function() { window.location.reload(); }, 2000);
         } else {
             actualizarEstado('error', data.error || 'Error al registrar fichada');
@@ -294,4 +268,5 @@ async function registrarFichada() {
     }
 }
 </script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap&loading=async" async defer></script>
 {% endblock %}
