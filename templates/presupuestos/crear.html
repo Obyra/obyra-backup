@@ -3,6 +3,31 @@
 {% block title %}Nuevo Presupuesto - OBYRA IA{% endblock %}
 
 {% block content %}
+<style>
+.btn-remover-etapa {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #adb5bd;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.btn-remover-etapa:hover {
+    background: rgba(198, 40, 40, 0.1);
+    color: #c62828;
+}
+.btn-remover-etapa:active {
+    background: rgba(198, 40, 40, 0.2);
+    color: #c62828;
+}
+</style>
 <div class="container-fluid">
     <!-- Header -->
     <div class="row mb-4">
@@ -1176,7 +1201,7 @@ function actualizarVistaEtapas(renderBadges = true) {
                                 </div>
                                 <small class="text-muted d-block">${descripcion}</small>
                             </div>
-                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerEtapa('${slug}')" title="Remover etapa">
+                            <button type="button" class="btn btn-sm btn-remover-etapa" onclick="removerEtapa('${slug}')" title="Remover etapa">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>

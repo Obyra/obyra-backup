@@ -18,7 +18,9 @@
 
     <div class="row mb-3">
         <div class="col-12">
-            <div id="mapaFichada" style="height: 250px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6;"></div>
+            <div id="mapaFichada" style="height: 250px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6; background: #e9ecef; display: flex; align-items: center; justify-content: center;">
+                <span class="text-muted"><i class="fas fa-map-marked-alt me-2"></i>Cargando mapa...</span>
+            </div>
         </div>
     </div>
 
@@ -86,70 +88,56 @@
 
 {% block scripts %}
 <script>
+// ── Configuración ──
 var OBRA_LAT = {{ obra.latitud|float if obra.latitud else 'null' }};
 var OBRA_LNG = {{ obra.longitud|float if obra.longitud else 'null' }};
 var OBRA_ID = {{ obra.id }};
 var OBRA_RADIO = {{ obra.radio_fichada_metros or 200 }};
 var PROXIMO_TIPO = '{{ proximo_tipo }}';
 var ES_ADMIN = {{ 'true' if es_admin else 'false' }};
+var GOOGLE_KEY = '{{ google_maps_key }}';
 
+// ── Estado ──
 var miLat = null, miLng = null, miPrecision = null;
 var mapa = null, marcadorObra = null, marcadorMio = null, circuloRadio = null;
 var gpsRespondio = false;
+var googleMapsListo = false;
 
-function initMap() {
-    var el = document.getElementById('mapaFichada');
-    var centro = OBRA_LAT ? { lat: OBRA_LAT, lng: OBRA_LNG } : { lat: -34.6037, lng: -58.3816 };
+// ══════════════════════════════════════════════
+// 1. GPS — arranca INMEDIATAMENTE, sin esperar Google Maps
+// ══════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function() {
+    iniciarGPS();
+});
 
-    mapa = new google.maps.Map(el, {
-        center: centro,
-        zoom: 16,
-        mapTypeId: 'roadmap',
-        zoomControl: true,
-        streetViewControl: false,
-        fullscreenControl: false,
-        mapTypeControl: false
-    });
-
-    if (OBRA_LAT) {
-        marcadorObra = new google.maps.Marker({
-            position: { lat: OBRA_LAT, lng: OBRA_LNG },
-            map: mapa,
-            title: '{{ obra.nombre }}',
-            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
-        });
-
-        circuloRadio = new google.maps.Circle({
-            map: mapa,
-            center: { lat: OBRA_LAT, lng: OBRA_LNG },
-            radius: OBRA_RADIO,
-            strokeColor: '#0d6efd',
-            strokeWeight: 2,
-            strokeOpacity: 0.8,
-            fillColor: '#0d6efd',
-            fillOpacity: 0.1
-        });
-    }
-
-    // Iniciar GPS
-    if (navigator.geolocation) {
-        navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
-            enableHighAccuracy: true, timeout: 20000, maximumAge: 5000
-        });
-        setTimeout(function() {
-            if (!gpsRespondio && ES_ADMIN) {
-                actualizarEstado('warning', 'No se pudo obtener tu ubicacion. Como admin podes fichar sin GPS.');
-                document.getElementById('btnFichar').disabled = false;
-            }
-        }, 10000);
-    } else {
+function iniciarGPS() {
+    if (!navigator.geolocation) {
         if (ES_ADMIN) {
             actualizarEstado('warning', 'Tu navegador no soporta geolocalizacion. Como admin podes fichar igualmente.');
             document.getElementById('btnFichar').disabled = false;
         } else {
-            actualizarEstado('error', 'Tu navegador no soporta geolocalizacion.');
+            actualizarEstado('error', 'Tu navegador no soporta geolocalizacion. Usa un navegador moderno.');
         }
+        return;
     }
+
+    navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 5000
+    });
+
+    // Fallback para admins si GPS no responde en 10s
+    setTimeout(function() {
+        if (!gpsRespondio) {
+            if (ES_ADMIN) {
+                actualizarEstado('warning', 'No se pudo obtener tu ubicacion. Como admin podes fichar sin GPS.');
+                document.getElementById('btnFichar').disabled = false;
+            } else {
+                actualizarEstado('error', 'No se pudo obtener tu ubicacion. Verifica que el GPS este activado y que diste permiso de ubicacion.');
+            }
+        }
+    }, 10000);
 }
 
 function onPosicion(pos) {
@@ -158,50 +146,43 @@ function onPosicion(pos) {
     miLng = pos.coords.longitude;
     miPrecision = pos.coords.accuracy;
 
-    if (marcadorMio) {
-        marcadorMio.setPosition({ lat: miLat, lng: miLng });
-    } else {
-        marcadorMio = new google.maps.Marker({
-            position: { lat: miLat, lng: miLng },
-            map: mapa,
-            title: 'Tu ubicacion',
-            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
-        });
-    }
+    // Actualizar mapa si está disponible
+    actualizarMarcadorMio();
 
-    if (OBRA_LAT) {
-        var bounds = new google.maps.LatLngBounds();
-        bounds.extend({ lat: OBRA_LAT, lng: OBRA_LNG });
-        bounds.extend({ lat: miLat, lng: miLng });
-        mapa.fitBounds(bounds);
-    }
-
+    // Evaluar distancia y habilitar/deshabilitar botón
     var btn = document.getElementById('btnFichar');
-    if (OBRA_LAT) {
-        var dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
-        var dentro = dist <= OBRA_RADIO;
 
-        if (dentro) {
-            actualizarEstado('ok', 'Estas a ' + Math.round(dist) + 'm de la obra (dentro del rango de ' + OBRA_RADIO + 'm)');
-            btn.disabled = false;
-        } else if (ES_ADMIN) {
-            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm (fuera del rango). Como admin podes fichar igualmente.');
+    if (!OBRA_LAT) {
+        if (ES_ADMIN) {
+            actualizarEstado('warning', 'La obra no tiene coordenadas. Como admin podes fichar igualmente.');
             btn.disabled = false;
         } else {
-            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm. Necesitas estar dentro de ' + OBRA_RADIO + 'm.');
+            actualizarEstado('error', 'La obra no tiene coordenadas configuradas. Contacta al administrador.');
             btn.disabled = true;
         }
+        return;
+    }
+
+    var dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
+    var dentro = dist <= OBRA_RADIO;
+
+    if (dentro) {
+        actualizarEstado('ok', 'Estas a ' + Math.round(dist) + 'm de la obra (dentro del rango de ' + OBRA_RADIO + 'm)');
+        btn.disabled = false;
+    } else if (ES_ADMIN) {
+        actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm (fuera del rango de ' + OBRA_RADIO + 'm). Como admin podes fichar igualmente.');
+        btn.disabled = false;
     } else {
-        actualizarEstado('error', 'La obra no tiene coordenadas configuradas.');
+        actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm de la obra. Necesitas estar dentro de ' + OBRA_RADIO + 'm para fichar.');
         btn.disabled = true;
     }
 }
 
 function onErrorGPS(err) {
     var msg = 'No se pudo obtener tu ubicacion.';
-    if (err.code === 1) msg = 'Permiso de ubicacion denegado. Habilita GPS en configuracion.';
-    else if (err.code === 2) msg = 'Ubicacion no disponible. Activa el GPS.';
-    else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicacion.';
+    if (err.code === 1) msg = 'Permiso de ubicacion denegado. Habilita GPS en la configuracion del navegador.';
+    else if (err.code === 2) msg = 'Ubicacion no disponible. Verifica que el GPS este activado.';
+    else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicacion. Intenta en un lugar con mejor señal.';
 
     if (ES_ADMIN) {
         actualizarEstado('warning', msg + ' Como admin podes fichar igualmente.');
@@ -212,6 +193,111 @@ function onErrorGPS(err) {
     }
 }
 
+// ══════════════════════════════════════════════
+// 2. Google Maps — se carga en paralelo como mejora visual
+// ══════════════════════════════════════════════
+function initMap() {
+    googleMapsListo = true;
+    var el = document.getElementById('mapaFichada');
+    el.innerHTML = '';
+    el.style.display = 'block';
+
+    var centro = OBRA_LAT ? { lat: OBRA_LAT, lng: OBRA_LNG } : { lat: -34.6037, lng: -58.3816 };
+
+    try {
+        mapa = new google.maps.Map(el, {
+            center: centro,
+            zoom: 16,
+            mapTypeId: 'roadmap',
+            zoomControl: true,
+            streetViewControl: false,
+            fullscreenControl: false,
+            mapTypeControl: false
+        });
+
+        if (OBRA_LAT) {
+            marcadorObra = new google.maps.Marker({
+                position: { lat: OBRA_LAT, lng: OBRA_LNG },
+                map: mapa,
+                title: '{{ obra.nombre }}',
+                icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
+            });
+
+            circuloRadio = new google.maps.Circle({
+                map: mapa,
+                center: { lat: OBRA_LAT, lng: OBRA_LNG },
+                radius: OBRA_RADIO,
+                strokeColor: '#0d6efd',
+                strokeWeight: 2,
+                strokeOpacity: 0.8,
+                fillColor: '#0d6efd',
+                fillOpacity: 0.1
+            });
+        }
+
+        // Si ya tenemos posición GPS, mostrar marcador
+        if (miLat !== null) {
+            actualizarMarcadorMio();
+        }
+    } catch (e) {
+        console.error('Error inicializando Google Maps:', e);
+        el.innerHTML = '<span class="text-muted"><i class="fas fa-exclamation-triangle me-2"></i>Error cargando mapa</span>';
+    }
+}
+
+function actualizarMarcadorMio() {
+    if (!googleMapsListo || !mapa || miLat === null) return;
+
+    try {
+        if (marcadorMio) {
+            marcadorMio.setPosition({ lat: miLat, lng: miLng });
+        } else {
+            marcadorMio = new google.maps.Marker({
+                position: { lat: miLat, lng: miLng },
+                map: mapa,
+                title: 'Tu ubicacion',
+                icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+            });
+        }
+
+        if (OBRA_LAT) {
+            var bounds = new google.maps.LatLngBounds();
+            bounds.extend({ lat: OBRA_LAT, lng: OBRA_LNG });
+            bounds.extend({ lat: miLat, lng: miLng });
+            mapa.fitBounds(bounds);
+        }
+    } catch (e) {
+        console.error('Error actualizando marcador:', e);
+    }
+}
+
+// Si Google Maps falla al cargar (red, 404, etc.)
+function onGoogleMapsError() {
+    var el = document.getElementById('mapaFichada');
+    el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa no disponible</span>';
+    console.warn('Google Maps no pudo cargarse. GPS sigue funcionando.');
+}
+
+// Si la API key de Google Maps es inválida o sin billing
+function gm_authFailure() {
+    var el = document.getElementById('mapaFichada');
+    el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Error de autenticacion del mapa</span>';
+    console.warn('Google Maps API key inválida o sin billing. GPS sigue funcionando.');
+}
+
+// Timeout: si Google Maps no cargó en 8 segundos, mostrar mensaje
+setTimeout(function() {
+    if (!googleMapsListo) {
+        var el = document.getElementById('mapaFichada');
+        if (el.innerHTML.indexOf('Cargando mapa') > -1) {
+            el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa tardando en cargar...</span>';
+        }
+    }
+}, 8000);
+
+// ══════════════════════════════════════════════
+// 3. Utilidades
+// ══════════════════════════════════════════════
 function actualizarEstado(tipo, mensaje) {
     var div = document.getElementById('estadoUbicacion');
     div.className = 'alert text-center';
@@ -234,6 +320,9 @@ function calcularDistancia(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+// ══════════════════════════════════════════════
+// 4. Registrar fichada
+// ══════════════════════════════════════════════
 async function registrarFichada() {
     var btn = document.getElementById('btnFichar');
     btn.disabled = true;
@@ -268,5 +357,11 @@ async function registrarFichada() {
     }
 }
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap&loading=async" async defer></script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap" async defer onerror="onGoogleMapsError()"></script>
+{% else %}
+<script>
+document.getElementById('mapaFichada').innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>API key de Google Maps no configurada</span>';
+</script>
+{% endif %}
 {% endblock %}

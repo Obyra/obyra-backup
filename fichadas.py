@@ -189,26 +189,38 @@ def api_fichar():
     distancia = None
     dentro_rango = False
     radio = obra.radio_fichada_metros or 200
+    es_admin = _es_admin(current_user)
 
-    if not lat or not lng:
-        return jsonify({'ok': False, 'error': 'No se pudo obtener tu ubicación GPS. Habilitá la geolocalización en tu navegador.'}), 400
+    tiene_gps = lat is not None and lng is not None
+    tiene_coords_obra = obra.latitud is not None and obra.longitud is not None
 
-    if not obra.latitud or not obra.longitud:
-        return jsonify({'ok': False, 'error': 'La obra no tiene coordenadas configuradas. Contactá al administrador.'}), 400
+    if not tiene_gps:
+        if not es_admin:
+            return jsonify({'ok': False, 'error': 'No se pudo obtener tu ubicación GPS. Habilitá la geolocalización en tu navegador.'}), 400
+        # Admin sin GPS: permitir fichar sin validación de distancia
+    elif not tiene_coords_obra:
+        if not es_admin:
+            return jsonify({'ok': False, 'error': 'La obra no tiene coordenadas configuradas. Contactá al administrador.'}), 400
+        # Admin con GPS pero obra sin coords: permitir fichar
+    else:
+        # Ambos tienen coordenadas: calcular distancia
+        distancia = calcular_distancia_metros(
+            float(lat), float(lng),
+            float(obra.latitud), float(obra.longitud))
+        dentro_rango = distancia <= radio
 
-    distancia = calcular_distancia_metros(
-        float(lat), float(lng),
-        float(obra.latitud), float(obra.longitud))
-    dentro_rango = distancia <= radio
+        # Operarios: deben estar dentro del rango. Admins: pueden fichar desde cualquier lugar.
+        if not dentro_rango and not es_admin:
+            return jsonify({
+                'ok': False,
+                'error': f'Estás a {round(distancia)}m de la obra. Necesitás estar dentro de {radio}m para fichar.',
+                'distancia_metros': round(distancia, 1),
+                'radio_metros': radio,
+            }), 403
 
-    # Operarios: deben estar dentro del rango. Admins: pueden fichar desde cualquier lugar.
-    if not dentro_rango and not _es_admin(current_user):
-        return jsonify({
-            'ok': False,
-            'error': f'Estás a {round(distancia)}m de la obra. Necesitás estar dentro de {radio}m para fichar.',
-            'distancia_metros': round(distancia, 1),
-            'radio_metros': radio,
-        }), 403
+    # Para admins fuera de rango, marcar dentro_rango como False pero permitir
+    if es_admin and distancia is not None and not dentro_rango:
+        dentro_rango = False
 
     fichada = Fichada(
         usuario_id=current_user.id,
