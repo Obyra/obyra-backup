@@ -12,7 +12,7 @@
             </a>
             <h5 class="mb-1"><i class="fas fa-building me-2"></i>{{ obra.nombre }}</h5>
             <p class="text-muted small mb-0">
-                <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion or 'Sin dirección' }}
+                <i class="fas fa-map-marker-alt me-1"></i>{{ obra.direccion or 'Sin direccion' }}
             </p>
         </div>
     </div>
@@ -24,16 +24,16 @@
         </div>
     </div>
 
-    <!-- Estado de ubicación -->
+    <!-- Estado de ubicacion -->
     <div class="row mb-3">
         <div class="col-12">
             <div id="estadoUbicacion" class="alert alert-info text-center">
-                <i class="fas fa-spinner fa-spin me-2"></i>Obteniendo tu ubicación...
+                <i class="fas fa-spinner fa-spin me-2"></i>Obteniendo tu ubicacion...
             </div>
         </div>
     </div>
 
-    <!-- Botón de fichada -->
+    <!-- Boton de fichada -->
     <div class="row mb-3">
         <div class="col-12">
             <button id="btnFichar"
@@ -47,7 +47,7 @@
         </div>
     </div>
 
-    <!-- Fichadas del día -->
+    <!-- Fichadas del dia -->
     {% if fichadas_del_dia %}
     <div class="row">
         <div class="col-12">
@@ -90,6 +90,7 @@
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 .leaflet-container { border-radius: 12px; }
@@ -104,27 +105,21 @@ const ES_ADMIN = {{ 'true' if es_admin else 'false' }};
 
 let miLat = null, miLng = null, miPrecision = null;
 let mapa = null, marcadorObra = null, marcadorMio = null, circuloRadio = null;
+let gpsRespondio = false;
 
 // Inicializar mapa
 document.addEventListener('DOMContentLoaded', function() {
     const centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG] : [-34.6037, -58.3816];
     mapa = L.map('mapaFichada', { zoomControl: true }).setView(centro, 16);
 
-    {% if google_maps_key %}
-    L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', {
-        subdomains: ['0', '1', '2', '3'],
-        attribution: '© Google Maps',
-        maxZoom: 20
-    }).addTo(mapa);
-    {% else %}
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap, &copy; CARTO',
         maxZoom: 20, subdomains: 'abcd'
     }).addTo(mapa);
-    {% endif %}
 
-    // Fix de renderizado: forzar recalcular tamaño del mapa
+    // Fix de renderizado: forzar recalcular tamano del mapa
     setTimeout(function() { mapa.invalidateSize(); }, 200);
+    setTimeout(function() { mapa.invalidateSize(); }, 600);
 
     if (OBRA_LAT) {
         // Marcador de la obra (rojo)
@@ -136,7 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .addTo(mapa)
             .bindPopup('<b>{{ obra.nombre }}</b>');
 
-        // Círculo de radio permitido
+        // Circulo de radio permitido
         circuloRadio = L.circle([OBRA_LAT, OBRA_LNG], {
             radius: OBRA_RADIO,
             color: '#0d6efd', fillColor: '#0d6efd', fillOpacity: 0.1,
@@ -144,17 +139,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }).addTo(mapa);
     }
 
-    // Obtener ubicación del usuario
+    // Obtener ubicacion del usuario
     if (navigator.geolocation) {
         navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
-            enableHighAccuracy: true, timeout: 15000, maximumAge: 5000
+            enableHighAccuracy: true, timeout: 20000, maximumAge: 5000
         });
+
+        // Fallback: si despues de 10 segundos no hay GPS, habilitar para admins
+        setTimeout(function() {
+            if (!gpsRespondio && ES_ADMIN) {
+                actualizarEstado('warning', 'No se pudo obtener tu ubicacion. Como admin podes fichar sin GPS.');
+                document.getElementById('btnFichar').disabled = false;
+            }
+        }, 10000);
     } else {
-        actualizarEstado('error', 'Tu navegador no soporta geolocalización');
+        if (ES_ADMIN) {
+            actualizarEstado('warning', 'Tu navegador no soporta geolocalizacion. Como admin podes fichar igualmente.');
+            document.getElementById('btnFichar').disabled = false;
+        } else {
+            actualizarEstado('error', 'Tu navegador no soporta geolocalizacion');
+        }
     }
 });
 
 function onPosicion(pos) {
+    gpsRespondio = true;
     miLat = pos.coords.latitude;
     miLng = pos.coords.longitude;
     miPrecision = pos.coords.accuracy;
@@ -169,7 +178,7 @@ function onPosicion(pos) {
         marcadorMio.setLatLng([miLat, miLng]);
     } else {
         marcadorMio = L.marker([miLat, miLng], { icon: iconMio })
-            .addTo(mapa).bindPopup('Tu ubicación');
+            .addTo(mapa).bindPopup('Tu ubicacion');
     }
 
     // Ajustar vista para ver ambos marcadores
@@ -180,35 +189,41 @@ function onPosicion(pos) {
         mapa.fitBounds(bounds.pad(0.3));
     }
 
-    // Calcular distancia y habilitar/deshabilitar botón
+    // Calcular distancia y habilitar/deshabilitar boton
     const btn = document.getElementById('btnFichar');
     if (OBRA_LAT) {
         const dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
         const dentro = dist <= OBRA_RADIO;
 
         if (dentro) {
-            actualizarEstado('ok', `Estás a ${Math.round(dist)}m de la obra (dentro del rango de ${OBRA_RADIO}m)`);
+            actualizarEstado('ok', 'Estas a ' + Math.round(dist) + 'm de la obra (dentro del rango de ' + OBRA_RADIO + 'm)');
             btn.disabled = false;
         } else if (ES_ADMIN) {
-            actualizarEstado('warning', `Estás a ${Math.round(dist)}m de la obra (fuera del rango de ${OBRA_RADIO}m). Como admin podés fichar igualmente.`);
+            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm de la obra (fuera del rango de ' + OBRA_RADIO + 'm). Como admin podes fichar igualmente.');
             btn.disabled = false;
         } else {
-            actualizarEstado('warning', `Estás a ${Math.round(dist)}m de la obra. Necesitás estar dentro de ${OBRA_RADIO}m para fichar.`);
+            actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm de la obra. Necesitas estar dentro de ' + OBRA_RADIO + 'm para fichar.');
             btn.disabled = true;
         }
     } else {
-        actualizarEstado('error', 'La obra no tiene coordenadas configuradas. Contactá al administrador.');
+        actualizarEstado('error', 'La obra no tiene coordenadas configuradas. Contacta al administrador.');
         btn.disabled = true;
     }
 }
 
 function onErrorGPS(err) {
-    let msg = 'No se pudo obtener tu ubicación';
-    if (err.code === 1) msg = 'Permiso de ubicación denegado. Habilitalo en la configuración del navegador.';
-    else if (err.code === 2) msg = 'Ubicación no disponible';
-    else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicación';
-    actualizarEstado('error', msg);
-    document.getElementById('btnFichar').disabled = true;
+    let msg = 'No se pudo obtener tu ubicacion';
+    if (err.code === 1) msg = 'Permiso de ubicacion denegado. Habilita GPS en la configuracion del navegador.';
+    else if (err.code === 2) msg = 'Ubicacion no disponible. Asegurate de tener GPS activo.';
+    else if (err.code === 3) msg = 'Tiempo agotado obteniendo ubicacion. Intenta recargar la pagina.';
+
+    if (ES_ADMIN) {
+        actualizarEstado('warning', msg + ' Como admin podes fichar igualmente.');
+        document.getElementById('btnFichar').disabled = false;
+    } else {
+        actualizarEstado('error', msg);
+        document.getElementById('btnFichar').disabled = true;
+    }
 }
 
 function actualizarEstado(tipo, mensaje) {
@@ -216,13 +231,13 @@ function actualizarEstado(tipo, mensaje) {
     div.className = 'alert text-center';
     if (tipo === 'ok') {
         div.className += ' alert-success';
-        div.innerHTML = `<i class="fas fa-check-circle me-2"></i>${mensaje}`;
+        div.innerHTML = '<i class="fas fa-check-circle me-2"></i>' + mensaje;
     } else if (tipo === 'warning') {
         div.className += ' alert-warning';
-        div.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${mensaje}`;
+        div.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' + mensaje;
     } else {
         div.className += ' alert-danger';
-        div.innerHTML = `<i class="fas fa-times-circle me-2"></i>${mensaje}`;
+        div.innerHTML = '<i class="fas fa-times-circle me-2"></i>' + mensaje;
     }
 }
 
@@ -256,26 +271,26 @@ async function registrarFichada() {
 
         if (data.ok) {
             const f = data.fichada;
-            let msg = `${PROXIMO_TIPO.toUpperCase()} registrado a las ${f.fecha_hora}`;
+            let msg = PROXIMO_TIPO.toUpperCase() + ' registrado a las ' + f.fecha_hora;
             if (f.distancia_metros !== null) {
-                msg += ` (${f.distancia_metros}m de la obra)`;
+                msg += ' (' + f.distancia_metros + 'm de la obra)';
             }
             if (f.dentro_rango) {
                 actualizarEstado('ok', msg);
             } else {
                 actualizarEstado('warning', msg + ' - FUERA DE RANGO');
             }
-            // Recargar después de 2 segundos
-            setTimeout(() => { window.location.reload(); }, 2000);
+            // Recargar despues de 2 segundos
+            setTimeout(function() { window.location.reload(); }, 2000);
         } else {
             actualizarEstado('error', data.error || 'Error al registrar fichada');
             btn.disabled = false;
-            btn.innerHTML = `<i class="fas fa-${PROXIMO_TIPO === 'egreso' ? 'sign-out-alt' : 'sign-in-alt'} me-2"></i>FICHAR ${PROXIMO_TIPO.toUpperCase()}`;
+            btn.innerHTML = '<i class="fas fa-' + (PROXIMO_TIPO === 'egreso' ? 'sign-out-alt' : 'sign-in-alt') + ' me-2"></i>FICHAR ' + PROXIMO_TIPO.toUpperCase();
         }
     } catch (err) {
-        actualizarEstado('error', 'Error de conexión: ' + err.message);
+        actualizarEstado('error', 'Error de conexion: ' + err.message);
         btn.disabled = false;
-        btn.innerHTML = `<i class="fas fa-${PROXIMO_TIPO === 'egreso' ? 'sign-out-alt' : 'sign-in-alt'} me-2"></i>FICHAR ${PROXIMO_TIPO.toUpperCase()}`;
+        btn.innerHTML = '<i class="fas fa-' + (PROXIMO_TIPO === 'egreso' ? 'sign-out-alt' : 'sign-in-alt') + ' me-2"></i>FICHAR ' + PROXIMO_TIPO.toUpperCase();
     }
 }
 </script>
