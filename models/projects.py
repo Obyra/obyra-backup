@@ -494,7 +494,7 @@ class Fichada(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     tipo = db.Column(db.String(10), nullable=False)  # 'ingreso' o 'egreso'
-    fecha_hora = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    fecha_hora = db.Column(db.DateTime, nullable=False)
     latitud = db.Column(db.Numeric(10, 8))
     longitud = db.Column(db.Numeric(11, 8))
     precision_gps = db.Column(db.Numeric(8, 2))  # metros

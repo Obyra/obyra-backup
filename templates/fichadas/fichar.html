@@ -116,12 +116,28 @@
 <!-- Leaflet JS (CSS ya está en base.html) -->
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 
-<!-- Forzar actualización del Service Worker -->
+<!-- Forzar actualización del Service Worker y limpiar caches viejos -->
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistration().then(function(reg) {
-        if (reg) reg.update();
+        if (reg) {
+            reg.update();
+            // Si hay un SW en espera, activarlo
+            if (reg.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+        }
     });
+    // Limpiar caches de tiles viejos que el SW anterior pudo haber interceptado
+    if (window.caches) {
+        caches.keys().then(function(names) {
+            names.forEach(function(name) {
+                if (name.indexOf('v3.2.0') === -1 && name.startsWith('obyra-')) {
+                    caches.delete(name);
+                }
+            });
+        });
+    }
 }
 </script>
 

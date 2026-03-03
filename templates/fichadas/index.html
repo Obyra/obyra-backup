@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Fichada - Mis Obras{% endblock %}
+{% block title %}Fichada - Asistencia{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
@@ -8,9 +8,7 @@
         <div class="col-12 d-flex justify-content-between align-items-center">
             <div>
                 <h4 class="mb-1"><i class="fas fa-fingerprint me-2"></i>Fichada de Asistencia</h4>
-                <p class="text-muted mb-0">
-                    {% if es_admin %}Panel de asistencia del equipo{% else %}Selecciona una obra para registrar tu ingreso o egreso{% endif %}
-                </p>
+                <p class="text-muted mb-0 small" id="horaServidor"></p>
             </div>
             <a href="{{ url_for('fichadas.historial') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-history me-1"></i>Historial
@@ -18,79 +16,291 @@
         </div>
     </div>
 
-    {% if not obras_info %}
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle me-2"></i>No tenes obras asignadas activas.
+    {# ── Botones rapidos para fichar ── #}
+    {% if obras_info %}
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex flex-wrap gap-2">
+                {% for info in obras_info %}
+                <a href="{{ url_for('fichadas.fichar', obra_id=info.obra.id) }}"
+                   class="btn btn-{{ 'danger' if info.proximo_tipo == 'egreso' else 'success' }} btn-sm">
+                    <i class="fas fa-{{ 'sign-out-alt' if info.proximo_tipo == 'egreso' else 'sign-in-alt' }} me-1"></i>
+                    {{ info.obra.nombre }} - {{ info.proximo_tipo|upper }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
     </div>
-    {% else %}
-    <div class="row">
-        {% for info in obras_info %}
-        <div class="col-12 col-md-6 col-lg-4 mb-3">
-            <div class="card h-100 border-{{ 'success' if info.proximo_tipo == 'egreso' else 'primary' }}">
-                <div class="card-body">
-                    <h6 class="card-title fw-bold">
-                        <i class="fas fa-building me-1"></i>{{ info.obra.nombre }}
-                    </h6>
-                    <p class="text-muted small mb-2">
-                        <i class="fas fa-map-marker-alt me-1"></i>{{ info.obra.direccion or 'Sin direccion' }}
-                    </p>
+    {% endif %}
 
-                    {% if info.ultima_fichada %}
-                    <div class="mb-2">
-                        <span class="badge bg-{{ 'success' if info.ultima_fichada.tipo == 'ingreso' else 'secondary' }}">
-                            <i class="fas fa-{{ 'sign-in-alt' if info.ultima_fichada.tipo == 'ingreso' else 'sign-out-alt' }} me-1"></i>
-                            Ultimo {{ info.ultima_fichada.tipo }}: {{ info.ultima_fichada.fecha_hora.strftime('%H:%M') }}
-                        </span>
-                        {% if info.ultima_fichada.dentro_rango %}
-                        <span class="badge bg-success"><i class="fas fa-check-circle"></i></span>
-                        {% else %}
-                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle"></i></span>
-                        {% endif %}
-                    </div>
-                    {% else %}
-                    <div class="mb-2">
-                        <span class="badge bg-light text-dark">Sin fichada hoy</span>
-                    </div>
-                    {% endif %}
-
-                    {# Admin: resumen de operarios en obra #}
-                    {% if es_admin and info.ficharon_hoy is defined %}
-                    <div class="border-top pt-2 mt-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <small class="text-muted fw-semibold">
-                                <i class="fas fa-users me-1"></i>Equipo hoy
-                            </small>
-                            {% if info.en_obra_count > 0 %}
-                            <span class="badge bg-success">{{ info.en_obra_count }} en obra</span>
-                            {% endif %}
-                        </div>
-                        {% if info.ficharon_hoy %}
-                        {% for op in info.ficharon_hoy %}
-                        <div class="d-flex justify-content-between align-items-center py-1" style="font-size: 0.8rem;">
-                            <span>
-                                <i class="fas fa-circle me-1 {{ 'text-success' if op.en_obra else 'text-secondary' }}" style="font-size: 0.5rem;"></i>
-                                {{ op.usuario.nombre_completo }}
-                            </span>
-                            <span class="text-muted">{{ op.horas_str }}</span>
-                        </div>
-                        {% endfor %}
-                        {% else %}
-                        <small class="text-muted">Nadie ficho hoy</small>
-                        {% endif %}
-                    </div>
-                    {% endif %}
+    {# ── Consulta de Fichadas ── #}
+    <div class="row mb-2">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2">
+                    <h6 class="mb-0"><i class="fas fa-search me-1 text-primary"></i>Consulta de Fichadas</h6>
                 </div>
-                <div class="card-footer bg-transparent">
-                    <a href="{{ url_for('fichadas.fichar', obra_id=info.obra.id) }}"
-                       class="btn btn-{{ 'danger' if info.proximo_tipo == 'egreso' else 'primary' }} w-100">
-                        <i class="fas fa-{{ 'sign-out-alt' if info.proximo_tipo == 'egreso' else 'sign-in-alt' }} me-2"></i>
-                        Fichar {{ info.proximo_tipo|upper }}
-                    </a>
+                <div class="card-body py-2">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small mb-1">Obra</label>
+                            <select id="selObra" class="form-select form-select-sm" onchange="onObraChange()">
+                                <option value="">Seleccionar obra...</option>
+                                {% for info in obras_info %}
+                                <option value="{{ info.obra.id }}">{{ info.obra.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% if es_admin %}
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small mb-1">Usuario</label>
+                            <select id="selUsuario" class="form-select form-select-sm" onchange="cargarFichadas()" disabled>
+                                <option value="">Todos los usuarios</option>
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div class="col-12 col-md-4">
+                            <div class="btn-group btn-group-sm w-100" role="group">
+                                <button type="button" class="btn btn-outline-primary active" data-periodo="hoy" onclick="selPeriodo(this)">Hoy</button>
+                                <button type="button" class="btn btn-outline-primary" data-periodo="semana" onclick="selPeriodo(this)">7 dias</button>
+                                <button type="button" class="btn btn-outline-primary" data-periodo="quincena" onclick="selPeriodo(this)">14 dias</button>
+                                <button type="button" class="btn btn-outline-primary" data-periodo="mes" onclick="selPeriodo(this)">Mes</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        {% endfor %}
     </div>
-    {% endif %}
+
+    {# ── Resultados ── #}
+    <div class="row">
+        <div class="col-12">
+            <div id="resultados">
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-hand-pointer fa-2x mb-2 d-block"></i>
+                    <p class="mb-0">Selecciona una obra para ver las fichadas</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var ES_ADMIN = {{ 'true' if es_admin else 'false' }};
+var periodoActual = 'hoy';
+
+function selPeriodo(btn) {
+    btn.closest('.btn-group').querySelectorAll('.btn').forEach(function(b) {
+        b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    periodoActual = btn.getAttribute('data-periodo');
+    cargarFichadas();
+}
+
+function onObraChange() {
+    var obraId = document.getElementById('selObra').value;
+    if (!obraId) {
+        if (ES_ADMIN) {
+            var sel = document.getElementById('selUsuario');
+            sel.innerHTML = '<option value="">Todos los usuarios</option>';
+            sel.disabled = true;
+        }
+        document.getElementById('resultados').innerHTML =
+            '<div class="text-center py-4 text-muted"><i class="fas fa-hand-pointer fa-2x mb-2 d-block"></i><p class="mb-0">Selecciona una obra para ver las fichadas</p></div>';
+        return;
+    }
+
+    // Cargar usuarios de la obra (solo admin)
+    if (ES_ADMIN) {
+        fetch('/fichadas/api/usuarios_obra/' + obraId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('selUsuario');
+                sel.innerHTML = '<option value="">Todos los usuarios</option>';
+                if (data.ok && data.usuarios) {
+                    data.usuarios.forEach(function(u) {
+                        sel.innerHTML += '<option value="' + u.id + '">' + u.nombre + '</option>';
+                    });
+                }
+                sel.disabled = false;
+            })
+            .catch(function() {});
+    }
+
+    cargarFichadas();
+}
+
+function cargarFichadas() {
+    var obraId = document.getElementById('selObra').value;
+    if (!obraId) return;
+
+    var usuarioId = '';
+    if (ES_ADMIN) {
+        usuarioId = document.getElementById('selUsuario').value;
+    }
+
+    var url = '/fichadas/api/consulta?obra_id=' + obraId + '&periodo=' + periodoActual;
+    if (usuarioId) url += '&usuario_id=' + usuarioId;
+
+    document.getElementById('resultados').innerHTML =
+        '<div class="text-center py-3"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></div>';
+
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                document.getElementById('resultados').innerHTML =
+                    '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>' + (data.error || 'Error') + '</div>';
+                return;
+            }
+
+            // Mostrar hora del servidor
+            document.getElementById('horaServidor').innerHTML =
+                '<i class="fas fa-clock me-1"></i>Hora Argentina: ' + data.hora_servidor +
+                ' | Periodo: ' + data.periodo.desde + ' - ' + data.periodo.hasta;
+
+            renderResultados(data.resultados);
+        })
+        .catch(function(err) {
+            document.getElementById('resultados').innerHTML =
+                '<div class="alert alert-danger"><i class="fas fa-wifi me-2"></i>Error de conexion: ' + err.message + '</div>';
+        });
+}
+
+function renderResultados(resultados) {
+    var container = document.getElementById('resultados');
+
+    if (!resultados || resultados.length === 0) {
+        container.innerHTML =
+            '<div class="text-center py-4 text-muted">' +
+            '<i class="fas fa-inbox fa-2x mb-2 d-block"></i>' +
+            '<p class="mb-0">No hay fichadas en este periodo</p></div>';
+        return;
+    }
+
+    var html = '';
+
+    resultados.forEach(function(usuario) {
+        html += '<div class="card border-0 shadow-sm mb-3">';
+
+        // Header del usuario
+        html += '<div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">';
+        html += '<div><i class="fas fa-user me-1 text-primary"></i><strong>' + usuario.usuario_nombre + '</strong></div>';
+        html += '<span class="badge bg-primary fs-6"><i class="fas fa-clock me-1"></i>' + usuario.total_horas_str + '</span>';
+        html += '</div>';
+
+        html += '<div class="card-body p-0">';
+
+        // Tabla por dia
+        usuario.dias.forEach(function(dia) {
+            // Header del dia
+            html += '<div class="bg-light px-3 py-1 border-bottom">';
+            html += '<small class="fw-semibold">' + dia.dia_semana + ' ' + dia.fecha + '</small>';
+            html += '<span class="float-end badge bg-secondary">' + dia.horas_str + '</span>';
+            html += '</div>';
+
+            // Fichadas del dia como pares ingreso->egreso
+            if (dia.pares && dia.pares.length > 0) {
+                html += '<table class="table table-sm mb-0">';
+                html += '<tbody>';
+                dia.pares.forEach(function(par) {
+                    html += '<tr>';
+                    html += '<td class="ps-3" style="width:90px;"><span class="badge bg-success bg-opacity-10 text-success">Ingreso</span></td>';
+                    html += '<td style="width:70px;">' + par.ingreso + '</td>';
+                    html += '<td style="width:30px;" class="text-center text-muted"><i class="fas fa-arrow-right" style="font-size:0.6rem;"></i></td>';
+                    html += '<td style="width:90px;"><span class="badge bg-danger bg-opacity-10 text-danger">Egreso</span></td>';
+                    html += '<td style="width:70px;">' + par.egreso + '</td>';
+                    html += '<td class="text-end pe-3"><strong>' + par.horas + '</strong></td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+            }
+
+            // Fichadas sueltas (sin par)
+            var fichadasSueltas = [];
+            var paresIngreso = {};
+            var paresEgreso = {};
+            if (dia.pares) {
+                dia.pares.forEach(function(p) {
+                    paresIngreso[p.ingreso] = true;
+                    paresEgreso[p.egreso] = true;
+                });
+            }
+            dia.fichadas.forEach(function(f) {
+                if (f.tipo === 'ingreso' && !paresIngreso[f.hora]) {
+                    fichadasSueltas.push(f);
+                } else if (f.tipo === 'egreso' && !paresEgreso[f.hora]) {
+                    fichadasSueltas.push(f);
+                }
+            });
+
+            if (fichadasSueltas.length > 0) {
+                html += '<table class="table table-sm mb-0">';
+                html += '<tbody>';
+                fichadasSueltas.forEach(function(f) {
+                    var esIngreso = f.tipo === 'ingreso';
+                    html += '<tr>';
+                    html += '<td class="ps-3" style="width:90px;">';
+                    html += '<span class="badge bg-' + (esIngreso ? 'success' : 'danger') + ' bg-opacity-10 text-' + (esIngreso ? 'success' : 'danger') + '">';
+                    html += esIngreso ? 'Ingreso' : 'Egreso';
+                    html += '</span></td>';
+                    html += '<td style="width:70px;">' + f.hora + '</td>';
+                    html += '<td colspan="3">';
+                    if (esIngreso && dia.en_obra) {
+                        html += '<span class="badge bg-info bg-opacity-10 text-info"><i class="fas fa-building me-1"></i>En obra</span>';
+                    }
+                    html += '</td>';
+                    html += '<td class="text-end pe-3"><span class="text-muted">-</span></td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+            }
+
+            if ((!dia.pares || dia.pares.length === 0) && fichadasSueltas.length === 0) {
+                html += '<div class="px-3 py-2 text-muted small">Sin fichadas registradas</div>';
+            }
+        });
+
+        html += '</div>'; // card-body
+
+        // Footer con total
+        html += '<div class="card-footer bg-white py-2 text-end">';
+        html += '<strong>Total: </strong>';
+        html += '<span class="badge bg-primary fs-6">' + usuario.total_horas_str + '</span>';
+        html += '</div>';
+
+        html += '</div>'; // card
+    });
+
+    // Gran total si hay multiples usuarios
+    if (resultados.length > 1) {
+        var totalSeg = 0;
+        resultados.forEach(function(u) { totalSeg += u.total_segundos; });
+        var totalH = Math.floor(totalSeg / 3600);
+        var totalM = Math.floor((totalSeg % 3600) / 60);
+        var totalStr = totalH > 0 ? totalH + 'h ' + (totalM < 10 ? '0' : '') + totalM + 'm' : totalM + 'm';
+
+        html += '<div class="card border-primary border-2">';
+        html += '<div class="card-body py-2 d-flex justify-content-between align-items-center">';
+        html += '<strong><i class="fas fa-calculator me-1"></i>Total General (' + resultados.length + ' usuarios)</strong>';
+        html += '<span class="badge bg-primary fs-5">' + totalStr + '</span>';
+        html += '</div></div>';
+    }
+
+    container.innerHTML = html;
+}
+
+// Auto-cargar si hay solo una obra
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('selObra');
+    if (sel.options.length === 2) { // "Seleccionar..." + 1 obra
+        sel.selectedIndex = 1;
+        onObraChange();
+    }
+});
+</script>
 {% endblock %}

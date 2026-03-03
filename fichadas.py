@@ -572,6 +572,148 @@ def api_estado(obra_id):
     })
 
 
+@fichadas_bp.route('/api/usuarios_obra/<int:obra_id>')
+@login_required
+def api_usuarios_obra(obra_id):
+    """Devuelve usuarios asignados/con fichadas en una obra."""
+    org_id = getattr(current_user, 'organizacion_id', None)
+    obra = Obra.query.get_or_404(obra_id)
+    if obra.organizacion_id != org_id:
+        return jsonify({'ok': False}), 403
+
+    # IDs de usuarios que ficharon en esta obra
+    ficharon_ids = {r[0] for r in
+                    db.session.query(Fichada.usuario_id)
+                    .filter(Fichada.obra_id == obra_id).distinct().all()}
+    # IDs de miembros asignados
+    miembros_ids = {m.usuario_id for m in
+                    ObraMiembro.query.filter_by(obra_id=obra_id).all()}
+    asig_ids = {a.usuario_id for a in
+                AsignacionObra.query.filter_by(obra_id=obra_id, activo=True).all()}
+
+    all_ids = ficharon_ids | miembros_ids | asig_ids
+    if not all_ids:
+        return jsonify({'ok': True, 'usuarios': []})
+
+    usuarios = (Usuario.query
+                .filter(Usuario.id.in_(all_ids))
+                .order_by(Usuario.nombre).all())
+
+    return jsonify({
+        'ok': True,
+        'usuarios': [{'id': u.id, 'nombre': u.nombre_completo} for u in usuarios]
+    })
+
+
+@fichadas_bp.route('/api/consulta')
+@login_required
+def api_consulta():
+    """Devuelve fichadas agrupadas por día para obra+usuario+periodo."""
+    obra_id = request.args.get('obra_id', type=int)
+    usuario_id = request.args.get('usuario_id', type=int)
+    periodo = request.args.get('periodo', 'hoy')
+
+    if not obra_id:
+        return jsonify({'ok': False, 'error': 'Falta obra_id'}), 400
+
+    es_admin = _es_admin(current_user)
+    if not es_admin:
+        usuario_id = current_user.id
+
+    hoy = _ahora_argentina().date()
+    ahora = _ahora_argentina()
+
+    if periodo == 'semana':
+        desde = hoy - timedelta(days=hoy.weekday())
+        hasta = hoy
+    elif periodo == 'quincena':
+        desde = hoy - timedelta(days=13)
+        hasta = hoy
+    elif periodo == 'mes':
+        desde = hoy.replace(day=1)
+        hasta = hoy
+    else:  # hoy
+        desde = hoy
+        hasta = hoy
+
+    query = (Fichada.query
+             .filter(Fichada.obra_id == obra_id,
+                     db.func.date(Fichada.fecha_hora) >= desde,
+                     db.func.date(Fichada.fecha_hora) <= hasta)
+             .order_by(Fichada.fecha_hora.asc()))
+
+    if usuario_id:
+        query = query.filter(Fichada.usuario_id == usuario_id)
+
+    fichadas = query.all()
+
+    # Agrupar por usuario y fecha
+    por_usuario = defaultdict(lambda: defaultdict(list))
+    for f in fichadas:
+        dia = f.fecha_hora.date()
+        por_usuario[f.usuario_id][dia].append(f)
+
+    resultado = []
+    for uid, dias_dict in por_usuario.items():
+        usuario = Usuario.query.get(uid)
+        if not usuario:
+            continue
+        dias = []
+        total_seg = 0
+        for dia in sorted(dias_dict.keys()):
+            seg, pares, en_obra = _calcular_horas_dia(dias_dict[dia])
+            total_seg += seg
+
+            fichadas_dia = []
+            for f in sorted(dias_dict[dia], key=lambda x: x.fecha_hora):
+                fichadas_dia.append({
+                    'tipo': f.tipo,
+                    'hora': f.fecha_hora.strftime('%H:%M'),
+                    'distancia': round(float(f.distancia_obra), 0) if f.distancia_obra else None,
+                    'dentro_rango': f.dentro_rango,
+                })
+
+            pares_info = []
+            for p in pares:
+                dur_seg = int(p[2].total_seconds())
+                pares_info.append({
+                    'ingreso': p[0].fecha_hora.strftime('%H:%M'),
+                    'egreso': p[1].fecha_hora.strftime('%H:%M'),
+                    'horas': _formatear_horas(dur_seg),
+                    'segundos': dur_seg,
+                })
+
+            dias.append({
+                'fecha': dia.strftime('%d/%m/%Y'),
+                'dia_semana': ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'][dia.weekday()],
+                'fichadas': fichadas_dia,
+                'pares': pares_info,
+                'horas_str': _formatear_horas(seg) if seg > 0 else ('En obra' if en_obra else '0m'),
+                'total_segundos': seg,
+                'en_obra': en_obra,
+            })
+
+        resultado.append({
+            'usuario_id': uid,
+            'usuario_nombre': usuario.nombre_completo,
+            'dias': dias,
+            'total_segundos': total_seg,
+            'total_horas_str': _formatear_horas(total_seg),
+        })
+
+    resultado.sort(key=lambda r: r['total_segundos'], reverse=True)
+
+    return jsonify({
+        'ok': True,
+        'hora_servidor': ahora.strftime('%H:%M:%S'),
+        'periodo': {
+            'desde': desde.strftime('%d/%m/%Y'),
+            'hasta': hasta.strftime('%d/%m/%Y'),
+        },
+        'resultados': resultado,
+    })
+
+
 @fichadas_bp.route('/historial')
 @login_required
 def historial():
