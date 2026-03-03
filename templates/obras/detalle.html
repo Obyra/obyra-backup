@@ -779,130 +779,213 @@
     </div>
 
 
-    <!-- Equipo asignado -->
-    <div class="row">
+    <!-- Tabs: Equipo | Fichadas | Legajo | Caja | OC -->
+    <div class="row mt-3">
         <div class="col-12">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Equipo Asignado</h5>
-                    {% if can_manage %}
-                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#asignarUsuarioModal">
-                        <i class="fas fa-user-plus me-1"></i>Asignar Usuario
-                    </button>
-                    {% endif %}
+                <div class="card-header p-0 pt-2 px-3">
+                    <ul class="nav nav-tabs card-header-tabs" id="obraDetailTabs" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="tab-equipo" data-bs-toggle="tab"
+                                    data-bs-target="#pane-equipo" type="button" role="tab">
+                                <i class="fas fa-users me-1"></i>Equipo
+                            </button>
+                        </li>
+                        {% if has_endpoint('fichadas.fichar') %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-fichadas" data-bs-toggle="tab"
+                                    data-bs-target="#pane-fichadas" type="button" role="tab">
+                                <i class="fas fa-clock me-1"></i>Fichadas
+                            </button>
+                        </li>
+                        {% endif %}
+                        {% if has_endpoint('documentos.subir') %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-legajo" data-bs-toggle="tab"
+                                    data-bs-target="#pane-legajo" type="button" role="tab">
+                                <i class="fas fa-folder-open me-1"></i>Legajo
+                            </button>
+                        </li>
+                        {% endif %}
+                        {% if has_endpoint('caja.dashboard') %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-caja" data-bs-toggle="tab"
+                                    data-bs-target="#pane-caja" type="button" role="tab">
+                                <i class="fas fa-cash-register me-1"></i>Caja
+                            </button>
+                        </li>
+                        {% endif %}
+                        {% if has_endpoint('ordenes_compra.lista') %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-oc" data-bs-toggle="tab"
+                                    data-bs-target="#pane-oc" type="button" role="tab">
+                                <i class="fas fa-file-invoice-dollar me-1"></i>OC
+                            </button>
+                        </li>
+                        {% endif %}
+                    </ul>
                 </div>
                 <div class="card-body">
-                    {% if miembros %}
-                    <div class="row">
-                        {% for miembro in miembros %}
-                        <div class="col-md-6 col-lg-4 mb-3">
-                            <div class="border rounded p-3">
-                                <h6 class="mb-1">{{ miembro.usuario.nombre_completo }}</h6>
-                                {% if miembro.rol_en_obra %}
-                                <p class="text-muted mb-1">{{ miembro.rol_en_obra }}</p>
+                    <div class="tab-content" id="obraDetailTabContent">
+
+                        <!-- TAB: Equipo -->
+                        <div class="tab-pane fade show active" id="pane-equipo" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Equipo Asignado</h5>
+                                {% if can_manage %}
+                                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#asignarUsuarioModal">
+                                    <i class="fas fa-user-plus me-1"></i>Asignar
+                                </button>
                                 {% endif %}
-                                {% if miembro.etapa_id %}
-                                <div class="mb-2">
-                                    <span class="badge bg-info">Etapa {{ miembro.etapa_id }}</span>
+                            </div>
+                            {% if miembros %}
+                            <div class="row">
+                                {% for miembro in miembros %}
+                                <div class="col-md-6 col-lg-4 mb-3">
+                                    <div class="border rounded p-3">
+                                        <h6 class="mb-1">{{ miembro.usuario.nombre_completo }}</h6>
+                                        {% if miembro.rol_en_obra %}
+                                        <p class="text-muted mb-1">{{ miembro.rol_en_obra }}</p>
+                                        {% endif %}
+                                        {% if miembro.etapa_id %}
+                                        <div class="mb-2">
+                                            <span class="badge bg-info">Etapa {{ miembro.etapa_id }}</span>
+                                        </div>
+                                        {% endif %}
+                                        {% if miembro.fecha_asignacion or miembro.created_at %}
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            Desde {{ (miembro.fecha_asignacion or miembro.created_at).strftime('%d/%m/%Y') }}
+                                        </small>
+                                        {% endif %}
+                                    </div>
                                 </div>
-                                {% endif %}
-                                {% if miembro.fecha_asignacion or miembro.created_at %}
-                                <small class="text-muted">
-                                    <i class="fas fa-calendar me-1"></i>
-                                    Desde {{ (miembro.fecha_asignacion or miembro.created_at).strftime('%d/%m/%Y') }}
-                                </small>
-                                {% endif %}
+                                {% endfor %}
                             </div>
+                            {% else %}
+                            <div class="text-center py-3">
+                                <i class="fas fa-users fa-2x text-muted mb-3"></i>
+                                <p class="text-muted">No hay usuarios asignados a esta obra.</p>
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="text-center py-3">
-                        <i class="fas fa-users fa-2x text-muted mb-3"></i>
-                        <p class="text-muted">No hay usuarios asignados a esta obra.</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Legajo Digital + Caja -->
-<div class="container-fluid mt-4">
-    <div class="row">
-        <!-- Legajo Digital -->
-        <div class="col-md-8">
-            <div class="card mb-4">
-                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>Legajo Digital</h5>
-                    {% if can_manage %}
-                    <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalSubirDocumento">
-                        <i class="fas fa-upload me-1"></i>Subir Documento
-                    </button>
-                    {% endif %}
-                </div>
-                <div class="card-body" id="legajoContainer">
-                    <div class="text-center py-3" id="legajoLoading">
-                        <div class="spinner-border spinner-border-sm text-primary"></div> Cargando documentos...
-                    </div>
-                    <div id="legajoContent" style="display:none"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Caja de la Obra -->
-        <div class="col-md-4">
-            <div class="card mb-4 border-success">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-cash-register me-2"></i>Caja de Obra</h5>
-                </div>
-                <div class="card-body text-center" id="cajaContainer">
-                    <div class="spinner-border spinner-border-sm text-success" id="cajaLoading"></div>
-                    <div id="cajaContent" style="display:none">
-                        <h3 class="mb-1" id="cajaSaldo">$0.00</h3>
-                        <p class="text-muted mb-2">Saldo disponible</p>
-                        {% if has_endpoint('caja.obra') %}
-                        <a href="{{ url_for('caja.obra', id=obra.id) }}" class="btn btn-outline-success btn-sm">
-                            <i class="fas fa-eye me-1"></i>Ver Movimientos
-                        </a>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            {% if obra.ordenes_compra %}
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h6 class="mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Ordenes de Compra</h6>
-                </div>
-                <div class="card-body p-0">
-                    <div class="list-group list-group-flush">
-                        {% for oc in obra.ordenes_compra[:5] %}
-                        <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ oc.numero }}</strong>
-                                <br><small class="text-muted">{{ oc.proveedor }}</small>
+                        <!-- TAB: Fichadas -->
+                        {% if has_endpoint('fichadas.fichar') %}
+                        <div class="tab-pane fade" id="pane-fichadas" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Fichadas</h5>
+                                <div>
+                                    <a href="{{ url_for('fichadas.fichar', obra_id=obra.id) }}" class="btn btn-sm btn-primary me-1">
+                                        <i class="fas fa-fingerprint me-1"></i>Fichar
+                                    </a>
+                                    <a href="{{ url_for('fichadas.historial') }}?obra_id={{ obra.id }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="fas fa-history me-1"></i>Historial
+                                    </a>
+                                </div>
                             </div>
-                            <span class="badge bg-{{ oc.estado_color }}">{{ oc.estado_display }}</span>
-                        </a>
-                        {% endfor %}
+                            <div id="fichadasLoading" class="text-center py-4">
+                                <div class="spinner-border spinner-border-sm text-primary"></div> Cargando...
+                            </div>
+                            <div id="fichadasContent" style="display:none"></div>
+                        </div>
+                        {% endif %}
+
+                        <!-- TAB: Legajo -->
+                        {% if has_endpoint('documentos.subir') %}
+                        <div class="tab-pane fade" id="pane-legajo" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Legajo Digital</h5>
+                                {% if can_manage %}
+                                <button class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#modalSubirDocumento">
+                                    <i class="fas fa-upload me-1"></i>Subir Documento
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div id="legajoLoading" class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm text-primary"></div> Cargando documentos...
+                            </div>
+                            <div id="legajoContent" style="display:none"></div>
+                        </div>
+                        {% endif %}
+
+                        <!-- TAB: Caja -->
+                        {% if has_endpoint('caja.dashboard') %}
+                        <div class="tab-pane fade" id="pane-caja" role="tabpanel">
+                            <div id="cajaTabLoading" class="text-center py-4">
+                                <div class="spinner-border spinner-border-sm text-success"></div> Cargando caja...
+                            </div>
+                            <div id="cajaTabContent" style="display:none"></div>
+                        </div>
+                        {% endif %}
+
+                        <!-- TAB: OC -->
+                        {% if has_endpoint('ordenes_compra.lista') %}
+                        <div class="tab-pane fade" id="pane-oc" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Ordenes de Compra</h5>
+                                <a href="{{ url_for('ordenes_compra.crear') }}?obra_id={{ obra.id }}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-plus me-1"></i>Nueva OC
+                                </a>
+                            </div>
+                            {% if obra.ordenes_compra %}
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Numero</th>
+                                            <th>Proveedor</th>
+                                            <th class="text-end">Total</th>
+                                            <th class="text-center">Estado</th>
+                                            <th class="text-center">Recepcion</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for oc in obra.ordenes_compra %}
+                                        <tr>
+                                            <td><strong>{{ oc.numero }}</strong></td>
+                                            <td>{{ oc.proveedor }}</td>
+                                            <td class="text-end">{{ oc.moneda }} {{ '{:,.2f}'.format(oc.total|float) }}</td>
+                                            <td class="text-center">
+                                                <span class="badge bg-{{ oc.estado_color }}">{{ oc.estado_display }}</span>
+                                            </td>
+                                            <td class="text-center">
+                                                {% set pct = oc.porcentaje_recepcion() %}
+                                                <div class="progress" style="height:18px; min-width:80px;">
+                                                    <div class="progress-bar bg-{{ 'success' if pct==100 else 'warning' }}"
+                                                         style="width:{{ pct }}%">{{ pct }}%</div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}"
+                                                   class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-4 text-muted">
+                                <i class="fas fa-file-invoice-dollar fa-2x mb-2"></i>
+                                <p>No hay ordenes de compra para esta obra.</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                     </div>
-                    {% if obra.ordenes_compra|length > 5 %}
-                    <div class="text-center p-2">
-                        <a href="{{ url_for('ordenes_compra.lista', obra_id=obra.id) }}" class="text-decoration-none">
-                            Ver todas ({{ obra.ordenes_compra|length }})
-                        </a>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
 <!-- Modal Subir Documento -->
+{% if has_endpoint('documentos.subir') %}
 <div class="modal fade" id="modalSubirDocumento" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -945,106 +1028,147 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
-// Cargar legajo digital
-document.addEventListener('DOMContentLoaded', function() {
-    // Cargar documentos
-    fetch('/documentos/obra/{{ obra.id }}/listar')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('legajoLoading').style.display = 'none';
-            const container = document.getElementById('legajoContent');
-            container.style.display = 'block';
+// Lazy loading por tab
+(function() {
+    var loaded = {equipo: true};
+    var obraId = {{ obra.id }};
 
-            if (!data.ok || data.documentos.length === 0) {
-                container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-folder-open fa-2x mb-2"></i><p>No hay documentos cargados</p></div>';
-                return;
-            }
-
-            // Agrupar por tipo
-            const porTipo = {};
-            data.documentos.forEach(d => {
-                const tipo = d.tipo_nombre || 'Otros';
-                if (!porTipo[tipo]) porTipo[tipo] = [];
-                porTipo[tipo].push(d);
-            });
-
-            let html = '<div class="row">';
-            const iconos = {
-                'Contrato': 'fa-file-signature',
-                'Planos': 'fa-drafting-compass',
-                'Renders': 'fa-image',
-                'Pliego de Especificaciones': 'fa-clipboard-list',
-                'Memoria de Calculo': 'fa-calculator',
-                'Presupuesto': 'fa-file-invoice-dollar',
-                'Otros': 'fa-file-alt',
-            };
-
-            for (const [tipo, docs] of Object.entries(porTipo)) {
-                html += '<div class="col-md-6 mb-3">';
-                html += `<h6 class="fw-bold"><i class="fas ${iconos[tipo] || 'fa-file'} me-1"></i>${tipo} (${docs.length})</h6>`;
-                html += '<div class="list-group list-group-flush">';
-                docs.forEach(d => {
-                    html += `<div class="list-group-item d-flex justify-content-between align-items-center py-2">
-                        <div>
-                            <small class="fw-bold">${d.nombre}</small>
-                            <br><small class="text-muted">${d.fecha} - ${d.creador || ''}</small>
-                        </div>
-                        <div class="btn-group btn-group-sm">
-                            <a href="/documentos/${d.id}/descargar" class="btn btn-outline-primary" title="Descargar">
-                                <i class="fas fa-download"></i>
-                            </a>
-                            <form method="POST" action="/documentos/${d.id}/eliminar" class="d-inline">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-outline-danger" title="Eliminar"
-                                        onclick="return confirm('Eliminar este documento?')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </div>`;
-                });
+    // --- Fichadas ---
+    function loadFichadas() {
+        if (loaded.fichadas) return;
+        loaded.fichadas = true;
+        fetch('/fichadas/api/estado/' + obraId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var loading = document.getElementById('fichadasLoading');
+                var container = document.getElementById('fichadasContent');
+                if (loading) loading.style.display = 'none';
+                if (!container) return;
+                container.style.display = 'block';
+                var html = '<div class="row align-items-center"><div class="col-md-6">';
+                if (data.ok && data.ultima && data.proximo_tipo === 'egreso') {
+                    html += '<div class="alert alert-success mb-0"><i class="fas fa-check-circle me-2"></i><strong>En obra</strong>';
+                    html += '<br><small>Ultimo ingreso: ' + data.ultima.hora + '</small></div>';
+                } else if (data.ok && data.ultima) {
+                    html += '<div class="alert alert-secondary mb-0"><i class="fas fa-minus-circle me-2"></i>Ultima fichada: <strong>' + data.ultima.tipo + '</strong> a las ' + data.ultima.hora + '</div>';
+                } else {
+                    html += '<div class="alert alert-secondary mb-0"><i class="fas fa-minus-circle me-2"></i>Sin fichadas hoy</div>';
+                }
+                html += '</div><div class="col-md-6 text-end">';
+                html += '<a href="/fichadas/fichar/' + obraId + '" class="btn btn-primary btn-lg"><i class="fas fa-fingerprint me-2"></i>Fichar</a>';
                 html += '</div></div>';
-            }
-            html += '</div>';
-            container.innerHTML = html;
-        })
-        .catch(() => {
-            document.getElementById('legajoLoading').innerHTML = '<span class="text-muted">Error al cargar documentos</span>';
-        });
+                container.innerHTML = html;
+            })
+            .catch(function() {
+                var loading = document.getElementById('fichadasLoading');
+                if (loading) loading.innerHTML = '<span class="text-muted">Error al cargar fichadas</span>';
+            });
+    }
 
-    // Cargar tipos de documento para el select
-    fetch('/documentos/tipos')
-        .then(r => r.json())
-        .then(data => {
-            const select = document.getElementById('tipoDocSelect');
-            select.innerHTML = '<option value="">Seleccionar tipo...</option>';
-            if (data.ok) {
-                data.tipos.forEach(t => {
-                    select.innerHTML += `<option value="${t.id}">${t.nombre}</option>`;
+    // --- Legajo ---
+    function loadLegajo() {
+        if (loaded.legajo) return;
+        loaded.legajo = true;
+        fetch('/documentos/obra/' + obraId + '/listar')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var el = document.getElementById('legajoLoading');
+                if (el) el.style.display = 'none';
+                var container = document.getElementById('legajoContent');
+                if (!container) return;
+                container.style.display = 'block';
+                if (!data.ok || data.documentos.length === 0) {
+                    container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-folder-open fa-2x mb-2"></i><p>No hay documentos cargados</p></div>';
+                    return;
+                }
+                var porTipo = {};
+                data.documentos.forEach(function(d) {
+                    var tipo = d.tipo_nombre || 'Otros';
+                    if (!porTipo[tipo]) porTipo[tipo] = [];
+                    porTipo[tipo].push(d);
                 });
-            }
-        });
+                var iconos = {'Contrato':'fa-file-signature','Planos':'fa-drafting-compass','Renders':'fa-image','Pliego de Especificaciones':'fa-clipboard-list','Memoria de Calculo':'fa-calculator','Presupuesto':'fa-file-invoice-dollar','Otros':'fa-file-alt'};
+                var html = '<div class="row">';
+                for (var tipo in porTipo) {
+                    var docs = porTipo[tipo];
+                    html += '<div class="col-md-6 mb-3">';
+                    html += '<h6 class="fw-bold"><i class="fas ' + (iconos[tipo]||'fa-file') + ' me-1"></i>' + tipo + ' (' + docs.length + ')</h6>';
+                    html += '<div class="list-group list-group-flush">';
+                    docs.forEach(function(d) {
+                        html += '<div class="list-group-item d-flex justify-content-between align-items-center py-2">';
+                        html += '<div><small class="fw-bold">' + d.nombre + '</small><br><small class="text-muted">' + d.fecha + ' - ' + (d.creador||'') + '</small></div>';
+                        html += '<a href="/documentos/' + d.id + '/descargar" class="btn btn-sm btn-outline-primary" title="Descargar"><i class="fas fa-download"></i></a>';
+                        html += '</div>';
+                    });
+                    html += '</div></div>';
+                }
+                html += '</div>';
+                container.innerHTML = html;
+            })
+            .catch(function() {
+                var el = document.getElementById('legajoLoading');
+                if (el) el.innerHTML = '<span class="text-muted">Error al cargar documentos</span>';
+            });
+        // Cargar tipos para el modal
+        fetch('/documentos/tipos')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var select = document.getElementById('tipoDocSelect');
+                if (!select) return;
+                select.innerHTML = '<option value="">Seleccionar tipo...</option>';
+                if (data.ok) {
+                    data.tipos.forEach(function(t) {
+                        select.innerHTML += '<option value="' + t.id + '">' + t.nombre + '</option>';
+                    });
+                }
+            });
+    }
 
-    // Cargar saldo de caja
-    fetch('/caja/api/saldo/{{ obra.id }}')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('cajaLoading').style.display = 'none';
-            document.getElementById('cajaContent').style.display = 'block';
-            if (data.ok) {
-                const saldo = data.saldo;
-                document.getElementById('cajaSaldo').textContent = '$' + saldo.toLocaleString('es-AR', {minimumFractionDigits: 2});
-                document.getElementById('cajaSaldo').className = 'mb-1 text-' + (saldo > 0 ? 'success' : saldo < 0 ? 'danger' : 'muted');
-            }
-        })
-        .catch(() => {
-            document.getElementById('cajaLoading').style.display = 'none';
-            document.getElementById('cajaContent').style.display = 'block';
-            document.getElementById('cajaSaldo').textContent = '$0.00';
+    // --- Caja ---
+    function loadCaja() {
+        if (loaded.caja) return;
+        loaded.caja = true;
+        fetch('/caja/api/saldo/' + obraId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var loading = document.getElementById('cajaTabLoading');
+                var container = document.getElementById('cajaTabContent');
+                if (loading) loading.style.display = 'none';
+                if (!container) return;
+                container.style.display = 'block';
+                var saldo = data.ok ? data.saldo : 0;
+                var color = saldo > 0 ? 'success' : (saldo < 0 ? 'danger' : 'muted');
+                var html = '<div class="text-center mb-4">';
+                html += '<h2 class="text-' + color + '">$' + saldo.toLocaleString('es-AR', {minimumFractionDigits:2}) + '</h2>';
+                html += '<p class="text-muted">Saldo disponible en caja</p>';
+                html += '<a href="/caja/obra/' + obraId + '" class="btn btn-outline-success"><i class="fas fa-list me-1"></i>Ver Movimientos</a>';
+                html += '</div>';
+                container.innerHTML = html;
+            })
+            .catch(function() {
+                var loading = document.getElementById('cajaTabLoading');
+                var container = document.getElementById('cajaTabContent');
+                if (loading) loading.style.display = 'none';
+                if (container) {
+                    container.style.display = 'block';
+                    container.innerHTML = '<div class="text-center text-muted py-3">Error al cargar datos de caja</div>';
+                }
+            });
+    }
+
+    // Tab switch event — lazy load
+    document.querySelectorAll('#obraDetailTabs button[data-bs-toggle="tab"]').forEach(function(btn) {
+        btn.addEventListener('shown.bs.tab', function(e) {
+            var target = e.target.getAttribute('data-bs-target');
+            if (target === '#pane-fichadas') loadFichadas();
+            else if (target === '#pane-legajo') loadLegajo();
+            else if (target === '#pane-caja') loadCaja();
         });
-});
+    });
+})();
 </script>
 
 <!-- Modales -->
