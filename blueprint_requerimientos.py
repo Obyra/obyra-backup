@@ -66,13 +66,15 @@ def lista():
 
     conteos_dict = dict(conteos)
 
+    from datetime import date
     return render_template('requerimientos/lista.html',
                           requerimientos=requerimientos,
                           obras=obras,
                           estado_filtro=estado,
                           prioridad_filtro=prioridad,
                           obra_id_filtro=obra_id,
-                          conteos=conteos_dict)
+                          conteos=conteos_dict,
+                          today=date.today())
 
 
 @requerimientos_bp.route('/nuevo', methods=['GET', 'POST'])
