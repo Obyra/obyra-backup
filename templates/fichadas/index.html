@@ -195,7 +195,7 @@ function renderResultados(resultados) {
 
         html += '<div class="card-body p-0">';
 
-        // Tabla por dia
+        // Por cada dia
         usuario.dias.forEach(function(dia) {
             // Header del dia
             html += '<div class="bg-light px-3 py-1 border-bottom">';
@@ -203,74 +203,47 @@ function renderResultados(resultados) {
             html += '<span class="float-end badge bg-secondary">' + dia.horas_str + '</span>';
             html += '</div>';
 
-            // Fichadas del dia como pares ingreso->egreso
-            if (dia.pares && dia.pares.length > 0) {
-                html += '<table class="table table-sm mb-0">';
-                html += '<tbody>';
-                dia.pares.forEach(function(par) {
-                    html += '<tr>';
-                    html += '<td class="ps-3" style="width:90px;"><span class="badge bg-success bg-opacity-10 text-success">Ingreso</span></td>';
-                    html += '<td style="width:70px;">' + par.ingreso + '</td>';
-                    html += '<td style="width:30px;" class="text-center text-muted"><i class="fas fa-arrow-right" style="font-size:0.6rem;"></i></td>';
-                    html += '<td style="width:90px;"><span class="badge bg-danger bg-opacity-10 text-danger">Egreso</span></td>';
-                    html += '<td style="width:70px;">' + par.egreso + '</td>';
-                    html += '<td class="text-end pe-3"><strong>' + par.horas + '</strong></td>';
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-            }
-
-            // Fichadas sueltas (sin par)
-            var fichadasSueltas = [];
-            var paresIngreso = {};
-            var paresEgreso = {};
+            // Armar mapa de egreso→horas desde los pares
+            var egresoHoras = {};
             if (dia.pares) {
                 dia.pares.forEach(function(p) {
-                    paresIngreso[p.ingreso] = true;
-                    paresEgreso[p.egreso] = true;
+                    egresoHoras[p.egreso] = p.horas;
                 });
             }
-            dia.fichadas.forEach(function(f) {
-                if (f.tipo === 'ingreso' && !paresIngreso[f.hora]) {
-                    fichadasSueltas.push(f);
-                } else if (f.tipo === 'egreso' && !paresEgreso[f.hora]) {
-                    fichadasSueltas.push(f);
+
+            // Tabla vertical: cada fichada en su propia fila, orden cronologico
+            html += '<table class="table table-sm mb-0">';
+            html += '<tbody>';
+            dia.fichadas.forEach(function(f, idx) {
+                var esIngreso = f.tipo === 'ingreso';
+                html += '<tr>';
+                // Tipo
+                html += '<td class="ps-3" style="width:100px;">';
+                html += '<span class="badge bg-' + (esIngreso ? 'success' : 'danger') + '">';
+                html += '<i class="fas fa-' + (esIngreso ? 'sign-in-alt' : 'sign-out-alt') + ' me-1"></i>';
+                html += esIngreso ? 'Ingreso' : 'Egreso';
+                html += '</span></td>';
+                // Horario
+                html += '<td style="width:80px; font-size:1.1rem;"><strong>' + f.hora + '</strong></td>';
+                // Horas (solo en egreso que tiene par)
+                html += '<td class="text-end pe-3">';
+                if (!esIngreso && egresoHoras[f.hora]) {
+                    html += '<span class="badge bg-info bg-opacity-10 text-info fs-6">' + egresoHoras[f.hora] + '</span>';
+                } else if (esIngreso && dia.en_obra && idx === dia.fichadas.length - 1) {
+                    html += '<span class="badge bg-warning bg-opacity-10 text-warning">En obra</span>';
                 }
+                html += '</td>';
+                html += '</tr>';
             });
-
-            if (fichadasSueltas.length > 0) {
-                html += '<table class="table table-sm mb-0">';
-                html += '<tbody>';
-                fichadasSueltas.forEach(function(f) {
-                    var esIngreso = f.tipo === 'ingreso';
-                    html += '<tr>';
-                    html += '<td class="ps-3" style="width:90px;">';
-                    html += '<span class="badge bg-' + (esIngreso ? 'success' : 'danger') + ' bg-opacity-10 text-' + (esIngreso ? 'success' : 'danger') + '">';
-                    html += esIngreso ? 'Ingreso' : 'Egreso';
-                    html += '</span></td>';
-                    html += '<td style="width:70px;">' + f.hora + '</td>';
-                    html += '<td colspan="3">';
-                    if (esIngreso && dia.en_obra) {
-                        html += '<span class="badge bg-info bg-opacity-10 text-info"><i class="fas fa-building me-1"></i>En obra</span>';
-                    }
-                    html += '</td>';
-                    html += '<td class="text-end pe-3"><span class="text-muted">-</span></td>';
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-            }
-
-            if ((!dia.pares || dia.pares.length === 0) && fichadasSueltas.length === 0) {
-                html += '<div class="px-3 py-2 text-muted small">Sin fichadas registradas</div>';
-            }
+            html += '</tbody></table>';
         });
 
         html += '</div>'; // card-body
 
-        // Footer con total
-        html += '<div class="card-footer bg-white py-2 text-end">';
-        html += '<strong>Total: </strong>';
-        html += '<span class="badge bg-primary fs-6">' + usuario.total_horas_str + '</span>';
+        // Footer con total de horas
+        html += '<div class="card-footer py-2 d-flex justify-content-between align-items-center" style="background:#f0f4ff;">';
+        html += '<strong><i class="fas fa-calculator me-1"></i>Total horas</strong>';
+        html += '<span class="badge bg-primary fs-5">' + usuario.total_horas_str + '</span>';
         html += '</div>';
 
         html += '</div>'; // card
