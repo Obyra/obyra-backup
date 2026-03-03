@@ -524,6 +524,18 @@ def api_fichar():
     })
 
 
+@fichadas_bp.route('/api/limpiar', methods=['POST'])
+@csrf.exempt
+@login_required
+def api_limpiar_fichadas():
+    """Elimina todas las fichadas (solo super_admin). Para testing."""
+    if not _es_admin(current_user):
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 403
+    cant = Fichada.query.delete()
+    db.session.commit()
+    return jsonify({'ok': True, 'eliminadas': cant})
+
+
 @fichadas_bp.route('/api/guardar_coords', methods=['POST'])
 @csrf.exempt
 @login_required
