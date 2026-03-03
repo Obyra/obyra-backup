@@ -18,8 +18,10 @@
 
     <div class="row mb-3">
         <div class="col-12">
-            <div id="mapaFichada" style="height: 250px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6; background: #e9ecef; display: flex; align-items: center; justify-content: center;">
-                <span class="text-muted"><i class="fas fa-map-marked-alt me-2"></i>Cargando mapa...</span>
+            <div id="mapaWrapper" style="height: 250px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6; overflow: hidden; position: relative;">
+                <div id="mapaFichada" style="height: 100%; width: 100%; background: #e9ecef; display: flex; align-items: center; justify-content: center;">
+                    <span class="text-muted"><i class="fas fa-map-marked-alt me-2"></i>Cargando mapa...</span>
+                </div>
             </div>
         </div>
     </div>
@@ -97,16 +99,8 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Leaflet JS cargado ESTÁTICAMENTE (CSS ya está en base.html) -->
+<!-- Leaflet JS (CSS ya está en base.html) -->
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
-
-<!-- Definir callbacks ANTES de que Google Maps pueda invocarlos desde cache -->
-<script>
-window._gmReady = false;
-window.initMap = function() { window._gmReady = true; };
-window.gm_authFailure = function() { window._gmAuthFail = true; };
-window.onGoogleMapsError = function() { window._gmError = true; };
-</script>
 
 <script>
 // ── Configuración ──
@@ -119,22 +113,22 @@ var ES_ADMIN = {{ 'true' if es_admin else 'false' }};
 var OBRA_DIRECCION = '{{ obra.direccion or "" }}';
 var OBRA_NOMBRE = '{{ obra.nombre }}';
 
-// CSRF token para requests POST
+// CSRF token
 var CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]');
 CSRF_TOKEN = CSRF_TOKEN ? CSRF_TOKEN.getAttribute('content') : '';
 
 // ── Estado ──
 var miLat = null, miLng = null, miPrecision = null;
-var mapa = null, marcadorObra = null, marcadorMio = null, circuloRadio = null;
+var mapa = null, marcadorMio = null;
 var gpsRespondio = false;
-var googleMapsListo = false;
-var fichandoEnCurso = false; // Evita que GPS sobreescriba mensajes de fichada
+var fichandoEnCurso = false;
 
 // ══════════════════════════════════════════════
-// 1. GPS — arranca INMEDIATAMENTE
+// 1. GPS — arranca inmediatamente
 // ══════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
     iniciarGPS();
+    iniciarMapa();
 });
 
 function iniciarGPS() {
@@ -148,17 +142,14 @@ function iniciarGPS() {
         return;
     }
 
-    // 1) getCurrentPosition primero (respuesta rápida, acepta cache)
     navigator.geolocation.getCurrentPosition(onPosicion, function(err) {
         console.log('getCurrentPosition error code=' + err.code);
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 
-    // 2) watchPosition en paralelo para actualizaciones continuas
     navigator.geolocation.watchPosition(onPosicion, onErrorGPS, {
         enableHighAccuracy: true, timeout: 20000, maximumAge: 10000
     });
 
-    // 3) Fallback para admins si GPS no responde en 15s
     setTimeout(function() {
         if (!gpsRespondio) {
             if (ES_ADMIN) {
@@ -179,7 +170,6 @@ function onPosicion(pos) {
 
     actualizarMarcadorMio();
 
-    // No sobreescribir el estado si se está fichando
     if (fichandoEnCurso) return;
 
     var btn = document.getElementById('btnFichar');
@@ -226,175 +216,138 @@ function onErrorGPS(err) {
 }
 
 // ══════════════════════════════════════════════
-// 2. MAPA — Google Maps primario, Leaflet fallback
+// 2. MAPA — Leaflet con OpenStreetMap tiles
 // ══════════════════════════════════════════════
-
-// Estilo original del contenedor del mapa (para reset)
-var MAPA_STYLE = 'height:250px;width:100%;border-radius:12px;border:2px solid #dee2e6;background:#e9ecef;';
-
-// Google Maps callback
-window.initMap = function initMap() {
-    googleMapsListo = true;
-    var el = document.getElementById('mapaFichada');
-    el.innerHTML = '';
-    el.style.cssText = MAPA_STYLE;
-
-    var centro = OBRA_LAT ? { lat: OBRA_LAT, lng: OBRA_LNG }
-               : (miLat ? { lat: miLat, lng: miLng } : { lat: -34.6037, lng: -58.3816 });
-
-    try {
-        mapa = new google.maps.Map(el, {
-            center: centro, zoom: OBRA_LAT ? 17 : 15,
-            mapTypeId: 'roadmap', zoomControl: true,
-            streetViewControl: false, fullscreenControl: false, mapTypeControl: false
-        });
-
-        if (OBRA_LAT) {
-            marcadorObra = new google.maps.Marker({
-                position: { lat: OBRA_LAT, lng: OBRA_LNG }, map: mapa,
-                title: OBRA_NOMBRE, icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
-            });
-            circuloRadio = new google.maps.Circle({
-                map: mapa, center: { lat: OBRA_LAT, lng: OBRA_LNG }, radius: OBRA_RADIO,
-                strokeColor: '#0d6efd', strokeWeight: 2, strokeOpacity: 0.8,
-                fillColor: '#0d6efd', fillOpacity: 0.1
-            });
-        }
-
-        if (miLat !== null) actualizarMarcadorMio();
-
-        // Detectar si los tiles de Google Maps cargan (si no, pasar a Leaflet)
-        var tilesOk = false;
-        google.maps.event.addListenerOnce(mapa, 'tilesloaded', function() { tilesOk = true; });
-        setTimeout(function() {
-            if (!tilesOk) {
-                console.log('Google Maps tiles no cargaron, pasando a Leaflet');
-                el.innerHTML = '';
-                el.style.cssText = MAPA_STYLE;
-                googleMapsListo = false;
-                mapa = null; marcadorObra = null; marcadorMio = null; circuloRadio = null;
-                initMapaLeaflet();
-            }
-        }, 5000);
-
-        // Geocodificar si obra no tiene coords
-        if (!OBRA_LAT && OBRA_DIRECCION) {
-            var geocoder = new google.maps.Geocoder();
-            geocoder.geocode({ address: OBRA_DIRECCION }, function(results, status) {
-                if (status === 'OK' && results[0]) {
-                    OBRA_LAT = results[0].geometry.location.lat();
-                    OBRA_LNG = results[0].geometry.location.lng();
-                    marcadorObra = new google.maps.Marker({
-                        position: { lat: OBRA_LAT, lng: OBRA_LNG }, map: mapa,
-                        title: OBRA_NOMBRE
-                    });
-                    circuloRadio = new google.maps.Circle({
-                        map: mapa, center: { lat: OBRA_LAT, lng: OBRA_LNG }, radius: OBRA_RADIO,
-                        strokeColor: '#0d6efd', strokeWeight: 2, strokeOpacity: 0.8,
-                        fillColor: '#0d6efd', fillOpacity: 0.1
-                    });
-                    if (miLat !== null) { actualizarMarcadorMio(); recalcularDistancia(); }
-                    fetch('/fichadas/api/guardar_coords', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                        body: JSON.stringify({ obra_id: OBRA_ID, latitud: OBRA_LAT, longitud: OBRA_LNG })
-                    }).catch(function() {});
-                }
-            });
-        }
-    } catch (e) {
-        console.error('Error Google Maps:', e);
-        googleMapsListo = false;
-        initMapaLeaflet();
-    }
-};
-
-function actualizarMarcadorMio() {
-    if (!mapa || miLat === null) return;
-
-    if (googleMapsListo && typeof google !== 'undefined') {
-        try {
-            if (marcadorMio) {
-                marcadorMio.setPosition({ lat: miLat, lng: miLng });
-            } else {
-                marcadorMio = new google.maps.Marker({
-                    position: { lat: miLat, lng: miLng }, map: mapa,
-                    title: 'Tu ubicacion', icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
-                });
-            }
-            if (OBRA_LAT) {
-                var bounds = new google.maps.LatLngBounds();
-                bounds.extend({ lat: OBRA_LAT, lng: OBRA_LNG });
-                bounds.extend({ lat: miLat, lng: miLng });
-                mapa.fitBounds(bounds);
-            } else {
-                mapa.setCenter({ lat: miLat, lng: miLng });
-            }
-        } catch (e) { console.error('Error marcador Google:', e); }
-    }
-    // Leaflet markers: se manejan en initMapaLeaflet
-}
-
-// Leaflet fallback — usa OpenStreetMap tiles (más confiable)
-function initMapaLeaflet() {
+function iniciarMapa() {
     if (typeof L === 'undefined') {
-        var el = document.getElementById('mapaFichada');
-        el.style.cssText = MAPA_STYLE + 'display:flex;align-items:center;justify-content:center;';
-        el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa no disponible</span>';
+        document.getElementById('mapaFichada').innerHTML =
+            '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa no disponible</span>';
         return;
     }
 
     var el = document.getElementById('mapaFichada');
-    // Reset completo del elemento (limpia cualquier style de Google Maps)
     el.innerHTML = '';
-    el.style.cssText = MAPA_STYLE;
-    el.className = '';
+    el.style.cssText = 'height:100%;width:100%;';
 
     try {
-        var centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG] : (miLat ? [miLat, miLng] : [-34.6037, -58.3816]);
-        mapa = L.map(el, { zoomControl: true }).setView(centro, OBRA_LAT ? 17 : 15);
+        var centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG]
+                   : (miLat ? [miLat, miLng] : [-34.6037, -58.3816]);
 
-        // OpenStreetMap tiles — los más confiables
+        mapa = L.map(el, {
+            zoomControl: true,
+            attributionControl: false
+        }).setView(centro, OBRA_LAT ? 17 : 15);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>',
-            maxZoom: 19, subdomains: 'abc'
+            maxZoom: 19,
+            subdomains: 'abc'
         }).addTo(mapa);
 
         if (OBRA_LAT) {
-            L.marker([OBRA_LAT, OBRA_LNG], { title: OBRA_NOMBRE }).addTo(mapa);
+            L.marker([OBRA_LAT, OBRA_LNG], {
+                title: OBRA_NOMBRE,
+                icon: L.icon({
+                    iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+                    iconRetinaUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                    shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                })
+            }).addTo(mapa).bindPopup('<b>' + OBRA_NOMBRE + '</b>');
+
             L.circle([OBRA_LAT, OBRA_LNG], {
-                radius: OBRA_RADIO, color: '#0d6efd', weight: 2, fillOpacity: 0.1
+                radius: OBRA_RADIO,
+                color: '#0d6efd',
+                weight: 2,
+                fillOpacity: 0.1
             }).addTo(mapa);
         }
+
         if (miLat) {
-            var miMarker = L.marker([miLat, miLng], { title: 'Tu ubicacion' }).addTo(mapa);
+            marcadorMio = L.circleMarker([miLat, miLng], {
+                radius: 8, color: '#fff', weight: 2,
+                fillColor: '#0d6efd', fillOpacity: 1
+            }).addTo(mapa).bindPopup('Tu ubicacion');
+
             if (OBRA_LAT) {
-                mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [30, 30] });
+                mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [40, 40] });
             }
         }
 
-        googleMapsListo = false;
-        // Forzar re-render de tiles
-        setTimeout(function() { mapa.invalidateSize(); }, 200);
-        setTimeout(function() { mapa.invalidateSize(); }, 600);
+        // Forzar render correcto
+        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 200);
+        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 600);
+
+        // Geocodificar si obra no tiene coords
+        if (!OBRA_LAT && OBRA_DIRECCION) {
+            geocodificarDireccion(OBRA_DIRECCION);
+        }
     } catch (e) {
-        el.style.cssText = MAPA_STYLE + 'display:flex;align-items:center;justify-content:center;';
+        console.error('Error inicializando mapa:', e);
+        el.style.cssText = 'height:100%;width:100%;display:flex;align-items:center;justify-content:center;background:#e9ecef;';
         el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Error cargando mapa</span>';
     }
 }
 
-// Error handlers para Google Maps
-window.onGoogleMapsError = function() { if (!googleMapsListo) initMapaLeaflet(); };
-window.gm_authFailure = function() { googleMapsListo = false; initMapaLeaflet(); };
+function actualizarMarcadorMio() {
+    if (!mapa || miLat === null) return;
 
-// Si Google Maps ya cargó desde cache antes de este script
-if (window._gmReady && !googleMapsListo) {
-    initMap();
-} else if (window._gmAuthFail || window._gmError) {
-    initMapaLeaflet();
+    try {
+        if (marcadorMio) {
+            marcadorMio.setLatLng([miLat, miLng]);
+        } else {
+            marcadorMio = L.circleMarker([miLat, miLng], {
+                radius: 8, color: '#fff', weight: 2,
+                fillColor: '#0d6efd', fillOpacity: 1
+            }).addTo(mapa).bindPopup('Tu ubicacion');
+        }
+
+        if (OBRA_LAT) {
+            mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [40, 40] });
+        } else {
+            mapa.setView([miLat, miLng], 15);
+        }
+    } catch (e) {
+        console.error('Error actualizando marcador:', e);
+    }
 }
-// Timeout global: si nada se inicializó después de 8s
-setTimeout(function() { if (!mapa) initMapaLeaflet(); }, 8000);
+
+function geocodificarDireccion(direccion) {
+    // Nominatim (OpenStreetMap) geocoder — gratuito, sin API key
+    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(direccion + ', Argentina'))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data && data.length > 0) {
+                OBRA_LAT = parseFloat(data[0].lat);
+                OBRA_LNG = parseFloat(data[0].lon);
+
+                if (mapa) {
+                    L.marker([OBRA_LAT, OBRA_LNG], {
+                        title: OBRA_NOMBRE
+                    }).addTo(mapa).bindPopup('<b>' + OBRA_NOMBRE + '</b>');
+
+                    L.circle([OBRA_LAT, OBRA_LNG], {
+                        radius: OBRA_RADIO, color: '#0d6efd', weight: 2, fillOpacity: 0.1
+                    }).addTo(mapa);
+
+                    if (miLat) {
+                        mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [40, 40] });
+                        recalcularDistancia();
+                    } else {
+                        mapa.setView([OBRA_LAT, OBRA_LNG], 17);
+                    }
+                }
+
+                // Guardar coords en el servidor
+                var headers = { 'Content-Type': 'application/json' };
+                if (CSRF_TOKEN) headers['X-CSRFToken'] = CSRF_TOKEN;
+                fetch('/fichadas/api/guardar_coords', {
+                    method: 'POST', headers: headers,
+                    body: JSON.stringify({ obra_id: OBRA_ID, latitud: OBRA_LAT, longitud: OBRA_LNG })
+                }).catch(function() {});
+            }
+        })
+        .catch(function(e) { console.log('Geocoding error:', e); });
+}
 
 // ══════════════════════════════════════════════
 // 3. Utilidades
@@ -496,9 +449,4 @@ async function registrarFichada() {
     }
 }
 </script>
-{% if google_maps_key %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap" async defer onerror="onGoogleMapsError()"></script>
-{% else %}
-<script>initMapaLeaflet();</script>
-{% endif %}
 {% endblock %}
