@@ -149,7 +149,7 @@
                                             <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-sm btn-outline-primary flex-fill">
                                                 <i class="fas fa-eye me-1"></i>Detalles
                                             </a>
-                                            <button class="btn btn-sm btn-outline-warning d-flex align-items-center" onclick="abrirClimaObra({{ obra.id }})" title="Ver clima semanal">
+                                            <button type="button" class="btn btn-sm btn-outline-warning d-flex align-items-center btn-clima" data-obra-id="{{ obra.id }}" title="Ver clima semanal">
                                                 <i class="fas fa-cloud-sun"></i>
                                                 <span class="d-none d-md-inline ms-1">Clima</span>
                                             </button>
@@ -268,12 +268,23 @@ var OBRAS_DATA = [
 {% endfor %}
 ];
 
-// Wrapper para abrir clima desde botón (evita problemas de comillas en onclick)
-function abrirClimaObra(obraId) {
-    var o = TODAS_OBRAS[obraId];
-    if (!o) { alert('Obra no encontrada'); return; }
-    abrirVentanaClima(o.lat, o.lng, o.nombre, o.direccion, obraId);
-}
+// Bind botones de clima al cargar el DOM
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.btn-clima').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var obraId = parseInt(this.getAttribute('data-obra-id'));
+            var o = TODAS_OBRAS[obraId];
+            if (!o) {
+                alert('Obra no encontrada (ID: ' + obraId + ')');
+                return;
+            }
+            console.log('Abriendo clima para obra:', o.nombre, o.lat, o.lng);
+            abrirVentanaClima(o.lat, o.lng, o.nombre, o.direccion, obraId);
+        });
+    });
+});
 
 var COLORES_ESTADO = {
     planificacion: '#6c757d',
