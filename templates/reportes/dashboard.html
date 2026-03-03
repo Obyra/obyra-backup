@@ -356,6 +356,8 @@
                                                 <i class="fas fa-tasks me-1"></i>
                                             {% elif alerta.tipo == 'sobrecosto' %}
                                                 <i class="fas fa-chart-line me-1"></i>
+                                            {% elif alerta.tipo == 'sin_fichada' %}
+                                                <i class="fas fa-user-clock me-1"></i>
                                             {% endif %}
                                             {{ alerta.titulo }}
                                         </div>

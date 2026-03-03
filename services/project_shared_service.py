@@ -446,6 +446,22 @@ class ProjectSharedService:
         from fichadas import calcular_resumen_horas
         resumen_horas_obra = calcular_resumen_horas(obra.id)
 
+        # Enriquecer con asignacion de etapa de cada operario
+        from models import AsignacionObra, EtapaObra
+        for item in resumen_horas_obra:
+            uid = item['usuario'].id
+            asignacion = AsignacionObra.query.filter_by(
+                obra_id=obra.id, usuario_id=uid, activo=True
+            ).first()
+            if asignacion and asignacion.etapa_id:
+                etapa = EtapaObra.query.get(asignacion.etapa_id)
+                item['etapa_nombre'] = etapa.nombre if etapa else None
+                item['etapa_id'] = asignacion.etapa_id
+            else:
+                item['etapa_nombre'] = None
+                item['etapa_id'] = None
+            item['rol_en_obra'] = asignacion.rol_en_obra if asignacion else None
+
         if request.args.get('format') == 'json':
             return jsonify(
                 ok=True,

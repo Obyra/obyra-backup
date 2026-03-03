@@ -229,12 +229,15 @@ function onErrorGPS(err) {
 // 2. MAPA — Google Maps primario, Leaflet fallback
 // ══════════════════════════════════════════════
 
-// Google Maps callback (redefine — el stub anterior ya capturó si GM llegó antes)
+// Estilo original del contenedor del mapa (para reset)
+var MAPA_STYLE = 'height:250px;width:100%;border-radius:12px;border:2px solid #dee2e6;background:#e9ecef;';
+
+// Google Maps callback
 window.initMap = function initMap() {
     googleMapsListo = true;
     var el = document.getElementById('mapaFichada');
     el.innerHTML = '';
-    el.style.display = 'block';
+    el.style.cssText = MAPA_STYLE;
 
     var centro = OBRA_LAT ? { lat: OBRA_LAT, lng: OBRA_LNG }
                : (miLat ? { lat: miLat, lng: miLng } : { lat: -34.6037, lng: -58.3816 });
@@ -260,6 +263,20 @@ window.initMap = function initMap() {
 
         if (miLat !== null) actualizarMarcadorMio();
 
+        // Detectar si los tiles de Google Maps cargan (si no, pasar a Leaflet)
+        var tilesOk = false;
+        google.maps.event.addListenerOnce(mapa, 'tilesloaded', function() { tilesOk = true; });
+        setTimeout(function() {
+            if (!tilesOk) {
+                console.log('Google Maps tiles no cargaron, pasando a Leaflet');
+                el.innerHTML = '';
+                el.style.cssText = MAPA_STYLE;
+                googleMapsListo = false;
+                mapa = null; marcadorObra = null; marcadorMio = null; circuloRadio = null;
+                initMapaLeaflet();
+            }
+        }, 5000);
+
         // Geocodificar si obra no tiene coords
         if (!OBRA_LAT && OBRA_DIRECCION) {
             var geocoder = new google.maps.Geocoder();
@@ -269,17 +286,14 @@ window.initMap = function initMap() {
                     OBRA_LNG = results[0].geometry.location.lng();
                     marcadorObra = new google.maps.Marker({
                         position: { lat: OBRA_LAT, lng: OBRA_LNG }, map: mapa,
-                        title: OBRA_NOMBRE, icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
+                        title: OBRA_NOMBRE
                     });
                     circuloRadio = new google.maps.Circle({
                         map: mapa, center: { lat: OBRA_LAT, lng: OBRA_LNG }, radius: OBRA_RADIO,
                         strokeColor: '#0d6efd', strokeWeight: 2, strokeOpacity: 0.8,
                         fillColor: '#0d6efd', fillOpacity: 0.1
                     });
-                    if (miLat !== null) {
-                        actualizarMarcadorMio();
-                        recalcularDistancia();
-                    }
+                    if (miLat !== null) { actualizarMarcadorMio(); recalcularDistancia(); }
                     fetch('/fichadas/api/guardar_coords', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
@@ -290,14 +304,14 @@ window.initMap = function initMap() {
         }
     } catch (e) {
         console.error('Error Google Maps:', e);
+        googleMapsListo = false;
         initMapaLeaflet();
     }
-}
+};
 
 function actualizarMarcadorMio() {
     if (!mapa || miLat === null) return;
 
-    // Google Maps
     if (googleMapsListo && typeof google !== 'undefined') {
         try {
             if (marcadorMio) {
@@ -318,25 +332,32 @@ function actualizarMarcadorMio() {
             }
         } catch (e) { console.error('Error marcador Google:', e); }
     }
+    // Leaflet markers: se manejan en initMapaLeaflet
 }
 
-// Leaflet fallback (L ya está cargado como script estático arriba)
+// Leaflet fallback — usa OpenStreetMap tiles (más confiable)
 function initMapaLeaflet() {
     if (typeof L === 'undefined') {
-        document.getElementById('mapaFichada').innerHTML =
-            '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa no disponible</span>';
+        var el = document.getElementById('mapaFichada');
+        el.style.cssText = MAPA_STYLE + 'display:flex;align-items:center;justify-content:center;';
+        el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Mapa no disponible</span>';
         return;
     }
 
     var el = document.getElementById('mapaFichada');
+    // Reset completo del elemento (limpia cualquier style de Google Maps)
     el.innerHTML = '';
-    el.style.display = 'block';
+    el.style.cssText = MAPA_STYLE;
+    el.className = '';
 
     try {
         var centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG] : (miLat ? [miLat, miLng] : [-34.6037, -58.3816]);
         mapa = L.map(el, { zoomControl: true }).setView(centro, OBRA_LAT ? 17 : 15);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OSM, &copy; CARTO', maxZoom: 20, subdomains: 'abcd'
+
+        // OpenStreetMap tiles — los más confiables
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>',
+            maxZoom: 19, subdomains: 'abc'
         }).addTo(mapa);
 
         if (OBRA_LAT) {
@@ -346,31 +367,34 @@ function initMapaLeaflet() {
             }).addTo(mapa);
         }
         if (miLat) {
-            L.marker([miLat, miLng], { title: 'Tu ubicacion' }).addTo(mapa);
+            var miMarker = L.marker([miLat, miLng], { title: 'Tu ubicacion' }).addTo(mapa);
             if (OBRA_LAT) {
                 mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [30, 30] });
             }
         }
 
         googleMapsListo = false;
-        setTimeout(function() { mapa.invalidateSize(); }, 300);
+        // Forzar re-render de tiles
+        setTimeout(function() { mapa.invalidateSize(); }, 200);
+        setTimeout(function() { mapa.invalidateSize(); }, 600);
     } catch (e) {
+        el.style.cssText = MAPA_STYLE + 'display:flex;align-items:center;justify-content:center;';
         el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Error cargando mapa</span>';
     }
 }
 
 // Error handlers para Google Maps
 window.onGoogleMapsError = function() { if (!googleMapsListo) initMapaLeaflet(); };
-window.gm_authFailure = function() { if (!googleMapsListo) initMapaLeaflet(); };
+window.gm_authFailure = function() { googleMapsListo = false; initMapaLeaflet(); };
 
-// Si Google Maps ya cargó desde cache (antes de este script), invocar ahora
+// Si Google Maps ya cargó desde cache antes de este script
 if (window._gmReady && !googleMapsListo) {
     initMap();
 } else if (window._gmAuthFail || window._gmError) {
     initMapaLeaflet();
 }
-// Timeout: si después de 8s no hay nada, Leaflet
-setTimeout(function() { if (!googleMapsListo && !mapa) initMapaLeaflet(); }, 8000);
+// Timeout global: si nada se inicializó después de 8s
+setTimeout(function() { if (!mapa) initMapaLeaflet(); }, 8000);
 
 // ══════════════════════════════════════════════
 // 3. Utilidades

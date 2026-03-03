@@ -68,8 +68,13 @@
     <div class="row mb-3">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white py-2">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0"><i class="fas fa-hourglass-half me-1 text-primary"></i>Resumen de horas trabajadas</h6>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary active" onclick="mostrarVista('dia', this)">Dia</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="mostrarVista('semana', this)">Semana</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="mostrarVista('mes', this)">Mes</button>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     {% for item in resumen_horas %}
@@ -84,20 +89,24 @@
                                 <i class="fas fa-clock me-1"></i>{{ item.total_horas_str }}
                             </span>
                         </div>
-                        <table class="table table-sm mb-0">
+
+                        {# Vista por DIA #}
+                        <table class="table table-sm mb-0 vista-dia">
                             <tbody>
                                 {% for dia in item.dias %}
                                 <tr>
                                     <td class="ps-4" style="width: 130px;">
                                         <small>{{ dia.fecha.strftime('%d/%m/%Y') }}</small>
+                                        <small class="text-muted d-block">{{ ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'][dia.fecha.weekday()] }}</small>
                                     </td>
                                     <td>
                                         {% for par in dia.pares %}
                                         <span class="badge bg-success bg-opacity-10 text-success me-1">
-                                            <i class="fas fa-sign-in-alt me-1"></i>{{ par[0].fecha_hora.strftime('%H:%M') }}
+                                            {{ par[0].fecha_hora.strftime('%H:%M') }}
                                         </span>
+                                        <i class="fas fa-arrow-right text-muted mx-1" style="font-size:0.5rem;"></i>
                                         <span class="badge bg-danger bg-opacity-10 text-danger me-1">
-                                            <i class="fas fa-sign-out-alt me-1"></i>{{ par[1].fecha_hora.strftime('%H:%M') }}
+                                            {{ par[1].fecha_hora.strftime('%H:%M') }}
                                         </span>
                                         {% endfor %}
                                         {% if dia.en_obra %}
@@ -109,6 +118,30 @@
                                     <td class="text-end pe-3" style="width: 100px;">
                                         <strong>{{ dia.horas_str }}</strong>
                                     </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        {# Vista por SEMANA #}
+                        <table class="table table-sm mb-0 vista-semana" style="display:none;">
+                            <tbody>
+                                {% for sem in item.por_semana %}
+                                <tr>
+                                    <td class="ps-4"><small><i class="fas fa-calendar-week me-1"></i>{{ sem.semana }}</small></td>
+                                    <td class="text-end pe-3"><strong>{{ sem.horas_str }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        {# Vista por MES #}
+                        <table class="table table-sm mb-0 vista-mes" style="display:none;">
+                            <tbody>
+                                {% for m in item.por_mes %}
+                                <tr>
+                                    <td class="ps-4"><small><i class="fas fa-calendar-alt me-1"></i>{{ m.mes }}</small></td>
+                                    <td class="text-end pe-3"><strong>{{ m.horas_str }}</strong></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -209,4 +242,24 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function mostrarVista(tipo, btn) {
+    // Ocultar todas las vistas
+    document.querySelectorAll('.vista-dia, .vista-semana, .vista-mes').forEach(function(el) {
+        el.style.display = 'none';
+    });
+    // Mostrar la vista seleccionada
+    document.querySelectorAll('.vista-' + tipo).forEach(function(el) {
+        el.style.display = '';
+    });
+    // Actualizar botones
+    btn.closest('.btn-group').querySelectorAll('.btn').forEach(function(b) {
+        b.classList.remove('active');
+    });
+    btn.classList.add('active');
+}
+</script>
 {% endblock %}

@@ -253,6 +253,27 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
             'total_horas_str': _formatear_horas(total_seg_usuario),
         })
 
+    # Calcular totales por semana y mes para cada usuario
+    for item in resultado:
+        por_semana = defaultdict(int)
+        por_mes = defaultdict(int)
+        for dia in item['dias']:
+            # Semana ISO (año-semana)
+            anio, semana, _ = dia['fecha'].isocalendar()
+            por_semana[f'{anio}-S{semana:02d}'] += dia['total_segundos']
+            # Mes
+            mes_key = dia['fecha'].strftime('%Y-%m')
+            por_mes[mes_key] += dia['total_segundos']
+
+        item['por_semana'] = [
+            {'semana': k, 'horas_str': _formatear_horas(v), 'total_segundos': v}
+            for k, v in sorted(por_semana.items())
+        ]
+        item['por_mes'] = [
+            {'mes': k, 'horas_str': _formatear_horas(v), 'total_segundos': v}
+            for k, v in sorted(por_mes.items())
+        ]
+
     # Ordenar por total de horas descendente
     resultado.sort(key=lambda r: r['total_segundos'], reverse=True)
     return resultado
@@ -267,18 +288,57 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
 def index():
     """Página principal: muestra obras asignadas con estado de fichada."""
     obras = _obras_asignadas(current_user)
+    es_admin = _es_admin(current_user)
     obras_info = []
     for obra in obras:
         ultima = _ultima_fichada_hoy(current_user.id, obra.id)
         proximo_tipo = 'ingreso'
         if ultima and ultima.tipo == 'ingreso':
             proximo_tipo = 'egreso'
-        obras_info.append({
+
+        info = {
             'obra': obra,
             'ultima_fichada': ultima,
             'proximo_tipo': proximo_tipo,
-        })
-    return render_template('fichadas/index.html', obras_info=obras_info)
+        }
+
+        # Para admins: mostrar operarios en obra hoy
+        if es_admin:
+            hoy = date.today()
+            fichadas_obra_hoy = (Fichada.query
+                .filter(Fichada.obra_id == obra.id,
+                        db.func.date(Fichada.fecha_hora) == hoy)
+                .order_by(Fichada.fecha_hora.asc())
+                .all())
+            # Agrupar por usuario y determinar quién está en obra
+            por_usuario = defaultdict(list)
+            for f in fichadas_obra_hoy:
+                por_usuario[f.usuario_id].append(f)
+
+            en_obra = []
+            ficharon_hoy = []
+            for uid, fichs in por_usuario.items():
+                usuario = fichs[0].usuario
+                ultima_f = max(fichs, key=lambda x: x.fecha_hora)
+                seg, _, esta_en_obra = _calcular_horas_dia(fichs)
+                ficharon_hoy.append({
+                    'usuario': usuario,
+                    'en_obra': esta_en_obra,
+                    'horas_str': _formatear_horas(seg) if seg > 0 else ('En obra' if esta_en_obra else '0m'),
+                    'ultima_hora': ultima_f.fecha_hora.strftime('%H:%M'),
+                })
+                if esta_en_obra:
+                    en_obra.append(usuario)
+
+            info['ficharon_hoy'] = ficharon_hoy
+            info['en_obra_count'] = len(en_obra)
+            info['total_ficharon'] = len(ficharon_hoy)
+
+        obras_info.append(info)
+
+    return render_template('fichadas/index.html',
+                           obras_info=obras_info,
+                           es_admin=es_admin)
 
 
 @fichadas_bp.route('/fichar/<int:obra_id>')

@@ -79,6 +79,7 @@ def setup_security_headers(app):
             "https://api.open-meteo.com "
             "https://cdn.jsdelivr.net "
             "https://*.basemaps.cartocdn.com "
+            "https://*.tile.openstreetmap.org "
             "wss: ws:",
             # Frames: permitir Google OAuth + Google Maps
             "frame-src 'self' "

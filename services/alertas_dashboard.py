@@ -307,6 +307,73 @@ def obtener_alertas_sobrecosto(org_id, limite=5, umbral_porcentaje=10):
     return alertas[:limite]
 
 
+def obtener_alertas_fichadas(org_id, limite=5):
+    """
+    Detecta operarios que no ficharon hoy en obras en curso.
+    """
+    from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
+
+    hoy = date.today()
+    # Solo alertar en dias de semana
+    if hoy.weekday() >= 5:  # sabado/domingo
+        return []
+
+    obras_activas = Obra.query.filter_by(
+        organizacion_id=org_id, estado='en_curso'
+    ).all()
+
+    alertas = []
+    for obra in obras_activas:
+        # Obtener miembros asignados
+        miembro_ids = set()
+        for m in ObraMiembro.query.filter_by(obra_id=obra.id).all():
+            miembro_ids.add(m.usuario_id)
+        for a in AsignacionObra.query.filter_by(obra_id=obra.id, activo=True).all():
+            miembro_ids.add(a.usuario_id)
+
+        if not miembro_ids:
+            continue
+
+        # Quienes ficharon hoy en esta obra
+        ficharon_hoy = set(
+            f.usuario_id for f in Fichada.query.filter(
+                Fichada.obra_id == obra.id,
+                db.func.date(Fichada.fecha_hora) == hoy
+            ).all()
+        )
+
+        # Quienes no ficharon
+        no_ficharon = miembro_ids - ficharon_hoy
+        if not no_ficharon:
+            continue
+
+        usuarios_no = Usuario.query.filter(
+            Usuario.id.in_(no_ficharon), Usuario.activo == True
+        ).all()
+
+        if not usuarios_no:
+            continue
+
+        nombres = ', '.join(u.nombre_completo for u in usuarios_no[:3])
+        if len(usuarios_no) > 3:
+            nombres += f' y {len(usuarios_no) - 3} mas'
+
+        severidad = 'alta' if len(usuarios_no) >= 3 else 'media'
+        alertas.append({
+            'tipo': 'sin_fichada',
+            'severidad': severidad,
+            'titulo': f'{len(usuarios_no)} sin fichar en {obra.nombre}',
+            'descripcion': nombres,
+            'referencia': f'{len(ficharon_hoy)} de {len(miembro_ids)} ficharon hoy',
+            'url': f'/fichadas/historial?obra_id={obra.id}',
+        })
+
+        if len(alertas) >= limite:
+            break
+
+    return alertas
+
+
 def obtener_todas_alertas(org_id, limite_por_tipo=3):
     """
     Obtiene todas las alertas del sistema agrupadas y ordenadas por severidad.
@@ -320,6 +387,7 @@ def obtener_todas_alertas(org_id, limite_por_tipo=3):
     alertas.extend(obtener_alertas_tareas_vencidas(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_tareas_en_riesgo(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_sobrecosto(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_fichadas(org_id, limite_por_tipo))
 
     # Ordenar por severidad
     orden_severidad = {'critica': 0, 'alta': 1, 'media': 2, 'baja': 3}
