@@ -142,14 +142,14 @@
                 </div>
                 {% endif %}
 
-                {# Desglose por etapa — nueva sección principal #}
+                {# Desglose por etapa — certificación multimodal #}
                 {% if desglose_etapas and desglose_etapas.etapas %}
                 <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" id="formCertDesglose">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="aprobar" value="true">
                     <input type="hidden" name="items_etapa" id="hiddenItemsEtapa">
 
-                    <h6 class="text-muted mb-2"><i class="fas fa-layer-group me-1"></i>Desglose por etapa (segun avance de tareas)</h6>
+                    <h6 class="text-muted mb-2"><i class="fas fa-layer-group me-1"></i>Desglose por etapa</h6>
 
                     {% if desglose_etapas.ya_certificado_ars > 0 %}
                     <div class="alert alert-info small py-2 mb-3">
@@ -165,13 +165,22 @@
                                 <tr>
                                     <th>Etapa</th>
                                     <th class="text-center">Avance</th>
-                                    <th class="text-end">Presupuestado</th>
-                                    <th class="text-end" style="min-width: 180px;">Monto a certificar</th>
+                                    <th class="text-center" style="min-width: 130px;">Modo</th>
+                                    <th class="text-end">Detalle</th>
+                                    <th class="text-end" style="min-width: 160px;">Monto</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for etapa in desglose_etapas.etapas %}
-                                <tr>
+                                {% set horas_seg = horas_por_etapa.get(etapa.etapa_id, 0) if horas_por_etapa else 0 %}
+                                {% set horas_dec = (horas_seg / 3600)|round(2) %}
+                                <tr class="fila-etapa"
+                                    data-etapa-id="{{ etapa.etapa_id }}"
+                                    data-etapa-nombre="{{ etapa.etapa_nombre }}"
+                                    data-porcentaje="{{ etapa.porcentaje_avance }}"
+                                    data-monto-avance="{{ etapa.monto_certificable|float|round(2) }}"
+                                    data-presupuesto="{{ etapa.costo_presupuestado|float|round(2) }}"
+                                    data-horas="{{ horas_dec }}">
                                     <td>
                                         <div class="fw-semibold">{{ etapa.etapa_nombre }}</div>
                                         <small class="text-muted">{{ etapa.tareas_completadas }}/{{ etapa.tareas_total }} tareas</small>
@@ -184,17 +193,59 @@
                                             </div>
                                             <span class="small fw-semibold">{{ etapa.porcentaje_avance }}%</span>
                                         </div>
+                                        {% if horas_seg > 0 %}
+                                        <small class="text-muted d-block"><i class="fas fa-clock me-1"></i>{{ '%dh %02dm'|format(horas_seg // 3600, (horas_seg % 3600) // 60) }}</small>
+                                        {% endif %}
                                     </td>
-                                    <td class="text-end text-muted">{{ etapa.costo_presupuestado|moneda }}</td>
+                                    <td class="text-center">
+                                        <select class="form-select form-select-sm select-modo" {% if not puede_aprobar %}disabled{% endif %}>
+                                            <option value="avance" selected>Por avance</option>
+                                            <option value="horas">Por horas</option>
+                                            <option value="cantidad">Por cantidad</option>
+                                        </select>
+                                    </td>
+                                    <td class="text-end">
+                                        {# Detalle por avance (default) #}
+                                        <div class="detalle-avance">
+                                            <small class="text-muted">{{ etapa.costo_presupuestado|moneda }}</small>
+                                        </div>
+                                        {# Detalle por horas #}
+                                        <div class="detalle-horas" style="display:none;">
+                                            <div class="d-flex align-items-center justify-content-end gap-1">
+                                                <small class="text-nowrap">{{ horas_dec }}h x $</small>
+                                                <input type="number" class="form-control form-control-sm input-tarifa" style="width:90px;"
+                                                       value="0" step="1" min="0" placeholder="$/h"
+                                                       {% if not puede_aprobar %}disabled{% endif %}>
+                                            </div>
+                                        </div>
+                                        {# Detalle por cantidad #}
+                                        <div class="detalle-cantidad" style="display:none;">
+                                            <div class="d-flex align-items-center justify-content-end gap-1 mb-1">
+                                                <input type="number" class="form-control form-control-sm input-qty" style="width:70px;"
+                                                       value="0" step="0.01" min="0" placeholder="Cant."
+                                                       {% if not puede_aprobar %}disabled{% endif %}>
+                                                <select class="form-select form-select-sm select-unidad" style="width:70px;"
+                                                        {% if not puede_aprobar %}disabled{% endif %}>
+                                                    <option value="m2">m2</option>
+                                                    <option value="m3">m3</option>
+                                                    <option value="ml">ml</option>
+                                                    <option value="kg">kg</option>
+                                                    <option value="tn">tn</option>
+                                                    <option value="u">u</option>
+                                                    <option value="gl">gl</option>
+                                                </select>
+                                                <small class="text-nowrap">x $</small>
+                                                <input type="number" class="form-control form-control-sm input-precio-u" style="width:90px;"
+                                                       value="0" step="0.01" min="0" placeholder="$/u"
+                                                       {% if not puede_aprobar %}disabled{% endif %}>
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td class="text-end">
                                         <input type="number"
-                                               class="form-control form-control-sm text-end input-monto-etapa"
-                                               data-etapa-id="{{ etapa.etapa_id }}"
-                                               data-etapa-nombre="{{ etapa.etapa_nombre }}"
-                                               data-porcentaje="{{ etapa.porcentaje_avance }}"
+                                               class="form-control form-control-sm text-end input-monto-etapa fw-bold"
                                                value="{{ etapa.monto_certificable|float|round(2) }}"
                                                step="0.01" min="0"
-                                               max="{{ etapa.costo_presupuestado|float|round(2) }}"
                                                {% if not puede_aprobar %}disabled{% endif %}>
                                     </td>
                                 </tr>
@@ -202,7 +253,7 @@
                             </tbody>
                             <tfoot class="table-light">
                                 <tr class="fw-bold">
-                                    <td colspan="3" class="text-end">Total a certificar:</td>
+                                    <td colspan="4" class="text-end">Total a certificar:</td>
                                     <td class="text-end">
                                         <span id="totalCertificar">{{ desglose_etapas.total_certificable|moneda }}</span>
                                     </td>
@@ -520,9 +571,9 @@
 {% block extra_js %}
 <script>
 (function () {
-    // --- Desglose por etapa: recalcular total y serializar al submit ---
+    // --- Desglose por etapa: modos de certificación ---
     const form = document.getElementById('formCertDesglose');
-    const inputs = document.querySelectorAll('.input-monto-etapa');
+    const filas = document.querySelectorAll('.fila-etapa');
     const totalSpan = document.getElementById('totalCertificar');
     const hiddenItems = document.getElementById('hiddenItemsEtapa');
 
@@ -532,30 +583,85 @@
 
     function recalcularTotal() {
         let total = 0;
-        inputs.forEach(function(input) {
-            total += parseFloat(input.value) || 0;
+        filas.forEach(function(fila) {
+            var montoInput = fila.querySelector('.input-monto-etapa');
+            total += parseFloat(montoInput.value) || 0;
         });
-        if (totalSpan) {
-            totalSpan.textContent = formatARS(total);
-        }
+        if (totalSpan) totalSpan.textContent = formatARS(total);
     }
 
-    inputs.forEach(function(input) {
-        input.addEventListener('input', recalcularTotal);
+    // Manejar cambio de modo por fila
+    filas.forEach(function(fila) {
+        var select = fila.querySelector('.select-modo');
+        var montoInput = fila.querySelector('.input-monto-etapa');
+        var detalleAvance = fila.querySelector('.detalle-avance');
+        var detalleHoras = fila.querySelector('.detalle-horas');
+        var detalleCantidad = fila.querySelector('.detalle-cantidad');
+        var inputTarifa = fila.querySelector('.input-tarifa');
+        var inputQty = fila.querySelector('.input-qty');
+        var inputPrecioU = fila.querySelector('.input-precio-u');
+
+        function actualizarModo() {
+            var modo = select.value;
+            detalleAvance.style.display = modo === 'avance' ? '' : 'none';
+            detalleHoras.style.display = modo === 'horas' ? '' : 'none';
+            detalleCantidad.style.display = modo === 'cantidad' ? '' : 'none';
+
+            if (modo === 'avance') {
+                montoInput.value = parseFloat(fila.dataset.montoAvance) || 0;
+            } else if (modo === 'horas') {
+                calcularMontoHoras();
+            } else if (modo === 'cantidad') {
+                calcularMontoCantidad();
+            }
+            recalcularTotal();
+        }
+
+        function calcularMontoHoras() {
+            var horas = parseFloat(fila.dataset.horas) || 0;
+            var tarifa = parseFloat(inputTarifa.value) || 0;
+            montoInput.value = (horas * tarifa).toFixed(2);
+            recalcularTotal();
+        }
+
+        function calcularMontoCantidad() {
+            var qty = parseFloat(inputQty.value) || 0;
+            var precio = parseFloat(inputPrecioU.value) || 0;
+            montoInput.value = (qty * precio).toFixed(2);
+            recalcularTotal();
+        }
+
+        if (select) select.addEventListener('change', actualizarModo);
+        if (inputTarifa) inputTarifa.addEventListener('input', calcularMontoHoras);
+        if (inputQty) inputQty.addEventListener('input', calcularMontoCantidad);
+        if (inputPrecioU) inputPrecioU.addEventListener('input', calcularMontoCantidad);
+        if (montoInput) montoInput.addEventListener('input', recalcularTotal);
     });
 
     if (form) {
         form.addEventListener('submit', function(e) {
-            const items = [];
-            inputs.forEach(function(input) {
-                const monto = parseFloat(input.value) || 0;
+            var items = [];
+            filas.forEach(function(fila) {
+                var montoInput = fila.querySelector('.input-monto-etapa');
+                var monto = parseFloat(montoInput.value) || 0;
                 if (monto > 0) {
-                    items.push({
-                        etapa_id: parseInt(input.dataset.etapaId),
-                        etapa_nombre: input.dataset.etapaNombre,
-                        porcentaje: parseFloat(input.dataset.porcentaje) || 0,
-                        monto: monto
-                    });
+                    var modo = fila.querySelector('.select-modo').value;
+                    var item = {
+                        etapa_id: parseInt(fila.dataset.etapaId),
+                        etapa_nombre: fila.dataset.etapaNombre,
+                        porcentaje: parseFloat(fila.dataset.porcentaje) || 0,
+                        monto: monto,
+                        modo: modo
+                    };
+                    if (modo === 'horas') {
+                        item.horas = parseFloat(fila.dataset.horas) || 0;
+                        item.tarifa_hora = parseFloat(fila.querySelector('.input-tarifa').value) || 0;
+                    } else if (modo === 'cantidad') {
+                        item.cantidad = parseFloat(fila.querySelector('.input-qty').value) || 0;
+                        item.unidad = fila.querySelector('.select-unidad').value;
+                        item.precio_unitario = parseFloat(fila.querySelector('.input-precio-u').value) || 0;
+                    }
+                    items.push(item);
                 }
             });
 
@@ -564,7 +670,6 @@
                 alert('No hay montos a certificar. Edita al menos un monto mayor a cero.');
                 return;
             }
-
             hiddenItems.value = JSON.stringify(items);
         });
     }

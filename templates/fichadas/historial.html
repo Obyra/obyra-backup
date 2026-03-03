@@ -73,6 +73,7 @@
                     <div class="btn-group btn-group-sm" role="group">
                         <button type="button" class="btn btn-outline-primary active" onclick="mostrarVista('dia', this)">Dia</button>
                         <button type="button" class="btn btn-outline-primary" onclick="mostrarVista('semana', this)">Semana</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="mostrarVista('quincena', this)">Quincena</button>
                         <button type="button" class="btn btn-outline-primary" onclick="mostrarVista('mes', this)">Mes</button>
                     </div>
                 </div>
@@ -130,6 +131,18 @@
                                 <tr>
                                     <td class="ps-4"><small><i class="fas fa-calendar-week me-1"></i>{{ sem.semana }}</small></td>
                                     <td class="text-end pe-3"><strong>{{ sem.horas_str }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        {# Vista por QUINCENA (14 dias) #}
+                        <table class="table table-sm mb-0 vista-quincena" style="display:none;">
+                            <tbody>
+                                {% for q in item.por_quincena %}
+                                <tr>
+                                    <td class="ps-4"><small><i class="fas fa-calendar-day me-1"></i>{{ q.quincena }}</small></td>
+                                    <td class="text-end pe-3"><strong>{{ q.horas_str }}</strong></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -248,7 +261,7 @@
 <script>
 function mostrarVista(tipo, btn) {
     // Ocultar todas las vistas
-    document.querySelectorAll('.vista-dia, .vista-semana, .vista-mes').forEach(function(el) {
+    document.querySelectorAll('.vista-dia, .vista-semana, .vista-quincena, .vista-mes').forEach(function(el) {
         el.style.display = 'none';
     });
     // Mostrar la vista seleccionada

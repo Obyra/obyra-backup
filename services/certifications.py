@@ -485,10 +485,21 @@ def create_certification_con_desglose(
             if context.tasa_usd else DecimalZero
         )
 
+        modo = item_data.get('modo', 'avance')
         resumen = {
             'etapa_nombre': item_data.get('etapa_nombre', ''),
             'porcentaje_avance': str(item_data.get('porcentaje', 0)),
+            'modo': modo,
         }
+        if modo == 'horas':
+            resumen['horas'] = item_data.get('horas', 0)
+            resumen['tarifa_hora'] = item_data.get('tarifa_hora', 0)
+        elif modo == 'cantidad':
+            resumen['cantidad'] = item_data.get('cantidad', 0)
+            resumen['unidad'] = item_data.get('unidad', '')
+            resumen['precio_unitario'] = item_data.get('precio_unitario', 0)
+
+        fuente = 'tareas' if modo == 'avance' else modo
 
         cert_item = WorkCertificationItem(
             certificacion_id=cert.id,
@@ -496,7 +507,7 @@ def create_certification_con_desglose(
             porcentaje_aplicado=_as_decimal(item_data.get('porcentaje', 0)),
             monto_ars=monto_item,
             monto_usd=monto_item_usd,
-            fuente_avance='tareas',
+            fuente_avance=fuente,
             resumen_avance=json_dumps(resumen),
         )
         db.session.add(cert_item)

@@ -40,6 +40,17 @@ def _es_admin(usuario):
     return rol.lower() in ('admin', 'administrador')
 
 
+def _es_admin_o_pm(usuario):
+    """Verifica si el usuario es admin, super_admin o project manager.
+
+    Los PM pueden fichar desde cualquier ubicación, igual que admins.
+    """
+    if _es_admin(usuario):
+        return True
+    rol = getattr(usuario, 'role', '') or getattr(usuario, 'rol', '') or ''
+    return rol.lower() in ('pm', 'project_manager', 'project manager', 'jefe_obra')
+
+
 def _geocodificar_direccion(direccion):
     """Geocodifica una dirección. Usa Google Geocoding API si hay key, sino Nominatim."""
     if not direccion:
@@ -253,14 +264,19 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
             'total_horas_str': _formatear_horas(total_seg_usuario),
         })
 
-    # Calcular totales por semana y mes para cada usuario
+    # Calcular totales por semana, quincena (14 días) y mes para cada usuario
     for item in resultado:
         por_semana = defaultdict(int)
+        por_quincena = defaultdict(int)
         por_mes = defaultdict(int)
         for dia in item['dias']:
             # Semana ISO (año-semana)
             anio, semana, _ = dia['fecha'].isocalendar()
             por_semana[f'{anio}-S{semana:02d}'] += dia['total_segundos']
+            # Quincena: 1-15 y 16-fin de mes
+            q = '1ra' if dia['fecha'].day <= 15 else '2da'
+            quincena_key = f"{dia['fecha'].strftime('%Y-%m')} {q}"
+            por_quincena[quincena_key] += dia['total_segundos']
             # Mes
             mes_key = dia['fecha'].strftime('%Y-%m')
             por_mes[mes_key] += dia['total_segundos']
@@ -268,6 +284,10 @@ def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
         item['por_semana'] = [
             {'semana': k, 'horas_str': _formatear_horas(v), 'total_segundos': v}
             for k, v in sorted(por_semana.items())
+        ]
+        item['por_quincena'] = [
+            {'quincena': k, 'horas_str': _formatear_horas(v), 'total_segundos': v}
+            for k, v in sorted(por_quincena.items())
         ]
         item['por_mes'] = [
             {'mes': k, 'horas_str': _formatear_horas(v), 'total_segundos': v}
@@ -392,7 +412,7 @@ def fichar(obra_id):
                            proximo_tipo=proximo_tipo,
                            fichadas_del_dia=fichadas_del_dia,
                            horas_hoy=horas_hoy,
-                           es_admin=_es_admin(current_user),
+                           es_admin=_es_admin_o_pm(current_user),
                            google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
 
@@ -434,7 +454,7 @@ def api_fichar():
     distancia = None
     dentro_rango = False
     radio = obra.radio_fichada_metros or 100
-    es_admin = _es_admin(current_user)
+    es_admin = _es_admin_o_pm(current_user)
 
     tiene_gps = lat is not None and lng is not None
     tiene_coords_obra = obra.latitud is not None and obra.longitud is not None

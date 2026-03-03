@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v3.1.0';  // Fix: exclude PDF/email routes from offline interception
+const CACHE_VERSION = 'v3.2.0';  // Fix: no interceptar recursos externos ni fichadas POST
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
@@ -103,10 +103,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
+    // NO interceptar recursos de otros dominios (CDN, tiles, etc.)
+    if (url.origin !== self.location.origin) {
+        return;
+    }
+
     // Solo manejar GET requests
     if (event.request.method !== 'GET') {
         // Para POST/PUT/DELETE, intentar online o guardar en cola
-        if (event.request.method === 'POST' || event.request.method === 'PUT') {
+        // EXCEPTO fichadas y otras APIs críticas que NO deben encolarse offline
+        if ((event.request.method === 'POST' || event.request.method === 'PUT') &&
+            !url.pathname.startsWith('/fichadas/') &&
+            !url.pathname.startsWith('/auth/')) {
             event.respondWith(handleMutationRequest(event.request));
         }
         return;
@@ -390,13 +398,8 @@ self.addEventListener('message', (event) => {
 // ============================================================================
 
 function isStaticAsset(url) {
-    return url.pathname.startsWith('/static/') ||
-           url.pathname.endsWith('.css') ||
-           url.pathname.endsWith('.js') ||
-           url.pathname.endsWith('.png') ||
-           url.pathname.endsWith('.jpg') ||
-           url.pathname.endsWith('.ico') ||
-           url.pathname.endsWith('.woff2');
+    // Solo archivos bajo /static/ del propio dominio
+    return url.pathname.startsWith('/static/');
 }
 
 function isAPIRequest(url) {

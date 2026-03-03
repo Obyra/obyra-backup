@@ -462,6 +462,15 @@ class ProjectSharedService:
                 item['etapa_id'] = None
             item['rol_en_obra'] = asignacion.rol_en_obra if asignacion else None
 
+        # Calcular horas por etapa (para certificación por horas)
+        horas_por_etapa = {}
+        for item in resumen_horas_obra:
+            eid = item.get('etapa_id')
+            if eid:
+                if eid not in horas_por_etapa:
+                    horas_por_etapa[eid] = 0
+                horas_por_etapa[eid] += item['total_segundos']
+
         if request.args.get('format') == 'json':
             return jsonify(
                 ok=True,
@@ -501,6 +510,7 @@ class ProjectSharedService:
             contexto=context,
             desglose_etapas=desglose_etapas,
             resumen_horas=resumen_horas_obra,
+            horas_por_etapa=horas_por_etapa,
         )
 
     @staticmethod

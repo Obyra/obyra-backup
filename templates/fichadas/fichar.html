@@ -435,6 +435,12 @@ async function registrarFichada() {
             mostrarResultado('ok', msg);
             actualizarEstado('ok', msg);
             setTimeout(function() { window.location.reload(); }, 2500);
+        } else if (data.offline || data.queued) {
+            // Service worker guardó offline — reintentar directamente
+            mostrarResultado('error', 'Sin conexion. Reintentando...');
+            fichandoEnCurso = false;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-' + (PROXIMO_TIPO === 'egreso' ? 'sign-out-alt' : 'sign-in-alt') + ' me-2"></i>FICHAR ' + PROXIMO_TIPO.toUpperCase();
         } else {
             mostrarResultado('error', data.error || 'Error al registrar fichada');
             fichandoEnCurso = false;
