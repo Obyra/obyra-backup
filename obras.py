@@ -2597,6 +2597,284 @@ def api_obtener_reservas(obra_id):
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@obras_bp.route('/api/obras/<int:obra_id>/analizar-materiales', methods=['GET'])
+@login_required
+def api_analizar_materiales(obra_id):
+    """
+    Analiza TODOS los materiales del presupuesto contra el inventario.
+    Clasifica cada material en: con_stock, stock_parcial, sin_stock.
+    Usado por el modal unificado de Gestión de Materiales.
+    """
+    try:
+        from models.inventory import ItemInventario, ReservaStock
+
+        obra = Obra.query.get_or_404(obra_id)
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        presupuesto = obra.presupuestos.filter_by(confirmado_como_obra=True).first()
+        if not presupuesto:
+            return jsonify({'ok': False, 'error': 'Esta obra no tiene presupuesto confirmado'}), 400
+
+        materiales = [item for item in presupuesto.items if item.tipo == 'material']
+        if not materiales:
+            return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
+
+        con_stock = []
+        stock_parcial = []
+        sin_stock = []
+        sin_vincular = []
+
+        for material in materiales:
+            cantidad_necesaria = float(material.cantidad or 0)
+            if cantidad_necesaria <= 0:
+                continue
+
+            if not material.item_inventario_id:
+                sin_vincular.append({
+                    'descripcion': material.descripcion,
+                    'cantidad': cantidad_necesaria,
+                    'unidad': material.unidad or 'unidad',
+                    'codigo': material.codigo or ''
+                })
+                continue
+
+            item_inv = ItemInventario.query.get(material.item_inventario_id)
+            if not item_inv:
+                sin_vincular.append({
+                    'descripcion': material.descripcion,
+                    'cantidad': cantidad_necesaria,
+                    'unidad': material.unidad or 'unidad',
+                    'codigo': material.codigo or ''
+                })
+                continue
+
+            # Calcular stock disponible (stock actual - reservas activas de OTRAS obras)
+            stock_actual = float(item_inv.stock_actual or 0)
+            reservas_activas = ReservaStock.query.filter_by(
+                item_inventario_id=item_inv.id,
+                estado='activa'
+            ).all()
+            stock_reservado = sum(float(r.cantidad) for r in reservas_activas)
+
+            # Reserva existente para ESTA obra
+            reserva_esta_obra = next(
+                (r for r in reservas_activas if r.obra_id == obra.id), None
+            )
+            ya_reservado = float(reserva_esta_obra.cantidad) if reserva_esta_obra else 0
+
+            # Stock disponible = actual - reservado por otros
+            stock_disponible = stock_actual - stock_reservado + ya_reservado
+
+            item_data = {
+                'item_inventario_id': item_inv.id,
+                'descripcion': item_inv.nombre,
+                'codigo': item_inv.codigo or '',
+                'unidad': item_inv.unidad or 'unidad',
+                'cantidad_necesaria': cantidad_necesaria,
+                'stock_disponible': max(0, stock_disponible),
+                'ya_reservado': ya_reservado,
+            }
+
+            if ya_reservado >= cantidad_necesaria:
+                item_data['estado'] = 'ya_reservado'
+                con_stock.append(item_data)
+            elif stock_disponible >= cantidad_necesaria:
+                item_data['estado'] = 'disponible'
+                item_data['a_reservar'] = cantidad_necesaria
+                con_stock.append(item_data)
+            elif stock_disponible > 0:
+                item_data['estado'] = 'parcial'
+                item_data['a_reservar'] = stock_disponible
+                item_data['faltante'] = cantidad_necesaria - stock_disponible
+                stock_parcial.append(item_data)
+            else:
+                item_data['estado'] = 'sin_stock'
+                item_data['faltante'] = cantidad_necesaria
+                sin_stock.append(item_data)
+
+        return jsonify({
+            'ok': True,
+            'obra_nombre': obra.nombre,
+            'con_stock': con_stock,
+            'stock_parcial': stock_parcial,
+            'sin_stock': sin_stock,
+            'sin_vincular': sin_vincular,
+            'resumen': {
+                'total_materiales': len(con_stock) + len(stock_parcial) + len(sin_stock) + len(sin_vincular),
+                'con_stock': len(con_stock),
+                'parcial': len(stock_parcial),
+                'sin_stock': len(sin_stock),
+                'sin_vincular': len(sin_vincular)
+            }
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error al analizar materiales: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@obras_bp.route('/api/obras/<int:obra_id>/gestionar-materiales', methods=['POST'])
+@login_required
+def api_gestionar_materiales(obra_id):
+    """
+    Endpoint unificado: reserva stock + crea solicitud de compra en un solo paso.
+    Recibe:
+    - reservar: [{item_inventario_id, cantidad}] — items a reservar
+    - comprar: [{item_inventario_id, descripcion, cantidad, unidad, ...}] — items a solicitar
+    - motivo, prioridad, fecha_necesidad — datos de la solicitud de compra
+    """
+    try:
+        from models.inventory import (
+            ItemInventario, ReservaStock,
+            RequerimientoCompra, RequerimientoCompraItem
+        )
+
+        obra = Obra.query.get_or_404(obra_id)
+        if obra.organizacion_id != current_user.organizacion_id:
+            return jsonify({'ok': False, 'error': 'Sin permisos'}), 403
+
+        data = request.get_json() or {}
+        items_reservar = data.get('reservar', [])
+        items_comprar = data.get('comprar', [])
+        motivo = data.get('motivo', 'Falta de material en obra')
+        prioridad = data.get('prioridad', 'normal')
+        fecha_necesidad_str = data.get('fecha_necesidad')
+
+        reservas_resultado = []
+        compra_resultado = None
+
+        # ── 1. Crear reservas ──
+        for item_data in items_reservar:
+            item_inv_id = item_data.get('item_inventario_id')
+            cantidad = float(item_data.get('cantidad', 0))
+            if not item_inv_id or cantidad <= 0:
+                continue
+
+            item_inv = ItemInventario.query.get(item_inv_id)
+            if not item_inv:
+                continue
+
+            # Verificar si ya existe reserva para esta obra
+            reserva_existente = ReservaStock.query.filter_by(
+                item_inventario_id=item_inv.id,
+                obra_id=obra.id,
+                estado='activa'
+            ).first()
+
+            if reserva_existente:
+                # Actualizar cantidad si la nueva es mayor
+                if cantidad > float(reserva_existente.cantidad):
+                    reserva_existente.cantidad = cantidad
+                reservas_resultado.append({
+                    'material': item_inv.nombre,
+                    'cantidad': float(reserva_existente.cantidad),
+                    'unidad': item_inv.unidad,
+                    'accion': 'actualizada'
+                })
+            else:
+                # Verificar stock disponible
+                stock_actual = float(item_inv.stock_actual or 0)
+                reservas_otros = ReservaStock.query.filter(
+                    ReservaStock.item_inventario_id == item_inv.id,
+                    ReservaStock.estado == 'activa',
+                    ReservaStock.obra_id != obra.id
+                ).all()
+                stock_reservado_otros = sum(float(r.cantidad) for r in reservas_otros)
+                stock_libre = stock_actual - stock_reservado_otros
+
+                cantidad_real = min(cantidad, max(0, stock_libre))
+                if cantidad_real > 0:
+                    reserva = ReservaStock(
+                        item_inventario_id=item_inv.id,
+                        obra_id=obra.id,
+                        cantidad=cantidad_real,
+                        estado='activa',
+                        usuario_id=current_user.id
+                    )
+                    db.session.add(reserva)
+                    reservas_resultado.append({
+                        'material': item_inv.nombre,
+                        'cantidad': cantidad_real,
+                        'unidad': item_inv.unidad,
+                        'accion': 'creada'
+                    })
+
+        # ── 2. Crear solicitud de compra (si hay items) ──
+        if items_comprar:
+            from datetime import datetime as dt
+            org_id = current_user.organizacion_id
+
+            requerimiento = RequerimientoCompra(
+                numero=RequerimientoCompra.generar_numero(org_id),
+                organizacion_id=org_id,
+                obra_id=obra.id,
+                solicitante_id=current_user.id,
+                motivo=motivo,
+                prioridad=prioridad,
+                fecha_necesidad=dt.strptime(fecha_necesidad_str, '%Y-%m-%d').date() if fecha_necesidad_str else None
+            )
+            db.session.add(requerimiento)
+            db.session.flush()
+
+            for item_data in items_comprar:
+                item = RequerimientoCompraItem(
+                    requerimiento_id=requerimiento.id,
+                    item_inventario_id=item_data.get('item_inventario_id') or None,
+                    descripcion=item_data.get('descripcion', ''),
+                    codigo=item_data.get('codigo', ''),
+                    cantidad=float(item_data.get('cantidad', 1)),
+                    unidad=item_data.get('unidad', 'unidad'),
+                    cantidad_planificada=float(item_data.get('cantidad_planificada', 0)),
+                    cantidad_actual_obra=float(item_data.get('cantidad_actual_obra', 0)),
+                    tipo=item_data.get('tipo', 'material')
+                )
+                db.session.add(item)
+
+            compra_resultado = {
+                'requerimiento_id': requerimiento.id,
+                'numero': requerimiento.numero,
+                'items_count': len(items_comprar)
+            }
+
+        db.session.commit()
+
+        # Notificar si se creó solicitud de compra
+        if compra_resultado:
+            try:
+                from blueprint_requerimientos import _notificar_nuevo_requerimiento
+                req = RequerimientoCompra.query.get(compra_resultado['requerimiento_id'])
+                if req:
+                    _notificar_nuevo_requerimiento(req)
+            except Exception as notify_err:
+                current_app.logger.warning(f"Error al notificar: {notify_err}")
+
+        return jsonify({
+            'ok': True,
+            'reservas': {
+                'count': len(reservas_resultado),
+                'detalle': reservas_resultado
+            },
+            'compra': compra_resultado,
+            'message': _build_result_message(reservas_resultado, compra_resultado)
+        })
+
+    except Exception as e:
+        current_app.logger.exception(f"Error en gestionar-materiales: {e}")
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+def _build_result_message(reservas, compra):
+    """Construye mensaje de resumen para el usuario."""
+    parts = []
+    if reservas:
+        parts.append(f'{len(reservas)} material(es) reservado(s)')
+    if compra:
+        parts.append(f'Solicitud de compra {compra["numero"]} creada con {compra["items_count"]} item(s)')
+    return ' | '.join(parts) if parts else 'No se realizaron acciones'
+
+
 @obras_bp.route('/api/obras/<int:obra_id>/consumir-material', methods=['POST'])
 @login_required
 def api_consumir_material(obra_id):

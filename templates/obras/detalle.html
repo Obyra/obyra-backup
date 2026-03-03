@@ -370,18 +370,13 @@
                             </button>
                         </li>
                         <li class="nav-item ms-auto" role="presentation">
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-warning" onclick="reservarMateriales(this, {{ obra.id }})" title="Reservar materiales en inventario">
-                                    <i class="fas fa-lock me-1"></i>Reservar Stock
-                                </button>
-                                <button class="btn btn-danger" onclick="mostrarModalRequerimientoCompra()" title="Solicitar compra de materiales faltantes">
-                                    <i class="fas fa-shopping-cart me-1"></i>Solicitar Compra
-                                </button>
-                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="abrirGestionMateriales({{ obra.id }})" title="Analizar stock, reservar y solicitar compra">
+                                <i class="fas fa-boxes me-1"></i>Gestionar Materiales
+                            </button>
                         </li>
                     </ul>
 
-                    <!-- Alertas de reservas y compras -->
+                    <!-- Alertas de gestion de materiales -->
                     <div id="alertasReservas" class="mb-3" style="display: none;"></div>
 
                     <!-- Panel de Reservas Activas -->
@@ -2588,112 +2583,256 @@ document.getElementById('formAvanceEnModal')?.addEventListener('submit', async f
 /* HOTFIX: Sin preventDefault global — dejamos que los forms tradicionales funcionen si no hay JS específico. */
 console.log('🔧 HOTFIX activo: envíos tradicionales permitidos cuando corresponde.');
 
-// ========== RESERVA DE MATERIALES ==========
-async function reservarMateriales(btn, obraId) {
-    const originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
+// ========== GESTIÓN UNIFICADA DE MATERIALES ==========
+var gestionData = null; // datos del análisis
+
+async function abrirGestionMateriales(obraId) {
+    var modal = new bootstrap.Modal(document.getElementById('modalGestionMateriales'));
+    modal.show();
+
+    var body = document.getElementById('gestionMaterialesBody');
+    body.innerHTML = '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-primary mb-3 d-block"></i><p class="text-muted">Analizando materiales vs inventario...</p></div>';
+    document.getElementById('btnEjecutarGestion').disabled = true;
+    document.getElementById('gestionResumen').innerHTML = '';
 
     try {
-        // Obtener CSRF token de cualquier input hidden en la página
-        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+        var response = await fetch('/obras/api/obras/' + obraId + '/analizar-materiales');
+        var data = await response.json();
 
-        const response = await fetch(`/obras/api/obras/${obraId}/reservar-materiales`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            }
-        });
-
-        const data = await response.json();
-
-        if (data.ok) {
-            mostrarAlertasReservas(data);
-        } else {
-            throw new Error(data.error || 'Error al reservar materiales');
+        if (!data.ok) {
+            body.innerHTML = '<div class="alert alert-danger m-3"><i class="fas fa-exclamation-triangle me-2"></i>' + (data.error || 'Error') + '</div>';
+            return;
         }
+
+        gestionData = data;
+        renderAnalisisMateriales(data);
     } catch (error) {
-        alert('Error al reservar materiales: ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
+        body.innerHTML = '<div class="alert alert-danger m-3"><i class="fas fa-wifi me-2"></i>Error de conexion: ' + error.message + '</div>';
     }
 }
 
-function mostrarAlertasReservas(data) {
-    const container = document.getElementById('alertasReservas');
-    container.style.display = 'block';
+function renderAnalisisMateriales(data) {
+    var body = document.getElementById('gestionMaterialesBody');
+    var html = '';
 
-    let html = '';
+    var hayReservables = false;
+    var hayComprables = false;
 
-    // Mostrar reservas creadas exitosamente
-    if (data.reservas_creadas > 0) {
-        html += `
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                <strong><i class="fas fa-check-circle me-2"></i>¡Reservas creadas exitosamente!</strong>
-                <p class="mb-2 mt-2">Se reservaron ${data.reservas_creadas} materiales en el inventario:</p>
-                <ul class="mb-0">
-                    ${data.detalle.reservas.map(r => `
-                        <li>${r.material}: ${r.cantidad} ${r.unidad}</li>
-                    `).join('')}
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
+    // ── Con stock disponible ──
+    if (data.con_stock.length > 0) {
+        hayReservables = true;
+        html += '<div class="mb-3">';
+        html += '<div class="d-flex align-items-center mb-2 px-3 pt-2"><span class="badge bg-success me-2">' + data.con_stock.length + '</span><strong class="text-success">Con stock disponible</strong></div>';
+        html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+        html += '<thead class="table-success"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Stock</th><th class="text-center">Estado</th></tr></thead><tbody>';
+        data.con_stock.forEach(function(m) {
+            var yaReservado = m.estado === 'ya_reservado';
+            html += '<tr class="' + (yaReservado ? 'table-light' : '') + '">';
+            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-reservar" data-item=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, cantidad: m.a_reservar || m.cantidad_necesaria}).replace(/'/g, '&#39;') + '\' ' + (yaReservado ? 'disabled checked' : 'checked') + '></td>';
+            html += '<td><strong class="small">' + m.descripcion + '</strong></td>';
+            html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
+            html += '<td class="text-center small">' + m.stock_disponible + ' ' + m.unidad + '</td>';
+            if (yaReservado) {
+                html += '<td class="text-center"><span class="badge bg-secondary">Ya reservado</span></td>';
+            } else {
+                html += '<td class="text-center"><span class="badge bg-success">Reservar</span></td>';
+            }
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
     }
 
-    // Mostrar alertas de compra (stock insuficiente)
-    if (data.alertas_compra > 0) {
-        html += `
-            <div class="alert alert-warning alert-dismissible fade show" role="alert">
-                <strong><i class="fas fa-exclamation-triangle me-2"></i>¡Stock insuficiente!</strong>
-                <p class="mb-2 mt-2">Los siguientes materiales requieren compra:</p>
-                <ul class="mb-0">
-                    ${data.detalle.alertas.map(a => `
-                        <li>
-                            <strong>${a.material}</strong>:
-                            Necesario: ${a.cantidad_necesaria} ${a.unidad} |
-                            Disponible: ${a.stock_disponible} ${a.unidad} |
-                            <span class="text-danger">Faltante: ${a.faltante} ${a.unidad}</span>
-                        </li>
-                    `).join('')}
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
+    // ── Stock parcial ──
+    if (data.stock_parcial.length > 0) {
+        hayReservables = true;
+        hayComprables = true;
+        html += '<div class="mb-3">';
+        html += '<div class="d-flex align-items-center mb-2 px-3"><span class="badge bg-warning text-dark me-2">' + data.stock_parcial.length + '</span><strong class="text-warning">Stock parcial</strong></div>';
+        html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+        html += '<thead class="table-warning"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Reservar</th><th class="text-center text-danger">Solicitar compra</th></tr></thead><tbody>';
+        data.stock_parcial.forEach(function(m) {
+            html += '<tr>';
+            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-parcial" data-reservar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, cantidad: m.a_reservar}).replace(/'/g, '&#39;') + '\' data-comprar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, descripcion: m.descripcion, codigo: m.codigo, cantidad: m.faltante, unidad: m.unidad, cantidad_planificada: m.cantidad_necesaria, cantidad_actual_obra: m.stock_disponible, tipo: 'material'}).replace(/'/g, '&#39;') + '\' checked></td>';
+            html += '<td><strong class="small">' + m.descripcion + '</strong></td>';
+            html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
+            html += '<td class="text-center"><span class="badge bg-success">' + m.a_reservar + ' ' + m.unidad + '</span></td>';
+            html += '<td class="text-center"><span class="badge bg-danger">' + m.faltante + ' ' + m.unidad + '</span></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
     }
 
-    // Si no hay reservas ni alertas, mostrar mensaje informativo
-    if (data.reservas_creadas === 0 && data.alertas_compra === 0) {
-        if (data.materiales_sin_match > 0) {
-            html += `
-                <div class="alert alert-info alert-dismissible fade show" role="alert">
-                    <strong><i class="fas fa-info-circle me-2"></i>Sin materiales vinculados</strong>
-                    <p class="mb-0 mt-2">Los materiales del presupuesto no están vinculados al inventario.
-                    Para reservar stock, primero vinculá cada material desde el módulo de presupuestos.</p>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-        } else {
-            html += `
-                <div class="alert alert-info alert-dismissible fade show" role="alert">
-                    <strong><i class="fas fa-info-circle me-2"></i>Sin reservas pendientes</strong>
-                    <p class="mb-0 mt-2">No hay materiales nuevos para reservar.
-                    Los materiales ya fueron reservados o no hay materiales en el presupuesto.</p>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-        }
+    // ── Sin stock ──
+    if (data.sin_stock.length > 0) {
+        hayComprables = true;
+        html += '<div class="mb-3">';
+        html += '<div class="d-flex align-items-center mb-2 px-3"><span class="badge bg-danger me-2">' + data.sin_stock.length + '</span><strong class="text-danger">Sin stock</strong></div>';
+        html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+        html += '<thead class="table-danger"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Stock</th><th class="text-center">Faltante</th></tr></thead><tbody>';
+        data.sin_stock.forEach(function(m) {
+            html += '<tr>';
+            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-comprar" data-comprar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, descripcion: m.descripcion, codigo: m.codigo, cantidad: m.faltante, unidad: m.unidad, cantidad_planificada: m.cantidad_necesaria, cantidad_actual_obra: 0, tipo: 'material'}).replace(/'/g, '&#39;') + '\' checked></td>';
+            html += '<td><strong class="small">' + m.descripcion + '</strong></td>';
+            html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
+            html += '<td class="text-center small text-muted">0</td>';
+            html += '<td class="text-center"><span class="badge bg-danger">' + m.faltante + ' ' + m.unidad + '</span></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
     }
 
-    container.innerHTML = html;
+    // ── Sin vincular ──
+    if (data.sin_vincular.length > 0) {
+        html += '<div class="mb-3">';
+        html += '<div class="d-flex align-items-center mb-2 px-3"><span class="badge bg-secondary me-2">' + data.sin_vincular.length + '</span><span class="text-muted">Sin vincular al inventario</span></div>';
+        html += '<div class="px-3"><small class="text-muted">Estos materiales del presupuesto no estan vinculados al inventario. Vincularlos para gestionar stock.</small>';
+        html += '<ul class="list-unstyled mt-1 mb-0">';
+        data.sin_vincular.forEach(function(m) {
+            html += '<li class="small text-muted"><i class="fas fa-unlink me-1"></i>' + m.descripcion + ' (' + m.cantidad + ' ' + m.unidad + ')</li>';
+        });
+        html += '</ul></div></div>';
+    }
 
-    // Scroll suave hasta las alertas
-    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // ── Sin materiales ──
+    if (data.con_stock.length === 0 && data.stock_parcial.length === 0 && data.sin_stock.length === 0 && data.sin_vincular.length === 0) {
+        html += '<div class="text-center py-4 text-muted"><i class="fas fa-check-circle fa-2x mb-2 d-block text-success"></i><p>No hay materiales que gestionar</p></div>';
+    }
 
-    // Recargar la lista de reservas activas
+    // ── Datos solicitud de compra (si hay items a comprar) ──
+    if (hayComprables) {
+        html += '<div class="border-top pt-3 mt-2 px-3 pb-2">';
+        html += '<h6 class="mb-2"><i class="fas fa-shopping-cart text-danger me-1"></i>Datos de la solicitud de compra</h6>';
+        html += '<div class="row g-2">';
+        html += '<div class="col-12"><textarea class="form-control form-control-sm" id="gestionMotivo" rows="2" placeholder="Motivo: ej. Falta material para completar etapa...">Falta de material en obra</textarea></div>';
+        html += '<div class="col-6"><label class="form-label small mb-1">Prioridad</label><select class="form-select form-select-sm" id="gestionPrioridad"><option value="baja">Baja</option><option value="normal" selected>Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></div>';
+        html += '<div class="col-6"><label class="form-label small mb-1">Fecha necesidad</label><input type="date" class="form-control form-control-sm" id="gestionFecha"></div>';
+        html += '</div></div>';
+    }
+
+    body.innerHTML = html;
+
+    // Actualizar resumen y boton
+    actualizarResumenGestion();
+
+    // Listeners en checkboxes
+    body.querySelectorAll('input[type="checkbox"]').forEach(function(chk) {
+        chk.addEventListener('change', actualizarResumenGestion);
+    });
+}
+
+function actualizarResumenGestion() {
+    var reservarCount = 0;
+    var comprarCount = 0;
+
+    document.querySelectorAll('.chk-reservar:checked:not(:disabled)').forEach(function() { reservarCount++; });
+    document.querySelectorAll('.chk-parcial:checked').forEach(function() { reservarCount++; comprarCount++; });
+    document.querySelectorAll('.chk-comprar:checked').forEach(function() { comprarCount++; });
+
+    var resumen = document.getElementById('gestionResumen');
+    var btn = document.getElementById('btnEjecutarGestion');
+    var parts = [];
+    if (reservarCount > 0) parts.push('<span class="badge bg-success me-1"><i class="fas fa-lock me-1"></i>Reservar ' + reservarCount + '</span>');
+    if (comprarCount > 0) parts.push('<span class="badge bg-danger me-1"><i class="fas fa-shopping-cart me-1"></i>Solicitar ' + comprarCount + '</span>');
+
+    resumen.innerHTML = parts.length > 0 ? parts.join('') : '<span class="text-muted small">Selecciona items para ejecutar</span>';
+    btn.disabled = (reservarCount + comprarCount) === 0;
+}
+
+async function ejecutarGestionMateriales() {
+    var btn = document.getElementById('btnEjecutarGestion');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Procesando...';
+
+    // Recopilar items a reservar
+    var itemsReservar = [];
+    document.querySelectorAll('.chk-reservar:checked:not(:disabled)').forEach(function(chk) {
+        var d = JSON.parse(chk.getAttribute('data-item'));
+        itemsReservar.push(d);
+    });
+    document.querySelectorAll('.chk-parcial:checked').forEach(function(chk) {
+        var d = JSON.parse(chk.getAttribute('data-reservar'));
+        itemsReservar.push(d);
+    });
+
+    // Recopilar items a comprar
+    var itemsComprar = [];
+    document.querySelectorAll('.chk-parcial:checked').forEach(function(chk) {
+        var d = JSON.parse(chk.getAttribute('data-comprar'));
+        itemsComprar.push(d);
+    });
+    document.querySelectorAll('.chk-comprar:checked').forEach(function(chk) {
+        var d = JSON.parse(chk.getAttribute('data-comprar'));
+        itemsComprar.push(d);
+    });
+
+    var payload = {
+        reservar: itemsReservar,
+        comprar: itemsComprar
+    };
+
+    // Datos de solicitud de compra
+    var motivoEl = document.getElementById('gestionMotivo');
+    if (motivoEl) payload.motivo = motivoEl.value || 'Falta de material en obra';
+    var prioEl = document.getElementById('gestionPrioridad');
+    if (prioEl) payload.prioridad = prioEl.value;
+    var fechaEl = document.getElementById('gestionFecha');
+    if (fechaEl && fechaEl.value) payload.fecha_necesidad = fechaEl.value;
+
+    try {
+        var csrfToken = document.querySelector('input[name="csrf_token"]')?.value || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        var response = await fetch('/obras/api/obras/{{ obra.id }}/gestionar-materiales', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify(payload)
+        });
+
+        var data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'Error al procesar');
+
+        mostrarResultadoGestion(data);
+    } catch (error) {
+        alert('Error: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Ejecutar todo';
+    }
+}
+
+function mostrarResultadoGestion(data) {
+    var body = document.getElementById('gestionMaterialesBody');
+    var html = '<div class="text-center py-4">';
+    html += '<i class="fas fa-check-circle fa-3x text-success mb-3 d-block"></i>';
+    html += '<h5 class="text-success mb-3">Operacion completada</h5>';
+
+    if (data.reservas && data.reservas.count > 0) {
+        html += '<div class="alert alert-success text-start mx-3">';
+        html += '<strong><i class="fas fa-lock me-2"></i>' + data.reservas.count + ' material(es) reservado(s)</strong>';
+        html += '<ul class="mb-0 mt-2 small">';
+        data.reservas.detalle.forEach(function(r) {
+            html += '<li>' + r.material + ': ' + r.cantidad + ' ' + r.unidad + ' <span class="badge bg-secondary">' + r.accion + '</span></li>';
+        });
+        html += '</ul></div>';
+    }
+
+    if (data.compra) {
+        html += '<div class="alert alert-info text-start mx-3">';
+        html += '<strong><i class="fas fa-shopping-cart me-2"></i>Solicitud de compra ' + data.compra.numero + '</strong>';
+        html += '<p class="mb-0 mt-1 small">' + data.compra.items_count + ' item(s) — El administrador sera notificado.</p>';
+        html += '</div>';
+    }
+
+    html += '<button class="btn btn-primary mt-2" onclick="cerrarGestionYRecargar()"><i class="fas fa-arrow-left me-1"></i>Volver a la obra</button>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    document.getElementById('gestionResumen').innerHTML = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Completado</span>';
+    document.getElementById('btnEjecutarGestion').style.display = 'none';
+}
+
+function cerrarGestionYRecargar() {
+    bootstrap.Modal.getInstance(document.getElementById('modalGestionMateriales'))?.hide();
+    // Recargar reservas y stock
     cargarReservas({{ obra.id }});
+    if (typeof cargarStockObra === 'function') cargarStockObra({{ obra.id }});
 }
 
 // ========== GESTIÓN DE RESERVAS ACTIVAS ==========
@@ -3084,241 +3223,30 @@ function pedirMasStock(obraId, itemInventarioId, itemNombre) {
     window.open('/inventario?buscar=' + encodeURIComponent(itemNombre), '_blank');
 }
 
-// ========== REQUERIMIENTO DE COMPRA ==========
-let itemsRequerimiento = [];
-let itemReqIdCounter = 0;
 
-function mostrarModalRequerimientoCompra() {
-    itemsRequerimiento = [];
-    itemReqIdCounter = 0;
-    document.getElementById('reqMotivo').value = '';
-    document.getElementById('reqPrioridad').value = 'normal';
-    document.getElementById('reqFechaNecesidad').value = '';
-    renderItemsRequerimiento();
-
-    // Cargar materiales con deficit
-    cargarMaterialesConDeficit();
-
-    const modal = new bootstrap.Modal(document.getElementById('modalRequerimientoCompra'));
-    modal.show();
-}
-
-function cargarMaterialesConDeficit() {
-    const lista = document.getElementById('listaMaterialesDeficit');
-    lista.innerHTML = '<div class="text-center py-2"><i class="fas fa-spinner fa-spin"></i></div>';
-
-    fetch(`/requerimientos/api/materiales-obra/{{ obra.id }}`)
-        .then(resp => resp.json())
-        .then(data => {
-            if (data.ok && data.materiales) {
-                const conDeficit = data.materiales.filter(m => m.deficit > 0);
-                if (conDeficit.length === 0) {
-                    lista.innerHTML = '<div class="text-muted small p-2">No hay materiales con deficit</div>';
-                    return;
-                }
-                lista.innerHTML = conDeficit.map(mat => `
-                    <a href="#" class="list-group-item list-group-item-action py-2" onclick="agregarMaterialReq(${JSON.stringify(mat).replace(/"/g, '&quot;')}); return false;">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong class="small">${mat.descripcion}</strong>
-                            </div>
-                            <span class="badge bg-danger">-${mat.deficit.toFixed(1)} ${mat.unidad}</span>
-                        </div>
-                    </a>
-                `).join('');
-            } else {
-                lista.innerHTML = '<div class="text-danger small p-2">Error al cargar</div>';
-            }
-        })
-        .catch(() => {
-            lista.innerHTML = '<div class="text-danger small p-2">Error de conexion</div>';
-        });
-}
-
-function agregarMaterialReq(mat) {
-    // Verificar si ya existe
-    if (mat.item_inventario_id && itemsRequerimiento.find(i => i.item_inventario_id === mat.item_inventario_id)) {
-        alert('Este material ya fue agregado');
-        return;
-    }
-
-    itemsRequerimiento.push({
-        id: ++itemReqIdCounter,
-        item_inventario_id: mat.item_inventario_id,
-        descripcion: mat.descripcion,
-        codigo: mat.codigo || '',
-        cantidad: mat.deficit || 1,
-        unidad: mat.unidad,
-        cantidad_planificada: mat.cantidad_planificada || 0,
-        cantidad_actual_obra: mat.cantidad_actual_obra || 0,
-        tipo: mat.tipo || 'material'
-    });
-    renderItemsRequerimiento();
-}
-
-function agregarItemManualReq() {
-    const desc = prompt('Descripcion del material/equipo:');
-    if (!desc) return;
-    const cant = parseFloat(prompt('Cantidad necesaria:', '1'));
-    if (!cant || cant <= 0) return;
-    const unidad = prompt('Unidad (unidad, kg, lts, m2, etc):', 'unidad');
-
-    itemsRequerimiento.push({
-        id: ++itemReqIdCounter,
-        item_inventario_id: null,
-        descripcion: desc,
-        codigo: '',
-        cantidad: cant,
-        unidad: unidad || 'unidad',
-        tipo: 'material'
-    });
-    renderItemsRequerimiento();
-}
-
-function eliminarItemReq(itemId) {
-    itemsRequerimiento = itemsRequerimiento.filter(i => i.id !== itemId);
-    renderItemsRequerimiento();
-}
-
-function renderItemsRequerimiento() {
-    const lista = document.getElementById('listaItemsRequerimiento');
-    const btn = document.getElementById('btnEnviarRequerimiento');
-
-    if (itemsRequerimiento.length === 0) {
-        lista.innerHTML = '<div class="text-center text-muted py-3 small">Selecciona materiales de la lista o agrega manualmente</div>';
-        btn.disabled = true;
-    } else {
-        lista.innerHTML = itemsRequerimiento.map(item => `
-            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
-                <div>
-                    <strong class="small">${item.descripcion}</strong>
-                    <span class="badge bg-primary ms-1">${item.cantidad} ${item.unidad}</span>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItemReq(${item.id})">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `).join('');
-        btn.disabled = false;
-    }
-
-    document.getElementById('totalItemsReq').textContent = itemsRequerimiento.length;
-}
-
-async function enviarRequerimientoCompra() {
-    const motivo = document.getElementById('reqMotivo').value.trim();
-    if (!motivo) {
-        alert('Debe indicar el motivo de la solicitud');
-        return;
-    }
-    if (itemsRequerimiento.length === 0) {
-        alert('Debe agregar al menos un item');
-        return;
-    }
-
-    const btn = document.getElementById('btnEnviarRequerimiento');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enviando...';
-
-    try {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        const response = await fetch('/requerimientos/api/crear-desde-obra', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken || ''
-            },
-            body: JSON.stringify({
-                obra_id: {{ obra.id }},
-                motivo: motivo,
-                prioridad: document.getElementById('reqPrioridad').value,
-                fecha_necesidad: document.getElementById('reqFechaNecesidad').value || null,
-                items: itemsRequerimiento.map(i => ({
-                    item_inventario_id: i.item_inventario_id,
-                    descripcion: i.descripcion,
-                    codigo: i.codigo,
-                    cantidad: i.cantidad,
-                    unidad: i.unidad,
-                    cantidad_planificada: i.cantidad_planificada || 0,
-                    cantidad_actual_obra: i.cantidad_actual_obra || 0,
-                    tipo: i.tipo
-                }))
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.ok) {
-            alert(`Requerimiento ${data.numero} creado exitosamente. El administrador sera notificado.`);
-            bootstrap.Modal.getInstance(document.getElementById('modalRequerimientoCompra')).hide();
-            // Opcional: redirigir al detalle del requerimiento
-            // window.location.href = `/requerimientos/${data.requerimiento_id}`;
-        } else {
-            throw new Error(data.error || 'Error al crear requerimiento');
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Enviar Solicitud';
-    }
-}
 </script>
 
-<!-- Modal Requerimiento de Compra -->
-<div class="modal fade" id="modalRequerimientoCompra" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<!-- Modal Gestion Unificada de Materiales -->
+<div class="modal fade" id="modalGestionMateriales" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title"><i class="fas fa-shopping-cart me-2"></i>Solicitar Compra de Materiales</h5>
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title"><i class="fas fa-boxes me-2"></i>Gestion de Materiales</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-5">
-                        <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-warning me-1"></i>Materiales con Deficit</h6>
-                        <div id="listaMaterialesDeficit" class="list-group list-group-flush border rounded" style="max-height: 250px; overflow-y: auto;">
-                            <div class="text-center py-2"><i class="fas fa-spinner fa-spin"></i></div>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2" onclick="agregarItemManualReq()">
-                            <i class="fas fa-plus me-1"></i>Agregar Manual
-                        </button>
-                    </div>
-                    <div class="col-md-7">
-                        <h6 class="mb-2"><i class="fas fa-list me-1"></i>Items a Solicitar (<span id="totalItemsReq">0</span>)</h6>
-                        <div id="listaItemsRequerimiento" class="list-group list-group-flush border rounded mb-3" style="max-height: 150px; overflow-y: auto;">
-                            <div class="text-center text-muted py-3 small">Selecciona materiales de la lista</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small">Motivo de la solicitud *</label>
-                            <textarea class="form-control form-control-sm" id="reqMotivo" rows="2" required
-                                      placeholder="Ej: Falta material para completar etapa de pintura..."></textarea>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-6">
-                                <label class="form-label fw-bold small">Prioridad</label>
-                                <select class="form-select form-select-sm" id="reqPrioridad">
-                                    <option value="baja">Baja</option>
-                                    <option value="normal" selected>Normal</option>
-                                    <option value="alta">Alta</option>
-                                    <option value="urgente">Urgente</option>
-                                </select>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label fw-bold small">Fecha necesidad</label>
-                                <input type="date" class="form-control form-control-sm" id="reqFechaNecesidad">
-                            </div>
-                        </div>
-                    </div>
+            <div class="modal-body p-0" id="gestionMaterialesBody">
+                <div class="text-center py-5">
+                    <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-danger" id="btnEnviarRequerimiento" onclick="enviarRequerimientoCompra()" disabled>
-                    <i class="fas fa-paper-plane me-1"></i>Enviar Solicitud
-                </button>
+            <div class="modal-footer py-2 d-flex justify-content-between align-items-center">
+                <div id="gestionResumen"></div>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnEjecutarGestion" onclick="ejecutarGestionMateriales()" disabled>
+                        <i class="fas fa-check-circle me-1"></i>Ejecutar todo
+                    </button>
+                </div>
             </div>
         </div>
     </div>
