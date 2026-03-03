@@ -149,7 +149,7 @@
                                             <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-sm btn-outline-primary flex-fill">
                                                 <i class="fas fa-eye me-1"></i>Detalles
                                             </a>
-                                            <button class="btn btn-sm btn-outline-warning d-flex align-items-center" onclick="abrirVentanaClima({{ obra.latitud or 'null' }}, {{ obra.longitud or 'null' }}, {{ obra.nombre|tojson }}, {{ (obra.direccion or 'Sin dirección')|tojson }}, {{ obra.id }})" title="Ver clima semanal">
+                                            <button class="btn btn-sm btn-outline-warning d-flex align-items-center" onclick="abrirClimaObra({{ obra.id }})" title="Ver clima semanal">
                                                 <i class="fas fa-cloud-sun"></i>
                                                 <span class="d-none d-md-inline ms-1">Clima</span>
                                             </button>
@@ -234,7 +234,23 @@ var marcadoresPorId = {};
 var infoWindowActiva = null;
 var mapaEngine = null; // 'google' o 'leaflet'
 
-// Datos de obras inyectados como JSON seguro
+// Datos de TODAS las obras (para botón clima)
+var TODAS_OBRAS = {
+{% for obra in obras.items if obras %}
+    {{ obra.id }}: {
+        id: {{ obra.id }},
+        lat: {{ obra.latitud|float if obra.latitud else 'null' }},
+        lng: {{ obra.longitud|float if obra.longitud else 'null' }},
+        nombre: {{ obra.nombre|tojson }},
+        cliente: {{ obra.cliente|tojson }},
+        direccion: {{ (obra.direccion or 'Sin dirección')|tojson }},
+        estado: {{ obra.estado|tojson }},
+        progreso: {{ obra.progreso or 0 }}
+    },
+{% endfor %}
+};
+
+// Datos de obras con coordenadas (para marcadores en mapa)
 var OBRAS_DATA = [
 {% for obra in obras.items if obras %}
 {% if obra.latitud and obra.longitud %}
@@ -251,6 +267,13 @@ var OBRAS_DATA = [
 {% endif %}
 {% endfor %}
 ];
+
+// Wrapper para abrir clima desde botón (evita problemas de comillas en onclick)
+function abrirClimaObra(obraId) {
+    var o = TODAS_OBRAS[obraId];
+    if (!o) { alert('Obra no encontrada'); return; }
+    abrirVentanaClima(o.lat, o.lng, o.nombre, o.direccion, obraId);
+}
 
 var COLORES_ESTADO = {
     planificacion: '#6c757d',
