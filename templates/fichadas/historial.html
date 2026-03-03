@@ -63,7 +63,65 @@
         </div>
     </div>
 
-    <!-- Tabla de resultados -->
+    <!-- Resumen de horas por operario (solo si se filtra por obra) -->
+    {% if resumen_horas %}
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2">
+                    <h6 class="mb-0"><i class="fas fa-hourglass-half me-1 text-primary"></i>Resumen de horas trabajadas</h6>
+                </div>
+                <div class="card-body p-0">
+                    {% for item in resumen_horas %}
+                    <div class="border-bottom {% if not loop.last %}mb-0{% endif %}">
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-light">
+                            <div>
+                                <i class="fas fa-user me-1"></i>
+                                <strong>{{ item.usuario.nombre_completo }}</strong>
+                                <small class="text-muted ms-2">{{ item.dias|length }} dia{{ 's' if item.dias|length != 1 }}</small>
+                            </div>
+                            <span class="badge bg-primary fs-6">
+                                <i class="fas fa-clock me-1"></i>{{ item.total_horas_str }}
+                            </span>
+                        </div>
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                                {% for dia in item.dias %}
+                                <tr>
+                                    <td class="ps-4" style="width: 130px;">
+                                        <small>{{ dia.fecha.strftime('%d/%m/%Y') }}</small>
+                                    </td>
+                                    <td>
+                                        {% for par in dia.pares %}
+                                        <span class="badge bg-success bg-opacity-10 text-success me-1">
+                                            <i class="fas fa-sign-in-alt me-1"></i>{{ par[0].fecha_hora.strftime('%H:%M') }}
+                                        </span>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger me-1">
+                                            <i class="fas fa-sign-out-alt me-1"></i>{{ par[1].fecha_hora.strftime('%H:%M') }}
+                                        </span>
+                                        {% endfor %}
+                                        {% if dia.en_obra %}
+                                        <span class="badge bg-info bg-opacity-10 text-info">
+                                            <i class="fas fa-building me-1"></i>En obra
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-3" style="width: 100px;">
+                                        <strong>{{ dia.horas_str }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabla de fichadas individuales -->
     <div class="row">
         <div class="col-12">
             <div class="card">
@@ -117,7 +175,7 @@
                         </table>
                     </div>
 
-                    <!-- Paginación -->
+                    <!-- Paginacion -->
                     {% if fichadas.pages > 1 %}
                     <div class="card-footer">
                         <nav>

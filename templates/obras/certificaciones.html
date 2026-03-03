@@ -15,7 +15,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
                     <p class="text-muted text-uppercase small mb-1">Certificado</p>
@@ -26,7 +26,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
                     <p class="text-muted text-uppercase small mb-1">Pagado</p>
@@ -37,7 +37,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
                     <p class="text-muted text-uppercase small mb-1">En borrador</p>
@@ -46,16 +46,26 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
-                    <p class="text-muted text-uppercase small mb-1">Contexto monetario</p>
-                    <h6 class="mb-0">Moneda base: {{ contexto.currency }}</h6>
+                    <p class="text-muted text-uppercase small mb-1">Horas fichadas</p>
+                    {% set total_horas_seg = resumen_horas|sum(attribute='total_segundos') if resumen_horas else 0 %}
+                    <h4 class="mb-0">{{ '%dh %02dm'|format(total_horas_seg // 3600, (total_horas_seg % 3600) // 60) if total_horas_seg > 0 else '0h' }}</h4>
+                    <small class="text-muted">{{ resumen_horas|length if resumen_horas else 0 }} operario{{ 's' if (resumen_horas|length if resumen_horas else 0) != 1 }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">Moneda</p>
+                    <h6 class="mb-0">{{ contexto.currency }}</h6>
                     {% if contexto.tasa_usd %}
-                    <small class="text-muted d-block">TC Banco Nacion: {{ contexto.tasa_usd }}</small>
+                    <small class="text-muted d-block">TC: {{ contexto.tasa_usd }}</small>
                     {% endif %}
                     {% if contexto.indice_cac %}
-                    <small class="text-muted">Indice CAC: {{ contexto.indice_cac }}</small>
+                    <small class="text-muted">CAC: {{ contexto.indice_cac }}</small>
                     {% endif %}
                 </div>
             </div>
@@ -68,6 +78,14 @@
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-certificadas" data-bs-toggle="tab" data-bs-target="#pane-certificadas" type="button" role="tab">Certificadas</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-horas" data-bs-toggle="tab" data-bs-target="#pane-horas" type="button" role="tab">
+                Horas de trabajo
+                {% if resumen_horas %}
+                <span class="badge bg-primary bg-opacity-75 ms-1">{{ resumen_horas|length }}</span>
+                {% endif %}
+            </button>
         </li>
     </ul>
     <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="certTabsContent">
@@ -295,6 +313,83 @@
                 <div class="text-center py-5">
                     <i class="fas fa-file-invoice-dollar fa-2x text-muted mb-2"></i>
                     <p class="mb-0 text-muted">Aun no se registraron certificaciones aprobadas.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Tab: Horas de trabajo -->
+        <div class="tab-pane fade" id="pane-horas" role="tabpanel" aria-labelledby="tab-horas">
+            <div class="p-3">
+                {% if resumen_horas %}
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-muted mb-0"><i class="fas fa-user-clock me-1"></i>Horas registradas por operario (fichadas con geolocalizacion)</h6>
+                    <a href="{{ url_for('fichadas.historial', obra_id=obra.id) }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-history me-1"></i>Ver historial completo
+                    </a>
+                </div>
+
+                {% for item in resumen_horas %}
+                <div class="card mb-3 border-0 shadow-sm">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <i class="fas fa-user-hard-hat me-1 text-muted"></i>
+                            <strong>{{ item.usuario.nombre_completo }}</strong>
+                            <small class="text-muted ms-2">{{ item.dias|length }} dia{{ 's' if item.dias|length != 1 }}</small>
+                        </div>
+                        <span class="badge bg-primary fs-6">
+                            <i class="fas fa-clock me-1"></i>{{ item.total_horas_str }}
+                        </span>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Fecha</th>
+                                    <th>Fichadas</th>
+                                    <th class="text-end pe-3">Horas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for dia in item.dias %}
+                                <tr>
+                                    <td class="ps-3">
+                                        <small>{{ dia.fecha.strftime('%d/%m/%Y') }}</small>
+                                        <small class="text-muted d-block">{{ ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'][dia.fecha.weekday()] }}</small>
+                                    </td>
+                                    <td>
+                                        {% for par in dia.pares %}
+                                        <span class="badge bg-success bg-opacity-10 text-success me-1">
+                                            {{ par[0].fecha_hora.strftime('%H:%M') }}
+                                        </span>
+                                        <i class="fas fa-arrow-right text-muted mx-1" style="font-size: 0.6rem;"></i>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger me-1">
+                                            {{ par[1].fecha_hora.strftime('%H:%M') }}
+                                        </span>
+                                        {% if not loop.last %}<span class="text-muted mx-1">|</span>{% endif %}
+                                        {% endfor %}
+                                        {% if dia.en_obra %}
+                                        <span class="badge bg-info bg-opacity-10 text-info ms-1">
+                                            <i class="fas fa-building me-1"></i>En obra
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <strong>{{ dia.horas_str }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-user-clock fa-2x text-muted mb-2"></i>
+                    <p class="mb-1 text-muted">No hay fichadas registradas para esta obra.</p>
+                    <p class="small text-muted">Los operarios y PMs pueden fichar ingreso/egreso con geolocalizacion desde el modulo de fichadas.</p>
                 </div>
                 {% endif %}
             </div>

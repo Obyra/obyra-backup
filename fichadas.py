@@ -5,7 +5,8 @@ import math
 import os
 import urllib.parse
 import urllib.request
-from datetime import datetime, date
+from collections import defaultdict
+from datetime import datetime, date, timedelta
 from flask import (Blueprint, render_template, request, jsonify,
                    flash, redirect, url_for, current_app)
 from flask_login import login_required, current_user
@@ -137,6 +138,126 @@ def _fichadas_hoy(usuario_id, obra_id):
             .all())
 
 
+def _calcular_horas_dia(fichadas_lista):
+    """Calcula horas trabajadas de una lista de fichadas del mismo día.
+
+    Empareja ingreso→egreso y suma las duraciones.
+    Returns: (total_segundos, pares, en_obra)
+      - total_segundos: int, total de segundos trabajados
+      - pares: list of (ingreso_fichada, egreso_fichada, duracion_timedelta)
+      - en_obra: bool, True si la última fichada es ingreso (aún en obra)
+    """
+    fichadas_ord = sorted(fichadas_lista, key=lambda f: f.fecha_hora)
+    pares = []
+    total_seg = 0
+    en_obra = False
+
+    i = 0
+    while i < len(fichadas_ord):
+        f = fichadas_ord[i]
+        if f.tipo == 'ingreso':
+            # Buscar el siguiente egreso
+            egreso = None
+            for j in range(i + 1, len(fichadas_ord)):
+                if fichadas_ord[j].tipo == 'egreso':
+                    egreso = fichadas_ord[j]
+                    i = j + 1
+                    break
+            if egreso:
+                dur = egreso.fecha_hora - f.fecha_hora
+                pares.append((f, egreso, dur))
+                total_seg += int(dur.total_seconds())
+            else:
+                # Ingreso sin egreso: aún en obra
+                en_obra = True
+                i += 1
+        else:
+            # Egreso suelto (sin ingreso previo), ignorar
+            i += 1
+
+    return total_seg, pares, en_obra
+
+
+def _formatear_horas(total_segundos):
+    """Formatea segundos a 'Xh Ym'."""
+    horas = total_segundos // 3600
+    minutos = (total_segundos % 3600) // 60
+    if horas > 0:
+        return f'{horas}h {minutos:02d}m'
+    return f'{minutos}m'
+
+
+def calcular_resumen_horas(obra_id, desde=None, hasta=None, usuario_id=None):
+    """Calcula resumen de horas trabajadas por operario en una obra.
+
+    Returns: list of dicts, one per user:
+      [{
+        'usuario': Usuario,
+        'dias': [{
+            'fecha': date,
+            'horas_str': '8h 30m',
+            'total_segundos': 30600,
+            'pares': [...],
+            'en_obra': False,
+        }],
+        'total_segundos': int,
+        'total_horas_str': '42h 15m',
+      }]
+    """
+    query = (Fichada.query
+             .filter(Fichada.obra_id == obra_id)
+             .order_by(Fichada.fecha_hora.asc()))
+
+    if usuario_id:
+        query = query.filter(Fichada.usuario_id == usuario_id)
+    if desde:
+        if isinstance(desde, str):
+            desde = datetime.strptime(desde, '%Y-%m-%d').date()
+        query = query.filter(db.func.date(Fichada.fecha_hora) >= desde)
+    if hasta:
+        if isinstance(hasta, str):
+            hasta = datetime.strptime(hasta, '%Y-%m-%d').date()
+        query = query.filter(db.func.date(Fichada.fecha_hora) <= hasta)
+
+    fichadas = query.all()
+    if not fichadas:
+        return []
+
+    # Agrupar por usuario y fecha
+    por_usuario = defaultdict(lambda: defaultdict(list))
+    for f in fichadas:
+        dia = f.fecha_hora.date()
+        por_usuario[f.usuario_id][dia].append(f)
+
+    resultado = []
+    for uid, dias_dict in por_usuario.items():
+        usuario = Usuario.query.get(uid)
+        if not usuario:
+            continue
+        dias = []
+        total_seg_usuario = 0
+        for dia in sorted(dias_dict.keys()):
+            seg, pares, en_obra = _calcular_horas_dia(dias_dict[dia])
+            total_seg_usuario += seg
+            dias.append({
+                'fecha': dia,
+                'horas_str': _formatear_horas(seg) if seg > 0 else ('En obra' if en_obra else '0m'),
+                'total_segundos': seg,
+                'pares': pares,
+                'en_obra': en_obra,
+            })
+        resultado.append({
+            'usuario': usuario,
+            'dias': dias,
+            'total_segundos': total_seg_usuario,
+            'total_horas_str': _formatear_horas(total_seg_usuario),
+        })
+
+    # Ordenar por total de horas descendente
+    resultado.sort(key=lambda r: r['total_segundos'], reverse=True)
+    return resultado
+
+
 # ---------------------------------------------------------------------------
 # Rutas de vista
 # ---------------------------------------------------------------------------
@@ -197,10 +318,20 @@ def fichar(obra_id):
 
     fichadas_del_dia = _fichadas_hoy(current_user.id, obra_id)
 
+    # Calcular horas trabajadas hoy
+    horas_hoy = None
+    if fichadas_del_dia:
+        seg, _, en_obra = _calcular_horas_dia(fichadas_del_dia)
+        if seg > 0:
+            horas_hoy = _formatear_horas(seg)
+        elif en_obra:
+            horas_hoy = 'En obra'
+
     return render_template('fichadas/fichar.html',
                            obra=obra,
                            proximo_tipo=proximo_tipo,
                            fichadas_del_dia=fichadas_del_dia,
+                           horas_hoy=horas_hoy,
                            es_admin=_es_admin(current_user),
                            google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
@@ -401,11 +532,19 @@ def historial():
                     .filter_by(organizacion_id=org_id, activo=True)
                     .order_by(Usuario.nombre).all())
 
+    # Calcular resumen de horas si hay filtro de obra
+    resumen_horas = []
+    if obra_id:
+        resumen_horas = calcular_resumen_horas(
+            obra_id, desde=fecha_desde, hasta=fecha_hasta,
+            usuario_id=usuario_id if not es_admin_o_pm else usuario_id)
+
     return render_template('fichadas/historial.html',
                            fichadas=fichadas,
                            obras=obras,
                            usuarios=usuarios,
                            es_admin_o_pm=es_admin_o_pm,
+                           resumen_horas=resumen_horas,
                            filtros={
                                'obra_id': obra_id,
                                'usuario_id': usuario_id,

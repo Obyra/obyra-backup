@@ -442,6 +442,10 @@ class ProjectSharedService:
         from services.certifications import compute_etapa_breakdown
         desglose_etapas = compute_etapa_breakdown(obra)
 
+        # Resumen de horas de fichadas vinculadas a esta obra
+        from fichadas import calcular_resumen_horas
+        resumen_horas_obra = calcular_resumen_horas(obra.id)
+
         if request.args.get('format') == 'json':
             return jsonify(
                 ok=True,
@@ -480,6 +484,7 @@ class ProjectSharedService:
             puede_aprobar=bool(puede_aprobar),
             contexto=context,
             desglose_etapas=desglose_etapas,
+            resumen_horas=resumen_horas_obra,
         )
 
     @staticmethod

@@ -56,8 +56,11 @@
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header py-2">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0"><i class="fas fa-clock me-1"></i>Fichadas de hoy</h6>
+                    {% if horas_hoy is not none %}
+                    <span class="badge bg-primary"><i class="fas fa-hourglass-half me-1"></i>{{ horas_hoy }}</span>
+                    {% endif %}
                 </div>
                 <div class="card-body p-0">
                     <table class="table table-sm mb-0">
@@ -96,6 +99,14 @@
 {% block scripts %}
 <!-- Leaflet JS cargado ESTÁTICAMENTE (CSS ya está en base.html) -->
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+
+<!-- Definir callbacks ANTES de que Google Maps pueda invocarlos desde cache -->
+<script>
+window._gmReady = false;
+window.initMap = function() { window._gmReady = true; };
+window.gm_authFailure = function() { window._gmAuthFail = true; };
+window.onGoogleMapsError = function() { window._gmError = true; };
+</script>
 
 <script>
 // ── Configuración ──
@@ -218,8 +229,8 @@ function onErrorGPS(err) {
 // 2. MAPA — Google Maps primario, Leaflet fallback
 // ══════════════════════════════════════════════
 
-// Google Maps callback
-function initMap() {
+// Google Maps callback (redefine — el stub anterior ya capturó si GM llegó antes)
+window.initMap = function initMap() {
     googleMapsListo = true;
     var el = document.getElementById('mapaFichada');
     el.innerHTML = '';
@@ -349,9 +360,17 @@ function initMapaLeaflet() {
 }
 
 // Error handlers para Google Maps
-function onGoogleMapsError() { initMapaLeaflet(); }
-function gm_authFailure() { initMapaLeaflet(); }
-setTimeout(function() { if (!googleMapsListo) initMapaLeaflet(); }, 8000);
+window.onGoogleMapsError = function() { if (!googleMapsListo) initMapaLeaflet(); };
+window.gm_authFailure = function() { if (!googleMapsListo) initMapaLeaflet(); };
+
+// Si Google Maps ya cargó desde cache (antes de este script), invocar ahora
+if (window._gmReady && !googleMapsListo) {
+    initMap();
+} else if (window._gmAuthFail || window._gmError) {
+    initMapaLeaflet();
+}
+// Timeout: si después de 8s no hay nada, Leaflet
+setTimeout(function() { if (!googleMapsListo && !mapa) initMapaLeaflet(); }, 8000);
 
 // ══════════════════════════════════════════════
 // 3. Utilidades
