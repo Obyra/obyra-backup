@@ -399,6 +399,18 @@
 
         // Recargar cada 60 segundos
         setInterval(cargarNotificaciones, 60000);
+
+        // Al abrir la campanita, marcar todas como leidas y limpiar badge
+        var notifDropdown = document.getElementById('navbarNotificaciones');
+        if (notifDropdown) {
+            notifDropdown.closest('.dropdown').addEventListener('shown.bs.dropdown', function() {
+                // Ocultar badge inmediatamente (feedback visual instantaneo)
+                var badge = document.getElementById('notif-badge');
+                if (badge) badge.style.display = 'none';
+                // Marcar todas como leidas en el servidor
+                marcarTodasLeidas();
+            });
+        }
     });
 
     function cargarNotificaciones() {
