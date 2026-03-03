@@ -89,6 +89,11 @@ from models.inventory import (
     # Global Catalog
     GlobalMaterialCatalog,
     GlobalMaterialUsage,
+    # Ordenes de Compra
+    OrdenCompra,
+    OrdenCompraItem,
+    RecepcionOC,
+    RecepcionOCItem,
 )
 
 # Equipment models
@@ -138,6 +143,7 @@ from models.templates import (
     WorkCertification,
     WorkCertificationItem,
     WorkPayment,
+    MovimientoCaja,
 )
 
 # Utility models

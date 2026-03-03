@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Caja - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-cash-register me-2"></i>Caja</h2>
+                    <p class="text-muted mb-0">Transferencias y fondos operativos por obra</p>
+                </div>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalTransferir">
+                    <i class="fas fa-paper-plane me-1"></i>Transferir a Obra
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if pendientes > 0 %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Hay <strong>{{ pendientes }}</strong> movimiento(s) pendiente(s) de confirmacion.
+    </div>
+    {% endif %}
+
+    <!-- Resumen por obra -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-building me-2"></i>Saldo por Obra</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if resumen_obras %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Obra</th>
+                            <th class="text-end">Transferido</th>
+                            <th class="text-end">Gastado</th>
+                            <th class="text-end">Saldo Disponible</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in resumen_obras %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('obras.detalle', id=r.obra.id) }}" class="text-decoration-none">
+                                    {{ r.obra.nombre }}
+                                </a>
+                            </td>
+                            <td class="text-end text-success">
+                                <i class="fas fa-arrow-right me-1"></i>${{ '{:,.2f}'.format(r.transferido) }}
+                            </td>
+                            <td class="text-end text-danger">
+                                <i class="fas fa-arrow-left me-1"></i>${{ '{:,.2f}'.format(r.gastado) }}
+                            </td>
+                            <td class="text-end">
+                                <strong class="{% if r.saldo > 0 %}text-success{% elif r.saldo < 0 %}text-danger{% endif %}">
+                                    ${{ '{:,.2f}'.format(r.saldo) }}
+                                </strong>
+                            </td>
+                            <td class="text-end">
+                                <a href="{{ url_for('caja.obra', id=r.obra.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Ver
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-wallet fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">Sin movimientos de caja</h5>
+                <p class="text-muted">Realice una transferencia a una obra para comenzar</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Ultimos movimientos -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-history me-2"></i>Ultimos Movimientos</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if movimientos %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Numero</th>
+                            <th>Fecha</th>
+                            <th>Obra</th>
+                            <th>Tipo</th>
+                            <th>Concepto</th>
+                            <th class="text-end">Monto</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mov in movimientos %}
+                        <tr>
+                            <td><strong>{{ mov.numero }}</strong></td>
+                            <td>{{ mov.fecha_movimiento.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <a href="{{ url_for('caja.obra', id=mov.obra_id) }}" class="text-decoration-none">
+                                    {{ mov.obra.nombre }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ mov.tipo_color }}">
+                                    <i class="fas {{ mov.tipo_icono }} me-1"></i>{{ mov.tipo_display }}
+                                </span>
+                            </td>
+                            <td><small>{{ mov.concepto or '-' }}</small></td>
+                            <td class="text-end">
+                                <strong class="text-{{ 'success' if mov.es_ingreso_obra else 'danger' }}">
+                                    {{ '+' if mov.es_ingreso_obra else '-' }}${{ '{:,.2f}'.format(mov.monto|float) }}
+                                </strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ mov.estado_color }}">{{ mov.estado_display }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4 text-muted">
+                No hay movimientos registrados
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Transferir a Obra -->
+<div class="modal fade" id="modalTransferir" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('caja.transferir') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-paper-plane me-2"></i>Transferir a Obra</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Obra destino <span class="text-danger">*</span></label>
+                        <select class="form-select" name="obra_id" required>
+                            <option value="">Seleccionar obra...</option>
+                            {% for obra in obras %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Monto <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" name="monto" step="0.01" min="0.01" required
+                                   placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Concepto <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="concepto" required
+                               placeholder="Ej: Fondo para compras menores">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Referencia (nro transferencia)</label>
+                        <input type="text" class="form-control" name="referencia"
+                               placeholder="Ej: TRF-12345">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fecha</label>
+                        <input type="date" class="form-control" name="fecha_movimiento"
+                               value="{{ today if today else '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas</label>
+                        <textarea class="form-control" name="notas" rows="2" placeholder="Observaciones..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-paper-plane me-1"></i>Transferir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva Orden de Compra - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-plus-circle me-2"></i>Nueva Orden de Compra</h2>
+                    {% if requerimiento %}
+                    <p class="text-muted mb-0">Desde Requerimiento {{ requerimiento.numero }}</p>
+                    {% endif %}
+                </div>
+                <a href="{{ url_for('ordenes_compra.lista') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" id="formOC">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if requerimiento %}
+        <input type="hidden" name="requerimiento_id" value="{{ requerimiento.id }}">
+        {% endif %}
+
+        <div class="row">
+            <!-- Datos principales -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header"><h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Datos de la OC</h5></div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Obra <span class="text-danger">*</span></label>
+                                <select class="form-select" name="obra_id" required>
+                                    <option value="">Seleccionar obra...</option>
+                                    {% for obra in obras %}
+                                    <option value="{{ obra.id }}"
+                                        {% if requerimiento and requerimiento.obra_id == obra.id %}selected{% endif %}>
+                                        {{ obra.nombre }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Moneda</label>
+                                <select class="form-select" name="moneda">
+                                    <option value="ARS">ARS (Pesos)</option>
+                                    <option value="USD">USD (Dolares)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Proveedor <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="proveedor" required
+                                       placeholder="Nombre del proveedor">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">CUIT</label>
+                                <input type="text" class="form-control" name="proveedor_cuit"
+                                       placeholder="XX-XXXXXXXX-X">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Contacto</label>
+                                <input type="text" class="form-control" name="proveedor_contacto"
+                                       placeholder="Tel / Email">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha entrega estimada</label>
+                                <input type="date" class="form-control" name="fecha_entrega_estimada">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Condicion de pago</label>
+                                <input type="text" class="form-control" name="condicion_pago"
+                                       placeholder="Ej: Contado, 30 dias...">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notas</label>
+                                <textarea class="form-control" name="notas" rows="2"
+                                          placeholder="Observaciones..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Items -->
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Items</h5>
+                        <button type="button" class="btn btn-sm btn-success" onclick="agregarItem()">
+                            <i class="fas fa-plus me-1"></i>Agregar Item
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table mb-0" id="tablaItems">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:35%">Descripcion</th>
+                                        <th style="width:12%">Cantidad</th>
+                                        <th style="width:12%">Unidad</th>
+                                        <th style="width:15%">P. Unitario</th>
+                                        <th style="width:15%">Subtotal</th>
+                                        <th style="width:5%"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="itemsBody">
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <td colspan="4" class="text-end fw-bold">Subtotal:</td>
+                                        <td class="fw-bold" id="totalSubtotal">$ 0.00</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="4" class="text-end">IVA 21%:</td>
+                                        <td id="totalIVA">$ 0.00</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr class="table-primary">
+                                        <td colspan="4" class="text-end fw-bold fs-5">TOTAL:</td>
+                                        <td class="fw-bold fs-5" id="totalGeneral">$ 0.00</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resumen lateral -->
+            <div class="col-md-4">
+                {% if requerimiento %}
+                <div class="card mb-4 border-info">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0"><i class="fas fa-link me-2"></i>Requerimiento Origen</h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><strong>{{ requerimiento.numero }}</strong></p>
+                        <p class="mb-1"><small>Obra: {{ requerimiento.obra.nombre }}</small></p>
+                        <p class="mb-1"><small>Solicitante: {{ requerimiento.solicitante.nombre }}</small></p>
+                        <p class="mb-0">
+                            <span class="badge bg-{{ requerimiento.prioridad_color }}">
+                                {{ requerimiento.prioridad_display }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="card">
+                    <div class="card-body">
+                        <button type="submit" class="btn btn-primary w-100 btn-lg">
+                            <i class="fas fa-save me-2"></i>Crear Orden de Compra
+                        </button>
+                        <p class="text-muted text-center mt-2 mb-0">
+                            <small>Se creara como borrador. Luego podra emitirla.</small>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+let itemIdx = 0;
+const itemsPrecarga = {{ items_precarga|tojson }};
+
+function agregarItem(datos) {
+    datos = datos || {};
+    const tbody = document.getElementById('itemsBody');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>
+            <input type="text" class="form-control form-control-sm" name="item_descripcion_${itemIdx}"
+                   value="${datos.descripcion || ''}" required placeholder="Descripcion del material">
+            <input type="hidden" name="item_inventario_id_${itemIdx}" value="${datos.item_inventario_id || ''}">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm item-cantidad" name="item_cantidad_${itemIdx}"
+                   value="${datos.cantidad || ''}" step="0.001" min="0.001" required
+                   onchange="recalcularFila(this)" oninput="recalcularFila(this)">
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm" name="item_unidad_${itemIdx}"
+                   value="${datos.unidad || 'unidad'}">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm item-precio" name="item_precio_${itemIdx}"
+                   value="${datos.precio_unitario || ''}" step="0.01" min="0"
+                   onchange="recalcularFila(this)" oninput="recalcularFila(this)">
+        </td>
+        <td>
+            <span class="item-subtotal fw-bold">$ 0.00</span>
+        </td>
+        <td>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove(); recalcularTotales();">
+                <i class="fas fa-times"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(row);
+    itemIdx++;
+    recalcularFila(row.querySelector('.item-cantidad'));
+}
+
+function recalcularFila(input) {
+    const row = input.closest('tr');
+    const cant = parseFloat(row.querySelector('.item-cantidad').value) || 0;
+    const precio = parseFloat(row.querySelector('.item-precio').value) || 0;
+    const subtotal = cant * precio;
+    row.querySelector('.item-subtotal').textContent = '$ ' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    recalcularTotales();
+}
+
+function recalcularTotales() {
+    let subtotal = 0;
+    document.querySelectorAll('#itemsBody tr').forEach(row => {
+        const cant = parseFloat(row.querySelector('.item-cantidad')?.value) || 0;
+        const precio = parseFloat(row.querySelector('.item-precio')?.value) || 0;
+        subtotal += cant * precio;
+    });
+    const iva = subtotal * 0.21;
+    const total = subtotal + iva;
+    document.getElementById('totalSubtotal').textContent = '$ ' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2});
+    document.getElementById('totalIVA').textContent = '$ ' + iva.toLocaleString('es-AR', {minimumFractionDigits: 2});
+    document.getElementById('totalGeneral').textContent = '$ ' + total.toLocaleString('es-AR', {minimumFractionDigits: 2});
+}
+
+// Precargar items si vienen del requerimiento
+document.addEventListener('DOMContentLoaded', function() {
+    if (itemsPrecarga.length > 0) {
+        itemsPrecarga.forEach(item => agregarItem(item));
+    } else {
+        agregarItem();
+    }
+});
+</script>
+{% endblock %}

@@ -123,6 +123,11 @@
                                 <i class="fas fa-shopping-cart me-1"></i>Requerimientos de Compra
                             </a></li>
                             {% endif %}
+                            {% if has_endpoint('ordenes_compra.lista') %}
+                            <li><a class="dropdown-item" href="{{ url_for('ordenes_compra.lista') }}">
+                                <i class="fas fa-file-invoice-dollar me-1"></i>Ordenes de Compra
+                            </a></li>
+                            {% endif %}
                             {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
@@ -178,6 +183,14 @@
                     {% endif %}
                     -->
                     
+                    {% if has_endpoint('caja.dashboard') and current_user.role in ['admin', 'pm'] %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('caja.dashboard') }}">
+                            <i class="fas fa-cash-register me-1"></i>Caja
+                        </a>
+                    </li>
+                    {% endif %}
+
                     {% if current_user.puede_acceder_modulo('reportes') and has_endpoint('reportes.reporte_obras') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarReportes" role="button" data-bs-toggle="dropdown">

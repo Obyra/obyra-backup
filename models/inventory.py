@@ -1120,3 +1120,173 @@ class RequerimientoCompraItem(db.Model):
         precio = float(self.precio_unitario_compra or 0)
         cant = float(self.cantidad_comprada or self.cantidad or 0)
         return precio * cant if precio > 0 else 0
+
+
+# ============================================================
+# ORDENES DE COMPRA
+# ============================================================
+
+class OrdenCompra(db.Model):
+    """Orden de compra formal generada a partir de un requerimiento aprobado."""
+    __tablename__ = 'ordenes_compra'
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True, nullable=False)  # OC-2026-0001
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    requerimiento_id = db.Column(db.Integer, db.ForeignKey('requerimientos_compra.id'), nullable=True)
+
+    # Proveedor
+    proveedor = db.Column(db.String(200), nullable=False)
+    proveedor_cuit = db.Column(db.String(20))
+    proveedor_contacto = db.Column(db.String(200))
+
+    # Estado: borrador, emitida, recibida_parcial, completada, cancelada
+    estado = db.Column(db.String(20), default='borrador')
+
+    # Montos
+    moneda = db.Column(db.String(3), default='ARS')
+    subtotal = db.Column(db.Numeric(15, 2), default=0)
+    iva = db.Column(db.Numeric(15, 2), default=0)
+    total = db.Column(db.Numeric(15, 2), default=0)
+
+    # Fechas
+    fecha_emision = db.Column(db.Date)
+    fecha_entrega_estimada = db.Column(db.Date)
+    fecha_entrega_real = db.Column(db.Date)
+
+    # Condiciones
+    condicion_pago = db.Column(db.String(100))
+    notas = db.Column(db.Text)
+
+    # Auditoría
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    organizacion = db.relationship('Organizacion', backref='ordenes_compra')
+    obra = db.relationship('Obra', backref='ordenes_compra')
+    requerimiento = db.relationship('RequerimientoCompra', backref='ordenes_compra')
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    items = db.relationship('OrdenCompraItem', back_populates='orden_compra',
+                           cascade='all, delete-orphan', lazy='dynamic')
+    recepciones = db.relationship('RecepcionOC', back_populates='orden_compra',
+                                 cascade='all, delete-orphan', lazy='dynamic')
+
+    @classmethod
+    def generar_numero(cls, organizacion_id):
+        year = datetime.utcnow().year
+        ultimo = cls.query.filter(
+            cls.organizacion_id == organizacion_id,
+            cls.numero.like(f'OC-{year}-%')
+        ).order_by(cls.id.desc()).first()
+        if ultimo and ultimo.numero:
+            try:
+                ultimo_num = int(ultimo.numero.split('-')[-1])
+            except Exception:
+                ultimo_num = 0
+        else:
+            ultimo_num = 0
+        return f'OC-{year}-{str(ultimo_num + 1).zfill(4)}'
+
+    @property
+    def estado_display(self):
+        estados = {
+            'borrador': 'Borrador',
+            'emitida': 'Emitida',
+            'recibida_parcial': 'Recibida Parcial',
+            'completada': 'Completada',
+            'cancelada': 'Cancelada'
+        }
+        return estados.get(self.estado, self.estado)
+
+    @property
+    def estado_color(self):
+        colores = {
+            'borrador': 'secondary',
+            'emitida': 'primary',
+            'recibida_parcial': 'warning',
+            'completada': 'success',
+            'cancelada': 'danger'
+        }
+        return colores.get(self.estado, 'secondary')
+
+    @property
+    def total_items(self):
+        return self.items.count()
+
+    def recalcular_totales(self):
+        """Recalcula subtotal, IVA y total desde los items."""
+        sub = sum(float(i.subtotal or 0) for i in self.items)
+        self.subtotal = sub
+        self.iva = sub * 0.21
+        self.total = sub * 1.21
+
+    def porcentaje_recepcion(self):
+        """Porcentaje de recepción global."""
+        total_q = sum(float(i.cantidad or 0) for i in self.items)
+        recibido_q = sum(float(i.cantidad_recibida or 0) for i in self.items)
+        if total_q <= 0:
+            return 0
+        return round((recibido_q / total_q) * 100, 1)
+
+
+class OrdenCompraItem(db.Model):
+    """Ítem individual de una orden de compra."""
+    __tablename__ = 'orden_compra_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id', ondelete='CASCADE'), nullable=False)
+    item_inventario_id = db.Column(db.Integer, db.ForeignKey('items_inventario.id'), nullable=True)
+    descripcion = db.Column(db.String(300), nullable=False)
+    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
+    unidad = db.Column(db.String(30), default='unidad')
+    precio_unitario = db.Column(db.Numeric(15, 2), default=0)
+    subtotal = db.Column(db.Numeric(15, 2), default=0)
+    cantidad_recibida = db.Column(db.Numeric(10, 3), default=0)
+
+    # Relaciones
+    orden_compra = db.relationship('OrdenCompra', back_populates='items')
+    item_inventario = db.relationship('ItemInventario')
+
+    @property
+    def recepcion_completa(self):
+        return float(self.cantidad_recibida or 0) >= float(self.cantidad or 0)
+
+    @property
+    def pendiente_recibir(self):
+        return max(0, float(self.cantidad or 0) - float(self.cantidad_recibida or 0))
+
+
+class RecepcionOC(db.Model):
+    """Registro de recepción de materiales de una OC."""
+    __tablename__ = 'recepciones_oc'
+
+    id = db.Column(db.Integer, primary_key=True)
+    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id', ondelete='CASCADE'), nullable=False)
+    fecha_recepcion = db.Column(db.Date, nullable=False)
+    recibido_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    remito_numero = db.Column(db.String(100))
+    notas = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    orden_compra = db.relationship('OrdenCompra', back_populates='recepciones')
+    recibido_por = db.relationship('Usuario')
+    items = db.relationship('RecepcionOCItem', back_populates='recepcion',
+                           cascade='all, delete-orphan')
+
+
+class RecepcionOCItem(db.Model):
+    """Ítem recibido en una recepción de OC."""
+    __tablename__ = 'recepcion_oc_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    recepcion_id = db.Column(db.Integer, db.ForeignKey('recepciones_oc.id', ondelete='CASCADE'), nullable=False)
+    oc_item_id = db.Column(db.Integer, db.ForeignKey('orden_compra_items.id'), nullable=False)
+    cantidad_recibida = db.Column(db.Numeric(10, 3), nullable=False)
+
+    # Relaciones
+    recepcion = db.relationship('RecepcionOC', back_populates='items')
+    oc_item = db.relationship('OrdenCompraItem')

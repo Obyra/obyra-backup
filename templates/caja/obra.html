@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Caja - {{ obra.nombre }} - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2>
+                        <i class="fas fa-cash-register me-2"></i>Caja: {{ obra.nombre }}
+                    </h2>
+                    <p class="text-muted mb-0">
+                        <a href="{{ url_for('caja.dashboard') }}">Caja</a> /
+                        <a href="{{ url_for('obras.detalle', id=obra.id) }}">{{ obra.nombre }}</a>
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ url_for('caja.dashboard') }}" class="btn btn-outline-secondary me-1">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </a>
+                    <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalGasto">
+                        <i class="fas fa-receipt me-1"></i>Registrar Gasto
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Saldo -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-{{ 'success' if saldo > 0 else 'danger' if saldo < 0 else 'secondary' }}">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Saldo Disponible</h6>
+                    <h2 class="mb-0 text-{{ 'success' if saldo > 0 else 'danger' if saldo < 0 else 'secondary' }}">
+                        ${{ '{:,.2f}'.format(saldo) }}
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Total Transferido</h6>
+                    {% set total_ing = movimientos|selectattr('es_ingreso_obra')|selectattr('estado', 'equalto', 'confirmado')|map(attribute='monto')|map('float')|sum %}
+                    <h2 class="mb-0 text-success">${{ '{:,.2f}'.format(total_ing) }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Total Gastado</h6>
+                    {% set total_eg = movimientos|selectattr('es_egreso_obra')|selectattr('estado', 'equalto', 'confirmado')|map(attribute='monto')|map('float')|sum %}
+                    <h2 class="mb-0 text-danger">${{ '{:,.2f}'.format(total_eg) }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Movimientos -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Movimientos</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if movimientos %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Numero</th>
+                            <th>Fecha</th>
+                            <th>Tipo</th>
+                            <th>Concepto</th>
+                            <th>Referencia</th>
+                            <th class="text-end">Monto</th>
+                            <th>Estado</th>
+                            <th>Registrado por</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mov in movimientos %}
+                        <tr class="{% if mov.estado == 'anulado' %}table-secondary{% endif %}">
+                            <td><strong>{{ mov.numero }}</strong></td>
+                            <td>{{ mov.fecha_movimiento.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <span class="badge bg-{{ mov.tipo_color }}">
+                                    <i class="fas {{ mov.tipo_icono }} me-1"></i>{{ mov.tipo_display }}
+                                </span>
+                            </td>
+                            <td>{{ mov.concepto or '-' }}</td>
+                            <td><small>{{ mov.referencia or '-' }}</small></td>
+                            <td class="text-end">
+                                <strong class="text-{{ 'success' if mov.es_ingreso_obra else 'danger' }}">
+                                    {{ '+' if mov.es_ingreso_obra else '-' }}${{ '{:,.2f}'.format(mov.monto|float) }}
+                                </strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ mov.estado_color }}">{{ mov.estado_display }}</span>
+                            </td>
+                            <td><small>{{ mov.created_by.nombre if mov.created_by else '-' }}</small></td>
+                            <td class="text-end">
+                                {% if mov.estado != 'anulado' %}
+                                <form method="POST" action="{{ url_for('caja.anular', id=mov.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Anular este movimiento?')" title="Anular">
+                                        <i class="fas fa-ban"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-wallet fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">Sin movimientos para esta obra</h5>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Gasto -->
+<div class="modal fade" id="modalGasto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('caja.gasto') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="obra_id" value="{{ obra.id }}">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-receipt me-2"></i>Registrar Gasto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info mb-3">
+                        <small><i class="fas fa-info-circle me-1"></i>Saldo disponible: <strong>${{ '{:,.2f}'.format(saldo) }}</strong></small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de movimiento</label>
+                        <select class="form-select" name="tipo">
+                            <option value="gasto_obra">Gasto de Obra</option>
+                            <option value="pago_proveedor">Pago a Proveedor</option>
+                            <option value="devolucion_obra">Devolucion a Oficina</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Monto <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" name="monto" step="0.01" min="0.01"
+                                   max="{{ saldo }}" required placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Concepto <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="concepto" required
+                               placeholder="Ej: Compra de tornillos ferreteria X">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Referencia (factura/recibo)</label>
+                        <input type="text" class="form-control" name="referencia"
+                               placeholder="Ej: FC-A-0001-00012345">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fecha</label>
+                        <input type="date" class="form-control" name="fecha_movimiento">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas</label>
+                        <textarea class="form-control" name="notas" rows="2" placeholder="Observaciones..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-receipt me-1"></i>Registrar Gasto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

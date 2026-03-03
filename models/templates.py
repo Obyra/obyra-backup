@@ -279,3 +279,116 @@ class WorkPayment(db.Model):
         if self.moneda == 'USD' or not self.tc_usd_pago or Decimal(str(self.tc_usd_pago)) == 0:
             return monto
         return monto / Decimal(str(self.tc_usd_pago))
+
+
+# ============================================================
+# CAJA - Transferencias oficina <-> obra
+# ============================================================
+
+class MovimientoCaja(db.Model):
+    """Movimiento de caja: transferencias de dinero entre oficina y obras."""
+    __tablename__ = 'movimientos_caja'
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True, nullable=False)  # MV-2026-0001
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+
+    # Tipo: transferencia_a_obra, devolucion_obra, pago_proveedor, gasto_obra
+    tipo = db.Column(db.String(20), nullable=False)
+
+    monto = db.Column(db.Numeric(15, 2), nullable=False)
+    moneda = db.Column(db.String(3), default='ARS')
+    concepto = db.Column(db.String(300))
+    referencia = db.Column(db.String(100))  # Nro transferencia/recibo
+
+    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id'), nullable=True)
+
+    fecha_movimiento = db.Column(db.Date, nullable=False)
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente, confirmado, anulado
+    comprobante_url = db.Column(db.String(500))
+
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    confirmado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    fecha_confirmacion = db.Column(db.DateTime)
+    notas = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    organizacion = db.relationship('Organizacion')
+    obra = db.relationship('Obra', backref='movimientos_caja')
+    orden_compra = db.relationship('OrdenCompra')
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    confirmado_por = db.relationship('Usuario', foreign_keys=[confirmado_por_id])
+
+    @classmethod
+    def generar_numero(cls, organizacion_id):
+        year = datetime.utcnow().year
+        ultimo = cls.query.filter(
+            cls.organizacion_id == organizacion_id,
+            cls.numero.like(f'MV-{year}-%')
+        ).order_by(cls.id.desc()).first()
+        if ultimo and ultimo.numero:
+            try:
+                ultimo_num = int(ultimo.numero.split('-')[-1])
+            except Exception:
+                ultimo_num = 0
+        else:
+            ultimo_num = 0
+        return f'MV-{year}-{str(ultimo_num + 1).zfill(4)}'
+
+    @property
+    def tipo_display(self):
+        tipos = {
+            'transferencia_a_obra': 'Transferencia a Obra',
+            'devolucion_obra': 'Devolucion de Obra',
+            'pago_proveedor': 'Pago a Proveedor',
+            'gasto_obra': 'Gasto de Obra',
+        }
+        return tipos.get(self.tipo, self.tipo)
+
+    @property
+    def tipo_color(self):
+        colores = {
+            'transferencia_a_obra': 'success',
+            'devolucion_obra': 'warning',
+            'pago_proveedor': 'primary',
+            'gasto_obra': 'danger',
+        }
+        return colores.get(self.tipo, 'secondary')
+
+    @property
+    def tipo_icono(self):
+        iconos = {
+            'transferencia_a_obra': 'fa-arrow-right',
+            'devolucion_obra': 'fa-arrow-left',
+            'pago_proveedor': 'fa-store',
+            'gasto_obra': 'fa-receipt',
+        }
+        return iconos.get(self.tipo, 'fa-exchange-alt')
+
+    @property
+    def es_ingreso_obra(self):
+        return self.tipo == 'transferencia_a_obra'
+
+    @property
+    def es_egreso_obra(self):
+        return self.tipo in ('devolucion_obra', 'pago_proveedor', 'gasto_obra')
+
+    @property
+    def estado_display(self):
+        estados = {
+            'pendiente': 'Pendiente',
+            'confirmado': 'Confirmado',
+            'anulado': 'Anulado',
+        }
+        return estados.get(self.estado, self.estado)
+
+    @property
+    def estado_color(self):
+        colores = {
+            'pendiente': 'warning',
+            'confirmado': 'success',
+            'anulado': 'secondary',
+        }
+        return colores.get(self.estado, 'secondary')

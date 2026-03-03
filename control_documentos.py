@@ -1,327 +1,227 @@
 """
-Módulo de Control de Documentos y Datos - OBYRA IA
-Gestión digital de documentos, control de versiones y data management
-para proyectos de construcción.
+Blueprint de Documentos de Obra (Legajo Digital)
+
+Gestión de documentos vinculados a obras: contratos, planos, renders,
+pliego de especificaciones, memoria de cálculo, etc.
 """
 
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, send_file, abort
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, send_file, abort, current_app
 from flask_login import login_required, current_user
-from datetime import datetime, date
-import json
+from datetime import datetime
 import os
+import uuid
 from werkzeug.utils import secure_filename
-from utils.pagination import Pagination
-from app import db
-from models import *
-from utils import *
+from extensions import db
 
-documentos_bp = Blueprint('documentos', __name__)
+documentos_bp = Blueprint('documentos', __name__, url_prefix='/documentos')
 
-@documentos_bp.before_request
+ALLOWED_DOC_EXTENSIONS = {
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv',
+    'jpg', 'jpeg', 'png', 'gif', 'webp',
+    'dwg', 'dxf', 'zip', 'rar',
+}
+
+
+def _tiene_permiso_docs():
+    rol = getattr(current_user, 'rol', '') or ''
+    role = getattr(current_user, 'role', '') or ''
+    return rol in ('administrador', 'admin', 'tecnico') or role in ('admin', 'pm', 'tecnico')
+
+
+def _allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_DOC_EXTENSIONS
+
+
+# ============================================================
+# API: Listar documentos de una obra (JSON)
+# ============================================================
+
+@documentos_bp.route('/obra/<int:obra_id>/listar')
 @login_required
-def _block_operario_docs():
-    """Bloquear acceso a documentos para operarios"""
-    if getattr(current_user, 'role', None) == 'operario':
-        abort(403)
+def listar_por_obra(obra_id):
+    from models.projects import Obra
 
-class TipoDocumento(db.Model):
-    __tablename__ = 'tipos_documento'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    nombre = db.Column(db.String(100), nullable=False)
-    categoria = db.Column(db.String(50), nullable=False)  # contractual, tecnico, administrativo, legal
-    requiere_aprobacion = db.Column(db.Boolean, default=False)
-    retención_años = db.Column(db.Integer, default=10)
-    activo = db.Column(db.Boolean, default=True)
+    obra = Obra.query.get_or_404(obra_id)
+    if obra.organizacion_id != current_user.organizacion_id:
+        return jsonify(ok=False, error='Sin acceso'), 403
 
-class DocumentoObra(db.Model):
-    __tablename__ = 'documentos_obra'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
-    tipo_documento_id = db.Column(db.Integer, db.ForeignKey('tipos_documento.id'), nullable=False)
-    nombre = db.Column(db.String(200), nullable=False)
-    descripcion = db.Column(db.Text)
-    archivo_path = db.Column(db.String(500), nullable=False)
-    version = db.Column(db.String(10), default='1.0')
-    estado = db.Column(db.String(20), default='borrador')  # borrador, revision, aprobado, obsoleto
-    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    fecha_modificacion = db.Column(db.DateTime, default=datetime.utcnow)
-    creado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    aprobado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
-    fecha_aprobacion = db.Column(db.DateTime)
-    tags = db.Column(db.String(500))  # Tags separados por comas
-    
-    # Relaciones
-    obra = db.relationship('Obra')
-    tipo_documento = db.relationship('TipoDocumento')
-    creado_por = db.relationship('Usuario', foreign_keys=[creado_por_id])
-    aprobado_por = db.relationship('Usuario', foreign_keys=[aprobado_por_id])
+    docs = db.session.execute(
+        db.text("""
+            SELECT d.id, d.nombre, d.descripcion, d.archivo_path, d.version,
+                   d.estado, d.fecha_creacion, d.tags,
+                   t.nombre as tipo_nombre, t.categoria as tipo_categoria,
+                   u.nombre as creador_nombre
+            FROM documentos_obra d
+            LEFT JOIN tipos_documento t ON d.tipo_documento_id = t.id
+            LEFT JOIN usuarios u ON d.creado_por_id = u.id
+            WHERE d.obra_id = :obra_id
+            ORDER BY t.categoria, d.fecha_creacion DESC
+        """),
+        {'obra_id': obra_id}
+    ).fetchall()
 
-class VersionDocumento(db.Model):
-    __tablename__ = 'versiones_documento'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    documento_id = db.Column(db.Integer, db.ForeignKey('documentos_obra.id'), nullable=False)
-    version = db.Column(db.String(10), nullable=False)
-    archivo_path = db.Column(db.String(500), nullable=False)
-    comentarios = db.Column(db.Text)
-    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    creado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    
-    # Relaciones
-    documento = db.relationship('DocumentoObra')
-    creado_por = db.relationship('Usuario')
+    result = []
+    for d in docs:
+        result.append({
+            'id': d.id,
+            'nombre': d.nombre,
+            'descripcion': d.descripcion,
+            'archivo_path': d.archivo_path,
+            'version': d.version,
+            'estado': d.estado,
+            'fecha': d.fecha_creacion.strftime('%d/%m/%Y') if d.fecha_creacion else '',
+            'tipo_nombre': d.tipo_nombre,
+            'tipo_categoria': d.tipo_categoria,
+            'creador': d.creador_nombre,
+            'tags': d.tags,
+        })
 
-class PermisoDocumento(db.Model):
-    __tablename__ = 'permisos_documento'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    documento_id = db.Column(db.Integer, db.ForeignKey('documentos_obra.id'), nullable=False)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    permiso = db.Column(db.String(20), nullable=False)  # lectura, escritura, aprobacion
-    fecha_otorgado = db.Column(db.DateTime, default=datetime.utcnow)
-    otorgado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
-    
-    # Relaciones
-    documento = db.relationship('DocumentoObra')
-    usuario = db.relationship('Usuario', foreign_keys=[usuario_id])
-    otorgado_por = db.relationship('Usuario', foreign_keys=[otorgado_por_id])
+    return jsonify(ok=True, documentos=result)
 
-@documentos_bp.route('/')
+
+# ============================================================
+# API: Listar tipos de documento
+# ============================================================
+
+@documentos_bp.route('/tipos')
 @login_required
-def dashboard():
-    """Dashboard principal del control de documentos"""
-    # Estadísticas
-    total_documentos = DocumentoObra.query.count()
-    documentos_pendientes = DocumentoObra.query.filter_by(estado='revision').count()
-    documentos_mes = DocumentoObra.query.filter(
-        DocumentoObra.fecha_creacion >= datetime.now().replace(day=1)
-    ).count()
-    
-    # Documentos recientes
-    documentos_recientes = DocumentoObra.query.order_by(
-        DocumentoObra.fecha_modificacion.desc()
-    ).limit(10).all()
-    
-    # Documentos por aprobar
-    documentos_aprobar = DocumentoObra.query.filter_by(estado='revision').limit(5).all()
-    
-    return render_template('documentos/dashboard.html',
-                         total_documentos=total_documentos,
-                         documentos_pendientes=documentos_pendientes,
-                         documentos_mes=documentos_mes,
-                         documentos_recientes=documentos_recientes,
-                         documentos_aprobar=documentos_aprobar)
+def listar_tipos():
+    tipos = db.session.execute(
+        db.text("SELECT id, nombre, categoria FROM tipos_documento WHERE activo = true ORDER BY categoria, nombre")
+    ).fetchall()
 
-@documentos_bp.route('/biblioteca')
+    result = [{'id': t.id, 'nombre': t.nombre, 'categoria': t.categoria} for t in tipos]
+    return jsonify(ok=True, tipos=result)
+
+
+# ============================================================
+# SUBIR DOCUMENTO
+# ============================================================
+
+@documentos_bp.route('/obra/<int:obra_id>/subir', methods=['POST'])
 @login_required
-def biblioteca():
-    """Biblioteca digital de documentos"""
-    # Filtros
-    obra_id = request.args.get('obra_id', type=int)
-    tipo_id = request.args.get('tipo_id', type=int)
-    estado = request.args.get('estado')
-    busqueda = request.args.get('q')
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+def subir(obra_id):
+    from models.projects import Obra
 
-    # Query base
-    query = DocumentoObra.query
-    
-    # Aplicar filtros
-    if obra_id:
-        query = query.filter_by(obra_id=obra_id)
-    if tipo_id:
-        query = query.filter_by(tipo_documento_id=tipo_id)
-    if estado:
-        query = query.filter_by(estado=estado)
-    if busqueda:
-        query = query.filter(DocumentoObra.nombre.contains(busqueda))
+    if not _tiene_permiso_docs():
+        flash('No tiene permisos para subir documentos.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
 
-    documentos = query.order_by(DocumentoObra.fecha_modificacion.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    obra = Obra.query.get_or_404(obra_id)
+    if obra.organizacion_id != current_user.organizacion_id:
+        flash('Sin acceso.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
 
-    # Datos para filtros
-    obras = Obra.query.all()
-    tipos_documento = TipoDocumento.query.filter_by(activo=True).all()
+    if 'archivo' not in request.files:
+        flash('No se selecciono ningun archivo.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
 
-    return render_template('documentos/biblioteca.html',
-                         documentos=documentos,
-                         obras=obras,
-                         tipos_documento=tipos_documento)
+    archivo = request.files['archivo']
+    if archivo.filename == '':
+        flash('No se selecciono ningun archivo.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
 
-@documentos_bp.route('/subir_documento')
-@login_required
-def subir_documento():
-    """Formulario para subir nuevo documento"""
-    obras = Obra.query.all()
-    tipos_documento = TipoDocumento.query.filter_by(activo=True).all()
-    return render_template('documentos/subir.html', obras=obras, tipos_documento=tipos_documento)
+    if not _allowed_file(archivo.filename):
+        flash('Tipo de archivo no permitido.', 'danger')
+        return redirect(url_for('obras.detalle', id=obra_id))
 
-@documentos_bp.route('/subir_documento', methods=['POST'])
-@login_required
-def procesar_subida():
-    """Procesa la subida de un nuevo documento"""
     try:
-        if 'archivo' not in request.files:
-            flash('No se seleccionó ningún archivo', 'danger')
-            return redirect(request.url)
-        
-        archivo = request.files['archivo']
-        if archivo.filename == '':
-            flash('No se seleccionó ningún archivo', 'danger')
-            return redirect(request.url)
-        
-        if archivo:
-            # Crear directorio si no existe
-            upload_dir = os.path.join('uploads', 'documentos')
-            os.makedirs(upload_dir, exist_ok=True)
-            
-            # Generar nombre seguro
-            filename = secure_filename(archivo.filename)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{timestamp}_{filename}"
-            filepath = os.path.join(upload_dir, filename)
-            
-            # Guardar archivo
-            archivo.save(filepath)
-            
-            # Crear registro en base de datos
-            documento = DocumentoObra(
-                obra_id=request.form.get('obra_id'),
-                tipo_documento_id=request.form.get('tipo_documento_id'),
-                nombre=request.form.get('nombre'),
-                descripcion=request.form.get('descripcion'),
-                archivo_path=filepath,
-                creado_por_id=current_user.id,
-                tags=request.form.get('tags')
-            )
-            
-            db.session.add(documento)
-            db.session.commit()
-            
-            flash('Documento subido correctamente', 'success')
-            return redirect(url_for('documentos.biblioteca'))
-    
+        tipo_doc_id = request.form.get('tipo_documento_id', type=int)
+        nombre = request.form.get('nombre', '').strip() or archivo.filename
+        descripcion = request.form.get('descripcion', '').strip()
+
+        # Crear directorio de uploads
+        upload_dir = os.path.join(current_app.static_folder, 'uploads', 'obras', str(obra_id), 'documentos')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Nombre único
+        filename = secure_filename(archivo.filename)
+        unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
+        filepath = os.path.join(upload_dir, unique_name)
+        archivo.save(filepath)
+
+        # Path relativo para guardar en DB
+        relative_path = f"uploads/obras/{obra_id}/documentos/{unique_name}"
+
+        # Insertar en BD
+        org_id = current_user.organizacion_id
+        db.session.execute(
+            db.text("""
+                INSERT INTO documentos_obra
+                    (obra_id, tipo_documento_id, organizacion_id, nombre, descripcion,
+                     archivo_path, creado_por_id, fecha_creacion, fecha_modificacion, estado)
+                VALUES
+                    (:obra_id, :tipo_id, :org_id, :nombre, :desc,
+                     :path, :user_id, NOW(), NOW(), 'activo')
+            """),
+            {
+                'obra_id': obra_id, 'tipo_id': tipo_doc_id, 'org_id': org_id,
+                'nombre': nombre, 'desc': descripcion,
+                'path': relative_path, 'user_id': current_user.id,
+            }
+        )
+        db.session.commit()
+
+        flash(f'Documento "{nombre}" subido exitosamente.', 'success')
+
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error subiendo documento: {e}")
         flash(f'Error al subir documento: {str(e)}', 'danger')
-        return redirect(url_for('documentos.subir_documento'))
 
-@documentos_bp.route('/documento/<int:documento_id>')
-@login_required
-def ver_documento(documento_id):
-    """Vista detallada de un documento"""
-    documento = DocumentoObra.query.get_or_404(documento_id)
-    versiones = VersionDocumento.query.filter_by(documento_id=documento_id).order_by(
-        VersionDocumento.fecha_creacion.desc()
-    ).all()
-    
-    return render_template('documentos/detalle.html', documento=documento, versiones=versiones)
+    return redirect(url_for('obras.detalle', id=obra_id))
 
-@documentos_bp.route('/descargar/<int:documento_id>')
-@login_required
-def descargar_documento(documento_id):
-    """Descarga un documento"""
-    documento = DocumentoObra.query.get_or_404(documento_id)
-    
-    # Verificar permisos (implementar lógica según necesidad)
-    if not verificar_permiso_documento(documento_id, current_user.id, 'lectura'):
-        flash('No tienes permisos para acceder a este documento', 'danger')
-        return redirect(url_for('documentos.biblioteca'))
-    
-    return send_file(documento.archivo_path, as_attachment=True)
 
-@documentos_bp.route('/aprobar_documento/<int:documento_id>', methods=['POST'])
+# ============================================================
+# DESCARGAR DOCUMENTO
+# ============================================================
+
+@documentos_bp.route('/<int:id>/descargar')
 @login_required
-def aprobar_documento(documento_id):
-    """Aprueba un documento"""
-    documento = DocumentoObra.query.get_or_404(documento_id)
-    
-    # Verificar permisos de aprobación
-    if current_user.role not in ['admin', 'pm', 'tecnico']:
-        flash('No tienes permisos para aprobar documentos', 'danger')
-        return redirect(url_for('documentos.ver_documento', documento_id=documento_id))
-    
-    documento.estado = 'aprobado'
-    documento.aprobado_por_id = current_user.id
-    documento.fecha_aprobacion = datetime.utcnow()
-    
+def descargar(id):
+    doc = db.session.execute(
+        db.text("SELECT archivo_path, nombre, obra_id FROM documentos_obra WHERE id = :id"),
+        {'id': id}
+    ).fetchone()
+
+    if not doc:
+        abort(404)
+
+    filepath = os.path.join(current_app.static_folder, doc.archivo_path)
+    if not os.path.exists(filepath):
+        flash('Archivo no encontrado en el servidor.', 'danger')
+        return redirect(url_for('obras.detalle', id=doc.obra_id))
+
+    return send_file(filepath, as_attachment=True, download_name=doc.nombre)
+
+
+# ============================================================
+# ELIMINAR DOCUMENTO
+# ============================================================
+
+@documentos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar(id):
+    if not _tiene_permiso_docs():
+        flash('No tiene permisos.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    doc = db.session.execute(
+        db.text("SELECT id, archivo_path, obra_id FROM documentos_obra WHERE id = :id"),
+        {'id': id}
+    ).fetchone()
+
+    if not doc:
+        abort(404)
+
+    # Eliminar archivo físico
+    filepath = os.path.join(current_app.static_folder, doc.archivo_path)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    # Eliminar registro
+    db.session.execute(db.text("DELETE FROM documentos_obra WHERE id = :id"), {'id': id})
     db.session.commit()
-    flash('Documento aprobado correctamente', 'success')
-    
-    return redirect(url_for('documentos.ver_documento', documento_id=documento_id))
 
-@documentos_bp.route('/nueva_version/<int:documento_id>')
-@login_required
-def nueva_version(documento_id):
-    """Formulario para nueva versión de documento"""
-    documento = DocumentoObra.query.get_or_404(documento_id)
-    return render_template('documentos/nueva_version.html', documento=documento)
-
-@documentos_bp.route('/control_versiones')
-@login_required
-def control_versiones():
-    """Panel de control de versiones"""
-    documentos_multiples_versiones = db.session.query(DocumentoObra).join(VersionDocumento).group_by(
-        DocumentoObra.id
-    ).having(db.func.count(VersionDocumento.id) > 1).all()
-    
-    return render_template('documentos/versiones.html', documentos=documentos_multiples_versiones)
-
-@documentos_bp.route('/configuracion_tipos')
-@login_required
-def configuracion_tipos():
-    """Configuración de tipos de documento"""
-    if not current_user.es_admin():
-        flash('Solo los administradores pueden configurar tipos de documento', 'danger')
-        return redirect(url_for('documentos.dashboard'))
-    
-    tipos = TipoDocumento.query.all()
-    return render_template('documentos/configuracion_tipos.html', tipos=tipos)
-
-@documentos_bp.route('/reportes_documentos')
-@login_required
-def reportes():
-    """Reportes y analytics de documentos"""
-    reporte_data = generar_reporte_documentos()
-    return render_template('documentos/reportes.html', reporte=reporte_data)
-
-def verificar_permiso_documento(documento_id, usuario_id, tipo_permiso):
-    """Verifica si un usuario tiene permiso específico sobre un documento"""
-    # Administradores tienen acceso total
-    usuario = Usuario.query.get(usuario_id)
-    if usuario.es_admin():
-        return True
-    
-    # Verificar permiso específico
-    permiso = PermisoDocumento.query.filter_by(
-        documento_id=documento_id,
-        usuario_id=usuario_id,
-        permiso=tipo_permiso
-    ).first()
-    
-    return permiso is not None
-
-def generar_reporte_documentos():
-    """Genera reporte estadístico de documentos"""
-    return {
-        'documentos_por_obra': db.session.query(
-            Obra.nombre, db.func.count(DocumentoObra.id)
-        ).join(DocumentoObra).group_by(Obra.id).all(),
-        
-        'documentos_por_tipo': db.session.query(
-            TipoDocumento.nombre, db.func.count(DocumentoObra.id)
-        ).join(DocumentoObra).group_by(TipoDocumento.id).all(),
-        
-        'documentos_por_estado': db.session.query(
-            DocumentoObra.estado, db.func.count(DocumentoObra.id)
-        ).group_by(DocumentoObra.estado).all(),
-        
-        'actividad_mensual': generar_actividad_mensual()
-    }
-
-def generar_actividad_mensual():
-    """Genera estadísticas de actividad por mes"""
-    # Implementar lógica para obtener actividad mensual
-    return []
+    flash('Documento eliminado.', 'info')
+    return redirect(url_for('obras.detalle', id=doc.obra_id))

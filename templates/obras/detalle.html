@@ -828,6 +828,225 @@
     </div>
 </div>
 
+<!-- Legajo Digital + Caja -->
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Legajo Digital -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>Legajo Digital</h5>
+                    {% if can_manage %}
+                    <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalSubirDocumento">
+                        <i class="fas fa-upload me-1"></i>Subir Documento
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body" id="legajoContainer">
+                    <div class="text-center py-3" id="legajoLoading">
+                        <div class="spinner-border spinner-border-sm text-primary"></div> Cargando documentos...
+                    </div>
+                    <div id="legajoContent" style="display:none"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Caja de la Obra -->
+        <div class="col-md-4">
+            <div class="card mb-4 border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-cash-register me-2"></i>Caja de Obra</h5>
+                </div>
+                <div class="card-body text-center" id="cajaContainer">
+                    <div class="spinner-border spinner-border-sm text-success" id="cajaLoading"></div>
+                    <div id="cajaContent" style="display:none">
+                        <h3 class="mb-1" id="cajaSaldo">$0.00</h3>
+                        <p class="text-muted mb-2">Saldo disponible</p>
+                        {% if has_endpoint('caja.obra') %}
+                        <a href="{{ url_for('caja.obra', id=obra.id) }}" class="btn btn-outline-success btn-sm">
+                            <i class="fas fa-eye me-1"></i>Ver Movimientos
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if obra.ordenes_compra %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Ordenes de Compra</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for oc in obra.ordenes_compra[:5] %}
+                        <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ oc.numero }}</strong>
+                                <br><small class="text-muted">{{ oc.proveedor }}</small>
+                            </div>
+                            <span class="badge bg-{{ oc.estado_color }}">{{ oc.estado_display }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% if obra.ordenes_compra|length > 5 %}
+                    <div class="text-center p-2">
+                        <a href="{{ url_for('ordenes_compra.lista', obra_id=obra.id) }}" class="text-decoration-none">
+                            Ver todas ({{ obra.ordenes_compra|length }})
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Subir Documento -->
+<div class="modal fade" id="modalSubirDocumento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('documentos.subir', obra_id=obra.id) }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title"><i class="fas fa-upload me-2"></i>Subir Documento</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de documento <span class="text-danger">*</span></label>
+                        <select class="form-select" name="tipo_documento_id" id="tipoDocSelect" required>
+                            <option value="">Cargando tipos...</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre del documento</label>
+                        <input type="text" class="form-control" name="nombre"
+                               placeholder="Se usara el nombre del archivo si queda vacio">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Archivo <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control" name="archivo" required
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.dxf,.zip,.rar">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripcion</label>
+                        <textarea class="form-control" name="descripcion" rows="2"
+                                  placeholder="Breve descripcion del documento..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark">
+                        <i class="fas fa-upload me-1"></i>Subir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Cargar legajo digital
+document.addEventListener('DOMContentLoaded', function() {
+    // Cargar documentos
+    fetch('/documentos/obra/{{ obra.id }}/listar')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('legajoLoading').style.display = 'none';
+            const container = document.getElementById('legajoContent');
+            container.style.display = 'block';
+
+            if (!data.ok || data.documentos.length === 0) {
+                container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-folder-open fa-2x mb-2"></i><p>No hay documentos cargados</p></div>';
+                return;
+            }
+
+            // Agrupar por tipo
+            const porTipo = {};
+            data.documentos.forEach(d => {
+                const tipo = d.tipo_nombre || 'Otros';
+                if (!porTipo[tipo]) porTipo[tipo] = [];
+                porTipo[tipo].push(d);
+            });
+
+            let html = '<div class="row">';
+            const iconos = {
+                'Contrato': 'fa-file-signature',
+                'Planos': 'fa-drafting-compass',
+                'Renders': 'fa-image',
+                'Pliego de Especificaciones': 'fa-clipboard-list',
+                'Memoria de Calculo': 'fa-calculator',
+                'Presupuesto': 'fa-file-invoice-dollar',
+                'Otros': 'fa-file-alt',
+            };
+
+            for (const [tipo, docs] of Object.entries(porTipo)) {
+                html += '<div class="col-md-6 mb-3">';
+                html += `<h6 class="fw-bold"><i class="fas ${iconos[tipo] || 'fa-file'} me-1"></i>${tipo} (${docs.length})</h6>`;
+                html += '<div class="list-group list-group-flush">';
+                docs.forEach(d => {
+                    html += `<div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <small class="fw-bold">${d.nombre}</small>
+                            <br><small class="text-muted">${d.fecha} - ${d.creador || ''}</small>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <a href="/documentos/${d.id}/descargar" class="btn btn-outline-primary" title="Descargar">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <form method="POST" action="/documentos/${d.id}/eliminar" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-danger" title="Eliminar"
+                                        onclick="return confirm('Eliminar este documento?')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('legajoLoading').innerHTML = '<span class="text-muted">Error al cargar documentos</span>';
+        });
+
+    // Cargar tipos de documento para el select
+    fetch('/documentos/tipos')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('tipoDocSelect');
+            select.innerHTML = '<option value="">Seleccionar tipo...</option>';
+            if (data.ok) {
+                data.tipos.forEach(t => {
+                    select.innerHTML += `<option value="${t.id}">${t.nombre}</option>`;
+                });
+            }
+        });
+
+    // Cargar saldo de caja
+    fetch('/caja/api/saldo/{{ obra.id }}')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('cajaLoading').style.display = 'none';
+            document.getElementById('cajaContent').style.display = 'block';
+            if (data.ok) {
+                const saldo = data.saldo;
+                document.getElementById('cajaSaldo').textContent = '$' + saldo.toLocaleString('es-AR', {minimumFractionDigits: 2});
+                document.getElementById('cajaSaldo').className = 'mb-1 text-' + (saldo > 0 ? 'success' : saldo < 0 ? 'danger' : 'muted');
+            }
+        })
+        .catch(() => {
+            document.getElementById('cajaLoading').style.display = 'none';
+            document.getElementById('cajaContent').style.display = 'block';
+            document.getElementById('cajaSaldo').textContent = '$0.00';
+        });
+});
+</script>
+
 <!-- Modales -->
 {% if can_manage %}
 

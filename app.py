@@ -946,6 +946,157 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Requerimiento compra items migration skipped: {e}")
 
+    # Ordenes de Compra + Recepciones + CAJA tables
+    try:
+        oc_sql = """
+        DO $$
+        BEGIN
+            -- Ordenes de compra
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='ordenes_compra') THEN
+                CREATE TABLE ordenes_compra (
+                    id SERIAL PRIMARY KEY,
+                    numero VARCHAR(20) UNIQUE NOT NULL,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    requerimiento_id INTEGER REFERENCES requerimientos_compra(id),
+                    proveedor VARCHAR(200) NOT NULL,
+                    proveedor_cuit VARCHAR(20),
+                    proveedor_contacto VARCHAR(200),
+                    estado VARCHAR(20) DEFAULT 'borrador',
+                    moneda VARCHAR(3) DEFAULT 'ARS',
+                    subtotal NUMERIC(15,2) DEFAULT 0,
+                    iva NUMERIC(15,2) DEFAULT 0,
+                    total NUMERIC(15,2) DEFAULT 0,
+                    fecha_emision DATE,
+                    fecha_entrega_estimada DATE,
+                    fecha_entrega_real DATE,
+                    condicion_pago VARCHAR(100),
+                    notas TEXT,
+                    created_by_id INTEGER REFERENCES usuarios(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_oc_org ON ordenes_compra(organizacion_id);
+                CREATE INDEX ix_oc_obra ON ordenes_compra(obra_id);
+                CREATE INDEX ix_oc_estado ON ordenes_compra(estado);
+            END IF;
+
+            -- Items de OC
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='orden_compra_items') THEN
+                CREATE TABLE orden_compra_items (
+                    id SERIAL PRIMARY KEY,
+                    orden_compra_id INTEGER NOT NULL REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+                    item_inventario_id INTEGER REFERENCES items_inventario(id),
+                    descripcion VARCHAR(300) NOT NULL,
+                    cantidad NUMERIC(10,3) NOT NULL,
+                    unidad VARCHAR(30) DEFAULT 'unidad',
+                    precio_unitario NUMERIC(15,2) DEFAULT 0,
+                    subtotal NUMERIC(15,2) DEFAULT 0,
+                    cantidad_recibida NUMERIC(10,3) DEFAULT 0
+                );
+                CREATE INDEX ix_oci_oc ON orden_compra_items(orden_compra_id);
+            END IF;
+
+            -- Recepciones de OC
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='recepciones_oc') THEN
+                CREATE TABLE recepciones_oc (
+                    id SERIAL PRIMARY KEY,
+                    orden_compra_id INTEGER NOT NULL REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+                    fecha_recepcion DATE NOT NULL,
+                    recibido_por_id INTEGER NOT NULL REFERENCES usuarios(id),
+                    remito_numero VARCHAR(100),
+                    notas TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_rec_oc ON recepciones_oc(orden_compra_id);
+            END IF;
+
+            -- Items de recepcion
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='recepcion_oc_items') THEN
+                CREATE TABLE recepcion_oc_items (
+                    id SERIAL PRIMARY KEY,
+                    recepcion_id INTEGER NOT NULL REFERENCES recepciones_oc(id) ON DELETE CASCADE,
+                    oc_item_id INTEGER NOT NULL REFERENCES orden_compra_items(id),
+                    cantidad_recibida NUMERIC(10,3) NOT NULL
+                );
+                CREATE INDEX ix_reci_rec ON recepcion_oc_items(recepcion_id);
+            END IF;
+
+            -- Movimientos de Caja
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='movimientos_caja') THEN
+                CREATE TABLE movimientos_caja (
+                    id SERIAL PRIMARY KEY,
+                    numero VARCHAR(20) UNIQUE NOT NULL,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    tipo VARCHAR(20) NOT NULL,
+                    monto NUMERIC(15,2) NOT NULL,
+                    moneda VARCHAR(3) DEFAULT 'ARS',
+                    concepto VARCHAR(300),
+                    referencia VARCHAR(100),
+                    orden_compra_id INTEGER REFERENCES ordenes_compra(id),
+                    fecha_movimiento DATE NOT NULL,
+                    estado VARCHAR(20) DEFAULT 'pendiente',
+                    comprobante_url VARCHAR(500),
+                    created_by_id INTEGER REFERENCES usuarios(id),
+                    confirmado_por_id INTEGER REFERENCES usuarios(id),
+                    fecha_confirmacion TIMESTAMP,
+                    notas TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_mc_org ON movimientos_caja(organizacion_id);
+                CREATE INDEX ix_mc_obra ON movimientos_caja(obra_id);
+                CREATE INDEX ix_mc_estado ON movimientos_caja(estado);
+            END IF;
+
+            -- Tipos de documento (para Legajo Digital)
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='tipos_documento') THEN
+                CREATE TABLE tipos_documento (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(100) NOT NULL,
+                    categoria VARCHAR(50) NOT NULL,
+                    requiere_aprobacion BOOLEAN DEFAULT FALSE,
+                    retencion_anos INTEGER DEFAULT 10,
+                    activo BOOLEAN DEFAULT TRUE
+                );
+                INSERT INTO tipos_documento (nombre, categoria) VALUES
+                    ('Contrato', 'contractual'),
+                    ('Planos', 'tecnico'),
+                    ('Renders', 'tecnico'),
+                    ('Pliego de Especificaciones', 'tecnico'),
+                    ('Memoria de Calculo', 'tecnico'),
+                    ('Presupuesto', 'administrativo'),
+                    ('Otros', 'general');
+            END IF;
+
+            -- Documentos de obra
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='documentos_obra') THEN
+                CREATE TABLE documentos_obra (
+                    id SERIAL PRIMARY KEY,
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    tipo_documento_id INTEGER NOT NULL REFERENCES tipos_documento(id),
+                    organizacion_id INTEGER REFERENCES organizaciones(id),
+                    nombre VARCHAR(200) NOT NULL,
+                    descripcion TEXT,
+                    archivo_path VARCHAR(500) NOT NULL,
+                    version VARCHAR(10) DEFAULT '1.0',
+                    estado VARCHAR(20) DEFAULT 'activo',
+                    fecha_creacion TIMESTAMP DEFAULT NOW(),
+                    fecha_modificacion TIMESTAMP DEFAULT NOW(),
+                    creado_por_id INTEGER NOT NULL REFERENCES usuarios(id),
+                    tags VARCHAR(500)
+                );
+                CREATE INDEX ix_do_obra ON documentos_obra(obra_id);
+                CREATE INDEX ix_do_tipo ON documentos_obra(tipo_documento_id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(oc_sql))
+        db.session.commit()
+        print("[OK] OC + Caja + Documentos tables migration applied")
+    except Exception as e:
+        print(f"[WARN] OC + Caja + Documentos migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
@@ -1255,6 +1406,30 @@ try:
     print("[OK] Fichadas blueprint registered successfully")
 except ImportError as e:
     print(f"[WARN] Fichadas blueprint not available: {e}")
+
+# Ordenes de Compra
+try:
+    from blueprint_ordenes_compra import ordenes_compra_bp
+    app.register_blueprint(ordenes_compra_bp)
+    print("[OK] Ordenes de Compra blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Ordenes de Compra blueprint not available: {e}")
+
+# Caja (Transferencias oficina -> obra)
+try:
+    from blueprint_caja import caja_bp
+    app.register_blueprint(caja_bp)
+    print("[OK] Caja blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Caja blueprint not available: {e}")
+
+# Documentos de Obra (Legajo Digital)
+try:
+    from control_documentos import documentos_bp
+    app.register_blueprint(documentos_bp)
+    print("[OK] Documentos blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Documentos blueprint not available: {e}")
 
 _refresh_login_view()
 

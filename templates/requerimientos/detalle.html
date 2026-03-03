@@ -343,23 +343,40 @@
                         {% endif %}
 
                     {% elif requerimiento.estado == 'aprobado' %}
-                        {% if current_user.rol in ['administrador', 'admin'] %}
+                        {% if current_user.rol in ['administrador', 'admin'] or current_user.role in ['admin', 'pm'] %}
+                        <a href="{{ url_for('ordenes_compra.crear', requerimiento_id=requerimiento.id) }}" class="btn btn-primary w-100 mb-2">
+                            <i class="fas fa-file-invoice-dollar me-1"></i>Generar Orden de Compra
+                        </a>
                         <form method="POST" action="{{ url_for('requerimientos.marcar_en_proceso', id=requerimiento.id) }}" class="mb-2">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-primary w-100">
-                                <i class="fas fa-shopping-cart me-1"></i>Marcar en Proceso de Compra
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-shopping-cart me-1"></i>Marcar en Proceso
                             </button>
                         </form>
                         <form method="POST" action="{{ url_for('requerimientos.completar', id=requerimiento.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-success w-100">
+                            <button type="submit" class="btn btn-outline-success w-100">
                                 <i class="fas fa-check-circle me-1"></i>Marcar como Completado
                             </button>
                         </form>
                         {% endif %}
 
                     {% elif requerimiento.estado == 'en_proceso' %}
-                        {% if current_user.rol in ['administrador', 'admin'] %}
+                        {% if current_user.rol in ['administrador', 'admin'] or current_user.role in ['admin', 'pm'] %}
+                        {% if not requerimiento.ordenes_compra %}
+                        <a href="{{ url_for('ordenes_compra.crear', requerimiento_id=requerimiento.id) }}" class="btn btn-primary w-100 mb-2">
+                            <i class="fas fa-file-invoice-dollar me-1"></i>Generar Orden de Compra
+                        </a>
+                        {% else %}
+                        <div class="alert alert-info mb-2">
+                            <small><i class="fas fa-file-invoice-dollar me-1"></i>
+                            OC generada:
+                            {% for oc in requerimiento.ordenes_compra %}
+                            <a href="{{ url_for('ordenes_compra.detalle', id=oc.id) }}">{{ oc.numero }}</a>{{ ", " if not loop.last }}
+                            {% endfor %}
+                            </small>
+                        </div>
+                        {% endif %}
                         <form method="POST" action="{{ url_for('requerimientos.completar', id=requerimiento.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-success w-100">
