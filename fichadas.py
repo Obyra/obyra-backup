@@ -100,15 +100,15 @@ def _geocodificar_direccion(direccion):
 def _obras_asignadas(usuario):
     """Devuelve las obras activas asignadas al usuario.
 
-    Admin/super_admin ven todas las obras activas de su organización.
-    Operarios/PMs solo ven las obras donde están asignados.
+    Admin/super_admin/PM ven todas las obras activas de su organización.
+    Operarios solo ven las obras donde están asignados.
     """
     org_id = getattr(usuario, 'organizacion_id', None)
     if not org_id:
         return []
 
-    # Admin/super_admin: todas las obras activas de la organización
-    if _es_admin(usuario):
+    # Admin/super_admin/PM: todas las obras activas de la organización
+    if _es_admin_o_pm(usuario):
         return (Obra.query
                 .filter(Obra.organizacion_id == org_id,
                         Obra.estado.in_(['en_curso', 'planificacion']))
@@ -375,8 +375,8 @@ def fichar(obra_id):
     """Página mobile-first para fichar ingreso/egreso."""
     obra = Obra.query.get_or_404(obra_id)
 
-    # Verificar que el usuario está asignado (admin/super_admin acceden a todas)
-    if not _es_admin(current_user):
+    # Verificar que el usuario está asignado (admin/PM acceden a todas)
+    if not _es_admin_o_pm(current_user):
         es_miembro = (ObraMiembro.query.filter_by(
                           obra_id=obra_id, usuario_id=current_user.id).first()
                       or AsignacionObra.query.filter_by(
@@ -448,8 +448,8 @@ def api_fichar():
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
 
-    # Verificar asignación (admin/super_admin acceden a todas)
-    if not _es_admin(current_user):
+    # Verificar asignación (admin/PM acceden a todas)
+    if not _es_admin_o_pm(current_user):
         es_miembro = (ObraMiembro.query.filter_by(
                           obra_id=obra_id, usuario_id=current_user.id).first()
                       or AsignacionObra.query.filter_by(
