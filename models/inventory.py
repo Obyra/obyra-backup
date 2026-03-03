@@ -1136,7 +1136,8 @@ class OrdenCompra(db.Model):
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
     requerimiento_id = db.Column(db.Integer, db.ForeignKey('requerimientos_compra.id'), nullable=True)
 
-    # Proveedor
+    # Proveedor (FK a ProveedorOC + campos texto como snapshot/fallback)
+    proveedor_oc_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id'), nullable=True)
     proveedor = db.Column(db.String(200), nullable=False)
     proveedor_cuit = db.Column(db.String(20))
     proveedor_contacto = db.Column(db.String(200))
@@ -1168,6 +1169,7 @@ class OrdenCompra(db.Model):
     organizacion = db.relationship('Organizacion', backref='ordenes_compra')
     obra = db.relationship('Obra', backref='ordenes_compra')
     requerimiento = db.relationship('RequerimientoCompra', backref='ordenes_compra')
+    proveedor_oc = db.relationship('ProveedorOC', foreign_keys=[proveedor_oc_id])
     created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
     items = db.relationship('OrdenCompraItem', back_populates='orden_compra',
                            cascade='all, delete-orphan', lazy='dynamic')

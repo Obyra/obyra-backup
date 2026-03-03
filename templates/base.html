@@ -117,26 +117,29 @@
                             <i class="fas fa-boxes me-1"></i>Inventario
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">Ver Inventario</a></li>
-                            {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.crear') %}
-                            <li><a class="dropdown-item" href="{{ url_for('inventario.crear') }}">Nuevo Item</a></li>
-                            {% endif %}
-                            {% if current_user.rol in ['administrador', 'tecnico'] and has_endpoint('inventario.uso_obra') %}
-                            <li><a class="dropdown-item" href="{{ url_for('inventario.uso_obra') }}">Uso en Obra</a></li>
-                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('inventario.lista') }}">
+                                <i class="fas fa-boxes me-2"></i>Inventario
+                            </a></li>
                             {% if has_endpoint('requerimientos.lista') %}
                             <li><a class="dropdown-item" href="{{ url_for('requerimientos.lista') }}">
-                                <i class="fas fa-shopping-cart me-1"></i>Requerimientos de Compra
+                                <i class="fas fa-shopping-cart me-2"></i>Requerimientos de Compra
                             </a></li>
                             {% endif %}
                             {% if has_endpoint('ordenes_compra.lista') %}
                             <li><a class="dropdown-item" href="{{ url_for('ordenes_compra.lista') }}">
-                                <i class="fas fa-file-invoice-dollar me-1"></i>Ordenes de Compra
+                                <i class="fas fa-file-invoice-dollar me-2"></i>Ordenes de Compra
+                            </a></li>
+                            {% endif %}
+                            {% if has_endpoint('proveedores_oc.lista') %}
+                            <li><a class="dropdown-item" href="{{ url_for('proveedores_oc.lista') }}">
+                                <i class="fas fa-truck me-2"></i>Proveedores
                             </a></li>
                             {% endif %}
                             {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">Categorías</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">
+                                <i class="fas fa-tags me-2"></i>Categorias
+                            </a></li>
                             {% endif %}
                         </ul>
                     </li>

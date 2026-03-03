@@ -1097,6 +1097,67 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] OC + Caja + Documentos migration skipped: {e}")
 
+    # Proveedores OC + Historial precios
+    try:
+        prov_sql = """
+        DO $$ BEGIN
+            -- Proveedores OC
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='proveedores_oc') THEN
+                CREATE TABLE proveedores_oc (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    razon_social VARCHAR(200) NOT NULL,
+                    nombre_fantasia VARCHAR(200),
+                    cuit VARCHAR(20),
+                    tipo VARCHAR(50) DEFAULT 'materiales',
+                    email VARCHAR(200),
+                    telefono VARCHAR(50),
+                    direccion VARCHAR(300),
+                    ciudad VARCHAR(100),
+                    provincia VARCHAR(100),
+                    contacto_nombre VARCHAR(200),
+                    contacto_telefono VARCHAR(50),
+                    condicion_pago VARCHAR(100),
+                    notas TEXT,
+                    activo BOOLEAN DEFAULT TRUE,
+                    created_by_id INTEGER REFERENCES usuarios(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_prov_oc_org ON proveedores_oc(organizacion_id);
+                CREATE INDEX ix_prov_oc_activo ON proveedores_oc(activo);
+            END IF;
+
+            -- Historial de precios proveedor
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='historial_precios_proveedor') THEN
+                CREATE TABLE historial_precios_proveedor (
+                    id SERIAL PRIMARY KEY,
+                    proveedor_id INTEGER NOT NULL REFERENCES proveedores_oc(id),
+                    item_inventario_id INTEGER REFERENCES items_inventario(id),
+                    descripcion_item VARCHAR(300) NOT NULL,
+                    precio_unitario NUMERIC(15,2) NOT NULL,
+                    moneda VARCHAR(3) DEFAULT 'ARS',
+                    orden_compra_id INTEGER REFERENCES ordenes_compra(id),
+                    fecha DATE NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_hpp_prov ON historial_precios_proveedor(proveedor_id);
+                CREATE INDEX ix_hpp_item ON historial_precios_proveedor(item_inventario_id);
+            END IF;
+
+            -- Agregar FK proveedor_oc_id a ordenes_compra si no existe
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='ordenes_compra' AND column_name='proveedor_oc_id') THEN
+                ALTER TABLE ordenes_compra ADD COLUMN proveedor_oc_id INTEGER REFERENCES proveedores_oc(id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(prov_sql))
+        db.session.commit()
+        print("[OK] Proveedores OC tables migration applied")
+    except Exception as e:
+        print(f"[WARN] Proveedores OC migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
@@ -1414,6 +1475,14 @@ try:
     print("[OK] Ordenes de Compra blueprint registered successfully")
 except ImportError as e:
     print(f"[WARN] Ordenes de Compra blueprint not available: {e}")
+
+# Proveedores OC
+try:
+    from blueprint_proveedores_oc import proveedores_oc_bp
+    app.register_blueprint(proveedores_oc_bp)
+    print("[OK] Proveedores OC blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Proveedores OC blueprint not available: {e}")
 
 # Caja (Transferencias oficina -> obra)
 try:

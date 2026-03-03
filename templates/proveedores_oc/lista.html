@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Proveedores - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-truck me-2"></i>Proveedores</h2>
+        <a href="{{ url_for('proveedores_oc.crear') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Nuevo Proveedor
+        </a>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('proveedores_oc.lista') }}" class="row g-3">
+                <div class="col-md-5">
+                    <input type="text" class="form-control" name="buscar"
+                           placeholder="Buscar por nombre, CUIT, contacto..."
+                           value="{{ buscar }}">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" name="tipo">
+                        <option value="">Todos los tipos</option>
+                        <option value="materiales" {% if tipo == 'materiales' %}selected{% endif %}>Materiales</option>
+                        <option value="servicios" {% if tipo == 'servicios' %}selected{% endif %}>Servicios</option>
+                        <option value="equipos" {% if tipo == 'equipos' %}selected{% endif %}>Equipos</option>
+                        <option value="otros" {% if tipo == 'otros' %}selected{% endif %}>Otros</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select" name="activo">
+                        <option value="">Todos</option>
+                        <option value="true" {% if activo == 'true' %}selected{% endif %}>Activos</option>
+                        <option value="false" {% if activo == 'false' %}selected{% endif %}>Inactivos</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i>Buscar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista -->
+    <div class="card">
+        <div class="card-body">
+            {% if proveedores %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Proveedor</th>
+                            <th>CUIT</th>
+                            <th>Tipo</th>
+                            <th>Contacto</th>
+                            <th>Telefono</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prov in proveedores %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('proveedores_oc.detalle', id=prov.id) }}" class="text-decoration-none">
+                                    <strong>{{ prov.razon_social }}</strong>
+                                </a>
+                                {% if prov.nombre_fantasia %}
+                                <br><small class="text-muted">{{ prov.nombre_fantasia }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ prov.cuit or '-' }}</td>
+                            <td><span class="badge bg-{{ prov.tipo_color }}">{{ prov.tipo_display }}</span></td>
+                            <td>{{ prov.contacto_nombre or '-' }}</td>
+                            <td>
+                                {% if prov.telefono %}
+                                <a href="tel:{{ prov.telefono }}">{{ prov.telefono }}</a>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if prov.activo %}
+                                <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('proveedores_oc.detalle', id=prov.id) }}"
+                                       class="btn btn-outline-primary" title="Ver detalle">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('proveedores_oc.editar', id=prov.id) }}"
+                                       class="btn btn-outline-secondary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-{{ 'danger' if prov.activo else 'success' }}"
+                                            onclick="cambiarEstado({{ prov.id }}, '{{ prov.razon_social }}')"
+                                            title="{{ 'Desactivar' if prov.activo else 'Activar' }}">
+                                        <i class="fas fa-{{ 'ban' if prov.activo else 'check' }}"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginacion -->
+            {% if pagination.pages > 1 %}
+            <nav>
+                <ul class="pagination justify-content-center">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ pagination.prev_num }}&buscar={{ buscar }}&tipo={{ tipo }}&activo={{ activo }}">Anterior</a>
+                    </li>
+                    {% endif %}
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                        {% if page_num %}
+                            {% if page_num == pagination.page %}
+                            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ page_num }}&buscar={{ buscar }}&tipo={{ tipo }}&activo={{ activo }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ pagination.next_num }}&buscar={{ buscar }}&tipo={{ tipo }}&activo={{ activo }}">Siguiente</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-truck fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No se encontraron proveedores</p>
+                <a href="{{ url_for('proveedores_oc.crear') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Crear primer proveedor
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function cambiarEstado(id, nombre) {
+    if (!confirm('¿Cambiar estado del proveedor "' + nombre + '"?')) return;
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    fetch('/proveedores-oc/' + id + '/cambiar-estado', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Error: ' + data.error); }
+        else { window.location.reload(); }
+    })
+    .catch(function() { alert('Error al cambiar estado'); });
+}
+</script>
+{% endblock %}

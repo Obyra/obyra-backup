@@ -68,6 +68,9 @@ from models.budgets import (
 # Client models
 from models.clients import Cliente
 
+# Proveedores OC models
+from models.proveedores_oc import ProveedorOC, HistorialPrecioProveedor
+
 # Inventory models
 from models.inventory import (
     # Sistema de Ubicaciones (nuevo)
@@ -247,6 +250,9 @@ __all__ = [
     'WizardStageCoefficient',
     # Clients
     'Cliente',
+    # Proveedores OC
+    'ProveedorOC',
+    'HistorialPrecioProveedor',
     # Inventory
     'CategoriaInventario',
     'ItemInventario',

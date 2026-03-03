@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}{{ proveedor.razon_social }} - Proveedor - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-truck me-2"></i>{{ proveedor.razon_social }}</h2>
+            {% if proveedor.nombre_fantasia %}
+            <p class="text-muted mb-0">{{ proveedor.nombre_fantasia }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <a href="{{ url_for('proveedores_oc.editar', id=proveedor.id) }}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-1"></i>Editar
+            </a>
+            <a href="{{ url_for('proveedores_oc.lista') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Datos del proveedor -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informacion</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless table-sm mb-0">
+                        <tr>
+                            <td class="text-muted" style="width:40%">CUIT</td>
+                            <td><strong>{{ proveedor.cuit or '-' }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Tipo</td>
+                            <td><span class="badge bg-{{ proveedor.tipo_color }}">{{ proveedor.tipo_display }}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Cond. Pago</td>
+                            <td>{{ proveedor.condicion_pago or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Estado</td>
+                            <td>
+                                {% if proveedor.activo %}
+                                <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-address-book me-2"></i>Contacto</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless table-sm mb-0">
+                        {% if proveedor.email %}
+                        <tr>
+                            <td class="text-muted" style="width:40%">Email</td>
+                            <td><a href="mailto:{{ proveedor.email }}">{{ proveedor.email }}</a></td>
+                        </tr>
+                        {% endif %}
+                        {% if proveedor.telefono %}
+                        <tr>
+                            <td class="text-muted">Telefono</td>
+                            <td><a href="tel:{{ proveedor.telefono }}">{{ proveedor.telefono }}</a></td>
+                        </tr>
+                        {% endif %}
+                        {% if proveedor.contacto_nombre %}
+                        <tr>
+                            <td class="text-muted">Contacto</td>
+                            <td>{{ proveedor.contacto_nombre }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if proveedor.contacto_telefono %}
+                        <tr>
+                            <td class="text-muted">Tel. Contacto</td>
+                            <td><a href="tel:{{ proveedor.contacto_telefono }}">{{ proveedor.contacto_telefono }}</a></td>
+                        </tr>
+                        {% endif %}
+                        {% if proveedor.direccion %}
+                        <tr>
+                            <td class="text-muted">Direccion</td>
+                            <td>{{ proveedor.direccion }}{% if proveedor.ciudad %}, {{ proveedor.ciudad }}{% endif %}{% if proveedor.provincia %}, {{ proveedor.provincia }}{% endif %}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                    {% if not proveedor.email and not proveedor.telefono and not proveedor.contacto_nombre %}
+                    <p class="text-muted mb-0 text-center">Sin datos de contacto</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if proveedor.notas %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-sticky-note me-2"></i>Notas</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ proveedor.notas }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Tabs: Ordenes de Compra + Historial de Precios -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#tabOC" role="tab">
+                                <i class="fas fa-file-invoice-dollar me-1"></i>Ordenes de Compra
+                                <span class="badge bg-secondary ms-1">{{ ordenes|length }}</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#tabPrecios" role="tab">
+                                <i class="fas fa-history me-1"></i>Historial de Precios
+                                <span class="badge bg-secondary ms-1">{{ precios|length }}</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content">
+                        <!-- Tab OC -->
+                        <div class="tab-pane fade show active" id="tabOC" role="tabpanel">
+                            {% if ordenes %}
+                            <div class="table-responsive">
+                                <table class="table table-hover table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Numero</th>
+                                            <th>Obra</th>
+                                            <th>Total</th>
+                                            <th>Estado</th>
+                                            <th>Fecha</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for oc in ordenes %}
+                                        <tr style="cursor:pointer" onclick="window.location='{{ url_for('ordenes_compra.detalle', id=oc.id) }}'">
+                                            <td><strong>{{ oc.numero }}</strong></td>
+                                            <td>{{ oc.obra.nombre if oc.obra else '-' }}</td>
+                                            <td>{{ oc.moneda }} {{ '{:,.2f}'.format(oc.total|float) }}</td>
+                                            <td><span class="badge bg-{{ oc.estado_color }}">{{ oc.estado_display }}</span></td>
+                                            <td>{{ oc.created_at.strftime('%d/%m/%Y') if oc.created_at else '-' }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-file-invoice fa-2x text-muted mb-2"></i>
+                                <p class="text-muted mb-0">No hay ordenes de compra vinculadas</p>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Tab Precios -->
+                        <div class="tab-pane fade" id="tabPrecios" role="tabpanel">
+                            {% if precios %}
+                            <div class="table-responsive">
+                                <table class="table table-hover table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Material / Item</th>
+                                            <th>Precio Unitario</th>
+                                            <th>OC</th>
+                                            <th>Fecha</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for p in precios %}
+                                        <tr>
+                                            <td>{{ p.descripcion_item }}</td>
+                                            <td><strong>{{ p.moneda }} {{ '{:,.2f}'.format(p.precio_unitario|float) }}</strong></td>
+                                            <td>
+                                                {% if p.orden_compra %}
+                                                <a href="{{ url_for('ordenes_compra.detalle', id=p.orden_compra.id) }}">
+                                                    {{ p.orden_compra.numero }}
+                                                </a>
+                                                {% else %}
+                                                -
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ p.fecha.strftime('%d/%m/%Y') if p.fecha else '-' }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-history fa-2x text-muted mb-2"></i>
+                                <p class="text-muted mb-0">Sin historial de precios</p>
+                                <small class="text-muted">El historial se genera automaticamente al completar ordenes de compra</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

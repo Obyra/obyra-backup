@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if proveedor else 'Nuevo' }} Proveedor - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="fas fa-{{ 'edit' if proveedor else 'plus-circle' }} me-2"></i>
+            {{ 'Editar Proveedor' if proveedor else 'Nuevo Proveedor' }}
+        </h2>
+        <a href="{{ url_for('proveedores_oc.lista') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="row">
+            <div class="col-md-8">
+                <!-- Datos principales -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-building me-2"></i>Datos del Proveedor</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Razon Social <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="razon_social" required
+                                       value="{{ proveedor.razon_social if proveedor else '' }}"
+                                       placeholder="Ej: Corralon Lopez S.R.L.">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Nombre Fantasia</label>
+                                <input type="text" class="form-control" name="nombre_fantasia"
+                                       value="{{ proveedor.nombre_fantasia if proveedor and proveedor.nombre_fantasia else '' }}"
+                                       placeholder="Nombre comercial (opcional)">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">CUIT</label>
+                                <input type="text" class="form-control" name="cuit"
+                                       value="{{ proveedor.cuit if proveedor and proveedor.cuit else '' }}"
+                                       placeholder="XX-XXXXXXXX-X">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Tipo</label>
+                                <select class="form-select" name="tipo">
+                                    <option value="materiales" {% if proveedor and proveedor.tipo == 'materiales' %}selected{% endif %}>Materiales</option>
+                                    <option value="servicios" {% if proveedor and proveedor.tipo == 'servicios' %}selected{% endif %}>Servicios</option>
+                                    <option value="equipos" {% if proveedor and proveedor.tipo == 'equipos' %}selected{% endif %}>Equipos</option>
+                                    <option value="otros" {% if proveedor and proveedor.tipo == 'otros' %}selected{% endif %}>Otros</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Condicion de Pago</label>
+                                <input type="text" class="form-control" name="condicion_pago"
+                                       value="{{ proveedor.condicion_pago if proveedor and proveedor.condicion_pago else '' }}"
+                                       placeholder="Ej: Contado, 30 dias...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contacto -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-address-book me-2"></i>Contacto</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" name="email"
+                                       value="{{ proveedor.email if proveedor and proveedor.email else '' }}"
+                                       placeholder="email@proveedor.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Telefono</label>
+                                <input type="text" class="form-control" name="telefono"
+                                       value="{{ proveedor.telefono if proveedor and proveedor.telefono else '' }}"
+                                       placeholder="(011) 1234-5678">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Persona de Contacto</label>
+                                <input type="text" class="form-control" name="contacto_nombre"
+                                       value="{{ proveedor.contacto_nombre if proveedor and proveedor.contacto_nombre else '' }}"
+                                       placeholder="Nombre del contacto">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Telefono Contacto</label>
+                                <input type="text" class="form-control" name="contacto_telefono"
+                                       value="{{ proveedor.contacto_telefono if proveedor and proveedor.contacto_telefono else '' }}"
+                                       placeholder="Celular del contacto">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ubicacion -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i>Ubicacion</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label">Direccion</label>
+                                <input type="text" class="form-control" name="direccion"
+                                       value="{{ proveedor.direccion if proveedor and proveedor.direccion else '' }}"
+                                       placeholder="Calle y numero">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Ciudad</label>
+                                <input type="text" class="form-control" name="ciudad"
+                                       value="{{ proveedor.ciudad if proveedor and proveedor.ciudad else '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Provincia</label>
+                                <input type="text" class="form-control" name="provincia"
+                                       value="{{ proveedor.provincia if proveedor and proveedor.provincia else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <!-- Notas -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-sticky-note me-2"></i>Notas</h5>
+                    </div>
+                    <div class="card-body">
+                        <textarea class="form-control" name="notas" rows="4"
+                                  placeholder="Observaciones internas...">{{ proveedor.notas if proveedor and proveedor.notas else '' }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Boton guardar -->
+                <div class="card">
+                    <div class="card-body">
+                        <button type="submit" class="btn btn-primary w-100 btn-lg">
+                            <i class="fas fa-save me-2"></i>{{ 'Guardar Cambios' if proveedor else 'Crear Proveedor' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

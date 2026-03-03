@@ -91,9 +91,19 @@ def crear():
         try:
             obra_id = request.form.get('obra_id', type=int)
             requerimiento_id = request.form.get('requerimiento_id', type=int) or None
+            proveedor_oc_id = request.form.get('proveedor_oc_id', type=int) or None
             proveedor = request.form.get('proveedor', '').strip()
             proveedor_cuit = request.form.get('proveedor_cuit', '').strip()
             proveedor_contacto = request.form.get('proveedor_contacto', '').strip()
+
+            # Si se selecciono un proveedor del catalogo, copiar datos como snapshot
+            if proveedor_oc_id:
+                from models.proveedores_oc import ProveedorOC
+                prov_obj = ProveedorOC.query.get(proveedor_oc_id)
+                if prov_obj and prov_obj.organizacion_id == org_id:
+                    proveedor = proveedor or prov_obj.razon_social
+                    proveedor_cuit = proveedor_cuit or (prov_obj.cuit or '')
+                    proveedor_contacto = proveedor_contacto or (prov_obj.telefono or '')
             moneda = request.form.get('moneda', 'ARS')
             condicion_pago = request.form.get('condicion_pago', '').strip()
             fecha_entrega_str = request.form.get('fecha_entrega_estimada', '')
@@ -108,6 +118,7 @@ def crear():
                 organizacion_id=org_id,
                 obra_id=obra_id,
                 requerimiento_id=requerimiento_id,
+                proveedor_oc_id=proveedor_oc_id,
                 proveedor=proveedor,
                 proveedor_cuit=proveedor_cuit,
                 proveedor_contacto=proveedor_contacto,
@@ -390,6 +401,24 @@ def recepcion(id):
                 # Completar requerimiento si existe
                 if oc.requerimiento and oc.requerimiento.estado != 'completado':
                     oc.requerimiento.completar()
+                # Guardar historial de precios del proveedor
+                if oc.proveedor_oc_id:
+                    try:
+                        from models.proveedores_oc import HistorialPrecioProveedor
+                        for oc_item in oc.items:
+                            if float(oc_item.precio_unitario or 0) > 0:
+                                hist = HistorialPrecioProveedor(
+                                    proveedor_id=oc.proveedor_oc_id,
+                                    item_inventario_id=oc_item.item_inventario_id,
+                                    descripcion_item=oc_item.descripcion,
+                                    precio_unitario=oc_item.precio_unitario,
+                                    moneda=oc.moneda,
+                                    orden_compra_id=oc.id,
+                                    fecha=fecha_recepcion,
+                                )
+                                db.session.add(hist)
+                    except Exception as hist_err:
+                        current_app.logger.warning(f"Error guardando historial precios: {hist_err}")
             else:
                 oc.estado = 'recibida_parcial'
 

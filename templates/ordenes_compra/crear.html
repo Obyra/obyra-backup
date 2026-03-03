@@ -54,18 +54,27 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Proveedor <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="proveedor" required
-                                       placeholder="Nombre del proveedor">
+                                <div class="position-relative">
+                                    <input type="hidden" name="proveedor_oc_id" id="proveedorOcId" value="">
+                                    <input type="text" class="form-control" name="proveedor" id="proveedorInput" required
+                                           placeholder="Escribir para buscar proveedor..." autocomplete="off">
+                                    <div id="proveedorDropdown" class="dropdown-menu w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1050;"></div>
+                                </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <label class="form-label">CUIT</label>
-                                <input type="text" class="form-control" name="proveedor_cuit"
-                                       placeholder="XX-XXXXXXXX-X">
+                                <input type="text" class="form-control" name="proveedor_cuit" id="proveedorCuit"
+                                       placeholder="XX-XXXXXXXX-X" readonly style="background:#f8f9fa">
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <label class="form-label">Contacto</label>
-                                <input type="text" class="form-control" name="proveedor_contacto"
-                                       placeholder="Tel / Email">
+                                <input type="text" class="form-control" name="proveedor_contacto" id="proveedorContacto"
+                                       placeholder="Tel / Email" readonly style="background:#f8f9fa">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#modalNuevoProveedor">
+                                    <i class="fas fa-plus me-1"></i>Nuevo
+                                </button>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Fecha entrega estimada</label>
@@ -166,7 +175,211 @@
     </form>
 </div>
 
+<!-- Modal Nuevo Proveedor -->
+<div class="modal fade" id="modalNuevoProveedor" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Nuevo Proveedor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Razon Social <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="mp_razon_social" placeholder="Ej: Corralon Lopez S.R.L.">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">CUIT</label>
+                        <input type="text" class="form-control" id="mp_cuit" placeholder="XX-XXXXXXXX-X">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select" id="mp_tipo">
+                            <option value="materiales">Materiales</option>
+                            <option value="servicios">Servicios</option>
+                            <option value="equipos">Equipos</option>
+                            <option value="otros">Otros</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Telefono</label>
+                        <input type="text" class="form-control" id="mp_telefono" placeholder="(011) 1234-5678">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="mp_email" placeholder="email@proveedor.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Contacto</label>
+                        <input type="text" class="form-control" id="mp_contacto" placeholder="Persona de contacto">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Cond. Pago</label>
+                        <input type="text" class="form-control" id="mp_condicion" placeholder="Contado, 30 dias...">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="crearProveedorInline()">
+                    <i class="fas fa-save me-1"></i>Crear y Seleccionar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+// ============================================================
+// Autocompletado de Proveedor
+// ============================================================
+(function() {
+    var input = document.getElementById('proveedorInput');
+    var dropdown = document.getElementById('proveedorDropdown');
+    var hiddenId = document.getElementById('proveedorOcId');
+    var cuitField = document.getElementById('proveedorCuit');
+    var contactoField = document.getElementById('proveedorContacto');
+    var timer = null;
+
+    input.addEventListener('input', function() {
+        clearTimeout(timer);
+        var val = input.value.trim();
+
+        // Si el usuario edita el texto, limpiar la seleccion
+        hiddenId.value = '';
+        cuitField.value = '';
+        contactoField.value = '';
+        cuitField.readOnly = true;
+        contactoField.readOnly = true;
+
+        if (val.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        timer = setTimeout(function() {
+            fetch('/proveedores-oc/api/buscar?q=' + encodeURIComponent(val))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.length) {
+                    dropdown.innerHTML = '<div class="dropdown-item text-muted"><small>No se encontraron proveedores. Use "Nuevo" para crear uno.</small></div>';
+                    dropdown.style.display = 'block';
+                    return;
+                }
+                var html = '';
+                data.forEach(function(p) {
+                    html += '<a class="dropdown-item" href="#" data-id="' + p.id + '" '
+                         + 'data-razon="' + (p.razon_social || '').replace(/"/g, '&quot;') + '" '
+                         + 'data-cuit="' + (p.cuit || '') + '" '
+                         + 'data-telefono="' + (p.telefono || '') + '" '
+                         + 'data-email="' + (p.email || '') + '" '
+                         + 'data-contacto="' + (p.contacto_nombre || '') + '" '
+                         + 'data-condicion="' + (p.condicion_pago || '') + '">'
+                         + '<strong>' + (p.razon_social || '') + '</strong>';
+                    if (p.nombre_fantasia) html += ' <small class="text-muted">(' + p.nombre_fantasia + ')</small>';
+                    if (p.cuit) html += '<br><small class="text-muted">CUIT: ' + p.cuit + '</small>';
+                    html += '</a>';
+                });
+                dropdown.innerHTML = html;
+                dropdown.style.display = 'block';
+
+                // Click en opcion
+                dropdown.querySelectorAll('a[data-id]').forEach(function(a) {
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        seleccionarProveedor(a);
+                    });
+                });
+            })
+            .catch(function() { dropdown.style.display = 'none'; });
+        }, 300);
+    });
+
+    // Cerrar dropdown al hacer click fuera
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    window.seleccionarProveedor = function(el) {
+        hiddenId.value = el.getAttribute('data-id');
+        input.value = el.getAttribute('data-razon');
+        cuitField.value = el.getAttribute('data-cuit') || '';
+        var contacto = el.getAttribute('data-contacto') || '';
+        var tel = el.getAttribute('data-telefono') || '';
+        contactoField.value = contacto ? contacto + (tel ? ' - ' + tel : '') : tel;
+        dropdown.style.display = 'none';
+    };
+
+    window.setProveedorFromModal = function(prov) {
+        hiddenId.value = prov.id;
+        input.value = prov.razon_social;
+        cuitField.value = prov.cuit || '';
+        var contacto = prov.contacto_nombre || '';
+        var tel = prov.telefono || '';
+        contactoField.value = contacto ? contacto + (tel ? ' - ' + tel : '') : tel;
+    };
+})();
+
+// ============================================================
+// Crear proveedor inline desde modal
+// ============================================================
+function crearProveedorInline() {
+    var razon = document.getElementById('mp_razon_social').value.trim();
+    if (!razon) {
+        alert('La razon social es obligatoria');
+        return;
+    }
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    fetch('/proveedores-oc/api/crear', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+        },
+        body: JSON.stringify({
+            razon_social: razon,
+            cuit: document.getElementById('mp_cuit').value.trim(),
+            tipo: document.getElementById('mp_tipo').value,
+            telefono: document.getElementById('mp_telefono').value.trim(),
+            email: document.getElementById('mp_email').value.trim(),
+            contacto_nombre: document.getElementById('mp_contacto').value.trim(),
+            condicion_pago: document.getElementById('mp_condicion').value.trim()
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        if (data.success && data.proveedor) {
+            setProveedorFromModal(data.proveedor);
+
+            // Copiar condicion de pago si existe
+            var condInput = document.querySelector('input[name="condicion_pago"]');
+            if (condInput && data.proveedor.condicion_pago) {
+                condInput.value = data.proveedor.condicion_pago;
+            }
+
+            // Cerrar modal y limpiar
+            var modal = bootstrap.Modal.getInstance(document.getElementById('modalNuevoProveedor'));
+            if (modal) modal.hide();
+            ['mp_razon_social','mp_cuit','mp_telefono','mp_email','mp_contacto','mp_condicion'].forEach(function(id) {
+                document.getElementById(id).value = '';
+            });
+        }
+    })
+    .catch(function() { alert('Error al crear proveedor'); });
+}
+
+// ============================================================
+// Items de la OC
+// ============================================================
 let itemIdx = 0;
 const itemsPrecarga = {{ items_precarga|tojson }};
 
