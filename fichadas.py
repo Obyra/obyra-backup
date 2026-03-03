@@ -448,6 +448,15 @@ def api_fichar():
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
 
+    # Validar que no se pueda fichar egreso sin ingreso previo hoy
+    if tipo == 'egreso':
+        ultima = _ultima_fichada_hoy(current_user.id, obra_id)
+        if not ultima or ultima.tipo != 'ingreso':
+            return jsonify({
+                'ok': False,
+                'error': 'No podes fichar egreso sin haber fichado ingreso primero.'
+            }), 400
+
     # Verificar asignación (admin/PM acceden a todas)
     if not _es_admin_o_pm(current_user):
         es_miembro = (ObraMiembro.query.filter_by(
