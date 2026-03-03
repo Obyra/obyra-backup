@@ -1015,6 +1015,19 @@ class RequerimientoCompra(db.Model):
                 total += float(item.costo_estimado) * float(item.cantidad)
         return total
 
+    @property
+    def costo_compra_total(self):
+        """Calcula el costo real total de compra"""
+        total = 0
+        for item in self.items:
+            total += item.subtotal_compra
+        return total
+
+    @property
+    def tiene_precios_compra(self):
+        """Verifica si al menos un item tiene precio de compra cargado"""
+        return any(item.precio_unitario_compra for item in self.items)
+
     def aprobar(self, aprobador_id, notas=None):
         """Aprueba el requerimiento"""
         self.estado = 'aprobado'
@@ -1067,6 +1080,13 @@ class RequerimientoCompraItem(db.Model):
     costo_estimado = db.Column(db.Numeric(15, 2))
     moneda = db.Column(db.String(3), default='ARS')
 
+    # Costo real de compra (se carga cuando se compra)
+    precio_unitario_compra = db.Column(db.Numeric(15, 2))
+    cantidad_comprada = db.Column(db.Numeric(10, 3))
+    proveedor_compra = db.Column(db.String(200))
+    factura_compra = db.Column(db.String(100))
+    fecha_compra = db.Column(db.Date)
+
     # Notas adicionales
     notas = db.Column(db.Text)
 
@@ -1093,3 +1113,10 @@ class RequerimientoCompraItem(db.Model):
         if self.costo_estimado and self.cantidad:
             return float(self.costo_estimado) * float(self.cantidad)
         return 0
+
+    @property
+    def subtotal_compra(self):
+        """Calcula el subtotal real de compra"""
+        precio = float(self.precio_unitario_compra or 0)
+        cant = float(self.cantidad_comprada or self.cantidad or 0)
+        return precio * cant if precio > 0 else 0

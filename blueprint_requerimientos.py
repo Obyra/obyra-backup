@@ -276,6 +276,8 @@ def marcar_en_proceso(id):
     requerimiento.marcar_en_proceso()
     db.session.commit()
 
+    _notificar_cambio_estado(requerimiento, 'en_proceso')
+
     flash(f'Requerimiento {requerimiento.numero} marcado como en proceso', 'info')
     return redirect(url_for('requerimientos.detalle', id=id))
 
@@ -339,6 +341,54 @@ def cancelar(id):
 # ============================================================
 # API ENDPOINTS
 # ============================================================
+
+@requerimientos_bp.route('/<int:id>/cargar-precios', methods=['POST'])
+@login_required
+def cargar_precios(id):
+    """Cargar precios reales de compra para los items del requerimiento"""
+    from models.inventory import RequerimientoCompra, RequerimientoCompraItem
+
+    if current_user.rol not in ['administrador', 'admin']:
+        flash('No tiene permisos para esta acción', 'danger')
+        return redirect(url_for('requerimientos.detalle', id=id))
+
+    requerimiento = RequerimientoCompra.query.filter_by(
+        id=id,
+        organizacion_id=current_user.organizacion_id
+    ).first_or_404()
+
+    if requerimiento.estado not in ['en_proceso', 'aprobado']:
+        flash('Solo se pueden cargar precios en requerimientos aprobados o en proceso', 'warning')
+        return redirect(url_for('requerimientos.detalle', id=id))
+
+    proveedor_global = request.form.get('proveedor_global', '').strip()
+    factura_global = request.form.get('factura_global', '').strip()
+    from datetime import datetime as dt
+    fecha_compra_str = request.form.get('fecha_compra_global', '')
+    fecha_compra = dt.strptime(fecha_compra_str, '%Y-%m-%d').date() if fecha_compra_str else None
+
+    items_actualizados = 0
+    for item in requerimiento.items:
+        precio_key = f'precio_{item.id}'
+        cantidad_key = f'cantidad_{item.id}'
+
+        precio_str = request.form.get(precio_key, '').strip()
+        if precio_str:
+            try:
+                item.precio_unitario_compra = float(precio_str)
+                cant_str = request.form.get(cantidad_key, '').strip()
+                item.cantidad_comprada = float(cant_str) if cant_str else float(item.cantidad)
+                item.proveedor_compra = proveedor_global or item.proveedor_compra
+                item.factura_compra = factura_global or item.factura_compra
+                item.fecha_compra = fecha_compra or item.fecha_compra
+                items_actualizados += 1
+            except (ValueError, TypeError):
+                continue
+
+    db.session.commit()
+    flash(f'Precios cargados para {items_actualizados} items. Total compra: ${requerimiento.costo_compra_total:,.2f}', 'success')
+    return redirect(url_for('requerimientos.detalle', id=id))
+
 
 @requerimientos_bp.route('/api/crear-desde-obra', methods=['POST'])
 @login_required
@@ -519,11 +569,12 @@ def _obtener_materiales_obra(obra):
 
 
 def _notificar_nuevo_requerimiento(requerimiento):
-    """Notifica a los administradores sobre un nuevo requerimiento"""
+    """Notifica a los administradores y registra evento en el dashboard"""
     try:
         from models.core import Notificacion
+        from models.marketplace import Event
 
-        # Usar el método de clase para notificar a todos los admins
+        # 1. Notificación a admins (campana)
         Notificacion.notificar_administradores(
             organizacion_id=requerimiento.organizacion_id,
             tipo='requerimiento_compra',
@@ -533,36 +584,90 @@ def _notificar_nuevo_requerimiento(requerimiento):
             referencia_tipo='requerimiento',
             referencia_id=requerimiento.id
         )
+
+        # 2. Evento para el dashboard (Actividad Reciente)
+        total_items = len(requerimiento.items.all()) if hasattr(requerimiento.items, 'all') else 0
+        evento = Event(
+            company_id=requerimiento.organizacion_id,
+            project_id=requerimiento.obra_id,
+            user_id=requerimiento.solicitante_id,
+            type='alert',
+            severity='alta' if requerimiento.prioridad in ('alta', 'urgente') else 'media',
+            title=f'Solicitud de compra {requerimiento.numero}',
+            description=f'{requerimiento.solicitante.nombre} solicitó {total_items} materiales para {requerimiento.obra.nombre}. Prioridad: {requerimiento.prioridad}.',
+            meta={
+                'requerimiento_id': requerimiento.id,
+                'numero': requerimiento.numero,
+                'prioridad': requerimiento.prioridad,
+                'url': url_for('requerimientos.detalle', id=requerimiento.id)
+            },
+            created_by=requerimiento.solicitante_id
+        )
+        db.session.add(evento)
         db.session.commit()
 
-        current_app.logger.info(f"Notificación enviada para requerimiento {requerimiento.numero}")
+        current_app.logger.info(f"Notificación + evento creados para requerimiento {requerimiento.numero}")
 
     except Exception as e:
         current_app.logger.error(f"Error notificando nuevo requerimiento: {e}")
 
 
 def _notificar_cambio_estado(requerimiento, nuevo_estado):
-    """Notifica al solicitante sobre cambio de estado"""
+    """Notifica al solicitante sobre cambio de estado y registra evento en dashboard"""
     try:
         from models.core import Notificacion
+        from models.marketplace import Event
 
         mensajes = {
-            'aprobado': f'Tu requerimiento {requerimiento.numero} fue aprobado',
-            'rechazado': f'Tu requerimiento {requerimiento.numero} fue rechazado',
-            'en_proceso': f'Tu requerimiento {requerimiento.numero} está en proceso de compra',
-            'completado': f'Tu requerimiento {requerimiento.numero} fue completado'
+            'aprobado': f'Requerimiento {requerimiento.numero} aprobado',
+            'rechazado': f'Requerimiento {requerimiento.numero} rechazado',
+            'en_proceso': f'Requerimiento {requerimiento.numero} en proceso de compra',
+            'completado': f'Requerimiento {requerimiento.numero} completado'
         }
 
+        severidades = {
+            'aprobado': 'media',
+            'rechazado': 'alta',
+            'en_proceso': 'media',
+            'completado': 'baja'
+        }
+
+        titulo = mensajes.get(nuevo_estado, f'Requerimiento {requerimiento.numero} actualizado')
+
+        # 1. Notificación al solicitante (campana)
         Notificacion.crear_notificacion(
             organizacion_id=requerimiento.organizacion_id,
             usuario_id=requerimiento.solicitante_id,
             tipo='requerimiento_estado',
-            titulo=mensajes.get(nuevo_estado, f'Requerimiento {requerimiento.numero} actualizado'),
+            titulo=titulo,
             mensaje=requerimiento.notas_aprobacion or '',
             url=url_for('requerimientos.detalle', id=requerimiento.id),
             referencia_tipo='requerimiento',
             referencia_id=requerimiento.id
         )
+
+        # 2. Evento para el dashboard (Actividad Reciente)
+        descripcion_evento = f'{requerimiento.obra.nombre} — {titulo}'
+        if requerimiento.notas_aprobacion:
+            descripcion_evento += f'. Notas: {requerimiento.notas_aprobacion}'
+
+        evento = Event(
+            company_id=requerimiento.organizacion_id,
+            project_id=requerimiento.obra_id,
+            user_id=current_user.id,
+            type='status_change',
+            severity=severidades.get(nuevo_estado, 'baja'),
+            title=titulo,
+            description=descripcion_evento,
+            meta={
+                'requerimiento_id': requerimiento.id,
+                'numero': requerimiento.numero,
+                'estado': nuevo_estado,
+                'url': url_for('requerimientos.detalle', id=requerimiento.id)
+            },
+            created_by=current_user.id
+        )
+        db.session.add(evento)
         db.session.commit()
 
         current_app.logger.info(f"Cambio estado requerimiento {requerimiento.numero} a {nuevo_estado}")

@@ -106,7 +106,11 @@
                                     <th class="text-end">Cantidad</th>
                                     <th>Unidad</th>
                                     <th class="text-end">Costo Est.</th>
-                                    <th class="text-end">Subtotal</th>
+                                    <th class="text-end">Subtotal Est.</th>
+                                    {% if requerimiento.tiene_precios_compra %}
+                                    <th class="text-end">P.U. Compra</th>
+                                    <th class="text-end">Total Compra</th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
@@ -117,8 +121,8 @@
                                         {% if item.codigo %}
                                         <small class="text-muted d-block">{{ item.codigo }}</small>
                                         {% endif %}
-                                        {% if item.notas %}
-                                        <small class="text-info d-block">{{ item.notas }}</small>
+                                        {% if item.proveedor_compra %}
+                                        <small class="text-success d-block"><i class="fas fa-store me-1"></i>{{ item.proveedor_compra }}</small>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -128,31 +132,170 @@
                                     <td>{{ item.unidad }}</td>
                                     <td class="text-end">
                                         {% if item.costo_estimado %}
-                                        ${{ "%.2f"|format(item.costo_estimado) }}
+                                        ${{ "{:,.2f}".format(item.costo_estimado|float) }}
                                         {% else %}
                                         <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
                                         {% if item.costo_estimado %}
-                                        <strong>${{ "%.2f"|format(item.subtotal_estimado) }}</strong>
+                                        <strong>${{ "{:,.2f}".format(item.subtotal_estimado) }}</strong>
                                         {% else %}
                                         <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
+                                    {% if requerimiento.tiene_precios_compra %}
+                                    <td class="text-end">
+                                        {% if item.precio_unitario_compra %}
+                                        ${{ "{:,.2f}".format(item.precio_unitario_compra|float) }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if item.precio_unitario_compra %}
+                                        <strong class="text-success">${{ "{:,.2f}".format(item.subtotal_compra) }}</strong>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <th colspan="5" class="text-end">Total Estimado:</th>
-                                    <th class="text-end">${{ "%.2f"|format(requerimiento.costo_estimado_total) }}</th>
+                                    <th colspan="{{ 5 if not requerimiento.tiene_precios_compra else 5 }}" class="text-end">Total Estimado:</th>
+                                    <th class="text-end">${{ "{:,.2f}".format(requerimiento.costo_estimado_total) }}</th>
+                                    {% if requerimiento.tiene_precios_compra %}
+                                    <th class="text-end">Total Compra:</th>
+                                    <th class="text-end text-success fs-5">${{ "{:,.2f}".format(requerimiento.costo_compra_total) }}</th>
+                                    {% endif %}
                                 </tr>
                             </tfoot>
                         </table>
                     </div>
                 </div>
             </div>
+
+            {% if requerimiento.estado in ['en_proceso', 'aprobado'] and current_user.rol in ['administrador', 'admin'] %}
+            <!-- Cargar precios de compra -->
+            <div class="card mt-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Cargar Precios de Compra</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('requerimientos.cargar_precios', id=requerimiento.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Proveedor</label>
+                                <input type="text" class="form-control form-control-sm" name="proveedor_global"
+                                       placeholder="Nombre del proveedor" value="{{ requerimiento.items[0].proveedor_compra or '' if requerimiento.items|list else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">N° Factura / Remito</label>
+                                <input type="text" class="form-control form-control-sm" name="factura_global"
+                                       placeholder="Ej: FC-A-00012345">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Fecha de Compra</label>
+                                <input type="date" class="form-control form-control-sm" name="fecha_compra_global">
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Material</th>
+                                        <th class="text-center" style="width:120px;">Cant. Solicitada</th>
+                                        <th class="text-center" style="width:120px;">Cant. Comprada</th>
+                                        <th class="text-center" style="width:150px;">Precio Unitario $</th>
+                                        <th class="text-end" style="width:130px;">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in requerimiento.items %}
+                                    <tr>
+                                        <td>
+                                            <strong class="small">{{ item.descripcion }}</strong>
+                                            <small class="text-muted d-block">{{ item.unidad }}</small>
+                                        </td>
+                                        <td class="text-center">{{ "%.1f"|format(item.cantidad) }}</td>
+                                        <td>
+                                            <input type="number" step="0.01" min="0"
+                                                   class="form-control form-control-sm text-center input-cantidad"
+                                                   name="cantidad_{{ item.id }}"
+                                                   value="{{ "%.2f"|format(item.cantidad_comprada or item.cantidad) }}"
+                                                   data-item-id="{{ item.id }}">
+                                        </td>
+                                        <td>
+                                            <input type="number" step="0.01" min="0"
+                                                   class="form-control form-control-sm text-end input-precio"
+                                                   name="precio_{{ item.id }}"
+                                                   value="{{ "%.2f"|format(item.precio_unitario_compra) if item.precio_unitario_compra else '' }}"
+                                                   placeholder="0.00"
+                                                   data-item-id="{{ item.id }}">
+                                        </td>
+                                        <td class="text-end align-middle">
+                                            <strong class="subtotal-compra" id="subtotal_{{ item.id }}">
+                                                {% if item.precio_unitario_compra %}
+                                                ${{ "{:,.2f}".format(item.subtotal_compra) }}
+                                                {% else %}
+                                                -
+                                                {% endif %}
+                                            </strong>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <th colspan="4" class="text-end">TOTAL COMPRA:</th>
+                                        <th class="text-end fs-5" id="totalCompraGeneral">
+                                            ${{ "{:,.2f}".format(requerimiento.costo_compra_total) }}
+                                        </th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="text-end mt-3">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-1"></i>Guardar Precios de Compra
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <script>
+            document.querySelectorAll('.input-precio, .input-cantidad').forEach(function(input) {
+                input.addEventListener('input', function() {
+                    var itemId = this.getAttribute('data-item-id');
+                    var precio = parseFloat(document.querySelector('input[name="precio_' + itemId + '"]').value) || 0;
+                    var cantidad = parseFloat(document.querySelector('input[name="cantidad_' + itemId + '"]').value) || 0;
+                    var subtotal = precio * cantidad;
+                    var el = document.getElementById('subtotal_' + itemId);
+                    el.textContent = subtotal > 0 ? '$' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+                    recalcularTotal();
+                });
+            });
+
+            function recalcularTotal() {
+                var total = 0;
+                document.querySelectorAll('.input-precio').forEach(function(input) {
+                    var itemId = input.getAttribute('data-item-id');
+                    var precio = parseFloat(input.value) || 0;
+                    var cantidad = parseFloat(document.querySelector('input[name="cantidad_' + itemId + '"]').value) || 0;
+                    total += precio * cantidad;
+                });
+                document.getElementById('totalCompraGeneral').textContent = '$' + total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+            </script>
+            {% endif %}
         </div>
 
         <!-- Columna lateral: Acciones -->

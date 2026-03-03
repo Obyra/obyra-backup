@@ -913,6 +913,39 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Fichadas migration skipped: {e}")
 
+    # Migración: campos de precio de compra en requerimiento_compra_items
+    try:
+        compra_items_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='precio_unitario_compra') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN precio_unitario_compra NUMERIC(15,2);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='cantidad_comprada') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN cantidad_comprada NUMERIC(10,3);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='proveedor_compra') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN proveedor_compra VARCHAR(200);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='factura_compra') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN factura_compra VARCHAR(100);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='fecha_compra') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN fecha_compra DATE;
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(compra_items_sql))
+        db.session.commit()
+        print("[OK] Requerimiento compra items price fields migration applied")
+    except Exception as e:
+        print(f"[WARN] Requerimiento compra items migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
