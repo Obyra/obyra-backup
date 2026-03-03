@@ -149,15 +149,19 @@
                                             <a href="{{ url_for('obras.detalle', id=obra.id) }}" class="btn btn-sm btn-outline-primary flex-fill">
                                                 <i class="fas fa-eye me-1"></i>Detalles
                                             </a>
+                                            <button class="btn btn-sm btn-outline-warning d-flex align-items-center" onclick="abrirVentanaClima({{ obra.latitud or 'null' }}, {{ obra.longitud or 'null' }}, {{ obra.nombre|tojson }}, {{ (obra.direccion or 'Sin dirección')|tojson }}, {{ obra.id }})" title="Ver clima semanal">
+                                                <i class="fas fa-cloud-sun"></i>
+                                                <span class="d-none d-md-inline ms-1">Clima</span>
+                                            </button>
                                             {% if obra.latitud and obra.longitud %}
                                             <button class="btn btn-sm btn-outline-info d-flex align-items-center" onclick="centrarEnObra({{ obra.id }})" title="Ver en mapa">
                                                 <i class="fas fa-map-marker-alt"></i>
-                                                <span class="d-none d-md-inline ms-1">Ver en mapa</span>
+                                                <span class="d-none d-md-inline ms-1">Mapa</span>
                                             </button>
                                             {% elif obra.direccion %}
                                             <a class="btn btn-sm btn-outline-info d-flex align-items-center" href="https://www.google.com/maps/search/?api=1&query={{ obra.direccion|urlencode }}" target="_blank" rel="noopener" title="Abrir en Google Maps">
                                                 <i class="fas fa-map-marker-alt"></i>
-                                                <span class="d-none d-md-inline ms-1">Abrir mapa</span>
+                                                <span class="d-none d-md-inline ms-1">Mapa</span>
                                             </a>
                                             {% endif %}
                                             {% if current_user.rol == 'administrador' %}
@@ -258,6 +262,8 @@ var COLORES_ESTADO = {
 
 function buildPopupHTML(o) {
     var c = COLORES_ESTADO[o.estado] || '#6c757d';
+    var nombreEsc = o.nombre.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    var dirEsc = o.direccion.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     return '<div style="padding:12px;min-width:240px;">'
         + '<h6 style="margin:0 0 6px;font-weight:bold;">' + o.nombre + '</h6>'
         + '<p style="margin:0 0 4px;font-size:13px;color:#666;"><i class="fas fa-user me-1"></i>' + o.cliente + '</p>'
@@ -266,7 +272,10 @@ function buildPopupHTML(o) {
         + '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:' + c + ';color:#fff;">' + o.estado.replace('_', ' ') + '</span>'
         + '<strong style="color:#0d6efd;">' + o.progreso + '%</strong></div>'
         + '<div style="background:#e9ecef;border-radius:4px;height:5px;"><div style="width:' + o.progreso + '%;background:#0d6efd;height:5px;border-radius:4px;"></div></div>'
-        + '<div style="margin-top:10px;"><a href="/obras/' + o.id + '" style="display:block;text-align:center;background:#0d6efd;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:14px;"><i class="fas fa-eye me-1"></i>Ver Detalles</a></div>'
+        + '<div style="margin-top:10px;display:flex;gap:6px;">'
+        + '<a href="/obras/' + o.id + '" style="flex:1;text-align:center;background:#0d6efd;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:13px;"><i class="fas fa-eye me-1"></i>Detalles</a>'
+        + '<button onclick="abrirVentanaClima(' + o.lat + ',' + o.lng + ',\'' + nombreEsc + '\',\'' + dirEsc + '\',' + o.id + ')" style="flex:1;text-align:center;background:#ffc107;color:#000;padding:6px 12px;border-radius:6px;border:none;font-size:13px;cursor:pointer;"><i class="fas fa-cloud-sun me-1"></i>Clima</button>'
+        + '</div>'
         + '</div>';
 }
 
