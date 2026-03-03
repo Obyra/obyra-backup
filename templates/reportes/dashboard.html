@@ -210,40 +210,50 @@
                     {% if eventos_recientes %}
                     <div id="activity-feed" class="activity-feed">
                         {% for evento in eventos_recientes %}
-                        <div class="activity-item d-flex align-items-start p-3 border-bottom" 
+                        {% set event_url = evento.meta.get('url', '') if evento.meta else '' %}
+                        <div class="activity-item d-flex align-items-start p-3 border-bottom {{ 'activity-actionable' if event_url }}"
                              data-event-id="{{ evento.id }}"
                              data-event-type="{{ evento.type }}"
-                             data-event-severity="{{ evento.severity or '' }}">
+                             data-event-severity="{{ evento.severity or '' }}"
+                             {% if event_url %}onclick="window.location='{{ event_url }}'"{% endif %}>
                             <!-- Icono del evento -->
                             <div class="activity-icon me-3 flex-shrink-0">
                                 <div class="rounded-circle d-flex align-items-center justify-content-center"
-                                     style="width: 40px; height: 40px; 
+                                     style="width: 40px; height: 40px;
                                      background-color: {% if evento.severity == 'critica' %}#dc3545{% elif evento.severity == 'alta' %}#fd7e14{% elif evento.severity == 'media' %}#ffc107{% else %}#6c757d{% endif %}20;">
                                     <i class="{{ evento.type_icon }} text-{% if evento.severity == 'critica' %}danger{% elif evento.severity == 'alta' %}warning{% elif evento.severity == 'media' %}warning{% else %}secondary{% endif %}"></i>
                                 </div>
                             </div>
-                            
+
                             <!-- Contenido del evento -->
                             <div class="activity-content flex-grow-1">
                                 <div class="d-flex justify-content-between align-items-start mb-1">
                                     <h6 class="mb-1 fw-bold">{{ evento.title }}</h6>
-                                    {% if evento.severity %}
-                                    <span class="{{ evento.severity_badge_class }}">
-                                        {{ evento.severity.title() }}
-                                    </span>
-                                    {% endif %}
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                        {% if evento.severity %}
+                                        <span class="{{ evento.severity_badge_class }}">
+                                            {{ evento.severity.title() }}
+                                        </span>
+                                        {% endif %}
+                                        {% if event_url %}
+                                        <a href="{{ event_url }}" class="btn btn-sm btn-outline-primary btn-action-event"
+                                           onclick="event.stopPropagation()" title="Ver detalle">
+                                            <i class="fas fa-arrow-right"></i>
+                                        </a>
+                                        {% endif %}
+                                    </div>
                                 </div>
-                                
+
                                 {% if evento.description %}
                                 <p class="mb-1 text-muted small">{{ evento.description }}</p>
                                 {% endif %}
-                                
+
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div class="small text-muted">
                                         {% if evento.project %}
                                         <i class="fas fa-building me-1"></i>
-                                        <a href="{{ url_for('obras.detalle', id=evento.project_id) }}" 
-                                           class="text-decoration-none">{{ evento.project.nombre }}</a>
+                                        <a href="{{ url_for('obras.detalle', id=evento.project_id) }}"
+                                           class="text-decoration-none" onclick="event.stopPropagation()">{{ evento.project.nombre }}</a>
                                         {% endif %}
                                         {% if evento.user %}
                                         <span class="ms-2">
@@ -510,6 +520,23 @@
 
 .activity-item:hover {
     background-color: #f8f9fa;
+}
+
+.activity-item.activity-actionable {
+    cursor: pointer;
+}
+
+.activity-item.activity-actionable:hover {
+    background-color: #e8f4f8;
+}
+
+.activity-item .btn-action-event {
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.activity-item:hover .btn-action-event {
+    opacity: 1;
 }
 
 .activity-item.highlighted {
@@ -793,11 +820,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const textColor = severityTextColors[event.severity] || 'secondary';
         const icon = typeIcons[event.type] || 'fas fa-bell';
         
+        const eventUrl = (event.meta && event.meta.url) ? event.meta.url : '';
+        const actionableClass = eventUrl ? 'activity-actionable' : '';
+        const onclickAttr = eventUrl ? `onclick="window.location='${eventUrl}'"` : '';
+
         return `
-            <div class="activity-item d-flex align-items-start p-3 border-bottom" 
+            <div class="activity-item d-flex align-items-start p-3 border-bottom ${actionableClass}"
                  data-event-id="${event.id}"
                  data-event-type="${event.type}"
-                 data-event-severity="${event.severity || ''}">
+                 data-event-severity="${event.severity || ''}"
+                 ${onclickAttr}>
                 <div class="activity-icon me-3 flex-shrink-0">
                     <div class="rounded-circle d-flex align-items-center justify-content-center"
                          style="width: 40px; height: 40px; background-color: ${bgColor}20;">
@@ -807,12 +839,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="activity-content flex-grow-1">
                     <div class="d-flex justify-content-between align-items-start mb-1">
                         <h6 class="mb-1 fw-bold">${event.title}</h6>
-                        ${event.severity ? `<span class="badge bg-${textColor}">${event.severity.charAt(0).toUpperCase() + event.severity.slice(1)}</span>` : ''}
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            ${event.severity ? `<span class="badge bg-${textColor}">${event.severity.charAt(0).toUpperCase() + event.severity.slice(1)}</span>` : ''}
+                            ${eventUrl ? `<a href="${eventUrl}" class="btn btn-sm btn-outline-primary btn-action-event" onclick="event.stopPropagation()" title="Ver detalle"><i class="fas fa-arrow-right"></i></a>` : ''}
+                        </div>
                     </div>
                     ${event.description ? `<p class="mb-1 text-muted small">${event.description}</p>` : ''}
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="small text-muted">
-                            ${event.project ? `<i class="fas fa-building me-1"></i>${event.project.nombre}` : ''}
+                            ${event.project ? `<i class="fas fa-building me-1"></i><a href="/obras/${event.project.id}" class="text-decoration-none" onclick="event.stopPropagation()">${event.project.nombre}</a>` : ''}
                             ${event.user ? `<span class="ms-2"><i class="fas fa-user me-1"></i>${event.user.nombre}</span>` : ''}
                         </div>
                         <small class="text-muted">${event.time_ago}</small>
