@@ -6,7 +6,7 @@ import os
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from flask import (Blueprint, render_template, request, jsonify,
                    flash, redirect, url_for, current_app)
 from flask_login import login_required, current_user
@@ -14,6 +14,14 @@ from extensions import db, csrf
 from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
 
 fichadas_bp = Blueprint('fichadas', __name__, url_prefix='/fichadas')
+
+# Timezone Argentina (UTC-3)
+AR_TZ = timezone(timedelta(hours=-3))
+
+
+def _ahora_argentina():
+    """Devuelve la hora actual en Argentina (UTC-3) como datetime naive."""
+    return datetime.now(AR_TZ).replace(tzinfo=None)
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +137,7 @@ def _obras_asignadas(usuario):
 
 def _ultima_fichada_hoy(usuario_id, obra_id):
     """Última fichada del día del usuario en una obra."""
-    hoy = date.today()
+    hoy = _ahora_argentina().date()
     return (Fichada.query
             .filter(Fichada.usuario_id == usuario_id,
                     Fichada.obra_id == obra_id,
@@ -140,7 +148,7 @@ def _ultima_fichada_hoy(usuario_id, obra_id):
 
 def _fichadas_hoy(usuario_id, obra_id):
     """Todas las fichadas de hoy del usuario en una obra."""
-    hoy = date.today()
+    hoy = _ahora_argentina().date()
     return (Fichada.query
             .filter(Fichada.usuario_id == usuario_id,
                     Fichada.obra_id == obra_id,
@@ -324,7 +332,7 @@ def index():
 
         # Para admins: mostrar operarios en obra hoy
         if es_admin:
-            hoy = date.today()
+            hoy = _ahora_argentina().date()
             fichadas_obra_hoy = (Fichada.query
                 .filter(Fichada.obra_id == obra.id,
                         db.func.date(Fichada.fecha_hora) == hoy)
@@ -491,7 +499,7 @@ def api_fichar():
         usuario_id=current_user.id,
         obra_id=obra_id,
         tipo=tipo,
-        fecha_hora=datetime.utcnow(),
+        fecha_hora=_ahora_argentina(),
         latitud=lat,
         longitud=lng,
         precision_gps=precision,

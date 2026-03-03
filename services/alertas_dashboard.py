@@ -7,7 +7,14 @@ Genera alertas reales basadas en:
 - Tareas no completadas pasada la fecha
 - Sobrecosto de obra
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+# Timezone Argentina (UTC-3)
+_AR_TZ = timezone(timedelta(hours=-3))
+
+
+def _hoy_argentina():
+    return datetime.now(_AR_TZ).replace(tzinfo=None).date()
 from decimal import Decimal
 from sqlalchemy import and_, or_
 from extensions import db
@@ -313,7 +320,7 @@ def obtener_alertas_fichadas(org_id, limite=5):
     """
     from models import Obra, ObraMiembro, AsignacionObra, Fichada, Usuario
 
-    hoy = date.today()
+    hoy = _hoy_argentina()
     # Solo alertar en dias de semana
     if hoy.weekday() >= 5:  # sabado/domingo
         return []

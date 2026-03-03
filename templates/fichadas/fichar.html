@@ -16,10 +16,24 @@
         </div>
     </div>
 
+    <!-- Info del usuario fichando -->
+    <div class="row mb-2">
+        <div class="col-12">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2">
+                    <i class="fas fa-user me-1"></i>{{ current_user.nombre_completo }}
+                </span>
+                <span class="badge bg-secondary bg-opacity-10 text-secondary px-3 py-2">
+                    <i class="fas fa-id-badge me-1"></i>{{ current_user.role or current_user.rol or 'Operario' }}
+                </span>
+            </div>
+        </div>
+    </div>
+
     <div class="row mb-3">
         <div class="col-12">
-            <div id="mapaWrapper" style="height: 250px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6; overflow: hidden; position: relative;">
-                <div id="mapaFichada" style="height: 100%; width: 100%; background: #e9ecef; display: flex; align-items: center; justify-content: center;">
+            <div id="mapaWrapper" style="height: 220px; width: 100%; border-radius: 12px; border: 2px solid #dee2e6; overflow: hidden; position: relative; background: #e9ecef;">
+                <div id="mapaFichada" style="height: 220px; width: 100%; display: flex; align-items: center; justify-content: center;">
                     <span class="text-muted"><i class="fas fa-map-marked-alt me-2"></i>Cargando mapa...</span>
                 </div>
             </div>
@@ -34,7 +48,7 @@
         </div>
     </div>
 
-    <!-- Resultado de fichada (separado del GPS) -->
+    <!-- Resultado de fichada -->
     <div class="row mb-3" id="resultadoFichada" style="display:none;">
         <div class="col-12">
             <div id="resultadoMsg" class="alert text-center"></div>
@@ -101,6 +115,15 @@
 {% block scripts %}
 <!-- Leaflet JS (CSS ya está en base.html) -->
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+
+<!-- Forzar actualización del Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(function(reg) {
+        if (reg) reg.update();
+    });
+}
+</script>
 
 <script>
 // ── Configuración ──
@@ -216,7 +239,7 @@ function onErrorGPS(err) {
 }
 
 // ══════════════════════════════════════════════
-// 2. MAPA — Leaflet con OpenStreetMap tiles
+// 2. MAPA — Leaflet con CartoDB Voyager tiles
 // ══════════════════════════════════════════════
 function iniciarMapa() {
     if (typeof L === 'undefined') {
@@ -227,7 +250,7 @@ function iniciarMapa() {
 
     var el = document.getElementById('mapaFichada');
     el.innerHTML = '';
-    el.style.cssText = 'height:100%;width:100%;';
+    el.style.cssText = 'height:220px;width:100%;';
 
     try {
         var centro = OBRA_LAT ? [OBRA_LAT, OBRA_LNG]
@@ -236,46 +259,47 @@ function iniciarMapa() {
         mapa = L.map(el, {
             zoomControl: true,
             attributionControl: false
-        }).setView(centro, OBRA_LAT ? 17 : 15);
+        }).setView(centro, OBRA_LAT ? 16 : 14);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // CartoDB Voyager tiles — confiables y ya permitidos en CSP
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
-            subdomains: 'abc'
+            subdomains: 'abcd'
         }).addTo(mapa);
 
         if (OBRA_LAT) {
-            L.marker([OBRA_LAT, OBRA_LNG], {
-                title: OBRA_NOMBRE,
-                icon: L.icon({
-                    iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
-                    iconRetinaUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-                    shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
-                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-                })
+            // Marcador de obra: circulo rojo
+            L.circleMarker([OBRA_LAT, OBRA_LNG], {
+                radius: 10, color: '#dc3545', weight: 3,
+                fillColor: '#dc3545', fillOpacity: 0.3
             }).addTo(mapa).bindPopup('<b>' + OBRA_NOMBRE + '</b>');
 
+            // Radio de fichada
             L.circle([OBRA_LAT, OBRA_LNG], {
                 radius: OBRA_RADIO,
                 color: '#0d6efd',
                 weight: 2,
-                fillOpacity: 0.1
+                fillOpacity: 0.08,
+                dashArray: '5,5'
             }).addTo(mapa);
         }
 
         if (miLat) {
+            // Marcador de usuario: circulo azul
             marcadorMio = L.circleMarker([miLat, miLng], {
                 radius: 8, color: '#fff', weight: 2,
                 fillColor: '#0d6efd', fillOpacity: 1
             }).addTo(mapa).bindPopup('Tu ubicacion');
 
             if (OBRA_LAT) {
-                mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [40, 40] });
+                mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [50, 50], maxZoom: 17 });
             }
         }
 
-        // Forzar render correcto
-        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 200);
-        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 600);
+        // Forzar render correcto (importante para contenedores con overflow:hidden)
+        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 300);
+        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 800);
+        setTimeout(function() { if (mapa) mapa.invalidateSize(); }, 1500);
 
         // Geocodificar si obra no tiene coords
         if (!OBRA_LAT && OBRA_DIRECCION) {
@@ -283,7 +307,7 @@ function iniciarMapa() {
         }
     } catch (e) {
         console.error('Error inicializando mapa:', e);
-        el.style.cssText = 'height:100%;width:100%;display:flex;align-items:center;justify-content:center;background:#e9ecef;';
+        el.style.cssText = 'height:220px;width:100%;display:flex;align-items:center;justify-content:center;background:#e9ecef;';
         el.innerHTML = '<span class="text-muted"><i class="fas fa-map me-2"></i>Error cargando mapa</span>';
     }
 }
@@ -302,7 +326,7 @@ function actualizarMarcadorMio() {
         }
 
         if (OBRA_LAT) {
-            mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [40, 40] });
+            mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [50, 50], maxZoom: 17 });
         } else {
             mapa.setView([miLat, miLng], 15);
         }
@@ -312,7 +336,6 @@ function actualizarMarcadorMio() {
 }
 
 function geocodificarDireccion(direccion) {
-    // Nominatim (OpenStreetMap) geocoder — gratuito, sin API key
     fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(direccion + ', Argentina'))
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -321,23 +344,24 @@ function geocodificarDireccion(direccion) {
                 OBRA_LNG = parseFloat(data[0].lon);
 
                 if (mapa) {
-                    L.marker([OBRA_LAT, OBRA_LNG], {
-                        title: OBRA_NOMBRE
+                    L.circleMarker([OBRA_LAT, OBRA_LNG], {
+                        radius: 10, color: '#dc3545', weight: 3,
+                        fillColor: '#dc3545', fillOpacity: 0.3
                     }).addTo(mapa).bindPopup('<b>' + OBRA_NOMBRE + '</b>');
 
                     L.circle([OBRA_LAT, OBRA_LNG], {
-                        radius: OBRA_RADIO, color: '#0d6efd', weight: 2, fillOpacity: 0.1
+                        radius: OBRA_RADIO, color: '#0d6efd', weight: 2,
+                        fillOpacity: 0.08, dashArray: '5,5'
                     }).addTo(mapa);
 
                     if (miLat) {
-                        mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [40, 40] });
+                        mapa.fitBounds([[OBRA_LAT, OBRA_LNG], [miLat, miLng]], { padding: [50, 50], maxZoom: 17 });
                         recalcularDistancia();
                     } else {
-                        mapa.setView([OBRA_LAT, OBRA_LNG], 17);
+                        mapa.setView([OBRA_LAT, OBRA_LNG], 16);
                     }
                 }
 
-                // Guardar coords en el servidor
                 var headers = { 'Content-Type': 'application/json' };
                 if (CSRF_TOKEN) headers['X-CSRFToken'] = CSRF_TOKEN;
                 fetch('/fichadas/api/guardar_coords', {
@@ -436,7 +460,6 @@ async function registrarFichada() {
             actualizarEstado('ok', msg);
             setTimeout(function() { window.location.reload(); }, 2500);
         } else if (data.offline || data.queued) {
-            // Service worker guardó offline — reintentar directamente
             mostrarResultado('error', 'Sin conexion. Reintentando...');
             fichandoEnCurso = false;
             btn.disabled = false;
