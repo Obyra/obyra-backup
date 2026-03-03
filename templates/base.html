@@ -447,7 +447,7 @@
 
             html += `
                 <li>
-                    <a class="dropdown-item py-2 ${bgClass}" href="${n.url || '#'}" onclick="marcarLeida(${n.id})">
+                    <a class="dropdown-item py-2 ${bgClass}" href="${n.url || '#'}" onclick="marcarLeida(${n.id}, event)">
                         <div class="d-flex align-items-start">
                             <i class="${icono} me-2 mt-1"></i>
                             <div class="flex-grow-1">
@@ -455,6 +455,7 @@
                                 ${n.mensaje ? `<div class="small text-muted">${n.mensaje.substring(0, 60)}...</div>` : ''}
                                 <div class="small text-muted">${fecha}</div>
                             </div>
+                            ${!n.leida ? '<span class="badge bg-primary rounded-pill ms-auto align-self-center" style="font-size:0.5rem">●</span>' : ''}
                         </div>
                     </a>
                 </li>`;
@@ -462,10 +463,23 @@
         lista.innerHTML = html;
     }
 
-    function marcarLeida(id) {
-        fetch(`/notificaciones/api/marcar-leida/${id}`, { method: 'POST' })
-            .then(() => cargarNotificaciones())
-            .catch(err => console.log('Error marcando notificación:', err));
+    function marcarLeida(id, e) {
+        // Prevenir navegacion inmediata para que el fetch termine
+        if (e) e.preventDefault();
+        var href = (e && e.currentTarget) ? e.currentTarget.getAttribute('href') : null;
+
+        fetch('/notificaciones/api/marcar-leida/' + id, { method: 'POST' })
+            .then(function() {
+                if (href && href !== '#') {
+                    window.location.href = href;
+                } else {
+                    cargarNotificaciones();
+                }
+            })
+            .catch(function() {
+                // Navegar igual aunque falle el API
+                if (href && href !== '#') window.location.href = href;
+            });
     }
 
     function marcarTodasLeidas() {
