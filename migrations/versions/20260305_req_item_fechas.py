@@ -18,6 +18,9 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
 
+    # Set lock_timeout so we fail fast instead of hanging if the table is locked
+    conn.execute(sa.text("SET lock_timeout = '5s'"))
+
     result = conn.execute(sa.text(
         "SELECT column_name FROM information_schema.columns "
         "WHERE table_name = 'requerimiento_compra_items' AND column_name = 'fecha_pedido'"
