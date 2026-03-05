@@ -1087,6 +1087,10 @@ class RequerimientoCompraItem(db.Model):
     factura_compra = db.Column(db.String(100))
     fecha_compra = db.Column(db.Date)
 
+    # Fechas de gestión de compra
+    fecha_pedido = db.Column(db.Date)
+    fecha_entrega_aprox = db.Column(db.Date)
+
     # Notas adicionales
     notas = db.Column(db.Text)
 

@@ -478,12 +478,20 @@
         lista.innerHTML = html;
     }
 
+    function getCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
     function marcarLeida(id, e) {
         // Prevenir navegacion inmediata para que el fetch termine
         if (e) e.preventDefault();
         var href = (e && e.currentTarget) ? e.currentTarget.getAttribute('href') : null;
 
-        fetch('/notificaciones/api/marcar-leida/' + id, { method: 'POST' })
+        fetch('/notificaciones/api/marcar-leida/' + id, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken() }
+        })
             .then(function() {
                 if (href && href !== '#') {
                     window.location.href = href;
@@ -498,7 +506,10 @@
     }
 
     function marcarTodasLeidas() {
-        fetch('/notificaciones/api/marcar-todas-leidas', { method: 'POST' })
+        fetch('/notificaciones/api/marcar-todas-leidas', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken() }
+        })
             .then(() => cargarNotificaciones())
             .catch(err => console.log('Error marcando notificaciones:', err));
         return false;
