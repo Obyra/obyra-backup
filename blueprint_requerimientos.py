@@ -466,46 +466,6 @@ def api_crear_desde_obra():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
-@requerimientos_bp.route('/<int:id>/editar-items', methods=['POST'])
-@login_required
-def editar_items(id):
-    """Permite al administrador editar cantidad, costo, proveedor y fechas de cada item"""
-    from models.inventory import RequerimientoCompra, RequerimientoCompraItem
-    from datetime import datetime as dt
-
-    if current_user.rol not in ['administrador', 'admin']:
-        flash('No tiene permisos para esta acción', 'danger')
-        return redirect(url_for('requerimientos.detalle', id=id))
-
-    requerimiento = RequerimientoCompra.query.filter_by(
-        id=id,
-        organizacion_id=current_user.organizacion_id
-    ).first_or_404()
-
-    items_actualizados = 0
-    for item in requerimiento.items:
-        cantidad_str = request.form.get(f'cantidad_{item.id}', '').strip()
-        costo_str = request.form.get(f'costo_{item.id}', '').strip()
-        proveedor = request.form.get(f'proveedor_{item.id}', '').strip()
-        fecha_pedido_str = request.form.get(f'fecha_pedido_{item.id}', '').strip()
-        fecha_entrega_str = request.form.get(f'fecha_entrega_{item.id}', '').strip()
-
-        try:
-            if cantidad_str:
-                item.cantidad = float(cantidad_str)
-            item.costo_estimado = float(costo_str) if costo_str else item.costo_estimado
-            item.proveedor_compra = proveedor or item.proveedor_compra
-            item.fecha_pedido = dt.strptime(fecha_pedido_str, '%Y-%m-%d').date() if fecha_pedido_str else item.fecha_pedido
-            item.fecha_entrega_aprox = dt.strptime(fecha_entrega_str, '%Y-%m-%d').date() if fecha_entrega_str else item.fecha_entrega_aprox
-            items_actualizados += 1
-        except (ValueError, TypeError):
-            continue
-
-    db.session.commit()
-    flash(f'Items actualizados correctamente ({items_actualizados})', 'success')
-    return redirect(url_for('requerimientos.detalle', id=id))
-
-
 @requerimientos_bp.route('/api/pendientes/count')
 @login_required
 def api_count_pendientes():

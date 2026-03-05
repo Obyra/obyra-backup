@@ -107,9 +107,6 @@
                                     <th>Unidad</th>
                                     <th class="text-end">Costo Est.</th>
                                     <th class="text-end">Subtotal Est.</th>
-                                    <th>Proveedor</th>
-                                    <th>F. Pedido</th>
-                                    <th>F. Entrega Aprox.</th>
                                     {% if requerimiento.tiene_precios_compra %}
                                     <th class="text-end">P.U. Compra</th>
                                     <th class="text-end">Total Compra</th>
@@ -123,6 +120,9 @@
                                         <strong>{{ item.descripcion }}</strong>
                                         {% if item.codigo %}
                                         <small class="text-muted d-block">{{ item.codigo }}</small>
+                                        {% endif %}
+                                        {% if item.proveedor_compra %}
+                                        <small class="text-success d-block"><i class="fas fa-store me-1"></i>{{ item.proveedor_compra }}</small>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -140,27 +140,6 @@
                                     <td class="text-end">
                                         {% if item.costo_estimado %}
                                         <strong>${{ "{:,.2f}".format(item.subtotal_estimado) }}</strong>
-                                        {% else %}
-                                        <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if item.proveedor_compra %}
-                                        <span class="text-success"><i class="fas fa-store me-1"></i>{{ item.proveedor_compra }}</span>
-                                        {% else %}
-                                        <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if item.fecha_pedido %}
-                                        {{ item.fecha_pedido.strftime('%d/%m/%Y') }}
-                                        {% else %}
-                                        <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if item.fecha_entrega_aprox %}
-                                        {{ item.fecha_entrega_aprox.strftime('%d/%m/%Y') }}
                                         {% else %}
                                         <span class="text-muted">-</span>
                                         {% endif %}
@@ -186,9 +165,8 @@
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <th colspan="5" class="text-end">Total Estimado:</th>
+                                    <th colspan="{{ 5 if not requerimiento.tiene_precios_compra else 5 }}" class="text-end">Total Estimado:</th>
                                     <th class="text-end">${{ "{:,.2f}".format(requerimiento.costo_estimado_total) }}</th>
-                                    <th colspan="3"></th>
                                     {% if requerimiento.tiene_precios_compra %}
                                     <th class="text-end">Total Compra:</th>
                                     <th class="text-end text-success fs-5">${{ "{:,.2f}".format(requerimiento.costo_compra_total) }}</th>
@@ -317,81 +295,6 @@
                 document.getElementById('totalCompraGeneral').textContent = '$' + total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             }
             </script>
-            {% endif %}
-
-            {% if current_user.rol in ['administrador', 'admin'] %}
-            <!-- Editar items: cantidad, costo, proveedor, fechas -->
-            <div class="card mt-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Editar Items</h5>
-                </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ url_for('requerimientos.editar_items', id=requerimiento.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-bordered mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Material</th>
-                                        <th style="width:110px;">Cantidad</th>
-                                        <th style="width:130px;">Costo Est. $</th>
-                                        <th style="width:160px;">Proveedor</th>
-                                        <th style="width:140px;">F. Pedido</th>
-                                        <th style="width:150px;">F. Entrega Aprox.</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in requerimiento.items %}
-                                    <tr>
-                                        <td>
-                                            <strong class="small">{{ item.descripcion }}</strong>
-                                            <small class="text-muted d-block">{{ item.unidad }}</small>
-                                        </td>
-                                        <td>
-                                            <input type="number" step="0.01" min="0"
-                                                   class="form-control form-control-sm text-end"
-                                                   name="cantidad_{{ item.id }}"
-                                                   value="{{ '%.2f'|format(item.cantidad) }}">
-                                        </td>
-                                        <td>
-                                            <input type="number" step="0.01" min="0"
-                                                   class="form-control form-control-sm text-end"
-                                                   name="costo_{{ item.id }}"
-                                                   value="{{ '%.2f'|format(item.costo_estimado) if item.costo_estimado else '' }}"
-                                                   placeholder="0.00">
-                                        </td>
-                                        <td>
-                                            <input type="text"
-                                                   class="form-control form-control-sm"
-                                                   name="proveedor_{{ item.id }}"
-                                                   value="{{ item.proveedor_compra or '' }}"
-                                                   placeholder="Nombre del proveedor">
-                                        </td>
-                                        <td>
-                                            <input type="date"
-                                                   class="form-control form-control-sm"
-                                                   name="fecha_pedido_{{ item.id }}"
-                                                   value="{{ item.fecha_pedido.strftime('%Y-%m-%d') if item.fecha_pedido else '' }}">
-                                        </td>
-                                        <td>
-                                            <input type="date"
-                                                   class="form-control form-control-sm"
-                                                   name="fecha_entrega_{{ item.id }}"
-                                                   value="{{ item.fecha_entrega_aprox.strftime('%Y-%m-%d') if item.fecha_entrega_aprox else '' }}">
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="text-end mt-3">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-1"></i>Guardar Cambios
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
             {% endif %}
         </div>
 
