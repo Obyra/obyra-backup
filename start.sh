@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Arranca gunicorn en background para que el healthcheck pase de inmediato
-gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120 --preload &
+gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120 &
 GUNICORN_PID=$!
 
-# Espera 45s para que Railway mate el contenedor viejo (que tenia los locks)
+# Espera 45s para que Railway mate el contenedor viejo (que tenia los locks de DB)
 # y luego corre la migracion sin contention
 (
     sleep 45
