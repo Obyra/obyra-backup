@@ -1,7 +1,16 @@
 #!/bin/bash
 
-echo "Running migrations..."
-flask db upgrade || (echo "Migration failed, retrying in 15s..." && sleep 15 && flask db upgrade) || echo "Warning: migration failed after retry, continuing..."
+# Arranca gunicorn en background para que el healthcheck pase de inmediato
+gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120 --preload &
+GUNICORN_PID=$!
 
-echo "Starting gunicorn..."
-exec gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120 --preload
+# Espera 45s para que Railway mate el contenedor viejo (que tenia los locks)
+# y luego corre la migracion sin contention
+(
+    sleep 45
+    echo "Running migrations after stabilization..."
+    flask db upgrade || (sleep 10 && flask db upgrade) || echo "Migration failed after retry"
+) &
+
+# Mantiene el proceso vivo hasta que gunicorn termine
+wait $GUNICORN_PID
