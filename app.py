@@ -938,6 +938,14 @@ with app.app_context():
                           WHERE table_name='requerimiento_compra_items' AND column_name='fecha_compra') THEN
                 ALTER TABLE requerimiento_compra_items ADD COLUMN fecha_compra DATE;
             END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='fecha_pedido') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN fecha_pedido DATE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='requerimiento_compra_items' AND column_name='fecha_entrega_aprox') THEN
+                ALTER TABLE requerimiento_compra_items ADD COLUMN fecha_entrega_aprox DATE;
+            END IF;
         END $$;
         """
         db.session.execute(text(compra_items_sql))
