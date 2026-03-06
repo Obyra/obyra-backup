@@ -1,0 +1,198 @@
+{
+  "version": "1.0",
+  "fuente": "Presupuesto Maestro Consolidado - Constructoras BLVD / Certificado (CORTES Y SISTEMAS)",
+  "fecha_actualizacion": "2026-03-06",
+  "moneda": "ARS",
+  "notas": "Precios instalados (material + mano de obra) por m2/ml/m3 de obra real en edificio multifamiliar CABA. Mediana de presupuestos de 2 constructoras.",
+  "parametros": {
+    "contingencia_pct": 8,
+    "gastos_generales_pct": 12,
+    "utilidad_pct": 10,
+    "iva_pct": 21
+  },
+  "precios_instalados_por_etapa": {
+    "fundaciones": {
+      "nombre": "Fundaciones",
+      "precio_m2_instalado": 7032,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Fundaciones", "unidad": "m2", "precio": 7032}
+      ]
+    },
+    "estructura": {
+      "nombre": "Estructura de HA",
+      "precio_m2_instalado": 9700,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Losa s/subsuelo (promedio)", "unidad": "m2", "precio": 9618},
+        {"desc": "Losa s/piso superior (promedio)", "unidad": "m2", "precio": 9865}
+      ]
+    },
+    "mamposteria": {
+      "nombre": "Mamposteria",
+      "precio_m2_instalado": 20500,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Ladrillo Ceramico 0.08m", "unidad": "m2", "precio": 16212},
+        {"desc": "Ladrillo Ceramico 0.04m", "unidad": "m2", "precio": 10981},
+        {"desc": "Ladrillo Ceramico 0.12m", "unidad": "m2", "precio": 22849},
+        {"desc": "Ladrillo Ceramico 0.18m", "unidad": "m2", "precio": 30346},
+        {"desc": "Ladrillo Comun", "unidad": "m2", "precio": 27590},
+        {"desc": "Bloque HCCA", "unidad": "m2", "precio": 36382},
+        {"desc": "Construccion en Seco", "unidad": "m2", "precio": 19993}
+      ]
+    },
+    "techos": {
+      "nombre": "Aislaciones e Impermeabilizaciones",
+      "precio_m2_instalado": 12000,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Tratamiento especial platea", "unidad": "m2", "precio": 11401},
+        {"desc": "Tratamiento tabiques HA subsuelos", "unidad": "m2", "precio": 16197},
+        {"desc": "Tratamiento hidrorepelente hormigon visto", "unidad": "m2", "precio": 9466},
+        {"desc": "Aislacion losa PB", "unidad": "m2", "precio": 27010},
+        {"desc": "Aislacion hidrofuga muros", "unidad": "m2", "precio": 4331},
+        {"desc": "Aislacion hidrofuga balcones y cubiertas", "unidad": "m2", "precio": 14668},
+        {"desc": "Aislacion bajo revestimiento sanitarios", "unidad": "m2", "precio": 7965},
+        {"desc": "Aislacion hidrofuga cementicia", "unidad": "m2", "precio": 10940},
+        {"desc": "Tratamiento tanques", "unidad": "m2", "precio": 16698},
+        {"desc": "Barrera vapor muros", "unidad": "m2", "precio": 3824},
+        {"desc": "Aislacion termica techados", "unidad": "m2", "precio": 16421},
+        {"desc": "Aislacion acustica", "unidad": "m2", "precio": 9936}
+      ]
+    },
+    "revoque-grueso": {
+      "nombre": "Revoques (grueso + exteriores)",
+      "precio_m2_instalado": 12000,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Emprolijado hormigon visto", "unidad": "m2", "precio": 8672},
+        {"desc": "Jaharro y enlucido a la cal subsuelos", "unidad": "m2", "precio": 14030},
+        {"desc": "Jaharro y enlucido a la cal interior", "unidad": "m2", "precio": 14030},
+        {"desc": "Jaharro bajo revestimiento exterior", "unidad": "m2", "precio": 12382},
+        {"desc": "Emprolijado hormigon visto exterior", "unidad": "m2", "precio": 8672}
+      ]
+    },
+    "revoque-fino": {
+      "nombre": "Cielorrasos y Yeseria",
+      "precio_m2_instalado": 16000,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Emprolijado hormigon visto cielos", "unidad": "m2", "precio": 8672},
+        {"desc": "Placa roca de yeso con buna", "unidad": "m2", "precio": 19491},
+        {"desc": "Placa roca yeso locales humedos", "unidad": "m2", "precio": 21485},
+        {"desc": "Yeso aplicado en ambientes", "unidad": "m2", "precio": 19355},
+        {"desc": "Yeso proyectado", "unidad": "m2", "precio": 17976},
+        {"desc": "Cantoneras metalicas", "unidad": "ml", "precio": 3427}
+      ]
+    },
+    "pisos": {
+      "nombre": "Contrapisos, Pisos, Zocalos y Revestimientos",
+      "precio_m2_instalado": 20000,
+      "unidad": "m2",
+      "detalle": [
+        {"desc": "Contrapiso HA sobre terreno", "unidad": "m2", "precio": 46694},
+        {"desc": "Contrapiso HA con pendiente", "unidad": "m2", "precio": 46694},
+        {"desc": "Contrapiso HA veredas", "unidad": "m2", "precio": 23550},
+        {"desc": "Contrapiso cascote sobre terreno", "unidad": "m2", "precio": 18209},
+        {"desc": "Contrapiso hormigon pobre", "unidad": "m2", "precio": 10472},
+        {"desc": "Contrapiso alivianado", "unidad": "m2", "precio": 20884},
+        {"desc": "Carpeta nivelacion", "unidad": "m2", "precio": 6600},
+        {"desc": "Carpeta monolitica", "unidad": "m2", "precio": 10133},
+        {"desc": "Carpeta proteccion", "unidad": "m2", "precio": 8016},
+        {"desc": "Bloques intertrabados", "unidad": "m2", "precio": 30600},
+        {"desc": "Pavimento HA endurecedor", "unidad": "m2", "precio": 34775},
+        {"desc": "Pavimento rodamiento", "unidad": "m2", "precio": 30913},
+        {"desc": "Cemento alisado endurecedor", "unidad": "m2", "precio": 25589},
+        {"desc": "Colocacion porcellanato sanitarios", "unidad": "m2", "precio": 17862},
+        {"desc": "Colocacion porcellanato balcones", "unidad": "m2", "precio": 17862},
+        {"desc": "Colocacion porcellanato espacios comunes", "unidad": "m2", "precio": 17862},
+        {"desc": "Baldosones vereda reglamentarios", "unidad": "m2", "precio": 23428},
+        {"desc": "Deck hormigon", "unidad": "m2", "precio": 12029},
+        {"desc": "Zocalo cemento alisado h10cm", "unidad": "ml", "precio": 8983},
+        {"desc": "Zocalo porcellanato h10cm", "unidad": "ml", "precio": 5193},
+        {"desc": "Zocalo MDF prepintado", "unidad": "ml", "precio": 5155},
+        {"desc": "Tarquini o similar buñado rodillado", "unidad": "m2", "precio": 15459},
+        {"desc": "Tarquini o similar buñado llaneado", "unidad": "m2", "precio": 15459},
+        {"desc": "Porcellanato baños", "unidad": "m2", "precio": 17862},
+        {"desc": "Porcellanato cocinas", "unidad": "m2", "precio": 17862}
+      ]
+    },
+    "excavacion": {
+      "nombre": "Movimiento de Suelos",
+      "precio_m3_instalado": 4907,
+      "unidad": "m3",
+      "detalle": [
+        {"desc": "Perfilado manual", "unidad": "un", "precio": 4907}
+      ]
+    }
+  },
+  "items_completos": [
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.01", "desc": "Seguridad e Higiene", "unidad": "gl", "cant": 1, "precio_unitario": 90449030},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.02", "desc": "Personal Supervision y Jefatura", "unidad": "Un", "cant": 1, "precio_unitario": 176649239},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.03", "desc": "Control Accesos y Seguridad obra", "unidad": "gl", "cant": 1, "precio_unitario": 134423364},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.04", "desc": "Replanteos y verificacion", "unidad": "gl", "cant": 1, "precio_unitario": 17895971},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.05", "desc": "Documentacion Replanteo", "unidad": "gl", "cant": 1, "precio_unitario": 296100000},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.06", "desc": "Ayuda de Gremios", "unidad": "gl", "cant": 1, "precio_unitario": 23567172},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.07", "desc": "Obradores y equipamiento", "unidad": "gl", "cant": 1, "precio_unitario": 28866847},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.10", "desc": "Protecciones en altura", "unidad": "gl", "cant": 1, "precio_unitario": 59070976},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.11", "desc": "Traslado Equipos Maquinarias", "unidad": "gl", "cant": 1, "precio_unitario": 10372303},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.12", "desc": "Equipos Herramientas Consumibles", "unidad": "gl", "cant": 1, "precio_unitario": 35250000},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.14", "desc": "Instalacion fuerza motriz", "unidad": "gl", "cant": 1, "precio_unitario": 19773297},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.15", "desc": "Suministro electrico obra", "unidad": "gl", "cant": 1, "precio_unitario": 16422847},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.16", "desc": "Instalacion Agua obra", "unidad": "gl", "cant": 1, "precio_unitario": 96898665},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.19", "desc": "Montacargas materiales y personas", "unidad": "gl", "cant": 1, "precio_unitario": 99227814},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.20", "desc": "GRUA provision operacion", "unidad": "gl", "cant": 1, "precio_unitario": 259762535},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.21", "desc": "Limpieza durante obra", "unidad": "gl", "cant": 1, "precio_unitario": 39090169},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.22", "desc": "Limpieza final UF", "unidad": "gl", "cant": 1, "precio_unitario": 6588132},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.23", "desc": "Limpieza final areas comunes", "unidad": "gl", "cant": 1, "precio_unitario": 5209659},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.25", "desc": "Tramitaciones ante Organismos", "unidad": "gl", "cant": 1, "precio_unitario": 8485471},
+    {"rubro": 1, "rubro_nombre": "ORGANIZACION", "item": "1.26", "desc": "Confeccion Planos previos obra", "unidad": "gl", "cant": 1, "precio_unitario": 82802301},
+    {"rubro": 2, "rubro_nombre": "ITEMS COMPLEMENTARIOS", "item": "2.01", "desc": "Sereno", "unidad": "gl", "cant": 1, "precio_unitario": 28925417},
+    {"rubro": 2, "rubro_nombre": "ITEMS COMPLEMENTARIOS", "item": "2.02", "desc": "Vigilancia diurna con camaras", "unidad": "gl", "cant": 1, "precio_unitario": 171930832},
+    {"rubro": 2, "rubro_nombre": "ITEMS COMPLEMENTARIOS", "item": "2.03", "desc": "Grupo Electrogeno", "unidad": "gl", "cant": 1, "precio_unitario": 7330505},
+    {"rubro": 5, "rubro_nombre": "ESTRUCTURAS HA FUNDACIONES", "item": "5.01", "desc": "Fundaciones", "unidad": "m2", "cant": 1842, "precio_unitario": 7032},
+    {"rubro": 5, "rubro_nombre": "ESTRUCTURAS HA FUNDACIONES", "item": "5.02", "desc": "Losa s/5 subsuelo", "unidad": "m2", "cant": 1029, "precio_unitario": 9618},
+    {"rubro": 5, "rubro_nombre": "ESTRUCTURAS HA FUNDACIONES", "item": "5.05", "desc": "Losa s/2 subsuelo", "unidad": "m2", "cant": 12223, "precio_unitario": 9865},
+    {"rubro": 6, "rubro_nombre": "ITEMS COMPLEMENTARIOS HA", "item": "6.01", "desc": "Tanque incendio", "unidad": "m3", "cant": 137, "precio_unitario": 7783},
+    {"rubro": 6, "rubro_nombre": "ITEMS COMPLEMENTARIOS HA", "item": "6.02", "desc": "Tanque reserva", "unidad": "m3", "cant": 62, "precio_unitario": 15613},
+    {"rubro": 6, "rubro_nombre": "ITEMS COMPLEMENTARIOS HA", "item": "6.06", "desc": "Hormigon limpieza bajo platea", "unidad": "m3", "cant": 45, "precio_unitario": 5598},
+    {"rubro": 6, "rubro_nombre": "ITEMS COMPLEMENTARIOS HA", "item": "6.07", "desc": "Ensayos hormigon", "unidad": "gl", "cant": 1, "precio_unitario": 36972776},
+    {"rubro": 8, "rubro_nombre": "MAMPOSTERIA", "item": "8.01", "desc": "Ladrillo Ceramico 0.08", "unidad": "m2", "cant": 1855, "precio_unitario": 16212},
+    {"rubro": 8, "rubro_nombre": "MAMPOSTERIA", "item": "8.09", "desc": "Ladrillo Ceramico 0.04", "unidad": "m2", "cant": 312, "precio_unitario": 10981},
+    {"rubro": 8, "rubro_nombre": "MAMPOSTERIA", "item": "8.12", "desc": "Ladrillo Ceramico 0.12", "unidad": "m2", "cant": 291, "precio_unitario": 22849},
+    {"rubro": 8, "rubro_nombre": "MAMPOSTERIA", "item": "8.16", "desc": "Ladrillo Ceramico 0.18", "unidad": "m2", "cant": 157, "precio_unitario": 30346},
+    {"rubro": 8, "rubro_nombre": "MAMPOSTERIA", "item": "8.18", "desc": "Ladrillo Comun", "unidad": "m2", "cant": 672, "precio_unitario": 27590},
+    {"rubro": 8, "rubro_nombre": "MAMPOSTERIA", "item": "8.26", "desc": "Bloque HCCA", "unidad": "m2", "cant": 151, "precio_unitario": 36382},
+    {"rubro": 9, "rubro_nombre": "CONSTRUCCION EN SECO", "item": "9.01", "desc": "Placa Durlock", "unidad": "m2", "cant": 917, "precio_unitario": 19993},
+    {"rubro": 10, "rubro_nombre": "AISLACIONES IMPERMEABILIZACIONES", "item": "10.01", "desc": "Tratamiento platea", "unidad": "m2", "cant": 906, "precio_unitario": 11401},
+    {"rubro": 10, "rubro_nombre": "AISLACIONES IMPERMEABILIZACIONES", "item": "10.02", "desc": "Tratamiento tabiques HA subsuelos", "unidad": "m2", "cant": 2383, "precio_unitario": 16197},
+    {"rubro": 10, "rubro_nombre": "AISLACIONES IMPERMEABILIZACIONES", "item": "10.08", "desc": "Aislacion hidrofuga balcones cubiertas", "unidad": "m2", "cant": 1705, "precio_unitario": 14668},
+    {"rubro": 10, "rubro_nombre": "AISLACIONES IMPERMEABILIZACIONES", "item": "10.09", "desc": "Aislacion bajo revestimiento sanitarios", "unidad": "m2", "cant": 7252, "precio_unitario": 7965},
+    {"rubro": 10, "rubro_nombre": "AISLACIONES IMPERMEABILIZACIONES", "item": "10.10", "desc": "Aislacion hidrofuga cementicia", "unidad": "m2", "cant": 9954, "precio_unitario": 10940},
+    {"rubro": 12, "rubro_nombre": "REVOQUES INTERIORES", "item": "12.01", "desc": "Emprolijado hormigon visto", "unidad": "m2", "cant": 379, "precio_unitario": 8672},
+    {"rubro": 12, "rubro_nombre": "REVOQUES INTERIORES", "item": "12.02", "desc": "Jaharro y enlucido subsuelos", "unidad": "m2", "cant": 2029, "precio_unitario": 14030},
+    {"rubro": 12, "rubro_nombre": "REVOQUES INTERIORES", "item": "12.03", "desc": "Jaharro y enlucido interior", "unidad": "m2", "cant": 1739, "precio_unitario": 14030},
+    {"rubro": 13, "rubro_nombre": "REVOQUES EXTERIORES", "item": "13.01", "desc": "Jaharro bajo revestimiento", "unidad": "m2", "cant": 7857, "precio_unitario": 12382},
+    {"rubro": 14, "rubro_nombre": "CIELORRASOS", "item": "14.01", "desc": "Emprolijado hormigon visto cielos", "unidad": "m2", "cant": 5996, "precio_unitario": 8672},
+    {"rubro": 14, "rubro_nombre": "CIELORRASOS", "item": "14.02", "desc": "Placa roca yeso con buna", "unidad": "m2", "cant": 1017, "precio_unitario": 19491},
+    {"rubro": 14, "rubro_nombre": "CIELORRASOS", "item": "14.03", "desc": "Placa roca yeso humedos", "unidad": "m2", "cant": 807, "precio_unitario": 21485},
+    {"rubro": 14, "rubro_nombre": "CIELORRASOS", "item": "14.07", "desc": "Yeso aplicado ambientes", "unidad": "m2", "cant": 5841, "precio_unitario": 19355},
+    {"rubro": 15, "rubro_nombre": "CONTRAPISOS Y CARPETAS", "item": "15.01", "desc": "Contrapiso HA sobre terreno", "unidad": "m2", "cant": 210, "precio_unitario": 46694},
+    {"rubro": 15, "rubro_nombre": "CONTRAPISOS Y CARPETAS", "item": "15.05", "desc": "Contrapiso hormigon pobre", "unidad": "m2", "cant": 907, "precio_unitario": 10472},
+    {"rubro": 15, "rubro_nombre": "CONTRAPISOS Y CARPETAS", "item": "15.09", "desc": "Carpeta nivelacion", "unidad": "m2", "cant": 2015, "precio_unitario": 6600},
+    {"rubro": 15, "rubro_nombre": "CONTRAPISOS Y CARPETAS", "item": "15.10", "desc": "Carpeta monolitica", "unidad": "m2", "cant": 1825, "precio_unitario": 10133},
+    {"rubro": 16, "rubro_nombre": "PISOS", "item": "16.03", "desc": "Pavimento rodamiento llaneado", "unidad": "m2", "cant": 2325, "precio_unitario": 30913},
+    {"rubro": 16, "rubro_nombre": "PISOS", "item": "16.06", "desc": "Porcellanato sanitarios", "unidad": "m2", "cant": 824, "precio_unitario": 17862},
+    {"rubro": 16, "rubro_nombre": "PISOS", "item": "16.09", "desc": "Porcellanato depositos", "unidad": "m2", "cant": 5850, "precio_unitario": 17862},
+    {"rubro": 17, "rubro_nombre": "ZOCALOS", "item": "17.02", "desc": "Porcellanato zocalo h10cm", "unidad": "ml", "cant": 1760, "precio_unitario": 5193},
+    {"rubro": 17, "rubro_nombre": "ZOCALOS", "item": "17.05", "desc": "Zocalo MDF prepintado", "unidad": "ml", "cant": 7277, "precio_unitario": 5155},
+    {"rubro": 18, "rubro_nombre": "REVESTIMIENTOS", "item": "18.01", "desc": "Tarquini buñado rodillado", "unidad": "m2", "cant": 3667, "precio_unitario": 15459},
+    {"rubro": 18, "rubro_nombre": "REVESTIMIENTOS", "item": "18.03", "desc": "Porcellanato banos", "unidad": "m2", "cant": 2566, "precio_unitario": 17862},
+    {"rubro": 19, "rubro_nombre": "YESERIA", "item": "19.01", "desc": "Yeso proyectado", "unidad": "m2", "cant": 13049, "precio_unitario": 17976},
+    {"rubro": 19, "rubro_nombre": "YESERIA", "item": "19.02", "desc": "Cantoneras metalicas", "unidad": "ml", "cant": 2093, "precio_unitario": 3427},
+    {"rubro": 20, "rubro_nombre": "PROVISIONES Y COLOCACIONES", "item": "20.06", "desc": "Bocas de ataque", "unidad": "Un", "cant": 64, "precio_unitario": 31036},
+    {"rubro": 20, "rubro_nombre": "PROVISIONES Y COLOCACIONES", "item": "20.08", "desc": "Accesorios de banos", "unidad": "Un", "cant": 1072, "precio_unitario": 17730},
+    {"rubro": 20, "rubro_nombre": "PROVISIONES Y COLOCACIONES", "item": "20.24", "desc": "Mensulas bajomesadas", "unidad": "Un", "cant": 1060, "precio_unitario": 12995}
+  ]
+}

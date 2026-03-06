@@ -1637,17 +1637,18 @@ def obtener_multiplicador_tipo(tipo):
 
 def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[int] = None) -> Tuple[Decimal, str]:
     """
-    Obtiene el precio de referencia con 3 niveles de prioridad:
+    Obtiene el precio de referencia con 4 niveles de prioridad:
     1. Inventario de la organización (precio_promedio de ItemInventario)
     2. Promedio de presupuestos importados de constructoras
-    3. Precio de referencia hardcodeado (PRECIO_REFERENCIA)
+    3. Precios de MercadoLibre (cache 24hs)
+    4. Precio de referencia hardcodeado (PRECIO_REFERENCIA)
 
-    Los precios de inventario y constructoras ya están en ARS actuales,
-    por lo que NO se les aplica multiplicador CAC. El multiplicador CAC
-    solo se aplica al fallback hardcodeado.
+    Los precios de inventario, constructoras y MercadoLibre ya están en ARS
+    actuales, por lo que NO se les aplica multiplicador CAC. El multiplicador
+    CAC solo se aplica al fallback hardcodeado.
 
     Retorna: (precio_decimal, fuente)
-    fuente = 'inventario' | 'constructora' | 'referencia'
+    fuente = 'inventario' | 'constructora' | 'mercadolibre' | 'referencia'
     """
     # Tier 1 y 2: Inventario y constructoras (via cache)
     if org_id:
@@ -1661,7 +1662,18 @@ def _precio_referencia(codigo: str, cac_context: CACContext, org_id: Optional[in
         except Exception as e:
             logging.warning(f"Error consultando cache de precios para {codigo}: {e}")
 
-    # Tier 3: Precio de referencia hardcodeado (aplicar CAC)
+    # Tier 3: Precios de MercadoLibre (cache)
+    try:
+        from services.mercadolibre_precios import obtener_precios_ml_como_referencia
+        precios_ml = obtener_precios_ml_como_referencia()
+        if codigo in precios_ml:
+            ml_precio = precios_ml[codigo]
+            if ml_precio and ml_precio > 0:
+                return _quantize_currency(_to_decimal(ml_precio)), 'mercadolibre'
+    except Exception:
+        pass
+
+    # Tier 4: Precio de referencia hardcodeado (aplicar CAC)
     base = _to_decimal(PRECIO_REFERENCIA.get(codigo), '0')
     return _quantize_currency(base * cac_context.multiplier), 'referencia'
 

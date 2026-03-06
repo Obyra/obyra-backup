@@ -2875,3 +2875,118 @@ def api_calculadora_items_etapa(etapa_slug):
     except Exception as e:
         current_app.logger.error(f"Error obteniendo items de etapa: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# MERCADOLIBRE - Precios de referencia
+# ============================================================================
+
+@presupuestos_bp.route('/api/calculadora/precios-mercadolibre')
+@login_required
+def api_precios_mercadolibre():
+    """
+    Obtiene precios de materiales desde MercadoLibre (cache 24hs).
+    Query params:
+        - material: codigo de material (ej: MAT-CEMENTO). Si no se pasa, retorna todos.
+        - forzar: si '1', ignora cache
+    """
+    try:
+        from services.mercadolibre_precios import (
+            obtener_precio_material_ml,
+            obtener_precios_ml_como_referencia,
+            MATERIALES_ML
+        )
+
+        material = request.args.get('material')
+        forzar = request.args.get('forzar') == '1'
+
+        if material:
+            resultado = obtener_precio_material_ml(material, forzar=forzar)
+            if resultado:
+                return jsonify({'ok': True, 'precio': resultado})
+            return jsonify({'ok': False, 'error': f'Sin resultados para {material}'}), 404
+
+        # Retornar todos los precios en cache
+        precios = obtener_precios_ml_como_referencia()
+        materiales_disponibles = list(MATERIALES_ML.keys())
+        return jsonify({
+            'ok': True,
+            'precios': precios,
+            'materiales_disponibles': materiales_disponibles,
+            'total_en_cache': len(precios),
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo precios ML: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/calculadora/actualizar-precios-ml', methods=['POST'])
+@csrf.exempt
+@login_required
+def api_actualizar_precios_ml():
+    """
+    Actualiza todos los precios de materiales desde MercadoLibre.
+    Solo admin puede forzar actualizacion.
+    """
+    try:
+        rol = getattr(current_user, 'rol', '') or ''
+        role = getattr(current_user, 'role', '') or ''
+        if rol not in ('administrador', 'admin') and role not in ('admin',):
+            return jsonify({'error': 'Solo admin puede actualizar precios'}), 403
+
+        from services.mercadolibre_precios import actualizar_todos_los_precios
+        resultado = actualizar_todos_los_precios(forzar=True)
+        return jsonify({'ok': True, 'resultado': resultado})
+
+    except Exception as e:
+        current_app.logger.error(f"Error actualizando precios ML: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/calculadora/buscar-precio-ml')
+@login_required
+def api_buscar_precio_ml():
+    """
+    Busca un producto en MercadoLibre y retorna precios.
+    Query params:
+        - q: termino de busqueda (ej: 'cemento portland 50kg')
+        - limit: cantidad de resultados (default 10)
+    """
+    try:
+        from services.mercadolibre_precios import buscar_precio_mercadolibre
+
+        query = request.args.get('q', '').strip()
+        limit = int(request.args.get('limit', 10))
+
+        if not query:
+            return jsonify({'ok': False, 'error': 'Parametro q requerido'}), 400
+
+        resultado = buscar_precio_mercadolibre(query, limit=limit)
+        if resultado:
+            return jsonify({'ok': True, 'resultado': resultado})
+        return jsonify({'ok': False, 'error': 'Sin resultados'}), 404
+
+    except Exception as e:
+        current_app.logger.error(f"Error buscando precio ML: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@presupuestos_bp.route('/api/calculadora/precios-referencia')
+@login_required
+def api_precios_referencia():
+    """
+    Retorna los precios de referencia de constructoras reales
+    cargados desde el Excel de presupuestos.
+    """
+    try:
+        from services.calculadora_ia_mejorada import _cargar_precios_constructora
+        ref = _cargar_precios_constructora()
+        return jsonify({
+            'ok': True,
+            'etapas_con_referencia': list(ref.keys()),
+            'datos': ref,
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo precios referencia: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
