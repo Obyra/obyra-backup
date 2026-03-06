@@ -871,18 +871,8 @@ FACTORES_SUPERFICIE_ETAPA = {
         'descripcion': 'Igual a superficie cubierta',
         'notas': 'Contrapiso + carpeta en toda la planta'
     },
-    'revestimientos': {
-        'factor': 0.35,
-        'unidad_default': 'm²',
-        'descripcion': 'Superficie de áreas húmedas + fachadas',
-        'notas': 'Cerámicos en baños/cocinas y revestimiento exterior'
-    },
-    'provisiones-colocaciones': {
-        'factor': 1.0,
-        'unidad_default': 'unidades',
-        'descripcion': 'Basado en superficie cubierta',
-        'notas': 'Griferías, sanitarios y accesorios'
-    },
+    # 'revestimientos' → fusionado en 'pisos' (factor de rev ya incluido en coefs de pisos)
+    # 'provisiones-colocaciones' → fusionado en 'instalaciones-sanitarias'
     # Aliases comunes
     'albanileria': {
         'factor': 1.4,
@@ -1108,7 +1098,7 @@ ETAPA_REGLAS_BASE = {
         'notas': 'Canalizaciones, cableado, tableros seccionales, tomas e interruptores.'
     },
     'instalaciones-sanitarias': {
-        'nombre': 'Instalaciones Sanitarias',
+        'nombre': 'Instalaciones Sanitarias y Provisiones',
         'materiales': [
             {'codigo': 'MAT-CANO-AGUA', 'material_key': 'caños_agua', 'descripcion': 'Caño PP agua fría', 'unidad': 'm', 'coef_por_m2': 3.5},
             {'codigo': 'MAT-CANO-PPF', 'material_key': 'cano_ppf', 'descripcion': 'Caño PP fusión agua caliente', 'unidad': 'm', 'coef_por_m2': 2.0},
@@ -1116,12 +1106,21 @@ ETAPA_REGLAS_BASE = {
             {'codigo': 'MAT-CANO-PLUVIAL', 'material_key': 'cano_pluvial', 'descripcion': 'Caño PVC desagüe pluvial', 'unidad': 'm', 'coef_por_m2': 1.5},
             {'codigo': 'MAT-TANQUE-AGUA', 'material_key': 'tanque_agua', 'descripcion': 'Tanque de reserva de agua 1000L', 'unidad': 'unidades', 'coef_por_m2': 0.004},
             {'codigo': 'MAT-TERMOTANQUE', 'material_key': 'termotanque', 'descripcion': 'Termotanque a gas', 'unidad': 'unidades', 'coef_por_m2': 0.004},
+            # Provisiones y colocaciones (griferías, sanitarios, accesorios)
+            {'codigo': 'MAT-GRIFERIA', 'material_key': 'griferia', 'descripcion': 'Griferías de baño', 'unidad': 'unidades', 'coef_por_m2': 0.025},
+            {'codigo': 'MAT-GRIFERIA-COCINA', 'material_key': 'griferia_cocina', 'descripcion': 'Grifería monocomando de cocina', 'unidad': 'unidades', 'coef_por_m2': 0.005},
+            {'codigo': 'MAT-SANITARIO', 'material_key': 'sanitario', 'descripcion': 'Inodoro con depósito', 'unidad': 'unidades', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-BIDET', 'material_key': 'bidet', 'descripcion': 'Bidet', 'unidad': 'unidades', 'coef_por_m2': 0.006},
+            {'codigo': 'MAT-LAVATORIO', 'material_key': 'lavatorio', 'descripcion': 'Lavatorio / vanitory', 'unidad': 'unidades', 'coef_por_m2': 0.008},
+            {'codigo': 'MAT-MESADA', 'material_key': 'mesada', 'descripcion': 'Mesada de cocina (granito/cuarzo)', 'unidad': 'ml', 'coef_por_m2': 0.012},
+            {'codigo': 'MAT-ACCESORIOS', 'material_key': 'accesorios', 'descripcion': 'Accesorios de baño (toallero, jabonera, etc.)', 'unidad': 'juego', 'coef_por_m2': 0.02},
         ],
         'mano_obra': [
-            {'codigo': 'MO-SANIT', 'descripcion': 'Instalador sanitario matriculado', 'unidad': 'jornal', 'coef_por_m2': 0.15}
+            {'codigo': 'MO-SANIT', 'descripcion': 'Instalador sanitario matriculado', 'unidad': 'jornal', 'coef_por_m2': 0.15},
+            {'codigo': 'MO-PROVISIONES', 'descripcion': 'Oficial colocador de artefactos', 'unidad': 'jornal', 'coef_por_m2': 0.12},
         ],
         'equipos': [],
-        'notas': 'Redes de agua fría/caliente, desagües cloacales y pluviales, tanques y termotanques.'
+        'notas': 'Redes de agua fría/caliente, desagües, tanques, termotanques, griferías, sanitarios y accesorios.'
     },
     'instalaciones-gas': {
         'nombre': 'Instalaciones de Gas',
@@ -1169,19 +1168,20 @@ ETAPA_REGLAS_BASE = {
         'notas': 'Revoque fino interior y exterior, jaharro bajo revestimiento.'
     },
     'pisos': {
-        'nombre': 'Pisos',
+        'nombre': 'Pisos y Revestimientos',
         'materiales': [
             {'codigo': 'MAT-PORCELLANATO', 'material_key': 'porcellanato', 'descripcion': 'Porcellanato / cerámico de piso', 'unidad': 'm²', 'coef_por_m2': 1.05},
-            {'codigo': 'MAT-ADHESIVO', 'material_key': 'adhesivo', 'descripcion': 'Adhesivo cementicio para pisos', 'unidad': 'kg', 'coef_por_m2': 5.0},
-            {'codigo': 'MAT-PASTINA', 'material_key': 'pastina', 'descripcion': 'Pastina para juntas', 'unidad': 'kg', 'coef_por_m2': 0.5},
+            {'codigo': 'MAT-CERAMICO-REV', 'material_key': 'ceramico_rev', 'descripcion': 'Cerámico / porcellanato para revestimiento de pared', 'unidad': 'm²', 'coef_por_m2': 0.35},
+            {'codigo': 'MAT-ADHESIVO', 'material_key': 'adhesivo', 'descripcion': 'Adhesivo cementicio para pisos y revestimientos', 'unidad': 'kg', 'coef_por_m2': 6.8},
+            {'codigo': 'MAT-PASTINA', 'material_key': 'pastina', 'descripcion': 'Pastina para juntas', 'unidad': 'kg', 'coef_por_m2': 0.8},
         ],
         'mano_obra': [
-            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador de pisos especializado', 'unidad': 'jornal', 'coef_por_m2': 0.18}
+            {'codigo': 'MO-PISOS', 'descripcion': 'Colocador de pisos y revestimientos', 'unidad': 'jornal', 'coef_por_m2': 0.34}
         ],
         'equipos': [
-            {'codigo': 'EQ-CORTADORA-CERAM', 'descripcion': 'Cortadora de cerámicos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
+            {'codigo': 'EQ-CORTADORA-CERAM', 'descripcion': 'Cortadora de cerámicos', 'unidad': 'día', 'dias_por_m2': 0.005, 'min_dias': 1},
         ],
-        'notas': 'Colocación de pisos cerámicos, porcellanato y zócalos.'
+        'notas': 'Pisos cerámicos, porcellanato, zócalos y revestimientos de pared en áreas húmedas.'
     },
     'carpinteria': {
         'nombre': 'Carpintería y Aberturas',
@@ -1473,39 +1473,8 @@ ETAPA_REGLAS_BASE = {
         ],
         'notas': 'Contrapiso de hormigón, carpeta de cemento alisado con pendientes, aislación.'
     },
-    'revestimientos': {
-        'nombre': 'Revestimientos',
-        'materiales': [
-            {'codigo': 'MAT-CERAMICO-REV', 'material_key': 'ceramico_rev', 'descripcion': 'Cerámico / porcellanato para revestimiento', 'unidad': 'm²', 'coef_por_m2': 0.35},
-            {'codigo': 'MAT-ADHESIVO', 'material_key': 'adhesivo', 'descripcion': 'Adhesivo cementicio para colocación', 'unidad': 'kg', 'coef_por_m2': 1.8},
-            {'codigo': 'MAT-PASTINA', 'material_key': 'pastina', 'descripcion': 'Pastina para juntas de revestimiento', 'unidad': 'kg', 'coef_por_m2': 0.3},
-        ],
-        'mano_obra': [
-            {'codigo': 'MO-REVESTIMIENTO', 'descripcion': 'Colocador de revestimientos', 'unidad': 'jornal', 'coef_por_m2': 0.16}
-        ],
-        'equipos': [
-            {'codigo': 'EQ-CORTADORA-CERAM', 'descripcion': 'Cortadora de cerámicos', 'unidad': 'día', 'dias_por_m2': 0.003, 'min_dias': 1},
-        ],
-        'notas': 'Revestimientos cerámicos, porcellanato, piedra en fachadas y áreas húmedas.'
-    },
-    'provisiones-colocaciones': {
-        'nombre': 'Provisiones y Colocaciones',
-        'materiales': [
-            {'codigo': 'MAT-GRIFERIA', 'material_key': 'griferia', 'descripcion': 'Griferías de baño', 'unidad': 'unidades', 'coef_por_m2': 0.025},
-            {'codigo': 'MAT-GRIFERIA-COCINA', 'material_key': 'griferia_cocina', 'descripcion': 'Grifería monocomando de cocina', 'unidad': 'unidades', 'coef_por_m2': 0.005},
-            {'codigo': 'MAT-SANITARIO', 'material_key': 'sanitario', 'descripcion': 'Inodoro con depósito', 'unidad': 'unidades', 'coef_por_m2': 0.008},
-            {'codigo': 'MAT-BIDET', 'material_key': 'bidet', 'descripcion': 'Bidet', 'unidad': 'unidades', 'coef_por_m2': 0.006},
-            {'codigo': 'MAT-LAVATORIO', 'material_key': 'lavatorio', 'descripcion': 'Lavatorio / vanitory', 'unidad': 'unidades', 'coef_por_m2': 0.008},
-            {'codigo': 'MAT-MESADA', 'material_key': 'mesada', 'descripcion': 'Mesada de cocina (granito/cuarzo)', 'unidad': 'ml', 'coef_por_m2': 0.012},
-            {'codigo': 'MAT-ACCESORIOS', 'material_key': 'accesorios', 'descripcion': 'Accesorios de baño (toallero, jabonera, etc.)', 'unidad': 'juego', 'coef_por_m2': 0.02},
-            {'codigo': 'MAT-PERFIL-L', 'material_key': 'perfil_l', 'descripcion': 'Perfil L de aluminio para terminaciones', 'unidad': 'ml', 'coef_por_m2': 0.08},
-        ],
-        'mano_obra': [
-            {'codigo': 'MO-PROVISIONES', 'descripcion': 'Oficial instalador', 'unidad': 'jornal', 'coef_por_m2': 0.12}
-        ],
-        'equipos': [],
-        'notas': 'Provisión y colocación de griferías, sanitarios, mesadas, perfiles y herrajes.'
-    },
+    # 'revestimientos' → fusionado en 'pisos' como "Pisos y Revestimientos"
+    # 'provisiones-colocaciones' → fusionado en 'instalaciones-sanitarias' como "Inst. Sanitarias y Provisiones"
 }
 
 STAGE_CALC_CACHE: Dict[str, Any] = {}
