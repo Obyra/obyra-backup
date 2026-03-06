@@ -28,7 +28,7 @@ fi
 # ============================================
 # 2. Run Database Migrations (if enabled)
 # ============================================
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     echo "==========================================="
     echo "Running database migrations..."
     echo "==========================================="
