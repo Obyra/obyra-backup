@@ -43,6 +43,7 @@ from models.projects import (
     TareaAvanceSemanal,
     TareaAdjunto,
     TareaResponsables,
+    EtapaDependencia,
     AsignacionObra,
     ObraMiembro,
     Fichada,
@@ -229,6 +230,7 @@ __all__ = [
     # Projects
     'Obra',
     'EtapaObra',
+    'EtapaDependencia',
     'TareaEtapa',
     'TareaMiembro',
     'TareaAvance',

@@ -16,6 +16,7 @@ from utils import safe_int
 from models import (
     Obra,
     EtapaObra,
+    EtapaDependencia,
     TareaEtapa,
     AsignacionObra,
     Usuario,
@@ -1451,66 +1452,44 @@ def pct_obra(obra):
 # === ETAPAS ENCADENADAS — PROPAGACIÓN DE FECHAS ===
 
 def propagar_fechas_etapas(obra_id):
-    """Propaga atrasos entre etapas encadenadas (por orden).
+    """Propaga fechas entre etapas usando dependencias y niveles.
 
-    Cuando una etapa termina más tarde de lo planificado, todas las
-    etapas siguientes se desplazan hacia adelante manteniendo su duración.
-    Solo desplaza hacia adelante, nunca achica el cronograma.
+    Algoritmo:
+    1. Usa dependencias explícitas (tabla etapa_dependencias) si existen.
+    2. Si no, deriva del nivel_encadenamiento (nivel N depende de nivel N-1).
+    3. Si no tiene nivel ni dependencias, fallback secuencial por orden.
+    4. Orden topológico. Para cada etapa:
+       - Skip si fechas_manuales == True
+       - Skip si estado == 'finalizada'
+       - inicio_más_temprano = max(pred.fin_efectivo + 1 + lag)
+       - Solo desplaza hacia adelante, preservando duración.
     Retorna dict con shifted_count y details.
     """
+    from services.dependency_service import propagar_fechas_obra
     from datetime import timedelta
 
-    etapas = EtapaObra.query.filter_by(obra_id=obra_id).order_by(EtapaObra.orden).all()
-    if len(etapas) < 2:
-        return {'shifted_count': 0, 'details': []}
+    etapas_modificadas = propagar_fechas_obra(obra_id)
 
-    shifted_count = 0
     details = []
+    for etapa in etapas_modificadas:
+        details.append({
+            'etapa': etapa.nombre,
+            'new_inicio': str(etapa.fecha_inicio_estimada),
+            'new_fin': str(etapa.fecha_fin_estimada),
+        })
 
-    for i in range(1, len(etapas)):
-        anterior = etapas[i - 1]
-        actual = etapas[i]
+        # Propagar a tareas de esta etapa (si hay delta)
+        # Las tareas se desplazan proporcionalmente
+        tareas = etapa.tareas.filter(
+            TareaEtapa.estado.notin_(['completada', 'cancelada'])
+        ).all()
+        for t in tareas:
+            if t.fecha_inicio_plan and etapa.fecha_inicio_estimada:
+                t.fecha_inicio_plan = etapa.fecha_inicio_estimada
+            if t.fecha_fin_plan and etapa.fecha_fin_estimada:
+                t.fecha_fin_plan = etapa.fecha_fin_estimada
 
-        # Saltar si faltan fechas o la etapa ya está finalizada
-        if not anterior.fecha_fin_estimada or not actual.fecha_inicio_estimada:
-            continue
-        if actual.estado == 'finalizada':
-            continue
-
-        # Fin efectivo de la etapa anterior
-        fin_efectivo = anterior.fecha_fin_estimada
-        if (anterior.fecha_fin_real
-                and anterior.estado == 'finalizada'
-                and anterior.fecha_fin_real > anterior.fecha_fin_estimada):
-            fin_efectivo = anterior.fecha_fin_real
-
-        nuevo_inicio = fin_efectivo + timedelta(days=1)
-
-        if nuevo_inicio > actual.fecha_inicio_estimada:
-            delta = nuevo_inicio - actual.fecha_inicio_estimada
-
-            # Preservar duración
-            duracion = None
-            if actual.fecha_fin_estimada:
-                duracion = actual.fecha_fin_estimada - actual.fecha_inicio_estimada
-
-            old_inicio = actual.fecha_inicio_estimada
-            actual.fecha_inicio_estimada = nuevo_inicio
-            if duracion is not None:
-                actual.fecha_fin_estimada = nuevo_inicio + duracion
-
-            details.append({
-                'etapa': actual.nombre,
-                'delta_dias': delta.days,
-                'old_inicio': str(old_inicio),
-                'new_inicio': str(nuevo_inicio),
-            })
-
-            # Propagar a tareas de esta etapa
-            _propagar_fechas_tareas(actual, delta)
-            shifted_count += 1
-
-    return {'shifted_count': shifted_count, 'details': details}
+    return {'shifted_count': len(etapas_modificadas), 'details': details}
 
 
 def _propagar_fechas_tareas(etapa, delta):
@@ -3887,12 +3866,14 @@ def cambiar_estado_etapa(etapa_id):
 
         db.session.commit()
 
-        # Propagar atrasos a etapas siguientes
+        # Propagar fechas a etapas sucesoras (dependencias + niveles)
         if nuevo_estado == 'finalizada':
             result = propagar_fechas_etapas(etapa.obra_id)
             if result['shifted_count'] > 0:
                 db.session.commit()
-                flash(f'Se ajustaron las fechas de {result["shifted_count"]} etapa(s) posterior(es) por atraso.', 'info')
+                nombres = ', '.join(d['etapa'] for d in result['details'][:3])
+                extra = f' y {result["shifted_count"] - 3} más' if result['shifted_count'] > 3 else ''
+                flash(f'Se actualizaron fechas de: {nombres}{extra}', 'info')
 
         flash(f'Estado de etapa "{etapa.nombre}" cambiado de "{estado_anterior}" a "{nuevo_estado}".', 'success')
 
@@ -3925,6 +3906,149 @@ def propagar_fechas(id):
         flash(f'Error al propagar fechas: {str(e)}', 'danger')
 
     return redirect(url_for('obras.detalle', id=id))
+
+
+# ===== ENDPOINTS PARA DEPENDENCIAS Y GANTT =====
+
+@obras_bp.route('/etapas/<int:etapa_id>/editar_fechas', methods=['POST'])
+@csrf.exempt
+@login_required
+def editar_fechas_etapa(etapa_id):
+    """Editar fechas de una etapa manualmente (admin/técnico)."""
+    etapa = EtapaObra.query.get_or_404(etapa_id)
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        return jsonify({'error': 'Sin permisos'}), 403
+
+    data = request.get_json(silent=True) or {}
+
+    try:
+        if 'fecha_inicio' in data and data['fecha_inicio']:
+            etapa.fecha_inicio_estimada = date.fromisoformat(data['fecha_inicio'])
+        if 'fecha_fin' in data and data['fecha_fin']:
+            etapa.fecha_fin_estimada = date.fromisoformat(data['fecha_fin'])
+
+        if 'bloquear_fechas' in data:
+            etapa.fechas_manuales = bool(data['bloquear_fechas'])
+
+        if data.get('forzar_inicio') and etapa.estado == 'pendiente':
+            etapa.estado = 'en_curso'
+            if not etapa.fecha_inicio_real:
+                etapa.fecha_inicio_real = date.today()
+
+        db.session.commit()
+
+        # Opcionalmente propagar a sucesoras
+        if data.get('propagar', False):
+            result = propagar_fechas_etapas(etapa.obra_id)
+            if result['shifted_count'] > 0:
+                db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'fecha_inicio': str(etapa.fecha_inicio_estimada) if etapa.fecha_inicio_estimada else None,
+            'fecha_fin': str(etapa.fecha_fin_estimada) if etapa.fecha_fin_estimada else None,
+            'estado': etapa.estado,
+            'fechas_manuales': etapa.fechas_manuales,
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+
+@obras_bp.route('/etapas/<int:etapa_id>/nivel', methods=['POST'])
+@csrf.exempt
+@login_required
+def cambiar_nivel_etapa(etapa_id):
+    """Cambiar nivel de encadenamiento de una etapa."""
+    etapa = EtapaObra.query.get_or_404(etapa_id)
+    roles = _get_roles_usuario(current_user)
+    if not any(r in roles for r in ['administrador', 'tecnico', 'admin']):
+        return jsonify({'error': 'Sin permisos'}), 403
+
+    data = request.get_json(silent=True) or {}
+    nivel = data.get('nivel')
+
+    try:
+        etapa.nivel_encadenamiento = int(nivel) if nivel is not None else None
+        db.session.commit()
+
+        # Recalcular dependencias y fechas
+        from services.dependency_service import generar_dependencias_desde_niveles
+        generar_dependencias_desde_niveles(etapa.obra_id)
+        result = propagar_fechas_etapas(etapa.obra_id)
+        db.session.commit()
+
+        return jsonify({
+            'ok': True,
+            'nivel': etapa.nivel_encadenamiento,
+            'shifted': result['shifted_count'],
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+
+@obras_bp.route('/<int:id>/gantt-data')
+@login_required
+def gantt_data(id):
+    """Retorna datos de etapas en formato compatible con frappe-gantt."""
+    obra = Obra.query.get_or_404(id)
+    etapas = (
+        EtapaObra.query
+        .filter_by(obra_id=id)
+        .order_by(EtapaObra.nivel_encadenamiento.asc().nullslast(), EtapaObra.orden)
+        .all()
+    )
+
+    # Cargar dependencias
+    etapa_ids = [e.id for e in etapas]
+    deps = EtapaDependencia.query.filter(
+        EtapaDependencia.etapa_id.in_(etapa_ids)
+    ).all() if etapa_ids else []
+
+    deps_map = {}
+    for d in deps:
+        deps_map.setdefault(d.etapa_id, []).append(str(d.depende_de_id))
+
+    # Estado → clase CSS para frappe-gantt
+    estado_class = {
+        'pendiente': 'gantt-pendiente',
+        'en_curso': 'gantt-en-curso',
+        'finalizada': 'gantt-finalizada',
+    }
+
+    tasks = []
+    for e in etapas:
+        inicio = e.fecha_inicio_real or e.fecha_inicio_estimada
+        fin = e.fecha_fin_real or e.fecha_fin_estimada
+
+        if not inicio or not fin:
+            continue
+
+        # Calcular progreso
+        if e.estado == 'finalizada':
+            progress = 100
+        elif e.estado == 'en_curso' and e.porcentaje_avance is not None:
+            progress = e.porcentaje_avance
+        else:
+            progress = 0
+
+        tasks.append({
+            'id': str(e.id),
+            'name': e.nombre,
+            'start': inicio.strftime('%Y-%m-%d'),
+            'end': fin.strftime('%Y-%m-%d'),
+            'progress': progress,
+            'dependencies': ','.join(deps_map.get(e.id, [])),
+            'custom_class': estado_class.get(e.estado, ''),
+            'nivel': e.nivel_encadenamiento,
+            'estado': e.estado,
+            'fechas_manuales': e.fechas_manuales or False,
+            'es_opcional': e.es_opcional or False,
+        })
+
+    return jsonify(tasks)
 
 
 # ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
@@ -4492,6 +4616,15 @@ def wizard_create_tasks():
                 created_count += 1
 
         db.session.commit()
+
+        # Asignar niveles de encadenamiento si se crearon etapas nuevas
+        if etapas_created > 0:
+            try:
+                from services.dependency_service import asignar_niveles_por_defecto
+                asignar_niveles_por_defecto(obra_id)
+                db.session.commit()
+            except Exception as e_dep:
+                current_app.logger.warning(f"No se pudieron asignar niveles: {e_dep}")
 
         return jsonify({
             'ok': True,

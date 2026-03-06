@@ -1232,6 +1232,44 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Cotizaciones proveedor migration skipped: {e}")
 
+    # Etapa dependencies and chaining
+    try:
+        dep_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='etapas_obra' AND column_name='nivel_encadenamiento') THEN
+                ALTER TABLE etapas_obra ADD COLUMN nivel_encadenamiento INTEGER;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='etapas_obra' AND column_name='fechas_manuales') THEN
+                ALTER TABLE etapas_obra ADD COLUMN fechas_manuales BOOLEAN DEFAULT false;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='etapas_obra' AND column_name='es_opcional') THEN
+                ALTER TABLE etapas_obra ADD COLUMN es_opcional BOOLEAN DEFAULT false;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='etapa_dependencias') THEN
+                CREATE TABLE etapa_dependencias (
+                    id SERIAL PRIMARY KEY,
+                    etapa_id INTEGER NOT NULL REFERENCES etapas_obra(id) ON DELETE CASCADE,
+                    depende_de_id INTEGER NOT NULL REFERENCES etapas_obra(id) ON DELETE CASCADE,
+                    tipo VARCHAR(10) DEFAULT 'FS',
+                    lag_dias INTEGER DEFAULT 0,
+                    UNIQUE(etapa_id, depende_de_id)
+                );
+                CREATE INDEX idx_etapa_dep_etapa ON etapa_dependencias(etapa_id);
+                CREATE INDEX idx_etapa_dep_depende ON etapa_dependencias(depende_de_id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(dep_sql))
+        db.session.commit()
+        print("[OK] Etapa dependencies migration applied")
+    except Exception as e:
+        print(f"[WARN] Etapa dependencies migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions

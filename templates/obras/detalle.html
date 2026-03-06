@@ -3,11 +3,26 @@
 {% block title %}{{ obra.nombre }} - OBYRA IA{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
 <style>
 /* Simple CSS para control de checkboxes */
 .d-none { display: none !important; }
 .cursor-pointer { cursor: pointer !important; }
 .cursor-pointer:hover { color: #0056b3 !important; }
+
+/* Gantt chart styles */
+#gantt-container { overflow-x: auto; }
+#gantt-container svg { min-width: 100%; }
+.gantt .bar-wrapper .bar-label { font-size: 11px; }
+.gantt .bar-wrapper .bar-label.big { font-size: 11px; }
+.gantt-pendiente .bar { fill: #adb5bd !important; }
+.gantt-pendiente .bar-progress { fill: #6c757d !important; }
+.gantt-en-curso .bar { fill: #6ea8fe !important; }
+.gantt-en-curso .bar-progress { fill: #0d6efd !important; }
+.gantt-finalizada .bar { fill: #75b798 !important; }
+.gantt-finalizada .bar-progress { fill: #198754 !important; }
+.badge-nivel { font-size: .65rem; cursor: pointer; }
+.badge-nivel:hover { opacity: .8; }
 </style>
 {% endblock %}
 
@@ -83,6 +98,23 @@
                         </div>
                     </div>
 
+                    <!-- Diagrama Gantt -->
+                    {% if etapas|length > 0 %}
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0"><i class="fas fa-stream me-2"></i>Cronograma</h6>
+                                <div class="btn-group btn-group-sm" id="gantt-view-buttons">
+                                    <button class="btn btn-outline-secondary active" data-view="Week">Semana</button>
+                                    <button class="btn btn-outline-secondary" data-view="Month">Mes</button>
+                                    <button class="btn btn-outline-secondary" data-view="Quarter Year">Trimestre</button>
+                                </div>
+                            </div>
+                            <div id="gantt-container"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Etapas del Proyecto -->
                     <div class="card border-0 bg-light">
                         <div class="card-body p-3" id="etapas-main-container">
@@ -147,8 +179,18 @@
                                     <div class="card-header bg-white py-2 px-3" style="cursor:pointer;" onclick="toggleTareasEtapa({{ etapa.id }})">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div class="d-flex align-items-center flex-grow-1">
-                                                <span class="badge bg-primary me-2">{{ etapa.orden }}</span>
+                                                {% if etapa.nivel_encadenamiento %}
+                                                <span class="badge bg-info text-white badge-nivel me-1"
+                                                      title="Nivel {{ etapa.nivel_encadenamiento }} – etapas del mismo nivel son paralelas"
+                                                      onclick="event.stopPropagation(); promptNivel({{ etapa.id }}, {{ etapa.nivel_encadenamiento }})">Nv{{ etapa.nivel_encadenamiento }}</span>
+                                                {% endif %}
                                                 <strong class="me-2">{{ etapa.nombre }}</strong>
+                                                {% if etapa.fechas_manuales %}
+                                                <i class="fas fa-lock text-warning me-1" title="Fechas bloqueadas (no auto-ajusta)" style="font-size:.7rem;"></i>
+                                                {% endif %}
+                                                {% if etapa.es_opcional %}
+                                                <span class="badge bg-light text-muted me-1" style="font-size:.6rem;">OPC</span>
+                                                {% endif %}
                                                 <i class="fas fa-chevron-right text-muted transition-transform" id="chevron-{{ etapa.id }}" style="font-size:.75rem; transition: transform .2s;"></i>
                                             </div>
                                             <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation();">
@@ -183,6 +225,11 @@
                                                 </div>
 
                                                 {% if can_manage %}
+                                                <button class="btn btn-sm btn-outline-info"
+                                                        onclick="event.stopPropagation(); abrirModalFechas({{ etapa.id }}, '{{ etapa.nombre }}', '{{ etapa.fecha_inicio_estimada or '' }}', '{{ etapa.fecha_fin_estimada or '' }}', {{ 'true' if etapa.fechas_manuales else 'false' }}, '{{ etapa.estado }}')"
+                                                        title="Editar fechas">
+                                                    <i class="fas fa-calendar-alt fa-xs"></i>
+                                                </button>
                                                 <button class="btn btn-sm btn-outline-danger"
                                                         onclick="event.stopPropagation(); confirmarEliminarEtapa({{ etapa.id }}, '{{ etapa.nombre }}')"
                                                         title="Eliminar etapa {{ etapa.nombre }}">
@@ -1901,6 +1948,47 @@
     </div>
 </div>
 
+<!-- Modal Editar Fechas de Etapa -->
+<div class="modal fade" id="modalEditarFechas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="fas fa-calendar-alt me-2"></i><span id="mef-titulo"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="mef-etapa-id">
+                <div class="mb-2">
+                    <label class="form-label small mb-1">Inicio estimado</label>
+                    <input type="date" class="form-control form-control-sm" id="mef-inicio">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">Fin estimado</label>
+                    <input type="date" class="form-control form-control-sm" id="mef-fin">
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="mef-bloquear">
+                    <label class="form-check-label small" for="mef-bloquear">Bloquear fechas (no auto-ajustar)</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="mef-propagar" checked>
+                    <label class="form-check-label small" for="mef-propagar">Propagar cambios a etapas siguientes</label>
+                </div>
+                <div id="mef-forzar-wrap" class="d-none">
+                    <hr class="my-2">
+                    <button class="btn btn-warning btn-sm w-100" id="mef-btn-forzar" onclick="forzarInicioEtapa()">
+                        <i class="fas fa-play me-1"></i>Forzar inicio (ignorar predecesoras)
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="guardarFechasEtapa()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endif %}
 {% endblock %}
 
@@ -3594,5 +3682,156 @@ function pedirMasStock(obraId, itemInventarioId, itemNombre) {
         </div>
     </div>
 </div>
+
+<!-- Frappe Gantt -->
+<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<script>
+/* ===== Gantt Chart ===== */
+let ganttChart = null;
+
+async function initGantt() {
+    const container = document.getElementById('gantt-container');
+    if (!container) return;
+
+    try {
+        const resp = await fetch(`/obras/${window.obraId}/gantt-data`);
+        const tasks = await resp.json();
+        if (!tasks.length) {
+            container.innerHTML = '<p class="text-muted small text-center py-3">Sin datos de fechas para mostrar el cronograma.</p>';
+            return;
+        }
+
+        ganttChart = new Gantt('#gantt-container', tasks, {
+            view_mode: 'Month',
+            date_format: 'YYYY-MM-DD',
+            language: 'es',
+            custom_popup_html: function(task) {
+                const estadoLabel = {pendiente:'Pendiente', en_curso:'En Curso', finalizada:'Finalizada'};
+                return `<div class="details-container" style="padding:8px 12px;min-width:180px;">
+                    <h5 style="margin:0 0 4px;font-size:13px;">${task.name}</h5>
+                    <p style="margin:0;font-size:11px;color:#666;">
+                        ${task.estado ? (estadoLabel[task.estado]||task.estado) : ''}<br>
+                        ${task._start.toLocaleDateString('es-AR')} — ${task._end.toLocaleDateString('es-AR')}<br>
+                        Avance: ${task.progress}%
+                        ${task.nivel ? '<br>Nivel: ' + task.nivel : ''}
+                    </p>
+                </div>`;
+            },
+            on_click: function(task) {
+                const card = document.querySelector(`#tareas-${task.id}`);
+                if (card) {
+                    card.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    toggleTareasEtapa(parseInt(task.id));
+                }
+            },
+            on_date_change: function(task, start, end) {
+                // Admin drag to change dates
+                fetch(`/obras/etapas/${task.id}/editar_fechas`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+                    body: JSON.stringify({
+                        fecha_inicio: start.toISOString().split('T')[0],
+                        fecha_fin: end.toISOString().split('T')[0],
+                        propagar: true
+                    })
+                }).then(r => r.json()).then(d => {
+                    if (d.ok) initGantt();  // refresh
+                });
+            }
+        });
+    } catch(e) {
+        console.error('Error loading Gantt:', e);
+        container.innerHTML = '<p class="text-muted small text-center py-3">Error al cargar cronograma.</p>';
+    }
+}
+
+// View mode buttons
+document.querySelectorAll('#gantt-view-buttons .btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('#gantt-view-buttons .btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        if (ganttChart) ganttChart.change_view_mode(this.dataset.view);
+    });
+});
+
+// Init on load
+document.addEventListener('DOMContentLoaded', initGantt);
+
+
+/* ===== Modal Editar Fechas ===== */
+function abrirModalFechas(etapaId, nombre, inicio, fin, bloqueadas, estado) {
+    document.getElementById('mef-etapa-id').value = etapaId;
+    document.getElementById('mef-titulo').textContent = nombre;
+    document.getElementById('mef-inicio').value = inicio || '';
+    document.getElementById('mef-fin').value = fin || '';
+    document.getElementById('mef-bloquear').checked = bloqueadas;
+    document.getElementById('mef-forzar-wrap').classList.toggle('d-none', estado !== 'pendiente');
+    new bootstrap.Modal(document.getElementById('modalEditarFechas')).show();
+}
+
+async function guardarFechasEtapa() {
+    const etapaId = document.getElementById('mef-etapa-id').value;
+    const body = {
+        fecha_inicio: document.getElementById('mef-inicio').value || null,
+        fecha_fin: document.getElementById('mef-fin').value || null,
+        bloquear_fechas: document.getElementById('mef-bloquear').checked,
+        propagar: document.getElementById('mef-propagar').checked,
+    };
+    try {
+        const resp = await fetch(`/obras/etapas/${etapaId}/editar_fechas`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json', 'X-CSRFToken':'{{ csrf_token() }}'},
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarFechas')).hide();
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'desconocido'));
+        }
+    } catch(e) {
+        alert('Error de conexión');
+    }
+}
+
+async function forzarInicioEtapa() {
+    const etapaId = document.getElementById('mef-etapa-id').value;
+    if (!confirm('Esto iniciará la etapa aunque sus predecesoras no hayan finalizado. ¿Continuar?')) return;
+    try {
+        const resp = await fetch(`/obras/etapas/${etapaId}/editar_fechas`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json', 'X-CSRFToken':'{{ csrf_token() }}'},
+            body: JSON.stringify({forzar_inicio: true, propagar: true})
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarFechas')).hide();
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'desconocido'));
+        }
+    } catch(e) {
+        alert('Error de conexión');
+    }
+}
+
+
+/* ===== Cambiar Nivel ===== */
+function promptNivel(etapaId, nivelActual) {
+    const nuevo = prompt(`Nivel actual: ${nivelActual}\nEtapas con el mismo nivel son paralelas.\n\nNuevo nivel (1-18):`, nivelActual);
+    if (nuevo === null) return;
+    const n = parseInt(nuevo);
+    if (isNaN(n) || n < 1 || n > 99) { alert('Nivel inválido'); return; }
+    fetch(`/obras/etapas/${etapaId}/nivel`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'X-CSRFToken':'{{ csrf_token() }}'},
+        body: JSON.stringify({nivel: n})
+    }).then(r => r.json()).then(d => {
+        if (d.ok) location.reload();
+        else alert('Error: ' + (d.error || 'desconocido'));
+    });
+}
+</script>
 {% endblock %}
 

@@ -176,9 +176,22 @@ class EtapaObra(db.Model):
     cantidad_total_ejecutada = db.Column(db.Numeric(15, 3), default=0)  # Total ejecutado
     porcentaje_avance_medicion = db.Column(db.Integer, default=0)  # Avance por medición (0-100)
 
+    # Dependencias y encadenamiento
+    nivel_encadenamiento = db.Column(db.Integer, nullable=True)  # Nivel paralelo (1-18)
+    fechas_manuales = db.Column(db.Boolean, default=False)  # True = admin bloqueó fechas
+    es_opcional = db.Column(db.Boolean, default=False)  # True = sucesoras no esperan
+
     # Relaciones
     obra = db.relationship('Obra', back_populates='etapas')
     tareas = db.relationship('TareaEtapa', back_populates='etapa', cascade='all, delete-orphan', lazy='dynamic')
+    predecesoras = db.relationship(
+        'EtapaDependencia', foreign_keys='EtapaDependencia.etapa_id',
+        backref='sucesor', cascade='all, delete-orphan', lazy='select'
+    )
+    sucesoras = db.relationship(
+        'EtapaDependencia', foreign_keys='EtapaDependencia.depende_de_id',
+        backref='predecesor', cascade='all, delete-orphan', lazy='select'
+    )
 
     def __repr__(self):
         return f'<EtapaObra {self.nombre}>'
@@ -197,6 +210,21 @@ class EtapaObra(db.Model):
         """Registra avance en metros/unidades y recalcula porcentaje"""
         self.cantidad_total_ejecutada = (self.cantidad_total_ejecutada or 0) + cantidad_ejecutada
         return self.calcular_avance_por_medicion()
+
+
+class EtapaDependencia(db.Model):
+    """Dependencia explícita entre dos etapas (predecesora → sucesora)."""
+    __tablename__ = 'etapa_dependencias'
+
+    id = db.Column(db.Integer, primary_key=True)
+    etapa_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id', ondelete='CASCADE'), nullable=False, index=True)
+    depende_de_id = db.Column(db.Integer, db.ForeignKey('etapas_obra.id', ondelete='CASCADE'), nullable=False, index=True)
+    tipo = db.Column(db.String(10), default='FS')  # FS = Finish-to-Start
+    lag_dias = db.Column(db.Integer, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint('etapa_id', 'depende_de_id', name='uq_etapa_dep'),
+    )
 
 
 class TareaEtapa(db.Model):

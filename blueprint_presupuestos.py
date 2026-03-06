@@ -1771,6 +1771,16 @@ def confirmar_como_obra(id):
 
         db.session.commit()
 
+        # Asignar niveles de encadenamiento por defecto a las etapas
+        try:
+            from services.dependency_service import asignar_niveles_por_defecto
+            asignadas = asignar_niveles_por_defecto(obra.id)
+            if asignadas:
+                db.session.commit()
+                current_app.logger.info(f"Asignados niveles de encadenamiento a {asignadas} etapas de obra {obra.id}")
+        except Exception as e_dep:
+            current_app.logger.warning(f"No se pudieron asignar niveles de dependencias: {e_dep}")
+
         current_app.logger.info(f"Presupuesto {presupuesto.numero} confirmado como obra {obra.id}")
 
         return jsonify({
