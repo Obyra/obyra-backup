@@ -391,67 +391,107 @@ def crear():
                     datos_proyecto_dict['ia_payload'] = ia_payload
                     presupuesto.datos_proyecto = json.dumps(datos_proyecto_dict)
 
-                    # Crear items SIN etapa_id pero CON etapa_nombre (las etapas se crearán al confirmar como obra)
+                    # Crear items SIN etapa_id pero CON etapa_nombre
+                    # Unificar items duplicados (misma descripcion+etapa+tipo) antes de guardar
                     items_vinculados = 0
+                    items_agrupados = {}  # key: (etapa, tipo, descripcion) -> item_data
+
                     for etapa in etapas_ia:
                         nombre_etapa = etapa.get('nombre', 'Sin Etapa')
                         items_etapa = etapa.get('items', [])
                         for item in items_etapa:
-                            # Obtener precios - precio_unit está en la moneda del presupuesto (USD si es USD)
+                            tipo_item = item.get('tipo', 'material')
+                            desc = (item.get('descripcion', '') or '').strip()
+                            key = (nombre_etapa, tipo_item, desc)
+
                             precio_unit = Decimal(str(item.get('precio_unit', 0)))
                             subtotal = Decimal(str(item.get('subtotal', 0)))
                             precio_unit_ars = Decimal(str(item.get('precio_unit_ars', item.get('precio_unit', 0))))
                             total_ars = Decimal(str(item.get('subtotal_ars', item.get('subtotal', 0))))
+                            cantidad = Decimal(str(item.get('cantidad', 0)))
 
-                            # price_unit_currency y total_currency son los valores en USD
-                            # Si la moneda es USD, precio_unit ya está en USD
-                            # Si la moneda es ARS, necesitamos calcular el equivalente USD
-                            if moneda_ia == 'USD':
-                                price_unit_usd = precio_unit
-                                total_usd = subtotal
-                            elif tasa_usd and tasa_usd > Decimal('0'):
-                                # Convertir de ARS a USD usando la tasa (ambos son Decimal)
-                                price_unit_usd = precio_unit / tasa_usd
-                                total_usd = subtotal / tasa_usd
+                            if key in items_agrupados:
+                                # Sumar al item existente
+                                existing = items_agrupados[key]
+                                existing['cantidad'] += cantidad
+                                existing['subtotal'] += subtotal
+                                existing['total_ars'] += total_ars
                             else:
-                                price_unit_usd = None
-                                total_usd = None
+                                items_agrupados[key] = {
+                                    'nombre_etapa': nombre_etapa,
+                                    'tipo': tipo_item,
+                                    'descripcion': desc,
+                                    'unidad': item.get('unidad', 'unidades'),
+                                    'cantidad': cantidad,
+                                    'precio_unit': precio_unit,
+                                    'subtotal': subtotal,
+                                    'precio_unit_ars': precio_unit_ars,
+                                    'total_ars': total_ars,
+                                    'nivel_nombre': item.get('nivel_nombre'),
+                                }
 
-                            # Buscar vinculación automática con inventario (solo para materiales)
-                            item_inventario_id = None
-                            tipo_item = item.get('tipo', 'material')
-                            if tipo_item == 'material':
-                                item_inv = buscar_item_inventario_por_nombre(
-                                    item.get('descripcion', ''),
-                                    org_id
-                                )
-                                if item_inv:
-                                    item_inventario_id = item_inv.id
-                                    items_vinculados += 1
+                    # Guardar items unificados
+                    for key, item in items_agrupados.items():
+                        cant = item['cantidad']
+                        subtotal = item['subtotal']
+                        total_ars = item['total_ars']
 
-                            item_presupuesto = ItemPresupuesto(
-                                presupuesto_id=presupuesto.id,
-                                tipo=tipo_item,
-                                descripcion=item.get('descripcion', ''),
-                                unidad=item.get('unidad', 'unidades'),
-                                cantidad=Decimal(str(item.get('cantidad', 0))),
-                                precio_unitario=precio_unit,
-                                total=subtotal,
-                                origen='ia',
-                                currency=moneda_ia,
-                                price_unit_currency=price_unit_usd,
-                                total_currency=total_usd,
-                                price_unit_ars=precio_unit_ars,
-                                total_ars=total_ars,
-                                etapa_id=None,
-                                etapa_nombre=nombre_etapa,
-                                nivel_nombre=item.get('nivel_nombre'),
-                                item_inventario_id=item_inventario_id
+                        # Recalcular precio unitario si se unificaron items
+                        if cant > 0:
+                            precio_unit = subtotal / cant
+                            precio_unit_ars = total_ars / cant
+                        else:
+                            precio_unit = item['precio_unit']
+                            precio_unit_ars = item['precio_unit_ars']
+
+                        if moneda_ia == 'USD':
+                            price_unit_usd = precio_unit
+                            total_usd = subtotal
+                        elif tasa_usd and tasa_usd > Decimal('0'):
+                            price_unit_usd = precio_unit / tasa_usd
+                            total_usd = subtotal / tasa_usd
+                        else:
+                            price_unit_usd = None
+                            total_usd = None
+
+                        # Buscar vinculacion con inventario
+                        item_inventario_id = None
+                        if item['tipo'] == 'material':
+                            item_inv = buscar_item_inventario_por_nombre(
+                                item['descripcion'], org_id
                             )
-                            db.session.add(item_presupuesto)
+                            if item_inv:
+                                item_inventario_id = item_inv.id
+                                items_vinculados += 1
 
-                    total_items = sum(len(e.get('items', [])) for e in etapas_ia)
-                    current_app.logger.info(f"✅ Guardados {total_items} items de IA en {moneda_ia} para presupuesto {numero} ({items_vinculados} vinculados a inventario)")
+                        item_presupuesto = ItemPresupuesto(
+                            presupuesto_id=presupuesto.id,
+                            tipo=item['tipo'],
+                            descripcion=item['descripcion'],
+                            unidad=item['unidad'],
+                            cantidad=cant,
+                            precio_unitario=precio_unit,
+                            total=subtotal,
+                            origen='ia',
+                            currency=moneda_ia,
+                            price_unit_currency=price_unit_usd,
+                            total_currency=total_usd,
+                            price_unit_ars=precio_unit_ars,
+                            total_ars=total_ars,
+                            etapa_id=None,
+                            etapa_nombre=item['nombre_etapa'],
+                            nivel_nombre=item['nivel_nombre'],
+                            item_inventario_id=item_inventario_id
+                        )
+                        db.session.add(item_presupuesto)
+
+                    total_items_original = sum(len(e.get('items', [])) for e in etapas_ia)
+                    total_items_guardados = len(items_agrupados)
+                    current_app.logger.info(
+                        f"Guardados {total_items_guardados} items de IA (de {total_items_original} originales, "
+                        f"unificados) en {moneda_ia} para presupuesto {numero} "
+                        f"({items_vinculados} vinculados a inventario)"
+                    )
 
                     # CRÍTICO: Calcular totales después de agregar items
                     db.session.flush()  # Asegurar que los items estén en la sesión
@@ -772,7 +812,8 @@ def detalle(id):
         ia_herramientas = [i for i in items if i.tipo == 'herramienta' and i.origen == 'ia']
 
         # Agrupar items IA por etapa para vista organizada
-        from collections import defaultdict
+        from collections import defaultdict, OrderedDict
+        from types import SimpleNamespace
         ia_por_etapa = defaultdict(lambda: {'materiales': [], 'mano_obra': [], 'equipos': [], 'herramientas': []})
 
         # Definir orden de etapas de construccion
@@ -800,6 +841,55 @@ def detalle(id):
             nombre = item.etapa_nombre or (item.etapa.nombre if item.etapa else 'Sin Etapa')
             ia_por_etapa[nombre]['herramientas'].append(item)
 
+        # Unificar items duplicados (misma descripcion) dentro de cada etapa
+        def _consolidar_items(items_lista):
+            """Unifica items con misma descripcion sumando cantidades y totales."""
+            if not items_lista:
+                return items_lista
+            grupos = OrderedDict()
+            for item in items_lista:
+                key = (item.descripcion or '').strip()
+                if not key:
+                    key = f'_item_{item.id}'
+                if key in grupos:
+                    g = grupos[key]
+                    g['cantidad'] += float(item.cantidad or 0)
+                    g['total'] += float(item.total or 0)
+                    g['total_ars'] += float(item.total_ars or item.total or 0)
+                    g['total_currency'] += float(item.total_currency or 0)
+                else:
+                    grupos[key] = {
+                        'id': item.id,
+                        'descripcion': item.descripcion,
+                        'unidad': item.unidad,
+                        'cantidad': float(item.cantidad or 0),
+                        'precio_unitario': float(item.precio_unitario or 0),
+                        'total': float(item.total or 0),
+                        'price_unit_ars': float(item.price_unit_ars or item.precio_unitario or 0),
+                        'total_ars': float(item.total_ars or item.total or 0),
+                        'price_unit_currency': float(item.price_unit_currency or 0),
+                        'total_currency': float(item.total_currency or 0),
+                        'currency': getattr(item, 'currency', 'ARS'),
+                        'origen': item.origen,
+                        'tipo': item.tipo,
+                    }
+            result = []
+            for data in grupos.values():
+                cant = data['cantidad']
+                if cant > 0:
+                    data['precio_unitario'] = data['total'] / cant
+                    data['price_unit_ars'] = data['total_ars'] / cant
+                    if data['total_currency'] > 0:
+                        data['price_unit_currency'] = data['total_currency'] / cant
+                result.append(SimpleNamespace(**data))
+            return result
+
+        for etapa_nombre in ia_por_etapa:
+            for tipo in ['materiales', 'mano_obra', 'equipos', 'herramientas']:
+                ia_por_etapa[etapa_nombre][tipo] = _consolidar_items(
+                    ia_por_etapa[etapa_nombre][tipo]
+                )
+
         # Ordenar etapas segun el orden definido
         ia_por_etapa_ordenado = {}
         for etapa in etapas_orden:
@@ -810,16 +900,15 @@ def detalle(id):
             if etapa not in ia_por_etapa_ordenado:
                 ia_por_etapa_ordenado[etapa] = items_etapa
 
-        # Calcular subtotales por etapa
+        # Calcular subtotales por etapa (items ya consolidados, valores son float)
         subtotales_por_etapa = {}
         for etapa_nombre, items_etapa in ia_por_etapa_ordenado.items():
-            subtotal_etapa = Decimal('0')
-            subtotal_etapa_usd = Decimal('0')
+            subtotal_etapa = 0.0
+            subtotal_etapa_usd = 0.0
             for tipo in ['materiales', 'mano_obra', 'equipos', 'herramientas']:
                 for item in items_etapa[tipo]:
-                    subtotal_etapa += item.total or Decimal('0')
-                    if item.total_currency:
-                        subtotal_etapa_usd += item.total_currency
+                    subtotal_etapa += float(item.total or 0)
+                    subtotal_etapa_usd += float(item.total_currency or 0)
             subtotales_por_etapa[etapa_nombre] = {
                 'total': subtotal_etapa,
                 'total_usd': subtotal_etapa_usd
