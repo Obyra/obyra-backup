@@ -93,9 +93,13 @@
 
             <!-- Items del requerimiento -->
             <div class="card">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-list me-2"></i>Items Solicitados ({{ requerimiento.total_items }})</h5>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleItemsBtn" onclick="toggleItems()">
+                        <i class="fas fa-eye me-1" id="toggleItemsIcon"></i>Ver Items
+                    </button>
                 </div>
+                <div id="collapseItems" style="display:none">
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
@@ -176,6 +180,7 @@
                         </table>
                     </div>
                 </div>
+                </div><!-- /collapse -->
             </div>
 
             {% if requerimiento.estado in ['en_proceso', 'aprobado'] and current_user.rol in ['administrador', 'admin'] %}
@@ -344,6 +349,14 @@
 
                     {% elif requerimiento.estado == 'aprobado' %}
                         {% if current_user.rol in ['administrador', 'admin'] or current_user.role in ['admin', 'pm'] %}
+                        {% if has_endpoint('cotizaciones.gestionar') %}
+                        <a href="{{ url_for('cotizaciones.gestionar', rc_id=requerimiento.id) }}" class="btn btn-info w-100 mb-2">
+                            <i class="fas fa-balance-scale me-1"></i>Solicitar Cotizaciones
+                            {% if requerimiento.cotizaciones %}
+                            <span class="badge bg-light text-dark ms-1">{{ requerimiento.cotizaciones|length }}</span>
+                            {% endif %}
+                        </a>
+                        {% endif %}
                         <a href="{{ url_for('ordenes_compra.crear', requerimiento_id=requerimiento.id) }}" class="btn btn-primary w-100 mb-2">
                             <i class="fas fa-file-invoice-dollar me-1"></i>Generar Orden de Compra
                         </a>
@@ -364,6 +377,14 @@
                     {% elif requerimiento.estado == 'en_proceso' %}
                         {% if current_user.rol in ['administrador', 'admin'] or current_user.role in ['admin', 'pm'] %}
                         {% if not requerimiento.ordenes_compra %}
+                        {% if has_endpoint('cotizaciones.gestionar') %}
+                        <a href="{{ url_for('cotizaciones.gestionar', rc_id=requerimiento.id) }}" class="btn btn-info w-100 mb-2">
+                            <i class="fas fa-balance-scale me-1"></i>Solicitar Cotizaciones
+                            {% if requerimiento.cotizaciones %}
+                            <span class="badge bg-light text-dark ms-1">{{ requerimiento.cotizaciones|length }}</span>
+                            {% endif %}
+                        </a>
+                        {% endif %}
                         <a href="{{ url_for('ordenes_compra.crear', requerimiento_id=requerimiento.id) }}" class="btn btn-primary w-100 mb-2">
                             <i class="fas fa-file-invoice-dollar me-1"></i>Generar Orden de Compra
                         </a>
@@ -475,4 +496,22 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleItems() {
+    var content = document.getElementById('collapseItems');
+    var icon = document.getElementById('toggleItemsIcon');
+    var btn = document.getElementById('toggleItemsBtn');
+    if (!content || !btn) return;
+    if (content.style.display === 'none') {
+        content.style.display = '';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+        btn.innerHTML = '<i class="fas fa-eye-slash me-1" id="toggleItemsIcon"></i>Ocultar Items';
+    } else {
+        content.style.display = 'none';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+        btn.innerHTML = '<i class="fas fa-eye me-1" id="toggleItemsIcon"></i>Ver Items';
+    }
+}
+</script>
 {% endblock %}

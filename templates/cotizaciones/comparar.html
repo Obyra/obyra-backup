@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Comparar Cotizaciones - {{ rc.numero }} - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-columns me-2"></i>Cuadro Comparativo</h2>
+            <p class="text-muted mb-0">
+                RC <strong>{{ rc.numero }}</strong> - {{ rc.obra.nombre if rc.obra else '' }}
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('cotizaciones.gestionar', rc_id=rc.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver a Cotizaciones
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:25%; min-width:200px">Item</th>
+                            <th class="text-center" style="width:8%">Cant.</th>
+                            <th class="text-center" style="width:7%">Unidad</th>
+                            {% for cot in cotizaciones %}
+                            <th class="text-center" style="min-width:180px">
+                                <div>{{ cot.proveedor.razon_social }}</div>
+                                {% if cot.estado == 'elegida' %}
+                                <span class="badge bg-success">Elegida</span>
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fila in comparacion %}
+                        <tr>
+                            <td>
+                                <strong>{{ fila.item.descripcion }}</strong>
+                                {% if fila.item.codigo %}
+                                <br><small class="text-muted">{{ fila.item.codigo }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">{{ '{:g}'.format(fila.item.cantidad|float) }}</td>
+                            <td class="text-center">{{ fila.item.unidad }}</td>
+                            {% for cot in cotizaciones %}
+                            {% set precio_data = fila.precios.get(cot.id, {}) %}
+                            {% set es_mejor = fila.mejor_precio == cot.id %}
+                            <td class="text-center {% if es_mejor %}table-success{% endif %}">
+                                {% if precio_data.precio_unitario > 0 %}
+                                <div>
+                                    <strong>{{ cot.moneda }} {{ '{:,.2f}'.format(precio_data.precio_unitario) }}</strong>
+                                    {% if es_mejor %}
+                                    <i class="fas fa-check-circle text-success ms-1"></i>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">Sub: {{ cot.moneda }} {{ '{:,.2f}'.format(precio_data.subtotal) }}</small>
+                                {% if precio_data.notas %}
+                                <br><small class="text-muted fst-italic">{{ precio_data.notas }}</small>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light fw-bold">
+                            <td colspan="3" class="text-end">TOTAL</td>
+                            {% for cot in cotizaciones %}
+                            {% set es_mejor_total = mejor_total == cot.id %}
+                            <td class="text-center {% if es_mejor_total %}table-success{% endif %}">
+                                <span class="fs-5">{{ cot.moneda }} {{ '{:,.2f}'.format(totales.get(cot.id, 0)) }}</span>
+                                {% if es_mejor_total %}
+                                <br><span class="badge bg-success">Mejor precio</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        <!-- Condiciones -->
+                        <tr>
+                            <td colspan="3" class="text-end text-muted">Cond. Pago</td>
+                            {% for cot in cotizaciones %}
+                            <td class="text-center"><small>{{ cot.condicion_pago or '-' }}</small></td>
+                            {% endfor %}
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-end text-muted">Plazo Entrega</td>
+                            {% for cot in cotizaciones %}
+                            <td class="text-center"><small>{{ cot.plazo_entrega or '-' }}</small></td>
+                            {% endfor %}
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-end text-muted">Validez</td>
+                            {% for cot in cotizaciones %}
+                            <td class="text-center"><small>{{ cot.validez or '-' }}</small></td>
+                            {% endfor %}
+                        </tr>
+                        <!-- Botones elegir -->
+                        <tr>
+                            <td colspan="3"></td>
+                            {% for cot in cotizaciones %}
+                            <td class="text-center">
+                                {% if cot.estado == 'elegida' %}
+                                <span class="badge bg-success fs-6 py-2 px-3">
+                                    <i class="fas fa-trophy me-1"></i>Elegida
+                                </span>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-success btn-sm"
+                                        onclick="elegirCotizacion({{ cot.id }}, '{{ cot.proveedor.razon_social }}')">
+                                    <i class="fas fa-check me-1"></i>Elegir
+                                </button>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% set hay_elegida = cotizaciones|selectattr('estado', 'equalto', 'elegida')|list %}
+    {% if hay_elegida %}
+    <div class="text-center mt-4">
+        <a href="{{ url_for('cotizaciones.generar_oc', rc_id=rc.id) }}" class="btn btn-success btn-lg">
+            <i class="fas fa-file-invoice-dollar me-2"></i>Generar Orden de Compra
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function elegirCotizacion(id, nombre) {
+    if (!confirm('¿Elegir la cotización de "' + nombre + '"?\n\nLas demás cotizaciones serán marcadas como descartadas.')) return;
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    fetch('/cotizaciones/' + id + '/elegir', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Error: ' + data.error); }
+        else { window.location.reload(); }
+    })
+    .catch(function() { alert('Error al elegir cotización'); });
+}
+</script>
+{% endblock %}

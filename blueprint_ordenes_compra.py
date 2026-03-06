@@ -199,21 +199,43 @@ def crear():
     requerimiento = None
     requerimiento_id = request.args.get('requerimiento_id', type=int)
     items_precarga = []
+    cotizacion_precarga = None
+
     if requerimiento_id:
         requerimiento = RequerimientoCompra.query.get(requerimiento_id)
         if requerimiento and requerimiento.organizacion_id == org_id:
-            for item in requerimiento.items:
-                items_precarga.append({
-                    'descripcion': item.descripcion,
-                    'cantidad': float(item.cantidad or 0),
-                    'unidad': item.unidad or 'unidad',
-                    'precio_unitario': float(item.costo_estimado or 0),
-                    'item_inventario_id': item.item_inventario_id,
-                })
+            # Verificar si hay cotización elegida para usar sus precios
+            cotizacion_id = request.args.get('cotizacion_id', type=int)
+            if cotizacion_id:
+                from models.proveedores_oc import CotizacionProveedor
+                cot = CotizacionProveedor.query.get(cotizacion_id)
+                if cot and cot.organizacion_id == org_id and cot.estado == 'elegida':
+                    cotizacion_precarga = cot
+                    # Precargar items con precios de la cotización
+                    for cot_item in cot.items:
+                        items_precarga.append({
+                            'descripcion': cot_item.descripcion,
+                            'cantidad': float(cot_item.cantidad or 0),
+                            'unidad': cot_item.unidad or 'unidad',
+                            'precio_unitario': float(cot_item.precio_unitario or 0),
+                            'item_inventario_id': cot_item.item_inventario_id,
+                        })
+
+            # Si no hay cotización, usar items del RC con costo estimado
+            if not items_precarga:
+                for item in requerimiento.items:
+                    items_precarga.append({
+                        'descripcion': item.descripcion,
+                        'cantidad': float(item.cantidad or 0),
+                        'unidad': item.unidad or 'unidad',
+                        'precio_unitario': float(item.costo_estimado or 0),
+                        'item_inventario_id': item.item_inventario_id,
+                    })
 
     return render_template('ordenes_compra/crear.html',
                          obras=obras, requerimiento=requerimiento,
-                         items_precarga=items_precarga)
+                         items_precarga=items_precarga,
+                         cotizacion_precarga=cotizacion_precarga)
 
 
 # ============================================================

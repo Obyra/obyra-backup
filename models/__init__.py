@@ -69,7 +69,10 @@ from models.budgets import (
 from models.clients import Cliente
 
 # Proveedores OC models
-from models.proveedores_oc import ProveedorOC, HistorialPrecioProveedor
+from models.proveedores_oc import (
+    ProveedorOC, HistorialPrecioProveedor,
+    CotizacionProveedor, CotizacionProveedorItem,
+)
 
 # Inventory models
 from models.inventory import (
@@ -253,6 +256,8 @@ __all__ = [
     # Proveedores OC
     'ProveedorOC',
     'HistorialPrecioProveedor',
+    'CotizacionProveedor',
+    'CotizacionProveedorItem',
     # Inventory
     'CategoriaInventario',
     'ItemInventario',

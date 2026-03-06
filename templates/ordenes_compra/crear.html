@@ -451,6 +451,29 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         agregarItem();
     }
+
+    // Pre-llenar proveedor desde cotización elegida
+    {% if cotizacion_precarga %}
+    (function() {
+        var prov = {{ cotizacion_precarga.proveedor.to_dict()|tojson }};
+        document.getElementById('proveedorOcId').value = prov.id;
+        document.getElementById('proveedorInput').value = prov.razon_social;
+        document.getElementById('proveedorCuit').value = prov.cuit || '';
+        var contacto = prov.contacto_nombre || '';
+        var tel = prov.telefono || '';
+        document.getElementById('proveedorContacto').value = contacto ? contacto + (tel ? ' - ' + tel : '') : tel;
+        // Condicion de pago
+        var condPago = '{{ cotizacion_precarga.condicion_pago or "" }}';
+        if (condPago) {
+            var condField = document.querySelector('input[name="condicion_pago"]');
+            if (condField) condField.value = condPago;
+        }
+        // Moneda
+        var moneda = '{{ cotizacion_precarga.moneda or "ARS" }}';
+        var monedaSelect = document.querySelector('select[name="moneda"]');
+        if (monedaSelect) monedaSelect.value = moneda;
+    })();
+    {% endif %}
 });
 </script>
 {% endblock %}

@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}Cotizaciones - {{ rc.numero }} - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-balance-scale me-2"></i>Cotizaciones</h2>
+            <p class="text-muted mb-0">
+                RC <strong>{{ rc.numero }}</strong> - {{ rc.obra.nombre if rc.obra else '' }}
+                <span class="badge bg-{{ rc.estado_color }} ms-2">{{ rc.estado_display }}</span>
+            </p>
+        </div>
+        <div>
+            {% if recibidas >= 2 %}
+            <a href="{{ url_for('cotizaciones.comparar', rc_id=rc.id) }}" class="btn btn-info">
+                <i class="fas fa-columns me-1"></i>Comparar
+            </a>
+            {% endif %}
+            {% if elegida %}
+            <a href="{{ url_for('cotizaciones.generar_oc', rc_id=rc.id) }}" class="btn btn-success">
+                <i class="fas fa-file-invoice-dollar me-1"></i>Generar OC
+            </a>
+            {% endif %}
+            <a href="{{ url_for('requerimientos.detalle', id=rc.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver al RC
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Columna principal: cotizaciones -->
+        <div class="col-lg-8">
+            {% if cotizaciones %}
+                {% for cot in cotizaciones %}
+                <div class="card mb-4 {% if cot.estado == 'elegida' %}border-success{% elif cot.estado == 'descartada' %}border-danger opacity-75{% endif %}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0">
+                                <i class="fas fa-truck me-1"></i>
+                                {{ cot.proveedor.razon_social }}
+                                {% if cot.proveedor.nombre_fantasia %}
+                                <small class="text-muted">({{ cot.proveedor.nombre_fantasia }})</small>
+                                {% endif %}
+                            </h5>
+                        </div>
+                        <div>
+                            <span class="badge bg-{{ cot.estado_color }} me-2">{{ cot.estado_display }}</span>
+                            {% if cot.estado == 'borrador' %}
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    onclick="eliminarCotizacion({{ cot.id }}, '{{ cot.proveedor.razon_social }}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('cotizaciones.cargar_precios', id=cot.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                            <!-- Tabla de items -->
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:35%">Descripcion</th>
+                                            <th style="width:10%">Cant.</th>
+                                            <th style="width:10%">Unidad</th>
+                                            <th style="width:18%">Precio Unit.</th>
+                                            <th style="width:15%">Subtotal</th>
+                                            <th style="width:12%">Notas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in cot.items %}
+                                        <tr>
+                                            <td>{{ item.descripcion }}</td>
+                                            <td class="text-center">{{ '{:g}'.format(item.cantidad|float) }}</td>
+                                            <td>{{ item.unidad }}</td>
+                                            <td>
+                                                {% if cot.estado in ('borrador', 'recibida') %}
+                                                <input type="number" step="0.01" min="0"
+                                                       class="form-control form-control-sm precio-input"
+                                                       name="precio_{{ item.id }}"
+                                                       value="{{ '{:.2f}'.format(item.precio_unitario|float) }}"
+                                                       data-cantidad="{{ item.cantidad|float }}">
+                                                {% else %}
+                                                <strong>{{ cot.moneda }} {{ '{:,.2f}'.format(item.precio_unitario|float) }}</strong>
+                                                {% endif %}
+                                            </td>
+                                            <td class="subtotal-cell">
+                                                {{ cot.moneda }} {{ '{:,.2f}'.format(item.subtotal|float) }}
+                                            </td>
+                                            <td>
+                                                {% if cot.estado in ('borrador', 'recibida') %}
+                                                <input type="text" class="form-control form-control-sm"
+                                                       name="nota_{{ item.id }}"
+                                                       value="{{ item.notas or '' }}"
+                                                       placeholder="...">
+                                                {% else %}
+                                                {{ item.notas or '-' }}
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-light">
+                                            <td colspan="4" class="text-end"><strong>Total:</strong></td>
+                                            <td class="total-cell"><strong>{{ cot.moneda }} {{ '{:,.2f}'.format(cot.total|float) }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            {% if cot.estado in ('borrador', 'recibida') %}
+                            <!-- Condiciones comerciales -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label form-label-sm">Moneda</label>
+                                    <select class="form-select form-select-sm" name="moneda">
+                                        <option value="ARS" {% if cot.moneda == 'ARS' %}selected{% endif %}>ARS</option>
+                                        <option value="USD" {% if cot.moneda == 'USD' %}selected{% endif %}>USD</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label form-label-sm">Cond. Pago</label>
+                                    <input type="text" class="form-control form-control-sm" name="condicion_pago"
+                                           value="{{ cot.condicion_pago or '' }}" placeholder="Ej: Contado">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label form-label-sm">Plazo Entrega</label>
+                                    <input type="text" class="form-control form-control-sm" name="plazo_entrega"
+                                           value="{{ cot.plazo_entrega or '' }}" placeholder="Ej: 5 dias">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label form-label-sm">Validez</label>
+                                    <input type="text" class="form-control form-control-sm" name="validez"
+                                           value="{{ cot.validez or '' }}" placeholder="Ej: 15 dias">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label form-label-sm">Notas</label>
+                                <textarea class="form-control form-control-sm" name="notas" rows="2"
+                                          placeholder="Observaciones...">{{ cot.notas or '' }}</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="fas fa-save me-1"></i>Guardar Precios
+                            </button>
+                            {% else %}
+                            <!-- Mostrar condiciones (solo lectura) -->
+                            {% if cot.condicion_pago or cot.plazo_entrega or cot.validez %}
+                            <div class="row g-2 text-muted small">
+                                {% if cot.condicion_pago %}
+                                <div class="col-auto"><strong>Pago:</strong> {{ cot.condicion_pago }}</div>
+                                {% endif %}
+                                {% if cot.plazo_entrega %}
+                                <div class="col-auto"><strong>Entrega:</strong> {{ cot.plazo_entrega }}</div>
+                                {% endif %}
+                                {% if cot.validez %}
+                                <div class="col-auto"><strong>Validez:</strong> {{ cot.validez }}</div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% if cot.notas %}
+                            <p class="text-muted small mt-2 mb-0"><strong>Notas:</strong> {{ cot.notas }}</p>
+                            {% endif %}
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-balance-scale fa-3x text-muted mb-3"></i>
+                    <p class="text-muted mb-0">No hay cotizaciones cargadas</p>
+                    <p class="text-muted small">Agregue proveedores desde el panel derecho para solicitar cotizaciones</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <!-- Agregar proveedor -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Agregar Proveedor</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('cotizaciones.agregar_proveedor', rc_id=rc.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="proveedor_oc_id" id="proveedorOcId">
+                        <div class="mb-3 position-relative">
+                            <label class="form-label">Buscar proveedor</label>
+                            <input type="text" class="form-control" id="proveedorInput"
+                                   placeholder="Escribir nombre o CUIT..." autocomplete="off">
+                            <div id="proveedorDropdown" class="dropdown-menu w-100" style="display:none; max-height:200px; overflow-y:auto; position:absolute; z-index:1000;"></div>
+                        </div>
+                        <div id="proveedorSeleccionado" style="display:none" class="mb-3">
+                            <div class="alert alert-info py-2 mb-0 d-flex justify-content-between align-items-center">
+                                <span id="proveedorNombre"></span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="limpiarProveedor()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" id="btnAgregar" disabled>
+                            <i class="fas fa-plus me-1"></i>Agregar
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Resumen -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Resumen</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted">Total cotizaciones</td>
+                            <td><strong>{{ cotizaciones|length }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Recibidas</td>
+                            <td><strong>{{ recibidas }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Elegida</td>
+                            <td>
+                                {% if elegida %}
+                                <span class="badge bg-success">{{ elegida.proveedor.razon_social }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Items del RC -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Items del RC</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless mb-0">
+                        {% for item in rc.items %}
+                        <tr>
+                            <td>
+                                <small>{{ item.descripcion }}</small>
+                                <br><small class="text-muted">{{ '{:g}'.format(item.cantidad|float) }} {{ item.unidad }}</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Autocomplete proveedor
+(function() {
+    var input = document.getElementById('proveedorInput');
+    var dropdown = document.getElementById('proveedorDropdown');
+    var hiddenId = document.getElementById('proveedorOcId');
+    var selDiv = document.getElementById('proveedorSeleccionado');
+    var nombreSpan = document.getElementById('proveedorNombre');
+    var btnAgregar = document.getElementById('btnAgregar');
+    var timer = null;
+
+    input.addEventListener('input', function() {
+        clearTimeout(timer);
+        var q = this.value.trim();
+        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+
+        timer = setTimeout(function() {
+            fetch('/proveedores-oc/api/buscar?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.length) {
+                    dropdown.innerHTML = '<div class="dropdown-item text-muted">Sin resultados</div>';
+                } else {
+                    dropdown.innerHTML = data.map(function(p) {
+                        return '<a class="dropdown-item" href="#" data-id="' + p.id + '" data-nombre="' + (p.razon_social || '') + '">' +
+                            '<strong>' + (p.razon_social || '') + '</strong>' +
+                            (p.cuit ? ' <small class="text-muted">CUIT: ' + p.cuit + '</small>' : '') +
+                            '</a>';
+                    }).join('');
+                }
+                dropdown.style.display = 'block';
+            });
+        }, 300);
+    });
+
+    dropdown.addEventListener('click', function(e) {
+        e.preventDefault();
+        var item = e.target.closest('[data-id]');
+        if (!item) return;
+
+        hiddenId.value = item.dataset.id;
+        nombreSpan.textContent = item.dataset.nombre;
+        input.style.display = 'none';
+        selDiv.style.display = 'block';
+        dropdown.style.display = 'none';
+        btnAgregar.disabled = false;
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!dropdown.contains(e.target) && e.target !== input) {
+            dropdown.style.display = 'none';
+        }
+    });
+})();
+
+function limpiarProveedor() {
+    document.getElementById('proveedorOcId').value = '';
+    document.getElementById('proveedorInput').style.display = 'block';
+    document.getElementById('proveedorInput').value = '';
+    document.getElementById('proveedorSeleccionado').style.display = 'none';
+    document.getElementById('btnAgregar').disabled = true;
+}
+
+// Calcular subtotales dinámicamente
+document.querySelectorAll('.precio-input').forEach(function(input) {
+    input.addEventListener('input', function() {
+        var precio = parseFloat(this.value) || 0;
+        var cantidad = parseFloat(this.dataset.cantidad) || 0;
+        var subtotal = precio * cantidad;
+        var cell = this.closest('tr').querySelector('.subtotal-cell');
+        if (cell) cell.textContent = 'ARS ' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        // Recalcular total de la card
+        var form = this.closest('form');
+        var total = 0;
+        form.querySelectorAll('.precio-input').forEach(function(inp) {
+            var p = parseFloat(inp.value) || 0;
+            var c = parseFloat(inp.dataset.cantidad) || 0;
+            total += p * c;
+        });
+        var totalCell = form.querySelector('.total-cell strong');
+        if (totalCell) totalCell.textContent = 'ARS ' + total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    });
+});
+
+// Eliminar cotización
+function eliminarCotizacion(id, nombre) {
+    if (!confirm('¿Eliminar cotización de "' + nombre + '"?')) return;
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    fetch('/cotizaciones/' + id + '/eliminar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Error: ' + data.error); }
+        else { window.location.reload(); }
+    })
+    .catch(function() { alert('Error al eliminar'); });
+}
+</script>
+{% endblock %}

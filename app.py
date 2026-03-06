@@ -1166,6 +1166,59 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Proveedores OC migration skipped: {e}")
 
+    # Cotizaciones de proveedor tables
+    try:
+        cot_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cotizaciones_proveedor') THEN
+                CREATE TABLE cotizaciones_proveedor (
+                    id SERIAL PRIMARY KEY,
+                    requerimiento_id INTEGER NOT NULL REFERENCES requerimientos_compra(id),
+                    proveedor_oc_id INTEGER NOT NULL REFERENCES proveedores_oc(id),
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    estado VARCHAR(20) DEFAULT 'borrador',
+                    moneda VARCHAR(3) DEFAULT 'ARS',
+                    condicion_pago VARCHAR(100),
+                    plazo_entrega VARCHAR(100),
+                    validez VARCHAR(100),
+                    notas TEXT,
+                    subtotal NUMERIC(15,2) DEFAULT 0,
+                    total NUMERIC(15,2) DEFAULT 0,
+                    fecha_solicitud TIMESTAMP DEFAULT NOW(),
+                    fecha_recepcion TIMESTAMP,
+                    created_by_id INTEGER REFERENCES usuarios(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_cot_prov_req ON cotizaciones_proveedor(requerimiento_id);
+                CREATE INDEX ix_cot_prov_org ON cotizaciones_proveedor(organizacion_id);
+            END IF;
+
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='cotizacion_proveedor_items') THEN
+                CREATE TABLE cotizacion_proveedor_items (
+                    id SERIAL PRIMARY KEY,
+                    cotizacion_id INTEGER NOT NULL REFERENCES cotizaciones_proveedor(id) ON DELETE CASCADE,
+                    requerimiento_item_id INTEGER REFERENCES requerimiento_compra_items(id),
+                    precio_unitario NUMERIC(15,2) DEFAULT 0,
+                    subtotal NUMERIC(15,2) DEFAULT 0,
+                    descripcion VARCHAR(300) NOT NULL,
+                    cantidad NUMERIC(10,3) NOT NULL,
+                    unidad VARCHAR(30) DEFAULT 'unidad',
+                    item_inventario_id INTEGER REFERENCES items_inventario(id),
+                    notas TEXT
+                );
+                CREATE INDEX ix_cot_item_cot ON cotizacion_proveedor_items(cotizacion_id);
+                CREATE INDEX ix_cot_item_req ON cotizacion_proveedor_items(requerimiento_item_id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(cot_sql))
+        db.session.commit()
+        print("[OK] Cotizaciones proveedor tables migration applied")
+    except Exception as e:
+        print(f"[WARN] Cotizaciones proveedor migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
@@ -1491,6 +1544,14 @@ try:
     print("[OK] Proveedores OC blueprint registered successfully")
 except ImportError as e:
     print(f"[WARN] Proveedores OC blueprint not available: {e}")
+
+# Cotizaciones de Proveedores
+try:
+    from blueprint_cotizaciones import cotizaciones_bp
+    app.register_blueprint(cotizaciones_bp)
+    print("[OK] Cotizaciones blueprint registered successfully")
+except ImportError as e:
+    print(f"[WARN] Cotizaciones blueprint not available: {e}")
 
 # Caja (Transferencias oficina -> obra)
 try:
