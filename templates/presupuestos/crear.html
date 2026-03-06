@@ -1003,6 +1003,40 @@ function generarSlugUnico(nombre) {
     return slug;
 }
 
+function _slimPayloadIA(data) {
+    // Reducir el payload para evitar "Request Entity Too Large" (413)
+    // Solo enviar los campos que el backend necesita para crear items
+    if (!data) return data;
+    return {
+        ok: data.ok,
+        moneda: data.moneda,
+        superficie_usada: data.superficie_usada,
+        tipo_calculo: data.tipo_calculo,
+        total_parcial: data.total_parcial,
+        total_parcial_ars: data.total_parcial_ars,
+        total_parcial_usd: data.total_parcial_usd,
+        tipo_cambio: data.tipo_cambio,
+        cac: data.cac,
+        etapas: (data.etapas || []).map(e => ({
+            nombre: e.nombre,
+            slug: e.slug,
+            etapa_id: e.etapa_id,
+            total_etapa: e.total_etapa,
+            items: (e.items || []).map(i => ({
+                tipo: i.tipo,
+                descripcion: i.descripcion,
+                unidad: i.unidad,
+                cantidad: i.cantidad,
+                precio_unit: i.precio_unit,
+                subtotal: i.subtotal,
+                precio_unit_ars: i.precio_unit_ars,
+                subtotal_ars: i.subtotal_ars,
+                nivel_nombre: i.nivel_nombre
+            }))
+        }))
+    };
+}
+
 function limpiarResultadosEtapasIA(resetBadges = true) {
     resultadoEtapasIA = null;
     const hidden = document.getElementById('iaEtapasPayload');
@@ -1348,11 +1382,10 @@ function solicitarCalculoEtapas(etapas) {
             data.parametros_contexto = payload.parametros_contexto;
             resultadoEtapasIA = data;
 
-            // AUTOMÁTICAMENTE guardar el payload en el campo hidden
+            // AUTOMÁTICAMENTE guardar el payload en el campo hidden (version slim)
             const hidden = document.getElementById('iaEtapasPayload');
             if (hidden) {
-                hidden.value = JSON.stringify(data);
-                console.log('Payload IA guardado automaticamente:', data);
+                hidden.value = JSON.stringify(_slimPayloadIA(data));
             }
 
             renderResultadoEtapasIA(data);
@@ -1518,7 +1551,7 @@ function aplicarResultadosEtapasIA() {
     }
 
     const hidden = document.getElementById('iaEtapasPayload');
-    hidden.value = JSON.stringify(resultadoEtapasIA);
+    hidden.value = JSON.stringify(_slimPayloadIA(resultadoEtapasIA));
 
     (resultadoEtapasIA.etapas || []).forEach(etapa => {
         const registro = obtenerEtapaPorSlug(etapa.slug);
