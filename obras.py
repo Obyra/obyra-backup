@@ -3436,6 +3436,28 @@ def eliminar_obra(obra_id):
         # Formato: (tabla, condicion_sql, [tablas_requeridas_en_subquery])
         # IMPORTANTE: tablas hijas ANTES que sus padres
         _optional_deletes = [
+            # --- Hijos de ordenes_compra (OC) ---
+            ("recepcion_oc_items",
+             "recepcion_id IN (SELECT r.id FROM recepciones_oc r JOIN ordenes_compra oc ON r.orden_compra_id = oc.id WHERE oc.obra_id = :obra_id)",
+             ["recepciones_oc", "ordenes_compra"]),
+            ("recepciones_oc",
+             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
+             ["ordenes_compra"]),
+            ("orden_compra_items",
+             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
+             ["ordenes_compra"]),
+            ("ordenes_compra", "obra_id = :obra_id"),
+            # --- Hijos de requerimientos_compra (RC) ---
+            ("cotizacion_proveedor_items",
+             "cotizacion_id IN (SELECT c.id FROM cotizaciones_proveedor c JOIN requerimientos_compra rc ON c.requerimiento_id = rc.id WHERE rc.obra_id = :obra_id)",
+             ["cotizaciones_proveedor", "requerimientos_compra"]),
+            ("cotizaciones_proveedor",
+             "requerimiento_id IN (SELECT id FROM requerimientos_compra WHERE obra_id = :obra_id)",
+             ["requerimientos_compra"]),
+            ("requerimiento_compra_items",
+             "requerimiento_id IN (SELECT id FROM requerimientos_compra WHERE obra_id = :obra_id)",
+             ["requerimientos_compra"]),
+            ("requerimientos_compra", "obra_id = :obra_id"),
             # --- Hijos de checklists_seguridad ---
             ("items_checklist", "checklist_id IN (SELECT id FROM checklists_seguridad WHERE obra_id = :obra_id)", ["checklists_seguridad"]),
             # --- Hijos de documentos_obra ---
