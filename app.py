@@ -628,10 +628,23 @@ def utility_processor():
     membership = get_current_membership()
     current_org = membership.organizacion if membership else getattr(current_user, 'organizacion', None)
 
+    def formatPrecio(valor):
+        """Formatea precio: sin decimales si es entero, con 2 si tiene centavos."""
+        try:
+            v = float(valor or 0)
+        except (ValueError, TypeError):
+            v = 0.0
+        if v == 0:
+            return '0'
+        if v == int(v):
+            return f'{int(v):,}'.replace(',', '.')
+        return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
     return dict(
         obtener_tareas_para_etapa=obtener_tareas_para_etapa,
         has_endpoint=has_endpoint,
         tiene_rol=tiene_rol_helper,
+        formatPrecio=formatPrecio,
         mostrar_calculadora_ia_header=app.config.get("SHOW_IA_CALCULATOR_BUTTON", False),
         current_membership=membership,
         current_organization=current_org,

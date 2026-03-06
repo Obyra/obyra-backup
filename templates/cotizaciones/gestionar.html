@@ -30,6 +30,18 @@
         </div>
     </div>
 
+    <!-- Tipo de cambio banner -->
+    <div class="alert alert-light border py-2 mb-4 d-flex justify-content-between align-items-center" id="tcBanner">
+        <span>
+            <i class="fas fa-dollar-sign me-1"></i>
+            Tipo de cambio: <strong id="tcValor">cargando...</strong>
+            <small class="text-muted ms-2" id="tcFuente"></small>
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cargarTipoCambio()">
+            <i class="fas fa-sync-alt me-1"></i>Actualizar
+        </button>
+    </div>
+
     <div class="row">
         <!-- Columna principal: cotizaciones -->
         <div class="col-lg-8">
@@ -57,7 +69,7 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        <form method="POST" action="{{ url_for('cotizaciones.cargar_precios', id=cot.id) }}">
+                        <form method="POST" action="{{ url_for('cotizaciones.cargar_precios', id=cot.id) }}" data-moneda="{{ cot.moneda }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                             <!-- Tabla de items -->
@@ -65,12 +77,13 @@
                                 <table class="table table-sm table-hover">
                                     <thead>
                                         <tr>
-                                            <th style="width:35%">Descripcion</th>
-                                            <th style="width:10%">Cant.</th>
-                                            <th style="width:10%">Unidad</th>
-                                            <th style="width:18%">Precio Unit.</th>
-                                            <th style="width:15%">Subtotal</th>
-                                            <th style="width:12%">Notas</th>
+                                            <th style="width:28%">Descripcion</th>
+                                            <th style="width:8%">Cant.</th>
+                                            <th style="width:8%">Unidad</th>
+                                            <th style="width:16%">Precio Unit.</th>
+                                            <th style="width:16%">Subtotal</th>
+                                            <th style="width:14%">Equivalente</th>
+                                            <th style="width:10%">Notas</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -84,14 +97,17 @@
                                                 <input type="number" step="0.01" min="0"
                                                        class="form-control form-control-sm precio-input"
                                                        name="precio_{{ item.id }}"
-                                                       value="{{ '{:.2f}'.format(item.precio_unitario|float) }}"
+                                                       value="{{ '{:g}'.format(item.precio_unitario|float) }}"
                                                        data-cantidad="{{ item.cantidad|float }}">
                                                 {% else %}
-                                                <strong>{{ cot.moneda }} {{ '{:,.2f}'.format(item.precio_unitario|float) }}</strong>
+                                                <strong>{{ cot.moneda }} {{ formatPrecio(item.precio_unitario|float) }}</strong>
                                                 {% endif %}
                                             </td>
-                                            <td class="subtotal-cell">
-                                                {{ cot.moneda }} {{ '{:,.2f}'.format(item.subtotal|float) }}
+                                            <td class="subtotal-cell" data-raw="{{ item.subtotal|float }}">
+                                                {{ cot.moneda }} {{ formatPrecio(item.subtotal|float) }}
+                                            </td>
+                                            <td class="equiv-cell text-muted small">
+                                                <!-- Se llena con JS -->
                                             </td>
                                             <td>
                                                 {% if cot.estado in ('borrador', 'recibida') %}
@@ -109,7 +125,8 @@
                                     <tfoot>
                                         <tr class="table-light">
                                             <td colspan="4" class="text-end"><strong>Total:</strong></td>
-                                            <td class="total-cell"><strong>{{ cot.moneda }} {{ '{:,.2f}'.format(cot.total|float) }}</strong></td>
+                                            <td class="total-cell" data-raw="{{ cot.total|float }}"><strong>{{ cot.moneda }} {{ formatPrecio(cot.total|float) }}</strong></td>
+                                            <td class="total-equiv-cell text-muted small"></td>
                                             <td></td>
                                         </tr>
                                     </tfoot>
@@ -121,7 +138,7 @@
                             <div class="row g-2 mb-3">
                                 <div class="col-md-3">
                                     <label class="form-label form-label-sm">Moneda</label>
-                                    <select class="form-select form-select-sm" name="moneda">
+                                    <select class="form-select form-select-sm moneda-select" name="moneda">
                                         <option value="ARS" {% if cot.moneda == 'ARS' %}selected{% endif %}>ARS</option>
                                         <option value="USD" {% if cot.moneda == 'USD' %}selected{% endif %}>USD</option>
                                     </select>
@@ -268,7 +285,90 @@
 </div>
 
 <script>
+// ============================================================
+// Formato de precios: sin decimales si es entero
+// ============================================================
+function fmtPrecio(val) {
+    if (val === 0) return '0';
+    if (val % 1 === 0) {
+        return val.toLocaleString('es-AR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+    }
+    return val.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+// ============================================================
+// Tipo de cambio
+// ============================================================
+var tipoCambio = 0;
+
+function cargarTipoCambio() {
+    document.getElementById('tcValor').textContent = 'cargando...';
+    fetch('/inventario/api/tipo-cambio')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success && data.tipo_cambio) {
+            tipoCambio = parseFloat(data.tipo_cambio);
+            document.getElementById('tcValor').textContent = '1 USD = ' + fmtPrecio(tipoCambio) + ' ARS';
+            document.getElementById('tcFuente').textContent = '(' + (data.provider || '') + ')';
+            actualizarEquivalentes();
+        } else {
+            document.getElementById('tcValor').textContent = 'No disponible';
+        }
+    })
+    .catch(function() {
+        document.getElementById('tcValor').textContent = 'Error al cargar';
+    });
+}
+
+function convertir(valor, monedaOrigen) {
+    if (!tipoCambio || tipoCambio === 0) return null;
+    if (monedaOrigen === 'ARS') return valor / tipoCambio;
+    if (monedaOrigen === 'USD') return valor * tipoCambio;
+    return null;
+}
+
+function actualizarEquivalentes() {
+    document.querySelectorAll('form[data-moneda]').forEach(function(form) {
+        var moneda = form.querySelector('.moneda-select');
+        var monedaVal = moneda ? moneda.value : form.dataset.moneda;
+        var otraMoneda = monedaVal === 'ARS' ? 'USD' : 'ARS';
+
+        // Equivalentes por fila
+        form.querySelectorAll('tr').forEach(function(row) {
+            var subtotalCell = row.querySelector('.subtotal-cell');
+            var equivCell = row.querySelector('.equiv-cell');
+            if (!subtotalCell || !equivCell) return;
+
+            var raw = parseFloat(subtotalCell.dataset.raw) || 0;
+            var equiv = convertir(raw, monedaVal);
+            if (equiv !== null && raw > 0) {
+                equivCell.textContent = '~ ' + otraMoneda + ' ' + fmtPrecio(equiv);
+            } else {
+                equivCell.textContent = '';
+            }
+        });
+
+        // Equivalente del total
+        var totalCell = form.querySelector('.total-cell');
+        var totalEquiv = form.querySelector('.total-equiv-cell');
+        if (totalCell && totalEquiv) {
+            var rawTotal = parseFloat(totalCell.dataset.raw) || 0;
+            var equivTotal = convertir(rawTotal, monedaVal);
+            if (equivTotal !== null && rawTotal > 0) {
+                totalEquiv.textContent = '~ ' + otraMoneda + ' ' + fmtPrecio(equivTotal);
+            } else {
+                totalEquiv.textContent = '';
+            }
+        }
+    });
+}
+
+// Cargar al inicio
+cargarTipoCambio();
+
+// ============================================================
 // Autocomplete proveedor
+// ============================================================
 (function() {
     var input = document.getElementById('proveedorInput');
     var dropdown = document.getElementById('proveedorDropdown');
@@ -330,29 +430,71 @@ function limpiarProveedor() {
     document.getElementById('btnAgregar').disabled = true;
 }
 
-// Calcular subtotales dinámicamente
+// ============================================================
+// Calcular subtotales y equivalentes al editar precios
+// ============================================================
 document.querySelectorAll('.precio-input').forEach(function(input) {
     input.addEventListener('input', function() {
         var precio = parseFloat(this.value) || 0;
         var cantidad = parseFloat(this.dataset.cantidad) || 0;
         var subtotal = precio * cantidad;
-        var cell = this.closest('tr').querySelector('.subtotal-cell');
-        if (cell) cell.textContent = 'ARS ' + subtotal.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-
-        // Recalcular total de la card
         var form = this.closest('form');
+        var monedaSelect = form.querySelector('.moneda-select');
+        var moneda = monedaSelect ? monedaSelect.value : (form.dataset.moneda || 'ARS');
+        var otraMoneda = moneda === 'ARS' ? 'USD' : 'ARS';
+
+        // Subtotal de la fila
+        var row = this.closest('tr');
+        var subtotalCell = row.querySelector('.subtotal-cell');
+        if (subtotalCell) {
+            subtotalCell.textContent = moneda + ' ' + fmtPrecio(subtotal);
+            subtotalCell.dataset.raw = subtotal;
+        }
+
+        // Equivalente de la fila
+        var equivCell = row.querySelector('.equiv-cell');
+        if (equivCell && tipoCambio > 0 && subtotal > 0) {
+            equivCell.textContent = '~ ' + otraMoneda + ' ' + fmtPrecio(convertir(subtotal, moneda));
+        } else if (equivCell) {
+            equivCell.textContent = '';
+        }
+
+        // Recalcular total
         var total = 0;
         form.querySelectorAll('.precio-input').forEach(function(inp) {
             var p = parseFloat(inp.value) || 0;
             var c = parseFloat(inp.dataset.cantidad) || 0;
             total += p * c;
         });
-        var totalCell = form.querySelector('.total-cell strong');
-        if (totalCell) totalCell.textContent = 'ARS ' + total.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        var totalCell = form.querySelector('.total-cell');
+        if (totalCell) {
+            totalCell.innerHTML = '<strong>' + moneda + ' ' + fmtPrecio(total) + '</strong>';
+            totalCell.dataset.raw = total;
+        }
+        var totalEquiv = form.querySelector('.total-equiv-cell');
+        if (totalEquiv && tipoCambio > 0 && total > 0) {
+            totalEquiv.textContent = '~ ' + otraMoneda + ' ' + fmtPrecio(convertir(total, moneda));
+        } else if (totalEquiv) {
+            totalEquiv.textContent = '';
+        }
     });
 });
 
+// Al cambiar moneda, recalcular equivalentes
+document.querySelectorAll('.moneda-select').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+        var form = this.closest('form');
+        form.dataset.moneda = this.value;
+        // Trigger recalculo en todos los inputs de precios de este form
+        var firstInput = form.querySelector('.precio-input');
+        if (firstInput) firstInput.dispatchEvent(new Event('input'));
+        actualizarEquivalentes();
+    });
+});
+
+// ============================================================
 // Eliminar cotización
+// ============================================================
 function eliminarCotizacion(id, nombre) {
     if (!confirm('¿Eliminar cotización de "' + nombre + '"?')) return;
 

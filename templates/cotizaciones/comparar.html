@@ -19,6 +19,13 @@
         </div>
     </div>
 
+    <!-- Tipo de cambio -->
+    <div class="alert alert-light border py-2 mb-4">
+        <i class="fas fa-dollar-sign me-1"></i>
+        Tipo de cambio: <strong id="tcValor">cargando...</strong>
+        <small class="text-muted ms-2" id="tcFuente"></small>
+    </div>
+
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -31,6 +38,7 @@
                             {% for cot in cotizaciones %}
                             <th class="text-center" style="min-width:180px">
                                 <div>{{ cot.proveedor.razon_social }}</div>
+                                <small>{{ cot.moneda }}</small>
                                 {% if cot.estado == 'elegida' %}
                                 <span class="badge bg-success">Elegida</span>
                                 {% endif %}
@@ -52,15 +60,19 @@
                             {% for cot in cotizaciones %}
                             {% set precio_data = fila.precios.get(cot.id, {}) %}
                             {% set es_mejor = fila.mejor_precio == cot.id %}
-                            <td class="text-center {% if es_mejor %}table-success{% endif %}">
+                            <td class="text-center {% if es_mejor %}table-success{% endif %}"
+                                data-precio="{{ precio_data.precio_unitario }}"
+                                data-subtotal="{{ precio_data.subtotal }}"
+                                data-moneda="{{ cot.moneda }}">
                                 {% if precio_data.precio_unitario > 0 %}
                                 <div>
-                                    <strong>{{ cot.moneda }} {{ '{:,.2f}'.format(precio_data.precio_unitario) }}</strong>
+                                    <strong>{{ cot.moneda }} {{ formatPrecio(precio_data.precio_unitario) }}</strong>
                                     {% if es_mejor %}
                                     <i class="fas fa-check-circle text-success ms-1"></i>
                                     {% endif %}
                                 </div>
-                                <small class="text-muted">Sub: {{ cot.moneda }} {{ '{:,.2f}'.format(precio_data.subtotal) }}</small>
+                                <small class="text-muted">Sub: {{ cot.moneda }} {{ formatPrecio(precio_data.subtotal) }}</small>
+                                <br><small class="equiv-precio text-muted"></small>
                                 {% if precio_data.notas %}
                                 <br><small class="text-muted fst-italic">{{ precio_data.notas }}</small>
                                 {% endif %}
@@ -77,8 +89,10 @@
                             <td colspan="3" class="text-end">TOTAL</td>
                             {% for cot in cotizaciones %}
                             {% set es_mejor_total = mejor_total == cot.id %}
-                            <td class="text-center {% if es_mejor_total %}table-success{% endif %}">
-                                <span class="fs-5">{{ cot.moneda }} {{ '{:,.2f}'.format(totales.get(cot.id, 0)) }}</span>
+                            <td class="text-center {% if es_mejor_total %}table-success{% endif %}"
+                                data-total="{{ totales.get(cot.id, 0) }}" data-moneda="{{ cot.moneda }}">
+                                <span class="fs-5">{{ cot.moneda }} {{ formatPrecio(totales.get(cot.id, 0)) }}</span>
+                                <br><small class="equiv-total text-muted"></small>
                                 {% if es_mejor_total %}
                                 <br><span class="badge bg-success">Mejor precio</span>
                                 {% endif %}
@@ -139,6 +153,50 @@
 </div>
 
 <script>
+function fmtPrecio(val) {
+    if (val === 0) return '0';
+    if (val % 1 === 0) return val.toLocaleString('es-AR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+    return val.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+// Cargar tipo de cambio y mostrar equivalentes
+fetch('/inventario/api/tipo-cambio')
+.then(function(r) { return r.json(); })
+.then(function(data) {
+    if (!data.success || !data.tipo_cambio) {
+        document.getElementById('tcValor').textContent = 'No disponible';
+        return;
+    }
+    var tc = parseFloat(data.tipo_cambio);
+    document.getElementById('tcValor').textContent = '1 USD = ' + fmtPrecio(tc) + ' ARS';
+    document.getElementById('tcFuente').textContent = '(' + (data.provider || '') + ')';
+
+    // Equivalentes en precios
+    document.querySelectorAll('.equiv-precio').forEach(function(el) {
+        var cell = el.closest('td');
+        var subtotal = parseFloat(cell.dataset.subtotal) || 0;
+        var moneda = cell.dataset.moneda;
+        if (subtotal <= 0) return;
+        var otra = moneda === 'ARS' ? 'USD' : 'ARS';
+        var equiv = moneda === 'ARS' ? subtotal / tc : subtotal * tc;
+        el.textContent = '~ ' + otra + ' ' + fmtPrecio(equiv);
+    });
+
+    // Equivalentes en totales
+    document.querySelectorAll('.equiv-total').forEach(function(el) {
+        var cell = el.closest('td');
+        var total = parseFloat(cell.dataset.total) || 0;
+        var moneda = cell.dataset.moneda;
+        if (total <= 0) return;
+        var otra = moneda === 'ARS' ? 'USD' : 'ARS';
+        var equiv = moneda === 'ARS' ? total / tc : total * tc;
+        el.textContent = '~ ' + otra + ' ' + fmtPrecio(equiv);
+    });
+})
+.catch(function() {
+    document.getElementById('tcValor').textContent = 'Error';
+});
+
 function elegirCotizacion(id, nombre) {
     if (!confirm('¿Elegir la cotización de "' + nombre + '"?\n\nLas demás cotizaciones serán marcadas como descartadas.')) return;
 
