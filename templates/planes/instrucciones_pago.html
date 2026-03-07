@@ -307,7 +307,7 @@
                                 </label>
                                 <input type="text" class="form-control" name="razon_social" required
                                        placeholder="Ej: Constructora ABC S.A. o Juan Perez"
-                                       value="{{ current_user.organization.name if current_user.is_authenticated and current_user.organization else '' }}">
+                                       value="{{ current_user.organizacion.nombre if current_user.is_authenticated and current_user.organizacion else '' }}">
                                 <small class="text-muted">Nombre de la empresa o persona que realizo la transferencia</small>
                             </div>
 
