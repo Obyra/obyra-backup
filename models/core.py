@@ -32,6 +32,7 @@ class Organizacion(db.Model):
     # Plan de suscripción
     plan_tipo = db.Column(db.String(50), default='prueba')  # prueba, estandar, premium, full_premium
     max_usuarios = db.Column(db.Integer, default=5)  # Límite de usuarios según plan
+    max_obras = db.Column(db.Integer, default=1)  # Límite de obras según plan
     fecha_inicio_plan = db.Column(db.DateTime)  # Fecha de inicio del plan pago
     fecha_fin_plan = db.Column(db.DateTime)  # Fecha de vencimiento del plan
 

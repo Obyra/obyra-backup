@@ -341,11 +341,12 @@ def pago_exitoso():
                 plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG['premium'])
                 org.plan_tipo = plan_tipo
                 org.max_usuarios = plan_info['max_usuarios']
+                org.max_obras = plan_info.get('max_obras', 3)
                 org.fecha_inicio_plan = datetime.utcnow()
                 org.fecha_fin_plan = datetime.utcnow() + timedelta(days=30)  # 1 mes
                 db.session.commit()
 
-                flash(f'¡Pago exitoso! Tu plan {plan_info["nombre"]} ha sido activado.', 'success')
+                flash(f'Pago exitoso! Tu plan {plan_info["nombre"]} ha sido activado.', 'success')
             else:
                 flash('Pago recibido. Contactanos para activar tu plan.', 'info')
         except Exception as e:
@@ -354,7 +355,7 @@ def pago_exitoso():
     else:
         flash('El pago fue procesado. Te notificaremos cuando se confirme.', 'info')
 
-    return redirect(url_for('planes.ver_planes'))
+    return redirect(url_for('planes.mostrar_planes'))
 
 
 @planes_bp.route('/pago-fallido')
@@ -370,7 +371,7 @@ def pago_fallido():
 def pago_pendiente():
     """Callback cuando el pago está pendiente."""
     flash('Tu pago está siendo procesado. Te notificaremos cuando se confirme.', 'info')
-    return redirect(url_for('planes.ver_planes'))
+    return redirect(url_for('planes.mostrar_planes'))
 
 
 @planes_bp.route('/webhook-mercadopago', methods=['POST'])
@@ -406,6 +407,7 @@ def webhook_mercadopago():
                         plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG['premium'])
                         user.organizacion.plan_tipo = plan_tipo
                         user.organizacion.max_usuarios = plan_info['max_usuarios']
+                        user.organizacion.max_obras = plan_info.get('max_obras', 3)
                         user.organizacion.fecha_inicio_plan = datetime.utcnow()
                         user.organizacion.fecha_fin_plan = datetime.utcnow() + timedelta(days=30)
                         db.session.commit()

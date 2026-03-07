@@ -1270,6 +1270,22 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Etapa dependencies migration skipped: {e}")
 
+    # max_obras en organizaciones
+    try:
+        db.session.execute(text("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='organizaciones' AND column_name='max_obras') THEN
+                ALTER TABLE organizaciones ADD COLUMN max_obras INTEGER DEFAULT 1;
+            END IF;
+        END $$;
+        """))
+        db.session.commit()
+        print("[OK] max_obras migration applied")
+    except Exception as e:
+        print(f"[WARN] max_obras migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions
