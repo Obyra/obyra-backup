@@ -36,7 +36,7 @@
                             <th>Fecha</th>
                             <th>Tipo</th>
                             <th>Auditor</th>
-                            <th>Resultado</th>
+                            <th>Puntuación</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
@@ -44,25 +44,29 @@
                     <tbody>
                         {% for auditoria in auditorias %}
                         <tr>
-                            <td>{{ auditoria.fecha.strftime('%d/%m/%Y') if auditoria.fecha else '-' }}</td>
-                            <td>{{ auditoria.tipo or '-' }}</td>
-                            <td>{{ auditoria.auditor or '-' }}</td>
+                            <td>{{ auditoria.fecha_auditoria.strftime('%d/%m/%Y') if auditoria.fecha_auditoria else '-' }}</td>
+                            <td>{{ auditoria.tipo_auditoria or '-' }}</td>
+                            <td>{{ auditoria.auditor_externo or '-' }}</td>
                             <td>
-                                {% if auditoria.resultado == 'aprobado' %}
-                                <span class="badge bg-success">Aprobado</span>
-                                {% elif auditoria.resultado == 'rechazado' %}
-                                <span class="badge bg-danger">Rechazado</span>
-                                {% elif auditoria.resultado == 'pendiente' %}
-                                <span class="badge bg-warning">Pendiente</span>
+                                {% if auditoria.puntuacion_general is not none %}
+                                    {% if auditoria.puntuacion_general >= 80 %}
+                                    <span class="badge bg-success">{{ auditoria.puntuacion_general }}%</span>
+                                    {% elif auditoria.puntuacion_general >= 50 %}
+                                    <span class="badge bg-warning">{{ auditoria.puntuacion_general }}%</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">{{ auditoria.puntuacion_general }}%</span>
+                                    {% endif %}
                                 {% else %}
-                                <span class="badge bg-secondary">{{ auditoria.resultado or '-' }}</span>
+                                <span class="badge bg-secondary">-</span>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if auditoria.estado == 'completada' %}
-                                <span class="badge bg-success">Completada</span>
+                                {% if auditoria.estado == 'cerrada' %}
+                                <span class="badge bg-success">Cerrada</span>
+                                {% elif auditoria.estado == 'ejecutada' %}
+                                <span class="badge bg-info">Ejecutada</span>
                                 {% else %}
-                                <span class="badge bg-warning">En progreso</span>
+                                <span class="badge bg-warning">Programada</span>
                                 {% endif %}
                             </td>
                             <td>
