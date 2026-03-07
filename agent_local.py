@@ -379,9 +379,27 @@ def auditoria_consultas():
     filtro_fecha_desde = request.args.get('fecha_desde', '')
     filtro_fecha_hasta = request.args.get('fecha_hasta', '')
     
+    # Verificar que la tabla existe antes de hacer queries
+    try:
+        total_consultas = db.session.query(ConsultaAgente).count()
+    except Exception:
+        db.session.rollback()
+        # Tabla consultas_agente no existe aún — mostrar vista vacía
+        organizaciones = Organizacion.query.all()
+        empty_stats = {
+            'total_consultas': 0, 'consultas_exitosas': 0, 'consultas_error': 0,
+            'tasa_exito': 0, 'tiempo_promedio': 0, 'tipos_consulta': [],
+            'top_organizaciones': [], 'consultas_por_dia': []
+        }
+        return render_template('asistente/auditoria_consultas.html',
+                             consultas=None, organizaciones=organizaciones,
+                             estadisticas=empty_stats,
+                             filtros={'organizacion': '', 'tipo': '', 'estado': '',
+                                      'fecha_desde': '', 'fecha_hasta': ''})
+
     # Construir consulta base
-    consultas_query = db.session.query(ConsultaAgente).join(Usuario).join(ConsultaAgente.organizacion)
-    
+    consultas_query = db.session.query(ConsultaAgente).outerjoin(Usuario, ConsultaAgente.usuario_id == Usuario.id).outerjoin(Organizacion, ConsultaAgente.organizacion_id == Organizacion.id)
+
     # Aplicar filtros
     if filtro_org:
         consultas_query = consultas_query.filter(ConsultaAgente.organizacion_id == filtro_org)
@@ -393,34 +411,31 @@ def auditoria_consultas():
         consultas_query = consultas_query.filter(ConsultaAgente.fecha_consulta >= datetime.strptime(filtro_fecha_desde, '%Y-%m-%d'))
     if filtro_fecha_hasta:
         consultas_query = consultas_query.filter(ConsultaAgente.fecha_consulta <= datetime.strptime(filtro_fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
-    
 
-    
     # Estadísticas generales
-    total_consultas = db.session.query(ConsultaAgente).count()
     consultas_exitosas = db.session.query(ConsultaAgente).filter_by(estado='exito').count()
     consultas_error = db.session.query(ConsultaAgente).filter_by(estado='error').count()
-    
+
     # Top consultas por tipo
     tipos_consulta = db.session.query(
         ConsultaAgente.tipo_consulta,
         func.count(ConsultaAgente.id).label('total')
     ).group_by(ConsultaAgente.tipo_consulta).all()
-    
+
     # Top organizaciones que más consultan
     top_organizaciones = db.session.query(
         ConsultaAgente.organizacion_id,
         func.count(ConsultaAgente.id).label('total'),
-        ConsultaAgente.organizacion
-    ).join(ConsultaAgente.organizacion).group_by(
+        Organizacion.nombre
+    ).join(Organizacion, ConsultaAgente.organizacion_id == Organizacion.id).group_by(
         ConsultaAgente.organizacion_id, Organizacion.id
     ).order_by(desc(func.count(ConsultaAgente.id))).limit(10).all()
-    
+
     # Tiempo promedio de respuesta
     tiempo_promedio = db.session.query(
         func.avg(ConsultaAgente.tiempo_respuesta_ms)
     ).filter_by(estado='exito').scalar() or 0
-    
+
     # Consultas por fecha (últimos 7 días)
     hace_7_dias = datetime.now() - timedelta(days=7)
     consultas_por_dia_query = db.session.query(
@@ -429,11 +444,10 @@ def auditoria_consultas():
     ).filter(ConsultaAgente.fecha_consulta >= hace_7_dias).group_by(
         func.date(ConsultaAgente.fecha_consulta)
     ).order_by(func.date(ConsultaAgente.fecha_consulta)).all()
-    
+
     # Convertir a formato adecuado para el template
     consultas_por_dia = []
     for fecha_item, total in consultas_por_dia_query:
-        # Asegurar que tenemos un objeto de fecha válido
         try:
             if isinstance(fecha_item, str):
                 fecha_obj = datetime.strptime(fecha_item, '%Y-%m-%d').date()
@@ -446,10 +460,10 @@ def auditoria_consultas():
             fecha_obj = datetime.now().date()
 
         consultas_por_dia.append((fecha_obj, total))
-    
-    # Construir consulta base para auditoría
-    query = db.session.query(ConsultaAgente).join(Usuario).join(ConsultaAgente.organizacion)
-    
+
+    # Construir consulta para paginación
+    query = db.session.query(ConsultaAgente).outerjoin(Usuario, ConsultaAgente.usuario_id == Usuario.id).outerjoin(Organizacion, ConsultaAgente.organizacion_id == Organizacion.id)
+
     # Aplicar filtros
     if filtro_org:
         query = query.filter(ConsultaAgente.organizacion_id == filtro_org)
@@ -461,7 +475,7 @@ def auditoria_consultas():
         query = query.filter(ConsultaAgente.fecha_consulta >= datetime.strptime(filtro_fecha_desde, '%Y-%m-%d'))
     if filtro_fecha_hasta:
         query = query.filter(ConsultaAgente.fecha_consulta <= datetime.strptime(filtro_fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
-    
+
     # Si es exportación, obtener todos los datos
     if request.args.get('export'):
         export_format = request.args.get('export')
@@ -470,16 +484,16 @@ def auditoria_consultas():
             return exportar_excel(consultas_export)
         elif export_format == 'pdf':
             return exportar_pdf(consultas_export)
-    
+
     # Paginación para vista normal
     page = request.args.get('page', 1, type=int)
     per_page = 20
     consultas = query.order_by(desc(ConsultaAgente.fecha_consulta)).paginate(
         page=page, per_page=per_page, error_out=False)
-    
+
     # Obtener todas las organizaciones para el filtro
     organizaciones = Organizacion.query.all()
-    
+
     return render_template('asistente/auditoria_consultas.html',
                          consultas=consultas,
                          organizaciones=organizaciones,

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria IA - OBYRA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-shield-alt me-2 text-danger"></i>Auditoria IA (Super Admin)
+                </h1>
+                <a href="{{ url_for('reportes.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-primary">{{ estadisticas.total_consultas }}</h2>
+                    <small class="text-muted">Total Consultas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-success">{{ estadisticas.consultas_exitosas }}</h2>
+                    <small class="text-muted">Exitosas ({{ estadisticas.tasa_exito }}%)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-danger">{{ estadisticas.consultas_error }}</h2>
+                    <small class="text-muted">Con Error</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h2 class="mb-0 text-info">{{ estadisticas.tiempo_promedio|round(0)|int }} ms</h2>
+                    <small class="text-muted">Tiempo Promedio</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graficos -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title">Consultas por Tipo</h6>
+                    {% if estadisticas.tipos_consulta %}
+                    <ul class="list-group list-group-flush">
+                        {% for tipo, total in estadisticas.tipos_consulta %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            {{ tipo or 'general' }}
+                            <span class="badge bg-primary rounded-pill">{{ total }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title">Top Organizaciones</h6>
+                    {% if estadisticas.top_organizaciones %}
+                    <ul class="list-group list-group-flush">
+                        {% for org_id, total, org_nombre in estadisticas.top_organizaciones %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            {{ org_nombre or 'Org #' ~ org_id }}
+                            <span class="badge bg-info rounded-pill">{{ total }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-2">
+            <form method="GET" class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Organizacion</label>
+                    <select name="organizacion" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        {% for org in organizaciones %}
+                        <option value="{{ org.id }}" {{ 'selected' if filtros.organizacion == org.id|string }}>{{ org.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Tipo</label>
+                    <select name="tipo" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for tipo_val in ['obra','presupuesto','inventario','usuario','general'] %}
+                        <option value="{{ tipo_val }}" {{ 'selected' if filtros.tipo == tipo_val }}>{{ tipo_val|title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Estado</label>
+                    <select name="estado" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        <option value="exito" {{ 'selected' if filtros.estado == 'exito' }}>Exito</option>
+                        <option value="error" {{ 'selected' if filtros.estado == 'error' }}>Error</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Desde</label>
+                    <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ filtros.fecha_desde }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Hasta</label>
+                    <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ filtros.fecha_hasta }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de consultas -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            {% if consultas and consultas.items %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Usuario</th>
+                            <th>Organizacion</th>
+                            <th>Tipo</th>
+                            <th>Consulta</th>
+                            <th>Estado</th>
+                            <th>Tiempo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in consultas.items %}
+                        <tr>
+                            <td class="text-nowrap small">{{ c.fecha_consulta.strftime('%d/%m/%Y %H:%M') if c.fecha_consulta else '-' }}</td>
+                            <td class="small">{{ c.usuario.nombre if c.usuario else '-' }}</td>
+                            <td class="small">{{ c.organizacion.nombre if c.organizacion else '-' }}</td>
+                            <td><span class="badge bg-secondary">{{ c.tipo_consulta or 'general' }}</span></td>
+                            <td class="small" style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ c.consulta_texto }}">
+                                {{ c.consulta_texto[:80] }}{{ '...' if c.consulta_texto|length > 80 }}
+                            </td>
+                            <td>
+                                {% if c.estado == 'exito' %}
+                                <span class="badge bg-success">Exito</span>
+                                {% else %}
+                                <span class="badge bg-danger">Error</span>
+                                {% endif %}
+                            </td>
+                            <td class="small">{{ c.tiempo_respuesta_ms or '-' }} ms</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginacion -->
+            {% if consultas.pages > 1 %}
+            <nav class="mt-3">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    {% if consultas.has_prev %}
+                    <li class="page-item"><a class="page-link" href="?page={{ consultas.prev_num }}&organizacion={{ filtros.organizacion }}&tipo={{ filtros.tipo }}&estado={{ filtros.estado }}&fecha_desde={{ filtros.fecha_desde }}&fecha_hasta={{ filtros.fecha_hasta }}">Anterior</a></li>
+                    {% endif %}
+                    {% for p in consultas.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if p %}
+                        <li class="page-item {{ 'active' if p == consultas.page }}"><a class="page-link" href="?page={{ p }}&organizacion={{ filtros.organizacion }}&tipo={{ filtros.tipo }}&estado={{ filtros.estado }}&fecha_desde={{ filtros.fecha_desde }}&fecha_hasta={{ filtros.fecha_hasta }}">{{ p }}</a></li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    {% if consultas.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ consultas.next_num }}&organizacion={{ filtros.organizacion }}&tipo={{ filtros.tipo }}&estado={{ filtros.estado }}&fecha_desde={{ filtros.fecha_desde }}&fecha_hasta={{ filtros.fecha_hasta }}">Siguiente</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-robot fa-3x text-muted mb-3"></i>
+                <h5>No hay consultas registradas</h5>
+                <p class="text-muted">Las consultas al agente IA se registran automaticamente aqui.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
