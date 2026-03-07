@@ -70,10 +70,18 @@
                         </div>
 
                         <div class="card-body p-4">
-                            <!-- Limite de usuarios destacado -->
+                            <!-- Limites destacados -->
                             <div class="text-center mb-4 p-3 bg-light rounded-3">
-                                <i class="fas fa-users fa-2x text-primary mb-2"></i>
-                                <h4 class="mb-0">Hasta {{ plan.max_usuarios }} usuarios</h4>
+                                <div class="d-flex justify-content-around">
+                                    <div>
+                                        <i class="fas fa-hard-hat fa-lg text-primary mb-1"></i>
+                                        <h5 class="mb-0">{{ plan.max_obras or 'Ilim.' }} obras</h5>
+                                    </div>
+                                    <div>
+                                        <i class="fas fa-users fa-lg text-primary mb-1"></i>
+                                        <h5 class="mb-0">{{ plan.max_usuarios }} usuarios</h5>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Features -->
@@ -115,23 +123,29 @@
                             <thead class="table-dark">
                                 <tr>
                                     <th>Caracteristica</th>
-                                    <th class="text-center">Estandar</th>
+                                    <th class="text-center">Standard</th>
                                     <th class="text-center bg-primary">Premium</th>
                                     <th class="text-center">Full Premium</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td><i class="fas fa-users me-2"></i>Cantidad de usuarios</td>
-                                    <td class="text-center"><strong>5</strong></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><strong>10</strong></td>
-                                    <td class="text-center"><strong>20</strong></td>
+                                    <td><i class="fas fa-dollar-sign me-2"></i>Precio mensual + IVA</td>
+                                    <td class="text-center"><strong>USD 400</strong></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>USD 600</strong></td>
+                                    <td class="text-center"><strong>USD 800</strong></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-dollar-sign me-2"></i>Precio mensual + IVA</td>
-                                    <td class="text-center"><strong>USD 150</strong></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><strong>USD 250</strong></td>
-                                    <td class="text-center"><strong>USD 300</strong></td>
+                                    <td><i class="fas fa-hard-hat me-2"></i>Cantidad de obras</td>
+                                    <td class="text-center"><strong>3</strong></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>5</strong></td>
+                                    <td class="text-center"><strong>15</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-users me-2"></i>Cantidad de usuarios</td>
+                                    <td class="text-center"><strong>5</strong></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><strong>15</strong></td>
+                                    <td class="text-center"><strong>25</strong></td>
                                 </tr>
                                 <tr class="table-light">
                                     <td colspan="4" class="text-center fw-bold text-primary">
@@ -139,7 +153,7 @@
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-brain me-2"></i>Calculadora IA</td>
+                                    <td><i class="fas fa-brain me-2"></i>Calculadora IA completa</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
@@ -169,13 +183,7 @@
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
                                 <tr>
-                                    <td><i class="fas fa-tools me-2"></i>Equipos Leiten</td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
-                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline</td>
+                                    <td><i class="fas fa-wifi-slash me-2"></i>Modo offline para operarios</td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
@@ -198,6 +206,12 @@
                                     <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
                                     <td class="text-center"><i class="fas fa-check text-success"></i></td>
                                 </tr>
+                                <tr>
+                                    <td><i class="fas fa-map-marker-alt me-2"></i>Fichaje por geolocalizacion</td>
+                                    <td class="text-center"><i class="fas fa-times text-muted"></i></td>
+                                    <td class="text-center bg-primary bg-opacity-10"><i class="fas fa-check text-success"></i></td>
+                                    <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -208,7 +222,7 @@
             <div class="alert alert-success mt-4 text-center">
                 <i class="fas fa-info-circle me-2"></i>
                 <strong>Todos los planes incluyen el sistema completo.</strong>
-                La unica diferencia es la cantidad de usuarios que podes agregar a tu organizacion.
+                La diferencia es la cantidad de obras, usuarios y funcionalidades adicionales.
             </div>
 
             <!-- Metodos de pago -->

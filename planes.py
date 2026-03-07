@@ -18,7 +18,6 @@ FEATURES_SISTEMA_COMPLETO = [
     'Gestion de obras',
     'Gestion de clientes',
     'Inventario completo',
-    'Gestion de equipos Leiten',
     'Modo offline para operarios',
     'Reportes completos',
     'Soporte por email y WhatsApp',
@@ -26,44 +25,47 @@ FEATURES_SISTEMA_COMPLETO = [
 ]
 
 # Configuración de planes de suscripción
-# La única diferencia entre planes es la cantidad de usuarios
 PLANES_CONFIG = {
     'prueba': {
         'nombre': 'Prueba Gratuita',
         'precio_usd': Decimal('0.00'),
         'precio_mensual_usd': Decimal('0.00'),
         'max_usuarios': 5,
+        'max_obras': 1,
         'duracion_dias': 30,
         'descripcion': '30 dias de prueba gratuita',
-        'features': ['Sistema completo por 30 dias', 'Hasta 5 usuarios', 'Soporte por email']
+        'features': ['Sistema completo por 30 dias', 'Hasta 5 usuarios', '1 obra', 'Soporte por email']
     },
     'estandar': {
-        'nombre': 'Plan Estandar',
-        'precio_usd': Decimal('150.00'),
-        'precio_mensual_usd': Decimal('150.00'),
+        'nombre': 'Plan Standard',
+        'precio_usd': Decimal('400.00'),
+        'precio_mensual_usd': Decimal('400.00'),
         'max_usuarios': 5,
+        'max_obras': 3,
         'duracion_dias': 365,
         'descripcion': 'Ideal para equipos pequenos',
-        'features': FEATURES_SISTEMA_COMPLETO + ['Hasta 5 usuarios']
+        'features': ['Hasta 3 obras', 'Hasta 5 usuarios'] + FEATURES_SISTEMA_COMPLETO
     },
     'premium': {
         'nombre': 'Plan Premium',
-        'precio_usd': Decimal('250.00'),
-        'precio_mensual_usd': Decimal('250.00'),
-        'max_usuarios': 10,
+        'precio_usd': Decimal('600.00'),
+        'precio_mensual_usd': Decimal('600.00'),
+        'max_usuarios': 15,
+        'max_obras': 5,
         'duracion_dias': 365,
         'descripcion': 'Para empresas en crecimiento',
-        'features': FEATURES_SISTEMA_COMPLETO + ['Hasta 10 usuarios'],
+        'features': ['Hasta 5 obras', 'Hasta 15 usuarios'] + FEATURES_SISTEMA_COMPLETO + ['Fichaje por geolocalizacion'],
         'popular': True
     },
     'full_premium': {
         'nombre': 'Plan Full Premium',
-        'precio_usd': Decimal('300.00'),
-        'precio_mensual_usd': Decimal('300.00'),
-        'max_usuarios': 20,
+        'precio_usd': Decimal('800.00'),
+        'precio_mensual_usd': Decimal('800.00'),
+        'max_usuarios': 25,
+        'max_obras': 15,
         'duracion_dias': 365,
-        'descripcion': 'Para grandes constructoras',
-        'features': FEATURES_SISTEMA_COMPLETO + ['Hasta 20 usuarios']
+        'descripcion': 'Para constructoras con operacion mas amplia',
+        'features': ['Hasta 15 obras', 'Hasta 25 usuarios'] + FEATURES_SISTEMA_COMPLETO + ['Fichaje por geolocalizacion']
     }
 }
 
