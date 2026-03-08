@@ -454,7 +454,10 @@ def verificar_periodo_prueba():
     """Middleware para verificar si el usuario necesita seleccionar un plan"""
     # Rutas que no requieren verificación de plan
     rutas_excluidas = [
-        'planes.mostrar_planes', 'planes.plan_standard', 'planes.plan_premium',
+        'planes.mostrar_planes', 'planes.seleccionar_plan', 'planes.pago_mercadopago',
+        'planes.pago_exitoso', 'planes.pago_fallido', 'planes.pago_pendiente',
+        'planes.webhook_mercadopago', 'planes.instrucciones_pago', 'planes.enviar_comprobante',
+        'planes.plan_standard', 'planes.plan_premium',
         'auth.login', 'auth.register', 'auth.logout',
         'supplier_auth.login', 'static', 'index'
     ]
