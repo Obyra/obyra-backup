@@ -281,7 +281,7 @@ def pago_mercadopago(plan):
         "payer": {
             "name": current_user.nombre,
             "surname": current_user.apellido,
-            "email": current_user.email
+            "email": current_user.email if not mp_access_token.startswith('TEST-') else "test_user_buyer@testuser.com"
         },
         "external_reference": f"user_{current_user.id}_plan_{plan}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
         "statement_descriptor": "OBYRA PRO"
