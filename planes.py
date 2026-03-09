@@ -302,13 +302,15 @@ def pago_mercadopago(plan):
         preference_response = sdk.preference().create(preference_data)
         preference = preference_response.get("response", {})
 
-        if not preference.get("init_point"):
+        # Usar sandbox_init_point si el token es de test, init_point si es producción
+        checkout_url = preference.get("sandbox_init_point") or preference.get("init_point")
+        if not checkout_url:
             print(f"MP Error Response: {preference_response}")
             flash('Error al crear el pago. Por favor, intenta nuevamente.', 'error')
             return redirect(url_for('planes.instrucciones_pago'))
 
         # Redirigir al checkout de MercadoPago
-        return redirect(preference["init_point"])
+        return redirect(checkout_url)
 
     except Exception as e:
         print(f"Error creando preferencia MP: {e}")
