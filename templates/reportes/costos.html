@@ -132,6 +132,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="indices-tab" data-bs-toggle="tab" data-bs-target="#indices-content" type="button" role="tab">
+                <i class="fas fa-ruler-combined me-1"></i>Costo por m²/m³
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link" id="detalle-tab" data-bs-toggle="tab" data-bs-target="#detalle-content" type="button" role="tab">
                 <i class="fas fa-list me-1"></i>Detalle
             </button>
@@ -274,6 +279,126 @@
                 <div class="card-body text-center py-5">
                     <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
                     <h4>Sin materiales registrados</h4>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Tab: Índices por Rubro (Costo por m²/m³) -->
+        <div class="tab-pane fade" id="indices-content" role="tabpanel">
+            {% if indices_rubro %}
+            <div class="row">
+                <!-- Tabla de costos por unidad -->
+                <div class="col-lg-8">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-ruler-combined me-2"></i>Costo por Unidad Real de Cada Rubro</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-3">
+                                Cada rubro se mide en su unidad natural: hormigón en m³, mampostería en m², acero en kg, etc.
+                            </p>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Rubro</th>
+                                            <th class="text-center">Unidad</th>
+                                            <th class="text-end">Cantidad</th>
+                                            <th class="text-end">Costo/Unidad</th>
+                                            <th class="text-end">Costo Total</th>
+                                            <th class="text-end">Incidencia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for idx in indices_rubro %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ idx.nombre }}</strong>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-info">{{ idx.unidad }}</span>
+                                            </td>
+                                            <td class="text-end">
+                                                {{ "{:,.2f}".format(idx.cantidad) }} {{ idx.unidad }}
+                                            </td>
+                                            <td class="text-end">
+                                                <strong>${{ "{:,.0f}".format(idx.costo_por_unidad) }}</strong>
+                                                <small class="text-muted">/{{ idx.unidad }}</small>
+                                            </td>
+                                            <td class="text-end">
+                                                <strong class="text-success">${{ "{:,.0f}".format(idx.costo_total) }}</strong>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="d-flex align-items-center justify-content-end">
+                                                    <div class="progress me-2" style="width: 60px; height: 8px;">
+                                                        <div class="progress-bar {% if idx.incidencia > 25 %}bg-danger{% elif idx.incidencia > 15 %}bg-warning{% else %}bg-success{% endif %}"
+                                                             style="width: {{ idx.incidencia }}%"></div>
+                                                    </div>
+                                                    <span class="fw-bold">{{ idx.incidencia }}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel lateral: Incidencia visual -->
+                <div class="col-lg-4">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Incidencia por Rubro</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-3">
+                                Porcentaje del costo total que representa cada rubro.
+                            </p>
+                            {% for idx in indices_rubro %}
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <small class="fw-bold">{{ idx.nombre }}</small>
+                                    <small>{{ idx.incidencia }}%</small>
+                                </div>
+                                <div class="progress" style="height: 12px;">
+                                    <div class="progress-bar {% if idx.incidencia > 25 %}bg-danger{% elif idx.incidencia > 15 %}bg-warning{% elif idx.incidencia > 8 %}bg-info{% else %}bg-success{% endif %}"
+                                         style="width: {{ idx.incidencia }}%"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Referencia de unidades -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Referencia de Unidades</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm table-borderless mb-0">
+                                <tbody>
+                                    <tr><td><span class="badge bg-secondary">m³</span></td><td>Metro cúbico (hormigón)</td></tr>
+                                    <tr><td><span class="badge bg-secondary">m²</span></td><td>Metro cuadrado (mampostería, revoque, pisos)</td></tr>
+                                    <tr><td><span class="badge bg-secondary">kg</span></td><td>Kilogramo (acero, hierro)</td></tr>
+                                    <tr><td><span class="badge bg-secondary">ml</span></td><td>Metro lineal (caños, cables)</td></tr>
+                                    <tr><td><span class="badge bg-secondary">puntos</span></td><td>Puntos de instalación (eléctrica, sanitaria)</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-ruler-combined fa-3x text-muted mb-3"></i>
+                    <h4>Sin datos de índices por rubro</h4>
+                    <p class="text-muted">
+                        Registrá uso de materiales en el inventario para ver los costos por m², m³ y kg de cada rubro.
+                    </p>
                 </div>
             </div>
             {% endif %}

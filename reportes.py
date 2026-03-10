@@ -472,6 +472,54 @@ def reporte_obras():
         else:
             estado_cronograma = 'sin_datos'
 
+        # Consumo por rubro (para índices de construcción)
+        from indices_construccion import (
+            MAPEO_CATEGORIA_A_RUBRO, UNIDAD_POR_RUBRO, obtener_nombre_rubro,
+        )
+        from sqlalchemy.orm import joinedload as _jl
+
+        usos_obra = UsoInventario.query.options(
+            _jl(UsoInventario.item).joinedload(ItemInventario.categoria)
+        ).filter(UsoInventario.obra_id == obra.id).all()
+
+        consumo_rubros = {}
+        for uso in usos_obra:
+            cant = float(uso.cantidad_usada or 0)
+            precio = float(uso.item.precio_promedio or 0)
+            cat_nombre = ''
+            if uso.item.categoria:
+                cat_nombre = uso.item.categoria.nombre.lower().strip()
+            else:
+                cat_nombre = (uso.item.nombre or '').lower().strip()
+
+            rubro = None
+            for kw, rb in MAPEO_CATEGORIA_A_RUBRO.items():
+                if kw in cat_nombre:
+                    rubro = rb
+                    break
+            if rubro:
+                if rubro not in consumo_rubros:
+                    consumo_rubros[rubro] = {
+                        'cantidad': 0, 'costo': 0,
+                        'unidad': UNIDAD_POR_RUBRO.get(rubro, ''),
+                        'nombre': obtener_nombre_rubro(rubro),
+                    }
+                consumo_rubros[rubro]['cantidad'] += cant
+                consumo_rubros[rubro]['costo'] += cant * precio
+
+        # Calcular costo por unidad por rubro
+        indices_obra = []
+        for rubro, datos in consumo_rubros.items():
+            cpu = datos['costo'] / datos['cantidad'] if datos['cantidad'] > 0 else 0
+            indices_obra.append({
+                'nombre': datos['nombre'],
+                'unidad': datos['unidad'],
+                'cantidad': round(datos['cantidad'], 2),
+                'costo_total': round(datos['costo'], 2),
+                'costo_por_unidad': round(cpu, 2),
+            })
+        indices_obra.sort(key=lambda x: x['costo_total'], reverse=True)
+
         obras_data.append({
             'obra': obra,
             'presupuesto': presupuesto,
@@ -481,7 +529,8 @@ def reporte_obras():
             'rentabilidad': rentabilidad,
             'dias_transcurridos': dias_transcurridos,
             'dias_estimados': dias_estimados,
-            'estado_cronograma': estado_cronograma
+            'estado_cronograma': estado_cronograma,
+            'indices_rubro': indices_obra,
         })
 
     # Estadísticas globales
@@ -642,6 +691,60 @@ def reporte_costos():
     # Ordenar por desvío (peores primero)
     analisis_obras.sort(key=lambda x: x['desvio'], reverse=True)
 
+    # --- Índices de construcción por rubro (costo/m², costo/m³, etc.) ---
+    from indices_construccion import (
+        MAPEO_CATEGORIA_A_RUBRO, UNIDAD_POR_RUBRO,
+        obtener_nombre_rubro, SECCIONES_EDIFICIO,
+    )
+
+    consumo_por_rubro = {}  # {rubro: {cantidad, costo, unidad}}
+    for uso in usos:
+        cantidad = float(uso.cantidad_usada or 0)
+        precio = float(uso.item.precio_promedio or 0)
+        costo_item = cantidad * precio
+
+        # Determinar rubro a partir de la categoría del item
+        cat_nombre = ''
+        if uso.item.categoria:
+            cat_nombre = uso.item.categoria.nombre.lower().strip()
+        else:
+            cat_nombre = (uso.item.nombre or '').lower().strip()
+
+        rubro = None
+        for keyword, rubro_mapped in MAPEO_CATEGORIA_A_RUBRO.items():
+            if keyword in cat_nombre:
+                rubro = rubro_mapped
+                break
+
+        if rubro:
+            if rubro not in consumo_por_rubro:
+                consumo_por_rubro[rubro] = {
+                    'cantidad': 0,
+                    'costo': 0,
+                    'unidad': UNIDAD_POR_RUBRO.get(rubro, ''),
+                    'nombre': obtener_nombre_rubro(rubro),
+                }
+            consumo_por_rubro[rubro]['cantidad'] += cantidad
+            consumo_por_rubro[rubro]['costo'] += costo_item
+
+    # Calcular costo por unidad para cada rubro
+    indices_rubro = []
+    for rubro, datos in consumo_por_rubro.items():
+        costo_unidad = datos['costo'] / datos['cantidad'] if datos['cantidad'] > 0 else 0
+        indices_rubro.append({
+            'rubro': rubro,
+            'nombre': datos['nombre'],
+            'unidad': datos['unidad'],
+            'cantidad': round(datos['cantidad'], 2),
+            'costo_total': round(datos['costo'], 2),
+            'costo_por_unidad': round(costo_unidad, 2),
+        })
+    indices_rubro.sort(key=lambda x: x['costo_total'], reverse=True)
+
+    # Incidencia por rubro (% del total)
+    for idx in indices_rubro:
+        idx['incidencia'] = round((idx['costo_total'] / costo_total_ars) * 100, 1) if costo_total_ars > 0 else 0
+
     estadisticas = {
         'costo_total_ars': costo_total_ars,
         'costo_total_usd': costo_total_usd,
@@ -660,6 +763,7 @@ def reporte_costos():
                          costos_por_mes=costos_por_mes_ordenado,
                          top_materiales=top_materiales,
                          analisis_obras=analisis_obras,
+                         indices_rubro=indices_rubro,
                          obra_id=obra_id,
                          fecha_desde=fecha_desde,
                          fecha_hasta=fecha_hasta,

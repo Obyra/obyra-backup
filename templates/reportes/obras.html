@@ -299,6 +299,66 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Índices de Construcción por Obra -->
+    {% if obras_data %}
+    {% set obras_con_indices = [] %}
+    {% for od in obras_data %}
+        {% if od.indices_rubro %}
+            {% set _ = obras_con_indices.append(od) %}
+        {% endif %}
+    {% endfor %}
+
+    {% if obras_con_indices %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-ruler-combined me-2"></i>Índices de Construcción por Obra</h5>
+                    <small class="text-muted">Consumo real de cada rubro en su unidad natural (m³, m², kg)</small>
+                </div>
+                <div class="card-body">
+                    {% for od in obras_con_indices %}
+                    <h6 class="mt-3 mb-2">
+                        <i class="fas fa-building me-1 text-primary"></i>
+                        {{ od.obra.nombre }}
+                        {% if od.obra.estado == 'en_curso' %}
+                        <span class="badge bg-success ms-1">En curso</span>
+                        {% elif od.obra.estado == 'finalizada' %}
+                        <span class="badge bg-secondary ms-1">Finalizada</span>
+                        {% endif %}
+                    </h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Rubro</th>
+                                    <th class="text-center">Unidad</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Costo/Unidad</th>
+                                    <th class="text-end">Costo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for idx in od.indices_rubro %}
+                                <tr>
+                                    <td><strong>{{ idx.nombre }}</strong></td>
+                                    <td class="text-center"><span class="badge bg-info">{{ idx.unidad }}</span></td>
+                                    <td class="text-end">{{ "{:,.2f}".format(idx.cantidad) }} {{ idx.unidad }}</td>
+                                    <td class="text-end"><strong>${{ "{:,.0f}".format(idx.costo_por_unidad) }}</strong><small class="text-muted">/{{ idx.unidad }}</small></td>
+                                    <td class="text-end"><strong class="text-success">${{ "{:,.0f}".format(idx.costo_total) }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
 </div>
 {% endblock %}
 
