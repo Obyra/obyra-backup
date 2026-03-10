@@ -491,7 +491,9 @@ def verificar_periodo_prueba():
             if hasattr(entidad_con_plan, "esta_en_periodo_prueba") and not entidad_con_plan.esta_en_periodo_prueba():
                 # Solo mostrar mensaje si es el admin (quien debe contratar)
                 if current_user.role == 'admin':
-                    flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
+                    # Solo agregar flash si no venimos de una redirección previa (evitar duplicados)
+                    if not request.endpoint or not request.endpoint.startswith('planes.'):
+                        flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
                     return redirect(url_for('planes.mostrar_planes'))
                 else:
                     # Operarios/PMs: el admin debe renovar
