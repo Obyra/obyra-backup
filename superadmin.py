@@ -4,6 +4,7 @@ Panel de Superadministrador
 Permite a los superadministradores ver datos de todas las organizaciones.
 """
 
+from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from functools import wraps
@@ -166,6 +167,33 @@ def usuarios_global():
                           usuarios=usuarios,
                           organizaciones=organizaciones,
                           org_filter=org_filter)
+
+
+@superadmin_bp.route('/activar-plan/<int:org_id>', methods=['POST'])
+@login_required
+@require_super_admin
+def activar_plan(org_id):
+    """Activar o cambiar el plan de una organización manualmente"""
+    from planes import PLANES_CONFIG
+
+    org = Organizacion.query.get_or_404(org_id)
+    plan_tipo = request.form.get('plan_tipo', 'estandar')
+    dias = int(request.form.get('dias', 30))
+
+    plan_info = PLANES_CONFIG.get(plan_tipo, PLANES_CONFIG.get('estandar'))
+    if not plan_info:
+        flash('Plan no válido.', 'error')
+        return redirect(url_for('superadmin.panel'))
+
+    org.plan_tipo = plan_tipo
+    org.max_usuarios = plan_info['max_usuarios']
+    org.max_obras = plan_info.get('max_obras', 3)
+    org.fecha_inicio_plan = datetime.utcnow()
+    org.fecha_fin_plan = datetime.utcnow() + timedelta(days=dias)
+    db.session.commit()
+
+    flash(f'Plan "{plan_info["nombre"]}" activado para {org.nombre} por {dias} días.', 'success')
+    return redirect(url_for('superadmin.panel'))
 
 
 @superadmin_bp.route('/api/stats')

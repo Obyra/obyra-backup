@@ -109,8 +109,10 @@
                     <tr>
                         <td>
                             <strong>{{ item.organizacion.nombre }}</strong>
-                            {% if item.organizacion.plan %}
-                            <span class="badge bg-info ms-1">{{ item.organizacion.plan }}</span>
+                            {% if item.organizacion.plan_tipo %}
+                            <span class="badge {% if item.organizacion.plan_tipo == 'prueba' %}bg-warning text-dark{% else %}bg-success{% endif %} ms-1">{{ item.organizacion.plan_tipo }}</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark ms-1">prueba</span>
                             {% endif %}
                             <br>
                             <small class="text-muted">ID: {{ item.organizacion.id }}</small>
@@ -132,10 +134,15 @@
                         </td>
                         <td class="text-center">
                             <a href="{{ url_for('superadmin.ver_organizacion', org_id=item.organizacion.id) }}"
-                               class="btn btn-sm btn-outline-primary"
+                               class="btn btn-sm btn-outline-primary me-1"
                                title="Ver detalles">
                                 <i class="fas fa-eye"></i>
                             </a>
+                            <button type="button" class="btn btn-sm btn-outline-success"
+                                    title="Activar plan"
+                                    onclick="abrirModalPlan({{ item.organizacion.id }}, '{{ item.organizacion.nombre }}', '{{ item.organizacion.plan_tipo or 'prueba' }}')">
+                                <i class="fas fa-crown"></i>
+                            </button>
                         </td>
                     </tr>
                     {% else %}
@@ -150,4 +157,48 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Activar Plan -->
+<div class="modal fade" id="modalActivarPlan" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="formActivarPlan" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-crown me-2"></i>Activar Plan</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Organización: <strong id="modalOrgNombre"></strong></p>
+                    <p>Plan actual: <span id="modalPlanActual" class="badge bg-secondary"></span></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Nuevo Plan</label>
+                        <select class="form-select" name="plan_tipo" required>
+                            <option value="estandar">Plan Standard (5 usuarios, 3 obras)</option>
+                            <option value="premium">Plan Premium (15 usuarios, 5 obras)</option>
+                            <option value="full_premium">Plan Full Premium (25 usuarios, 15 obras)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Duración (días)</label>
+                        <input type="number" class="form-control" name="dias" value="30" min="1" max="365">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check me-2"></i>Activar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function abrirModalPlan(orgId, orgNombre, planActual) {
+    document.getElementById('formActivarPlan').action = '/superadmin/activar-plan/' + orgId;
+    document.getElementById('modalOrgNombre').textContent = orgNombre;
+    document.getElementById('modalPlanActual').textContent = planActual;
+    new bootstrap.Modal(document.getElementById('modalActivarPlan')).show();
+}
+</script>
 {% endblock %}
