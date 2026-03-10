@@ -275,7 +275,7 @@ def pago_mercadopago(plan):
                 "category_id": "services",
                 "quantity": 1,
                 "currency_id": "ARS",
-                "unit_price": 10.00  # TEMPORARIO: precio de prueba, restaurar a round(precio_ars, 2)
+                "unit_price": round(precio_ars, 2)
             }
         ],
         "external_reference": f"user_{current_user.id}_plan_{plan}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
