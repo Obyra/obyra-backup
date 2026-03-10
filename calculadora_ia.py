@@ -2033,6 +2033,12 @@ def calcular_etapa_por_reglas(
                     'subtotal': float(_quantize_currency(costo_herr)),
                 })
 
+    # Consolidar items duplicados dentro de la misma etapa
+    items = _consolidar_items(items)
+    subtotal_materiales = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items if i.get('tipo') == 'material')
+    subtotal_mano_obra = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items if i.get('tipo') == 'mano_obra')
+    subtotal_equipos = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items if i.get('tipo') == 'equipo')
+
     subtotal_total = subtotal_materiales + subtotal_mano_obra + subtotal_equipos
     confianza = min(0.6 + 0.03 * len(items), 0.9)
 
@@ -2071,6 +2077,31 @@ def calcular_etapa_por_reglas(
             'proveedor': _get_cac_context_cached().provider,
         },
     }
+
+
+def _consolidar_items(items):
+    """
+    Consolida items con el mismo código: suma cantidades y subtotales
+    en vez de repetir filas duplicadas.
+    """
+    consolidado = {}
+    orden = []
+    for item in items:
+        key = (item.get('codigo', ''), item.get('tipo', ''))
+        if key in consolidado:
+            consolidado[key]['cantidad'] += item.get('cantidad', 0)
+            consolidado[key]['subtotal'] += item.get('subtotal', 0)
+        else:
+            consolidado[key] = dict(item)
+            orden.append(key)
+    # Recalcular subtotales redondeados
+    resultado = []
+    for key in orden:
+        item = consolidado[key]
+        item['cantidad'] = round(item['cantidad'], 2)
+        item['subtotal'] = round(item['subtotal'], 2)
+        resultado.append(item)
+    return resultado
 
 
 def calcular_etapas_seleccionadas(
@@ -2497,6 +2528,14 @@ def calcular_etapas_por_niveles(
                 'subtotal': float(nivel_subtotal),
                 'items': len(resultado_nivel.get('items', [])),
             })
+
+        # Consolidar items duplicados (mismo código) sumando cantidades
+        items_etapa = _consolidar_items(items_etapa)
+
+        # Recalcular subtotales desde items consolidados
+        sub_mat = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items_etapa if i.get('tipo') == 'material')
+        sub_mo = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items_etapa if i.get('tipo') == 'mano_obra')
+        sub_eq = sum(_to_decimal(i.get('subtotal', 0), '0') for i in items_etapa if i.get('tipo') == 'equipo')
 
         subtotal_etapa = sub_mat + sub_mo + sub_eq
         total_parcial += subtotal_etapa
