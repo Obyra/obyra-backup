@@ -298,7 +298,10 @@ def pago_mercadopago(plan):
         preference = preference_response.get("response", {})
 
         # Usar sandbox_init_point si el token es de test, init_point si es producción
-        checkout_url = preference.get("sandbox_init_point") or preference.get("init_point")
+        if mp_access_token.startswith('TEST-'):
+            checkout_url = preference.get("sandbox_init_point") or preference.get("init_point")
+        else:
+            checkout_url = preference.get("init_point")
         if not checkout_url:
             print(f"MP Error Response: {preference_response}")
             flash('Error al crear el pago. Por favor, intenta nuevamente.', 'error')
