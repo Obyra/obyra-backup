@@ -471,32 +471,33 @@ def verificar_periodo_prueba():
             app.logger.info(f"Super admin access granted for: {current_user.email}")
             return  # Acceso completo sin restricciones de plan
 
-        # Determinar el plan a verificar según el contexto del usuario
+        # Determinar el plan a verificar: siempre desde la organización
         plan_a_verificar = None
         entidad_con_plan = None
 
-        # Operarios y PMs heredan el plan de su organización
-        if current_user.role in ['operario', 'pm']:
-            membership = get_current_membership()
-            if membership and membership.organizacion:
-                plan_a_verificar = getattr(membership.organizacion, 'plan_activo', None)
-                entidad_con_plan = membership.organizacion
+        org = current_user.organizacion
+        if org:
+            plan_a_verificar = getattr(org, 'plan_tipo', None) or 'prueba'
+            entidad_con_plan = org
         else:
-            # Admins verifican su propio plan
             plan_a_verificar = getattr(current_user, "plan_activo", None)
             entidad_con_plan = current_user
 
         # Verificar si el plan es de prueba y ya expiró
         if plan_a_verificar == 'prueba' and entidad_con_plan:
-            if hasattr(entidad_con_plan, "esta_en_periodo_prueba") and not entidad_con_plan.esta_en_periodo_prueba():
-                # Solo mostrar mensaje si es el admin (quien debe contratar)
+            # Verificar expiración: usar fecha_creacion de la org para calcular 30 días
+            periodo_vencido = False
+            if hasattr(entidad_con_plan, 'fecha_creacion') and entidad_con_plan.fecha_creacion:
+                from datetime import timedelta
+                fecha_limite = entidad_con_plan.fecha_creacion + timedelta(days=30)
+                periodo_vencido = datetime.utcnow() > fecha_limite
+
+            if periodo_vencido:
                 if current_user.role == 'admin':
-                    # Solo agregar flash si no venimos de una redirección previa (evitar duplicados)
                     if not request.endpoint or not request.endpoint.startswith('planes.'):
                         flash('Tu período de prueba de 30 días ha expirado. Selecciona un plan para continuar.', 'warning')
                     return redirect(url_for('planes.mostrar_planes'))
                 else:
-                    # Operarios/PMs: el admin debe renovar
                     flash('El período de prueba de tu organización ha expirado. Contacta al administrador.', 'warning')
                     return redirect(url_for('index'))
 
