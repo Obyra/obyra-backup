@@ -452,9 +452,32 @@ def lista():
 
 @obras_bp.route('/crear', methods=['GET', 'POST'])
 @login_required
+def verificar_limite_obras(org_id):
+    """Verifica si la organización puede crear más obras según su plan."""
+    from models import Organizacion
+    org = Organizacion.query.get(org_id)
+    if not org:
+        return False, "No se encontró la organización."
+    limite = org.max_obras or 1
+    cantidad_actual = Obra.query.filter(
+        Obra.organizacion_id == org_id,
+        Obra.estado != 'cancelada'
+    ).count()
+    if cantidad_actual >= limite:
+        return False, f"Has alcanzado el límite de {limite} obras de tu plan. Para crear más obras, mejorá tu plan."
+    return True, f"Obras: {cantidad_actual}/{limite}"
+
+
 def crear():
     if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras'):
         flash('No tienes permisos para crear obras.', 'danger')
+        return redirect(url_for('obras.lista'))
+
+    # Verificar límite de obras del plan
+    org_id = get_current_org_id()
+    puede_crear, mensaje_obras = verificar_limite_obras(org_id)
+    if not puede_crear:
+        flash(mensaje_obras, 'warning')
         return redirect(url_for('obras.lista'))
 
     if request.method == 'POST':

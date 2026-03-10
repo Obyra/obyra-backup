@@ -142,6 +142,14 @@
                                     {{ 'Desactivar' if miembro.status == 'active' and usuario.activo else 'Activar' }}
                                 </button>
                             </form>
+                            <form method="POST" action="{{ url_for('equipos.eliminar_miembro', id=usuario.id) }}"
+                                  style="display: inline;"
+                                  onsubmit="return confirm('¿Estás seguro de eliminar a {{ usuario.nombre_completo }} del equipo? Esta acción no se puede deshacer.')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                    <i class="fas fa-user-times me-1"></i>Eliminar
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
                     </div>

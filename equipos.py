@@ -69,8 +69,8 @@ def _normalize_membership_role(raw_role: Optional[str]) -> Optional[str]:
     return None
 
 
-# Límite de usuarios por organización
-MAX_USUARIOS_POR_ORGANIZACION = 10
+# Límite de usuarios por defecto (plan prueba)
+MAX_USUARIOS_DEFAULT = 3
 
 
 def contar_usuarios_organizacion(org_id):
@@ -87,6 +87,15 @@ def contar_usuarios_organizacion(org_id):
     ).count()
 
 
+def obtener_limite_usuarios(org_id):
+    """Obtiene el límite de usuarios según el plan de la organización."""
+    from models import Organizacion
+    org = Organizacion.query.get(org_id)
+    if org and org.max_usuarios:
+        return org.max_usuarios
+    return MAX_USUARIOS_DEFAULT
+
+
 def verificar_limite_usuarios(org_id):
     """
     Verifica si la organización puede agregar más usuarios.
@@ -96,11 +105,12 @@ def verificar_limite_usuarios(org_id):
         return False, "No se encontró la organización."
 
     cantidad_actual = contar_usuarios_organizacion(org_id)
+    limite = obtener_limite_usuarios(org_id)
 
-    if cantidad_actual >= MAX_USUARIOS_POR_ORGANIZACION:
-        return False, f"Has alcanzado el límite de {MAX_USUARIOS_POR_ORGANIZACION} usuarios para tu organización. Contacta a soporte para ampliar tu plan."
+    if cantidad_actual >= limite:
+        return False, f"Has alcanzado el límite de {limite} usuarios de tu plan. Para agregar más usuarios, mejorá tu plan."
 
-    return True, f"Usuarios: {cantidad_actual}/{MAX_USUARIOS_POR_ORGANIZACION}"
+    return True, f"Usuarios: {cantidad_actual}/{limite}"
 
 
 equipos_bp = Blueprint('equipos', __name__)
@@ -571,6 +581,43 @@ def toggle_activo(id):
     except Exception:
         db.session.rollback()
         flash('Error al cambiar el estado del usuario.', 'danger')
+
+    return redirect(url_for('equipos.lista'))
+
+@equipos_bp.route('/<int:id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_miembro(id):
+    membership = get_current_membership()
+    if not membership or membership.role != 'admin':
+        flash('No tienes permisos para eliminar usuarios.', 'danger')
+        return redirect(url_for('equipos.lista'))
+
+    objetivo = (
+        OrgMembership.query
+        .filter(
+            OrgMembership.org_id == membership.org_id,
+            OrgMembership.user_id == id,
+        )
+        .first()
+    )
+
+    if not objetivo:
+        flash('El usuario no pertenece a tu organización.', 'danger')
+        return redirect(url_for('equipos.lista'))
+
+    if objetivo.user_id == current_user.id:
+        flash('No puedes eliminarte a ti mismo del equipo.', 'danger')
+        return redirect(url_for('equipos.lista'))
+
+    nombre = objetivo.usuario.nombre_completo if objetivo.usuario else 'Usuario'
+
+    try:
+        db.session.delete(objetivo)
+        db.session.commit()
+        flash(f'Usuario {nombre} eliminado del equipo exitosamente.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Error al eliminar el usuario del equipo.', 'danger')
 
     return redirect(url_for('equipos.lista'))
 

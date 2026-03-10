@@ -1560,6 +1560,12 @@ def confirmar_como_obra(id):
         if presupuesto.items.count() == 0:
             return jsonify({'error': '❌ No se puede confirmar un presupuesto sin ítems. Agregá al menos un ítem o usá la calculadora IA primero.'}), 400
 
+        # Verificar límite de obras del plan
+        from obras import verificar_limite_obras
+        puede_crear, mensaje_obras = verificar_limite_obras(org_id)
+        if not puede_crear:
+            return jsonify({'error': f'❌ {mensaje_obras}'}), 400
+
         # Obtener datos del formulario
         data = request.get_json() or {}
         crear_tareas = data.get('crear_tareas', True)
