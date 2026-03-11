@@ -22,6 +22,7 @@
 .cronograma-estado.pendiente { background: #e9ecef; color: #6c757d; }
 .cronograma-estado.en_curso { background: #cfe2ff; color: #0d6efd; }
 .cronograma-estado.finalizada { background: #d1e7dd; color: #198754; }
+.cronograma-table tbody tr:hover { background: #f0f7ff; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -3736,8 +3737,8 @@ async function initGantt() {
             const widthPct = Math.max(((end - start) / (1000*60*60*24)) / totalDays * 100, 1);
             const estado = t.estado || 'pendiente';
 
-            html += '<tr>';
-            html += `<td class="fw-semibold">${t.name}</td>`;
+            html += `<tr style="cursor:pointer;" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
+            html += `<td class="fw-semibold"><i class="fas fa-edit text-muted me-1" style="font-size:11px;"></i>${t.name}</td>`;
             html += `<td class="text-center">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
             html += `<td class="text-center">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
             html += `<td class="text-center"><span class="cronograma-estado ${estado}">${estadoLabel[estado]||estado}</span></td>`;
