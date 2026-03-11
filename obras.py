@@ -625,9 +625,17 @@ def detalle(id):
         # Detectar horas incorrectas (todas iguales = heredaron horas de etapa)
         horas_set = set(float(t.horas_estimadas or 0) for t in tareas_etapa)
         horas_mal = len(horas_set) <= 1 and len(tareas_etapa) > 1
-        if sin_cantidad or horas_mal:
-            distribuir_datos_etapa_a_tareas(etapa.id)
-            datos_distribuidos = True
+        # Detectar cantidades incorrectas (todas iguales = heredaron cantidad de etapa)
+        cant_set = set(float(t.cantidad_planificada or 0) for t in tareas_etapa)
+        cant_mal = len(cant_set) <= 1 and len(tareas_etapa) > 1 and any(float(t.cantidad_planificada or 0) > 0 for t in tareas_etapa)
+        necesita_forzar = horas_mal and cant_mal  # ambos mal = forzar redistribución completa
+        if sin_cantidad or horas_mal or cant_mal:
+            try:
+                distribuir_datos_etapa_a_tareas(etapa.id, forzar=necesita_forzar)
+                datos_distribuidos = True
+            except Exception as e:
+                import traceback
+                current_app.logger.error(f"Error distribuyendo etapa {etapa.id} ({etapa.nombre}): {e}\n{traceback.format_exc()}")
 
     if datos_distribuidos:
         db.session.commit()
@@ -4310,6 +4318,10 @@ def editar_fechas_etapa(etapa_id):
         propagadas = result['shifted_count']
         if propagadas > 0:
             db.session.commit()
+
+        # Redistribuir fechas de tareas dentro de esta etapa
+        distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
+        db.session.commit()
 
         return jsonify({
             'ok': True,
