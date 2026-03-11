@@ -9,29 +9,19 @@
 .cursor-pointer { cursor: pointer !important; }
 .cursor-pointer:hover { color: #0056b3 !important; }
 
-/* Cronograma card styles */
-.crono-card { background: #fff; border: 1px solid #e8ecf1; border-left: 4px solid #cbd5e0; border-radius: 8px; padding: 14px 18px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 16px; }
-.crono-card:hover { border-left-color: #4299e1; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
-.crono-card.estado-en_curso { border-left-color: #4299e1; }
-.crono-card.estado-finalizada { border-left-color: #48bb78; }
-.crono-card .crono-nivel { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; color: #fff; white-space: nowrap; min-width: 36px; text-align: center; }
-.crono-card .crono-nombre { font-weight: 600; font-size: 14px; color: #1a202c; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crono-card .crono-fechas { font-size: 12px; color: #718096; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
-.crono-card .crono-dias { font-size: 12px; font-weight: 600; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
-.crono-card .crono-estado { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
-.crono-card .crono-estado.pendiente { background: #f7fafc; color: #a0aec0; border: 1px solid #e2e8f0; }
-.crono-card .crono-estado.en_curso { background: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8; }
-.crono-card .crono-estado.finalizada { background: #f0fff4; color: #276749; border: 1px solid #c6f6d5; }
-.crono-progress-wrap { flex: 0 0 180px; display: flex; align-items: center; gap: 10px; }
-.crono-bar-bg { flex: 1; height: 10px; background: #edf2f7; border-radius: 5px; overflow: hidden; position: relative; }
-.crono-bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); min-width: 0; }
-.crono-bar-fill.fill-pendiente { background: linear-gradient(90deg, #e2e8f0, #cbd5e0); }
-.crono-bar-fill.fill-en_curso { background: linear-gradient(90deg, #63b3ed, #4299e1); }
-.crono-bar-fill.fill-finalizada { background: linear-gradient(90deg, #68d391, #48bb78); }
-.crono-pct { font-size: 13px; font-weight: 700; min-width: 38px; text-align: right; }
-.crono-pct.pct-pendiente { color: #a0aec0; }
-.crono-pct.pct-en_curso { color: #3182ce; }
-.crono-pct.pct-finalizada { color: #38a169; }
+/* Cronograma styles - matching etapa-card design */
+.crono-item { border-top: 3px solid #28a745; }
+.crono-item .card-body { padding: 10px 16px; }
+.crono-item .crono-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.crono-item .crono-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.crono-item .crono-left strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crono-item .crono-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.crono-item .crono-fechas-text { font-size: 12px; color: #6c757d; white-space: nowrap; }
+.crono-item .crono-dias-badge { font-size: 11px; font-weight: 600; color: #495057; background: #e9ecef; padding: 2px 8px; border-radius: 10px; }
+.crono-progress-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0f0f0; }
+.crono-progress-row .progress { height: 8px; flex: 1; background: #e9ecef; border-radius: 4px; }
+.crono-progress-row .progress-bar { border-radius: 4px; transition: width 0.5s ease; }
+.crono-progress-row .crono-pct { font-size: 12px; font-weight: 700; min-width: 35px; text-align: right; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -3702,8 +3692,9 @@ async function initGantt() {
             return;
         }
 
-        const estadoLabel = {pendiente:'Pendiente', en_curso:'En curso', finalizada:'Finalizada'};
-        const nivelColors = ['#2c5282','#2b6cb0','#3182ce','#4299e1','#63b3ed','#90cdf4'];
+        const estadoLabel = {pendiente:'PENDIENTE', en_curso:'EN CURSO', finalizada:'FINALIZADA'};
+        const estadoBadge = {pendiente:'bg-secondary', en_curso:'bg-primary', finalizada:'bg-success'};
+        const barBg = {pendiente:'bg-secondary', en_curso:'bg-primary', finalizada:'bg-success'};
 
         let html = '';
         tasks.forEach((t, idx) => {
@@ -3713,21 +3704,33 @@ async function initGantt() {
             const duracion = Math.max(1, Math.round((end - start) / (1000*60*60*24)));
             const progress = Math.min(100, Math.max(0, t.progress || 0));
             const nivel = t.nivel || (idx + 1);
-            const nivelColor = nivelColors[Math.min(nivel - 1, nivelColors.length - 1)] || '#4299e1';
+            const fmtD = (d) => d.toLocaleDateString('es-AR', {day:'2-digit', month:'short'}).replace('.','');
 
-            const fmtDate = (d) => d.toLocaleDateString('es-AR', {day:'2-digit', month:'short'});
+            html += `<div class="card mb-2 border shadow-sm crono-item">`;
+            html += `<div class="card-body">`;
 
-            html += `<div class="crono-card estado-${estado}" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
-            html += `<span class="crono-nivel" style="background:${nivelColor};">NV${nivel}</span>`;
-            html += `<span class="crono-nombre">${t.name}</span>`;
-            html += `<span class="crono-fechas"><i class="far fa-calendar-alt" style="font-size:11px;"></i> ${fmtDate(start)} - ${fmtDate(end)}</span>`;
-            html += `<span class="crono-dias">${duracion}d</span>`;
-            html += `<span class="crono-estado ${estado}">${estadoLabel[estado]||estado}</span>`;
-            html += `<div class="crono-progress-wrap">`;
-            html += `<div class="crono-bar-bg"><div class="crono-bar-fill fill-${estado}" style="width:${progress}%;"></div></div>`;
-            html += `<span class="crono-pct pct-${estado}">${progress}%</span>`;
+            // Row 1: nombre, fechas, estado, boton editar (same layout as etapa-card)
+            html += `<div class="crono-row">`;
+            html += `<div class="crono-left">`;
+            html += `<span class="badge bg-info text-white" style="font-size:.65rem;">NV${nivel}</span>`;
+            html += `<strong>${t.name}</strong>`;
+            if (t.es_opcional) html += `<span class="badge bg-light text-muted" style="font-size:.6rem;">OPC</span>`;
+            html += `</div>`;
+            html += `<div class="crono-right">`;
+            html += `<span class="crono-fechas-text"><i class="far fa-calendar-alt me-1"></i>${fmtD(start)} - ${fmtD(end)}</span>`;
+            html += `<span class="crono-dias-badge">${duracion}d</span>`;
+            html += `<span class="badge ${estadoBadge[estado]||'bg-secondary'}" style="font-size:.7rem;">${estadoLabel[estado]||estado}</span>`;
+            html += `<button class="btn btn-sm btn-outline-primary" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')"><i class="fas fa-calendar-pen me-1" style="font-size:11px;"></i>Editar</button>`;
             html += `</div>`;
             html += `</div>`;
+
+            // Row 2: progress bar
+            html += `<div class="crono-progress-row">`;
+            html += `<div class="progress"><div class="progress-bar ${barBg[estado]||'bg-secondary'}" role="progressbar" style="width:${progress}%;" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"></div></div>`;
+            html += `<span class="crono-pct" style="color:${estado==='finalizada'?'#198754':estado==='en_curso'?'#0d6efd':'#6c757d'};">${progress}%</span>`;
+            html += `</div>`;
+
+            html += `</div></div>`;
         });
 
         container.innerHTML = html;
