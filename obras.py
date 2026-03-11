@@ -4384,13 +4384,25 @@ def editar_fechas_etapa(etapa_id):
     data = request.get_json(silent=True) or {}
 
     try:
+        fechas_editadas = False
         if 'fecha_inicio' in data and data['fecha_inicio']:
-            etapa.fecha_inicio_estimada = date.fromisoformat(data['fecha_inicio'])
+            nueva_inicio = date.fromisoformat(data['fecha_inicio'])
+            if etapa.fecha_inicio_estimada != nueva_inicio:
+                etapa.fecha_inicio_estimada = nueva_inicio
+                fechas_editadas = True
         if 'fecha_fin' in data and data['fecha_fin']:
-            etapa.fecha_fin_estimada = date.fromisoformat(data['fecha_fin'])
+            nueva_fin = date.fromisoformat(data['fecha_fin'])
+            if etapa.fecha_fin_estimada != nueva_fin:
+                etapa.fecha_fin_estimada = nueva_fin
+                fechas_editadas = True
 
         if 'bloquear_fechas' in data:
             etapa.fechas_manuales = bool(data['bloquear_fechas'])
+
+        # Si el usuario editó fechas manualmente, bloquearlas para que
+        # la propagación no las sobreescriba
+        if fechas_editadas and not etapa.fechas_manuales:
+            etapa.fechas_manuales = True
 
         if 'nivel' in data:
             etapa.nivel_encadenamiento = int(data['nivel']) if data['nivel'] is not None else None
@@ -4402,7 +4414,7 @@ def editar_fechas_etapa(etapa_id):
 
         db.session.commit()
 
-        # SIEMPRE propagar fechas a etapas sucesoras
+        # Propagar fechas a etapas sucesoras (esta etapa no se toca por fechas_manuales)
         # Primero asegurar que existan dependencias desde niveles
         from services.dependency_service import generar_dependencias_desde_niveles
         deps_creadas = generar_dependencias_desde_niveles(etapa.obra_id)
