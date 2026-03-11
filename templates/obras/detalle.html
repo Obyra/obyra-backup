@@ -13,7 +13,7 @@
 .cronograma-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cronograma-table th { background: #f8f9fa; padding: 8px 10px; border: 1px solid #dee2e6; font-weight: 600; color: #495057; white-space: nowrap; }
 .cronograma-table td { padding: 6px 10px; border: 1px solid #dee2e6; vertical-align: middle; }
-.cronograma-bar-container { position: relative; height: 24px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+.cronograma-bar-container { position: relative; height: 24px; background: #e9ecef; border-radius: 4px; overflow: hidden; min-width: 300px; }
 .cronograma-bar { position: absolute; top: 0; height: 100%; border-radius: 4px; min-width: 4px; }
 .cronograma-bar.pendiente { background: #adb5bd; }
 .cronograma-bar.en_curso { background: linear-gradient(90deg, #0d6efd, #6ea8fe); }
@@ -3726,7 +3726,7 @@ async function initGantt() {
         const todayPct = Math.max(0, Math.min(100, ((today - minDate) / (1000*60*60*24)) / totalDays * 100));
 
         let html = '<table class="cronograma-table"><thead><tr>';
-        html += '<th style="width:200px;">Etapa</th><th style="width:90px;">Inicio</th><th style="width:90px;">Fin</th><th style="width:80px;">Estado</th><th>Cronograma</th>';
+        html += '<th style="width:200px;">Etapa</th><th style="width:90px;">Inicio</th><th style="width:90px;">Fin</th><th style="width:80px;">Estado</th><th>Linea de tiempo</th>';
         html += '</tr></thead><tbody>';
 
         tasks.forEach(t => {
