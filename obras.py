@@ -672,48 +672,49 @@ def detalle(id):
         for t in todas_tareas:
             tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
 
-    # Sync directo: asegurar que fechas de tareas coincidan con etapa (cronograma)
+    # Sync directo: fechas y cantidades redondas
     fechas_sync = False
     for etapa in etapas:
+        # Fechas del cronograma (misma lógica que gantt_data)
         inicio = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
         fin = etapa.fecha_fin_real or etapa.fecha_fin_estimada
-        if not inicio or not fin:
-            continue
         tareas_etapa = tareas_por_etapa.get(etapa.id, [])
-        n = len(tareas_etapa)
-        if n == 0:
+        if not tareas_etapa:
             continue
-        if n == 1:
-            # Una sola tarea: hereda exactamente las fechas de la etapa
-            t = tareas_etapa[0]
-            if t.fecha_inicio_plan != inicio or t.fecha_fin_plan != fin:
-                t.fecha_inicio_plan = inicio
-                t.fecha_fin_plan = fin
-                t.fecha_inicio_estimada = inicio
-                t.fecha_fin_estimada = fin
-                fechas_sync = True
-        else:
-            # Múltiples tareas: verificar que estén dentro del rango
-            for t in tareas_etapa:
-                changed = False
-                if t.fecha_inicio_plan and t.fecha_inicio_plan < inicio:
-                    t.fecha_inicio_plan = inicio
-                    t.fecha_inicio_estimada = inicio
-                    changed = True
-                if t.fecha_fin_plan and t.fecha_fin_plan > fin:
-                    t.fecha_fin_plan = fin
-                    t.fecha_fin_estimada = fin
-                    changed = True
-                if not t.fecha_inicio_plan:
-                    t.fecha_inicio_plan = inicio
-                    t.fecha_inicio_estimada = inicio
-                    changed = True
-                if not t.fecha_fin_plan:
-                    t.fecha_fin_plan = fin
-                    t.fecha_fin_estimada = fin
-                    changed = True
-                if changed:
+
+        for t in tareas_etapa:
+            # Sync fechas con cronograma
+            if inicio and fin:
+                if len(tareas_etapa) == 1:
+                    # Una sola tarea: exactamente las fechas de la etapa
+                    if t.fecha_inicio_plan != inicio or t.fecha_fin_plan != fin:
+                        t.fecha_inicio_plan = inicio
+                        t.fecha_fin_plan = fin
+                        t.fecha_inicio_estimada = inicio
+                        t.fecha_fin_estimada = fin
+                        fechas_sync = True
+                else:
+                    # Múltiples: ajustar si están fuera del rango
+                    if not t.fecha_inicio_plan or t.fecha_inicio_plan < inicio:
+                        t.fecha_inicio_plan = inicio
+                        t.fecha_inicio_estimada = inicio
+                        fechas_sync = True
+                    if not t.fecha_fin_plan or t.fecha_fin_plan > fin:
+                        t.fecha_fin_plan = fin
+                        t.fecha_fin_estimada = fin
+                        fechas_sync = True
+
+            # Redondear cantidades a enteros
+            if t.cantidad_planificada:
+                cant_redondeada = round(float(t.cantidad_planificada))
+                if cant_redondeada < 1:
+                    cant_redondeada = 1
+                if float(t.cantidad_planificada) != float(cant_redondeada):
+                    t.cantidad_planificada = cant_redondeada
+                    if t.objetivo:
+                        t.objetivo = cant_redondeada
                     fechas_sync = True
+
     if fechas_sync:
         db.session.commit()
         todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
