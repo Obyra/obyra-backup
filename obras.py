@@ -4046,14 +4046,24 @@ def gantt_data(id):
         inicio = e.fecha_inicio_real or e.fecha_inicio_estimada
         fin = e.fecha_fin_real or e.fecha_fin_estimada
 
+        # Si la etapa no tiene fechas, calcular desde sus tareas
+        if not inicio or not fin:
+            tareas = e.tareas.all() if hasattr(e.tareas, 'all') else (e.tareas or [])
+            fechas_inicio = [t.fecha_inicio or t.fecha_inicio_estimada for t in tareas if (t.fecha_inicio or t.fecha_inicio_estimada)]
+            fechas_fin = [t.fecha_fin or t.fecha_fin_estimada for t in tareas if (t.fecha_fin or t.fecha_fin_estimada)]
+            if not inicio and fechas_inicio:
+                inicio = min(fechas_inicio)
+            if not fin and fechas_fin:
+                fin = max(fechas_fin)
+
         if not inicio or not fin:
             continue
 
         # Calcular progreso
         if e.estado == 'finalizada':
             progress = 100
-        elif e.estado == 'en_curso' and e.porcentaje_avance is not None:
-            progress = e.porcentaje_avance
+        elif e.estado == 'en_curso' and getattr(e, 'progreso', None) is not None:
+            progress = e.progreso
         else:
             progress = 0
 
