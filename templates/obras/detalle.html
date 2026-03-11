@@ -9,29 +9,29 @@
 .cursor-pointer { cursor: pointer !important; }
 .cursor-pointer:hover { color: #0056b3 !important; }
 
-/* Cronograma styles */
-.cronograma-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.cronograma-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; table-layout: fixed; }
-.cronograma-table th { background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: #fff; padding: 12px 14px; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; border: none; }
-.cronograma-table th:first-child { border-radius: 11px 0 0 0; }
-.cronograma-table th:last-child { border-radius: 0 11px 0 0; }
-.cronograma-table td { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
-.cronograma-table tbody tr { transition: all 0.2s ease; }
-.cronograma-table tbody tr:hover { background: #f0f7ff; transform: scale(1.002); }
-.cronograma-table tbody tr:nth-child(even) { background: #fafbfc; }
-.cronograma-table tbody tr:nth-child(even):hover { background: #f0f7ff; }
-.cronograma-table tbody tr:last-child td:first-child { border-radius: 0 0 0 11px; }
-.cronograma-table tbody tr:last-child td:last-child { border-radius: 0 0 11px 0; }
-.cronograma-bar-container { position: relative; height: 26px; background: #edf2f7; border-radius: 13px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06); }
-.cronograma-bar { position: absolute; top: 0; left: 0; height: 100%; border-radius: 13px; min-width: 0; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
-.cronograma-bar.bar-pendiente { background: linear-gradient(90deg, #cbd5e0 0%, #a0aec0 100%); }
-.cronograma-bar.bar-en_curso { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); }
-.cronograma-bar.bar-finalizada { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
-.cronograma-progress-text { position: absolute; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 700; z-index: 1; line-height: 1; }
-.cronograma-estado { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; display: inline-block; white-space: nowrap; letter-spacing: 0.3px; }
-.cronograma-estado.pendiente { background: #edf2f7; color: #718096; }
-.cronograma-estado.en_curso { background: #ebf8ff; color: #2b6cb0; }
-.cronograma-estado.finalizada { background: #f0fff4; color: #276749; }
+/* Cronograma card styles */
+.crono-card { background: #fff; border: 1px solid #e8ecf1; border-left: 4px solid #cbd5e0; border-radius: 8px; padding: 14px 18px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 16px; }
+.crono-card:hover { border-left-color: #4299e1; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
+.crono-card.estado-en_curso { border-left-color: #4299e1; }
+.crono-card.estado-finalizada { border-left-color: #48bb78; }
+.crono-card .crono-nivel { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; color: #fff; white-space: nowrap; min-width: 36px; text-align: center; }
+.crono-card .crono-nombre { font-weight: 600; font-size: 14px; color: #1a202c; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crono-card .crono-fechas { font-size: 12px; color: #718096; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.crono-card .crono-dias { font-size: 12px; font-weight: 600; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.crono-card .crono-estado { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+.crono-card .crono-estado.pendiente { background: #f7fafc; color: #a0aec0; border: 1px solid #e2e8f0; }
+.crono-card .crono-estado.en_curso { background: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8; }
+.crono-card .crono-estado.finalizada { background: #f0fff4; color: #276749; border: 1px solid #c6f6d5; }
+.crono-progress-wrap { flex: 0 0 180px; display: flex; align-items: center; gap: 10px; }
+.crono-bar-bg { flex: 1; height: 10px; background: #edf2f7; border-radius: 5px; overflow: hidden; position: relative; }
+.crono-bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); min-width: 0; }
+.crono-bar-fill.fill-pendiente { background: linear-gradient(90deg, #e2e8f0, #cbd5e0); }
+.crono-bar-fill.fill-en_curso { background: linear-gradient(90deg, #63b3ed, #4299e1); }
+.crono-bar-fill.fill-finalizada { background: linear-gradient(90deg, #68d391, #48bb78); }
+.crono-pct { font-size: 13px; font-weight: 700; min-width: 38px; text-align: right; }
+.crono-pct.pct-pendiente { color: #a0aec0; }
+.crono-pct.pct-en_curso { color: #3182ce; }
+.crono-pct.pct-finalizada { color: #38a169; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -113,14 +113,7 @@
                     {% if etapas|length > 0 %}
                     <div class="card shadow-sm border-0 mb-4">
                         <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0"><i class="fas fa-stream me-2"></i>Cronograma</h6>
-                                <div class="btn-group btn-group-sm" id="gantt-view-buttons">
-                                    <button class="btn btn-outline-secondary active" data-view="Week">Semana</button>
-                                    <button class="btn btn-outline-secondary" data-view="Month">Mes</button>
-                                    <button class="btn btn-outline-secondary" data-view="Quarter Year">Trimestre</button>
-                                </div>
-                            </div>
+                            <h6 class="mb-3"><i class="fas fa-stream me-2"></i>Cronograma</h6>
                             <div id="gantt-container"></div>
                         </div>
                     </div>
@@ -3710,38 +3703,33 @@ async function initGantt() {
         }
 
         const estadoLabel = {pendiente:'Pendiente', en_curso:'En curso', finalizada:'Finalizada'};
-        const estadoIcon = {pendiente:'far fa-clock', en_curso:'fas fa-spinner fa-pulse', finalizada:'fas fa-check-circle'};
+        const nivelColors = ['#2c5282','#2b6cb0','#3182ce','#4299e1','#63b3ed','#90cdf4'];
 
-        let html = '<div class="cronograma-wrap"><table class="cronograma-table"><thead><tr>';
-        html += '<th style="width:28%;">Etapa</th><th style="width:9%;">Inicio</th><th style="width:9%;">Fin</th><th style="width:7%;">Dias</th><th style="width:11%;">Estado</th><th style="width:36%;">Avance</th>';
-        html += '</tr></thead><tbody>';
-
-        tasks.forEach(t => {
+        let html = '';
+        tasks.forEach((t, idx) => {
             const start = new Date(t.start);
             const end = new Date(t.end);
             const estado = t.estado || 'pendiente';
             const duracion = Math.max(1, Math.round((end - start) / (1000*60*60*24)));
             const progress = Math.min(100, Math.max(0, t.progress || 0));
+            const nivel = t.nivel || (idx + 1);
+            const nivelColor = nivelColors[Math.min(nivel - 1, nivelColors.length - 1)] || '#4299e1';
 
-            // Posicion del texto del porcentaje: dentro si hay espacio, fuera si no
-            const textInside = progress >= 25;
-            const textColor = textInside ? '#fff' : '#4a5568';
-            const textPos = textInside ? `left: ${Math.max(4, progress - 2)}%; transform: translateX(-100%) translateY(-50%);` : `left: ${progress + 2}%; transform: translateY(-50%);`;
+            const fmtDate = (d) => d.toLocaleDateString('es-AR', {day:'2-digit', month:'short'});
 
-            html += `<tr style="cursor:pointer;" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
-            html += `<td class="fw-semibold text-truncate" style="max-width:0;"><i class="fas fa-grip-vertical text-muted me-2" style="font-size:10px;opacity:0.4;"></i>${t.name}</td>`;
-            html += `<td class="text-center" style="color:#4a5568;">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'short'})}</td>`;
-            html += `<td class="text-center" style="color:#4a5568;">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'short'})}</td>`;
-            html += `<td class="text-center fw-semibold" style="color:#2d3748;">${duracion}d</td>`;
-            html += `<td class="text-center"><span class="cronograma-estado ${estado}"><i class="${estadoIcon[estado]||''}" style="margin-right:4px;font-size:10px;"></i>${estadoLabel[estado]||estado}</span></td>`;
-            html += '<td><div class="cronograma-bar-container">';
-            html += `<div class="cronograma-bar bar-${estado}" style="width:${progress}%;" title="${progress}% completado"></div>`;
-            html += `<span class="cronograma-progress-text" style="${textPos}color:${textColor};">${progress}%</span>`;
-            html += '</div></td>';
-            html += '</tr>';
+            html += `<div class="crono-card estado-${estado}" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
+            html += `<span class="crono-nivel" style="background:${nivelColor};">NV${nivel}</span>`;
+            html += `<span class="crono-nombre">${t.name}</span>`;
+            html += `<span class="crono-fechas"><i class="far fa-calendar-alt" style="font-size:11px;"></i> ${fmtDate(start)} - ${fmtDate(end)}</span>`;
+            html += `<span class="crono-dias">${duracion}d</span>`;
+            html += `<span class="crono-estado ${estado}">${estadoLabel[estado]||estado}</span>`;
+            html += `<div class="crono-progress-wrap">`;
+            html += `<div class="crono-bar-bg"><div class="crono-bar-fill fill-${estado}" style="width:${progress}%;"></div></div>`;
+            html += `<span class="crono-pct pct-${estado}">${progress}%</span>`;
+            html += `</div>`;
+            html += `</div>`;
         });
 
-        html += '</tbody></table></div>';
         container.innerHTML = html;
 
     } catch(e) {
@@ -3749,14 +3737,6 @@ async function initGantt() {
         container.innerHTML = '<p class="text-muted small text-center py-3">Error al cargar cronograma.</p>';
     }
 }
-
-// View mode buttons (kept for compatibility, no-op now)
-document.querySelectorAll('#gantt-view-buttons .btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('#gantt-view-buttons .btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-    });
-});
 
 // Init on load
 document.addEventListener('DOMContentLoaded', initGantt);
