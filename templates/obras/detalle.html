@@ -18,18 +18,12 @@
 .cronograma-table tbody tr:hover { background: #edf4ff; }
 .cronograma-table tbody tr:nth-child(even) { background: #f9fafb; }
 .cronograma-table tbody tr:nth-child(even):hover { background: #edf4ff; }
-.cronograma-bar-cell { width: auto; min-width: 0; }
 .cronograma-bar-container { position: relative; height: 22px; background: #eef1f5; border-radius: 11px; overflow: hidden; }
-.cronograma-bar { position: absolute; top: 2px; height: 18px; border-radius: 9px; min-width: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
-.cronograma-bar.pendiente { background: linear-gradient(90deg, #b0b8c1, #cdd3da); }
-.cronograma-bar.en_curso { background: linear-gradient(90deg, #0d6efd, #4d9fff); }
-.cronograma-bar.finalizada { background: linear-gradient(90deg, #198754, #34c77b); }
+.cronograma-bar { position: absolute; top: 0; height: 100%; border-radius: 11px; min-width: 0; transition: width 0.3s ease; }
 .cronograma-estado { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; display: inline-block; white-space: nowrap; }
 .cronograma-estado.pendiente { background: #f0f1f3; color: #6c757d; }
 .cronograma-estado.en_curso { background: #dbeafe; color: #0d6efd; }
 .cronograma-estado.finalizada { background: #d1f2e0; color: #198754; }
-.cronograma-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; z-index: 2; }
-.cronograma-today-dot { position: absolute; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #dc3545; transform: translateX(-3px); z-index: 3; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -3707,54 +3701,33 @@ async function initGantt() {
             return;
         }
 
-        // Calcular rango total
-        const allDates = tasks.flatMap(t => [new Date(t.start), new Date(t.end)]);
-        const minDate = new Date(Math.min(...allDates));
-        const maxDate = new Date(Math.max(...allDates));
-        // Agregar margen de 7 dias a cada lado
-        minDate.setDate(minDate.getDate() - 7);
-        maxDate.setDate(maxDate.getDate() + 7);
-        const totalDays = Math.max((maxDate - minDate) / (1000*60*60*24), 1);
-
         const estadoLabel = {pendiente:'Pendiente', en_curso:'En curso', finalizada:'Finalizada'};
-        const today = new Date();
-        today.setHours(0,0,0,0);
-
-        // Generar meses para header
-        let meses = [];
-        let d = new Date(minDate);
-        d.setDate(1);
-        const mesesNombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-        while (d <= maxDate) {
-            meses.push({nombre: mesesNombres[d.getMonth()] + ' ' + d.getFullYear(), date: new Date(d)});
-            d.setMonth(d.getMonth() + 1);
-        }
-
-        // Linea de hoy
-        const todayPct = Math.max(0, Math.min(100, ((today - minDate) / (1000*60*60*24)) / totalDays * 100));
 
         let html = '<div class="cronograma-wrap"><table class="cronograma-table"><thead><tr>';
-        html += '<th style="width:22%;">Etapa</th><th style="width:8%;">Inicio</th><th style="width:8%;">Fin</th><th style="width:10%;">Estado</th><th style="width:52%;">Linea de tiempo</th>';
+        html += '<th style="width:25%;">Etapa</th><th style="width:9%;">Inicio</th><th style="width:9%;">Fin</th><th style="width:8%;">Dias</th><th style="width:10%;">Estado</th><th style="width:39%;">Avance</th>';
         html += '</tr></thead><tbody>';
 
         tasks.forEach(t => {
             const start = new Date(t.start);
             const end = new Date(t.end);
-            const startPct = ((start - minDate) / (1000*60*60*24)) / totalDays * 100;
-            const widthPct = Math.max(((end - start) / (1000*60*60*24)) / totalDays * 100, 1.5);
             const estado = t.estado || 'pendiente';
             const duracion = Math.round((end - start) / (1000*60*60*24));
+            const progress = t.progress || 0;
+
+            // Color de la barra de avance segun estado
+            let barColor = '#adb5bd';
+            if (estado === 'en_curso') barColor = '#0d6efd';
+            if (estado === 'finalizada') barColor = '#198754';
 
             html += `<tr style="cursor:pointer;" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
             html += `<td class="fw-semibold text-truncate" style="max-width:0;"><i class="fas fa-edit text-primary me-1" style="font-size:10px;opacity:0.6;"></i>${t.name}</td>`;
             html += `<td class="text-center text-muted">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
             html += `<td class="text-center text-muted">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
+            html += `<td class="text-center fw-semibold">${duracion}d</td>`;
             html += `<td class="text-center"><span class="cronograma-estado ${estado}">${estadoLabel[estado]||estado}</span></td>`;
-            html += '<td class="cronograma-bar-cell"><div class="cronograma-bar-container">';
-            if (todayPct > 0 && todayPct < 100) {
-                html += `<div class="cronograma-today-line" style="left:${todayPct}%;"><div class="cronograma-today-dot"></div></div>`;
-            }
-            html += `<div class="cronograma-bar ${estado}" style="left:${startPct}%;width:${widthPct}%;" title="${t.name}: ${duracion} dias"></div>`;
+            html += '<td><div class="cronograma-bar-container">';
+            html += `<div class="cronograma-bar" style="left:0;width:${progress}%;background:${barColor};" title="${progress}% completado"></div>`;
+            html += `<span style="position:absolute;right:8px;top:2px;font-size:11px;font-weight:600;color:${progress > 50 ? '#fff' : '#495057'};z-index:1;">${progress}%</span>`;
             html += '</div></td>';
             html += '</tr>';
         });
