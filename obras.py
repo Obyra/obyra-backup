@@ -1418,10 +1418,14 @@ def recalc_tarea_pct(tarea_id):
         return 0
 
     meta = float(tarea.cantidad_planificada or 0)
+    ejecutado = suma_ejecutado(tarea_id)
     if meta <= 0:
-        tarea.porcentaje_avance = 0
+        # Sin cantidad planificada: si hay algún avance aprobado, considerar 100%
+        if ejecutado > 0:
+            tarea.porcentaje_avance = 100
+        else:
+            tarea.porcentaje_avance = 0
     else:
-        ejecutado = suma_ejecutado(tarea_id)
         tarea.porcentaje_avance = min(100, round((ejecutado / meta) * 100, 2))
 
     # Auto-cambiar estado según porcentaje de avance
