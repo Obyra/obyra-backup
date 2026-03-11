@@ -672,6 +672,55 @@ def detalle(id):
         for t in todas_tareas:
             tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
 
+    # Sync directo: asegurar que fechas de tareas coincidan con etapa (cronograma)
+    fechas_sync = False
+    for etapa in etapas:
+        inicio = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
+        fin = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+        if not inicio or not fin:
+            continue
+        tareas_etapa = tareas_por_etapa.get(etapa.id, [])
+        n = len(tareas_etapa)
+        if n == 0:
+            continue
+        if n == 1:
+            # Una sola tarea: hereda exactamente las fechas de la etapa
+            t = tareas_etapa[0]
+            if t.fecha_inicio_plan != inicio or t.fecha_fin_plan != fin:
+                t.fecha_inicio_plan = inicio
+                t.fecha_fin_plan = fin
+                t.fecha_inicio_estimada = inicio
+                t.fecha_fin_estimada = fin
+                fechas_sync = True
+        else:
+            # Múltiples tareas: verificar que estén dentro del rango
+            for t in tareas_etapa:
+                changed = False
+                if t.fecha_inicio_plan and t.fecha_inicio_plan < inicio:
+                    t.fecha_inicio_plan = inicio
+                    t.fecha_inicio_estimada = inicio
+                    changed = True
+                if t.fecha_fin_plan and t.fecha_fin_plan > fin:
+                    t.fecha_fin_plan = fin
+                    t.fecha_fin_estimada = fin
+                    changed = True
+                if not t.fecha_inicio_plan:
+                    t.fecha_inicio_plan = inicio
+                    t.fecha_inicio_estimada = inicio
+                    changed = True
+                if not t.fecha_fin_plan:
+                    t.fecha_fin_plan = fin
+                    t.fecha_fin_estimada = fin
+                    changed = True
+                if changed:
+                    fechas_sync = True
+    if fechas_sync:
+        db.session.commit()
+        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
+        tareas_por_etapa = {}
+        for t in todas_tareas:
+            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+
     # Auto-sync: recalcular tareas con avances aprobados que aún figuran como pendientes
     tareas_desync = [t for t in todas_tareas if t.estado == 'pendiente' and any(a.status == 'aprobado' for a in t.avances)]
     if tareas_desync:
@@ -1687,22 +1736,25 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         if cantidad_etapa > 0:
             if es_fisica:
                 proporcion_cant = horas_tarea / total_horas_fisicas
-                cant = round(cantidad_etapa * proporcion_cant, 2)
+                cant = round(cantidad_etapa * proporcion_cant)  # entero
+                cant = max(1, cant)
                 tarea.cantidad_planificada = cant
                 tarea.objetivo = cant
                 tarea.unidad = unidad_etapa
             else:
                 # Tarea administrativa: su meta es completar las horas
-                tarea.cantidad_planificada = horas_tarea
+                tarea.cantidad_planificada = round(horas_tarea)
                 tarea.unidad = 'h'
         else:
             # Sin cantidad en etapa → todas usan horas como meta
-            tarea.cantidad_planificada = horas_tarea
+            tarea.cantidad_planificada = round(horas_tarea)
             tarea.unidad = 'h'
 
-        # Rendimiento: cantidad por hora
-        if horas_tarea > 0 and float(tarea.cantidad_planificada or 0) > 0:
-            tarea.rendimiento = round(float(tarea.cantidad_planificada) / horas_tarea, 2)
+        # Rendimiento: cantidad por hora (solo para unidades físicas como m², ml, etc.)
+        if horas_tarea > 0 and float(tarea.cantidad_planificada or 0) > 0 and tarea.unidad not in ('h', 'día', 'dia', 'gl', 'global'):
+            tarea.rendimiento = round(float(tarea.cantidad_planificada) / horas_tarea, 1)
+        else:
+            tarea.rendimiento = None
 
         # Fechas: distribuir secuencialmente proporcional a horas
         if inicio_etapa and fin_etapa and dias_etapa > 0:

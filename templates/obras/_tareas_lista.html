@@ -44,7 +44,7 @@
                                 <!-- Cantidad + Unidad -->
                                 {% if tarea.cantidad_planificada %}
                                 <span class="badge bg-light text-dark border">
-                                    <i class="fas fa-calculator me-1"></i> {{ tarea.cantidad_planificada }} {{ tarea.unidad or 'un' }}
+                                    <i class="fas fa-ruler-combined me-1"></i> {{ tarea.cantidad_planificada|int if tarea.cantidad_planificada == tarea.cantidad_planificada|int else "%.1f"|format(tarea.cantidad_planificada|float) }} {{ tarea.unidad or 'un' }}
                                 </span>
                                 {% endif %}
                                 
@@ -60,8 +60,8 @@
                                     </span>
                                 {% endif %}
                                 
-                                <!-- Rendimiento -->
-                                {% if tarea.rendimiento and tarea.rendimiento > 0 %}
+                                <!-- Rendimiento (solo para unidades físicas: m², ml, etc.) -->
+                                {% if tarea.rendimiento and tarea.rendimiento > 0 and tarea.unidad not in ('h', 'día', 'dia', 'gl', 'global') %}
                                 <span class="badge bg-light text-dark border">
                                     <i class="fas fa-tachometer-alt me-1"></i> {{ "%.1f"|format(tarea.rendimiento|float) }} {{ tarea.unidad or 'un' }}/h
                                 </span>
