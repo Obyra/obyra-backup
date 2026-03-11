@@ -641,8 +641,12 @@ def detalle(id):
         cant_mal = len(cant_set) <= 1 and len(tareas_etapa) > 1 and any(float(t.cantidad_planificada or 0) > 0 for t in tareas_etapa)
 
         # Detectar fechas desincronizadas con la etapa
-        inicio_etapa = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
-        fin_etapa = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+        if etapa.estado in ('en_curso', 'finalizada'):
+            inicio_etapa = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
+            fin_etapa = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+        else:
+            inicio_etapa = etapa.fecha_inicio_estimada
+            fin_etapa = etapa.fecha_fin_estimada
         fechas_mal = False
         if inicio_etapa and fin_etapa:
             for t in tareas_etapa:
@@ -672,12 +676,23 @@ def detalle(id):
         for t in todas_tareas:
             tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
 
+    # Limpiar fechas reales de etapas pendientes (no deberían tener)
+    for etapa in etapas:
+        if etapa.estado == 'pendiente' and (etapa.fecha_inicio_real or etapa.fecha_fin_real):
+            etapa.fecha_inicio_real = None
+            etapa.fecha_fin_real = None
+            db.session.flush()
+
     # Sync directo: fechas y cantidades redondas
     fechas_sync = False
     for etapa in etapas:
-        # Fechas del cronograma (misma lógica que gantt_data)
-        inicio = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
-        fin = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+        # Fechas del cronograma: solo usar reales si la etapa arrancó
+        if etapa.estado in ('en_curso', 'finalizada'):
+            inicio = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
+            fin = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+        else:
+            inicio = etapa.fecha_inicio_estimada
+            fin = etapa.fecha_fin_estimada
         tareas_etapa = tareas_por_etapa.get(etapa.id, [])
         if not tareas_etapa:
             continue
@@ -1625,9 +1640,13 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
     cantidad_etapa = float(etapa.cantidad_total_planificada or 0)
     unidad_etapa = etapa.unidad_medida or 'm2'
-    # Usar misma lógica que el cronograma: real > estimada
-    inicio_etapa = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
-    fin_etapa = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+    # Solo usar fechas reales si la etapa ya arrancó
+    if etapa.estado in ('en_curso', 'finalizada'):
+        inicio_etapa = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
+        fin_etapa = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+    else:
+        inicio_etapa = etapa.fecha_inicio_estimada
+        fin_etapa = etapa.fecha_fin_estimada
 
     tareas = etapa.tareas.order_by(TareaEtapa.id).all()
     if not tareas:
@@ -4476,8 +4495,13 @@ def gantt_data(id):
 
     tasks = []
     for e in etapas:
-        inicio = e.fecha_inicio_real or e.fecha_inicio_estimada
-        fin = e.fecha_fin_real or e.fecha_fin_estimada
+        # Solo usar fechas reales si la etapa ya arrancó
+        if e.estado in ('en_curso', 'finalizada'):
+            inicio = e.fecha_inicio_real or e.fecha_inicio_estimada
+            fin = e.fecha_fin_real or e.fecha_fin_estimada
+        else:
+            inicio = e.fecha_inicio_estimada
+            fin = e.fecha_fin_estimada
 
         # Si la etapa no tiene fechas, calcular desde sus tareas
         if not inicio or not fin:
