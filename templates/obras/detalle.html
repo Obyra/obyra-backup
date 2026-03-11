@@ -10,19 +10,26 @@
 .cursor-pointer:hover { color: #0056b3 !important; }
 
 /* Cronograma styles */
-.cronograma-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.cronograma-table th { background: #f8f9fa; padding: 8px 10px; border: 1px solid #dee2e6; font-weight: 600; color: #495057; white-space: nowrap; }
-.cronograma-table td { padding: 6px 10px; border: 1px solid #dee2e6; vertical-align: middle; }
-.cronograma-bar-container { position: relative; height: 24px; background: #e9ecef; border-radius: 4px; overflow: hidden; min-width: 300px; }
-.cronograma-bar { position: absolute; top: 0; height: 100%; border-radius: 4px; min-width: 4px; }
-.cronograma-bar.pendiente { background: #adb5bd; }
-.cronograma-bar.en_curso { background: linear-gradient(90deg, #0d6efd, #6ea8fe); }
-.cronograma-bar.finalizada { background: linear-gradient(90deg, #198754, #75b798); }
-.cronograma-estado { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; display: inline-block; }
-.cronograma-estado.pendiente { background: #e9ecef; color: #6c757d; }
-.cronograma-estado.en_curso { background: #cfe2ff; color: #0d6efd; }
-.cronograma-estado.finalizada { background: #d1e7dd; color: #198754; }
-.cronograma-table tbody tr:hover { background: #f0f7ff; }
+.cronograma-wrap { overflow-x: auto; border: 1px solid #dee2e6; border-radius: 8px; }
+.cronograma-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.cronograma-table th { background: #1a374d; color: #fff; padding: 10px 12px; font-weight: 600; white-space: nowrap; border: none; }
+.cronograma-table td { padding: 8px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+.cronograma-table tbody tr { transition: background 0.15s; }
+.cronograma-table tbody tr:hover { background: #edf4ff; }
+.cronograma-table tbody tr:nth-child(even) { background: #f9fafb; }
+.cronograma-table tbody tr:nth-child(even):hover { background: #edf4ff; }
+.cronograma-bar-cell { width: auto; min-width: 0; }
+.cronograma-bar-container { position: relative; height: 22px; background: #eef1f5; border-radius: 11px; overflow: hidden; }
+.cronograma-bar { position: absolute; top: 2px; height: 18px; border-radius: 9px; min-width: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+.cronograma-bar.pendiente { background: linear-gradient(90deg, #b0b8c1, #cdd3da); }
+.cronograma-bar.en_curso { background: linear-gradient(90deg, #0d6efd, #4d9fff); }
+.cronograma-bar.finalizada { background: linear-gradient(90deg, #198754, #34c77b); }
+.cronograma-estado { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; display: inline-block; white-space: nowrap; }
+.cronograma-estado.pendiente { background: #f0f1f3; color: #6c757d; }
+.cronograma-estado.en_curso { background: #dbeafe; color: #0d6efd; }
+.cronograma-estado.finalizada { background: #d1f2e0; color: #198754; }
+.cronograma-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; z-index: 2; }
+.cronograma-today-dot { position: absolute; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #dc3545; transform: translateX(-3px); z-index: 3; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -3726,33 +3733,33 @@ async function initGantt() {
         // Linea de hoy
         const todayPct = Math.max(0, Math.min(100, ((today - minDate) / (1000*60*60*24)) / totalDays * 100));
 
-        let html = '<table class="cronograma-table"><thead><tr>';
-        html += '<th style="width:200px;">Etapa</th><th style="width:90px;">Inicio</th><th style="width:90px;">Fin</th><th style="width:80px;">Estado</th><th>Linea de tiempo</th>';
+        let html = '<div class="cronograma-wrap"><table class="cronograma-table"><thead><tr>';
+        html += '<th style="width:22%;">Etapa</th><th style="width:8%;">Inicio</th><th style="width:8%;">Fin</th><th style="width:10%;">Estado</th><th style="width:52%;">Linea de tiempo</th>';
         html += '</tr></thead><tbody>';
 
         tasks.forEach(t => {
             const start = new Date(t.start);
             const end = new Date(t.end);
             const startPct = ((start - minDate) / (1000*60*60*24)) / totalDays * 100;
-            const widthPct = Math.max(((end - start) / (1000*60*60*24)) / totalDays * 100, 1);
+            const widthPct = Math.max(((end - start) / (1000*60*60*24)) / totalDays * 100, 1.5);
             const estado = t.estado || 'pendiente';
+            const duracion = Math.round((end - start) / (1000*60*60*24));
 
             html += `<tr style="cursor:pointer;" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
-            html += `<td class="fw-semibold"><i class="fas fa-edit text-muted me-1" style="font-size:11px;"></i>${t.name}</td>`;
-            html += `<td class="text-center">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
-            html += `<td class="text-center">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
+            html += `<td class="fw-semibold text-truncate" style="max-width:0;"><i class="fas fa-edit text-primary me-1" style="font-size:10px;opacity:0.6;"></i>${t.name}</td>`;
+            html += `<td class="text-center text-muted">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
+            html += `<td class="text-center text-muted">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
             html += `<td class="text-center"><span class="cronograma-estado ${estado}">${estadoLabel[estado]||estado}</span></td>`;
-            html += '<td><div class="cronograma-bar-container">';
-            // Linea de hoy
+            html += '<td class="cronograma-bar-cell"><div class="cronograma-bar-container">';
             if (todayPct > 0 && todayPct < 100) {
-                html += `<div style="position:absolute;left:${todayPct}%;top:0;bottom:0;width:2px;background:#dc3545;z-index:2;" title="Hoy"></div>`;
+                html += `<div class="cronograma-today-line" style="left:${todayPct}%;"><div class="cronograma-today-dot"></div></div>`;
             }
-            html += `<div class="cronograma-bar ${estado}" style="left:${startPct}%;width:${widthPct}%;" title="${t.name}: ${t.start} → ${t.end} (${t.progress}%)"></div>`;
+            html += `<div class="cronograma-bar ${estado}" style="left:${startPct}%;width:${widthPct}%;" title="${t.name}: ${duracion} dias"></div>`;
             html += '</div></td>';
             html += '</tr>';
         });
 
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         container.innerHTML = html;
 
     } catch(e) {
