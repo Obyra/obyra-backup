@@ -1683,23 +1683,31 @@ async function guardarItem(itemId) {
                 row.dataset.itemPrecio = data.precio_unitario;
             }
 
-            if (typeof result.nuevo_total !== 'undefined') {
+            // Actualizar totales USD (convertido por backend con tasa BNA)
+            if (result.total_usd !== null && result.total_usd !== undefined) {
+                row.dataset.itemTotalCurrency = result.total_usd;
+            } else if (typeof result.nuevo_total !== 'undefined') {
                 row.dataset.itemTotalCurrency = result.nuevo_total;
-            } else if (typeof data.cantidad !== 'undefined' && typeof data.precio_unitario !== 'undefined') {
-                row.dataset.itemTotalCurrency = data.cantidad * data.precio_unitario;
+            }
+
+            // Actualizar precio unitario en la moneda de edición
+            if (data.currency === 'ARS') {
+                row.dataset.itemPrecio = data.precio_unitario;
+            } else {
+                row.dataset.itemPrecio = data.precio_unitario;
             }
 
             // Update ARS values from backend response
-            if (result.price_unit_ars !== null && result.price_unit_ars !== undefined) {
-                row.dataset.itemPrecioArs = result.price_unit_ars;
-            } else {
-                row.dataset.itemPrecioArs = '';
-            }
-
             if (result.total_ars !== null && result.total_ars !== undefined) {
                 row.dataset.itemTotalArs = result.total_ars;
             } else {
                 row.dataset.itemTotalArs = '';
+            }
+
+            if (result.price_unit_ars !== null && result.price_unit_ars !== undefined) {
+                row.dataset.itemPrecioArs = result.price_unit_ars;
+            } else {
+                row.dataset.itemPrecioArs = '';
             }
 
             renderItemDisplay(row);

@@ -2052,6 +2052,8 @@ def editar_item(id):
             'nuevo_total': float(item.total),
             'price_unit_ars': float(item.price_unit_ars) if item.price_unit_ars else None,
             'total_ars': float(item.total_ars) if item.total_ars else None,
+            'price_unit_usd': float(item.price_unit_currency) if item.price_unit_currency else None,
+            'total_usd': float(item.total_currency) if item.total_currency else None,
             'currency': item.currency,
             'subtotal_materiales': float(presupuesto.subtotal_materiales),
             'subtotal_mano_obra': float(presupuesto.subtotal_mano_obra),
