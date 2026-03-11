@@ -11,9 +11,18 @@
 .cursor-pointer:hover { color: #0056b3 !important; }
 
 /* Gantt chart styles */
-#gantt-container { overflow-x: auto; }
+#gantt-container { overflow-x: auto; background: #fff; }
 #gantt-container svg { min-width: 100%; }
-.gantt .bar-wrapper .bar-label { font-size: 11px; }
+.gantt { background: #fff !important; }
+.gantt .grid-background { fill: #fff !important; }
+.gantt .grid-header { fill: #f8f9fa !important; stroke: #dee2e6 !important; }
+.gantt .grid-row { fill: #fff !important; }
+.gantt .grid-row:nth-child(even) { fill: #f8f9fa !important; }
+.gantt .row-line { stroke: #e9ecef !important; }
+.gantt .tick { stroke: #dee2e6 !important; }
+.gantt .today-highlight { fill: rgba(13, 110, 253, 0.08) !important; }
+.gantt .lower-text, .gantt .upper-text { fill: #495057 !important; font-size: 12px; }
+.gantt .bar-wrapper .bar-label { font-size: 11px; fill: #fff !important; }
 .gantt .bar-wrapper .bar-label.big { font-size: 11px; }
 .gantt-pendiente .bar { fill: #adb5bd !important; }
 .gantt-pendiente .bar-progress { fill: #6c757d !important; }
