@@ -145,13 +145,30 @@
                             {% endif %}
                             
                             <!-- Métricas adicionales -->
-                            <div class="mt-2 d-flex gap-3">
-                                <small class="text-muted" style="cursor: pointer;" 
-                                       onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')"
-                                       title="Ver todos los avances de esta tarea">
-                                    <i class="fas fa-chart-line me-1"></i>
-                                    {{ tarea.avances|length or 0 }} registros
-                                </small>
+                            {% set avances_aprobados = tarea.avances|selectattr('status', 'equalto', 'aprobado')|list %}
+                            {% set avances_pend = tarea.avances|selectattr('status', 'equalto', 'pendiente')|list %}
+                            {% set total_ejecutado = avances_aprobados|sum(attribute='cantidad') %}
+                            {% set plan_total = tarea.cantidad_planificada|float if tarea.cantidad_planificada else 0 %}
+                            <div class="mt-2">
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <small class="text-muted" style="cursor:pointer;"
+                                           onclick="mostrarAvancesPendientes({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', '{{ tarea.unidad or 'un' }}', '{{ tarea.rendimiento or '' }}')"
+                                           title="Ver detalle de avances">
+                                        <i class="fas fa-chart-line me-1"></i>
+                                        {{ tarea.avances|length }} registro{{ 's' if tarea.avances|length != 1 else '' }}
+                                    </small>
+                                    {% if avances_pend %}
+                                    <span class="badge bg-warning text-dark" style="font-size:.6rem;">{{ avances_pend|length }} pendiente{{ 's' if avances_pend|length != 1 else '' }}</span>
+                                    {% endif %}
+                                    {% if plan_total > 0 %}
+                                    <small class="text-muted">{{ "%.1f"|format(total_ejecutado) }} / {{ "%.1f"|format(plan_total) }} {{ tarea.unidad or 'un' }}</small>
+                                    {% endif %}
+                                </div>
+                                {% if tarea.porcentaje_avance and tarea.porcentaje_avance > 0 %}
+                                <div class="progress" style="height:4px;">
+                                    <div class="progress-bar {% if tarea.porcentaje_avance >= 100 %}bg-success{% else %}bg-primary{% endif %}" style="width:{{ tarea.porcentaje_avance }}%;"></div>
+                                </div>
+                                {% endif %}
                             </div>
                             
                             <!-- Avances: botones para Admin/PM -->

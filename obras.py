@@ -1652,14 +1652,14 @@ def crear_avance(tarea_id):
             unidad_ingresada=unidad_form or unidad
         )
 
-        # Avances registrados desde el modal de pendientes quedan como "pendiente"
-        # para que el admin los apruebe/rechace explícitamente
-        if operario_id and roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
-            av.status = "pendiente"
-        elif roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
+        # Admin/PM/Técnico: avances se auto-aprueban siempre
+        # Operarios: avances quedan pendientes de aprobación
+        if roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
             av.status = "aprobado"
             av.confirmed_by = current_user.id
             av.confirmed_at = datetime.utcnow()
+        else:
+            av.status = "pendiente"
 
         db.session.add(av)
 
