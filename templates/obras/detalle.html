@@ -10,20 +10,28 @@
 .cursor-pointer:hover { color: #0056b3 !important; }
 
 /* Cronograma styles */
-.cronograma-wrap { overflow-x: auto; border: 1px solid #dee2e6; border-radius: 8px; }
-.cronograma-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
-.cronograma-table th { background: #1a374d; color: #fff; padding: 10px 12px; font-weight: 600; white-space: nowrap; border: none; }
-.cronograma-table td { padding: 8px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
-.cronograma-table tbody tr { transition: background 0.15s; }
-.cronograma-table tbody tr:hover { background: #edf4ff; }
-.cronograma-table tbody tr:nth-child(even) { background: #f9fafb; }
-.cronograma-table tbody tr:nth-child(even):hover { background: #edf4ff; }
-.cronograma-bar-container { position: relative; height: 22px; background: #eef1f5; border-radius: 11px; overflow: hidden; }
-.cronograma-bar { position: absolute; top: 0; height: 100%; border-radius: 11px; min-width: 0; transition: width 0.3s ease; }
-.cronograma-estado { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; display: inline-block; white-space: nowrap; }
-.cronograma-estado.pendiente { background: #f0f1f3; color: #6c757d; }
-.cronograma-estado.en_curso { background: #dbeafe; color: #0d6efd; }
-.cronograma-estado.finalizada { background: #d1f2e0; color: #198754; }
+.cronograma-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.cronograma-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; table-layout: fixed; }
+.cronograma-table th { background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: #fff; padding: 12px 14px; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; border: none; }
+.cronograma-table th:first-child { border-radius: 11px 0 0 0; }
+.cronograma-table th:last-child { border-radius: 0 11px 0 0; }
+.cronograma-table td { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.cronograma-table tbody tr { transition: all 0.2s ease; }
+.cronograma-table tbody tr:hover { background: #f0f7ff; transform: scale(1.002); }
+.cronograma-table tbody tr:nth-child(even) { background: #fafbfc; }
+.cronograma-table tbody tr:nth-child(even):hover { background: #f0f7ff; }
+.cronograma-table tbody tr:last-child td:first-child { border-radius: 0 0 0 11px; }
+.cronograma-table tbody tr:last-child td:last-child { border-radius: 0 0 11px 0; }
+.cronograma-bar-container { position: relative; height: 26px; background: #edf2f7; border-radius: 13px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06); }
+.cronograma-bar { position: absolute; top: 0; left: 0; height: 100%; border-radius: 13px; min-width: 0; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+.cronograma-bar.bar-pendiente { background: linear-gradient(90deg, #cbd5e0 0%, #a0aec0 100%); }
+.cronograma-bar.bar-en_curso { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); }
+.cronograma-bar.bar-finalizada { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
+.cronograma-progress-text { position: absolute; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 700; z-index: 1; line-height: 1; }
+.cronograma-estado { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; display: inline-block; white-space: nowrap; letter-spacing: 0.3px; }
+.cronograma-estado.pendiente { background: #edf2f7; color: #718096; }
+.cronograma-estado.en_curso { background: #ebf8ff; color: #2b6cb0; }
+.cronograma-estado.finalizada { background: #f0fff4; color: #276749; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -3702,32 +3710,33 @@ async function initGantt() {
         }
 
         const estadoLabel = {pendiente:'Pendiente', en_curso:'En curso', finalizada:'Finalizada'};
+        const estadoIcon = {pendiente:'far fa-clock', en_curso:'fas fa-spinner fa-pulse', finalizada:'fas fa-check-circle'};
 
         let html = '<div class="cronograma-wrap"><table class="cronograma-table"><thead><tr>';
-        html += '<th style="width:25%;">Etapa</th><th style="width:9%;">Inicio</th><th style="width:9%;">Fin</th><th style="width:8%;">Dias</th><th style="width:10%;">Estado</th><th style="width:39%;">Avance</th>';
+        html += '<th style="width:28%;">Etapa</th><th style="width:9%;">Inicio</th><th style="width:9%;">Fin</th><th style="width:7%;">Dias</th><th style="width:11%;">Estado</th><th style="width:36%;">Avance</th>';
         html += '</tr></thead><tbody>';
 
         tasks.forEach(t => {
             const start = new Date(t.start);
             const end = new Date(t.end);
             const estado = t.estado || 'pendiente';
-            const duracion = Math.round((end - start) / (1000*60*60*24));
-            const progress = t.progress || 0;
+            const duracion = Math.max(1, Math.round((end - start) / (1000*60*60*24)));
+            const progress = Math.min(100, Math.max(0, t.progress || 0));
 
-            // Color de la barra de avance segun estado
-            let barColor = '#adb5bd';
-            if (estado === 'en_curso') barColor = '#0d6efd';
-            if (estado === 'finalizada') barColor = '#198754';
+            // Posicion del texto del porcentaje: dentro si hay espacio, fuera si no
+            const textInside = progress >= 25;
+            const textColor = textInside ? '#fff' : '#4a5568';
+            const textPos = textInside ? `left: ${Math.max(4, progress - 2)}%; transform: translateX(-100%) translateY(-50%);` : `left: ${progress + 2}%; transform: translateY(-50%);`;
 
             html += `<tr style="cursor:pointer;" onclick="abrirModalFechas(${t.id}, '${t.name.replace(/'/g,"\\'")}', '${t.start}', '${t.end}', ${t.fechas_manuales||false}, '${estado}')" title="Clic para editar fechas">`;
-            html += `<td class="fw-semibold text-truncate" style="max-width:0;"><i class="fas fa-edit text-primary me-1" style="font-size:10px;opacity:0.6;"></i>${t.name}</td>`;
-            html += `<td class="text-center text-muted">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
-            html += `<td class="text-center text-muted">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
-            html += `<td class="text-center fw-semibold">${duracion}d</td>`;
-            html += `<td class="text-center"><span class="cronograma-estado ${estado}">${estadoLabel[estado]||estado}</span></td>`;
+            html += `<td class="fw-semibold text-truncate" style="max-width:0;"><i class="fas fa-grip-vertical text-muted me-2" style="font-size:10px;opacity:0.4;"></i>${t.name}</td>`;
+            html += `<td class="text-center" style="color:#4a5568;">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'short'})}</td>`;
+            html += `<td class="text-center" style="color:#4a5568;">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'short'})}</td>`;
+            html += `<td class="text-center fw-semibold" style="color:#2d3748;">${duracion}d</td>`;
+            html += `<td class="text-center"><span class="cronograma-estado ${estado}"><i class="${estadoIcon[estado]||''}" style="margin-right:4px;font-size:10px;"></i>${estadoLabel[estado]||estado}</span></td>`;
             html += '<td><div class="cronograma-bar-container">';
-            html += `<div class="cronograma-bar" style="left:0;width:${progress}%;background:${barColor};" title="${progress}% completado"></div>`;
-            html += `<span style="position:absolute;right:8px;top:2px;font-size:11px;font-weight:600;color:${progress > 50 ? '#fff' : '#495057'};z-index:1;">${progress}%</span>`;
+            html += `<div class="cronograma-bar bar-${estado}" style="width:${progress}%;" title="${progress}% completado"></div>`;
+            html += `<span class="cronograma-progress-text" style="${textPos}color:${textColor};">${progress}%</span>`;
             html += '</div></td>';
             html += '</tr>';
         });

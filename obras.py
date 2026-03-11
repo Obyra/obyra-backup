@@ -4059,13 +4059,25 @@ def gantt_data(id):
         if not inicio or not fin:
             continue
 
-        # Calcular progreso
+        # Calcular progreso - primero intentar desde tareas, luego campo directo
         if e.estado == 'finalizada':
             progress = 100
-        elif e.estado == 'en_curso' and getattr(e, 'progreso', None) is not None:
-            progress = e.progreso
         else:
-            progress = 0
+            # Intentar calcular desde tareas
+            tareas_list = e.tareas.all() if hasattr(e.tareas, 'all') else (e.tareas or [])
+            if tareas_list:
+                total_tareas = len(tareas_list)
+                completadas = sum(1 for t in tareas_list if t.estado in ('completada', 'finalizada'))
+                # Promedio ponderado: tareas completadas + avance parcial de las demás
+                avance_parcial = sum(float(t.porcentaje_avance or 0) for t in tareas_list)
+                progress = round(avance_parcial / total_tareas) if total_tareas else 0
+                # Si hay completadas pero porcentaje_avance está en 0, usar ratio simple
+                if progress == 0 and completadas > 0:
+                    progress = round((completadas / total_tareas) * 100)
+            elif getattr(e, 'progreso', None):
+                progress = e.progreso
+            else:
+                progress = 0
 
         tasks.append({
             'id': str(e.id),
