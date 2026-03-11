@@ -1424,17 +1424,44 @@ def recalc_tarea_pct(tarea_id):
         ejecutado = suma_ejecutado(tarea_id)
         tarea.porcentaje_avance = min(100, round((ejecutado / meta) * 100, 2))
 
-    # Auto-completar tarea cuando llega al 100%
+    # Auto-cambiar estado según porcentaje de avance
     if tarea.porcentaje_avance >= 100 and tarea.estado != 'completada':
         tarea.estado = 'completada'
         tarea.fecha_fin_real = datetime.utcnow()
         current_app.logger.info(f"Tarea {tarea.id} '{tarea.nombre}' auto-completada al alcanzar 100%")
+    elif tarea.porcentaje_avance > 0 and tarea.estado == 'pendiente':
+        tarea.estado = 'en_curso'
+        if not tarea.fecha_inicio_real:
+            tarea.fecha_inicio_real = datetime.utcnow()
+        current_app.logger.info(f"Tarea {tarea.id} '{tarea.nombre}' auto-iniciada al registrar avance")
 
         # Aprobar automáticamente todos los avances pendientes de esta tarea
         avances_pendientes = [a for a in tarea.avances if a.status == 'pendiente']
         for avance in avances_pendientes:
             avance.status = 'aprobado'
             current_app.logger.info(f"Avance {avance.id} auto-aprobado al completar tarea {tarea.id}")
+
+    # Auto-actualizar estado de la etapa según sus tareas
+    etapa = tarea.etapa
+    if etapa:
+        todas_tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else (etapa.tareas or [])
+        if todas_tareas:
+            todas_completadas = all(t.estado in ('completada', 'cancelada') for t in todas_tareas)
+            alguna_en_curso = any(t.estado in ('en_curso', 'completada') for t in todas_tareas)
+
+            if todas_completadas and etapa.estado != 'finalizada':
+                etapa.estado = 'finalizada'
+                etapa.progreso = 100
+                if not etapa.fecha_fin_real:
+                    from datetime import date as date_class
+                    etapa.fecha_fin_real = date_class.today()
+                current_app.logger.info(f"Etapa {etapa.id} '{etapa.nombre}' auto-finalizada (todas las tareas completadas)")
+            elif alguna_en_curso and etapa.estado == 'pendiente':
+                etapa.estado = 'en_curso'
+                if not etapa.fecha_inicio_real:
+                    from datetime import date as date_class
+                    etapa.fecha_inicio_real = date_class.today()
+                current_app.logger.info(f"Etapa {etapa.id} '{etapa.nombre}' auto-iniciada (tarea en curso)")
 
     db.session.commit()
     return float(tarea.porcentaje_avance or 0)
