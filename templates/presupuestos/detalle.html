@@ -211,8 +211,11 @@
             {% set total_items_ia = ia_materiales|length + ia_mano_obra|length + ia_equipos|length + ia_herramientas|length %}
             {% if total_items_ia > 0 %}
             <div class="card mt-4">
-                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 text-primary"><i class="fas fa-robot me-2"></i>Items generados por IA - Organizados por Etapa</h6>
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#iaItemsCollapse" aria-expanded="false">
+                    <h6 class="mb-0 text-primary">
+                        <i class="fas fa-robot me-2"></i>Items generados por IA - Organizados por Etapa
+                        <i class="fas fa-chevron-down ms-2 small" id="iaItemsChevron"></i>
+                    </h6>
                     <div>
                         <span class="badge bg-success me-2">
                             USD {{ "{:,.2f}".format(totales_ia_usd.general|float) }}
@@ -222,14 +225,15 @@
                         </span>
                     </div>
                 </div>
-                <div class="card-body">
+                <div class="card-body collapse" id="iaItemsCollapse">
                     {% for etapa_nombre, items_etapa in ia_por_etapa.items() %}
                     {% set tiene_items = items_etapa.materiales|length + items_etapa.mano_obra|length + items_etapa.equipos|length + items_etapa.herramientas|length %}
                     {% if tiene_items > 0 %}
                     <div class="card mb-4 border-primary">
-                        <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
+                        <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#etapaCollapse{{ loop.index }}">
                             <h6 class="mb-0 text-primary fw-bold">
                                 <i class="fas fa-layer-group me-2"></i>{{ etapa_nombre }}
+                                <i class="fas fa-chevron-down ms-2 small"></i>
                             </h6>
                             {% if subtotales_por_etapa[etapa_nombre] %}
                             <div>
@@ -238,7 +242,7 @@
                             </div>
                             {% endif %}
                         </div>
-                        <div class="card-body">
+                        <div class="card-body collapse" id="etapaCollapse{{ loop.index }}">
                             {% if items_etapa.materiales %}
                             <h6 class="text-secondary"><i class="fas fa-cubes me-1"></i> Materiales</h6>
                             <div class="table-responsive mb-3">
@@ -1870,5 +1874,19 @@ async function enviarPorCorreo(presupuestoId) {
         alert('❌ Error de conexión. Intenta nuevamente.');
     }
 }
+// Rotar chevron en collapse
+document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(el) {
+    var target = document.querySelector(el.getAttribute('data-bs-target'));
+    if (target) {
+        target.addEventListener('show.bs.collapse', function() {
+            var chevron = el.querySelector('.fa-chevron-down');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        target.addEventListener('hide.bs.collapse', function() {
+            var chevron = el.querySelector('.fa-chevron-down');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
+});
 </script>
 {% endblock %}
