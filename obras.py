@@ -3954,6 +3954,9 @@ def editar_fechas_etapa(etapa_id):
         if 'bloquear_fechas' in data:
             etapa.fechas_manuales = bool(data['bloquear_fechas'])
 
+        if 'nivel' in data:
+            etapa.nivel_encadenamiento = int(data['nivel']) if data['nivel'] is not None else None
+
         if data.get('forzar_inicio') and etapa.estado == 'pendiente':
             etapa.estado = 'en_curso'
             if not etapa.fecha_inicio_real:

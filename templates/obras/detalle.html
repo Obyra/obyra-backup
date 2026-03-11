@@ -146,6 +146,7 @@
                                     <strong>Fechas superpuestas:</strong> Algunas etapas tienen fechas que se solapan con la etapa anterior.
                                 </div>
                                 <form method="POST" action="{{ url_for('obras.propagar_fechas', id=obra.id) }}" class="ms-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-warning btn-sm text-nowrap">
                                         <i class="fas fa-sync-alt me-1"></i>Recalcular fechas
                                     </button>
@@ -208,7 +209,7 @@
 
                                                 {% if can_manage %}
                                                 <button class="btn btn-sm btn-outline-info"
-                                                        onclick="event.stopPropagation(); abrirModalFechas({{ etapa.id }}, '{{ etapa.nombre }}', '{{ etapa.fecha_inicio_estimada or '' }}', '{{ etapa.fecha_fin_estimada or '' }}', {{ 'true' if etapa.fechas_manuales else 'false' }}, '{{ etapa.estado }}')"
+                                                        onclick="event.stopPropagation(); abrirModalFechas({{ etapa.id }}, '{{ etapa.nombre }}', '{{ etapa.fecha_inicio_estimada or '' }}', '{{ etapa.fecha_fin_estimada or '' }}', {{ 'true' if etapa.fechas_manuales else 'false' }}, '{{ etapa.estado }}', {{ etapa.nivel_encadenamiento or 'null' }})"
                                                         title="Editar fechas">
                                                     <i class="fas fa-calendar-alt fa-xs"></i>
                                                 </button>
@@ -1940,6 +1941,24 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="mef-etapa-id">
+                <div class="mb-2">
+                    <label class="form-label small mb-1">Nivel de encadenamiento</label>
+                    <select class="form-select form-select-sm" id="mef-nivel">
+                        <option value="">Sin nivel</option>
+                        <option value="1">NV1</option>
+                        <option value="2">NV2</option>
+                        <option value="3">NV3</option>
+                        <option value="4">NV4</option>
+                        <option value="5">NV5</option>
+                        <option value="6">NV6</option>
+                        <option value="7">NV7</option>
+                        <option value="8">NV8</option>
+                        <option value="9">NV9</option>
+                        <option value="10">NV10</option>
+                    </select>
+                    <small class="text-muted">Mismo nivel = paralelas. Nivel N espera a nivel N-1.</small>
+                </div>
+                <hr class="my-2">
                 <div class="mb-2">
                     <label class="form-label small mb-1">Inicio estimado</label>
                     <input type="date" class="form-control form-control-sm" id="mef-inicio">
@@ -3714,7 +3733,7 @@ async function initGantt() {
             html += '<small class="text-muted me-1"><i class="far fa-calendar-alt me-1"></i>' + fmtD(start) + ' - ' + fmtD(end) + '</small>';
             html += '<span class="badge bg-light text-dark" style="font-size:.65rem;">' + duracion + 'd</span>';
             html += '<span class="' + estadoBadge[estado] + '" style="font-size:.65rem;">' + estadoLabel[estado] + '</span>';
-            html += '<button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:.75rem;" onclick="abrirModalFechas(' + t.id + ', \'' + escapeName + '\', \'' + t.start + '\', \'' + t.end + '\', ' + (t.fechas_manuales||false) + ', \'' + estado + '\')"><i class="fas fa-pen me-1" style="font-size:10px;"></i>Editar</button>';
+            html += '<button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:.75rem;" onclick="abrirModalFechas(' + t.id + ', \'' + escapeName + '\', \'' + t.start + '\', \'' + t.end + '\', ' + (t.fechas_manuales||false) + ', \'' + estado + '\', ' + (nivel||'null') + ')"><i class="fas fa-pen me-1" style="font-size:10px;"></i>Editar</button>';
             html += '</div>';
 
             html += '</div>';
@@ -3744,22 +3763,25 @@ document.addEventListener('DOMContentLoaded', initGantt);
 
 
 /* ===== Modal Editar Fechas ===== */
-function abrirModalFechas(etapaId, nombre, inicio, fin, bloqueadas, estado) {
+function abrirModalFechas(etapaId, nombre, inicio, fin, bloqueadas, estado, nivel) {
     document.getElementById('mef-etapa-id').value = etapaId;
     document.getElementById('mef-titulo').textContent = nombre;
     document.getElementById('mef-inicio').value = inicio || '';
     document.getElementById('mef-fin').value = fin || '';
     document.getElementById('mef-bloquear').checked = bloqueadas;
+    document.getElementById('mef-nivel').value = nivel || '';
     document.getElementById('mef-forzar-wrap').classList.toggle('d-none', estado !== 'pendiente');
     new bootstrap.Modal(document.getElementById('modalEditarFechas')).show();
 }
 
 async function guardarFechasEtapa() {
     const etapaId = document.getElementById('mef-etapa-id').value;
+    const nivelVal = document.getElementById('mef-nivel').value;
     const body = {
         fecha_inicio: document.getElementById('mef-inicio').value || null,
         fecha_fin: document.getElementById('mef-fin').value || null,
         bloquear_fechas: document.getElementById('mef-bloquear').checked,
+        nivel: nivelVal ? parseInt(nivelVal) : null,
     };
     const btn = document.getElementById('mef-btn-guardar');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardando...'; }
