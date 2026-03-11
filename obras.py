@@ -616,19 +616,31 @@ def detalle(id):
             tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
 
     # Auto-distribuir cantidad/unidad/fechas/horas de etapa a tareas sin datos
+    from tareas_predefinidas import obtener_tareas_por_etapa as _obt_tareas_cat
     datos_distribuidos = False
     for etapa in etapas:
         tareas_etapa = tareas_por_etapa.get(etapa.id, [])
         if not tareas_etapa:
             continue
+
+        # Verificar si alguna tarea tiene horas incorrectas comparando con catálogo
+        catalogo = _obt_tareas_cat(etapa.nombre)
+        cat_map = {t['nombre'].lower().strip(): t for t in catalogo}
+        horas_mal = False
+        for t in tareas_etapa:
+            key = t.nombre.lower().strip()
+            info = cat_map.get(key)
+            if info and float(t.horas_estimadas or 0) != float(info.get('horas', 0)):
+                horas_mal = True
+                break
+
         sin_cantidad = any(not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0 for t in tareas_etapa)
-        # Detectar horas incorrectas (todas iguales = heredaron horas de etapa)
-        horas_set = set(float(t.horas_estimadas or 0) for t in tareas_etapa)
-        horas_mal = len(horas_set) <= 1 and len(tareas_etapa) > 1
-        # Detectar cantidades incorrectas (todas iguales = heredaron cantidad de etapa)
+
+        # Detectar cantidades mal distribuidas (todas iguales con >1 tarea)
         cant_set = set(float(t.cantidad_planificada or 0) for t in tareas_etapa)
         cant_mal = len(cant_set) <= 1 and len(tareas_etapa) > 1 and any(float(t.cantidad_planificada or 0) > 0 for t in tareas_etapa)
-        necesita_forzar = horas_mal and cant_mal  # ambos mal = forzar redistribución completa
+
+        necesita_forzar = horas_mal or cant_mal
         if sin_cantidad or horas_mal or cant_mal:
             try:
                 distribuir_datos_etapa_a_tareas(etapa.id, forzar=necesita_forzar)
@@ -1561,17 +1573,14 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
     for t_cat in catalogo:
         catalogo_map[t_cat['nombre'].lower().strip()] = t_cat
 
-    # Detectar si las horas están mal (todas iguales = heredaron horas de etapa)
-    horas_set = set(float(t.horas_estimadas or 0) for t in tareas)
-    horas_todas_iguales = len(horas_set) <= 1 and len(tareas) > 1
-
     for tarea in tareas:
         key = tarea.nombre.lower().strip()
         info_cat = catalogo_map.get(key)
         if info_cat:
-            # Siempre corregir horas si están mal (todas iguales) o si forzar
-            if horas_todas_iguales or forzar or not tarea.horas_estimadas:
-                tarea.horas_estimadas = info_cat.get('horas', 1)
+            horas_catalogo = info_cat.get('horas', 1)
+            # Corregir si: forzar, no tiene horas, o las horas no coinciden con catálogo
+            if forzar or not tarea.horas_estimadas or float(tarea.horas_estimadas) != float(horas_catalogo):
+                tarea.horas_estimadas = horas_catalogo
             # Completar descripción si falta
             if not tarea.descripcion or tarea.descripcion == 'Creada via wizard':
                 tarea.descripcion = info_cat.get('descripcion', '')
@@ -1585,11 +1594,9 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         tareas_a_procesar = [t for t in tareas if not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0]
 
     if not tareas_a_procesar:
-        # Aunque no haya tareas sin cantidad, si corregimos horas hay que guardar
-        if horas_todas_iguales:
-            db.session.flush()
-            return len(tareas)
-        return 0
+        # Guardar correcciones de horas del PASO 1
+        db.session.flush()
+        return len(tareas)
 
     # --- PASO 3: Clasificar tareas (físicas vs administrativas) ---
     # Palabras clave que indican tareas de gestión/control (no consumen m²)
