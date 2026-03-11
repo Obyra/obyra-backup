@@ -3,33 +3,25 @@
 {% block title %}{{ obra.nombre }} - OBYRA IA{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
 <style>
 /* Simple CSS para control de checkboxes */
 .d-none { display: none !important; }
 .cursor-pointer { cursor: pointer !important; }
 .cursor-pointer:hover { color: #0056b3 !important; }
 
-/* Gantt chart styles */
-#gantt-container { overflow-x: auto; background: #fff; }
-#gantt-container svg { min-width: 100%; }
-.gantt { background: #fff !important; }
-.gantt .grid-background { fill: #fff !important; }
-.gantt .grid-header { fill: #f8f9fa !important; stroke: #dee2e6 !important; }
-.gantt .grid-row { fill: #fff !important; }
-.gantt .grid-row:nth-child(even) { fill: #f8f9fa !important; }
-.gantt .row-line { stroke: #e9ecef !important; }
-.gantt .tick { stroke: #dee2e6 !important; }
-.gantt .today-highlight { fill: rgba(13, 110, 253, 0.08) !important; }
-.gantt .lower-text, .gantt .upper-text { fill: #495057 !important; font-size: 12px; }
-.gantt .bar-wrapper .bar-label { font-size: 11px; fill: #fff !important; }
-.gantt .bar-wrapper .bar-label.big { font-size: 11px; }
-.gantt-pendiente .bar { fill: #adb5bd !important; }
-.gantt-pendiente .bar-progress { fill: #6c757d !important; }
-.gantt-en-curso .bar { fill: #6ea8fe !important; }
-.gantt-en-curso .bar-progress { fill: #0d6efd !important; }
-.gantt-finalizada .bar { fill: #75b798 !important; }
-.gantt-finalizada .bar-progress { fill: #198754 !important; }
+/* Cronograma styles */
+.cronograma-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cronograma-table th { background: #f8f9fa; padding: 8px 10px; border: 1px solid #dee2e6; font-weight: 600; color: #495057; white-space: nowrap; }
+.cronograma-table td { padding: 6px 10px; border: 1px solid #dee2e6; vertical-align: middle; }
+.cronograma-bar-container { position: relative; height: 24px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+.cronograma-bar { position: absolute; top: 0; height: 100%; border-radius: 4px; min-width: 4px; }
+.cronograma-bar.pendiente { background: #adb5bd; }
+.cronograma-bar.en_curso { background: linear-gradient(90deg, #0d6efd, #6ea8fe); }
+.cronograma-bar.finalizada { background: linear-gradient(90deg, #198754, #75b798); }
+.cronograma-estado { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; display: inline-block; }
+.cronograma-estado.pendiente { background: #e9ecef; color: #6c757d; }
+.cronograma-estado.en_curso { background: #cfe2ff; color: #0d6efd; }
+.cronograma-estado.finalizada { background: #d1e7dd; color: #198754; }
 .badge-nivel { font-size: .65rem; cursor: pointer; }
 .badge-nivel:hover { opacity: .8; }
 </style>
@@ -3692,12 +3684,9 @@ function pedirMasStock(obraId, itemInventarioId, itemNombre) {
     </div>
 </div>
 
-<!-- Frappe Gantt -->
-<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<!-- Cronograma HTML -->
 <script>
-/* ===== Gantt Chart ===== */
-let ganttChart = null;
-
+/* ===== Cronograma ===== */
 async function initGantt() {
     const container = document.getElementById('gantt-container');
     if (!container) return;
@@ -3710,56 +3699,72 @@ async function initGantt() {
             return;
         }
 
-        ganttChart = new Gantt('#gantt-container', tasks, {
-            view_mode: 'Month',
-            date_format: 'YYYY-MM-DD',
-            language: 'es',
-            custom_popup_html: function(task) {
-                const estadoLabel = {pendiente:'Pendiente', en_curso:'En Curso', finalizada:'Finalizada'};
-                return `<div class="details-container" style="padding:8px 12px;min-width:180px;">
-                    <h5 style="margin:0 0 4px;font-size:13px;">${task.name}</h5>
-                    <p style="margin:0;font-size:11px;color:#666;">
-                        ${task.estado ? (estadoLabel[task.estado]||task.estado) : ''}<br>
-                        ${task._start.toLocaleDateString('es-AR')} — ${task._end.toLocaleDateString('es-AR')}<br>
-                        Avance: ${task.progress}%
-                        ${task.nivel ? '<br>Nivel: ' + task.nivel : ''}
-                    </p>
-                </div>`;
-            },
-            on_click: function(task) {
-                const card = document.querySelector(`#tareas-${task.id}`);
-                if (card) {
-                    card.scrollIntoView({behavior: 'smooth', block: 'center'});
-                    toggleTareasEtapa(parseInt(task.id));
-                }
-            },
-            on_date_change: function(task, start, end) {
-                // Admin drag to change dates
-                fetch(`/obras/etapas/${task.id}/editar_fechas`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
-                    body: JSON.stringify({
-                        fecha_inicio: start.toISOString().split('T')[0],
-                        fecha_fin: end.toISOString().split('T')[0],
-                        propagar: true
-                    })
-                }).then(r => r.json()).then(d => {
-                    if (d.ok) initGantt();  // refresh
-                });
+        // Calcular rango total
+        const allDates = tasks.flatMap(t => [new Date(t.start), new Date(t.end)]);
+        const minDate = new Date(Math.min(...allDates));
+        const maxDate = new Date(Math.max(...allDates));
+        // Agregar margen de 7 dias a cada lado
+        minDate.setDate(minDate.getDate() - 7);
+        maxDate.setDate(maxDate.getDate() + 7);
+        const totalDays = Math.max((maxDate - minDate) / (1000*60*60*24), 1);
+
+        const estadoLabel = {pendiente:'Pendiente', en_curso:'En curso', finalizada:'Finalizada'};
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        // Generar meses para header
+        let meses = [];
+        let d = new Date(minDate);
+        d.setDate(1);
+        const mesesNombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        while (d <= maxDate) {
+            meses.push({nombre: mesesNombres[d.getMonth()] + ' ' + d.getFullYear(), date: new Date(d)});
+            d.setMonth(d.getMonth() + 1);
+        }
+
+        // Linea de hoy
+        const todayPct = Math.max(0, Math.min(100, ((today - minDate) / (1000*60*60*24)) / totalDays * 100));
+
+        let html = '<table class="cronograma-table"><thead><tr>';
+        html += '<th style="width:200px;">Etapa</th><th style="width:90px;">Inicio</th><th style="width:90px;">Fin</th><th style="width:80px;">Estado</th><th>Cronograma</th>';
+        html += '</tr></thead><tbody>';
+
+        tasks.forEach(t => {
+            const start = new Date(t.start);
+            const end = new Date(t.end);
+            const startPct = ((start - minDate) / (1000*60*60*24)) / totalDays * 100;
+            const widthPct = Math.max(((end - start) / (1000*60*60*24)) / totalDays * 100, 1);
+            const estado = t.estado || 'pendiente';
+
+            html += '<tr>';
+            html += `<td class="fw-semibold">${t.name}</td>`;
+            html += `<td class="text-center">${start.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
+            html += `<td class="text-center">${end.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>`;
+            html += `<td class="text-center"><span class="cronograma-estado ${estado}">${estadoLabel[estado]||estado}</span></td>`;
+            html += '<td><div class="cronograma-bar-container">';
+            // Linea de hoy
+            if (todayPct > 0 && todayPct < 100) {
+                html += `<div style="position:absolute;left:${todayPct}%;top:0;bottom:0;width:2px;background:#dc3545;z-index:2;" title="Hoy"></div>`;
             }
+            html += `<div class="cronograma-bar ${estado}" style="left:${startPct}%;width:${widthPct}%;" title="${t.name}: ${t.start} → ${t.end} (${t.progress}%)"></div>`;
+            html += '</div></td>';
+            html += '</tr>';
         });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
     } catch(e) {
-        console.error('Error loading Gantt:', e);
+        console.error('Error loading cronograma:', e);
         container.innerHTML = '<p class="text-muted small text-center py-3">Error al cargar cronograma.</p>';
     }
 }
 
-// View mode buttons
+// View mode buttons (kept for compatibility, no-op now)
 document.querySelectorAll('#gantt-view-buttons .btn').forEach(btn => {
     btn.addEventListener('click', function() {
         document.querySelectorAll('#gantt-view-buttons .btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
-        if (ganttChart) ganttChart.change_view_mode(this.dataset.view);
     });
 });
 
