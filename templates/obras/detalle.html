@@ -2742,6 +2742,10 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
     document.getElementById('loading-avances').style.display = 'block';
     document.getElementById('avances-container').style.display = 'none';
     document.getElementById('no-avances').style.display = 'none';
+    var resumenEl = document.getElementById('avance-resumen');
+    var historialEl = document.getElementById('historial-avances');
+    if (resumenEl) resumenEl.style.display = 'none';
+    if (historialEl) historialEl.style.display = 'none';
 
     // Configurar formulario de registro dentro del modal
     currentModalTareaId = tareaId;
@@ -2801,9 +2805,55 @@ async function mostrarAvancesPendientes(tareaId, tareaNombre, unidad, rendimient
             if (data.responsable_id) operarioSel.value = data.responsable_id;
         }
 
-        if ((data.avances || []).length === 0) { document.getElementById('no-avances').style.display = 'block'; return; }
-        document.getElementById('avances-container').style.display = 'block';
-        renderAvancesPendientes(data.avances);
+        if ((data.avances || []).length === 0) { document.getElementById('no-avances').style.display = 'block'; }
+        else { document.getElementById('avances-container').style.display = 'block'; renderAvancesPendientes(data.avances); }
+
+        // Mostrar resumen de progreso
+        if (data.tarea) {
+            var rEl = document.getElementById('avance-resumen');
+            if (rEl) {
+                rEl.style.display = 'block';
+                var pct = data.tarea.porcentaje || 0;
+                document.getElementById('avance-pct-text').textContent = pct + '%';
+                var bar = document.getElementById('avance-pct-bar');
+                bar.style.width = pct + '%';
+                bar.className = 'progress-bar ' + (pct >= 100 ? 'bg-success' : pct > 0 ? 'bg-primary' : 'bg-secondary');
+                var plan = data.tarea.cantidad_planificada || 0;
+                var ejec = data.tarea.ejecutado || 0;
+                document.getElementById('avance-ejecutado-text').textContent = plan > 0 ? (ejec.toFixed(1) + ' / ' + plan.toFixed(1) + ' ' + (data.tarea.unidad || 'un') + ' ejecutado') : 'Sin cantidad planificada';
+            }
+        }
+
+        // Mostrar historial de avances aprobados
+        if (data.historial && data.historial.length > 0) {
+            var hEl = document.getElementById('historial-avances');
+            var hCont = document.getElementById('historial-container');
+            if (hEl && hCont) {
+                hEl.style.display = 'block';
+                var hHtml = '';
+                data.historial.forEach(function(av) {
+                    hHtml += '<div class="card mb-2 border"><div class="card-body py-2 px-3">';
+                    hHtml += '<div class="d-flex justify-content-between align-items-start">';
+                    hHtml += '<div>';
+                    hHtml += '<div class="fw-bold" style="font-size:13px;"><i class="fas fa-check-circle text-success me-1"></i>' + av.cantidad + ' ' + (av.unidad || '') + '</div>';
+                    if (av.horas > 0) hHtml += '<small class="text-muted"><i class="far fa-clock me-1"></i>' + av.horas + ' hs</small> ';
+                    hHtml += '<small class="text-muted"><i class="far fa-user me-1"></i>' + av.operario + '</small>';
+                    if (av.notas) hHtml += '<div class="text-muted mt-1" style="font-size:12px;"><i class="far fa-comment me-1"></i>' + av.notas + '</div>';
+                    hHtml += '</div>';
+                    hHtml += '<div class="text-end">';
+                    hHtml += '<small class="text-muted d-block">' + av.fecha + '</small>';
+                    hHtml += '<small class="text-success" style="font-size:10px;">Aprobado por ' + av.aprobado_por + '</small>';
+                    hHtml += '</div></div>';
+                    if (av.fotos && av.fotos.length > 0) {
+                        hHtml += '<div class="mt-2 d-flex gap-1 flex-wrap">';
+                        av.fotos.forEach(function(f) { hHtml += '<img src="' + f.url + '" style="width:50px;height:50px;object-fit:cover;border-radius:4px;cursor:pointer;" onclick="window.open(\'' + f.url + '\',\'_blank\')">'; });
+                        hHtml += '</div>';
+                    }
+                    hHtml += '</div></div>';
+                });
+                hCont.innerHTML = hHtml;
+            }
+        }
     } catch (err) {
         document.getElementById('loading-avances').style.display = 'none';
         document.getElementById('no-avances').style.display = 'block';

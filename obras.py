@@ -2227,6 +2227,34 @@ def obtener_avances_pendientes(tarea_id):
                 'fotos_count': len(fotos)
             })
 
+        # Historial de avances aprobados
+        avances_aprobados = (
+            TareaAvance.query
+            .filter_by(tarea_id=tarea_id, status='aprobado')
+            .order_by(TareaAvance.created_at.desc())
+            .all()
+        )
+        historial = []
+        for av in avances_aprobados:
+            fotos_h = []
+            for foto in av.fotos:
+                fotos_h.append({
+                    'id': foto.id,
+                    'url': f"/media/{foto.file_path}",
+                    'thumbnail_url': f"/media/{foto.file_path}",
+                })
+            historial.append({
+                'id': av.id,
+                'cantidad': float(av.cantidad),
+                'unidad': av.unidad,
+                'horas': float(av.horas or 0),
+                'notas': av.notas or '',
+                'fecha': av.created_at.strftime('%d/%m/%Y %H:%M'),
+                'operario': av.usuario.nombre_completo if av.usuario else 'N/A',
+                'aprobado_por': av.confirmado_por.nombre_completo if av.confirmado_por else 'Auto',
+                'fotos': fotos_h,
+            })
+
         # Obtener miembros y responsable de la tarea para el selector de operario
         miembros_data = []
         responsable_data = None
@@ -2242,15 +2270,24 @@ def obtener_avances_pendientes(tarea_id):
                 miembros_data.append({'id': m.usuario.id, 'nombre': m.usuario.nombre_completo})
                 seen_ids.add(m.user_id)
 
+        # Info de progreso
+        plan = float(tarea.cantidad_planificada or 0)
+        ejecutado = suma_ejecutado(tarea_id)
+
         return jsonify({
             'ok': True,
             'tarea': {
                 'id': tarea.id,
                 'nombre': tarea.nombre,
-                'unidad': tarea.unidad
+                'unidad': tarea.unidad,
+                'cantidad_planificada': plan,
+                'ejecutado': ejecutado,
+                'porcentaje': float(tarea.porcentaje_avance or 0),
+                'estado': tarea.estado,
             },
             'avances': avances_data,
             'total': len(avances_data),
+            'historial': historial,
             'miembros': miembros_data,
             'responsable_id': tarea.responsable_id
         })
