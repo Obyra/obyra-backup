@@ -615,32 +615,52 @@ def detalle(id):
         for t in todas_tareas:
             tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
 
-    # Calcular porcentaje de avance por etapa (sin queries adicionales)
+    # Auto-distribuir cantidad/unidad/fechas/horas de etapa a tareas sin datos
+    datos_distribuidos = False
+    for etapa in etapas:
+        tareas_etapa = tareas_por_etapa.get(etapa.id, [])
+        if not tareas_etapa:
+            continue
+        sin_cantidad = any(not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0 for t in tareas_etapa)
+        # Detectar horas incorrectas (todas iguales = heredaron horas de etapa)
+        horas_set = set(float(t.horas_estimadas or 0) for t in tareas_etapa)
+        horas_mal = len(horas_set) <= 1 and len(tareas_etapa) > 1
+        if sin_cantidad or horas_mal:
+            distribuir_datos_etapa_a_tareas(etapa.id)
+            datos_distribuidos = True
+
+    if datos_distribuidos:
+        db.session.commit()
+        # Refrescar datos
+        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
+        tareas_por_etapa = {}
+        for t in todas_tareas:
+            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+
+    # Auto-sync: recalcular tareas con avances aprobados que aún figuran como pendientes
+    tareas_desync = [t for t in todas_tareas if t.estado == 'pendiente' and any(a.status == 'aprobado' for a in t.avances)]
+    if tareas_desync:
+        for t in tareas_desync:
+            recalc_tarea_pct(t.id)
+        # Refrescar datos después del recálculo
+        todas_tareas = TareaEtapa.query.filter(TareaEtapa.etapa_id.in_(etapa_ids)).all()
+        tareas_por_etapa = {}
+        for t in todas_tareas:
+            tareas_por_etapa.setdefault(t.etapa_id, []).append(t)
+
+    # Calcular porcentaje de avance por etapa (tareas completadas / total tareas)
     etapas_con_avance = {}
     for etapa in etapas:
         tareas = tareas_por_etapa.get(etapa.id, [])
         if not tareas:
             etapas_con_avance[etapa.id] = 0
             continue
-        total_meta = sum(float(t.cantidad_planificada or 0) for t in tareas)
-        if total_meta <= 0:
-            etapas_con_avance[etapa.id] = round(sum(float(t.porcentaje_avance or 0) for t in tareas) / len(tareas), 2)
-        else:
-            weighted = sum(float(t.cantidad_planificada or 0) * float(t.porcentaje_avance or 0) / 100 for t in tareas)
-            etapas_con_avance[etapa.id] = round((weighted / total_meta) * 100, 2)
+        completadas = sum(1 for t in tareas if t.estado in ('completada', 'finalizada'))
+        etapas_con_avance[etapa.id] = round((completadas / len(tareas)) * 100, 2)
 
-    # Calcular porcentaje total de la obra (sin queries adicionales)
+    # Calcular porcentaje total de la obra (promedio de etapas)
     if etapas:
-        total_meta_obra = sum(sum(float(t.cantidad_planificada or 0) for t in tareas_por_etapa.get(e.id, [])) for e in etapas)
-        if total_meta_obra > 0:
-            total_ej = sum(
-                sum(float(t.cantidad_planificada or 0) for t in tareas_por_etapa.get(e.id, []))
-                * (etapas_con_avance.get(e.id, 0) / 100)
-                for e in etapas
-            )
-            porcentaje_obra = round((total_ej / total_meta_obra) * 100, 2)
-        else:
-            porcentaje_obra = round(sum(etapas_con_avance.get(e.id, 0) for e in etapas) / len(etapas), 2)
+        porcentaje_obra = round(sum(etapas_con_avance.get(e.id, 0) for e in etapas) / len(etapas), 2)
     else:
         porcentaje_obra = 0
 
@@ -1467,40 +1487,217 @@ def recalc_tarea_pct(tarea_id):
                     etapa.fecha_inicio_real = date_class.today()
                 current_app.logger.info(f"Etapa {etapa.id} '{etapa.nombre}' auto-iniciada (tarea en curso)")
 
+            # Actualizar progreso de la etapa (% tareas completadas)
+            etapa.progreso = pct_etapa(etapa)
+
     db.session.commit()
     return float(tarea.porcentaje_avance or 0)
 
 def pct_etapa(etapa):
+    """Progreso de etapa = % de tareas completadas (lógica binaria).
+    Cada tarea cuenta como 0% o 100% (done/not done).
+    """
     tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else etapa.tareas
     if not tareas:
         return 0
 
-    total_meta = sum((float(t.cantidad_planificada or 0) for t in tareas))
-    if total_meta <= 0:
-        return round(sum((float(t.porcentaje_avance or 0) for t in tareas)) / max(len(tareas), 1), 2)
-
-    weighted_sum = sum((float(t.cantidad_planificada or 0) * float(t.porcentaje_avance or 0) / 100 for t in tareas))
-    return round((weighted_sum / total_meta) * 100, 2)
+    total = len(tareas)
+    completadas = sum(1 for t in tareas if t.estado in ('completada', 'finalizada'))
+    return round((completadas / total) * 100, 2)
 
 def pct_obra(obra):
+    """Progreso de obra = promedio simple de progreso de sus etapas."""
     etapas = obra.etapas.all() if hasattr(obra.etapas, 'all') else obra.etapas
     if not etapas:
         return 0
 
-    total_meta = 0
-    total_ejecutado = 0
+    etapa_pcts = [pct_etapa(e) for e in etapas]
+    return round(sum(etapa_pcts) / len(etapa_pcts), 2)
 
-    for etapa in etapas:
-        etapa_meta = sum((float(t.cantidad_planificada or 0) for t in etapa.tareas))
-        etapa_pct = pct_etapa(etapa)
-        total_meta += etapa_meta
-        total_ejecutado += etapa_meta * (etapa_pct / 100)
 
-    if total_meta > 0:
-        return round((total_ejecutado / total_meta) * 100, 2)
+# === DISTRIBUCIÓN INTELIGENTE DE DATOS ETAPA → TAREAS ===
+
+def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
+    """Distribuye horas, cantidad, unidad, fechas y rendimiento de la etapa a sus tareas.
+
+    Lógica de arquitecto:
+    - Horas por tarea = según catálogo predefinido (si existe), o distribución equitativa
+    - Cantidad por tarea = proporcional a sus horas vs total horas de la etapa
+    - Unidad = heredada de la etapa
+    - Fechas = distribuidas secuencialmente dentro del rango de la etapa
+    - Rendimiento = cantidad_tarea / horas_tarea
+
+    Args:
+        etapa_id: ID de la etapa
+        forzar: Si True, sobreescribe datos existentes
+    """
+    from datetime import timedelta
+    from tareas_predefinidas import obtener_tareas_por_etapa
+
+    etapa = EtapaObra.query.get(etapa_id)
+    if not etapa:
+        return 0
+
+    cantidad_etapa = float(etapa.cantidad_total_planificada or 0)
+    unidad_etapa = etapa.unidad_medida or 'm2'
+    inicio_etapa = etapa.fecha_inicio_estimada
+    fin_etapa = etapa.fecha_fin_estimada
+
+    tareas = etapa.tareas.order_by(TareaEtapa.id).all()
+    if not tareas:
+        return 0
+
+    # --- PASO 1: Corregir horas desde catálogo predefinido ---
+    catalogo = obtener_tareas_por_etapa(etapa.nombre)
+    catalogo_map = {}
+    for t_cat in catalogo:
+        catalogo_map[t_cat['nombre'].lower().strip()] = t_cat
+
+    # Detectar si las horas están mal (todas iguales = heredaron horas de etapa)
+    horas_set = set(float(t.horas_estimadas or 0) for t in tareas)
+    horas_todas_iguales = len(horas_set) <= 1 and len(tareas) > 1
+
+    for tarea in tareas:
+        key = tarea.nombre.lower().strip()
+        info_cat = catalogo_map.get(key)
+        if info_cat:
+            # Siempre corregir horas si están mal (todas iguales) o si forzar
+            if horas_todas_iguales or forzar or not tarea.horas_estimadas:
+                tarea.horas_estimadas = info_cat.get('horas', 1)
+            # Completar descripción si falta
+            if not tarea.descripcion or tarea.descripcion == 'Creada via wizard':
+                tarea.descripcion = info_cat.get('descripcion', '')
+        elif not tarea.horas_estimadas:
+            tarea.horas_estimadas = 1  # fallback mínimo
+
+    # --- PASO 2: Decidir qué tareas necesitan distribución ---
+    if forzar:
+        tareas_a_procesar = tareas
     else:
-        etapa_pcts = [pct_etapa(e) for e in etapas]
-        return round(sum(etapa_pcts) / max(len(etapa_pcts), 1), 2)
+        tareas_a_procesar = [t for t in tareas if not t.cantidad_planificada or float(t.cantidad_planificada or 0) == 0]
+
+    if not tareas_a_procesar:
+        # Aunque no haya tareas sin cantidad, si corregimos horas hay que guardar
+        if horas_todas_iguales:
+            db.session.flush()
+            return len(tareas)
+        return 0
+
+    # --- PASO 3: Clasificar tareas (físicas vs administrativas) ---
+    # Palabras clave que indican tareas de gestión/control (no consumen m²)
+    _KEYWORDS_NO_CANTIDAD = {
+        # Gestión y permisos
+        'gestión', 'gestion', 'permisos', 'habilitación', 'habilitacion',
+        'trámites', 'tramites',
+        # Planes y documentación
+        'plan de seguridad', 'documentación', 'documentacion',
+        'confección', 'confeccion', 'checklist', 'manual de usuario',
+        'entrega de documentación', 'despiece por piso',
+        # Registros y relevamientos
+        'registro fotográfico', 'registro fotografico',
+        'relevamiento topográfico', 'relevamiento topografico',
+        # Verificaciones y controles
+        'verificación', 'verificacion',
+        'control de calidad', 'control de compactación', 'control de compactacion',
+        'control de deformaciones', 'control de resistencia', 'control de juntas',
+        # Pruebas y ensayos
+        'prueba de', 'pruebas y puesta', 'pruebas de presión',
+        'medición y verificación', 'medicion y verificacion',
+        # Inspecciones (solo "inspección final", no "trampas de inspección")
+        'inspección final', 'inspeccion final', 'revisión y retoques', 'revision y retoques',
+        # Estudios
+        'estudio de suelos', 'estudio de nivel',
+        # Tareas específicas sin m²
+        'cartel de obra', 'configuración domótica', 'configuracion domotica',
+        'clasificación de escombros', 'clasificacion de escombros',
+    }
+
+    def _tarea_aplica_cantidad(tarea, catalogo_map):
+        """Determina si una tarea consume cantidad física (m², ml, etc.)."""
+        key = tarea.nombre.lower().strip()
+        info_cat = catalogo_map.get(key)
+        # Si el catálogo dice explícitamente que no aplica
+        if info_cat and info_cat.get('aplica_cantidad') is False:
+            return False
+        # Detección por nombre
+        for kw in _KEYWORDS_NO_CANTIDAD:
+            if kw in key:
+                return False
+        return True
+
+    tareas_fisicas = [t for t in tareas_a_procesar if _tarea_aplica_cantidad(t, catalogo_map)]
+    tareas_admin = [t for t in tareas_a_procesar if not _tarea_aplica_cantidad(t, catalogo_map)]
+
+    # --- PASO 4: Distribución proporcional ---
+    # Horas: proporcional sobre TODAS las tareas
+    total_horas_todas = sum(float(t.horas_estimadas or 1) for t in tareas_a_procesar)
+    if total_horas_todas <= 0:
+        total_horas_todas = len(tareas_a_procesar)
+
+    # Cantidad: proporcional sobre solo tareas FÍSICAS
+    total_horas_fisicas = sum(float(t.horas_estimadas or 1) for t in tareas_fisicas)
+    if total_horas_fisicas <= 0:
+        total_horas_fisicas = 1
+
+    # Duración de la etapa en días
+    dias_etapa = 0
+    if inicio_etapa and fin_etapa:
+        dias_etapa = max(1, (fin_etapa - inicio_etapa).days)
+
+    actualizadas = 0
+    dia_acumulado = 0
+
+    for tarea in tareas_a_procesar:
+        horas_tarea = float(tarea.horas_estimadas or 1)
+        proporcion_horas = horas_tarea / total_horas_todas
+        es_fisica = tarea in tareas_fisicas
+
+        # Cantidad: solo para tareas físicas, proporcional a sus horas
+        if cantidad_etapa > 0:
+            if es_fisica:
+                proporcion_cant = horas_tarea / total_horas_fisicas
+                cant = round(cantidad_etapa * proporcion_cant, 2)
+                tarea.cantidad_planificada = cant
+                tarea.objetivo = cant
+                tarea.unidad = unidad_etapa
+            else:
+                # Tarea administrativa: su meta es completar las horas
+                tarea.cantidad_planificada = horas_tarea
+                tarea.unidad = 'h'
+        else:
+            # Sin cantidad en etapa → todas usan horas como meta
+            tarea.cantidad_planificada = horas_tarea
+            tarea.unidad = 'h'
+
+        # Rendimiento: cantidad por hora
+        if horas_tarea > 0 and float(tarea.cantidad_planificada or 0) > 0:
+            tarea.rendimiento = round(float(tarea.cantidad_planificada) / horas_tarea, 2)
+
+        # Fechas: distribuir secuencialmente proporcional a horas
+        if inicio_etapa and fin_etapa and dias_etapa > 0:
+            dias_tarea = max(1, round(dias_etapa * proporcion_horas))
+            f_ini = inicio_etapa + timedelta(days=dia_acumulado)
+            f_fin = f_ini + timedelta(days=max(0, dias_tarea - 1))
+            if f_fin > fin_etapa:
+                f_fin = fin_etapa
+
+            if forzar or not tarea.fecha_inicio_plan:
+                tarea.fecha_inicio_plan = f_ini
+            if forzar or not tarea.fecha_fin_plan:
+                tarea.fecha_fin_plan = f_fin
+            if forzar or not tarea.fecha_inicio_estimada:
+                tarea.fecha_inicio_estimada = f_ini
+            if forzar or not tarea.fecha_fin_estimada:
+                tarea.fecha_fin_estimada = f_fin
+
+            dia_acumulado += dias_tarea
+
+        actualizadas += 1
+
+    if actualizadas or horas_todas_iguales:
+        db.session.flush()
+
+    return actualizadas
 
 
 # === ETAPAS ENCADENADAS — PROPAGACIÓN DE FECHAS ===
@@ -1847,6 +2044,7 @@ def crear_avance(tarea_id):
             ok=True,
             mensaje="Avance registrado y materiales descontados del stock",
             porcentaje_avance=nuevo_pct,
+            estado=tarea.estado,
             cantidad_planificada=float(tarea.cantidad_planificada or 0),
             cantidad_ejecutada=suma_ejecutado(tarea_id)
         )
@@ -2194,6 +2392,9 @@ def obtener_avances_pendientes(tarea_id):
     org_id = get_current_org_id() or getattr(current_user, 'organizacion_id', None)
     if tarea.etapa.obra.organizacion_id != org_id:
         return jsonify(ok=False, error="Sin permiso"), 403
+
+    # Recalcular porcentaje de la tarea (por si hay avances que no se reflejaron)
+    recalc_tarea_pct(tarea_id)
 
     try:
         avances_pendientes = (
@@ -3763,6 +3964,72 @@ def actualizar_estado_tarea(id):
     return redirect(url_for('obras.detalle', id=obra.id))
 
 
+@obras_bp.route('/api/tareas/<int:tarea_id>/editar-datos', methods=['POST'])
+@login_required
+def api_editar_datos_tarea(tarea_id):
+    """Editar horas, cantidad, unidad, rendimiento y fechas de una tarea."""
+    tarea = TareaEtapa.query.get_or_404(tarea_id)
+    obra = tarea.etapa.obra
+
+    if not can_manage_obra(obra):
+        return jsonify(ok=False, error="Sin permisos"), 403
+
+    try:
+        data = request.get_json() or request.form
+
+        # Horas estimadas
+        if 'horas_estimadas' in data and data['horas_estimadas'] is not None:
+            tarea.horas_estimadas = float(str(data['horas_estimadas']).replace(',', '.'))
+
+        # Cantidad planificada
+        if 'cantidad_planificada' in data and data['cantidad_planificada'] is not None:
+            tarea.cantidad_planificada = float(str(data['cantidad_planificada']).replace(',', '.'))
+            tarea.objetivo = tarea.cantidad_planificada
+
+        # Unidad
+        if 'unidad' in data and data['unidad']:
+            tarea.unidad = data['unidad'].strip()
+
+        # Rendimiento
+        if 'rendimiento' in data and data['rendimiento'] is not None:
+            tarea.rendimiento = float(str(data['rendimiento']).replace(',', '.'))
+        elif tarea.horas_estimadas and float(tarea.horas_estimadas) > 0 and tarea.cantidad_planificada:
+            # Auto-calcular rendimiento
+            tarea.rendimiento = round(float(tarea.cantidad_planificada) / float(tarea.horas_estimadas), 2)
+
+        # Fechas
+        if 'fecha_inicio' in data and data['fecha_inicio']:
+            from datetime import datetime as dt
+            f = dt.strptime(data['fecha_inicio'], '%Y-%m-%d').date()
+            tarea.fecha_inicio_plan = f
+            tarea.fecha_inicio_estimada = f
+        if 'fecha_fin' in data and data['fecha_fin']:
+            from datetime import datetime as dt
+            f = dt.strptime(data['fecha_fin'], '%Y-%m-%d').date()
+            tarea.fecha_fin_plan = f
+            tarea.fecha_fin_estimada = f
+
+        db.session.commit()
+
+        return jsonify(
+            ok=True,
+            tarea={
+                'id': tarea.id,
+                'horas_estimadas': float(tarea.horas_estimadas or 0),
+                'cantidad_planificada': float(tarea.cantidad_planificada or 0),
+                'unidad': tarea.unidad,
+                'rendimiento': float(tarea.rendimiento or 0),
+            }
+        )
+
+    except (ValueError, TypeError) as e:
+        return jsonify(ok=False, error=f"Valor inválido: {str(e)}"), 400
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error al editar datos de tarea")
+        return jsonify(ok=False, error="Error interno"), 500
+
+
 @obras_bp.route('/tareas/<int:tarea_id>/asignar', methods=['POST'])
 @login_required
 def tarea_asignar(tarea_id):
@@ -4137,25 +4404,11 @@ def gantt_data(id):
         if not inicio or not fin:
             continue
 
-        # Calcular progreso - primero intentar desde tareas, luego campo directo
+        # Calcular progreso: tareas completadas / total tareas (lógica binaria)
         if e.estado == 'finalizada':
             progress = 100
         else:
-            # Intentar calcular desde tareas
-            tareas_list = e.tareas.all() if hasattr(e.tareas, 'all') else (e.tareas or [])
-            if tareas_list:
-                total_tareas = len(tareas_list)
-                completadas = sum(1 for t in tareas_list if t.estado in ('completada', 'finalizada'))
-                # Promedio ponderado: tareas completadas + avance parcial de las demás
-                avance_parcial = sum(float(t.porcentaje_avance or 0) for t in tareas_list)
-                progress = round(avance_parcial / total_tareas) if total_tareas else 0
-                # Si hay completadas pero porcentaje_avance está en 0, usar ratio simple
-                if progress == 0 and completadas > 0:
-                    progress = round((completadas / total_tareas) * 100)
-            elif getattr(e, 'progreso', None):
-                progress = e.progreso
-            else:
-                progress = 0
+            progress = pct_etapa(e)
 
         tasks.append({
             'id': str(e.id),

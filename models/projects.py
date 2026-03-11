@@ -81,8 +81,9 @@ class Obra(db.Model):
 
     def calcular_progreso_automatico(self):
         """
-        Calcula el progreso automático basado en las cantidades ejecutadas de las tareas.
-        Fórmula: Suma ponderada de (cantidad_ejecutada / cantidad_planificada) de cada tarea
+        Calcula el progreso automático basado en tareas completadas.
+        Lógica binaria: cada tarea es 0% o 100% (completada/no completada).
+        Etapa = % tareas completadas. Obra = promedio de etapas.
         """
         from decimal import Decimal, ROUND_HALF_UP
 
@@ -97,44 +98,16 @@ class Obra(db.Model):
             total_tareas = len(tareas)
 
             if total_tareas > 0:
-                # Calcular progreso de la etapa basado en porcentaje_avance de las tareas
-                # Ponderado por cantidad_planificada de cada tarea
-                total_planificado_etapa = Decimal('0')
-                total_ejecutado_etapa = Decimal('0')
-
-                for tarea in tareas:
-                    cant_plan = Decimal(str(tarea.cantidad_planificada or 0))
-                    pct_avance = Decimal(str(tarea.porcentaje_avance or 0))
-
-                    if cant_plan > 0:
-                        total_planificado_etapa += cant_plan
-                        # Calcular ejecutado basado en el porcentaje
-                        total_ejecutado_etapa += (cant_plan * pct_avance / Decimal('100'))
-
-                # Calcular porcentaje de la etapa
-                if total_planificado_etapa > 0:
-                    porcentaje_etapa_calc = (total_ejecutado_etapa / total_planificado_etapa) * Decimal('100')
-                else:
-                    # Si no hay cantidades planificadas, usar promedio simple de porcentajes
-                    suma_pcts = sum(Decimal(str(t.porcentaje_avance or 0)) for t in tareas)
-                    porcentaje_etapa_calc = suma_pcts / Decimal(str(total_tareas))
-
-                # Contribución de esta etapa al progreso total (ponderado por # de etapas)
+                completadas = sum(1 for t in tareas if t.estado in ('completada', 'finalizada'))
+                porcentaje_etapa_calc = Decimal(str(completadas)) / Decimal(str(total_tareas)) * Decimal('100')
                 progreso_etapas += porcentaje_etapa_calc / Decimal(str(total_etapas))
-
             elif etapa.estado == 'finalizada':
                 progreso_etapas += (Decimal('100') / Decimal(str(total_etapas)))
 
-        # Agregar progreso de certificaciones - convertir a Decimal
-        progreso_certificaciones = Decimal('0')
-        for cert in self.certificaciones.filter_by(activa=True):
-            if cert.porcentaje_avance:
-                progreso_certificaciones += Decimal(str(cert.porcentaje_avance))
-
         # El progreso total no puede exceder 100%
-        progreso_total = min(Decimal('100'), progreso_etapas + progreso_certificaciones)
+        progreso_total = min(Decimal('100'), progreso_etapas)
 
-        # Actualizar el progreso en la base de datos - convertir a int
+        # Actualizar el progreso en la base de datos
         self.progreso = int(progreso_total.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
         return self.progreso
 

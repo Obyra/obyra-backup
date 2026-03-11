@@ -1944,6 +1944,65 @@
 </div>
 
 <!-- Modal Editar Fechas de Etapa -->
+<!-- Modal: Editar datos de tarea (horas, cantidad, unidad, fechas) -->
+<div class="modal fade" id="modalEditarDatosTarea" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Tarea: <span id="edt-nombre"></span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edt-tarea-id">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label fw-bold"><i class="fas fa-clock me-1"></i>Horas estimadas</label>
+                        <input type="number" step="0.5" min="0" class="form-control" id="edt-horas">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold"><i class="fas fa-ruler me-1"></i>Unidad</label>
+                        <select class="form-select" id="edt-unidad">
+                            <option value="m2">m²</option>
+                            <option value="ml">ml</option>
+                            <option value="m3">m³</option>
+                            <option value="un">un</option>
+                            <option value="kg">kg</option>
+                            <option value="h">h</option>
+                            <option value="gl">gl</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold"><i class="fas fa-calculator me-1"></i>Cantidad planificada</label>
+                        <input type="number" step="0.01" min="0" class="form-control" id="edt-cantidad">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold"><i class="fas fa-tachometer-alt me-1"></i>Rendimiento (<span id="edt-rend-unidad">un</span>/h)</label>
+                        <input type="number" step="0.01" min="0" class="form-control" id="edt-rendimiento">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold"><i class="fas fa-calendar me-1"></i>Fecha inicio</label>
+                        <input type="date" class="form-control" id="edt-fecha-inicio">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold"><i class="fas fa-calendar-check me-1"></i>Fecha fin</label>
+                        <input type="date" class="form-control" id="edt-fecha-fin">
+                    </div>
+                </div>
+                <div class="alert alert-info mt-3 mb-0 py-2" style="font-size:.8rem;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    El rendimiento se calcula como cantidad / horas. Si modificas horas o cantidad, el rendimiento se recalcula.
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="guardarDatosTarea()">
+                    <i class="fas fa-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="modalEditarFechas" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
@@ -3048,20 +3107,10 @@ document.getElementById('formAvanceEnModal')?.addEventListener('submit', async f
         const response = await fetch(`/obras/tareas/${tareaId}/avances`, { method: 'POST', body: formData });
         const result = await response.json();
         if (result.ok) {
-            // Limpiar formulario
-            this.reset();
-            document.getElementById('modal_tarea_id').value = tareaId;
-            // Colapsar el formulario
-            const collapseEl = document.getElementById('collapseNuevoAvance');
-            if (collapseEl) bootstrap.Collapse.getInstance(collapseEl)?.hide();
-            // Recargar avances pendientes en el modal
-            alert('Avance registrado exitosamente como pendiente de aprobación.');
-            // Recargar la lista de avances pendientes
-            const tareaNombre = document.getElementById('tarea-nombre-pendiente').textContent;
-            const unidadBase = document.getElementById('modal_unidad_base').value;
-            const rendimiento = document.getElementById('modal_rendimiento').value;
-            bootstrap.Modal.getInstance(document.getElementById('modalAvancesPendientes'))?.hide();
-            setTimeout(() => mostrarAvancesPendientes(tareaId, tareaNombre, unidadBase, rendimiento), 300);
+            // Mostrar mensaje y recargar página para reflejar cambios en estado, progreso y cronograma
+            const pct = result.porcentaje_avance || 0;
+            alert(`✅ Avance registrado exitosamente. Progreso de la tarea: ${pct}%`);
+            window.location.reload();
         } else {
             alert(result.error || 'Error al registrar el avance');
         }
@@ -3837,6 +3886,69 @@ document.addEventListener('DOMContentLoaded', initGantt);
         if (c) c.style.transform = 'rotate(0deg)';
     });
 });
+
+
+/* ===== Modal Editar Datos de Tarea ===== */
+function editarDatosTarea(tareaId, nombre, horas, cantidad, unidad, rendimiento, fechaInicio, fechaFin) {
+    document.getElementById('edt-tarea-id').value = tareaId;
+    document.getElementById('edt-nombre').textContent = nombre;
+    document.getElementById('edt-horas').value = horas || '';
+    document.getElementById('edt-cantidad').value = cantidad || '';
+    document.getElementById('edt-unidad').value = unidad || 'un';
+    document.getElementById('edt-rendimiento').value = rendimiento || '';
+    document.getElementById('edt-rend-unidad').textContent = unidad || 'un';
+    document.getElementById('edt-fecha-inicio').value = fechaInicio || '';
+    document.getElementById('edt-fecha-fin').value = fechaFin || '';
+
+    // Auto-recalcular rendimiento al cambiar horas o cantidad
+    var horasInput = document.getElementById('edt-horas');
+    var cantidadInput = document.getElementById('edt-cantidad');
+    var rendInput = document.getElementById('edt-rendimiento');
+    var unidadSel = document.getElementById('edt-unidad');
+
+    function recalcRendimiento() {
+        var h = parseFloat(horasInput.value) || 0;
+        var c = parseFloat(cantidadInput.value) || 0;
+        if (h > 0 && c > 0) {
+            rendInput.value = (c / h).toFixed(2);
+        }
+        document.getElementById('edt-rend-unidad').textContent = unidadSel.value;
+    }
+    horasInput.oninput = recalcRendimiento;
+    cantidadInput.oninput = recalcRendimiento;
+    unidadSel.onchange = recalcRendimiento;
+
+    new bootstrap.Modal(document.getElementById('modalEditarDatosTarea')).show();
+}
+
+async function guardarDatosTarea() {
+    var tareaId = document.getElementById('edt-tarea-id').value;
+    var data = {
+        horas_estimadas: parseFloat(document.getElementById('edt-horas').value) || null,
+        cantidad_planificada: parseFloat(document.getElementById('edt-cantidad').value) || null,
+        unidad: document.getElementById('edt-unidad').value,
+        rendimiento: parseFloat(document.getElementById('edt-rendimiento').value) || null,
+        fecha_inicio: document.getElementById('edt-fecha-inicio').value || null,
+        fecha_fin: document.getElementById('edt-fecha-fin').value || null,
+    };
+
+    try {
+        var resp = await fetch('/obras/api/tareas/' + tareaId + '/editar-datos', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.content || ''},
+            body: JSON.stringify(data)
+        });
+        var result = await resp.json();
+        if (result.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarDatosTarea')).hide();
+            window.location.reload();
+        } else {
+            alert(result.error || 'Error al guardar');
+        }
+    } catch (e) {
+        alert('Error de conexión');
+    }
+}
 
 
 /* ===== Modal Editar Fechas ===== */

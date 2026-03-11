@@ -638,6 +638,15 @@ class ProjectSharedService:
                             db.session.add(asignacion)
                             asignaciones_creadas += 1
 
+            # Distribuir cantidad/unidad/fechas de cada etapa a sus tareas nuevas
+            from obras import distribuir_datos_etapa_a_tareas
+            etapas_procesadas = set()
+            for etapa_data in etapas_data:
+                eid = etapa_data.get('etapa_id')
+                if eid and eid not in etapas_procesadas:
+                    distribuir_datos_etapa_a_tareas(eid)
+                    etapas_procesadas.add(eid)
+
             db.session.commit()
 
             return jsonify(ok=True, creadas=creadas, ya_existian=ya_existian, asignaciones_creadas=asignaciones_creadas)

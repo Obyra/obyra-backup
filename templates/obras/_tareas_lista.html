@@ -60,14 +60,30 @@
                                     </span>
                                 {% endif %}
                                 
+                                <!-- Rendimiento -->
+                                {% if tarea.rendimiento and tarea.rendimiento > 0 %}
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fas fa-tachometer-alt me-1"></i> {{ "%.1f"|format(tarea.rendimiento|float) }} {{ tarea.unidad or 'un' }}/h
+                                </span>
+                                {% endif %}
+
                                 <!-- Prioridad -->
                                 {% if tarea.prioridad %}
                                     {% set prioridad_class = 'bg-danger' if tarea.prioridad == 'alta' else ('bg-warning text-dark' if tarea.prioridad == 'media' else 'bg-secondary') %}
                                     <span class="badge {{ prioridad_class }}">
                                         {% if tarea.prioridad == 'alta' %}<i class="fas fa-exclamation-triangle me-1"></i>Alta
-                                        {% elif tarea.prioridad == 'media' %}<i class="fas fa-minus me-1"></i>Media  
+                                        {% elif tarea.prioridad == 'media' %}<i class="fas fa-minus me-1"></i>Media
                                         {% else %}<i class="fas fa-low-vision me-1"></i>Baja{% endif %}
                                     </span>
+                                {% endif %}
+
+                                <!-- Botón editar datos de tarea -->
+                                {% if can_manage %}
+                                <button class="badge bg-white text-primary border border-primary" style="cursor:pointer; font-size:.65rem;"
+                                        onclick="editarDatosTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}', {{ tarea.horas_estimadas|float if tarea.horas_estimadas else 0 }}, {{ tarea.cantidad_planificada|float if tarea.cantidad_planificada else 0 }}, '{{ tarea.unidad or 'un' }}', {{ tarea.rendimiento|float if tarea.rendimiento else 0 }}, '{{ tarea.fecha_inicio_plan.strftime('%Y-%m-%d') if tarea.fecha_inicio_plan else '' }}', '{{ tarea.fecha_fin_plan.strftime('%Y-%m-%d') if tarea.fecha_fin_plan else '' }}')"
+                                        title="Editar datos de la tarea">
+                                    <i class="fas fa-pen me-1"></i>Editar
+                                </button>
                                 {% endif %}
                             </div>
                             
@@ -226,8 +242,8 @@
                             {% endif %}
                         </div>
                         <div class="d-flex flex-column align-items-end gap-1">
-                            {% set badge_class = 'bg-success' if tarea.estado == 'completada' else ('bg-warning' if tarea.estado == 'en_progreso' else ('bg-secondary' if tarea.estado == 'pausada' else 'bg-info')) %}
-                            <span class="badge {{ badge_class }}">{{ tarea.estado }}</span>
+                            {% set badge_class = 'bg-success' if tarea.estado in ('completada', 'finalizada') else ('bg-primary' if tarea.estado == 'en_curso' else ('bg-warning' if tarea.estado == 'en_progreso' else ('bg-secondary' if tarea.estado == 'pausada' else 'bg-info'))) %}
+                            <span class="badge {{ badge_class }} text-uppercase">{{ tarea.estado|replace('_', ' ') }}</span>
                             {% if current_user.role in ['admin', 'pm'] %}
                             <button class="btn btn-sm btn-outline-danger" 
                                     onclick="confirmarEliminarTarea({{ tarea.id }}, '{{ tarea.nombre|replace("'", "\\'") }}')" 
