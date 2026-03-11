@@ -640,8 +640,23 @@ def detalle(id):
         cant_set = set(float(t.cantidad_planificada or 0) for t in tareas_etapa)
         cant_mal = len(cant_set) <= 1 and len(tareas_etapa) > 1 and any(float(t.cantidad_planificada or 0) > 0 for t in tareas_etapa)
 
-        necesita_forzar = horas_mal or cant_mal
-        if sin_cantidad or horas_mal or cant_mal:
+        # Detectar fechas desincronizadas con la etapa
+        inicio_etapa = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
+        fin_etapa = etapa.fecha_fin_real or etapa.fecha_fin_estimada
+        fechas_mal = False
+        if inicio_etapa and fin_etapa:
+            for t in tareas_etapa:
+                f_ini = t.fecha_inicio_plan
+                f_fin = t.fecha_fin_plan
+                if f_ini and f_ini < inicio_etapa:
+                    fechas_mal = True; break
+                if f_fin and f_fin > fin_etapa:
+                    fechas_mal = True; break
+                if not f_ini or not f_fin:
+                    fechas_mal = True; break
+
+        necesita_forzar = horas_mal or cant_mal or fechas_mal
+        if sin_cantidad or horas_mal or cant_mal or fechas_mal:
             try:
                 distribuir_datos_etapa_a_tareas(etapa.id, forzar=necesita_forzar)
                 datos_distribuidos = True
@@ -1560,8 +1575,9 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
     cantidad_etapa = float(etapa.cantidad_total_planificada or 0)
     unidad_etapa = etapa.unidad_medida or 'm2'
-    inicio_etapa = etapa.fecha_inicio_estimada
-    fin_etapa = etapa.fecha_fin_estimada
+    # Usar misma lógica que el cronograma: real > estimada
+    inicio_etapa = etapa.fecha_inicio_real or etapa.fecha_inicio_estimada
+    fin_etapa = etapa.fecha_fin_real or etapa.fecha_fin_estimada
 
     tareas = etapa.tareas.order_by(TareaEtapa.id).all()
     if not tareas:
