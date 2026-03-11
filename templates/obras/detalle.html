@@ -1984,9 +1984,8 @@
                     <input class="form-check-input" type="checkbox" id="mef-bloquear">
                     <label class="form-check-label small" for="mef-bloquear">Bloquear fechas (no auto-ajustar)</label>
                 </div>
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" id="mef-propagar" checked>
-                    <label class="form-check-label small" for="mef-propagar">Propagar cambios a etapas siguientes</label>
+                <div class="alert alert-info py-1 px-2 mb-2" style="font-size:11px;">
+                    <i class="fas fa-link me-1"></i>Las fechas de etapas encadenadas se ajustan automaticamente.
                 </div>
                 <div id="mef-forzar-wrap" class="d-none">
                     <hr class="my-2">
@@ -1997,7 +1996,7 @@
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="guardarFechasEtapa()">Guardar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="mef-btn-guardar" onclick="guardarFechasEtapa()"><i class="fas fa-save me-1"></i>Guardar</button>
             </div>
         </div>
     </div>
@@ -3789,8 +3788,9 @@ async function guardarFechasEtapa() {
         fecha_inicio: document.getElementById('mef-inicio').value || null,
         fecha_fin: document.getElementById('mef-fin').value || null,
         bloquear_fechas: document.getElementById('mef-bloquear').checked,
-        propagar: document.getElementById('mef-propagar').checked,
     };
+    const btn = document.getElementById('mef-btn-guardar');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardando...'; }
     try {
         const resp = await fetch(`/obras/etapas/${etapaId}/editar_fechas`, {
             method: 'POST',
@@ -3800,12 +3800,17 @@ async function guardarFechasEtapa() {
         const data = await resp.json();
         if (data.ok) {
             bootstrap.Modal.getInstance(document.getElementById('modalEditarFechas')).hide();
+            if (data.propagadas > 0) {
+                alert(`Fechas guardadas. Se actualizaron automáticamente ${data.propagadas} etapa(s) encadenada(s).`);
+            }
             location.reload();
         } else {
             alert('Error: ' + (data.error || 'desconocido'));
         }
     } catch(e) {
         alert('Error de conexión');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar'; }
     }
 }
 

@@ -253,7 +253,7 @@ def propagar_fechas_obra(obra_id):
         if inicio_mas_temprano is None:
             continue
 
-        if etapa.fecha_inicio_estimada and inicio_mas_temprano > etapa.fecha_inicio_estimada:
+        if etapa.fecha_inicio_estimada and inicio_mas_temprano != etapa.fecha_inicio_estimada:
             # Calcular duración actual para preservarla
             if etapa.fecha_inicio_estimada and etapa.fecha_fin_estimada:
                 duracion = (etapa.fecha_fin_estimada - etapa.fecha_inicio_estimada).days

@@ -3961,11 +3961,17 @@ def editar_fechas_etapa(etapa_id):
 
         db.session.commit()
 
-        # Opcionalmente propagar a sucesoras
-        if data.get('propagar', False):
-            result = propagar_fechas_etapas(etapa.obra_id)
-            if result['shifted_count'] > 0:
-                db.session.commit()
+        # SIEMPRE propagar fechas a etapas sucesoras
+        # Primero asegurar que existan dependencias desde niveles
+        from services.dependency_service import generar_dependencias_desde_niveles
+        deps_creadas = generar_dependencias_desde_niveles(etapa.obra_id)
+        if deps_creadas:
+            db.session.commit()
+
+        result = propagar_fechas_etapas(etapa.obra_id)
+        propagadas = result['shifted_count']
+        if propagadas > 0:
+            db.session.commit()
 
         return jsonify({
             'ok': True,
@@ -3973,6 +3979,7 @@ def editar_fechas_etapa(etapa_id):
             'fecha_fin': str(etapa.fecha_fin_estimada) if etapa.fecha_fin_estimada else None,
             'estado': etapa.estado,
             'fechas_manuales': etapa.fechas_manuales,
+            'propagadas': propagadas,
         })
     except Exception as e:
         db.session.rollback()
