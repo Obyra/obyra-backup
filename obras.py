@@ -3861,6 +3861,12 @@ def eliminar_obra(obra_id):
         # IMPORTANTE: tablas hijas ANTES que sus padres
         _optional_deletes = [
             # --- Hijos de ordenes_compra (OC) ---
+            ("historial_precios_proveedor",
+             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
+             ["ordenes_compra"]),
+            ("movimientos_caja",
+             "orden_compra_id IN (SELECT id FROM ordenes_compra WHERE obra_id = :obra_id)",
+             ["ordenes_compra"]),
             ("recepcion_oc_items",
              "recepcion_id IN (SELECT r.id FROM recepciones_oc r JOIN ordenes_compra oc ON r.orden_compra_id = oc.id WHERE oc.obra_id = :obra_id)",
              ["recepciones_oc", "ordenes_compra"]),
