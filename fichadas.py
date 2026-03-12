@@ -565,11 +565,9 @@ def api_guardar_coords():
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
 
-    # Solo guardar si la obra no tiene coords todavía
-    if not obra.latitud:
-        obra.latitud = float(lat)
-        obra.longitud = float(lng)
-        db.session.commit()
+    obra.latitud = float(lat)
+    obra.longitud = float(lng)
+    db.session.commit()
 
     return jsonify({'ok': True})
 

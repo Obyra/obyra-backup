@@ -45,6 +45,14 @@
             <div id="estadoUbicacion" class="alert alert-info text-center">
                 <i class="fas fa-spinner fa-spin me-2"></i>Obteniendo tu ubicacion...
             </div>
+            {% if es_admin %}
+            <div id="btnCorregirUbicacion" class="text-center mt-2" style="display:none;">
+                <button class="btn btn-outline-warning btn-sm" onclick="corregirUbicacionObra()">
+                    <i class="fas fa-map-pin me-1"></i>Usar mi ubicacion actual como ubicacion de la obra
+                </button>
+                <div class="form-text">Si la ubicacion de la obra es incorrecta, esto la corrige con tu GPS actual.</div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -421,6 +429,29 @@ function mostrarResultado(tipo, mensaje) {
     }
 }
 
+function corregirUbicacionObra() {
+    if (!miLat || !miLng) {
+        alert('No se pudo obtener tu ubicacion GPS. Intenta de nuevo.');
+        return;
+    }
+    if (!confirm('Esto va a actualizar la ubicacion de la obra a tu posicion actual. Continuar?')) return;
+
+    var headers = { 'Content-Type': 'application/json' };
+    if (CSRF_TOKEN) headers['X-CSRFToken'] = CSRF_TOKEN;
+    fetch('/fichadas/api/guardar_coords', {
+        method: 'POST', headers: headers,
+        body: JSON.stringify({ obra_id: OBRA_ID, latitud: miLat, longitud: miLng })
+    }).then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            alert('Ubicacion de la obra actualizada. Se recargara la pagina.');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo actualizar'));
+        }
+    }).catch(function() { alert('Error de conexion'); });
+}
+
 function recalcularDistancia() {
     if (!miLat || !OBRA_LAT || fichandoEnCurso) return;
     var dist = calcularDistancia(miLat, miLng, OBRA_LAT, OBRA_LNG);
@@ -429,9 +460,13 @@ function recalcularDistancia() {
     if (dentro) {
         actualizarEstado('ok', 'Estas a ' + Math.round(dist) + 'm de la obra (dentro del rango de ' + OBRA_RADIO + 'm)');
         btn.disabled = false;
+        var btnCorregir = document.getElementById('btnCorregirUbicacion');
+        if (btnCorregir) btnCorregir.style.display = 'none';
     } else if (ES_ADMIN) {
         actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm (fuera de ' + OBRA_RADIO + 'm). Como admin podes fichar.');
         btn.disabled = false;
+        var btnCorregir = document.getElementById('btnCorregirUbicacion');
+        if (btnCorregir) btnCorregir.style.display = 'block';
     } else {
         actualizarEstado('warning', 'Estas a ' + Math.round(dist) + 'm. Necesitas estar dentro de ' + OBRA_RADIO + 'm.');
         btn.disabled = true;
