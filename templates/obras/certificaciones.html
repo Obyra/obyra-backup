@@ -414,6 +414,7 @@
 <script>
 var OBRA_ID = {{ obra.id }};
 var previewData = null; // datos del preview unificado
+var UNIDADES_SISTEMA = ['m2','m3','ml','gl','unidad','kg','tn','lts','bolsa','rollo','caja','pack','jornal','hrs','pz','global'];
 
 // ============================================================
 // UTILIDADES
@@ -542,23 +543,57 @@ function renderUnificado() {
             var key = `e${eIdx}_o${oIdx}`;
             var tareas = op.tareas || [];
 
-            // Fila principal del operario con todos los campos editables
-            html += `<tr class="border-bottom" id="oprow-${key}">
-                <td>
+            // Fila header del operario
+            html += `<tr class="table-secondary">
+                <td colspan="8">
                     <strong>${op.operario_nombre}</strong>
                     <span class="badge bg-secondary bg-opacity-50 ms-1">${op.rol}</span>
-                    ${tareas.length > 0 ? '<br><a href="javascript:void(0)" onclick="toggleDetalle(\''+key+'\')" class="text-muted small"><i class="fas fa-chevron-down" id="icon-'+key+'"></i> ver tareas ('+tareas.length+')</a>' : ''}
                 </td>
+            </tr>`;
+
+            // Filas de tareas editables individualmente
+            if (tareas.length > 0) {
+                tareas.forEach((t, tIdx) => {
+                    var tKey = `${key}_t${tIdx}`;
+                    html += `<tr id="row-${tKey}">
+                        <td class="ps-3">
+                            <div class="d-flex align-items-center">
+                                <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
+                                       data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
+                                       checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
+                                <small>${t.tarea}</small>
+                            </div>
+                        </td>
+                        <td class="text-center">
+                            <input type="number" class="form-control form-control-sm text-center tarea-cant" data-tkey="${tKey}" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}"
+                                   value="${t.cantidad || 0}" step="0.1" min="0" oninput="recalcFromTareas('${key}', ${eIdx}, ${oIdx})" style="max-width:70px;margin:0 auto;">
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm tarea-unid" data-tkey="${tKey}" style="max-width:80px;margin:0 auto;">
+                                ${UNIDADES_SISTEMA.map(u => '<option value="'+u+'" '+(u===(t.unidad||'') ? 'selected' : '')+'>'+u+'</option>').join('')}
+                            </select>
+                        </td>
+                        <td class="text-center">
+                            <input type="number" class="form-control form-control-sm text-center tarea-horas" data-tkey="${tKey}" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}"
+                                   value="${t.horas || 0}" step="0.5" min="0" oninput="recalcFromTareas('${key}', ${eIdx}, ${oIdx})" style="max-width:60px;margin:0 auto;">
+                        </td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-end"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
+                        <td></td>
+                    </tr>`;
+                });
+            }
+
+            // Fila resumen/totales con modo de pago
+            html += `<tr class="table-light border-bottom">
+                <td class="text-end"><small class="text-muted fw-bold">Total:</small></td>
                 <td class="text-center">
-                    <input type="number" class="form-control form-control-sm text-center" id="cant-input-${key}"
-                           value="${op.cantidad_total}" step="0.1" min="0" oninput="document.getElementById('cant-${key}').value=this.value; recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:80px;margin:0 auto;">
+                    <strong id="cant-display-${key}">${op.cantidad_total}</strong>
                 </td>
+                <td class="text-center"><small class="text-muted" id="unid-display-${key}">${op.unidad || '-'}</small></td>
                 <td class="text-center">
-                    <small class="text-muted">${op.unidad || '-'}</small>
-                </td>
-                <td class="text-center">
-                    <input type="number" class="form-control form-control-sm text-center" id="hav-input-${key}"
-                           value="${op.horas_avance}" step="0.5" min="0" oninput="document.getElementById('hav-${key}').value=this.value; recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:70px;margin:0 auto;">
+                    <strong id="hav-display-${key}">${op.horas_avance}h</strong>
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm text-center" id="hfi-input-${key}"
@@ -574,7 +609,9 @@ function renderUnificado() {
                 </td>
                 <td class="text-end">
                     <input type="number" class="form-control form-control-sm text-end liq-tarifa" id="tarifa-${key}"
-                           value="${op.tarifa_hora}" step="100" min="0" oninput="recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:100px;margin-left:auto;">
+                           value="${op.tarifa_hora}" step="100" min="0" style="max-width:100px;margin-left:auto;"
+                           onfocus="this.dataset.editing='1'" onblur="this.dataset.editing='0'; recalcItem('${key}', ${eIdx}, ${oIdx})"
+                           oninput="if(this.dataset.editing==='1'){recalcItem('${key}', ${eIdx}, ${oIdx})}">
                     <small class="text-muted detalle-modo" id="detalle-modo-${key}"></small>
                 </td>
                 <td class="text-end">
@@ -582,32 +619,6 @@ function renderUnificado() {
                            value="${op.monto_default}" step="100" min="0" oninput="recalcTotales()" style="max-width:120px;margin-left:auto;">
                 </td>
             </tr>`;
-
-            // Filas de detalle de tareas (colapsables, con checkboxes)
-            if (tareas.length > 0) {
-                tareas.forEach((t, tIdx) => {
-                    var cantStr = (t.cantidad || 0) > 0 ? t.cantidad + ' ' + (t.unidad || '') : '-';
-                    var tKey = `${key}_t${tIdx}`;
-                    html += `<tr id="row-${tKey}" class="detalle-${key}" style="display:none;">
-                        <td class="ps-4">
-                            <div class="d-flex align-items-center">
-                                <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
-                                       data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
-                                       data-horas="${t.horas || 0}" data-cantidad="${t.cantidad || 0}"
-                                       checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
-                                <small class="tarea-data" data-tkey="${tKey}">${t.tarea}</small>
-                            </div>
-                        </td>
-                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${cantStr}</small></td>
-                        <td></td>
-                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${t.horas}h</small></td>
-                        <td></td>
-                        <td></td>
-                        <td class="text-end tarea-data" data-tkey="${tKey}"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
-                        <td></td>
-                    </tr>`;
-                });
-            }
 
             // Hidden inputs para valores de referencia
             html += `<input type="hidden" id="hav-${key}" value="${op.horas_avance}">
@@ -750,27 +761,35 @@ function cambiarModoSE(key, sIdx) {
 }
 
 function recalcFromTareas(key, eIdx, oIdx) {
-    // Sumar horas y cantidad solo de tareas checkeadas
+    // Sumar horas y cantidad solo de tareas checkeadas, leyendo de inputs editables
     var checks = document.querySelectorAll(`.tarea-check[data-key="${key}"]`);
     var totalHoras = 0, totalCant = 0;
+    var unidades = new Set();
     checks.forEach(chk => {
         var tKey = key + '_t' + chk.dataset.tidx;
-        var dataCells = document.querySelectorAll(`.tarea-data[data-tkey="${tKey}"]`);
+        var row = document.getElementById('row-' + tKey);
+        var cantInput = row ? row.querySelector('.tarea-cant') : null;
+        var horasInput = row ? row.querySelector('.tarea-horas') : null;
+        var unidSelect = row ? row.querySelector('.tarea-unid') : null;
         if (chk.checked) {
-            totalHoras += parseFloat(chk.dataset.horas) || 0;
-            totalCant += parseFloat(chk.dataset.cantidad) || 0;
-            dataCells.forEach(c => { c.style.opacity = '1'; c.style.textDecoration = 'none'; });
+            totalCant += parseFloat(cantInput ? cantInput.value : 0) || 0;
+            totalHoras += parseFloat(horasInput ? horasInput.value : 0) || 0;
+            if (unidSelect && unidSelect.value) unidades.add(unidSelect.value);
+            if (row) row.style.opacity = '1';
         } else {
-            dataCells.forEach(c => { c.style.opacity = '0.4'; c.style.textDecoration = 'line-through'; });
+            if (row) row.style.opacity = '0.4';
         }
     });
-    // Actualizar inputs visibles y hidden
-    var havInput = document.getElementById('hav-input-' + key);
-    var cantInput = document.getElementById('cant-input-' + key);
-    if (havInput) havInput.value = totalHoras;
-    if (cantInput) cantInput.value = totalCant;
+    // Actualizar displays y hidden inputs
+    var cantDisplay = document.getElementById('cant-display-' + key);
+    var havDisplay = document.getElementById('hav-display-' + key);
+    var unidDisplay = document.getElementById('unid-display-' + key);
+    if (cantDisplay) cantDisplay.textContent = totalCant;
+    if (havDisplay) havDisplay.textContent = totalHoras + 'h';
+    if (unidDisplay) unidDisplay.textContent = unidades.size > 0 ? Array.from(unidades).join(', ') : '-';
     document.getElementById('hav-' + key).value = totalHoras;
     document.getElementById('cant-' + key).value = totalCant;
+    document.getElementById('unid-' + key).value = Array.from(unidades).join(', ');
     recalcItem(key, eIdx, oIdx);
 }
 
