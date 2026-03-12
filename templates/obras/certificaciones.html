@@ -615,8 +615,12 @@ function renderUnificado() {
                     <small class="text-muted detalle-modo" id="detalle-modo-${key}"></small>
                 </td>
                 <td class="text-end">
-                    <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
-                           value="${op.monto_default}" step="100" min="0" oninput="recalcTotales()" style="max-width:120px;margin-left:auto;">
+                    <div class="d-flex align-items-center justify-content-end gap-1">
+                        <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
+                               value="${op.monto_default}" step="100" min="0" oninput="recalcTotales()" style="max-width:120px;">
+                        <button class="btn btn-sm btn-success py-0 px-2" onclick="confirmarIndividual('${key}', ${eIdx}, ${oIdx}, 'etapa')"
+                                title="Confirmar solo este operario"><i class="fas fa-check"></i></button>
+                    </div>
                 </td>
             </tr>`;
 
@@ -682,8 +686,12 @@ function renderUnificado() {
                     <small class="text-muted" id="detalle-modo-${key}">x ${op.horas_fichadas}h</small>
                 </td>
                 <td class="text-end">
-                    <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
-                           value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;margin-left:auto;">
+                    <div class="d-flex align-items-center justify-content-end gap-1">
+                        <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
+                               value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;">
+                        <button class="btn btn-sm btn-success py-0 px-2" onclick="confirmarIndividual('${key}', 0, ${sIdx}, 'sinEtapa')"
+                                title="Confirmar solo este operario"><i class="fas fa-check"></i></button>
+                    </div>
                 </td>
             </tr>`;
             html += `<input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">`;
@@ -912,6 +920,67 @@ function confirmarUnificado() {
             document.getElementById('liq-preview').style.display = 'none';
             document.getElementById('liq-empty').style.display = 'block';
             document.getElementById('liq-empty').innerHTML = '<div class="alert alert-success text-center"><i class="fas fa-check-circle me-1"></i>Liquidacion creada. Puede registrar los pagos en el historial de abajo.</div>';
+        } else {
+            alert(data.error || 'Error al crear liquidacion');
+        }
+    })
+    .catch(err => alert('Error: ' + err.message));
+}
+
+// ============================================================
+// CONFIRMAR INDIVIDUAL (un solo operario)
+// ============================================================
+function confirmarIndividual(key, eIdx, oIdx, tipo) {
+    var desde = document.getElementById('liq-desde').value;
+    var hasta = document.getElementById('liq-hasta').value;
+    var notas = document.getElementById('liq-notas').value;
+
+    var monto = parseFloat(document.getElementById('monto-' + key).value) || 0;
+    var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
+    var select = document.querySelector(`select[data-key="${key}"]`);
+    var modo = select ? select.value : 'horas';
+
+    var operario, horas;
+    if (tipo === 'etapa') {
+        var etapa = previewData.etapas[eIdx];
+        operario = etapa.operarios[oIdx];
+        var hav = parseFloat(document.getElementById('hav-' + key).value) || 0;
+        var hfi = parseFloat(document.getElementById('hfi-' + key)?.value) || 0;
+        horas = (modo === 'fichada') ? hfi : hav;
+    } else {
+        operario = previewData.operarios_sin_etapa[oIdx];
+        horas = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+    }
+
+    if (monto <= 0) { alert('El monto debe ser mayor a 0'); return; }
+
+    var nombre = operario.operario_nombre;
+    if (!confirm('Confirmar liquidacion individual:\n\n' + nombre + ': ' + formatARS(monto) + '\nPeriodo: ' + formatFecha(desde) + ' al ' + formatFecha(hasta))) return;
+
+    var items = [{
+        operario_id: operario.operario_id,
+        horas_liquidadas: horas,
+        tarifa_hora: tarifa,
+        monto: monto,
+    }];
+
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, notas: notas ? notas + ' [' + nombre + ']' : nombre })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Liquidacion de ' + nombre + ' creada por ' + formatARS(monto));
+            // Marcar fila como liquidada
+            var row = document.getElementById('oprow-' + key) || document.querySelector(`[id$="${key}"]`);
+            document.getElementById('monto-' + key).value = 0;
+            document.getElementById('monto-' + key).disabled = true;
+            var btn = document.querySelector(`button[onclick*="confirmarIndividual('${key}'"]`);
+            if (btn) { btn.innerHTML = '<i class="fas fa-check-double"></i>'; btn.disabled = true; btn.classList.replace('btn-success','btn-secondary'); }
+            recalcTotales();
+            cargarHistorialLiq();
         } else {
             alert(data.error || 'Error al crear liquidacion');
         }
