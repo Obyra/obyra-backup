@@ -2028,9 +2028,16 @@ def _crear_avance_impl(tarea_id):
     except (ValueError, TypeError):
         return jsonify(ok=False, error="❌ Cantidad inválida. Ingresá un número válido (ej: 10 o 10.5)."), 400
 
+    # Usar la unidad seleccionada por el usuario, con fallback a la de la tarea
+    unidad_form = request.form.get("unidad_ingresada", "").strip()
+    unidad = normalize_unit(unidad_form) if unidad_form else normalize_unit(tarea.unidad)
+
     # Validar que no se exceda la cantidad planificada
+    # Solo validar si la unidad ingresada coincide con la planificada
     plan = float(tarea.cantidad_planificada or 0)
-    if plan > 0:
+    unidad_tarea = normalize_unit(tarea.unidad) if tarea.unidad else ''
+    misma_unidad = (unidad == unidad_tarea) or not unidad_form
+    if plan > 0 and misma_unidad:
         ejecutado = float(
             db.session.query(db.func.coalesce(db.func.sum(TareaAvance.cantidad), 0))
             .filter(TareaAvance.tarea_id == tarea.id, TareaAvance.status == 'aprobado')
@@ -2041,10 +2048,6 @@ def _crear_avance_impl(tarea_id):
             return jsonify(ok=False, error=f"❌ Esta tarea ya alcanzó el 100% de avance ({plan} {tarea.unidad}). No se pueden registrar más avances."), 400
         if cantidad > disponible:
             return jsonify(ok=False, error=f"❌ La cantidad ({cantidad}) supera lo restante ({disponible:.2f} {tarea.unidad}). Máximo permitido: {disponible:.2f}."), 400
-
-    # Usar la unidad seleccionada por el usuario, con fallback a la de la tarea
-    unidad_form = request.form.get("unidad_ingresada", "").strip()
-    unidad = normalize_unit(unidad_form) if unidad_form else normalize_unit(tarea.unidad)
     horas = request.form.get("horas", type=float)
     notas = request.form.get("notas", "")
 
