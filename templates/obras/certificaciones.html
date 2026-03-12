@@ -543,27 +543,33 @@ function renderUnificado() {
             var key = `e${eIdx}_o${oIdx}`;
             var tareas = op.tareas || [];
 
-            // Mostrar una fila por tarea con checkbox para seleccionar
+            // Fila titulo del operario (siempre visible, sin checkbox)
+            html += `<tr class="table-secondary">
+                <td colspan="9">
+                    <strong>${op.operario_nombre}</strong>
+                    <span class="badge bg-secondary bg-opacity-50 ms-2">${op.rol}</span>
+                </td>
+            </tr>`;
+
+            // Filas de tareas con checkbox
             if (tareas.length > 0) {
                 tareas.forEach((t, tIdx) => {
-                    var isFirst = tIdx === 0;
                     var cantStr = (t.cantidad || 0) > 0 ? t.cantidad + ' ' + (t.unidad || '') : '-';
                     var tKey = `${key}_t${tIdx}`;
                     html += `<tr id="row-${tKey}">
                         <td>
-                            <div class="d-flex align-items-center">
+                            <div class="d-flex align-items-center ps-3">
                                 <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
                                        data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
                                        data-horas="${t.horas || 0}" data-cantidad="${t.cantidad || 0}"
                                        checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
-                                ${isFirst ? '<strong>' + op.operario_nombre + '</strong>' : ''}
                             </div>
                         </td>
-                        <td class="text-center">${isFirst ? '<span class="badge bg-secondary bg-opacity-50">' + op.rol + '</span>' : ''}</td>
+                        <td class="text-center"></td>
                         <td class="text-center tarea-data" data-tkey="${tKey}"><small>${t.tarea}</small></td>
                         <td class="text-center tarea-data" data-tkey="${tKey}"><small>${cantStr}</small></td>
                         <td class="text-center tarea-data" data-tkey="${tKey}">${t.horas}h</td>
-                        <td class="text-center">${isFirst ? op.horas_fichadas + 'h' : ''}</td>
+                        <td class="text-center"></td>
                         <td class="text-center"></td>
                         <td class="text-end tarea-data" data-tkey="${tKey}"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
                         <td class="text-end"></td>
@@ -571,11 +577,10 @@ function renderUnificado() {
                 });
             }
 
-            // Fila resumen del operario con modo de pago y monto
+            // Fila resumen/totales del operario con modo de pago y monto
             html += `<tr class="table-light border-bottom">
                 <td colspan="2" class="text-end">
-                    ${tareas.length === 0 ? '<strong>' + op.operario_nombre + '</strong> <span class="badge bg-secondary bg-opacity-50 ms-1">' + op.rol + '</span> ' : ''}
-                    <small class="text-muted fw-bold">Total ${op.operario_nombre.split(' ')[0]}:</small>
+                    <small class="text-muted fw-bold">Total:</small>
                 </td>
                 <td></td>
                 <td class="text-center">
@@ -714,7 +719,7 @@ function cambiarModo(key, eIdx, oIdx) {
         montoEl.value = Math.round(cant * precioU);
         detalleEl.innerHTML = cant + ' ' + unid + ' x $' + precioU + '/' + unid;
     } else if (modo === 'manual') {
-        detalleEl.textContent = 'editar monto';
+        detalleEl.textContent = 'editar monto libre';
         montoEl.focus();
     }
     recalcTotales();
@@ -730,10 +735,11 @@ function cambiarModoSE(key, sIdx) {
 
     if (modo === 'fichada') {
         montoEl.value = Math.round(hfi * tarifa);
-        detalleEl.textContent = 'x ' + hfi + 'h';
+        detalleEl.textContent = hfi + 'h x $' + formatARS(tarifa);
     } else if (modo === 'manual') {
-        detalleEl.textContent = 'editar monto';
-        montoEl.focus();
+        // En manual, si se editó tarifa u horas, recalcular también
+        montoEl.value = Math.round(hfi * tarifa);
+        detalleEl.textContent = hfi + 'h x $' + formatARS(tarifa) + ' (editable)';
     }
     recalcTotales();
 }
