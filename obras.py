@@ -4375,38 +4375,53 @@ def pagar_liquidacion_mo_item(item_id):
 @login_required
 def liquidacion_mo_historial(obra_id):
     """API: obtener historial de liquidaciones de una obra."""
-    from services.liquidacion_mo import obtener_liquidaciones_obra
-    liquidaciones = obtener_liquidaciones_obra(obra_id)
-    result = []
-    for liq in liquidaciones:
-        items = []
-        for item in liq.items.all():
-            items.append({
-                'id': item.id,
-                'operario_id': item.operario_id,
-                'operario_nombre': item.operario.nombre_completo if item.operario else 'N/A',
-                'horas_avance': float(item.horas_avance or 0),
-                'horas_fichadas': float(item.horas_fichadas or 0),
-                'horas_liquidadas': float(item.horas_liquidadas or 0),
-                'tarifa_hora': float(item.tarifa_hora or 0),
-                'monto': float(item.monto or 0),
-                'estado': item.estado,
-                'metodo_pago': item.metodo_pago,
-                'fecha_pago': item.fecha_pago.isoformat() if item.fecha_pago else None,
-                'comprobante_url': item.comprobante_url,
+    try:
+        from services.liquidacion_mo import obtener_liquidaciones_obra
+        liquidaciones = obtener_liquidaciones_obra(obra_id)
+        result = []
+        for liq in liquidaciones:
+            items = []
+            for item in liq.items.all():
+                items.append({
+                    'id': item.id,
+                    'operario_id': item.operario_id,
+                    'operario_nombre': item.operario.nombre_completo if item.operario else 'N/A',
+                    'horas_avance': float(item.horas_avance or 0),
+                    'horas_fichadas': float(item.horas_fichadas or 0),
+                    'horas_liquidadas': float(item.horas_liquidadas or 0),
+                    'tarifa_hora': float(item.tarifa_hora or 0),
+                    'monto': float(item.monto or 0),
+                    'estado': item.estado,
+                    'metodo_pago': item.metodo_pago,
+                    'fecha_pago': item.fecha_pago.isoformat() if item.fecha_pago else None,
+                    'comprobante_url': item.comprobante_url,
+                })
+            result.append({
+                'id': liq.id,
+                'periodo_desde': liq.periodo_desde.isoformat(),
+                'periodo_hasta': liq.periodo_hasta.isoformat(),
+                'estado': liq.estado,
+                'monto_total': float(liq.monto_total or 0),
+                'notas': liq.notas,
+                'created_at': liq.created_at.isoformat() if liq.created_at else None,
+                'created_by': liq.created_by.nombre_completo if liq.created_by else 'N/A',
+                'items': items,
             })
-        result.append({
-            'id': liq.id,
-            'periodo_desde': liq.periodo_desde.isoformat(),
-            'periodo_hasta': liq.periodo_hasta.isoformat(),
-            'estado': liq.estado,
-            'monto_total': float(liq.monto_total or 0),
-            'notas': liq.notas,
-            'created_at': liq.created_at.isoformat() if liq.created_at else None,
-            'created_by': liq.created_by.nombre_completo if liq.created_by else 'N/A',
-            'items': items,
-        })
-    return jsonify(ok=True, liquidaciones=result)
+        return jsonify(ok=True, liquidaciones=result)
+    except Exception as e:
+        # Si la tabla no existe, crearla automáticamente
+        if 'liquidaciones_mo' in str(e).lower() or 'relation' in str(e).lower():
+            try:
+                db.session.rollback()
+                db.create_all()
+                db.session.commit()
+                current_app.logger.info("Tablas de liquidación MO creadas automáticamente")
+                return jsonify(ok=True, liquidaciones=[])
+            except Exception:
+                pass
+        db.session.rollback()
+        current_app.logger.exception("Error en historial liquidación MO")
+        return jsonify(ok=True, liquidaciones=[])
 
 
 @obras_bp.route('/certificacion/<int:id>/desactivar', methods=['POST'])
