@@ -448,13 +448,23 @@ def api_fichar():
     if not obra:
         return jsonify({'ok': False, 'error': 'Obra no encontrada'}), 404
 
+    # Admin/PM puede fichar en nombre de otro usuario
+    fichar_usuario_id = current_user.id
+    usuario_id_param = data.get('usuario_id')
+    if usuario_id_param and _es_admin_o_pm(current_user):
+        fichar_usuario_id = int(usuario_id_param)
+
     # Validar que no se pueda fichar egreso sin ingreso previo hoy
     if tipo == 'egreso':
-        ultima = _ultima_fichada_hoy(current_user.id, obra_id)
+        ultima = _ultima_fichada_hoy(fichar_usuario_id, obra_id)
         if not ultima or ultima.tipo != 'ingreso':
+            nombre = ''
+            if fichar_usuario_id != current_user.id:
+                u = Usuario.query.get(fichar_usuario_id)
+                nombre = f' ({u.nombre_completo})' if u else ''
             return jsonify({
                 'ok': False,
-                'error': 'No podes fichar egreso sin haber fichado ingreso primero.'
+                'error': f'No se puede fichar egreso sin ingreso previo hoy{nombre}.'
             }), 400
 
     # Verificar asignación (admin/PM acceden a todas)
@@ -505,7 +515,7 @@ def api_fichar():
         dentro_rango = False
 
     fichada = Fichada(
-        usuario_id=current_user.id,
+        usuario_id=fichar_usuario_id,
         obra_id=obra_id,
         tipo=tipo,
         fecha_hora=_ahora_argentina(),

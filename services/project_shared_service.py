@@ -464,12 +464,70 @@ class ProjectSharedService:
 
         # Calcular horas por etapa (para certificación por horas)
         horas_por_etapa = {}
+        operarios_por_etapa = {}  # etapa_id -> [{nombre, horas_str, rol}]
         for item in resumen_horas_obra:
             eid = item.get('etapa_id')
             if eid:
                 if eid not in horas_por_etapa:
                     horas_por_etapa[eid] = 0
+                    operarios_por_etapa[eid] = []
                 horas_por_etapa[eid] += item['total_segundos']
+                operarios_por_etapa[eid].append({
+                    'nombre': item['usuario'].nombre_completo,
+                    'horas_str': item['total_horas_str'],
+                    'rol': item.get('rol_en_obra') or 'operario',
+                })
+
+        # Resumen de liquidaciones MO para la pestaña
+        resumen_liq_mo = None
+        if puede_aprobar:
+            try:
+                from services.liquidacion_mo import obtener_liquidaciones_obra, obtener_tarifa_default_obra
+                from models.templates import LiquidacionMO, LiquidacionMOItem
+                liq_all = obtener_liquidaciones_obra(obra.id)
+                total_liquidado = sum(float(l.monto_total or 0) for l in liq_all)
+                total_pagado_mo = sum(
+                    float(item.monto or 0)
+                    for l in liq_all for item in l.items.all()
+                    if item.estado == 'pagado'
+                )
+                total_pendiente_mo = sum(
+                    float(item.monto or 0)
+                    for l in liq_all for item in l.items.all()
+                    if item.estado == 'pendiente'
+                )
+                # Horas totales fichadas
+                total_horas_fichadas = sum(i['total_segundos'] for i in resumen_horas_obra) / 3600 if resumen_horas_obra else 0
+                # Horas avance total
+                from models import TareaAvance, TareaEtapa, EtapaObra as EO2
+                total_horas_avance = float(
+                    db.session.query(db.func.coalesce(db.func.sum(
+                        db.func.coalesce(TareaAvance.horas, TareaAvance.horas_trabajadas, 0)
+                    ), 0))
+                    .join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id)
+                    .join(EO2, TareaEtapa.etapa_id == EO2.id)
+                    .filter(EO2.obra_id == obra.id, TareaAvance.status == 'aprobado')
+                    .scalar() or 0
+                )
+                tarifa_default = float(obtener_tarifa_default_obra(obra))
+                # Operarios activos
+                operarios_activos = len(resumen_horas_obra) if resumen_horas_obra else 0
+                # Avance general de la obra
+                avance_obra = float(obra.progreso or 0) if hasattr(obra, 'progreso') else 0
+
+                resumen_liq_mo = {
+                    'total_liquidado': total_liquidado,
+                    'total_pagado': total_pagado_mo,
+                    'total_pendiente': total_pendiente_mo,
+                    'cant_liquidaciones': len(liq_all),
+                    'horas_fichadas': round(total_horas_fichadas, 1),
+                    'horas_avance': round(total_horas_avance, 1),
+                    'tarifa_default': tarifa_default,
+                    'operarios_activos': operarios_activos,
+                    'avance_obra': avance_obra,
+                }
+            except Exception:
+                resumen_liq_mo = None
 
         if request.args.get('format') == 'json':
             return jsonify(
@@ -511,6 +569,8 @@ class ProjectSharedService:
             desglose_etapas=desglose_etapas,
             resumen_horas=resumen_horas_obra,
             horas_por_etapa=horas_por_etapa,
+            operarios_por_etapa=operarios_por_etapa,
+            resumen_liq_mo=resumen_liq_mo,
         )
 
     @staticmethod

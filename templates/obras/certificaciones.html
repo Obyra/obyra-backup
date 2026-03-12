@@ -59,6 +59,26 @@
         <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">Costo MO</p>
+                    {% if resumen_liq_mo %}
+                    <h4 class="mb-0">{{ '$%s'|format('{:,.0f}'.format(resumen_liq_mo.total_liquidado)) }}</h4>
+                    <small class="{% if resumen_liq_mo.total_pendiente > 0 %}text-warning{% else %}text-success{% endif %}">
+                        {% if resumen_liq_mo.total_pendiente > 0 %}
+                        <i class="fas fa-exclamation-circle me-1"></i>${{ '{:,.0f}'.format(resumen_liq_mo.total_pendiente) }} pend.
+                        {% else %}
+                        <i class="fas fa-check-circle me-1"></i>Todo pagado
+                        {% endif %}
+                    </small>
+                    {% else %}
+                    <h4 class="mb-0 text-muted">-</h4>
+                    <small class="text-muted">Sin liquidaciones</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
                     <p class="text-muted text-uppercase small mb-1">Moneda</p>
                     <h6 class="mb-0">{{ contexto.currency }}</h6>
                     {% if contexto.tasa_usd %}
@@ -202,6 +222,16 @@
                                         </div>
                                         {% if horas_seg > 0 %}
                                         <small class="text-muted d-block"><i class="fas fa-clock me-1"></i>{{ '%dh %02dm'|format(horas_seg // 3600, (horas_seg % 3600) // 60) }}</small>
+                                        {% endif %}
+                                        {% set ops = operarios_por_etapa.get(etapa.etapa_id, []) if operarios_por_etapa else [] %}
+                                        {% if ops %}
+                                        <div class="mt-1">
+                                            {% for op in ops %}
+                                            <span class="badge bg-primary bg-opacity-10 text-primary me-1" style="font-size:0.65rem;" title="{{ op.rol }}">
+                                                <i class="fas fa-user me-1"></i>{{ op.nombre.split(' ')[0] }} {{ op.horas_str }}
+                                            </span>
+                                            {% endfor %}
+                                        </div>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
@@ -465,19 +495,87 @@
         {% if puede_aprobar %}
         <div class="tab-pane fade" id="pane-liquidacion" role="tabpanel" aria-labelledby="tab-liquidacion">
             <div class="p-3">
+
+                <!-- Resumen de obra y MO -->
+                {% if resumen_liq_mo %}
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-lg-3">
+                        <div class="card border-0 bg-light h-100">
+                            <div class="card-body py-2 px-3">
+                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">Horas fichadas</div>
+                                <div class="fw-bold fs-5">{{ resumen_liq_mo.horas_fichadas }}h</div>
+                                <small class="text-muted">{{ resumen_liq_mo.operarios_activos }} operario{{ 's' if resumen_liq_mo.operarios_activos != 1 }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <div class="card border-0 bg-light h-100">
+                            <div class="card-body py-2 px-3">
+                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">Horas avance</div>
+                                <div class="fw-bold fs-5">{{ resumen_liq_mo.horas_avance }}h</div>
+                                {% set diff_h = resumen_liq_mo.horas_fichadas - resumen_liq_mo.horas_avance %}
+                                {% if diff_h|abs > 2 %}
+                                <small class="{{ 'text-warning' if diff_h > 0 else 'text-danger' }}">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Dif: {{ '%+.1f'|format(diff_h) }}h
+                                </small>
+                                {% else %}
+                                <small class="text-success"><i class="fas fa-check me-1"></i>Coincide</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <div class="card border-0 bg-light h-100">
+                            <div class="card-body py-2 px-3">
+                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">MO liquidado</div>
+                                <div class="fw-bold fs-5">${{ '{:,.0f}'.format(resumen_liq_mo.total_liquidado) }}</div>
+                                <small class="text-muted">{{ resumen_liq_mo.cant_liquidaciones }} liquidacion{{ 'es' if resumen_liq_mo.cant_liquidaciones != 1 }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <div class="card border-0 h-100 {{ 'bg-warning bg-opacity-10' if resumen_liq_mo.total_pendiente > 0 else 'bg-success bg-opacity-10' }}">
+                            <div class="card-body py-2 px-3">
+                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">Pendiente de pago</div>
+                                <div class="fw-bold fs-5 {{ 'text-warning' if resumen_liq_mo.total_pendiente > 0 else 'text-success' }}">
+                                    ${{ '{:,.0f}'.format(resumen_liq_mo.total_pendiente) }}
+                                </div>
+                                <small class="text-muted">Pagado: ${{ '{:,.0f}'.format(resumen_liq_mo.total_pagado) }}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% if resumen_liq_mo.tarifa_default > 0 %}
+                <div class="alert alert-info small py-2 mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Tarifa default del presupuesto: <strong>${{ '{:,.0f}'.format(resumen_liq_mo.tarifa_default) }}/hora</strong>
+                    (jornal 8h = ${{ '{:,.0f}'.format(resumen_liq_mo.tarifa_default * 8) }})
+                    &mdash; Avance obra: <strong>{{ resumen_liq_mo.avance_obra }}%</strong>
+                </div>
+                {% endif %}
+                {% endif %}
+
                 <!-- Selector de período -->
                 <div class="card border-primary mb-3">
                     <div class="card-body py-2">
                         <div class="row align-items-end g-2">
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <label class="form-label small fw-bold mb-1">Periodo desde</label>
                                 <input type="date" class="form-control form-control-sm" id="liq-desde">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <label class="form-label small fw-bold mb-1">Periodo hasta</label>
                                 <input type="date" class="form-control form-control-sm" id="liq-hasta">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-auto">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('quincena1')" title="1ra quincena del mes actual">1-15</button>
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('quincena2')" title="2da quincena del mes actual">16-fin</button>
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('mes')" title="Mes completo actual">Mes</button>
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('semana')" title="Ultima semana">7d</button>
+                                </div>
+                            </div>
+                            <div class="col col-md-3">
                                 <button class="btn btn-primary btn-sm w-100" onclick="buscarLiquidacion()">
                                     <i class="fas fa-search me-1"></i>Buscar operarios
                                 </button>
@@ -791,6 +889,30 @@
 // ============================================================
 var liqData = [];
 var OBRA_ID = {{ obra.id }};
+var liqHistorialCargado = false;
+
+// Atajos de período
+function setLiqPeriodo(tipo) {
+    var hoy = new Date();
+    var y = hoy.getFullYear(), m = hoy.getMonth();
+    var desde, hasta;
+    if (tipo === 'quincena1') {
+        desde = new Date(y, m, 1);
+        hasta = new Date(y, m, 15);
+    } else if (tipo === 'quincena2') {
+        desde = new Date(y, m, 16);
+        hasta = new Date(y, m + 1, 0); // ultimo dia del mes
+    } else if (tipo === 'mes') {
+        desde = new Date(y, m, 1);
+        hasta = new Date(y, m + 1, 0);
+    } else if (tipo === 'semana') {
+        desde = new Date(hoy.getTime() - 7 * 86400000);
+        hasta = hoy;
+    }
+    function fmt(d) { return d.toISOString().split('T')[0]; }
+    document.getElementById('liq-desde').value = fmt(desde);
+    document.getElementById('liq-hasta').value = fmt(hasta);
+}
 
 function buscarLiquidacion() {
     var desde = document.getElementById('liq-desde').value;
@@ -956,26 +1078,46 @@ function confirmarLiquidacion() {
 }
 
 function cargarHistorialLiq() {
+    var container = document.getElementById('liq-historial');
+    if (!container) return;
+    container.innerHTML = '<div class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm"></div> Cargando historial...</div>';
+
     fetch(`/obras/${OBRA_ID}/liquidacion-mo/historial`)
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) throw new Error('Error del servidor: ' + r.status);
+        return r.json();
+    })
     .then(data => {
-        if (!data.ok) return;
-        var container = document.getElementById('liq-historial');
+        liqHistorialCargado = true;
+        if (!data.ok) {
+            container.innerHTML = '<div class="alert alert-danger small"><i class="fas fa-times-circle me-1"></i>' + (data.error || 'Error al cargar historial') + '</div>';
+            return;
+        }
         if (data.liquidaciones.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center">No hay liquidaciones registradas.</p>';
+            container.innerHTML = '<p class="text-muted text-center py-2">No hay liquidaciones registradas aun.</p>';
             return;
         }
         var html = '';
         data.liquidaciones.forEach(liq => {
             var estadoBadge = liq.estado === 'pagado' ? 'success' : liq.estado === 'parcial' ? 'warning' : 'secondary';
-            html += `<div class="card mb-2 border-0 shadow-sm">
-                <div class="card-header bg-light py-2 d-flex justify-content-between">
-                    <div>
-                        <i class="fas fa-file-invoice-dollar me-1"></i>
-                        <strong>${liq.periodo_desde} → ${liq.periodo_hasta}</strong>
-                        <span class="badge bg-${estadoBadge} ms-2">${liq.estado}</span>
+            var totalPagado = liq.items.filter(i => i.estado === 'pagado').reduce((s, i) => s + (i.monto || 0), 0);
+            var totalPendiente = liq.items.filter(i => i.estado === 'pendiente').reduce((s, i) => s + (i.monto || 0), 0);
+            html += `<div class="card mb-3 border-0 shadow-sm">
+                <div class="card-header bg-light py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-file-invoice-dollar me-1"></i>
+                            <strong>${formatFecha(liq.periodo_desde)} → ${formatFecha(liq.periodo_hasta)}</strong>
+                            <span class="badge bg-${estadoBadge} ms-2">${liq.estado}</span>
+                        </div>
+                        <strong class="fs-5">$${(liq.monto_total || 0).toLocaleString('es-AR')}</strong>
                     </div>
-                    <strong>$${(liq.monto_total || 0).toLocaleString('es-AR')}</strong>
+                    <div class="small text-muted mt-1">
+                        <i class="fas fa-user me-1"></i>${liq.created_by} &middot;
+                        ${liq.created_at ? new Date(liq.created_at).toLocaleDateString('es-AR') : ''}
+                        ${liq.notas ? ' &middot; <em>' + liq.notas + '</em>' : ''}
+                        ${totalPendiente > 0 ? ' &middot; <span class="text-warning fw-semibold">Pendiente: $' + totalPendiente.toLocaleString('es-AR') + '</span>' : ''}
+                    </div>
                 </div>
                 <div class="card-body py-2">
                     <table class="table table-sm table-hover mb-0" style="font-size:0.85rem;">
@@ -986,28 +1128,46 @@ function cargarHistorialLiq() {
                         </tr></thead><tbody>`;
             liq.items.forEach(item => {
                 var itemBadge = item.estado === 'pagado' ? 'success' : 'warning';
+                var diffH = item.horas_fichadas - item.horas_avance;
+                var diffClass = Math.abs(diffH) > 2 ? 'text-warning' : '';
                 html += `<tr>
-                    <td>${item.operario_nombre}</td>
+                    <td class="fw-semibold">${item.operario_nombre}</td>
                     <td class="text-center">${item.horas_avance}h</td>
                     <td class="text-center">${item.horas_fichadas}h</td>
-                    <td class="text-center fw-bold">${item.horas_liquidadas}h</td>
+                    <td class="text-center fw-bold ${diffClass}">${item.horas_liquidadas}h</td>
                     <td class="text-end">$${(item.tarifa_hora || 0).toLocaleString('es-AR')}</td>
                     <td class="text-end fw-bold">$${(item.monto || 0).toLocaleString('es-AR')}</td>
-                    <td class="text-center"><span class="badge bg-${itemBadge}">${item.estado}</span></td>
+                    <td class="text-center"><span class="badge bg-${itemBadge}">${item.estado}</span>
+                        ${item.fecha_pago ? '<div class="small text-muted">' + formatFecha(item.fecha_pago) + '</div>' : ''}
+                    </td>
                     <td>`;
                 if (item.estado === 'pendiente') {
-                    html += `<button class="btn btn-sm btn-outline-success" onclick="pagarItemLiq(${item.id}, '${item.operario_nombre}', ${item.monto})">
+                    html += `<button class="btn btn-sm btn-outline-success" onclick="pagarItemLiq(${item.id}, '${item.operario_nombre.replace(/'/g, "\\'")}', ${item.monto})" title="Registrar pago">
                         <i class="fas fa-money-bill-wave"></i>
                     </button>`;
-                } else if (item.comprobante_url) {
-                    html += `<a href="${item.comprobante_url}" target="_blank" class="btn btn-sm btn-outline-info"><i class="fas fa-file"></i></a>`;
+                } else {
+                    html += '<i class="fas fa-check-circle text-success"></i>';
+                    if (item.comprobante_url) {
+                        html += ` <a href="${item.comprobante_url}" target="_blank" class="btn btn-sm btn-outline-info"><i class="fas fa-file"></i></a>`;
+                    }
                 }
                 html += '</td></tr>';
             });
             html += '</tbody></table></div></div>';
         });
         container.innerHTML = html;
+    })
+    .catch(err => {
+        liqHistorialCargado = true;
+        container.innerHTML = '<div class="alert alert-warning small"><i class="fas fa-exclamation-triangle me-1"></i>Error al cargar historial: ' + err.message + '</div>';
     });
+}
+
+function formatFecha(isoStr) {
+    if (!isoStr) return '-';
+    var parts = isoStr.split('-');
+    if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
+    return isoStr;
 }
 
 function pagarItemLiq(itemId, nombre, monto) {
@@ -1037,8 +1197,13 @@ function pagarItemLiq(itemId, nombre, monto) {
 }
 
 // Cargar historial al abrir la pestaña
-document.getElementById('tab-liquidacion')?.addEventListener('shown.bs.tab', function() {
-    cargarHistorialLiq();
+document.addEventListener('DOMContentLoaded', function() {
+    var tabEl = document.getElementById('tab-liquidacion');
+    if (tabEl) {
+        tabEl.addEventListener('shown.bs.tab', function() {
+            cargarHistorialLiq();
+        });
+    }
 });
 </script>
 {% endblock %}
