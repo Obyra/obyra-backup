@@ -622,13 +622,13 @@ function renderUnificado() {
                                 title="Confirmar solo este operario"><i class="fas fa-check"></i></button>
                     </div>
                 </td>
-            </tr>`;
-
-            // Hidden inputs para valores de referencia
-            html += `<input type="hidden" id="hav-${key}" value="${op.horas_avance}">
-                     <input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">
-                     <input type="hidden" id="cant-${key}" value="${op.cantidad_total}">
-                     <input type="hidden" id="unid-${key}" value="${op.unidad || ''}">`;
+            </tr>
+            <tr style="display:none;"><td>
+                <input type="hidden" id="hav-${key}" value="${op.horas_avance}">
+                <input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">
+                <input type="hidden" id="cant-${key}" value="${op.cantidad_total}">
+                <input type="hidden" id="unid-${key}" value="${op.unidad || ''}">
+            </td></tr>`;
         });
 
         html += `</tbody>
@@ -945,7 +945,8 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
         var etapa = previewData.etapas[eIdx];
         operario = etapa.operarios[oIdx];
         var hav = parseFloat(document.getElementById('hav-' + key).value) || 0;
-        var hfi = parseFloat(document.getElementById('hfi-' + key)?.value) || 0;
+        var hfiEl = document.getElementById('hfi-' + key) || document.getElementById('hfi-input-' + key);
+        var hfi = parseFloat(hfiEl ? hfiEl.value : 0) || 0;
         horas = (modo === 'fichada') ? hfi : hav;
     } else {
         operario = previewData.operarios_sin_etapa[oIdx];
