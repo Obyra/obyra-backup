@@ -2259,8 +2259,10 @@ def crear_avance(tarea_id):
 
     except Exception as e:
         db.session.rollback()
+        import traceback
+        tb = traceback.format_exc()
         current_app.logger.exception("Error en crear_avance")
-        return jsonify(ok=False, error="Error interno"), 500
+        return jsonify(ok=False, error=f"Error interno: {str(e)}", detalle=tb), 500
 
 
 @obras_bp.route("/api/tareas/<int:tarea_id>/avances", methods=['POST'])

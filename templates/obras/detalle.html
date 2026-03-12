@@ -3113,6 +3113,7 @@ document.getElementById('formAvanceEnModal')?.addEventListener('submit', async f
             alert(`Avance registrado exitosamente. Progreso de la tarea: ${pct}%`);
             window.location.reload();
         } else {
+            console.error('Server error detail:', result.detalle || result.error);
             alert(result.error || 'Error al registrar el avance');
         }
     } catch (error) {
