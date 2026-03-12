@@ -571,7 +571,7 @@ def calcular_avance_tarea(tarea_id):
 
     # Opción 1: Si tiene item_presupuesto vinculado
     if tarea.item_presupuesto_id and tarea.item_presupuesto:
-        costo_acordado = tarea.item_presupuesto.subtotal_ars or Decimal('0')
+        costo_acordado = tarea.item_presupuesto.total_ars or Decimal('0')
     # Opción 2: Si tiene presupuesto_mo directo
     elif tarea.presupuesto_mo:
         costo_acordado = tarea.presupuesto_mo
@@ -618,7 +618,7 @@ def calcular_avance_etapa(etapa_id):
         # Obtener costo acordado de mano de obra
         costo_tarea = Decimal('0')
         if tarea.item_presupuesto_id and tarea.item_presupuesto:
-            costo_tarea = tarea.item_presupuesto.subtotal_ars or Decimal('0')
+            costo_tarea = tarea.item_presupuesto.total_ars or Decimal('0')
         elif tarea.presupuesto_mo:
             costo_tarea = tarea.presupuesto_mo
 

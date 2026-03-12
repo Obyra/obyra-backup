@@ -4278,22 +4278,17 @@ def tarea_asignar(tarea_id):
 @login_required
 def historial_certificaciones(id):
     """Historial de certificaciones de una obra"""
-    try:
-        return ProjectSharedService.historial_certificaciones(
-            id,
-            'obras',
-            create_certification,
-            certification_totals,
-            build_pending_entries,
-            approved_entries,
-            pending_percentage,
-            resolve_budget_context,
-            register_payment
-        )
-    except Exception as e:
-        import traceback
-        current_app.logger.error(f"Error en certificaciones: {traceback.format_exc()}")
-        return f"<pre>Error en certificaciones:\n{traceback.format_exc()}</pre>", 500
+    return ProjectSharedService.historial_certificaciones(
+        id,
+        'obras',
+        create_certification,
+        certification_totals,
+        build_pending_entries,
+        approved_entries,
+        pending_percentage,
+        resolve_budget_context,
+        register_payment
+    )
 
 
 @obras_bp.route('/certificacion/<int:id>/desactivar', methods=['POST'])
