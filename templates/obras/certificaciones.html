@@ -564,12 +564,23 @@ function renderUnificado() {
 
             // Fila resumen del operario con modo de pago y monto
             html += `<tr class="table-light border-bottom">
-                <td colspan="4" class="text-end">
-                    ${tareas.length === 0 ? '<strong>' + op.operario_nombre + '</strong> <span class="badge bg-secondary bg-opacity-50 ms-1">' + op.rol + '</span>' : ''}
+                <td colspan="2" class="text-end">
+                    ${tareas.length === 0 ? '<strong>' + op.operario_nombre + '</strong> <span class="badge bg-secondary bg-opacity-50 ms-1">' + op.rol + '</span> ' : ''}
                     <small class="text-muted fw-bold">Total ${op.operario_nombre.split(' ')[0]}:</small>
                 </td>
-                <td class="text-center fw-bold">${op.horas_avance}h</td>
-                <td class="text-center fw-bold">${op.horas_fichadas}h</td>
+                <td></td>
+                <td class="text-center">
+                    <input type="number" class="form-control form-control-sm text-center" id="cant-input-${key}"
+                           value="${op.cantidad_total}" step="0.1" min="0" onchange="document.getElementById('cant-${key}').value=this.value; recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:80px;margin:0 auto;">
+                </td>
+                <td class="text-center">
+                    <input type="number" class="form-control form-control-sm text-center" id="hav-input-${key}"
+                           value="${op.horas_avance}" step="0.5" min="0" onchange="document.getElementById('hav-${key}').value=this.value; recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:70px;margin:0 auto;">
+                </td>
+                <td class="text-center">
+                    <input type="number" class="form-control form-control-sm text-center" id="hfi-input-${key}"
+                           value="${op.horas_fichadas}" step="0.5" min="0" onchange="document.getElementById('hfi-${key}').value=this.value; recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:70px;margin:0 auto;">
+                </td>
                 <td class="text-center">
                     <select class="form-select form-select-sm select-modo" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" onchange="cambiarModo('${key}', ${eIdx}, ${oIdx})">
                         <option value="avance" selected>Avance</option>
