@@ -3816,8 +3816,8 @@ async function initGantt() {
 
         let html = '';
         tasks.forEach((t, idx) => {
-            const start = new Date(t.start);
-            const end = new Date(t.end);
+            const start = new Date(t.start + 'T00:00:00');
+            const end = new Date(t.end + 'T00:00:00');
             const estado = t.estado || 'pendiente';
             const duracion = Math.max(1, Math.round((end - start) / (1000*60*60*24)));
             const progress = Math.min(100, Math.max(0, t.progress || 0));

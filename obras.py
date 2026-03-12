@@ -1855,21 +1855,17 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         es_fisica = tarea in tareas_fisicas
 
         # Cantidad: solo para tareas físicas, proporcional a sus horas
-        if cantidad_etapa > 0:
-            if es_fisica:
-                proporcion_cant = horas_tarea / total_horas_fisicas
-                cant = round(cantidad_etapa * proporcion_cant)  # entero
-                cant = max(1, cant)
-                tarea.cantidad_planificada = cant
-                tarea.objetivo = cant
-                tarea.unidad = unidad_etapa
-            else:
-                # Tarea administrativa: su meta es completar las horas
-                tarea.cantidad_planificada = round(horas_tarea)
-                tarea.unidad = 'h'
+        if cantidad_etapa > 0 and es_fisica and unidad_etapa not in ('h', 'día', 'dia'):
+            proporcion_cant = horas_tarea / total_horas_fisicas
+            cant = round(cantidad_etapa * proporcion_cant)  # entero
+            cant = max(1, cant)
+            tarea.cantidad_planificada = cant
+            tarea.objetivo = cant
+            tarea.unidad = unidad_etapa
         else:
-            # Sin cantidad en etapa → todas usan horas como meta
-            tarea.cantidad_planificada = round(horas_tarea)
+            # Meta basada en horas reales de la tarea
+            tarea.cantidad_planificada = max(1, round(horas_tarea))
+            tarea.objetivo = tarea.cantidad_planificada
             tarea.unidad = 'h'
 
         # Rendimiento: cantidad por hora (solo para unidades físicas como m², ml, etc.)
