@@ -543,19 +543,28 @@ function renderUnificado() {
             var key = `e${eIdx}_o${oIdx}`;
             var tareas = op.tareas || [];
 
-            // Mostrar una fila por tarea, o una fila resumen si no hay tareas
+            // Mostrar una fila por tarea con checkbox para seleccionar
             if (tareas.length > 0) {
                 tareas.forEach((t, tIdx) => {
                     var isFirst = tIdx === 0;
                     var cantStr = (t.cantidad || 0) > 0 ? t.cantidad + ' ' + (t.unidad || '') : '-';
-                    html += `<tr>
-                        <td>${isFirst ? '<strong>' + op.operario_nombre + '</strong>' : '<small class="text-muted ps-3">↳</small>'}</td>
+                    var tKey = `${key}_t${tIdx}`;
+                    html += `<tr id="row-${tKey}">
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
+                                       data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
+                                       data-horas="${t.horas || 0}" data-cantidad="${t.cantidad || 0}"
+                                       checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
+                                ${isFirst ? '<strong>' + op.operario_nombre + '</strong>' : '<small class="text-muted">↳</small>'}
+                            </div>
+                        </td>
                         <td class="text-center">${isFirst ? '<span class="badge bg-secondary bg-opacity-50">' + op.rol + '</span>' : ''}</td>
                         <td class="text-center"><small>${t.tarea}</small></td>
                         <td class="text-center"><small>${cantStr}</small></td>
                         <td class="text-center">${t.horas}h</td>
                         <td class="text-center">${isFirst ? op.horas_fichadas + 'h' : ''}</td>
-                        <td class="text-center">${isFirst ? '' : ''}</td>
+                        <td class="text-center"></td>
                         <td class="text-end"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
                         <td class="text-end"></td>
                     </tr>`;
@@ -722,6 +731,30 @@ function cambiarModoSE(key, sIdx) {
         montoEl.focus();
     }
     recalcTotales();
+}
+
+function recalcFromTareas(key, eIdx, oIdx) {
+    // Sumar horas y cantidad solo de tareas checkeadas
+    var checks = document.querySelectorAll(`.tarea-check[data-key="${key}"]`);
+    var totalHoras = 0, totalCant = 0;
+    checks.forEach(chk => {
+        var row = document.getElementById('row-' + key + '_t' + chk.dataset.tidx);
+        if (chk.checked) {
+            totalHoras += parseFloat(chk.dataset.horas) || 0;
+            totalCant += parseFloat(chk.dataset.cantidad) || 0;
+            if (row) row.style.opacity = '1';
+        } else {
+            if (row) row.style.opacity = '0.4';
+        }
+    });
+    // Actualizar inputs visibles y hidden
+    var havInput = document.getElementById('hav-input-' + key);
+    var cantInput = document.getElementById('cant-input-' + key);
+    if (havInput) havInput.value = totalHoras;
+    if (cantInput) cantInput.value = totalCant;
+    document.getElementById('hav-' + key).value = totalHoras;
+    document.getElementById('cant-' + key).value = totalCant;
+    recalcItem(key, eIdx, oIdx);
 }
 
 function recalcItem(key, eIdx, oIdx) {
