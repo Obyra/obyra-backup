@@ -2216,7 +2216,9 @@ def _crear_avance_impl(tarea_id):
         TareaAvance.status == 'aprobado'
     ).scalar() or Decimal('0')
 
-    costo_hora = Decimal('5000')
+    # Tarifa real del presupuesto (no hardcodeada)
+    from services.liquidacion_mo import obtener_tarifa_default_obra
+    costo_hora = obtener_tarifa_default_obra(obra) or Decimal('5000')
     costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
     obra.costo_real = Decimal(str(costo_materiales)) + costo_mano_obra
 
@@ -4091,7 +4093,9 @@ def actualizar_progreso_automatico(id):
             TareaAvance.status == 'aprobado'
         ).scalar() or Decimal('0')
 
-        costo_hora = Decimal('5000')
+        # Tarifa real del presupuesto (no hardcodeada)
+        from services.liquidacion_mo import obtener_tarifa_default_obra
+        costo_hora = obtener_tarifa_default_obra(obra) or Decimal('5000')
         costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
         obra.costo_real = Decimal(str(costo_materiales)) + costo_mano_obra
 
