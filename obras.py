@@ -4505,11 +4505,18 @@ def editar_fechas_etapa(etapa_id):
             if not etapa.fecha_inicio_real:
                 etapa.fecha_inicio_real = date.today()
 
-        # Aplicar fechas y bloquear
+        # Aplicar fechas
         if fecha_inicio_usuario:
             etapa.fecha_inicio_estimada = fecha_inicio_usuario
         if fecha_fin_usuario:
             etapa.fecha_fin_estimada = fecha_fin_usuario
+
+        # Respetar la elección del usuario sobre bloquear fechas
+        bloquear = data.get('bloquear_fechas')
+        if bloquear is not None:
+            etapa.fechas_manuales = bool(bloquear)
+
+        # Temporalmente bloquear para que la propagación no pise las fechas
         etapa.fechas_manuales = True
 
         db.session.commit()
@@ -4527,6 +4534,8 @@ def editar_fechas_etapa(etapa_id):
 
         # SQL DIRECTO: forzar las fechas del usuario en BD, sin pasar por SQLAlchemy
         # Esto garantiza que ningún proceso intermedio pueda pisar los valores
+        # Ahora restaurar el valor real de fechas_manuales que el usuario eligió
+        usuario_quiere_bloquear = bool(bloquear) if bloquear is not None else True
         if fecha_inicio_usuario or fecha_fin_usuario:
             sets = []
             params = {"eid": etapa_id}
@@ -4536,7 +4545,8 @@ def editar_fechas_etapa(etapa_id):
             if fecha_fin_usuario:
                 sets.append("fecha_fin_estimada = :ff")
                 params["ff"] = fecha_fin_usuario
-            sets.append("fechas_manuales = true")
+            sets.append("fechas_manuales = :fm")
+            params["fm"] = usuario_quiere_bloquear
             db.session.execute(
                 db.text(f"UPDATE etapas_obra SET {', '.join(sets)} WHERE id = :eid"),
                 params
