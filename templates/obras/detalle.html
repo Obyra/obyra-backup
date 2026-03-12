@@ -3101,17 +3101,29 @@ document.getElementById('formAvanceEnModal')?.addEventListener('submit', async f
 
     try {
         const response = await fetch(`/obras/tareas/${tareaId}/avances`, { method: 'POST', body: formData });
-        const result = await response.json();
-        if (result.ok) {
-            // Mostrar mensaje y recargar página para reflejar cambios en estado, progreso y cronograma
-            const pct = result.porcentaje_avance || 0;
-            alert(`✅ Avance registrado exitosamente. Progreso de la tarea: ${pct}%`);
-            window.location.reload();
+        if (!response.ok) {
+            // Intentar leer JSON del error, sino mostrar status
+            try {
+                const errData = await response.json();
+                alert(errData.error || `Error del servidor (${response.status})`);
+            } catch(e) {
+                const txt = await response.text();
+                console.error('Server error:', response.status, txt.substring(0, 500));
+                alert(`Error del servidor (${response.status}). Revisá la consola para más detalle.`);
+            }
         } else {
-            alert(result.error || 'Error al registrar el avance');
+            const result = await response.json();
+            if (result.ok) {
+                const pct = result.porcentaje_avance || 0;
+                alert(`Avance registrado exitosamente. Progreso de la tarea: ${pct}%`);
+                window.location.reload();
+            } else {
+                alert(result.error || 'Error al registrar el avance');
+            }
         }
     } catch (error) {
-        alert('Error de conexión al registrar el avance');
+        console.error('Fetch error:', error);
+        alert('Error de conexión al registrar el avance: ' + error.message);
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;

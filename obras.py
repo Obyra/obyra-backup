@@ -1987,6 +1987,7 @@ def normalize_unit(unit):
 
 
 @obras_bp.route("/tareas/<int:tarea_id>/avances", methods=['POST'])
+@csrf.exempt
 @login_required
 def crear_avance(tarea_id):
     """Registrar avance con fotos (operarios desde dashboard)."""
