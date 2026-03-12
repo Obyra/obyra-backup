@@ -1726,7 +1726,7 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
     # Escalar horas proporcionalmente para que la suma = horas de la etapa
     # Horas de la etapa = días × 9h/jornal (jornada laboral estándar)
-    HORAS_JORNAL_ESCALA = 9
+    HORAS_JORNAL_ESCALA = 8
     horas_etapa_total = None
     if inicio_etapa and fin_etapa:
         dias = max(1, (fin_etapa - inicio_etapa).days + 1)
@@ -1817,7 +1817,7 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
     # --- Pre-calcular fechas por tarea usando jornal de 9 horas ---
     # Lógica: un día de obra = 9 horas. Tareas se agrupan en el mismo día
     # si caben en las horas restantes del jornal. Se encadenan secuencialmente.
-    HORAS_JORNAL = 9
+    HORAS_JORNAL = 8
 
     fechas_tareas = []  # lista de (f_ini, f_fin) por tarea
     if inicio_etapa and fin_etapa and dias_etapa > 0:
