@@ -434,6 +434,24 @@ def lista():
         # OPTIMIZACIÓN: No hacer geocodificación síncrona aquí
         # La geocodificación se hace automáticamente cuando el usuario
         # hace clic en "Información del Clima" (lazy loading)
+
+        # Sincronizar estado de obras que tienen etapas en curso pero siguen en planificación
+        obras_planif = query.filter(Obra.estado == 'planificacion').all() if not estado else []
+        if not estado:
+            # Solo sincronizar si no hay filtro de estado (evitar queries extras)
+            obras_planif = Obra.query.filter(
+                Obra.organizacion_id == org_id,
+                Obra.estado == 'planificacion'
+            ).all()
+        sync_changed = False
+        for o in obras_planif:
+            estado_antes = o.estado
+            sincronizar_estado_obra(o)
+            if o.estado != estado_antes:
+                sync_changed = True
+        if sync_changed:
+            db.session.commit()
+
         obras = query.order_by(Obra.fecha_creacion.desc()).paginate(page=page, per_page=per_page, error_out=False)
     else:
         flash('Selecciona una organización para ver tus obras.', 'warning')
@@ -604,6 +622,7 @@ def detalle(id):
             etapa.estado = 'en_curso'
             etapas_actualizadas = True
     if etapas_actualizadas:
+        sincronizar_estado_obra(obra)
         db.session.commit()
 
     # Pre-cargar todas las tareas de todas las etapas en UN solo query
@@ -1590,6 +1609,11 @@ def recalc_tarea_pct(tarea_id):
             # Actualizar progreso de la etapa (% tareas completadas)
             etapa.progreso = pct_etapa(etapa)
 
+        # Sincronizar estado de la obra según sus etapas
+        obra = etapa.obra
+        if obra:
+            sincronizar_estado_obra(obra)
+
     db.session.commit()
     return float(tarea.porcentaje_avance or 0)
 
@@ -1613,6 +1637,32 @@ def pct_obra(obra):
 
     etapa_pcts = [pct_etapa(e) for e in etapas]
     return round(sum(etapa_pcts) / len(etapa_pcts), 2)
+
+
+def sincronizar_estado_obra(obra):
+    """Sincroniza obra.estado según el estado de sus etapas.
+    - Si alguna etapa está en_curso → obra en_curso
+    - Si todas finalizadas → obra finalizada
+    - Si no hay etapas en curso ni finalizadas → mantener estado actual
+    No toca obras pausadas o canceladas (estados manuales).
+    """
+    if obra.estado in ('pausada', 'cancelada'):
+        return
+    etapas = obra.etapas.all() if hasattr(obra.etapas, 'all') else obra.etapas
+    if not etapas:
+        return
+    estados = [e.estado for e in etapas]
+    todas_finalizadas = all(e == 'finalizada' for e in estados)
+    alguna_en_curso = any(e in ('en_curso',) for e in estados)
+    alguna_finalizada = any(e == 'finalizada' for e in estados)
+
+    if todas_finalizadas:
+        obra.estado = 'finalizada'
+        if not obra.fecha_fin_real:
+            obra.fecha_fin_real = date.today()
+    elif alguna_en_curso or alguna_finalizada:
+        if obra.estado == 'planificacion':
+            obra.estado = 'en_curso'
 
 
 # === DISTRIBUCIÓN INTELIGENTE DE DATOS ETAPA → TAREAS ===
@@ -4053,7 +4103,25 @@ def actualizar_estado_tarea(id):
         elif nuevo_estado == 'en_curso' and not tarea.fecha_inicio_real:
             tarea.fecha_inicio_real = date.today()
 
+        # Sincronizar estado de etapa según tareas
+        etapa = tarea.etapa
+        if etapa:
+            todas_tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else (etapa.tareas or [])
+            if todas_tareas:
+                todas_completadas = all(t.estado in ('completada', 'cancelada') for t in todas_tareas)
+                alguna_en_curso = any(t.estado in ('en_curso', 'completada') for t in todas_tareas)
+                if todas_completadas and etapa.estado != 'finalizada':
+                    etapa.estado = 'finalizada'
+                    etapa.progreso = 100
+                    if not etapa.fecha_fin_real:
+                        etapa.fecha_fin_real = date.today()
+                elif alguna_en_curso and etapa.estado == 'pendiente':
+                    etapa.estado = 'en_curso'
+                    if not etapa.fecha_inicio_real:
+                        etapa.fecha_inicio_real = date.today()
+
         obra.calcular_progreso_automatico()
+        sincronizar_estado_obra(obra)
 
         db.session.commit()
         flash('Estado de tarea actualizado exitosamente.', 'success')
@@ -4324,6 +4392,7 @@ def cambiar_estado_etapa(etapa_id):
                 etapa.fecha_fin_real = date.today()
 
         etapa.obra.calcular_progreso_automatico()
+        sincronizar_estado_obra(etapa.obra)
 
         db.session.commit()
 
