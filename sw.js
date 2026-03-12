@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v3.3.0';  // Force cache refresh: unified certificaciones module
+const CACHE_VERSION = 'v4.0.0';  // Major: unified certificaciones module, clean all caches
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
@@ -44,7 +44,7 @@ const API_ROUTES = [
 // INSTALACIÓN
 // ============================================================================
 self.addEventListener('install', (event) => {
-    console.log('[SW] Instalando Service Worker v3.2.0...');
+    console.log('[SW] Instalando Service Worker ' + CACHE_VERSION + '...');
 
     event.waitUntil(
         caches.open(STATIC_CACHE)
@@ -70,7 +70,7 @@ self.addEventListener('install', (event) => {
 // ACTIVACIÓN
 // ============================================================================
 self.addEventListener('activate', (event) => {
-    console.log('[SW] Activando Service Worker v3.2.0...');
+    console.log('[SW] Activando Service Worker ' + CACHE_VERSION + '...');
 
     event.waitUntil(
         caches.keys()
