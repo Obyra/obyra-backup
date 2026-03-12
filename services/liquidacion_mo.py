@@ -267,7 +267,138 @@ def generar_preview_liquidacion(obra_id, desde, hasta):
     return items
 
 
-def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None):
+def generar_preview_unificado(obra_id, desde, hasta):
+    """Genera preview unificado: etapas → operarios → detalle.
+
+    Combina compute_etapa_breakdown (cert. cliente) con detalle de
+    operarios por etapa (liquidación MO).
+    """
+    obra = Obra.query.get(obra_id)
+    if not obra:
+        return {'etapas': [], 'operarios_sin_etapa': []}
+
+    from services.certifications import compute_etapa_breakdown
+
+    tarifa_default = obtener_tarifa_default_obra(obra)
+    operarios = buscar_operarios_obra(obra_id, desde, hasta)
+    etapa_breakdown = compute_etapa_breakdown(obra)
+
+    # Calcular datos de cada operario
+    operarios_data = {}
+    for uid, usuario in operarios.items():
+        avance_data = calcular_horas_avance_operario(obra_id, uid, desde, hasta)
+        fichada_data = calcular_horas_fichadas_operario(obra_id, uid, desde, hasta)
+
+        asig = AsignacionObra.query.filter_by(
+            obra_id=obra_id, usuario_id=uid, activo=True
+        ).first()
+
+        operarios_data[uid] = {
+            'operario_id': uid,
+            'operario_nombre': usuario.nombre_completo,
+            'rol': asig.rol_en_obra if asig else 'operario',
+            'horas_fichadas': fichada_data['total_horas'],
+            'fichada_desglose': fichada_data['desglose'],
+            'avance_desglose': avance_data['desglose'],
+            'horas_avance_total': avance_data['total_horas'],
+        }
+
+    # Agrupar avances por etapa → operario
+    # avance_desglose items tienen 'etapa' y 'tarea'
+    etapa_operarios = {}  # etapa_nombre -> {uid -> [tareas]}
+    for uid, op_data in operarios_data.items():
+        for av in op_data['avance_desglose']:
+            etapa_nombre = av.get('etapa', 'Sin etapa')
+            if etapa_nombre not in etapa_operarios:
+                etapa_operarios[etapa_nombre] = {}
+            if uid not in etapa_operarios[etapa_nombre]:
+                etapa_operarios[etapa_nombre][uid] = []
+            etapa_operarios[etapa_nombre][uid].append(av)
+
+    # Construir resultado por etapa
+    etapas_result = []
+    operarios_usados = set()
+
+    for etapa_info in (etapa_breakdown.get('etapas') or []):
+        etapa_nombre = etapa_info['etapa_nombre']
+        ops_en_etapa = etapa_operarios.get(etapa_nombre, {})
+
+        operarios_list = []
+        subtotal_mo = Decimal('0')
+
+        for uid, tareas in ops_en_etapa.items():
+            op = operarios_data.get(uid)
+            if not op:
+                continue
+            operarios_usados.add(uid)
+
+            # Horas avance en ESTA etapa
+            horas_avance_etapa = sum(t.get('horas', 0) for t in tareas)
+            # Cantidad total en esta etapa
+            cantidad_total = sum(t.get('cantidad', 0) for t in tareas)
+            unidades = set(t.get('unidad', '') for t in tareas if t.get('unidad'))
+            unidad = list(unidades)[0] if len(unidades) == 1 else ', '.join(unidades) if unidades else ''
+
+            # Default: pagar por avance
+            horas_liquidar = horas_avance_etapa if horas_avance_etapa > 0 else op['horas_fichadas']
+            monto_default = float(_q2(_decimal(horas_liquidar) * tarifa_default))
+
+            operarios_list.append({
+                'operario_id': uid,
+                'operario_nombre': op['operario_nombre'],
+                'rol': op['rol'],
+                'tareas': tareas,
+                'cantidad_total': cantidad_total,
+                'unidad': unidad,
+                'horas_avance': horas_avance_etapa,
+                'horas_fichadas': op['horas_fichadas'],
+                'tarifa_hora': float(tarifa_default),
+                'monto_default': monto_default,
+            })
+            subtotal_mo += _decimal(monto_default)
+
+        etapas_result.append({
+            'etapa_id': etapa_info['etapa_id'],
+            'etapa_nombre': etapa_nombre,
+            'porcentaje_avance': etapa_info['porcentaje_avance'],
+            'costo_presupuestado': float(etapa_info['costo_presupuestado']),
+            'monto_certificable': float(etapa_info['monto_certificable']),
+            'tareas_total': etapa_info['tareas_total'],
+            'tareas_completadas': etapa_info['tareas_completadas'],
+            'operarios': operarios_list,
+            'subtotal_mo': float(subtotal_mo),
+        })
+
+    # Operarios con fichadas pero sin avances en ninguna etapa
+    operarios_sin_etapa = []
+    for uid, op in operarios_data.items():
+        if uid not in operarios_usados and op['horas_fichadas'] > 0:
+            monto_default = float(_q2(_decimal(op['horas_fichadas']) * tarifa_default))
+            operarios_sin_etapa.append({
+                'operario_id': uid,
+                'operario_nombre': op['operario_nombre'],
+                'rol': op['rol'],
+                'tareas': [],
+                'cantidad_total': 0,
+                'unidad': '',
+                'horas_avance': 0,
+                'horas_fichadas': op['horas_fichadas'],
+                'fichada_desglose': op['fichada_desglose'],
+                'tarifa_hora': float(tarifa_default),
+                'monto_default': monto_default,
+            })
+
+    return {
+        'etapas': etapas_result,
+        'operarios_sin_etapa': operarios_sin_etapa,
+        'tarifa_default': float(tarifa_default),
+        'ya_certificado_ars': float(etapa_breakdown.get('ya_certificado_ars', 0)),
+        'presupuesto_total': float(etapa_breakdown.get('presupuesto_total', 0)),
+        'total_certificable': float(etapa_breakdown.get('total_certificable', 0)),
+    }
+
+
+def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None, commit=True):
     """Crea una liquidación con sus items.
 
     Args:
@@ -275,6 +406,7 @@ def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None):
         desde, hasta: fechas del período
         items_data: lista de dicts con operario_id, horas_liquidadas, tarifa_hora, monto
         notas: notas opcionales
+        commit: si True, hace commit. Si False, deja el commit al caller.
 
     Returns: LiquidacionMO creada
     """
@@ -324,7 +456,8 @@ def crear_liquidacion(obra_id, desde, hasta, items_data, notas=None):
         monto_total += monto
 
     liq.monto_total = float(monto_total)
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
     return liq
 

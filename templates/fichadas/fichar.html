@@ -19,7 +19,7 @@
     <!-- Info del usuario fichando -->
     <div class="row mb-2">
         <div class="col-12">
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2">
                     <i class="fas fa-user me-1"></i>{{ current_user.nombre_completo }}
                 </span>
@@ -27,6 +27,21 @@
                     <i class="fas fa-id-badge me-1"></i>{{ current_user.role or current_user.rol or 'Operario' }}
                 </span>
             </div>
+            {% if es_admin and operarios_obra %}
+            <div class="mt-2">
+                <label class="form-label small fw-bold mb-1">
+                    <i class="fas fa-users me-1"></i>Fichar por otro operario/PM:
+                </label>
+                <select class="form-select form-select-sm" id="selectOperario" onchange="cambiarOperario()">
+                    <option value="" selected>-- Yo mismo ({{ current_user.nombre_completo }}) --</option>
+                    {% for op in operarios_obra %}
+                    <option value="{{ op.id }}" data-nombre="{{ op.nombre }}" data-rol="{{ op.rol }}" data-proximo="{{ op.proximo_tipo }}">
+                        {{ op.nombre }} ({{ op.rol }}) — proximo: {{ op.proximo_tipo }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -169,6 +184,33 @@ var miLat = null, miLng = null, miPrecision = null;
 var mapa = null, marcadorMio = null;
 var gpsRespondio = false;
 var fichandoEnCurso = false;
+var FICHAR_USUARIO_ID = null; // null = yo mismo
+
+function cambiarOperario() {
+    var sel = document.getElementById('selectOperario');
+    if (!sel) return;
+    var opt = sel.options[sel.selectedIndex];
+    var uid = sel.value;
+    var btn = document.getElementById('btnFichar');
+
+    if (uid) {
+        FICHAR_USUARIO_ID = parseInt(uid);
+        var nombre = opt.dataset.nombre;
+        var prox = opt.dataset.proximo;
+        PROXIMO_TIPO = prox;
+        btn.className = 'btn btn-' + (prox === 'egreso' ? 'danger' : 'success') + ' btn-lg w-100 py-4';
+        btn.style.fontSize = '1.4rem';
+        btn.style.borderRadius = '16px';
+        btn.innerHTML = '<i class="fas fa-' + (prox === 'egreso' ? 'sign-out-alt' : 'sign-in-alt') + ' me-2"></i>FICHAR ' + prox.toUpperCase() + ' - ' + nombre.split(' ')[0];
+    } else {
+        FICHAR_USUARIO_ID = null;
+        PROXIMO_TIPO = '{{ proximo_tipo }}';
+        btn.className = 'btn btn-' + (PROXIMO_TIPO === 'egreso' ? 'danger' : 'success') + ' btn-lg w-100 py-4';
+        btn.style.fontSize = '1.4rem';
+        btn.style.borderRadius = '16px';
+        btn.innerHTML = '<i class="fas fa-' + (PROXIMO_TIPO === 'egreso' ? 'sign-out-alt' : 'sign-in-alt') + ' me-2"></i>FICHAR ' + PROXIMO_TIPO.toUpperCase();
+    }
+}
 
 // ══════════════════════════════════════════════
 // 1. GPS — arranca inmediatamente
@@ -493,19 +535,27 @@ async function registrarFichada() {
     if (CSRF_TOKEN) headers['X-CSRFToken'] = CSRF_TOKEN;
 
     try {
+        var payload = {
+            obra_id: OBRA_ID, tipo: PROXIMO_TIPO,
+            latitud: miLat, longitud: miLng, precision_gps: miPrecision
+        };
+        if (FICHAR_USUARIO_ID) payload.usuario_id = FICHAR_USUARIO_ID;
+
         var resp = await fetch('/fichadas/api/fichar', {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({
-                obra_id: OBRA_ID, tipo: PROXIMO_TIPO,
-                latitud: miLat, longitud: miLng, precision_gps: miPrecision
-            })
+            body: JSON.stringify(payload)
         });
         var data = await resp.json();
 
         if (data.ok) {
             var f = data.fichada;
-            var msg = PROXIMO_TIPO.toUpperCase() + ' registrado a las ' + f.fecha_hora;
+            var nombreOp = '';
+            if (FICHAR_USUARIO_ID) {
+                var sel = document.getElementById('selectOperario');
+                if (sel) nombreOp = ' para ' + sel.options[sel.selectedIndex].dataset.nombre;
+            }
+            var msg = PROXIMO_TIPO.toUpperCase() + ' registrado' + nombreOp + ' a las ' + f.fecha_hora;
             if (f.distancia_metros !== null) msg += ' (' + f.distancia_metros + 'm de la obra)';
             mostrarResultado('ok', msg);
             actualizarEstado('ok', msg);

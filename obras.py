@@ -4295,13 +4295,38 @@ def historial_certificaciones(id):
 
 
 # ============================================================
-# LIQUIDACIÓN MANO DE OBRA
+# LIQUIDACIÓN MANO DE OBRA (CERTIFICACIÓN UNIFICADA)
 # ============================================================
+
+@obras_bp.route('/<int:obra_id>/certificacion-unificada/preview')
+@login_required
+def certificacion_unificada_preview(obra_id):
+    """API: preview unificado etapas + operarios para un período."""
+    from services.liquidacion_mo import generar_preview_unificado
+    desde = request.args.get('desde')
+    hasta = request.args.get('hasta')
+    if not desde or not hasta:
+        return jsonify(ok=False, error='Debe indicar período desde/hasta'), 400
+    try:
+        desde_date = date.fromisoformat(desde)
+        hasta_date = date.fromisoformat(hasta)
+    except ValueError:
+        return jsonify(ok=False, error='Formato de fecha inválido (YYYY-MM-DD)'), 400
+
+    try:
+        data = generar_preview_unificado(obra_id, desde_date, hasta_date)
+        return jsonify(ok=True, **data)
+    except Exception as e:
+        current_app.logger.exception("Error en preview unificado")
+        return jsonify(ok=True, etapas=[], operarios_sin_etapa=[],
+                       tarifa_default=0, ya_certificado_ars=0,
+                       presupuesto_total=0, total_certificable=0)
+
 
 @obras_bp.route('/<int:obra_id>/liquidacion-mo/preview')
 @login_required
 def liquidacion_mo_preview(obra_id):
-    """API: preview de liquidación para un período."""
+    """API: preview de liquidación para un período (legacy)."""
     from services.liquidacion_mo import generar_preview_liquidacion
     desde = request.args.get('desde')
     hasta = request.args.get('hasta')

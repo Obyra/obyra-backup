@@ -18,37 +18,6 @@
         <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
-                    <p class="text-muted text-uppercase small mb-1">Certificado</p>
-                    <h4 class="mb-0">{{ resumen['certificado_ars']|moneda }}</h4>
-                    {% if resumen['certificado_usd'] %}
-                    <small class="text-muted">USD {{ resumen['certificado_usd']|float|round(2) }}</small>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-lg">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <p class="text-muted text-uppercase small mb-1">Pagado</p>
-                    <h4 class="mb-0">{{ resumen['pagado_ars']|moneda }}</h4>
-                    {% if resumen['pagado_usd'] %}
-                    <small class="text-muted">USD {{ resumen['pagado_usd']|float|round(2) }}</small>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-lg">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <p class="text-muted text-uppercase small mb-1">En borrador</p>
-                    <h4 class="mb-0">{{ resumen['borrador_ars']|moneda }}</h4>
-                    <small class="text-muted">{{ porcentajes[1] }}% pendiente</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-lg">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
                     <p class="text-muted text-uppercase small mb-1">Horas fichadas</p>
                     {% set total_horas_seg = resumen_horas|sum(attribute='total_segundos') if resumen_horas else 0 %}
                     <h4 class="mb-0">{{ '%dh %02dm'|format(total_horas_seg // 3600, (total_horas_seg % 3600) // 60) if total_horas_seg > 0 else '0h' }}</h4>
@@ -59,19 +28,40 @@
         <div class="col-6 col-lg">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
-                    <p class="text-muted text-uppercase small mb-1">Costo MO</p>
+                    <p class="text-muted text-uppercase small mb-1">Horas avance</p>
                     {% if resumen_liq_mo %}
-                    <h4 class="mb-0">{{ '$%s'|format('{:,.0f}'.format(resumen_liq_mo.total_liquidado)) }}</h4>
-                    <small class="{% if resumen_liq_mo.total_pendiente > 0 %}text-warning{% else %}text-success{% endif %}">
-                        {% if resumen_liq_mo.total_pendiente > 0 %}
-                        <i class="fas fa-exclamation-circle me-1"></i>${{ '{:,.0f}'.format(resumen_liq_mo.total_pendiente) }} pend.
-                        {% else %}
-                        <i class="fas fa-check-circle me-1"></i>Todo pagado
-                        {% endif %}
-                    </small>
+                    <h4 class="mb-0">{{ resumen_liq_mo.horas_avance }}h</h4>
+                    {% else %}
+                    <h4 class="mb-0 text-muted">-</h4>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">MO liquidado</p>
+                    {% if resumen_liq_mo %}
+                    <h4 class="mb-0">${{ '{:,.0f}'.format(resumen_liq_mo.total_liquidado) }}</h4>
+                    <small class="text-muted">{{ resumen_liq_mo.cant_liquidaciones }} liquidacion{{ 'es' if resumen_liq_mo.cant_liquidaciones != 1 }}</small>
                     {% else %}
                     <h4 class="mb-0 text-muted">-</h4>
                     <small class="text-muted">Sin liquidaciones</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted text-uppercase small mb-1">Pendiente de pago</p>
+                    {% if resumen_liq_mo %}
+                    <h4 class="mb-0 {{ 'text-warning' if resumen_liq_mo.total_pendiente > 0 else 'text-success' }}">
+                        ${{ '{:,.0f}'.format(resumen_liq_mo.total_pendiente) }}
+                    </h4>
+                    <small class="text-muted">Pagado: ${{ '{:,.0f}'.format(resumen_liq_mo.total_pagado) }}</small>
+                    {% else %}
+                    <h4 class="mb-0 text-muted">-</h4>
                     {% endif %}
                 </div>
             </div>
@@ -94,7 +84,9 @@
 
     <ul class="nav nav-tabs" id="certTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="tab-pendientes" data-bs-toggle="tab" data-bs-target="#pane-pendientes" type="button" role="tab">A certificar</button>
+            <button class="nav-link active" id="tab-pendientes" data-bs-toggle="tab" data-bs-target="#pane-pendientes" type="button" role="tab">
+                <i class="fas fa-file-invoice-dollar me-1"></i>Certificar
+            </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-certificadas" data-bs-toggle="tab" data-bs-target="#pane-certificadas" type="button" role="tab">Certificadas</button>
@@ -107,227 +99,96 @@
                 {% endif %}
             </button>
         </li>
-        {% if puede_aprobar %}
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="tab-liquidacion" data-bs-toggle="tab" data-bs-target="#pane-liquidacion" type="button" role="tab">
-                <i class="fas fa-hand-holding-usd me-1"></i>Liquidacion MO
-            </button>
-        </li>
-        {% endif %}
     </ul>
     <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="certTabsContent">
-        <!-- Tab: A certificar -->
+        <!-- Tab: Certificar (unificado: etapas + operarios) -->
         <div class="tab-pane fade show active" id="pane-pendientes" role="tabpanel" aria-labelledby="tab-pendientes">
             <div class="p-3">
 
-                {# Borradores existentes #}
-                {% set borradores = pendientes|selectattr('tipo', 'equalto', 'borrador')|list %}
-                {% if borradores %}
-                <h6 class="text-muted mb-2"><i class="fas fa-file-alt me-1"></i>Borradores pendientes</h6>
-                <div class="table-responsive mb-4">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Estado</th>
-                                <th>Periodo</th>
-                                <th>% Avance</th>
-                                <th>Monto (ARS)</th>
-                                {% if puede_aprobar %}<th class="text-end">Acciones</th>{% endif %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in borradores %}
-                            <tr>
-                                <td><span class="badge bg-secondary">Borrador</span></td>
-                                <td>
-                                    {% if item.periodo and (item.periodo[0] or item.periodo[1]) %}
-                                        {{ item.periodo[0].strftime('%d/%m/%Y') if item.periodo[0] else '-' }}
-                                        &rarr;
-                                        {{ item.periodo[1].strftime('%d/%m/%Y') if item.periodo[1] else '-' }}
-                                    {% else %}
-                                        <span class="text-muted">Sin periodo</span>
-                                    {% endif %}
-                                </td>
-                                <td><strong>{{ item.porcentaje }}%</strong></td>
-                                <td>{{ item.monto_ars|moneda }}</td>
-                                {% if puede_aprobar %}
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-primary"
-                                            data-bs-toggle="modal" data-bs-target="#modalConfirmarCertificacion"
-                                            data-porcentaje="{{ item.porcentaje }}"
-                                            data-certificacion-id="{{ item.id or '' }}"
-                                            data-monto-ars="{{ item.monto_ars }}"
-                                            data-monto-usd="{{ item.monto_usd }}">
-                                        <i class="fas fa-check me-1"></i>Aprobar
+                {% if resumen_liq_mo and resumen_liq_mo.tarifa_default > 0 %}
+                <div class="alert alert-info small py-2 mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Tarifa default del presupuesto: <strong>${{ '{:,.0f}'.format(resumen_liq_mo.tarifa_default) }}/hora</strong>
+                    (jornal 8h = ${{ '{:,.0f}'.format(resumen_liq_mo.tarifa_default * 8) }})
+                    &mdash; Avance obra: <strong>{{ resumen_liq_mo.avance_obra }}%</strong>
+                </div>
+                {% endif %}
+
+                <!-- Selector de periodo -->
+                <div class="card border-primary mb-3">
+                    <div class="card-body py-2">
+                        <div class="row align-items-end g-2">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small fw-bold mb-1">Periodo desde</label>
+                                <input type="date" class="form-control form-control-sm" id="liq-desde">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small fw-bold mb-1">Periodo hasta</label>
+                                <input type="date" class="form-control form-control-sm" id="liq-hasta">
+                            </div>
+                            <div class="col-auto">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('quincena1')" title="1ra quincena del mes actual">1-15</button>
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('quincena2')" title="2da quincena del mes actual">16-fin</button>
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('mes')" title="Mes completo actual">Mes</button>
+                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('semana')" title="Ultima semana">7d</button>
+                                </div>
+                            </div>
+                            <div class="col col-md-3">
+                                <button class="btn btn-primary btn-sm w-100" onclick="buscarUnificado()">
+                                    <i class="fas fa-search me-1"></i>Buscar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading -->
+                <div id="liq-loading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border text-primary"></div>
+                    <div class="mt-2 text-muted">Calculando...</div>
+                </div>
+
+                <!-- Preview unificado (se llena por JS) -->
+                <div id="liq-preview" style="display:none;">
+                    <div id="liq-etapas"></div>
+
+                    <!-- Total y confirmar -->
+                    <div class="card bg-dark text-white mt-3">
+                        <div class="card-body py-2">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Notas (opcional)</label>
+                                    <input type="text" class="form-control form-control-sm" id="liq-notas" placeholder="Ej: Quincena marzo...">
+                                </div>
+                                <div class="col-md-4 text-center">
+                                    <div class="small text-muted">TOTAL MO A PAGAR</div>
+                                    <div class="fs-4 fw-bold" id="liq-total">$0</div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button class="btn btn-success" onclick="confirmarUnificado()">
+                                        <i class="fas fa-check me-1"></i>Confirmar liquidacion
                                     </button>
-                                </td>
-                                {% endif %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                {% endif %}
 
-                {# Desglose por etapa — certificación multimodal #}
-                {% if desglose_etapas and desglose_etapas.etapas %}
-                <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}" id="formCertDesglose">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <input type="hidden" name="aprobar" value="true">
-                    <input type="hidden" name="items_etapa" id="hiddenItemsEtapa">
-
-                    <h6 class="text-muted mb-2"><i class="fas fa-layer-group me-1"></i>Desglose por etapa</h6>
-
-                    {% if desglose_etapas.ya_certificado_ars > 0 %}
-                    <div class="alert alert-info small py-2 mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Ya certificado: <strong>{{ desglose_etapas.ya_certificado_ars|moneda }}</strong>
-                        de {{ desglose_etapas.presupuesto_total|moneda }} (presupuesto total)
-                    </div>
-                    {% endif %}
-
-                    <div class="table-responsive mb-3">
-                        <table class="table align-middle mb-0" id="tablaDesglose">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Etapa</th>
-                                    <th class="text-center">Avance</th>
-                                    <th class="text-center" style="min-width: 130px;">Modo</th>
-                                    <th class="text-end">Detalle</th>
-                                    <th class="text-end" style="min-width: 160px;">Monto</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for etapa in desglose_etapas.etapas %}
-                                {% set horas_seg = horas_por_etapa.get(etapa.etapa_id, 0) if horas_por_etapa else 0 %}
-                                {% set horas_dec = (horas_seg / 3600)|round(2) %}
-                                <tr class="fila-etapa"
-                                    data-etapa-id="{{ etapa.etapa_id }}"
-                                    data-etapa-nombre="{{ etapa.etapa_nombre }}"
-                                    data-porcentaje="{{ etapa.porcentaje_avance }}"
-                                    data-monto-avance="{{ etapa.monto_certificable|float|round(2) }}"
-                                    data-presupuesto="{{ etapa.costo_presupuestado|float|round(2) }}"
-                                    data-horas="{{ horas_dec }}">
-                                    <td>
-                                        <div class="fw-semibold">{{ etapa.etapa_nombre }}</div>
-                                        <small class="text-muted">{{ etapa.tareas_completadas }}/{{ etapa.tareas_total }} tareas</small>
-                                    </td>
-                                    <td class="text-center">
-                                        <div class="d-flex align-items-center justify-content-center gap-2">
-                                            <div class="progress flex-grow-1" style="height: 8px; max-width: 80px;">
-                                                <div class="progress-bar {% if etapa.porcentaje_avance >= 100 %}bg-success{% elif etapa.porcentaje_avance >= 50 %}bg-primary{% else %}bg-warning{% endif %}"
-                                                     style="width: {{ etapa.porcentaje_avance }}%"></div>
-                                            </div>
-                                            <span class="small fw-semibold">{{ etapa.porcentaje_avance }}%</span>
-                                        </div>
-                                        {% if horas_seg > 0 %}
-                                        <small class="text-muted d-block"><i class="fas fa-clock me-1"></i>{{ '%dh %02dm'|format(horas_seg // 3600, (horas_seg % 3600) // 60) }}</small>
-                                        {% endif %}
-                                        {% set ops = operarios_por_etapa.get(etapa.etapa_id, []) if operarios_por_etapa else [] %}
-                                        {% if ops %}
-                                        <div class="mt-1">
-                                            {% for op in ops %}
-                                            <span class="badge bg-primary bg-opacity-10 text-primary me-1" style="font-size:0.65rem;" title="{{ op.rol }}">
-                                                <i class="fas fa-user me-1"></i>{{ op.nombre.split(' ')[0] }} {{ op.horas_str }}
-                                            </span>
-                                            {% endfor %}
-                                        </div>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        <select class="form-select form-select-sm select-modo" {% if not puede_aprobar %}disabled{% endif %}>
-                                            <option value="avance" selected>Por avance</option>
-                                            <option value="horas">Por horas</option>
-                                            <option value="cantidad">Por cantidad</option>
-                                        </select>
-                                    </td>
-                                    <td class="text-end">
-                                        {# Detalle por avance (default) #}
-                                        <div class="detalle-avance">
-                                            <small class="text-muted">{{ etapa.costo_presupuestado|moneda }}</small>
-                                        </div>
-                                        {# Detalle por horas #}
-                                        <div class="detalle-horas" style="display:none;">
-                                            <div class="d-flex align-items-center justify-content-end gap-1">
-                                                <small class="text-nowrap">{{ horas_dec }}h x $</small>
-                                                <input type="number" class="form-control form-control-sm input-tarifa" style="width:90px;"
-                                                       value="0" step="1" min="0" placeholder="$/h"
-                                                       {% if not puede_aprobar %}disabled{% endif %}>
-                                            </div>
-                                        </div>
-                                        {# Detalle por cantidad #}
-                                        <div class="detalle-cantidad" style="display:none;">
-                                            <div class="d-flex align-items-center justify-content-end gap-1 mb-1">
-                                                <input type="number" class="form-control form-control-sm input-qty" style="width:70px;"
-                                                       value="0" step="0.01" min="0" placeholder="Cant."
-                                                       {% if not puede_aprobar %}disabled{% endif %}>
-                                                <select class="form-select form-select-sm select-unidad" style="width:70px;"
-                                                        {% if not puede_aprobar %}disabled{% endif %}>
-                                                    <option value="m2">m2</option>
-                                                    <option value="m3">m3</option>
-                                                    <option value="ml">ml</option>
-                                                    <option value="kg">kg</option>
-                                                    <option value="tn">tn</option>
-                                                    <option value="u">u</option>
-                                                    <option value="gl">gl</option>
-                                                </select>
-                                                <small class="text-nowrap">x $</small>
-                                                <input type="number" class="form-control form-control-sm input-precio-u" style="width:90px;"
-                                                       value="0" step="0.01" min="0" placeholder="$/u"
-                                                       {% if not puede_aprobar %}disabled{% endif %}>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="text-end">
-                                        <input type="number"
-                                               class="form-control form-control-sm text-end input-monto-etapa fw-bold"
-                                               value="{{ etapa.monto_certificable|float|round(2) }}"
-                                               step="0.01" min="0"
-                                               {% if not puede_aprobar %}disabled{% endif %}>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                            <tfoot class="table-light">
-                                <tr class="fw-bold">
-                                    <td colspan="4" class="text-end">Total a certificar:</td>
-                                    <td class="text-end">
-                                        <span id="totalCertificar">{{ desglose_etapas.total_certificable|moneda }}</span>
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-
-                    {% if puede_aprobar %}
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-4">
-                            <label class="form-label small text-muted">Periodo desde</label>
-                            <input type="date" class="form-control form-control-sm" name="periodo_desde">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label small text-muted">Periodo hasta</label>
-                            <input type="date" class="form-control form-control-sm" name="periodo_hasta">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label small text-muted">Notas</label>
-                            <input type="text" class="form-control form-control-sm" name="notas" placeholder="Detalle opcional...">
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary" id="btnCertificarDesglose">
-                            <i class="fas fa-certificate me-1"></i>Certificar
-                        </button>
-                    </div>
-                    {% endif %}
-                </form>
-
-                {% elif not borradores %}
-                <div class="text-center py-5">
-                    <i class="fas fa-layer-group fa-2x text-muted mb-2"></i>
-                    <p class="mb-0 text-muted">No hay montos a certificar. El desglose se calculara automaticamente cuando las tareas tengan presupuesto vinculado y reporten avance.</p>
+                <!-- Empty state -->
+                <div id="liq-empty" class="text-center py-4">
+                    <i class="fas fa-hand-holding-usd fa-2x text-muted mb-2"></i>
+                    <p class="text-muted">Seleccione un periodo y presione "Buscar" para ver las etapas y operarios que trabajaron en la obra.</p>
                 </div>
-                {% endif %}
+
+                <!-- Historial de liquidaciones -->
+                <hr class="my-4">
+                <h6 class="text-muted mb-3"><i class="fas fa-history me-1"></i>Historial de liquidaciones</h6>
+                <div id="liq-historial">
+                    <div class="text-center py-3 text-muted" id="liq-historial-loading">
+                        <div class="spinner-border spinner-border-sm"></div> Cargando...
+                    </div>
+                </div>
 
             </div>
         </div>
@@ -490,208 +351,11 @@
                 {% endif %}
             </div>
         </div>
-
-        <!-- Tab: Liquidación Mano de Obra -->
-        {% if puede_aprobar %}
-        <div class="tab-pane fade" id="pane-liquidacion" role="tabpanel" aria-labelledby="tab-liquidacion">
-            <div class="p-3">
-
-                <!-- Resumen de obra y MO -->
-                {% if resumen_liq_mo %}
-                <div class="row g-2 mb-3">
-                    <div class="col-6 col-lg-3">
-                        <div class="card border-0 bg-light h-100">
-                            <div class="card-body py-2 px-3">
-                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">Horas fichadas</div>
-                                <div class="fw-bold fs-5">{{ resumen_liq_mo.horas_fichadas }}h</div>
-                                <small class="text-muted">{{ resumen_liq_mo.operarios_activos }} operario{{ 's' if resumen_liq_mo.operarios_activos != 1 }}</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-lg-3">
-                        <div class="card border-0 bg-light h-100">
-                            <div class="card-body py-2 px-3">
-                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">Horas avance</div>
-                                <div class="fw-bold fs-5">{{ resumen_liq_mo.horas_avance }}h</div>
-                                {% set diff_h = resumen_liq_mo.horas_fichadas - resumen_liq_mo.horas_avance %}
-                                {% if diff_h|abs > 2 %}
-                                <small class="{{ 'text-warning' if diff_h > 0 else 'text-danger' }}">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Dif: {{ '%+.1f'|format(diff_h) }}h
-                                </small>
-                                {% else %}
-                                <small class="text-success"><i class="fas fa-check me-1"></i>Coincide</small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-lg-3">
-                        <div class="card border-0 bg-light h-100">
-                            <div class="card-body py-2 px-3">
-                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">MO liquidado</div>
-                                <div class="fw-bold fs-5">${{ '{:,.0f}'.format(resumen_liq_mo.total_liquidado) }}</div>
-                                <small class="text-muted">{{ resumen_liq_mo.cant_liquidaciones }} liquidacion{{ 'es' if resumen_liq_mo.cant_liquidaciones != 1 }}</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-lg-3">
-                        <div class="card border-0 h-100 {{ 'bg-warning bg-opacity-10' if resumen_liq_mo.total_pendiente > 0 else 'bg-success bg-opacity-10' }}">
-                            <div class="card-body py-2 px-3">
-                                <div class="text-muted text-uppercase small" style="font-size:0.7rem;">Pendiente de pago</div>
-                                <div class="fw-bold fs-5 {{ 'text-warning' if resumen_liq_mo.total_pendiente > 0 else 'text-success' }}">
-                                    ${{ '{:,.0f}'.format(resumen_liq_mo.total_pendiente) }}
-                                </div>
-                                <small class="text-muted">Pagado: ${{ '{:,.0f}'.format(resumen_liq_mo.total_pagado) }}</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% if resumen_liq_mo.tarifa_default > 0 %}
-                <div class="alert alert-info small py-2 mb-3">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Tarifa default del presupuesto: <strong>${{ '{:,.0f}'.format(resumen_liq_mo.tarifa_default) }}/hora</strong>
-                    (jornal 8h = ${{ '{:,.0f}'.format(resumen_liq_mo.tarifa_default * 8) }})
-                    &mdash; Avance obra: <strong>{{ resumen_liq_mo.avance_obra }}%</strong>
-                </div>
-                {% endif %}
-                {% endif %}
-
-                <!-- Selector de período -->
-                <div class="card border-primary mb-3">
-                    <div class="card-body py-2">
-                        <div class="row align-items-end g-2">
-                            <div class="col-6 col-md-3">
-                                <label class="form-label small fw-bold mb-1">Periodo desde</label>
-                                <input type="date" class="form-control form-control-sm" id="liq-desde">
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label small fw-bold mb-1">Periodo hasta</label>
-                                <input type="date" class="form-control form-control-sm" id="liq-hasta">
-                            </div>
-                            <div class="col-auto">
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('quincena1')" title="1ra quincena del mes actual">1-15</button>
-                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('quincena2')" title="2da quincena del mes actual">16-fin</button>
-                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('mes')" title="Mes completo actual">Mes</button>
-                                    <button class="btn btn-outline-secondary" onclick="setLiqPeriodo('semana')" title="Ultima semana">7d</button>
-                                </div>
-                            </div>
-                            <div class="col col-md-3">
-                                <button class="btn btn-primary btn-sm w-100" onclick="buscarLiquidacion()">
-                                    <i class="fas fa-search me-1"></i>Buscar operarios
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Preview de liquidación (se llena por JS) -->
-                <div id="liq-loading" class="text-center py-4" style="display:none;">
-                    <div class="spinner-border text-primary"></div>
-                    <div class="mt-2 text-muted">Calculando horas...</div>
-                </div>
-
-                <div id="liq-preview" style="display:none;">
-                    <div id="liq-operarios"></div>
-
-                    <!-- Total y confirmar -->
-                    <div class="card bg-dark text-white mt-3">
-                        <div class="card-body py-2">
-                            <div class="row align-items-center">
-                                <div class="col-md-4">
-                                    <label class="form-label small mb-1">Notas (opcional)</label>
-                                    <input type="text" class="form-control form-control-sm" id="liq-notas" placeholder="Ej: Quincena marzo...">
-                                </div>
-                                <div class="col-md-4 text-center">
-                                    <div class="small text-muted">TOTAL A LIQUIDAR</div>
-                                    <div class="fs-4 fw-bold" id="liq-total">$0</div>
-                                </div>
-                                <div class="col-md-4 text-end">
-                                    <button class="btn btn-success" onclick="confirmarLiquidacion()">
-                                        <i class="fas fa-check me-1"></i>Confirmar liquidacion
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="liq-empty" class="text-center py-4">
-                    <i class="fas fa-hand-holding-usd fa-2x text-muted mb-2"></i>
-                    <p class="text-muted">Seleccione un periodo y presione "Buscar" para ver los operarios que trabajaron en la obra.</p>
-                </div>
-
-                <!-- Historial de liquidaciones -->
-                <hr class="my-4">
-                <h6 class="text-muted mb-3"><i class="fas fa-history me-1"></i>Historial de liquidaciones</h6>
-                <div id="liq-historial">
-                    <div class="text-center py-3 text-muted" id="liq-historial-loading">
-                        <div class="spinner-border spinner-border-sm"></div> Cargando...
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
     </div>
 </div>
 
 {% if puede_aprobar %}
-<!-- Modal aprobar borrador -->
-<div class="modal fade" id="modalConfirmarCertificacion" tabindex="-1" aria-labelledby="modalConfirmarCertificacionLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <form method="post" action="{{ url_for('obras.historial_certificaciones', id=obra.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modalConfirmarCertificacionLabel"><i class="fas fa-check-circle me-2"></i>Confirmar certificacion</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info small" id="certResumenContexto">
-                        <div><strong>Moneda base:</strong> {{ contexto.currency }}</div>
-                        {% if contexto.tasa_usd %}<div><strong>Tipo de cambio:</strong> {{ contexto.tasa_usd }}</div>{% endif %}
-                    </div>
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Porcentaje a certificar</label>
-                            <input type="number" class="form-control" name="porcentaje" id="inputPorcentaje" min="0" max="100" step="0.1" required>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Monto estimado (ARS)</label>
-                            <input type="text" class="form-control" id="inputMontoArs" readonly>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Monto estimado (USD)</label>
-                            <input type="text" class="form-control" id="inputMontoUsd" readonly>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Periodo desde</label>
-                            <input type="date" class="form-control" name="periodo_desde">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Periodo hasta</label>
-                            <input type="date" class="form-control" name="periodo_hasta">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Notas</label>
-                            <textarea class="form-control" name="notas" rows="3" placeholder="Detalle adicional, cuadrillas, etc."></textarea>
-                        </div>
-                    </div>
-                    <input type="hidden" name="aprobar" value="true">
-                    <input type="hidden" name="certificacion_id" id="inputCertificacionId">
-                    <input type="hidden" name="fuente" value="tareas">
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-1"></i>Confirmar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal registrar pago -->
+<!-- Modal registrar pago (certificaciones aprobadas) -->
 <div class="modal fade" id="modalRegistrarPago" tabindex="-1" aria-labelledby="modalRegistrarPagoLabel" aria-hidden="true" data-action-template="{{ url_for('obras.registrar_pago_certificacion', cert_id=0) }}">
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content">
@@ -748,150 +412,26 @@
 
 {% block extra_js %}
 <script>
-(function () {
-    // --- Desglose por etapa: modos de certificación ---
-    const form = document.getElementById('formCertDesglose');
-    const filas = document.querySelectorAll('.fila-etapa');
-    const totalSpan = document.getElementById('totalCertificar');
-    const hiddenItems = document.getElementById('hiddenItemsEtapa');
-
-    function formatARS(value) {
-        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
-    }
-
-    function recalcularTotal() {
-        let total = 0;
-        filas.forEach(function(fila) {
-            var montoInput = fila.querySelector('.input-monto-etapa');
-            total += parseFloat(montoInput.value) || 0;
-        });
-        if (totalSpan) totalSpan.textContent = formatARS(total);
-    }
-
-    // Manejar cambio de modo por fila
-    filas.forEach(function(fila) {
-        var select = fila.querySelector('.select-modo');
-        var montoInput = fila.querySelector('.input-monto-etapa');
-        var detalleAvance = fila.querySelector('.detalle-avance');
-        var detalleHoras = fila.querySelector('.detalle-horas');
-        var detalleCantidad = fila.querySelector('.detalle-cantidad');
-        var inputTarifa = fila.querySelector('.input-tarifa');
-        var inputQty = fila.querySelector('.input-qty');
-        var inputPrecioU = fila.querySelector('.input-precio-u');
-
-        function actualizarModo() {
-            var modo = select.value;
-            detalleAvance.style.display = modo === 'avance' ? '' : 'none';
-            detalleHoras.style.display = modo === 'horas' ? '' : 'none';
-            detalleCantidad.style.display = modo === 'cantidad' ? '' : 'none';
-
-            if (modo === 'avance') {
-                montoInput.value = parseFloat(fila.dataset.montoAvance) || 0;
-            } else if (modo === 'horas') {
-                calcularMontoHoras();
-            } else if (modo === 'cantidad') {
-                calcularMontoCantidad();
-            }
-            recalcularTotal();
-        }
-
-        function calcularMontoHoras() {
-            var horas = parseFloat(fila.dataset.horas) || 0;
-            var tarifa = parseFloat(inputTarifa.value) || 0;
-            montoInput.value = (horas * tarifa).toFixed(2);
-            recalcularTotal();
-        }
-
-        function calcularMontoCantidad() {
-            var qty = parseFloat(inputQty.value) || 0;
-            var precio = parseFloat(inputPrecioU.value) || 0;
-            montoInput.value = (qty * precio).toFixed(2);
-            recalcularTotal();
-        }
-
-        if (select) select.addEventListener('change', actualizarModo);
-        if (inputTarifa) inputTarifa.addEventListener('input', calcularMontoHoras);
-        if (inputQty) inputQty.addEventListener('input', calcularMontoCantidad);
-        if (inputPrecioU) inputPrecioU.addEventListener('input', calcularMontoCantidad);
-        if (montoInput) montoInput.addEventListener('input', recalcularTotal);
-    });
-
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            var items = [];
-            filas.forEach(function(fila) {
-                var montoInput = fila.querySelector('.input-monto-etapa');
-                var monto = parseFloat(montoInput.value) || 0;
-                if (monto > 0) {
-                    var modo = fila.querySelector('.select-modo').value;
-                    var item = {
-                        etapa_id: parseInt(fila.dataset.etapaId),
-                        etapa_nombre: fila.dataset.etapaNombre,
-                        porcentaje: parseFloat(fila.dataset.porcentaje) || 0,
-                        monto: monto,
-                        modo: modo
-                    };
-                    if (modo === 'horas') {
-                        item.horas = parseFloat(fila.dataset.horas) || 0;
-                        item.tarifa_hora = parseFloat(fila.querySelector('.input-tarifa').value) || 0;
-                    } else if (modo === 'cantidad') {
-                        item.cantidad = parseFloat(fila.querySelector('.input-qty').value) || 0;
-                        item.unidad = fila.querySelector('.select-unidad').value;
-                        item.precio_unitario = parseFloat(fila.querySelector('.input-precio-u').value) || 0;
-                    }
-                    items.push(item);
-                }
-            });
-
-            if (items.length === 0) {
-                e.preventDefault();
-                alert('No hay montos a certificar. Edita al menos un monto mayor a cero.');
-                return;
-            }
-            hiddenItems.value = JSON.stringify(items);
-        });
-    }
-
-    // --- Modal confirmar borrador ---
-    const confirmModal = document.getElementById('modalConfirmarCertificacion');
-    if (confirmModal) {
-        confirmModal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const porcentaje = button?.dataset.porcentaje || '';
-            const montoArs = button?.dataset.montoArs || '';
-            const montoUsd = button?.dataset.montoUsd || '';
-            const certId = button?.dataset.certificacionId || '';
-
-            confirmModal.querySelector('#inputPorcentaje').value = porcentaje;
-            confirmModal.querySelector('#inputMontoArs').value = montoArs ? formatARS(montoArs) : '';
-            confirmModal.querySelector('#inputMontoUsd').value = montoUsd ? 'USD ' + parseFloat(montoUsd).toFixed(2) : '';
-            confirmModal.querySelector('#inputCertificacionId').value = certId;
-        });
-    }
-
-    // --- Modal registrar pago ---
-    const pagoModal = document.getElementById('modalRegistrarPago');
-    if (pagoModal) {
-        const actionTemplate = pagoModal.dataset.actionTemplate;
-        pagoModal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const certId = button?.dataset.certificacionId;
-            const form = pagoModal.querySelector('form');
-            if (certId && actionTemplate) {
-                form.action = actionTemplate.replace('0', certId);
-            }
-        });
-    }
-})();
-
-// ============================================================
-// LIQUIDACIÓN MANO DE OBRA
-// ============================================================
-var liqData = [];
 var OBRA_ID = {{ obra.id }};
-var liqHistorialCargado = false;
+var previewData = null; // datos del preview unificado
 
-// Atajos de período
+// ============================================================
+// UTILIDADES
+// ============================================================
+function formatARS(value) {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
+}
+
+function formatFecha(isoStr) {
+    if (!isoStr) return '-';
+    var parts = isoStr.split('-');
+    if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
+    return isoStr;
+}
+
+// ============================================================
+// SELECTOR DE PERIODO
+// ============================================================
 function setLiqPeriodo(tipo) {
     var hoy = new Date();
     var y = hoy.getFullYear(), m = hoy.getMonth();
@@ -901,7 +441,7 @@ function setLiqPeriodo(tipo) {
         hasta = new Date(y, m, 15);
     } else if (tipo === 'quincena2') {
         desde = new Date(y, m, 16);
-        hasta = new Date(y, m + 1, 0); // ultimo dia del mes
+        hasta = new Date(y, m + 1, 0);
     } else if (tipo === 'mes') {
         desde = new Date(y, m, 1);
         hasta = new Date(y, m + 1, 0);
@@ -914,7 +454,10 @@ function setLiqPeriodo(tipo) {
     document.getElementById('liq-hasta').value = fmt(hasta);
 }
 
-function buscarLiquidacion() {
+// ============================================================
+// BUSCAR PREVIEW UNIFICADO
+// ============================================================
+function buscarUnificado() {
     var desde = document.getElementById('liq-desde').value;
     var hasta = document.getElementById('liq-hasta').value;
     if (!desde || !hasta) { alert('Seleccione periodo desde y hasta'); return; }
@@ -923,18 +466,23 @@ function buscarLiquidacion() {
     document.getElementById('liq-preview').style.display = 'none';
     document.getElementById('liq-empty').style.display = 'none';
 
-    fetch(`/obras/${OBRA_ID}/liquidacion-mo/preview?desde=${desde}&hasta=${hasta}`)
+    fetch(`/obras/${OBRA_ID}/certificacion-unificada/preview?desde=${desde}&hasta=${hasta}`)
     .then(r => r.json())
     .then(data => {
         document.getElementById('liq-loading').style.display = 'none';
-        if (!data.ok) { alert(data.error); return; }
-        liqData = data.items;
-        if (liqData.length === 0) {
+        if (!data.ok) { alert(data.error || 'Error al cargar datos'); return; }
+
+        previewData = data;
+        var tieneOperarios = false;
+        (data.etapas || []).forEach(e => { if (e.operarios && e.operarios.length > 0) tieneOperarios = true; });
+        if ((data.operarios_sin_etapa || []).length > 0) tieneOperarios = true;
+
+        if (!tieneOperarios) {
             document.getElementById('liq-empty').style.display = 'block';
             document.getElementById('liq-empty').innerHTML = '<div class="text-center py-4"><i class="fas fa-info-circle fa-2x text-muted mb-2"></i><p class="text-muted">No se encontraron operarios con actividad en este periodo.</p></div>';
             return;
         }
-        renderPreview();
+        renderUnificado();
     })
     .catch(err => {
         document.getElementById('liq-loading').style.display = 'none';
@@ -942,156 +490,353 @@ function buscarLiquidacion() {
     });
 }
 
-function renderPreview() {
-    var container = document.getElementById('liq-operarios');
+// ============================================================
+// RENDER PREVIEW UNIFICADO
+// ============================================================
+function renderUnificado() {
+    var container = document.getElementById('liq-etapas');
     var desde = document.getElementById('liq-desde').value;
     var hasta = document.getElementById('liq-hasta').value;
+    var data = previewData;
 
-    // Tabla resumen principal: A QUIÉN, CUÁNTO, POR QUÉ
     var html = `<div class="alert alert-dark py-2 mb-3">
         <strong><i class="fas fa-file-invoice-dollar me-1"></i>Liquidacion MO &mdash; ${formatFecha(desde)} al ${formatFecha(hasta)}</strong>
-        <span class="float-end">${liqData.length} operario${liqData.length !== 1 ? 's' : ''}</span>
     </div>`;
 
-    html += `<div class="table-responsive mb-3">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>Operario</th>
-                    <th class="text-center">Rol</th>
-                    <th class="text-center">H. Avance</th>
-                    <th class="text-center">H. Fichadas</th>
-                    <th class="text-center" style="min-width:100px;">Horas a liquidar</th>
-                    <th class="text-end" style="min-width:110px;">Tarifa/h ($)</th>
-                    <th class="text-end fw-bold" style="min-width:120px;">A PAGAR ($)</th>
-                </tr>
-            </thead>
-            <tbody>`;
+    // Render each etapa
+    (data.etapas || []).forEach((etapa, eIdx) => {
+        if (etapa.operarios.length === 0) return;
 
-    liqData.forEach((op, idx) => {
-        var diff = op.diferencia_horas;
-        var diffBadge = '';
-        if (Math.abs(diff) > 2) {
-            diffBadge = diff > 0
-                ? `<span class="badge bg-warning text-dark ms-1" title="Fichó más de lo que avanzó">+${diff}h</span>`
-                : `<span class="badge bg-danger ms-1" title="Avanzó más de lo que fichó">${diff}h</span>`;
-        }
+        html += `<div class="card mb-3 border-0 shadow-sm">
+            <div class="card-header bg-light py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-layer-group me-1 text-primary"></i>
+                        <strong>${etapa.etapa_nombre}</strong>
+                        <span class="badge bg-primary bg-opacity-75 ms-2">${etapa.porcentaje_avance}%</span>
+                        <small class="text-muted ms-2">${etapa.tareas_completadas}/${etapa.tareas_total} tareas</small>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">Presup: ${formatARS(etapa.costo_presupuestado)}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size:0.9rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="min-width:140px;">Operario</th>
+                                <th class="text-center">Rol</th>
+                                <th class="text-center">Tarea</th>
+                                <th class="text-center">Cantidad</th>
+                                <th class="text-center">H.Avance</th>
+                                <th class="text-center">H.Fichada</th>
+                                <th class="text-center" style="min-width:110px;">Modo</th>
+                                <th class="text-end" style="min-width:100px;">Tarifa</th>
+                                <th class="text-end fw-bold" style="min-width:120px;">A PAGAR</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
 
-        html += `<tr>
-            <td>
-                <strong>${op.operario_nombre}</strong>${diffBadge}
-                <button class="btn btn-link btn-sm p-0 ms-1 text-muted" onclick="toggleDetalle(${idx})" title="Ver detalle">
-                    <i class="fas fa-chevron-down" id="detalle-icon-${idx}"></i>
-                </button>
-            </td>
-            <td class="text-center"><span class="badge bg-secondary bg-opacity-50">${op.rol}</span></td>
-            <td class="text-center">${op.horas_avance}h</td>
-            <td class="text-center">${op.horas_fichadas}h</td>
-            <td class="text-center">
-                <input type="number" class="form-control form-control-sm text-center liq-horas" data-idx="${idx}"
-                       value="${op.horas_liquidar}" step="0.5" min="0" onchange="recalcLiqItem(${idx})" style="max-width:90px;margin:0 auto;">
-            </td>
-            <td class="text-end">
-                <input type="number" class="form-control form-control-sm text-end liq-tarifa" data-idx="${idx}"
-                       value="${op.tarifa_hora}" step="100" min="0" onchange="recalcLiqItem(${idx})" style="max-width:110px;margin-left:auto;">
-            </td>
-            <td class="text-end">
-                <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" data-idx="${idx}"
-                       value="${op.monto}" step="100" min="0" onchange="recalcLiqTotal()" style="max-width:120px;margin-left:auto;">
-            </td>
-        </tr>`;
+        etapa.operarios.forEach((op, oIdx) => {
+            var key = `e${eIdx}_o${oIdx}`;
+            var tareasStr = (op.tareas || []).map(t => t.tarea).filter((v, i, a) => a.indexOf(v) === i).join(', ') || '-';
+            var cantStr = op.cantidad_total > 0 ? op.cantidad_total + ' ' + (op.unidad || '') : '-';
 
-        // Fila de detalle expandible
-        html += `<tr id="detalle-row-${idx}" style="display:none;">
-            <td colspan="7" class="bg-light px-4 py-2">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="small fw-semibold text-muted mb-1"><i class="fas fa-tasks me-1"></i>Avances por tarea</div>`;
+            html += `<tr>
+                <td>
+                    <strong>${op.operario_nombre}</strong>
+                    <button class="btn btn-link btn-sm p-0 ms-1 text-muted" onclick="toggleDetalle('${key}')" title="Ver detalle">
+                        <i class="fas fa-chevron-down" id="icon-${key}"></i>
+                    </button>
+                </td>
+                <td class="text-center"><span class="badge bg-secondary bg-opacity-50">${op.rol}</span></td>
+                <td class="text-center"><small>${tareasStr}</small></td>
+                <td class="text-center"><small>${cantStr}</small></td>
+                <td class="text-center">${op.horas_avance}h</td>
+                <td class="text-center">${op.horas_fichadas}h</td>
+                <td class="text-center">
+                    <select class="form-select form-select-sm select-modo" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" onchange="cambiarModo('${key}', ${eIdx}, ${oIdx})">
+                        <option value="avance" selected>Avance</option>
+                        <option value="fichada">Fichada</option>
+                        ${op.cantidad_total > 0 ? '<option value="cantidad">Cantidad</option>' : ''}
+                        <option value="manual">Manual</option>
+                    </select>
+                </td>
+                <td class="text-end">
+                    <input type="number" class="form-control form-control-sm text-end liq-tarifa" id="tarifa-${key}"
+                           value="${op.tarifa_hora}" step="100" min="0" onchange="recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:100px;margin-left:auto;">
+                    <small class="text-muted detalle-modo" id="detalle-modo-${key}">x ${op.horas_avance}h</small>
+                </td>
+                <td class="text-end">
+                    <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
+                           value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;margin-left:auto;">
+                </td>
+            </tr>`;
 
-        if (op.avance_desglose.length > 0) {
-            html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.8rem;">';
-            html += '<thead><tr><th>Tarea</th><th class="text-end">Horas</th><th>Cantidad</th><th>Fecha</th></tr></thead><tbody>';
-            op.avance_desglose.forEach(a => {
-                html += `<tr><td>${a.tarea}</td><td class="text-end fw-semibold">${a.horas}h</td><td class="text-muted">${a.cantidad} ${a.unidad}</td><td class="text-muted">${formatFecha(a.fecha)}</td></tr>`;
-            });
-            html += `</tbody><tfoot><tr class="border-top fw-bold"><td>Total</td><td class="text-end">${op.horas_avance}h</td><td colspan="2"></td></tr></tfoot></table>`;
-        } else {
-            html += '<div class="text-muted small fst-italic">Sin avances registrados en este periodo</div>';
-        }
+            // Fila detalle expandible
+            html += `<tr id="detalle-${key}" style="display:none;">
+                <td colspan="9" class="bg-light px-4 py-2">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="small fw-semibold text-muted mb-1"><i class="fas fa-tasks me-1"></i>Avances en esta etapa</div>`;
 
-        html += `</div><div class="col-md-6">
-                        <div class="small fw-semibold text-muted mb-1"><i class="fas fa-clock me-1"></i>Fichadas por dia</div>`;
+            if (op.tareas && op.tareas.length > 0) {
+                html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.8rem;">';
+                html += '<thead><tr><th>Tarea</th><th class="text-end">Horas</th><th>Cantidad</th><th>Fecha</th></tr></thead><tbody>';
+                op.tareas.forEach(t => {
+                    html += `<tr><td>${t.tarea}</td><td class="text-end fw-semibold">${t.horas}h</td><td class="text-muted">${t.cantidad || ''} ${t.unidad || ''}</td><td class="text-muted">${formatFecha(t.fecha)}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+            } else {
+                html += '<div class="text-muted small fst-italic">Sin avances</div>';
+            }
 
-        if (op.fichada_desglose.length > 0) {
-            html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.8rem;">';
-            html += '<thead><tr><th>Fecha</th><th>Ingreso</th><th>Egreso</th><th class="text-end">Horas</th></tr></thead><tbody>';
-            op.fichada_desglose.forEach(f => {
-                html += `<tr><td>${formatFecha(f.fecha)}</td><td class="text-success">${f.ingreso}</td><td class="text-danger">${f.egreso}</td><td class="text-end fw-semibold">${f.horas}h</td></tr>`;
-            });
-            html += `</tbody><tfoot><tr class="border-top fw-bold"><td colspan="3">Total</td><td class="text-end">${op.horas_fichadas}h</td></tr></tfoot></table>`;
-        } else {
-            html += '<div class="text-muted small fst-italic">Sin fichadas en este periodo</div>';
-        }
+            html += `</div><div class="col-md-6">
+                        <div class="small fw-semibold text-muted mb-1"><i class="fas fa-clock me-1"></i>Info adicional</div>
+                        <div class="small">
+                            <div>Horas avance (esta etapa): <strong>${op.horas_avance}h</strong></div>
+                            <div>Horas fichadas (total obra): <strong>${op.horas_fichadas}h</strong></div>
+                            ${op.cantidad_total > 0 ? '<div>Cantidad: <strong>' + op.cantidad_total + ' ' + (op.unidad || '') + '</strong></div>' : ''}
+                        </div>
+                    </div></div>
+                </td>
+            </tr>`;
 
-        html += `</div></div></td></tr>`;
+            // Hidden inputs para cantidad mode
+            html += `<input type="hidden" id="hav-${key}" value="${op.horas_avance}">
+                     <input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">
+                     <input type="hidden" id="cant-${key}" value="${op.cantidad_total}">
+                     <input type="hidden" id="unid-${key}" value="${op.unidad || ''}">`;
+        });
+
+        html += `</tbody>
+                <tfoot class="table-light">
+                    <tr><td colspan="8" class="text-end fw-bold">Subtotal MO etapa:</td>
+                    <td class="text-end fw-bold" id="subtotal-e${eIdx}">${formatARS(etapa.subtotal_mo)}</td></tr>
+                </tfoot>
+            </table></div></div></div>`;
     });
 
-    html += '</tbody></table></div>';
+    // Operarios sin etapa (solo fichadas)
+    var sinEtapa = data.operarios_sin_etapa || [];
+    if (sinEtapa.length > 0) {
+        html += `<div class="card mb-3 border-0 shadow-sm">
+            <div class="card-header bg-warning bg-opacity-10 py-2">
+                <i class="fas fa-user-clock me-1 text-warning"></i>
+                <strong>Operarios con fichadas sin avances</strong>
+                <small class="text-muted ms-2">(solo tienen horas fichadas, sin tarea asociada)</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size:0.9rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Operario</th>
+                                <th class="text-center">Rol</th>
+                                <th class="text-center">H.Fichada</th>
+                                <th class="text-center" style="min-width:110px;">Modo</th>
+                                <th class="text-end" style="min-width:100px;">Tarifa</th>
+                                <th class="text-end fw-bold" style="min-width:120px;">A PAGAR</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+        sinEtapa.forEach((op, sIdx) => {
+            var key = `se${sIdx}`;
+            html += `<tr>
+                <td><strong>${op.operario_nombre}</strong></td>
+                <td class="text-center"><span class="badge bg-secondary bg-opacity-50">${op.rol}</span></td>
+                <td class="text-center">${op.horas_fichadas}h</td>
+                <td class="text-center">
+                    <select class="form-select form-select-sm" data-key="${key}" onchange="cambiarModoSE('${key}', ${sIdx})">
+                        <option value="fichada" selected>Fichada</option>
+                        <option value="manual">Manual</option>
+                    </select>
+                </td>
+                <td class="text-end">
+                    <input type="number" class="form-control form-control-sm text-end liq-tarifa" id="tarifa-${key}"
+                           value="${op.tarifa_hora}" step="100" min="0" onchange="recalcItemSE('${key}', ${sIdx})" style="max-width:100px;margin-left:auto;">
+                    <small class="text-muted" id="detalle-modo-${key}">x ${op.horas_fichadas}h</small>
+                </td>
+                <td class="text-end">
+                    <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
+                           value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;margin-left:auto;">
+                </td>
+            </tr>`;
+            html += `<input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">`;
+        });
+
+        html += '</tbody></table></div></div></div>';
+    }
+
     container.innerHTML = html;
     document.getElementById('liq-preview').style.display = 'block';
-    recalcLiqTotal();
+    recalcTotales();
 }
 
-function toggleDetalle(idx) {
-    var row = document.getElementById('detalle-row-' + idx);
-    var icon = document.getElementById('detalle-icon-' + idx);
+// ============================================================
+// CAMBIAR MODO DE PAGO
+// ============================================================
+function cambiarModo(key, eIdx, oIdx) {
+    var select = document.querySelector(`select[data-key="${key}"]`);
+    var modo = select.value;
+    var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
+    var montoEl = document.getElementById('monto-' + key);
+    var detalleEl = document.getElementById('detalle-modo-' + key);
+    var hav = parseFloat(document.getElementById('hav-' + key).value) || 0;
+    var hfi = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+    var cant = parseFloat(document.getElementById('cant-' + key).value) || 0;
+    var unid = document.getElementById('unid-' + key).value;
+
+    if (modo === 'avance') {
+        montoEl.value = Math.round(hav * tarifa);
+        detalleEl.textContent = 'x ' + hav + 'h';
+    } else if (modo === 'fichada') {
+        montoEl.value = Math.round(hfi * tarifa);
+        detalleEl.textContent = 'x ' + hfi + 'h';
+    } else if (modo === 'cantidad') {
+        // Show a prompt for price per unit
+        var precioU = prompt('Precio por ' + unid + ':', '0');
+        if (precioU === null) { select.value = 'avance'; cambiarModo(key, eIdx, oIdx); return; }
+        precioU = parseFloat(precioU) || 0;
+        montoEl.value = Math.round(cant * precioU);
+        detalleEl.innerHTML = cant + ' ' + unid + ' x $' + precioU + '/' + unid;
+    } else if (modo === 'manual') {
+        detalleEl.textContent = 'editar monto';
+        montoEl.focus();
+    }
+    recalcTotales();
+}
+
+function cambiarModoSE(key, sIdx) {
+    var select = document.querySelector(`select[data-key="${key}"]`);
+    var modo = select.value;
+    var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
+    var montoEl = document.getElementById('monto-' + key);
+    var detalleEl = document.getElementById('detalle-modo-' + key);
+    var hfi = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+
+    if (modo === 'fichada') {
+        montoEl.value = Math.round(hfi * tarifa);
+        detalleEl.textContent = 'x ' + hfi + 'h';
+    } else if (modo === 'manual') {
+        detalleEl.textContent = 'editar monto';
+        montoEl.focus();
+    }
+    recalcTotales();
+}
+
+function recalcItem(key, eIdx, oIdx) {
+    var select = document.querySelector(`select[data-key="${key}"]`);
+    if (select) cambiarModo(key, eIdx, oIdx);
+}
+
+function recalcItemSE(key, sIdx) {
+    var select = document.querySelector(`select[data-key="${key}"]`);
+    if (select) cambiarModoSE(key, sIdx);
+}
+
+// ============================================================
+// TOGGLE DETALLE
+// ============================================================
+function toggleDetalle(key) {
+    var row = document.getElementById('detalle-' + key);
+    var icon = document.getElementById('icon-' + key);
+    if (!row) return;
     if (row.style.display === 'none') {
         row.style.display = '';
-        icon.className = 'fas fa-chevron-up';
+        if (icon) icon.className = 'fas fa-chevron-up';
     } else {
         row.style.display = 'none';
-        icon.className = 'fas fa-chevron-down';
+        if (icon) icon.className = 'fas fa-chevron-down';
     }
 }
 
-function recalcLiqItem(idx) {
-    var horasEl = document.querySelector(`.liq-horas[data-idx="${idx}"]`);
-    var tarifaEl = document.querySelector(`.liq-tarifa[data-idx="${idx}"]`);
-    var montoEl = document.querySelector(`.liq-monto[data-idx="${idx}"]`);
-    var h = parseFloat(horasEl.value) || 0;
-    var t = parseFloat(tarifaEl.value) || 0;
-    montoEl.value = (h * t).toFixed(0);
-    recalcLiqTotal();
-}
-
-function recalcLiqTotal() {
+// ============================================================
+// RECALCULAR TOTALES
+// ============================================================
+function recalcTotales() {
     var total = 0;
-    document.querySelectorAll('.liq-monto').forEach(el => { total += parseFloat(el.value) || 0; });
-    document.getElementById('liq-total').textContent = '$' + total.toLocaleString('es-AR');
+    document.querySelectorAll('.liq-monto').forEach(el => {
+        total += parseFloat(el.value) || 0;
+    });
+    document.getElementById('liq-total').textContent = formatARS(total);
+
+    // Subtotales por etapa
+    if (previewData && previewData.etapas) {
+        previewData.etapas.forEach((etapa, eIdx) => {
+            var subtotal = 0;
+            etapa.operarios.forEach((op, oIdx) => {
+                var key = `e${eIdx}_o${oIdx}`;
+                var montoEl = document.getElementById('monto-' + key);
+                if (montoEl) subtotal += parseFloat(montoEl.value) || 0;
+            });
+            var stEl = document.getElementById('subtotal-e' + eIdx);
+            if (stEl) stEl.textContent = formatARS(subtotal);
+        });
+    }
 }
 
-function confirmarLiquidacion() {
+// ============================================================
+// CONFIRMAR LIQUIDACION
+// ============================================================
+function confirmarUnificado() {
     var desde = document.getElementById('liq-desde').value;
     var hasta = document.getElementById('liq-hasta').value;
     var notas = document.getElementById('liq-notas').value;
 
     var items = [];
-    liqData.forEach((op, idx) => {
-        var horas = parseFloat(document.querySelector(`.liq-horas[data-idx="${idx}"]`).value) || 0;
-        var tarifa = parseFloat(document.querySelector(`.liq-tarifa[data-idx="${idx}"]`).value) || 0;
-        var monto = parseFloat(document.querySelector(`.liq-monto[data-idx="${idx}"]`).value) || 0;
-        if (monto > 0) {
-            items.push({
-                operario_id: op.operario_id,
-                horas_liquidadas: horas,
-                tarifa_hora: tarifa,
-                monto: monto,
+
+    // Items de etapas
+    if (previewData && previewData.etapas) {
+        previewData.etapas.forEach((etapa, eIdx) => {
+            etapa.operarios.forEach((op, oIdx) => {
+                var key = `e${eIdx}_o${oIdx}`;
+                var monto = parseFloat(document.getElementById('monto-' + key).value) || 0;
+                var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
+                var select = document.querySelector(`select[data-key="${key}"]`);
+                var modo = select ? select.value : 'avance';
+                var hav = parseFloat(document.getElementById('hav-' + key).value) || 0;
+                var hfi = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+
+                if (monto > 0) {
+                    var horasLiq = modo === 'fichada' ? hfi : hav;
+                    items.push({
+                        operario_id: op.operario_id,
+                        horas_liquidadas: horasLiq,
+                        tarifa_hora: tarifa,
+                        monto: monto,
+                    });
+                }
             });
-        }
-    });
+        });
+    }
+
+    // Items sin etapa
+    if (previewData && previewData.operarios_sin_etapa) {
+        previewData.operarios_sin_etapa.forEach((op, sIdx) => {
+            var key = `se${sIdx}`;
+            var monto = parseFloat(document.getElementById('monto-' + key).value) || 0;
+            var tarifa = parseFloat(document.getElementById('tarifa-' + key).value) || 0;
+            var hfi = parseFloat(document.getElementById('hfi-' + key).value) || 0;
+
+            if (monto > 0) {
+                items.push({
+                    operario_id: op.operario_id,
+                    horas_liquidadas: hfi,
+                    tarifa_hora: tarifa,
+                    monto: monto,
+                });
+            }
+        });
+    }
 
     if (items.length === 0) { alert('No hay montos a liquidar. Ingrese al menos un monto mayor a 0.'); return; }
-    if (!confirm('Confirmar liquidacion por $' + items.reduce((s, i) => s + i.monto, 0).toLocaleString('es-AR') + '?')) return;
+
+    var totalMonto = items.reduce((s, i) => s + i.monto, 0);
+    if (!confirm('Confirmar liquidacion por ' + formatARS(totalMonto) + '?\n\n' + items.length + ' operario(s) en el periodo ' + formatFecha(desde) + ' al ' + formatFecha(hasta))) return;
 
     fetch(`/obras/${OBRA_ID}/liquidacion-mo`, {
         method: 'POST',
@@ -1101,7 +846,7 @@ function confirmarLiquidacion() {
     .then(r => r.json())
     .then(data => {
         if (data.ok) {
-            alert('Liquidacion creada exitosamente por $' + (data.monto_total || 0).toLocaleString('es-AR'));
+            alert('Liquidacion creada exitosamente por ' + formatARS(data.monto_total || 0));
             cargarHistorialLiq();
             document.getElementById('liq-preview').style.display = 'none';
             document.getElementById('liq-empty').style.display = 'block';
@@ -1113,6 +858,9 @@ function confirmarLiquidacion() {
     .catch(err => alert('Error: ' + err.message));
 }
 
+// ============================================================
+// HISTORIAL DE LIQUIDACIONES
+// ============================================================
 function cargarHistorialLiq() {
     var container = document.getElementById('liq-historial');
     if (!container) return;
@@ -1124,7 +872,6 @@ function cargarHistorialLiq() {
         return r.json();
     })
     .then(data => {
-        liqHistorialCargado = true;
         if (!data.ok) {
             container.innerHTML = '<div class="alert alert-danger small"><i class="fas fa-times-circle me-1"></i>' + (data.error || 'Error al cargar historial') + '</div>';
             return;
@@ -1136,7 +883,6 @@ function cargarHistorialLiq() {
         var html = '';
         data.liquidaciones.forEach(liq => {
             var estadoBadge = liq.estado === 'pagado' ? 'success' : liq.estado === 'parcial' ? 'warning' : 'secondary';
-            var totalPagado = liq.items.filter(i => i.estado === 'pagado').reduce((s, i) => s + (i.monto || 0), 0);
             var totalPendiente = liq.items.filter(i => i.estado === 'pendiente').reduce((s, i) => s + (i.monto || 0), 0);
             html += `<div class="card mb-3 border-0 shadow-sm">
                 <div class="card-header bg-light py-2">
@@ -1146,13 +892,13 @@ function cargarHistorialLiq() {
                             <strong>${formatFecha(liq.periodo_desde)} → ${formatFecha(liq.periodo_hasta)}</strong>
                             <span class="badge bg-${estadoBadge} ms-2">${liq.estado}</span>
                         </div>
-                        <strong class="fs-5">$${(liq.monto_total || 0).toLocaleString('es-AR')}</strong>
+                        <strong class="fs-5">${formatARS(liq.monto_total || 0)}</strong>
                     </div>
                     <div class="small text-muted mt-1">
                         <i class="fas fa-user me-1"></i>${liq.created_by} &middot;
                         ${liq.created_at ? new Date(liq.created_at).toLocaleDateString('es-AR') : ''}
                         ${liq.notas ? ' &middot; <em>' + liq.notas + '</em>' : ''}
-                        ${totalPendiente > 0 ? ' &middot; <span class="text-warning fw-semibold">Pendiente: $' + totalPendiente.toLocaleString('es-AR') + '</span>' : ''}
+                        ${totalPendiente > 0 ? ' &middot; <span class="text-warning fw-semibold">Pendiente: ' + formatARS(totalPendiente) + '</span>' : ''}
                     </div>
                 </div>
                 <div class="card-body py-2">
@@ -1164,15 +910,13 @@ function cargarHistorialLiq() {
                         </tr></thead><tbody>`;
             liq.items.forEach(item => {
                 var itemBadge = item.estado === 'pagado' ? 'success' : 'warning';
-                var diffH = item.horas_fichadas - item.horas_avance;
-                var diffClass = Math.abs(diffH) > 2 ? 'text-warning' : '';
                 html += `<tr>
                     <td class="fw-semibold">${item.operario_nombre}</td>
                     <td class="text-center">${item.horas_avance}h</td>
                     <td class="text-center">${item.horas_fichadas}h</td>
-                    <td class="text-center fw-bold ${diffClass}">${item.horas_liquidadas}h</td>
-                    <td class="text-end">$${(item.tarifa_hora || 0).toLocaleString('es-AR')}</td>
-                    <td class="text-end fw-bold">$${(item.monto || 0).toLocaleString('es-AR')}</td>
+                    <td class="text-center fw-bold">${item.horas_liquidadas}h</td>
+                    <td class="text-end">${formatARS(item.tarifa_hora || 0)}</td>
+                    <td class="text-end fw-bold">${formatARS(item.monto || 0)}</td>
                     <td class="text-center"><span class="badge bg-${itemBadge}">${item.estado}</span>
                         ${item.fecha_pago ? '<div class="small text-muted">' + formatFecha(item.fecha_pago) + '</div>' : ''}
                     </td>
@@ -1194,20 +938,12 @@ function cargarHistorialLiq() {
         container.innerHTML = html;
     })
     .catch(err => {
-        liqHistorialCargado = true;
         container.innerHTML = '<div class="alert alert-warning small"><i class="fas fa-exclamation-triangle me-1"></i>Error al cargar historial: ' + err.message + '</div>';
     });
 }
 
-function formatFecha(isoStr) {
-    if (!isoStr) return '-';
-    var parts = isoStr.split('-');
-    if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
-    return isoStr;
-}
-
 function pagarItemLiq(itemId, nombre, monto) {
-    var metodo = prompt('Metodo de pago para ' + nombre + ' ($' + monto.toLocaleString('es-AR') + '):\n\nEscriba "transferencia" o "efectivo":', 'transferencia');
+    var metodo = prompt('Metodo de pago para ' + nombre + ' (' + formatARS(monto) + '):\n\nEscriba "transferencia" o "efectivo":', 'transferencia');
     if (!metodo) return;
     metodo = metodo.toLowerCase().trim();
     if (metodo !== 'transferencia' && metodo !== 'efectivo') {
@@ -1232,21 +968,29 @@ function pagarItemLiq(itemId, nombre, monto) {
     .catch(err => alert('Error: ' + err.message));
 }
 
-// Cargar historial al abrir la pestaña
-document.addEventListener('DOMContentLoaded', function() {
-    var tabEl = document.getElementById('tab-liquidacion');
-    if (tabEl) {
-        // Cargar cuando se muestra el tab via Bootstrap
-        tabEl.addEventListener('shown.bs.tab', function() {
-            cargarHistorialLiq();
-        });
-        // También con click directo como fallback
-        tabEl.addEventListener('click', function() {
-            setTimeout(function() {
-                if (!liqHistorialCargado) cargarHistorialLiq();
-            }, 300);
+// ============================================================
+// MODAL REGISTRAR PAGO (certificaciones aprobadas)
+// ============================================================
+(function() {
+    var pagoModal = document.getElementById('modalRegistrarPago');
+    if (pagoModal) {
+        var actionTemplate = pagoModal.dataset.actionTemplate;
+        pagoModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            var certId = button && button.dataset.certificacionId;
+            var form = pagoModal.querySelector('form');
+            if (certId && actionTemplate) {
+                form.action = actionTemplate.replace('0', certId);
+            }
         });
     }
+})();
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    cargarHistorialLiq();
 });
 </script>
 {% endblock %}

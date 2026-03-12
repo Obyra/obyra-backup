@@ -415,12 +415,29 @@ def fichar(obra_id):
         elif en_obra:
             horas_hoy = 'En obra'
 
+    # Si es admin/PM, traer operarios asignados para "fichar por otro"
+    operarios_obra = []
+    if _es_admin_o_pm(current_user):
+        asignaciones = AsignacionObra.query.filter_by(
+            obra_id=obra_id, activo=True
+        ).all()
+        for a in asignaciones:
+            if a.usuario_id != current_user.id and a.usuario:
+                ultima_f = _ultima_fichada_hoy(a.usuario_id, obra_id)
+                operarios_obra.append({
+                    'id': a.usuario_id,
+                    'nombre': a.usuario.nombre_completo,
+                    'rol': a.rol_en_obra or 'operario',
+                    'proximo_tipo': 'egreso' if (ultima_f and ultima_f.tipo == 'ingreso') else 'ingreso',
+                })
+
     return render_template('fichadas/fichar.html',
                            obra=obra,
                            proximo_tipo=proximo_tipo,
                            fichadas_del_dia=fichadas_del_dia,
                            horas_hoy=horas_hoy,
                            es_admin=_es_admin_o_pm(current_user),
+                           operarios_obra=operarios_obra,
                            google_maps_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
 
