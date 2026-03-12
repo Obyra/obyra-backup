@@ -3802,7 +3802,7 @@ async function initGantt() {
     if (!container) return;
 
     try {
-        const resp = await fetch(`/obras/${window.obraId}/gantt-data`);
+        const resp = await fetch(`/obras/${window.obraId}/gantt-data?_=${Date.now()}`);
         const tasks = await resp.json();
         if (!tasks.length) {
             container.innerHTML = '<p class="text-muted small text-center py-3">Sin datos de fechas para mostrar el cronograma.</p>';

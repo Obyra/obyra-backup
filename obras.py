@@ -4525,9 +4525,9 @@ def editar_fechas_etapa(etapa_id):
             if not etapa.fecha_inicio_real:
                 etapa.fecha_inicio_real = date.today()
 
-        # Guardar las fechas que el usuario eligió (para re-asegurar después)
-        fecha_inicio_usuario = etapa.fecha_inicio_estimada
-        fecha_fin_usuario = etapa.fecha_fin_estimada
+        # Guardar las fechas que el usuario eligió (valores primitivos, no objetos SA)
+        fecha_inicio_usuario = date.fromisoformat(str(etapa.fecha_inicio_estimada)) if etapa.fecha_inicio_estimada else None
+        fecha_fin_usuario = date.fromisoformat(str(etapa.fecha_fin_estimada)) if etapa.fecha_fin_estimada else None
 
         db.session.commit()
 
@@ -4542,11 +4542,19 @@ def editar_fechas_etapa(etapa_id):
         if propagadas > 0:
             db.session.commit()
 
-        # Re-asegurar que las fechas del usuario no fueron pisadas por la propagación
+        # FORZAR las fechas del usuario — la propagación puede haberlas pisado
+        # Refrescar el objeto desde BD para tener el estado actual
+        db.session.refresh(etapa)
+        fechas_restauradas = False
         if fecha_inicio_usuario and etapa.fecha_inicio_estimada != fecha_inicio_usuario:
             etapa.fecha_inicio_estimada = fecha_inicio_usuario
+            fechas_restauradas = True
         if fecha_fin_usuario and etapa.fecha_fin_estimada != fecha_fin_usuario:
             etapa.fecha_fin_estimada = fecha_fin_usuario
+            fechas_restauradas = True
+        if fechas_restauradas:
+            etapa.fechas_manuales = True
+            db.session.commit()
 
         # Redistribuir fechas de tareas dentro de esta etapa
         distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
@@ -4670,7 +4678,9 @@ def gantt_data(id):
             'es_opcional': e.es_opcional or False,
         })
 
-    return jsonify(tasks)
+    response = jsonify(tasks)
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return response
 
 
 # ===== ENDPOINTS PARA SISTEMA DE APROBACIONES =====
