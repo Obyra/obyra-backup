@@ -2207,20 +2207,13 @@ def _crear_avance_impl(tarea_id):
     ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
     ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
 
-    horas_trabajadas = db.session.query(
-        func.coalesce(func.sum(TareaAvance.horas), 0)
-    ).join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id
-    ).join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
-    ).filter(
-        EtapaObra.obra_id == obra.id,
-        TareaAvance.status == 'aprobado'
-    ).scalar() or Decimal('0')
+    # Costo MO = suma de liquidaciones (lo realmente liquidado, no estimado)
+    from models import LiquidacionMO
+    costo_mano_obra = db.session.query(
+        db.func.coalesce(db.func.sum(LiquidacionMO.monto_total), 0)
+    ).filter(LiquidacionMO.obra_id == obra.id).scalar() or Decimal('0')
 
-    # Tarifa real del presupuesto (no hardcodeada)
-    from services.liquidacion_mo import obtener_tarifa_default_obra
-    costo_hora = obtener_tarifa_default_obra(obra) or Decimal('5000')
-    costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
-    obra.costo_real = Decimal(str(costo_materiales)) + costo_mano_obra
+    obra.costo_real = Decimal(str(costo_materiales)) + Decimal(str(costo_mano_obra))
 
     db.session.commit()
 
@@ -4083,21 +4076,13 @@ def actualizar_progreso_automatico(id):
         ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
         ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
 
-        # Costo de mano de obra
-        horas_trabajadas = db.session.query(
-            func.coalesce(func.sum(TareaAvance.horas), 0)
-        ).join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id
-        ).join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
-        ).filter(
-            EtapaObra.obra_id == obra.id,
-            TareaAvance.status == 'aprobado'
-        ).scalar() or Decimal('0')
+        # Costo MO = suma de liquidaciones (lo realmente liquidado)
+        from models import LiquidacionMO
+        costo_mano_obra = db.session.query(
+            db.func.coalesce(db.func.sum(LiquidacionMO.monto_total), 0)
+        ).filter(LiquidacionMO.obra_id == obra.id).scalar() or Decimal('0')
 
-        # Tarifa real del presupuesto (no hardcodeada)
-        from services.liquidacion_mo import obtener_tarifa_default_obra
-        costo_hora = obtener_tarifa_default_obra(obra) or Decimal('5000')
-        costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
-        obra.costo_real = Decimal(str(costo_materiales)) + costo_mano_obra
+        obra.costo_real = Decimal(str(costo_materiales)) + Decimal(str(costo_mano_obra))
 
         db.session.commit()
 
