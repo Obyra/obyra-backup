@@ -278,10 +278,24 @@ def generar_preview_unificado(obra_id, desde, hasta):
         return {'etapas': [], 'operarios_sin_etapa': []}
 
     from services.certifications import compute_etapa_breakdown
+    from models.projects import EtapaObra
 
     tarifa_default = obtener_tarifa_default_obra(obra)
     operarios = buscar_operarios_obra(obra_id, desde, hasta)
     etapa_breakdown = compute_etapa_breakdown(obra)
+
+    # Calcular avance por conteo simple de tareas (igual que cronograma)
+    def _pct_etapa_simple(etapa_id):
+        etapa = EtapaObra.query.get(etapa_id)
+        if not etapa:
+            return 0
+        tareas = etapa.tareas.all() if hasattr(etapa.tareas, 'all') else (etapa.tareas or [])
+        if not tareas:
+            return 0
+        completadas = sum(1 for t in tareas if t.estado in ('completada', 'finalizada'))
+        return round((completadas / len(tareas)) * 100, 2)
+
+    pct_simple_map = {ei['etapa_id']: _pct_etapa_simple(ei['etapa_id']) for ei in (etapa_breakdown.get('etapas') or [])}
 
     # Calcular datos de cada operario
     operarios_data = {}
@@ -360,7 +374,7 @@ def generar_preview_unificado(obra_id, desde, hasta):
         etapas_result.append({
             'etapa_id': etapa_info['etapa_id'],
             'etapa_nombre': etapa_nombre,
-            'porcentaje_avance': etapa_info['porcentaje_avance'],
+            'porcentaje_avance': pct_simple_map.get(etapa_info['etapa_id'], etapa_info['porcentaje_avance']),
             'costo_presupuestado': float(etapa_info['costo_presupuestado']),
             'monto_certificable': float(etapa_info['monto_certificable']),
             'tareas_total': etapa_info['tareas_total'],
