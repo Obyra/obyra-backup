@@ -4497,25 +4497,9 @@ def editar_fechas_etapa(etapa_id):
     data = request.get_json(silent=True) or {}
 
     try:
-        fechas_editadas = False
-        if 'fecha_inicio' in data and data['fecha_inicio']:
-            nueva_inicio = date.fromisoformat(data['fecha_inicio'])
-            if etapa.fecha_inicio_estimada != nueva_inicio:
-                etapa.fecha_inicio_estimada = nueva_inicio
-                fechas_editadas = True
-        if 'fecha_fin' in data and data['fecha_fin']:
-            nueva_fin = date.fromisoformat(data['fecha_fin'])
-            if etapa.fecha_fin_estimada != nueva_fin:
-                etapa.fecha_fin_estimada = nueva_fin
-                fechas_editadas = True
-
-        if 'bloquear_fechas' in data:
-            etapa.fechas_manuales = bool(data['bloquear_fechas'])
-
-        # Si el usuario editó fechas manualmente, bloquearlas para que
-        # la propagación no las sobreescriba
-        if fechas_editadas and not etapa.fechas_manuales:
-            etapa.fechas_manuales = True
+        # Capturar las fechas que el usuario quiere (valores puros)
+        fecha_inicio_usuario = date.fromisoformat(data['fecha_inicio']) if data.get('fecha_inicio') else None
+        fecha_fin_usuario = date.fromisoformat(data['fecha_fin']) if data.get('fecha_fin') else None
 
         if 'nivel' in data:
             etapa.nivel_encadenamiento = int(data['nivel']) if data['nivel'] is not None else None
@@ -4525,13 +4509,16 @@ def editar_fechas_etapa(etapa_id):
             if not etapa.fecha_inicio_real:
                 etapa.fecha_inicio_real = date.today()
 
-        # Guardar las fechas que el usuario eligió (valores primitivos, no objetos SA)
-        fecha_inicio_usuario = date.fromisoformat(str(etapa.fecha_inicio_estimada)) if etapa.fecha_inicio_estimada else None
-        fecha_fin_usuario = date.fromisoformat(str(etapa.fecha_fin_estimada)) if etapa.fecha_fin_estimada else None
+        # Aplicar fechas y bloquear
+        if fecha_inicio_usuario:
+            etapa.fecha_inicio_estimada = fecha_inicio_usuario
+        if fecha_fin_usuario:
+            etapa.fecha_fin_estimada = fecha_fin_usuario
+        etapa.fechas_manuales = True
 
         db.session.commit()
 
-        # Propagar fechas a etapas sucesoras (esta etapa no se toca por fechas_manuales)
+        # Propagar fechas a etapas SUCESORAS solamente
         from services.dependency_service import generar_dependencias_desde_niveles
         deps_creadas = generar_dependencias_desde_niveles(etapa.obra_id)
         if deps_creadas:
@@ -4542,30 +4529,42 @@ def editar_fechas_etapa(etapa_id):
         if propagadas > 0:
             db.session.commit()
 
-        # FORZAR las fechas del usuario — la propagación puede haberlas pisado
-        # Refrescar el objeto desde BD para tener el estado actual
-        db.session.refresh(etapa)
-        fechas_restauradas = False
-        if fecha_inicio_usuario and etapa.fecha_inicio_estimada != fecha_inicio_usuario:
-            etapa.fecha_inicio_estimada = fecha_inicio_usuario
-            fechas_restauradas = True
-        if fecha_fin_usuario and etapa.fecha_fin_estimada != fecha_fin_usuario:
-            etapa.fecha_fin_estimada = fecha_fin_usuario
-            fechas_restauradas = True
-        if fechas_restauradas:
-            etapa.fechas_manuales = True
+        # SQL DIRECTO: forzar las fechas del usuario en BD, sin pasar por SQLAlchemy
+        # Esto garantiza que ningún proceso intermedio pueda pisar los valores
+        if fecha_inicio_usuario or fecha_fin_usuario:
+            sets = []
+            params = {"eid": etapa_id}
+            if fecha_inicio_usuario:
+                sets.append("fecha_inicio_estimada = :fi")
+                params["fi"] = fecha_inicio_usuario
+            if fecha_fin_usuario:
+                sets.append("fecha_fin_estimada = :ff")
+                params["ff"] = fecha_fin_usuario
+            sets.append("fechas_manuales = true")
+            db.session.execute(
+                db.text(f"UPDATE etapas_obra SET {', '.join(sets)} WHERE id = :eid"),
+                params
+            )
             db.session.commit()
+            # Refrescar el objeto SA para que refleje los valores reales de BD
+            db.session.expire(etapa)
 
         # Redistribuir fechas de tareas dentro de esta etapa
         distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
         db.session.commit()
 
+        # Leer valores finales directo de BD para la respuesta
+        row = db.session.execute(
+            db.text("SELECT fecha_inicio_estimada, fecha_fin_estimada, estado, fechas_manuales FROM etapas_obra WHERE id = :eid"),
+            {"eid": etapa_id}
+        ).fetchone()
+
         return jsonify({
             'ok': True,
-            'fecha_inicio': str(etapa.fecha_inicio_estimada) if etapa.fecha_inicio_estimada else None,
-            'fecha_fin': str(etapa.fecha_fin_estimada) if etapa.fecha_fin_estimada else None,
-            'estado': etapa.estado,
-            'fechas_manuales': etapa.fechas_manuales,
+            'fecha_inicio': str(row[0]) if row[0] else None,
+            'fecha_fin': str(row[1]) if row[1] else None,
+            'estado': row[2],
+            'fechas_manuales': row[3],
             'propagadas': propagadas,
         })
     except Exception as e:
