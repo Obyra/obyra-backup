@@ -1991,6 +1991,17 @@ def normalize_unit(unit):
 @login_required
 def crear_avance(tarea_id):
     """Registrar avance con fotos (operarios desde dashboard)."""
+    try:
+        return _crear_avance_impl(tarea_id)
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        tb = traceback.format_exc()
+        current_app.logger.error(f"Error en crear_avance: {tb}")
+        return jsonify(ok=False, error=f"Error interno: {str(e)}"), 500
+
+
+def _crear_avance_impl(tarea_id):
     from werkzeug.utils import secure_filename
     from pathlib import Path
 
@@ -2049,220 +2060,174 @@ def crear_avance(tarea_id):
         if is_resp or is_task_member or is_obra_member:
             avance_user_id = operario_id
 
-    try:
-        av = TareaAvance(
-            tarea_id=tarea.id,
-            user_id=avance_user_id,
-            cantidad=cantidad,
-            unidad=unidad,
-            horas=horas,
-            notas=notas,
-            cantidad_ingresada=cantidad,
-            unidad_ingresada=unidad_form or unidad
-        )
+    av = TareaAvance(
+        tarea_id=tarea.id,
+        user_id=avance_user_id,
+        cantidad=cantidad,
+        unidad=unidad,
+        horas=horas,
+        notas=notas,
+        cantidad_ingresada=cantidad,
+        unidad_ingresada=unidad_form or unidad
+    )
 
-        # Admin/PM/Técnico: avances se auto-aprueban siempre
-        # Operarios: avances quedan pendientes de aprobación
-        if roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
-            av.status = "aprobado"
-            av.confirmed_by = current_user.id
-            av.confirmed_at = datetime.utcnow()
-        else:
-            av.status = "pendiente"
+    # Admin/PM/Técnico: avances se auto-aprueban siempre
+    # Operarios: avances quedan pendientes de aprobación
+    if roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
+        av.status = "aprobado"
+        av.confirmed_by = current_user.id
+        av.confirmed_at = datetime.utcnow()
+    else:
+        av.status = "pendiente"
 
-        db.session.add(av)
+    db.session.add(av)
 
-        if not tarea.fecha_inicio_real and av.status == "aprobado":
-            tarea.fecha_inicio_real = datetime.utcnow()
+    if not tarea.fecha_inicio_real and av.status == "aprobado":
+        tarea.fecha_inicio_real = datetime.utcnow()
 
-        uploaded_files = request.files.getlist("fotos")
-        for f in uploaded_files:
-            if f.filename:
-                fname = secure_filename(f.filename)
-                base = Path(current_app.static_folder) / "uploads" / "obras" / str(tarea.etapa.obra_id) / "tareas" / str(tarea.id)
-                base.mkdir(parents=True, exist_ok=True)
-                file_path = base / fname
-                f.save(file_path)
+    uploaded_files = request.files.getlist("fotos")
+    for f in uploaded_files:
+        if f.filename:
+            fname = secure_filename(f.filename)
+            base = Path(current_app.static_folder) / "uploads" / "obras" / str(tarea.etapa.obra_id) / "tareas" / str(tarea.id)
+            base.mkdir(parents=True, exist_ok=True)
+            file_path = base / fname
+            f.save(file_path)
 
-                adjunto = TareaAdjunto(
-                    tarea_id=tarea.id,
-                    avance_id=av.id,
-                    uploaded_by=current_user.id,
-                    path=f"/static/uploads/obras/{tarea.etapa.obra_id}/tareas/{tarea.id}/{fname}"
-                )
-                db.session.add(adjunto)
+            adjunto = TareaAdjunto(
+                tarea_id=tarea.id,
+                avance_id=av.id,
+                uploaded_by=current_user.id,
+                path=f"/static/uploads/obras/{tarea.etapa.obra_id}/tareas/{tarea.id}/{fname}"
+            )
+            db.session.add(adjunto)
 
-        # Procesar materiales consumidos y descontar del stock DE LA OBRA
-        from models.inventory import StockObra, MovimientoStockObra
+    # Procesar materiales consumidos y descontar del stock DE LA OBRA
+    from models.inventory import StockObra, MovimientoStockObra
 
-        material_ids = request.form.getlist("material_id[]")
-        material_cantidades = request.form.getlist("material_cantidad[]")
-        obra_id = tarea.etapa.obra_id
+    material_ids = request.form.getlist("material_id[]")
+    material_cantidades = request.form.getlist("material_cantidad[]")
+    obra_id = tarea.etapa.obra_id
 
-        if material_ids and len(material_ids) > 0:
-            for i, material_id_str in enumerate(material_ids):
-                if not material_id_str or material_id_str == '':
+    if material_ids and len(material_ids) > 0:
+        for i, material_id_str in enumerate(material_ids):
+            if not material_id_str or material_id_str == '':
+                continue
+
+            try:
+                material_id = int(material_id_str)
+                cantidad_consumida = Decimal(str(material_cantidades[i])) if i < len(material_cantidades) else Decimal("0")
+
+                if cantidad_consumida <= 0:
                     continue
 
-                try:
-                    material_id = int(material_id_str)
-                    cantidad_consumida = Decimal(str(material_cantidades[i])) if i < len(material_cantidades) else Decimal("0")
-
-                    if cantidad_consumida <= 0:
-                        continue
-
-                    # Obtener el item del inventario
-                    item = ItemInventario.query.get(material_id)
-                    if not item:
-                        db.session.rollback()
-                        return jsonify(ok=False, error=f"❌ Material ID {material_id} no encontrado en inventario. Verificá que el material esté cargado correctamente."), 400
-
-                    # PRIMERO: Intentar descontar del stock de la obra (si existe)
-                    stock_obra = StockObra.query.filter_by(
-                        obra_id=obra_id,
-                        item_inventario_id=material_id
-                    ).first()
-
-                    if stock_obra and float(stock_obra.cantidad_disponible or 0) > 0:
-                        # Descontar del stock de la obra
-                        disponible_obra = Decimal(str(stock_obra.cantidad_disponible or 0))
-
-                        if disponible_obra >= cantidad_consumida:
-                            # Todo del stock de la obra
-                            stock_obra.cantidad_disponible = float(disponible_obra - cantidad_consumida)
-                            stock_obra.cantidad_consumida = float(
-                                Decimal(str(stock_obra.cantidad_consumida or 0)) + cantidad_consumida
-                            )
-                            stock_obra.fecha_ultimo_uso = datetime.utcnow()
-
-                            # Registrar movimiento en stock de obra
-                            movimiento = MovimientoStockObra(
-                                stock_obra_id=stock_obra.id,
-                                tipo='consumo',
-                                cantidad=float(cantidad_consumida),
-                                usuario_id=current_user.id,
-                                observaciones=f"Consumido en avance de tarea: {tarea.nombre} (ID:{tarea.id})",
-                                precio_unitario=float(item.precio_promedio or 0)
-                            )
-                            db.session.add(movimiento)
-
-                            current_app.logger.info(
-                                f"Material {item.descripcion} descontado del STOCK DE OBRA: {cantidad_consumida} {item.unidad}. "
-                                f"Stock obra restante: {stock_obra.cantidad_disponible}"
-                            )
-                        else:
-                            # Stock de obra insuficiente - alertar pero permitir
-                            current_app.logger.warning(
-                                f"⚠️ Stock de obra insuficiente para {item.descripcion}. "
-                                f"Disponible en obra: {disponible_obra}, Requerido: {cantidad_consumida}. "
-                                f"Descontando lo disponible y el resto queda pendiente."
-                            )
-                            # Descontar lo que hay
-                            stock_obra.cantidad_disponible = 0
-                            stock_obra.cantidad_consumida = float(
-                                Decimal(str(stock_obra.cantidad_consumida or 0)) + disponible_obra
-                            )
-                            stock_obra.fecha_ultimo_uso = datetime.utcnow()
-
-                            movimiento = MovimientoStockObra(
-                                stock_obra_id=stock_obra.id,
-                                tipo='consumo',
-                                cantidad=float(disponible_obra),
-                                usuario_id=current_user.id,
-                                observaciones=f"Consumido en avance de tarea: {tarea.nombre} (ID:{tarea.id}, parcial-stock insuficiente)",
-                                precio_unitario=float(item.precio_promedio or 0)
-                            )
-                            db.session.add(movimiento)
-                    else:
-                        # No hay stock en obra - alertar
-                        current_app.logger.warning(
-                            f"⚠️ No hay stock de {item.descripcion} transferido a esta obra. "
-                            f"Se registra el consumo pero no se descuenta de ningún stock."
-                        )
-
-                    # Registrar el uso de inventario (para historial y costo)
-                    precio_unitario = float(item.precio_promedio or 0)
-                    uso = UsoInventario(
-                        obra_id=obra_id,
-                        item_id=item.id,
-                        cantidad_usada=cantidad_consumida,
-                        fecha_uso=datetime.utcnow().date(),
-                        usuario_id=current_user.id,
-                        observaciones=f"Consumido en avance de tarea: {tarea.nombre}",
-                        precio_unitario_al_uso=precio_unitario,
-                        moneda='ARS'
-                    )
-                    db.session.add(uso)
-
-                except (ValueError, IndexError) as e:
+                item = ItemInventario.query.get(material_id)
+                if not item:
                     db.session.rollback()
-                    return jsonify(ok=False, error=f"❌ Error procesando material: {str(e)}. Verificá que la cantidad sea un número válido."), 400
+                    return jsonify(ok=False, error=f"Material ID {material_id} no encontrado en inventario."), 400
 
-        db.session.commit()
+                stock_obra = StockObra.query.filter_by(
+                    obra_id=obra_id,
+                    item_inventario_id=material_id
+                ).first()
 
-        # Recalcular porcentaje de avance de la tarea
-        nuevo_pct = recalc_tarea_pct(tarea_id)
+                if stock_obra and float(stock_obra.cantidad_disponible or 0) > 0:
+                    disponible_obra = Decimal(str(stock_obra.cantidad_disponible or 0))
 
-        # IMPORTANTE: Recalcular progreso general de la OBRA
-        obra = tarea.etapa.obra
-        obra.calcular_progreso_automatico()
+                    if disponible_obra >= cantidad_consumida:
+                        stock_obra.cantidad_disponible = float(disponible_obra - cantidad_consumida)
+                        stock_obra.cantidad_consumida = float(
+                            Decimal(str(stock_obra.cantidad_consumida or 0)) + cantidad_consumida
+                        )
+                        stock_obra.fecha_ultimo_uso = datetime.utcnow()
 
-        # Calcular y actualizar el costo real de la obra
-        # 1. Costo de materiales consumidos (desde uso_inventario)
-        costo_materiales = db.session.query(
-            db.func.coalesce(
-                db.func.sum(
-                    UsoInventario.cantidad_usada *
-                    db.func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
-                ), 0
-            )
-        ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
-        ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
+                        movimiento = MovimientoStockObra(
+                            stock_obra_id=stock_obra.id,
+                            tipo='consumo',
+                            cantidad=float(cantidad_consumida),
+                            usuario_id=current_user.id,
+                            observaciones=f"Consumido en avance de tarea: {tarea.nombre} (ID:{tarea.id})",
+                            precio_unitario=float(item.precio_promedio or 0)
+                        )
+                        db.session.add(movimiento)
+                    else:
+                        stock_obra.cantidad_disponible = 0
+                        stock_obra.cantidad_consumida = float(
+                            Decimal(str(stock_obra.cantidad_consumida or 0)) + disponible_obra
+                        )
+                        stock_obra.fecha_ultimo_uso = datetime.utcnow()
 
-        # 2. Costo de mano de obra (horas trabajadas * costo por hora estimado)
-        # Obtener el total de horas trabajadas de los avances aprobados
-        from sqlalchemy import func
-        horas_trabajadas = db.session.query(
-            func.coalesce(func.sum(TareaAvance.horas), 0)
-        ).join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id
-        ).join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
-        ).filter(
-            EtapaObra.obra_id == obra.id,
-            TareaAvance.status == 'aprobado'
-        ).scalar() or Decimal('0')
+                        movimiento = MovimientoStockObra(
+                            stock_obra_id=stock_obra.id,
+                            tipo='consumo',
+                            cantidad=float(disponible_obra),
+                            usuario_id=current_user.id,
+                            observaciones=f"Consumido en avance de tarea: {tarea.nombre} (ID:{tarea.id}, parcial)",
+                            precio_unitario=float(item.precio_promedio or 0)
+                        )
+                        db.session.add(movimiento)
 
-        # Costo estimado por hora (se puede configurar por obra o usar un valor por defecto)
-        costo_hora = Decimal('5000')  # $5000 ARS por hora como valor por defecto
-        costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
+                precio_unitario = float(item.precio_promedio or 0)
+                uso = UsoInventario(
+                    obra_id=obra_id,
+                    item_id=item.id,
+                    cantidad_usada=cantidad_consumida,
+                    fecha_uso=datetime.utcnow().date(),
+                    usuario_id=current_user.id,
+                    observaciones=f"Consumido en avance de tarea: {tarea.nombre}",
+                    precio_unitario_al_uso=precio_unitario,
+                    moneda='ARS'
+                )
+                db.session.add(uso)
 
-        # Actualizar costo real de la obra
-        obra.costo_real = Decimal(str(costo_materiales)) + costo_mano_obra
+            except (ValueError, IndexError) as e:
+                db.session.rollback()
+                return jsonify(ok=False, error=f"Error procesando material: {str(e)}"), 400
 
-        db.session.commit()
+    db.session.commit()
 
-        current_app.logger.info(
-            f"Obra {obra.id}: Progreso={obra.progreso}%, "
-            f"Costo Materiales=${float(costo_materiales):,.2f}, "
-            f"Horas={float(horas_trabajadas)}, "
-            f"Costo MO=${float(costo_mano_obra):,.2f}, "
-            f"Costo Total=${float(obra.costo_real):,.2f}"
+    # Recalcular porcentaje de avance de la tarea
+    nuevo_pct = recalc_tarea_pct(tarea_id)
+
+    # Recalcular progreso general de la OBRA
+    obra = tarea.etapa.obra
+    obra.calcular_progreso_automatico()
+
+    # Calcular y actualizar el costo real de la obra
+    costo_materiales = db.session.query(
+        db.func.coalesce(
+            db.func.sum(
+                UsoInventario.cantidad_usada *
+                db.func.coalesce(UsoInventario.precio_unitario_al_uso, ItemInventario.precio_promedio)
+            ), 0
         )
+    ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
+    ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
 
-        return jsonify(
-            ok=True,
-            mensaje="Avance registrado y materiales descontados del stock",
-            porcentaje_avance=nuevo_pct,
-            estado=tarea.estado,
-            cantidad_planificada=float(tarea.cantidad_planificada or 0),
-            cantidad_ejecutada=suma_ejecutado(tarea_id)
-        )
+    horas_trabajadas = db.session.query(
+        func.coalesce(func.sum(TareaAvance.horas), 0)
+    ).join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id
+    ).join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
+    ).filter(
+        EtapaObra.obra_id == obra.id,
+        TareaAvance.status == 'aprobado'
+    ).scalar() or Decimal('0')
 
-    except Exception as e:
-        db.session.rollback()
-        import traceback
-        tb = traceback.format_exc()
-        current_app.logger.exception("Error en crear_avance")
-        return jsonify(ok=False, error=f"Error interno: {str(e)}", detalle=tb), 500
+    costo_hora = Decimal('5000')
+    costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
+    obra.costo_real = Decimal(str(costo_materiales)) + costo_mano_obra
+
+    db.session.commit()
+
+    return jsonify(
+        ok=True,
+        mensaje="Avance registrado y materiales descontados del stock",
+        porcentaje_avance=nuevo_pct,
+        estado=tarea.estado,
+        cantidad_planificada=float(tarea.cantidad_planificada or 0),
+        cantidad_ejecutada=suma_ejecutado(tarea_id)
+    )
+
 
 
 @obras_bp.route("/api/tareas/<int:tarea_id>/avances", methods=['POST'])
