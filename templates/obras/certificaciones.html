@@ -653,7 +653,12 @@ function renderUnificado() {
             html += `<tr>
                 <td><strong>${op.operario_nombre}</strong></td>
                 <td class="text-center"><span class="badge bg-secondary bg-opacity-50">${op.rol}</span></td>
-                <td class="text-center">${op.horas_fichadas}h</td>
+                <td class="text-center">
+                    <input type="number" class="form-control form-control-sm text-center" id="hfi-input-${key}"
+                           value="${op.horas_fichadas}" step="0.5" min="0"
+                           oninput="document.getElementById('hfi-${key}').value=this.value; recalcItemSE('${key}', ${sIdx})"
+                           style="max-width:70px;margin:0 auto;">
+                </td>
                 <td class="text-center">
                     <select class="form-select form-select-sm" data-key="${key}" onchange="cambiarModoSE('${key}', ${sIdx})">
                         <option value="fichada" selected>Fichada</option>
