@@ -1796,42 +1796,60 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
     actualizadas = 0
 
-    # --- Pre-calcular días por tarea (proporcional a horas, ajustado al total) ---
-    dias_por_tarea = []
+    # --- Pre-calcular fechas por tarea usando jornal de 9 horas ---
+    # Lógica: un día de obra = 9 horas. Tareas se agrupan en el mismo día
+    # si caben en las horas restantes del jornal. Se encadenan secuencialmente.
+    HORAS_JORNAL = 9
+
+    fechas_tareas = []  # lista de (f_ini, f_fin) por tarea
     if inicio_etapa and fin_etapa and dias_etapa > 0:
-        n_tareas = len(tareas_a_procesar)
-        if n_tareas == 1:
-            dias_por_tarea = [dias_etapa]
-        else:
-            # Calcular días proporcionales a horas
-            for tarea in tareas_a_procesar:
-                horas_t = float(tarea.horas_estimadas or 1)
-                dias_raw = dias_etapa * (horas_t / total_horas_todas)
-                dias_por_tarea.append(dias_raw)
+        dia_actual = 0
+        horas_restantes_dia = HORAS_JORNAL
 
-            # Redondear asegurando mínimo 1 día y que la suma = dias_etapa
-            dias_por_tarea_int = [max(1, round(d)) for d in dias_por_tarea]
-            suma_actual = sum(dias_por_tarea_int)
+        for tarea in tareas_a_procesar:
+            horas_t = float(tarea.horas_estimadas or 1)
 
-            # Ajustar para que la suma sea exactamente dias_etapa
-            while suma_actual > dias_etapa and dias_etapa >= n_tareas:
-                # Reducir la tarea con más días (que tenga > 1)
-                idx_max = max(
-                    (i for i in range(n_tareas) if dias_por_tarea_int[i] > 1),
-                    key=lambda i: dias_por_tarea_int[i]
-                )
-                dias_por_tarea_int[idx_max] -= 1
-                suma_actual -= 1
+            # ¿Cabe en el día actual?
+            if horas_restantes_dia <= 0:
+                # Día lleno, avanzar al siguiente
+                dia_actual += 1
+                horas_restantes_dia = HORAS_JORNAL
 
-            while suma_actual < dias_etapa:
-                # Agregar al que más horas tenga proporcionalmente
-                idx_max = max(range(n_tareas), key=lambda i: float(tareas_a_procesar[i].horas_estimadas or 1))
-                dias_por_tarea_int[idx_max] += 1
-                suma_actual += 1
+            f_ini = inicio_etapa + timedelta(days=dia_actual)
 
-            dias_por_tarea = dias_por_tarea_int
+            # Calcular cuántos días necesita esta tarea
+            if horas_t <= horas_restantes_dia:
+                # Cabe en el día actual
+                dias_tarea = 0  # mismo día (f_ini == f_fin)
+                horas_restantes_dia -= horas_t
+            else:
+                # Necesita más de un día
+                horas_pendientes = horas_t - horas_restantes_dia
+                dias_extra = int(horas_pendientes // HORAS_JORNAL)
+                if horas_pendientes % HORAS_JORNAL > 0:
+                    dias_extra += 1
+                dias_tarea = dias_extra  # días adicionales después del inicio
+                horas_restantes_dia = HORAS_JORNAL - (horas_pendientes % HORAS_JORNAL)
+                if horas_restantes_dia == HORAS_JORNAL:
+                    horas_restantes_dia = 0  # terminó justo al final del último día
 
-    dia_acumulado = 0
+            f_fin = f_ini + timedelta(days=dias_tarea)
+
+            # Seguridad: nunca exceder la etapa
+            if f_ini > fin_etapa:
+                f_ini = fin_etapa
+            if f_fin > fin_etapa:
+                f_fin = fin_etapa
+
+            fechas_tareas.append((f_ini, f_fin))
+
+            # Si la tarea ocupó días completos, avanzar al día siguiente
+            if horas_restantes_dia <= 0:
+                dia_actual += dias_tarea + 1
+                horas_restantes_dia = HORAS_JORNAL
+            else:
+                dia_actual += dias_tarea
+
     for i, tarea in enumerate(tareas_a_procesar):
         horas_tarea = float(tarea.horas_estimadas or 1)
         es_fisica = tarea in tareas_fisicas
@@ -1860,16 +1878,9 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         else:
             tarea.rendimiento = None
 
-        # Fechas: encadenar secuencialmente dentro del rango de la etapa
-        if inicio_etapa and fin_etapa and dias_etapa > 0 and dias_por_tarea:
-            dias_tarea = dias_por_tarea[i]
-            f_ini = inicio_etapa + timedelta(days=dia_acumulado)
-            f_fin = f_ini + timedelta(days=max(0, dias_tarea - 1))
-            # Seguridad: nunca exceder la etapa
-            if f_ini > fin_etapa:
-                f_ini = fin_etapa
-            if f_fin > fin_etapa:
-                f_fin = fin_etapa
+        # Fechas: encadenar secuencialmente usando jornal de 9h
+        if fechas_tareas and i < len(fechas_tareas):
+            f_ini, f_fin = fechas_tareas[i]
 
             if forzar or not tarea.fecha_inicio_plan:
                 tarea.fecha_inicio_plan = f_ini
@@ -1879,8 +1890,6 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
                 tarea.fecha_inicio_estimada = f_ini
             if forzar or not tarea.fecha_fin_estimada:
                 tarea.fecha_fin_estimada = f_fin
-
-            dia_acumulado += dias_tarea
 
         actualizadas += 1
 
@@ -4516,10 +4525,13 @@ def editar_fechas_etapa(etapa_id):
             if not etapa.fecha_inicio_real:
                 etapa.fecha_inicio_real = date.today()
 
+        # Guardar las fechas que el usuario eligió (para re-asegurar después)
+        fecha_inicio_usuario = etapa.fecha_inicio_estimada
+        fecha_fin_usuario = etapa.fecha_fin_estimada
+
         db.session.commit()
 
         # Propagar fechas a etapas sucesoras (esta etapa no se toca por fechas_manuales)
-        # Primero asegurar que existan dependencias desde niveles
         from services.dependency_service import generar_dependencias_desde_niveles
         deps_creadas = generar_dependencias_desde_niveles(etapa.obra_id)
         if deps_creadas:
@@ -4529,6 +4541,12 @@ def editar_fechas_etapa(etapa_id):
         propagadas = result['shifted_count']
         if propagadas > 0:
             db.session.commit()
+
+        # Re-asegurar que las fechas del usuario no fueron pisadas por la propagación
+        if fecha_inicio_usuario and etapa.fecha_inicio_estimada != fecha_inicio_usuario:
+            etapa.fecha_inicio_estimada = fecha_inicio_usuario
+        if fecha_fin_usuario and etapa.fecha_fin_estimada != fecha_fin_usuario:
+            etapa.fecha_fin_estimada = fecha_fin_usuario
 
         # Redistribuir fechas de tareas dentro de esta etapa
         distribuir_datos_etapa_a_tareas(etapa_id, forzar=True)
