@@ -1795,11 +1795,45 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         dias_etapa = max(1, (fin_etapa - inicio_etapa).days)
 
     actualizadas = 0
-    dia_acumulado = 0
 
-    for tarea in tareas_a_procesar:
+    # --- Pre-calcular días por tarea (proporcional a horas, ajustado al total) ---
+    dias_por_tarea = []
+    if inicio_etapa and fin_etapa and dias_etapa > 0:
+        n_tareas = len(tareas_a_procesar)
+        if n_tareas == 1:
+            dias_por_tarea = [dias_etapa]
+        else:
+            # Calcular días proporcionales a horas
+            for tarea in tareas_a_procesar:
+                horas_t = float(tarea.horas_estimadas or 1)
+                dias_raw = dias_etapa * (horas_t / total_horas_todas)
+                dias_por_tarea.append(dias_raw)
+
+            # Redondear asegurando mínimo 1 día y que la suma = dias_etapa
+            dias_por_tarea_int = [max(1, round(d)) for d in dias_por_tarea]
+            suma_actual = sum(dias_por_tarea_int)
+
+            # Ajustar para que la suma sea exactamente dias_etapa
+            while suma_actual > dias_etapa and dias_etapa >= n_tareas:
+                # Reducir la tarea con más días (que tenga > 1)
+                idx_max = max(
+                    (i for i in range(n_tareas) if dias_por_tarea_int[i] > 1),
+                    key=lambda i: dias_por_tarea_int[i]
+                )
+                dias_por_tarea_int[idx_max] -= 1
+                suma_actual -= 1
+
+            while suma_actual < dias_etapa:
+                # Agregar al que más horas tenga proporcionalmente
+                idx_max = max(range(n_tareas), key=lambda i: float(tareas_a_procesar[i].horas_estimadas or 1))
+                dias_por_tarea_int[idx_max] += 1
+                suma_actual += 1
+
+            dias_por_tarea = dias_por_tarea_int
+
+    dia_acumulado = 0
+    for i, tarea in enumerate(tareas_a_procesar):
         horas_tarea = float(tarea.horas_estimadas or 1)
-        proporcion_horas = horas_tarea / total_horas_todas
         es_fisica = tarea in tareas_fisicas
 
         # Cantidad: solo para tareas físicas, proporcional a sus horas
@@ -1826,11 +1860,14 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         else:
             tarea.rendimiento = None
 
-        # Fechas: distribuir secuencialmente proporcional a horas
-        if inicio_etapa and fin_etapa and dias_etapa > 0:
-            dias_tarea = max(1, round(dias_etapa * proporcion_horas))
+        # Fechas: encadenar secuencialmente dentro del rango de la etapa
+        if inicio_etapa and fin_etapa and dias_etapa > 0 and dias_por_tarea:
+            dias_tarea = dias_por_tarea[i]
             f_ini = inicio_etapa + timedelta(days=dia_acumulado)
             f_fin = f_ini + timedelta(days=max(0, dias_tarea - 1))
+            # Seguridad: nunca exceder la etapa
+            if f_ini > fin_etapa:
+                f_ini = fin_etapa
             if f_fin > fin_etapa:
                 f_fin = fin_etapa
 
@@ -1847,7 +1884,7 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
 
         actualizadas += 1
 
-    if actualizadas or horas_todas_iguales:
+    if actualizadas:
         db.session.flush()
 
     return actualizadas
@@ -1882,16 +1919,8 @@ def propagar_fechas_etapas(obra_id):
             'new_fin': str(etapa.fecha_fin_estimada),
         })
 
-        # Propagar a tareas de esta etapa (si hay delta)
-        # Las tareas se desplazan proporcionalmente
-        tareas = etapa.tareas.filter(
-            TareaEtapa.estado.notin_(['completada', 'cancelada'])
-        ).all()
-        for t in tareas:
-            if t.fecha_inicio_plan and etapa.fecha_inicio_estimada:
-                t.fecha_inicio_plan = etapa.fecha_inicio_estimada
-            if t.fecha_fin_plan and etapa.fecha_fin_estimada:
-                t.fecha_fin_plan = etapa.fecha_fin_estimada
+        # Re-distribuir fechas de tareas secuencialmente dentro del nuevo rango
+        distribuir_datos_etapa_a_tareas(etapa.id, forzar=True)
 
     return {'shifted_count': len(etapas_modificadas), 'details': details}
 
