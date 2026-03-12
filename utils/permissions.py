@@ -3,8 +3,10 @@
 
 def is_admin_or_pm(user) -> bool:
     """Verifica si el usuario tiene rol de administrador o PM."""
+    if getattr(user, 'is_super_admin', False):
+        return True
     role = getattr(user, 'role', None)
-    if role and role.lower() in ('admin', 'pm'):
+    if role and role.lower() in ('admin', 'pm', 'administrador', 'tecnico', 'project_manager'):
         return True
     rol = getattr(user, 'rol', None)
     if rol and rol.lower() in ('administrador', 'admin', 'tecnico', 'project_manager', 'pm'):
