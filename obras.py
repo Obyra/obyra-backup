@@ -2040,10 +2040,12 @@ def crear_avance(tarea_id):
     avance_user_id = current_user.id
     operario_id = request.form.get("operario_id", type=int)
     if operario_id and roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
-        # Validar que el operario sea miembro o responsable de la tarea
+        # Validar que el operario sea miembro de la obra (no solo de la tarea)
+        obra = tarea.etapa.obra
+        is_obra_member = AsignacionObra.query.filter_by(obra_id=obra.id, user_id=operario_id).first()
         is_resp = tarea.responsable_id == operario_id
-        is_member = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=operario_id).first()
-        if is_resp or is_member:
+        is_task_member = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=operario_id).first()
+        if is_resp or is_task_member or is_obra_member:
             avance_user_id = operario_id
 
     try:
@@ -2665,20 +2667,33 @@ def obtener_avances_pendientes(tarea_id):
                 'fotos': fotos_h,
             })
 
-        # Obtener miembros y responsable de la tarea para el selector de operario
+        # Obtener miembros para el selector de operario
+        # Mostrar TODOS los miembros de la obra (responsable primero, luego resto)
         miembros_data = []
-        responsable_data = None
         seen_ids = set()
 
+        # Primero el responsable de la tarea (si existe)
         if tarea.responsable:
-            responsable_data = {'id': tarea.responsable.id, 'nombre': tarea.responsable.nombre_completo}
-            miembros_data.append(responsable_data)
+            miembros_data.append({'id': tarea.responsable.id, 'nombre': tarea.responsable.nombre_completo})
             seen_ids.add(tarea.responsable.id)
 
+        # Miembros asignados a la tarea
         for m in tarea.miembros:
             if m.usuario and m.user_id not in seen_ids:
                 miembros_data.append({'id': m.usuario.id, 'nombre': m.usuario.nombre_completo})
                 seen_ids.add(m.user_id)
+
+        # Todos los miembros de la obra (siempre, no solo como fallback)
+        obra = tarea.etapa.obra
+        for asig in obra.asignaciones:
+            if asig.usuario and asig.usuario.id not in seen_ids:
+                miembros_data.append({'id': asig.usuario.id, 'nombre': asig.usuario.nombre_completo})
+                seen_ids.add(asig.usuario.id)
+
+        # Siempre incluir al usuario actual como opción
+        if current_user.id not in seen_ids:
+            miembros_data.append({'id': current_user.id, 'nombre': current_user.nombre_completo})
+            seen_ids.add(current_user.id)
 
         # Info de progreso
         plan = float(tarea.cantidad_planificada or 0)
