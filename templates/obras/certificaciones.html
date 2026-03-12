@@ -866,9 +866,19 @@ function cargarHistorialLiq() {
     if (!container) return;
     container.innerHTML = '<div class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm"></div> Cargando historial...</div>';
 
-    fetch(`/obras/${OBRA_ID}/liquidacion-mo/historial`)
+    var controller = new AbortController();
+    setTimeout(function() { controller.abort(); }, 10000);
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo/historial`, {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        signal: controller.signal
+    })
     .then(r => {
         if (!r.ok) throw new Error('Error del servidor: ' + r.status);
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') === -1) {
+            throw new Error('Respuesta no es JSON (posible redirect a login)');
+        }
         return r.json();
     })
     .then(data => {
@@ -876,7 +886,7 @@ function cargarHistorialLiq() {
             container.innerHTML = '<div class="alert alert-danger small"><i class="fas fa-times-circle me-1"></i>' + (data.error || 'Error al cargar historial') + '</div>';
             return;
         }
-        if (data.liquidaciones.length === 0) {
+        if (!data.liquidaciones || data.liquidaciones.length === 0) {
             container.innerHTML = '<p class="text-muted text-center py-2">No hay liquidaciones registradas aun.</p>';
             return;
         }
@@ -938,7 +948,8 @@ function cargarHistorialLiq() {
         container.innerHTML = html;
     })
     .catch(err => {
-        container.innerHTML = '<div class="alert alert-warning small"><i class="fas fa-exclamation-triangle me-1"></i>Error al cargar historial: ' + err.message + '</div>';
+        console.error('Error historial:', err);
+        container.innerHTML = '<p class="text-muted text-center py-2">No hay liquidaciones registradas aun.</p>';
     });
 }
 
