@@ -556,16 +556,16 @@ function renderUnificado() {
                                        data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
                                        data-horas="${t.horas || 0}" data-cantidad="${t.cantidad || 0}"
                                        checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
-                                ${isFirst ? '<strong>' + op.operario_nombre + '</strong>' : '<small class="text-muted">↳</small>'}
+                                ${isFirst ? '<strong>' + op.operario_nombre + '</strong>' : ''}
                             </div>
                         </td>
                         <td class="text-center">${isFirst ? '<span class="badge bg-secondary bg-opacity-50">' + op.rol + '</span>' : ''}</td>
-                        <td class="text-center"><small>${t.tarea}</small></td>
-                        <td class="text-center"><small>${cantStr}</small></td>
-                        <td class="text-center">${t.horas}h</td>
+                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${t.tarea}</small></td>
+                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${cantStr}</small></td>
+                        <td class="text-center tarea-data" data-tkey="${tKey}">${t.horas}h</td>
                         <td class="text-center">${isFirst ? op.horas_fichadas + 'h' : ''}</td>
                         <td class="text-center"></td>
-                        <td class="text-end"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
+                        <td class="text-end tarea-data" data-tkey="${tKey}"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
                         <td class="text-end"></td>
                     </tr>`;
                 });
@@ -738,13 +738,14 @@ function recalcFromTareas(key, eIdx, oIdx) {
     var checks = document.querySelectorAll(`.tarea-check[data-key="${key}"]`);
     var totalHoras = 0, totalCant = 0;
     checks.forEach(chk => {
-        var row = document.getElementById('row-' + key + '_t' + chk.dataset.tidx);
+        var tKey = key + '_t' + chk.dataset.tidx;
+        var dataCells = document.querySelectorAll(`.tarea-data[data-tkey="${tKey}"]`);
         if (chk.checked) {
             totalHoras += parseFloat(chk.dataset.horas) || 0;
             totalCant += parseFloat(chk.dataset.cantidad) || 0;
-            if (row) row.style.opacity = '1';
+            dataCells.forEach(c => { c.style.opacity = '1'; c.style.textDecoration = 'none'; });
         } else {
-            if (row) row.style.opacity = '0.4';
+            dataCells.forEach(c => { c.style.opacity = '0.4'; c.style.textDecoration = 'line-through'; });
         }
     });
     // Actualizar inputs visibles y hidden
