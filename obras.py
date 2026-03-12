@@ -1702,25 +1702,43 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
     if not tareas:
         return 0
 
-    # --- PASO 1: Corregir horas desde catálogo predefinido ---
+    # --- PASO 1: Asignar horas proporcionales desde catálogo ---
+    # Primero obtener las proporciones del catálogo, luego escalar
+    # para que la suma de horas de tareas = horas reales de la etapa
     catalogo = obtener_tareas_por_etapa(etapa.nombre)
     catalogo_map = {}
     for t_cat in catalogo:
         catalogo_map[t_cat['nombre'].lower().strip()] = t_cat
 
+    # Asignar horas del catálogo como referencia de proporciones
     for tarea in tareas:
         key = tarea.nombre.lower().strip()
         info_cat = catalogo_map.get(key)
         if info_cat:
             horas_catalogo = info_cat.get('horas', 1)
-            # Corregir si: forzar, no tiene horas, o las horas no coinciden con catálogo
-            if forzar or not tarea.horas_estimadas or float(tarea.horas_estimadas) != float(horas_catalogo):
+            if not tarea.horas_estimadas:
                 tarea.horas_estimadas = horas_catalogo
             # Completar descripción si falta
             if not tarea.descripcion or tarea.descripcion == 'Creada via wizard':
                 tarea.descripcion = info_cat.get('descripcion', '')
         elif not tarea.horas_estimadas:
             tarea.horas_estimadas = 1  # fallback mínimo
+
+    # Escalar horas proporcionalmente para que la suma = horas de la etapa
+    # Horas de la etapa = días × 9h/jornal (jornada laboral estándar)
+    HORAS_JORNAL_ESCALA = 9
+    horas_etapa_total = None
+    if inicio_etapa and fin_etapa:
+        dias = max(1, (fin_etapa - inicio_etapa).days + 1)
+        horas_etapa_total = dias * HORAS_JORNAL_ESCALA
+
+    suma_horas_catalogo = sum(float(t.horas_estimadas or 1) for t in tareas)
+    if horas_etapa_total and suma_horas_catalogo > 0 and suma_horas_catalogo != horas_etapa_total:
+        factor = horas_etapa_total / suma_horas_catalogo
+        for tarea in tareas:
+            horas_orig = float(tarea.horas_estimadas or 1)
+            horas_nueva = round(horas_orig * factor, 1)
+            tarea.horas_estimadas = max(0.5, horas_nueva)  # mínimo media hora
 
     # --- PASO 2: Decidir qué tareas necesitan distribución ---
     if forzar:
