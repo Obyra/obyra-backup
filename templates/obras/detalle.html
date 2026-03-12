@@ -3092,10 +3092,6 @@ document.getElementById('formAvanceEnModal')?.addEventListener('submit', async f
         alert('Debe completar todos los campos obligatorios: cantidad, unidad y horas.');
         return;
     }
-    if (!operarioId) {
-        alert('Debe seleccionar un operario.');
-        return;
-    }
 
     const formData = new FormData(this);
     const submitBtn = this.querySelector('button[type="submit"]');
