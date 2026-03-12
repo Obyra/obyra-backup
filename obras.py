@@ -1737,8 +1737,8 @@ def distribuir_datos_etapa_a_tareas(etapa_id, forzar=False):
         factor = horas_etapa_total / suma_horas_catalogo
         for tarea in tareas:
             horas_orig = float(tarea.horas_estimadas or 1)
-            horas_nueva = round(horas_orig * factor, 1)
-            tarea.horas_estimadas = max(0.5, horas_nueva)  # mínimo media hora
+            horas_nueva = max(1, round(horas_orig * factor))
+            tarea.horas_estimadas = horas_nueva
 
     # --- PASO 2: Decidir qué tareas necesitan distribución ---
     if forzar:
