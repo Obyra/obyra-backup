@@ -2054,7 +2054,7 @@ def _crear_avance_impl(tarea_id):
     if operario_id and roles & {'admin', 'pm', 'administrador', 'tecnico', 'project_manager'}:
         # Validar que el operario sea miembro de la obra (no solo de la tarea)
         obra = tarea.etapa.obra
-        is_obra_member = AsignacionObra.query.filter_by(obra_id=obra.id, user_id=operario_id).first()
+        is_obra_member = AsignacionObra.query.filter_by(obra_id=obra.id, usuario_id=operario_id).first()
         is_resp = tarea.responsable_id == operario_id
         is_task_member = TareaMiembro.query.filter_by(tarea_id=tarea.id, user_id=operario_id).first()
         if is_resp or is_task_member or is_obra_member:
