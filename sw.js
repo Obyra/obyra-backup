@@ -3,7 +3,7 @@
  * Permite a los operarios trabajar sin conexión a internet
  */
 
-const CACHE_VERSION = 'v3.2.0';  // Fix: no interceptar recursos externos ni fichadas POST
+const CACHE_VERSION = 'v3.3.0';  // Force cache refresh: unified certificaciones module
 const STATIC_CACHE = `obyra-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `obyra-dynamic-${CACHE_VERSION}`;
 const DATA_CACHE = `obyra-data-${CACHE_VERSION}`;
