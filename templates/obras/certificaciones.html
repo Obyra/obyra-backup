@@ -526,10 +526,9 @@ function renderUnificado() {
                     <table class="table table-hover align-middle mb-0" style="font-size:0.9rem;">
                         <thead class="table-light">
                             <tr>
-                                <th style="min-width:140px;">Operario</th>
-                                <th class="text-center">Rol</th>
-                                <th class="text-center">Tarea</th>
+                                <th style="min-width:160px;">Operario</th>
                                 <th class="text-center">Cantidad</th>
+                                <th class="text-center">Medida</th>
                                 <th class="text-center">Horas</th>
                                 <th class="text-center">H.Fichada</th>
                                 <th class="text-center" style="min-width:110px;">Modo</th>
@@ -543,49 +542,19 @@ function renderUnificado() {
             var key = `e${eIdx}_o${oIdx}`;
             var tareas = op.tareas || [];
 
-            // Fila titulo del operario (siempre visible, sin checkbox)
-            html += `<tr class="table-secondary">
-                <td colspan="9">
+            // Fila principal del operario con todos los campos editables
+            html += `<tr class="border-bottom" id="oprow-${key}">
+                <td>
                     <strong>${op.operario_nombre}</strong>
-                    <span class="badge bg-secondary bg-opacity-50 ms-2">${op.rol}</span>
+                    <span class="badge bg-secondary bg-opacity-50 ms-1">${op.rol}</span>
+                    ${tareas.length > 0 ? '<br><a href="javascript:void(0)" onclick="toggleDetalle(\''+key+'\')" class="text-muted small"><i class="fas fa-chevron-down" id="icon-'+key+'"></i> ver tareas ('+tareas.length+')</a>' : ''}
                 </td>
-            </tr>`;
-
-            // Filas de tareas con checkbox
-            if (tareas.length > 0) {
-                tareas.forEach((t, tIdx) => {
-                    var cantStr = (t.cantidad || 0) > 0 ? t.cantidad + ' ' + (t.unidad || '') : '-';
-                    var tKey = `${key}_t${tIdx}`;
-                    html += `<tr id="row-${tKey}">
-                        <td>
-                            <div class="d-flex align-items-center ps-3">
-                                <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
-                                       data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
-                                       data-horas="${t.horas || 0}" data-cantidad="${t.cantidad || 0}"
-                                       checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
-                            </div>
-                        </td>
-                        <td class="text-center"></td>
-                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${t.tarea}</small></td>
-                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${cantStr}</small></td>
-                        <td class="text-center tarea-data" data-tkey="${tKey}">${t.horas}h</td>
-                        <td class="text-center"></td>
-                        <td class="text-center"></td>
-                        <td class="text-end tarea-data" data-tkey="${tKey}"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
-                        <td class="text-end"></td>
-                    </tr>`;
-                });
-            }
-
-            // Fila resumen/totales del operario con modo de pago y monto
-            html += `<tr class="table-light border-bottom">
-                <td colspan="2" class="text-end">
-                    <small class="text-muted fw-bold">Total:</small>
-                </td>
-                <td></td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm text-center" id="cant-input-${key}"
                            value="${op.cantidad_total}" step="0.1" min="0" oninput="document.getElementById('cant-${key}').value=this.value; recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:80px;margin:0 auto;">
+                </td>
+                <td class="text-center">
+                    <small class="text-muted">${op.unidad || '-'}</small>
                 </td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm text-center" id="hav-input-${key}"
@@ -597,24 +566,50 @@ function renderUnificado() {
                 </td>
                 <td class="text-center">
                     <select class="form-select form-select-sm select-modo" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" onchange="cambiarModo('${key}', ${eIdx}, ${oIdx})">
-                        <option value="avance" selected>Avance hora</option>
+                        <option value="cantidad" ${op.cantidad_total > 0 ? 'selected' : ''}>Cantidad</option>
+                        <option value="horas" ${op.cantidad_total <= 0 ? 'selected' : ''}>Horas</option>
                         <option value="fichada">Fichada</option>
-                        ${op.cantidad_total > 0 ? '<option value="cantidad">Cantidad</option>' : ''}
                         <option value="manual">Manual</option>
                     </select>
                 </td>
                 <td class="text-end">
                     <input type="number" class="form-control form-control-sm text-end liq-tarifa" id="tarifa-${key}"
-                           value="${op.tarifa_hora}" step="100" min="0" onchange="recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:100px;margin-left:auto;">
-                    <small class="text-muted detalle-modo" id="detalle-modo-${key}">x ${op.horas_avance}h</small>
+                           value="${op.tarifa_hora}" step="100" min="0" oninput="recalcItem('${key}', ${eIdx}, ${oIdx})" style="max-width:100px;margin-left:auto;">
+                    <small class="text-muted detalle-modo" id="detalle-modo-${key}"></small>
                 </td>
                 <td class="text-end">
                     <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
-                           value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;margin-left:auto;">
+                           value="${op.monto_default}" step="100" min="0" oninput="recalcTotales()" style="max-width:120px;margin-left:auto;">
                 </td>
             </tr>`;
 
-            // Hidden inputs para modo cantidad
+            // Filas de detalle de tareas (colapsables, con checkboxes)
+            if (tareas.length > 0) {
+                tareas.forEach((t, tIdx) => {
+                    var cantStr = (t.cantidad || 0) > 0 ? t.cantidad + ' ' + (t.unidad || '') : '-';
+                    var tKey = `${key}_t${tIdx}`;
+                    html += `<tr id="row-${tKey}" class="detalle-${key}" style="display:none;">
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <input type="checkbox" class="form-check-input me-2 tarea-check" id="chk-${tKey}"
+                                       data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" data-tidx="${tIdx}"
+                                       data-horas="${t.horas || 0}" data-cantidad="${t.cantidad || 0}"
+                                       checked onchange="recalcFromTareas('${key}', ${eIdx}, ${oIdx})">
+                                <small class="tarea-data" data-tkey="${tKey}">${t.tarea}</small>
+                            </div>
+                        </td>
+                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${cantStr}</small></td>
+                        <td></td>
+                        <td class="text-center tarea-data" data-tkey="${tKey}"><small>${t.horas}h</small></td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-end tarea-data" data-tkey="${tKey}"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
+                        <td></td>
+                    </tr>`;
+                });
+            }
+
+            // Hidden inputs para valores de referencia
             html += `<input type="hidden" id="hav-${key}" value="${op.horas_avance}">
                      <input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">
                      <input type="hidden" id="cant-${key}" value="${op.cantidad_total}">
@@ -623,7 +618,7 @@ function renderUnificado() {
 
         html += `</tbody>
                 <tfoot class="table-light">
-                    <tr><td colspan="8" class="text-end fw-bold">Subtotal MO etapa:</td>
+                    <tr><td colspan="7" class="text-end fw-bold">Subtotal MO etapa:</td>
                     <td class="text-end fw-bold" id="subtotal-e${eIdx}">${formatARS(etapa.subtotal_mo)}</td></tr>
                 </tfoot>
             </table></div></div></div>`;
@@ -688,6 +683,17 @@ function renderUnificado() {
 
     container.innerHTML = html;
     document.getElementById('liq-preview').style.display = 'block';
+
+    // Trigger initial calc for each operario based on selected mode
+    (data.etapas || []).forEach((etapa, eIdx) => {
+        etapa.operarios.forEach((op, oIdx) => {
+            cambiarModo(`e${eIdx}_o${oIdx}`, eIdx, oIdx);
+        });
+    });
+    // Also for sin-etapa operarios
+    (data.operarios_sin_etapa || []).forEach((op, sIdx) => {
+        cambiarModoSE(`se${sIdx}`, sIdx);
+    });
     recalcTotales();
 }
 
@@ -705,19 +711,18 @@ function cambiarModo(key, eIdx, oIdx) {
     var cant = parseFloat(document.getElementById('cant-' + key).value) || 0;
     var unid = document.getElementById('unid-' + key).value;
 
-    if (modo === 'avance') {
+    if (modo === 'cantidad') {
+        // Cantidad × tarifa (tarifa = precio por unidad)
+        montoEl.value = Math.round(cant * tarifa);
+        detalleEl.textContent = cant + ' ' + unid + ' x $' + formatARS(tarifa) + '/' + unid;
+    } else if (modo === 'horas') {
+        // Horas avance × tarifa/hora
         montoEl.value = Math.round(hav * tarifa);
-        detalleEl.textContent = 'x ' + hav + 'h';
+        detalleEl.textContent = hav + 'h x $' + formatARS(tarifa) + '/h';
     } else if (modo === 'fichada') {
+        // H.Fichada × tarifa/hora
         montoEl.value = Math.round(hfi * tarifa);
-        detalleEl.textContent = 'x ' + hfi + 'h';
-    } else if (modo === 'cantidad') {
-        // Show a prompt for price per unit
-        var precioU = prompt('Precio por ' + unid + ':', '0');
-        if (precioU === null) { select.value = 'avance'; cambiarModo(key, eIdx, oIdx); return; }
-        precioU = parseFloat(precioU) || 0;
-        montoEl.value = Math.round(cant * precioU);
-        detalleEl.innerHTML = cant + ' ' + unid + ' x $' + precioU + '/' + unid;
+        detalleEl.textContent = hfi + 'h x $' + formatARS(tarifa) + '/h';
     } else if (modo === 'manual') {
         detalleEl.textContent = 'editar monto libre';
         montoEl.focus();
@@ -783,16 +788,12 @@ function recalcItemSE(key, sIdx) {
 // TOGGLE DETALLE
 // ============================================================
 function toggleDetalle(key) {
-    var row = document.getElementById('detalle-' + key);
+    var rows = document.querySelectorAll('.detalle-' + key);
     var icon = document.getElementById('icon-' + key);
-    if (!row) return;
-    if (row.style.display === 'none') {
-        row.style.display = '';
-        if (icon) icon.className = 'fas fa-chevron-up';
-    } else {
-        row.style.display = 'none';
-        if (icon) icon.className = 'fas fa-chevron-down';
-    }
+    if (!rows.length) return;
+    var visible = rows[0].style.display !== 'none';
+    rows.forEach(r => r.style.display = visible ? 'none' : '');
+    if (icon) icon.className = visible ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
 }
 
 // ============================================================
