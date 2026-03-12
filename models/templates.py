@@ -282,6 +282,104 @@ class WorkPayment(db.Model):
 
 
 # ============================================================
+# LIQUIDACIÓN MANO DE OBRA
+# ============================================================
+
+class LiquidacionMO(db.Model):
+    """Liquidación de mano de obra para un período."""
+    __tablename__ = 'liquidaciones_mo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    periodo_desde = db.Column(db.Date, nullable=False)
+    periodo_hasta = db.Column(db.Date, nullable=False)
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente / parcial / pagado
+    notas = db.Column(db.Text)
+    monto_total = db.Column(db.Numeric(15, 2), default=0)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    obra = db.relationship('Obra', backref=db.backref('liquidaciones_mo', lazy='dynamic'))
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    items = db.relationship('LiquidacionMOItem', back_populates='liquidacion',
+                            cascade='all, delete-orphan', lazy='dynamic')
+
+    __table_args__ = (
+        db.Index('ix_liq_mo_obra', 'obra_id'),
+        db.Index('ix_liq_mo_estado', 'estado'),
+    )
+
+    @property
+    def items_pendientes(self):
+        return self.items.filter_by(estado='pendiente').count()
+
+    @property
+    def items_pagados(self):
+        return self.items.filter_by(estado='pagado').count()
+
+    def recalcular_estado(self):
+        """Actualiza estado basado en items."""
+        total = self.items.count()
+        pagados = self.items_pagados
+        if total == 0:
+            self.estado = 'pendiente'
+        elif pagados == total:
+            self.estado = 'pagado'
+        elif pagados > 0:
+            self.estado = 'parcial'
+        else:
+            self.estado = 'pendiente'
+
+    def recalcular_total(self):
+        """Recalcula monto_total sumando items."""
+        total = sum(Decimal(str(item.monto or 0)) for item in self.items.all())
+        self.monto_total = total
+
+
+class LiquidacionMOItem(db.Model):
+    """Item de liquidación: un operario dentro de una liquidación."""
+    __tablename__ = 'liquidaciones_mo_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    liquidacion_id = db.Column(db.Integer, db.ForeignKey('liquidaciones_mo.id'), nullable=False)
+    operario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    # Horas calculadas (informativas, no editables directamente)
+    horas_avance = db.Column(db.Numeric(8, 2), default=0)      # Horas de avances registrados
+    horas_fichadas = db.Column(db.Numeric(8, 2), default=0)    # Horas de fichadas (ingreso/egreso)
+
+    # Datos de liquidación (editables por el admin)
+    horas_liquidadas = db.Column(db.Numeric(8, 2), default=0)  # Horas que se pagan
+    tarifa_hora = db.Column(db.Numeric(12, 2), default=0)      # $/hora
+    monto = db.Column(db.Numeric(15, 2), default=0)            # Monto final a pagar
+
+    # Pago
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente / pagado
+    metodo_pago = db.Column(db.String(30))                   # transferencia / efectivo
+    fecha_pago = db.Column(db.Date)
+    comprobante_url = db.Column(db.String(500))
+    pagado_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    pagado_at = db.Column(db.DateTime)
+
+    notas = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    liquidacion = db.relationship('LiquidacionMO', back_populates='items')
+    operario = db.relationship('Usuario', foreign_keys=[operario_id])
+    pagado_por = db.relationship('Usuario', foreign_keys=[pagado_por_id])
+
+    __table_args__ = (
+        db.Index('ix_liq_mo_item_liq', 'liquidacion_id'),
+        db.Index('ix_liq_mo_item_op', 'operario_id'),
+        db.Index('ix_liq_mo_item_estado', 'estado'),
+    )
+
+
+# ============================================================
 # CAJA - Transferencias oficina <-> obra
 # ============================================================
 

@@ -4291,6 +4291,121 @@ def historial_certificaciones(id):
     )
 
 
+# ============================================================
+# LIQUIDACIÓN MANO DE OBRA
+# ============================================================
+
+@obras_bp.route('/<int:obra_id>/liquidacion-mo/preview')
+@login_required
+def liquidacion_mo_preview(obra_id):
+    """API: preview de liquidación para un período."""
+    from services.liquidacion_mo import generar_preview_liquidacion
+    desde = request.args.get('desde')
+    hasta = request.args.get('hasta')
+    if not desde or not hasta:
+        return jsonify(ok=False, error='Debe indicar período desde/hasta'), 400
+    try:
+        desde_date = date.fromisoformat(desde)
+        hasta_date = date.fromisoformat(hasta)
+    except ValueError:
+        return jsonify(ok=False, error='Formato de fecha inválido (YYYY-MM-DD)'), 400
+
+    items = generar_preview_liquidacion(obra_id, desde_date, hasta_date)
+    return jsonify(ok=True, items=items)
+
+
+@obras_bp.route('/<int:obra_id>/liquidacion-mo', methods=['POST'])
+@csrf.exempt
+@login_required
+def crear_liquidacion_mo(obra_id):
+    """Crear una liquidación de mano de obra."""
+    from services.liquidacion_mo import crear_liquidacion
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
+        return jsonify(ok=False, error='Sin permisos para crear liquidaciones'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    try:
+        desde = date.fromisoformat(data['periodo_desde'])
+        hasta = date.fromisoformat(data['periodo_hasta'])
+        items_data = data.get('items', [])
+        if not items_data:
+            return jsonify(ok=False, error='Debe incluir al menos un operario'), 400
+
+        liq = crear_liquidacion(obra_id, desde, hasta, items_data, notas=data.get('notas'))
+        return jsonify(ok=True, liquidacion_id=liq.id, monto_total=float(liq.monto_total))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error creando liquidación MO")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/liquidacion-mo/item/<int:item_id>/pagar', methods=['POST'])
+@csrf.exempt
+@login_required
+def pagar_liquidacion_mo_item(item_id):
+    """Registrar pago de un item de liquidación."""
+    from services.liquidacion_mo import registrar_pago_item
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        metodo = data.get('metodo_pago', 'transferencia')
+        fecha = date.fromisoformat(data['fecha_pago']) if data.get('fecha_pago') else date.today()
+        comprobante = data.get('comprobante_url')
+        notas = data.get('notas')
+
+        item = registrar_pago_item(item_id, metodo, fecha, comprobante, notas)
+        return jsonify(ok=True, estado=item.estado, liquidacion_estado=item.liquidacion.estado)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error registrando pago liquidación MO")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/<int:obra_id>/liquidacion-mo/historial')
+@login_required
+def liquidacion_mo_historial(obra_id):
+    """API: obtener historial de liquidaciones de una obra."""
+    from services.liquidacion_mo import obtener_liquidaciones_obra
+    liquidaciones = obtener_liquidaciones_obra(obra_id)
+    result = []
+    for liq in liquidaciones:
+        items = []
+        for item in liq.items.all():
+            items.append({
+                'id': item.id,
+                'operario_id': item.operario_id,
+                'operario_nombre': item.operario.nombre_completo if item.operario else 'N/A',
+                'horas_avance': float(item.horas_avance or 0),
+                'horas_fichadas': float(item.horas_fichadas or 0),
+                'horas_liquidadas': float(item.horas_liquidadas or 0),
+                'tarifa_hora': float(item.tarifa_hora or 0),
+                'monto': float(item.monto or 0),
+                'estado': item.estado,
+                'metodo_pago': item.metodo_pago,
+                'fecha_pago': item.fecha_pago.isoformat() if item.fecha_pago else None,
+                'comprobante_url': item.comprobante_url,
+            })
+        result.append({
+            'id': liq.id,
+            'periodo_desde': liq.periodo_desde.isoformat(),
+            'periodo_hasta': liq.periodo_hasta.isoformat(),
+            'estado': liq.estado,
+            'monto_total': float(liq.monto_total or 0),
+            'notas': liq.notas,
+            'created_at': liq.created_at.isoformat() if liq.created_at else None,
+            'created_by': liq.created_by.nombre_completo if liq.created_by else 'N/A',
+            'items': items,
+        })
+    return jsonify(ok=True, liquidaciones=result)
+
+
 @obras_bp.route('/certificacion/<int:id>/desactivar', methods=['POST'])
 @login_required
 def desactivar_certificacion(id):

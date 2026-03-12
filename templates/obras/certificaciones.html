@@ -87,6 +87,13 @@
                 {% endif %}
             </button>
         </li>
+        {% if puede_aprobar %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-liquidacion" data-bs-toggle="tab" data-bs-target="#pane-liquidacion" type="button" role="tab">
+                <i class="fas fa-hand-holding-usd me-1"></i>Liquidacion MO
+            </button>
+        </li>
+        {% endif %}
     </ul>
     <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="certTabsContent">
         <!-- Tab: A certificar -->
@@ -453,6 +460,79 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- Tab: Liquidación Mano de Obra -->
+        {% if puede_aprobar %}
+        <div class="tab-pane fade" id="pane-liquidacion" role="tabpanel" aria-labelledby="tab-liquidacion">
+            <div class="p-3">
+                <!-- Selector de período -->
+                <div class="card border-primary mb-3">
+                    <div class="card-body py-2">
+                        <div class="row align-items-end g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold mb-1">Periodo desde</label>
+                                <input type="date" class="form-control form-control-sm" id="liq-desde">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold mb-1">Periodo hasta</label>
+                                <input type="date" class="form-control form-control-sm" id="liq-hasta">
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-primary btn-sm w-100" onclick="buscarLiquidacion()">
+                                    <i class="fas fa-search me-1"></i>Buscar operarios
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preview de liquidación (se llena por JS) -->
+                <div id="liq-loading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border text-primary"></div>
+                    <div class="mt-2 text-muted">Calculando horas...</div>
+                </div>
+
+                <div id="liq-preview" style="display:none;">
+                    <div id="liq-operarios"></div>
+
+                    <!-- Total y confirmar -->
+                    <div class="card bg-dark text-white mt-3">
+                        <div class="card-body py-2">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Notas (opcional)</label>
+                                    <input type="text" class="form-control form-control-sm" id="liq-notas" placeholder="Ej: Quincena marzo...">
+                                </div>
+                                <div class="col-md-4 text-center">
+                                    <div class="small text-muted">TOTAL A LIQUIDAR</div>
+                                    <div class="fs-4 fw-bold" id="liq-total">$0</div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button class="btn btn-success" onclick="confirmarLiquidacion()">
+                                        <i class="fas fa-check me-1"></i>Confirmar liquidacion
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="liq-empty" class="text-center py-4">
+                    <i class="fas fa-hand-holding-usd fa-2x text-muted mb-2"></i>
+                    <p class="text-muted">Seleccione un periodo y presione "Buscar" para ver los operarios que trabajaron en la obra.</p>
+                </div>
+
+                <!-- Historial de liquidaciones -->
+                <hr class="my-4">
+                <h6 class="text-muted mb-3"><i class="fas fa-history me-1"></i>Historial de liquidaciones</h6>
+                <div id="liq-historial">
+                    <div class="text-center py-3 text-muted" id="liq-historial-loading">
+                        <div class="spinner-border spinner-border-sm"></div> Cargando...
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -705,5 +785,260 @@
         });
     }
 })();
+
+// ============================================================
+// LIQUIDACIÓN MANO DE OBRA
+// ============================================================
+var liqData = [];
+var OBRA_ID = {{ obra.id }};
+
+function buscarLiquidacion() {
+    var desde = document.getElementById('liq-desde').value;
+    var hasta = document.getElementById('liq-hasta').value;
+    if (!desde || !hasta) { alert('Seleccione periodo desde y hasta'); return; }
+
+    document.getElementById('liq-loading').style.display = 'block';
+    document.getElementById('liq-preview').style.display = 'none';
+    document.getElementById('liq-empty').style.display = 'none';
+
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo/preview?desde=${desde}&hasta=${hasta}`)
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('liq-loading').style.display = 'none';
+        if (!data.ok) { alert(data.error); return; }
+        liqData = data.items;
+        if (liqData.length === 0) {
+            document.getElementById('liq-empty').style.display = 'block';
+            document.getElementById('liq-empty').innerHTML = '<div class="text-center py-4"><i class="fas fa-info-circle fa-2x text-muted mb-2"></i><p class="text-muted">No se encontraron operarios con actividad en este periodo.</p></div>';
+            return;
+        }
+        renderPreview();
+    })
+    .catch(err => {
+        document.getElementById('liq-loading').style.display = 'none';
+        alert('Error de conexion: ' + err.message);
+    });
+}
+
+function renderPreview() {
+    var container = document.getElementById('liq-operarios');
+    var html = '';
+    liqData.forEach((op, idx) => {
+        var diff = op.diferencia_horas;
+        var diffClass = diff > 2 ? 'text-warning' : (diff < -2 ? 'text-danger' : 'text-success');
+        var diffIcon = diff > 2 ? 'exclamation-triangle' : 'check-circle';
+
+        html += `<div class="card mb-3 border-0 shadow-sm">
+            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-user-hard-hat me-1 text-primary"></i>
+                    <strong>${op.operario_nombre}</strong>
+                    <span class="badge bg-secondary ms-2">${op.rol}</span>
+                </div>
+                <div class="${diffClass} small">
+                    <i class="fas fa-${diffIcon} me-1"></i>
+                    ${diff > 0 ? 'Ficho ' + op.horas_fichadas + 'h, avanzo ' + op.horas_avance + 'h' :
+                      diff < 0 ? 'Avance ' + op.horas_avance + 'h > fichadas ' + op.horas_fichadas + 'h' :
+                      'Horas coinciden'}
+                </div>
+            </div>
+            <div class="card-body py-2">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <div class="small text-muted mb-1"><i class="fas fa-tasks me-1"></i>Avances registrados</div>`;
+
+        if (op.avance_desglose.length > 0) {
+            html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.8rem;">';
+            op.avance_desglose.forEach(a => {
+                html += `<tr><td>${a.tarea}</td><td class="text-end">${a.horas}h</td><td class="text-muted">${a.cantidad} ${a.unidad}</td></tr>`;
+            });
+            html += `<tr class="border-top fw-bold"><td>Total avances</td><td class="text-end">${op.horas_avance}h</td><td></td></tr></table>`;
+        } else {
+            html += '<div class="text-muted small">Sin avances en este periodo</div>';
+        }
+
+        html += `</div><div class="col-md-6">
+                        <div class="small text-muted mb-1"><i class="fas fa-clock me-1"></i>Fichadas</div>`;
+
+        if (op.fichada_desglose.length > 0) {
+            html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.8rem;">';
+            op.fichada_desglose.forEach(f => {
+                html += `<tr><td>${f.fecha}</td><td>${f.ingreso}→${f.egreso}</td><td class="text-end fw-bold">${f.horas}h</td></tr>`;
+            });
+            html += `<tr class="border-top fw-bold"><td colspan="2">Total fichadas</td><td class="text-end">${op.horas_fichadas}h</td></tr></table>`;
+        } else {
+            html += '<div class="text-muted small">Sin fichadas en este periodo</div>';
+        }
+
+        html += `</div></div>
+                <div class="row g-2 align-items-end border-top pt-2">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0">Horas a liquidar</label>
+                        <input type="number" class="form-control form-control-sm liq-horas" data-idx="${idx}"
+                               value="${op.horas_liquidar}" step="0.5" min="0" onchange="recalcLiqItem(${idx})">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0">Tarifa/hora ($)</label>
+                        <input type="number" class="form-control form-control-sm liq-tarifa" data-idx="${idx}"
+                               value="${op.tarifa_hora}" step="100" min="0" onchange="recalcLiqItem(${idx})">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0 fw-bold">Subtotal ($)</label>
+                        <input type="number" class="form-control form-control-sm fw-bold liq-monto" data-idx="${idx}"
+                               value="${op.monto}" step="100" min="0" onchange="recalcLiqTotal()">
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+    document.getElementById('liq-preview').style.display = 'block';
+    recalcLiqTotal();
+}
+
+function recalcLiqItem(idx) {
+    var horasEl = document.querySelector(`.liq-horas[data-idx="${idx}"]`);
+    var tarifaEl = document.querySelector(`.liq-tarifa[data-idx="${idx}"]`);
+    var montoEl = document.querySelector(`.liq-monto[data-idx="${idx}"]`);
+    var h = parseFloat(horasEl.value) || 0;
+    var t = parseFloat(tarifaEl.value) || 0;
+    montoEl.value = (h * t).toFixed(0);
+    recalcLiqTotal();
+}
+
+function recalcLiqTotal() {
+    var total = 0;
+    document.querySelectorAll('.liq-monto').forEach(el => { total += parseFloat(el.value) || 0; });
+    document.getElementById('liq-total').textContent = '$' + total.toLocaleString('es-AR');
+}
+
+function confirmarLiquidacion() {
+    var desde = document.getElementById('liq-desde').value;
+    var hasta = document.getElementById('liq-hasta').value;
+    var notas = document.getElementById('liq-notas').value;
+
+    var items = [];
+    liqData.forEach((op, idx) => {
+        var horas = parseFloat(document.querySelector(`.liq-horas[data-idx="${idx}"]`).value) || 0;
+        var tarifa = parseFloat(document.querySelector(`.liq-tarifa[data-idx="${idx}"]`).value) || 0;
+        var monto = parseFloat(document.querySelector(`.liq-monto[data-idx="${idx}"]`).value) || 0;
+        if (monto > 0) {
+            items.push({
+                operario_id: op.operario_id,
+                horas_liquidadas: horas,
+                tarifa_hora: tarifa,
+                monto: monto,
+            });
+        }
+    });
+
+    if (items.length === 0) { alert('No hay montos a liquidar. Ingrese al menos un monto mayor a 0.'); return; }
+    if (!confirm('Confirmar liquidacion por $' + items.reduce((s, i) => s + i.monto, 0).toLocaleString('es-AR') + '?')) return;
+
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, notas: notas })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Liquidacion creada exitosamente por $' + (data.monto_total || 0).toLocaleString('es-AR'));
+            cargarHistorialLiq();
+            document.getElementById('liq-preview').style.display = 'none';
+            document.getElementById('liq-empty').style.display = 'block';
+            document.getElementById('liq-empty').innerHTML = '<div class="alert alert-success text-center"><i class="fas fa-check-circle me-1"></i>Liquidacion creada. Puede registrar los pagos en el historial de abajo.</div>';
+        } else {
+            alert(data.error || 'Error al crear liquidacion');
+        }
+    })
+    .catch(err => alert('Error: ' + err.message));
+}
+
+function cargarHistorialLiq() {
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo/historial`)
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) return;
+        var container = document.getElementById('liq-historial');
+        if (data.liquidaciones.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center">No hay liquidaciones registradas.</p>';
+            return;
+        }
+        var html = '';
+        data.liquidaciones.forEach(liq => {
+            var estadoBadge = liq.estado === 'pagado' ? 'success' : liq.estado === 'parcial' ? 'warning' : 'secondary';
+            html += `<div class="card mb-2 border-0 shadow-sm">
+                <div class="card-header bg-light py-2 d-flex justify-content-between">
+                    <div>
+                        <i class="fas fa-file-invoice-dollar me-1"></i>
+                        <strong>${liq.periodo_desde} → ${liq.periodo_hasta}</strong>
+                        <span class="badge bg-${estadoBadge} ms-2">${liq.estado}</span>
+                    </div>
+                    <strong>$${(liq.monto_total || 0).toLocaleString('es-AR')}</strong>
+                </div>
+                <div class="card-body py-2">
+                    <table class="table table-sm table-hover mb-0" style="font-size:0.85rem;">
+                        <thead><tr>
+                            <th>Operario</th><th class="text-center">H.Avance</th><th class="text-center">H.Fichadas</th>
+                            <th class="text-center">H.Liquidadas</th><th class="text-end">Tarifa/h</th>
+                            <th class="text-end">Monto</th><th class="text-center">Estado</th><th></th>
+                        </tr></thead><tbody>`;
+            liq.items.forEach(item => {
+                var itemBadge = item.estado === 'pagado' ? 'success' : 'warning';
+                html += `<tr>
+                    <td>${item.operario_nombre}</td>
+                    <td class="text-center">${item.horas_avance}h</td>
+                    <td class="text-center">${item.horas_fichadas}h</td>
+                    <td class="text-center fw-bold">${item.horas_liquidadas}h</td>
+                    <td class="text-end">$${(item.tarifa_hora || 0).toLocaleString('es-AR')}</td>
+                    <td class="text-end fw-bold">$${(item.monto || 0).toLocaleString('es-AR')}</td>
+                    <td class="text-center"><span class="badge bg-${itemBadge}">${item.estado}</span></td>
+                    <td>`;
+                if (item.estado === 'pendiente') {
+                    html += `<button class="btn btn-sm btn-outline-success" onclick="pagarItemLiq(${item.id}, '${item.operario_nombre}', ${item.monto})">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </button>`;
+                } else if (item.comprobante_url) {
+                    html += `<a href="${item.comprobante_url}" target="_blank" class="btn btn-sm btn-outline-info"><i class="fas fa-file"></i></a>`;
+                }
+                html += '</td></tr>';
+            });
+            html += '</tbody></table></div></div>';
+        });
+        container.innerHTML = html;
+    });
+}
+
+function pagarItemLiq(itemId, nombre, monto) {
+    var metodo = prompt('Metodo de pago para ' + nombre + ' ($' + monto.toLocaleString('es-AR') + '):\n\nEscriba "transferencia" o "efectivo":', 'transferencia');
+    if (!metodo) return;
+    metodo = metodo.toLowerCase().trim();
+    if (metodo !== 'transferencia' && metodo !== 'efectivo') {
+        alert('Metodo invalido. Use "transferencia" o "efectivo".');
+        return;
+    }
+
+    fetch(`/obras/liquidacion-mo/item/${itemId}/pagar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metodo_pago: metodo, fecha_pago: new Date().toISOString().split('T')[0] })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            alert('Pago registrado exitosamente');
+            cargarHistorialLiq();
+        } else {
+            alert(data.error || 'Error al registrar pago');
+        }
+    })
+    .catch(err => alert('Error: ' + err.message));
+}
+
+// Cargar historial al abrir la pestaña
+document.getElementById('tab-liquidacion')?.addEventListener('shown.bs.tab', function() {
+    cargarHistorialLiq();
+});
 </script>
 {% endblock %}

@@ -395,6 +395,7 @@ def obtener_todas_alertas(org_id, limite_por_tipo=3):
     alertas.extend(obtener_alertas_tareas_en_riesgo(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_sobrecosto(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_fichadas(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_liquidaciones_pendientes(org_id, limite_por_tipo))
 
     # Ordenar por severidad
     orden_severidad = {'critica': 0, 'alta': 1, 'media': 2, 'baja': 3}
@@ -428,3 +429,53 @@ def obtener_alertas_para_dashboard(org_id, limite=10):
 
     # Limitar total
     return alertas[:limite]
+
+
+def obtener_alertas_liquidaciones_pendientes(org_id, limite=5):
+    """Alertas de liquidaciones MO pendientes de pago."""
+    try:
+        from models.templates import LiquidacionMO, LiquidacionMOItem
+
+        pendientes = (
+            db.session.query(
+                LiquidacionMOItem.id,
+                LiquidacionMOItem.monto,
+                LiquidacionMOItem.operario_id,
+                LiquidacionMO.obra_id,
+                LiquidacionMO.periodo_desde,
+                LiquidacionMO.periodo_hasta,
+            )
+            .join(LiquidacionMO)
+            .filter(
+                LiquidacionMO.organizacion_id == org_id,
+                LiquidacionMOItem.estado == 'pendiente',
+            )
+            .all()
+        )
+
+        if not pendientes:
+            return []
+
+        total_monto = sum(float(p.monto or 0) for p in pendientes)
+        cant = len(pendientes)
+
+        # Obtener nombres de obras
+        from models import Obra
+        obra_ids = set(p.obra_id for p in pendientes)
+        obras_nombres = []
+        for oid in list(obra_ids)[:3]:
+            obra = Obra.query.get(oid)
+            if obra:
+                obras_nombres.append(obra.nombre)
+
+        return [{
+            'tipo': 'liquidacion_mo',
+            'severidad': 'alta' if total_monto > 100000 else 'media',
+            'titulo': f'{cant} pago{"s" if cant > 1 else ""} de MO pendiente{"s" if cant > 1 else ""}',
+            'descripcion': f'Total: ${total_monto:,.0f} - {", ".join(obras_nombres)}',
+            'accion_url': None,
+            'icono': 'fas fa-hand-holding-usd',
+            'color': 'warning',
+        }]
+    except Exception:
+        return []

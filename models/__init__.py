@@ -150,6 +150,8 @@ from models.templates import (
     WorkCertification,
     WorkCertificationItem,
     WorkPayment,
+    LiquidacionMO,
+    LiquidacionMOItem,
     MovimientoCaja,
 )
 
