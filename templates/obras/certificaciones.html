@@ -530,7 +530,7 @@ function renderUnificado() {
                                 <th class="text-center">Rol</th>
                                 <th class="text-center">Tarea</th>
                                 <th class="text-center">Cantidad</th>
-                                <th class="text-center">H.Avance</th>
+                                <th class="text-center">Horas</th>
                                 <th class="text-center">H.Fichada</th>
                                 <th class="text-center" style="min-width:110px;">Modo</th>
                                 <th class="text-end" style="min-width:100px;">Tarifa</th>
@@ -541,21 +541,35 @@ function renderUnificado() {
 
         etapa.operarios.forEach((op, oIdx) => {
             var key = `e${eIdx}_o${oIdx}`;
-            var tareasStr = (op.tareas || []).map(t => t.tarea).filter((v, i, a) => a.indexOf(v) === i).join(', ') || '-';
-            var cantStr = op.cantidad_total > 0 ? op.cantidad_total + ' ' + (op.unidad || '') : '-';
+            var tareas = op.tareas || [];
 
-            html += `<tr>
-                <td>
-                    <strong>${op.operario_nombre}</strong>
-                    <button class="btn btn-link btn-sm p-0 ms-1 text-muted" onclick="toggleDetalle('${key}')" title="Ver detalle">
-                        <i class="fas fa-chevron-down" id="icon-${key}"></i>
-                    </button>
+            // Mostrar una fila por tarea, o una fila resumen si no hay tareas
+            if (tareas.length > 0) {
+                tareas.forEach((t, tIdx) => {
+                    var isFirst = tIdx === 0;
+                    var cantStr = (t.cantidad || 0) > 0 ? t.cantidad + ' ' + (t.unidad || '') : '-';
+                    html += `<tr>
+                        <td>${isFirst ? '<strong>' + op.operario_nombre + '</strong>' : '<small class="text-muted ps-3">↳</small>'}</td>
+                        <td class="text-center">${isFirst ? '<span class="badge bg-secondary bg-opacity-50">' + op.rol + '</span>' : ''}</td>
+                        <td class="text-center"><small>${t.tarea}</small></td>
+                        <td class="text-center"><small>${cantStr}</small></td>
+                        <td class="text-center">${t.horas}h</td>
+                        <td class="text-center">${isFirst ? op.horas_fichadas + 'h' : ''}</td>
+                        <td class="text-center">${isFirst ? '' : ''}</td>
+                        <td class="text-end"><small class="text-muted">${formatFecha(t.fecha)}</small></td>
+                        <td class="text-end"></td>
+                    </tr>`;
+                });
+            }
+
+            // Fila resumen del operario con modo de pago y monto
+            html += `<tr class="table-light border-bottom">
+                <td colspan="4" class="text-end">
+                    ${tareas.length === 0 ? '<strong>' + op.operario_nombre + '</strong> <span class="badge bg-secondary bg-opacity-50 ms-1">' + op.rol + '</span>' : ''}
+                    <small class="text-muted fw-bold">Total ${op.operario_nombre.split(' ')[0]}:</small>
                 </td>
-                <td class="text-center"><span class="badge bg-secondary bg-opacity-50">${op.rol}</span></td>
-                <td class="text-center"><small>${tareasStr}</small></td>
-                <td class="text-center"><small>${cantStr}</small></td>
-                <td class="text-center">${op.horas_avance}h</td>
-                <td class="text-center">${op.horas_fichadas}h</td>
+                <td class="text-center fw-bold">${op.horas_avance}h</td>
+                <td class="text-center fw-bold">${op.horas_fichadas}h</td>
                 <td class="text-center">
                     <select class="form-select form-select-sm select-modo" data-key="${key}" data-eidx="${eIdx}" data-oidx="${oIdx}" onchange="cambiarModo('${key}', ${eIdx}, ${oIdx})">
                         <option value="avance" selected>Avance</option>
@@ -575,36 +589,7 @@ function renderUnificado() {
                 </td>
             </tr>`;
 
-            // Fila detalle expandible
-            html += `<tr id="detalle-${key}" style="display:none;">
-                <td colspan="9" class="bg-light px-4 py-2">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="small fw-semibold text-muted mb-1"><i class="fas fa-tasks me-1"></i>Avances en esta etapa</div>`;
-
-            if (op.tareas && op.tareas.length > 0) {
-                html += '<table class="table table-sm table-borderless mb-0" style="font-size:0.8rem;">';
-                html += '<thead><tr><th>Tarea</th><th class="text-end">Horas</th><th>Cantidad</th><th>Fecha</th></tr></thead><tbody>';
-                op.tareas.forEach(t => {
-                    html += `<tr><td>${t.tarea}</td><td class="text-end fw-semibold">${t.horas}h</td><td class="text-muted">${t.cantidad || ''} ${t.unidad || ''}</td><td class="text-muted">${formatFecha(t.fecha)}</td></tr>`;
-                });
-                html += `</tbody></table>`;
-            } else {
-                html += '<div class="text-muted small fst-italic">Sin avances</div>';
-            }
-
-            html += `</div><div class="col-md-6">
-                        <div class="small fw-semibold text-muted mb-1"><i class="fas fa-clock me-1"></i>Info adicional</div>
-                        <div class="small">
-                            <div>Horas avance (esta etapa): <strong>${op.horas_avance}h</strong></div>
-                            <div>Horas fichadas (total obra): <strong>${op.horas_fichadas}h</strong></div>
-                            ${op.cantidad_total > 0 ? '<div>Cantidad: <strong>' + op.cantidad_total + ' ' + (op.unidad || '') + '</strong></div>' : ''}
-                        </div>
-                    </div></div>
-                </td>
-            </tr>`;
-
-            // Hidden inputs para cantidad mode
+            // Hidden inputs para modo cantidad
             html += `<input type="hidden" id="hav-${key}" value="${op.horas_avance}">
                      <input type="hidden" id="hfi-${key}" value="${op.horas_fichadas}">
                      <input type="hidden" id="cant-${key}" value="${op.cantidad_total}">
