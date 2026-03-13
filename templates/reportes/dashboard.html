@@ -417,15 +417,19 @@
                 </div>
             </div>
             
-            <!-- Alertas y Notificaciones -->
+            <!-- Alertas y Notificaciones (solo stock, presupuestos, fichadas, liquidaciones) -->
+            {% set alertas_panel_derecho = [] %}
+            {% for a in alertas_dashboard if a.tipo not in ['etapa_demorada', 'tarea_vencida', 'tarea_en_riesgo', 'obra_demorada', 'sobrecosto'] %}
+                {% if alertas_panel_derecho.append(a) %}{% endif %}
+            {% endfor %}
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                     <h5 class="mb-0 fw-bold">Alertas y Notificaciones</h5>
-                    <span class="badge bg-danger">{{ conteo_alertas.total if conteo_alertas else 0 }} nuevas</span>
+                    <span class="badge bg-danger">{{ alertas_panel_derecho|length }} nuevas</span>
                 </div>
                 <div class="card-body">
-                    {% if alertas_dashboard %}
-                        {% for alerta in alertas_dashboard %}
+                    {% if alertas_panel_derecho %}
+                        {% for alerta in alertas_panel_derecho %}
                         <a href="{{ alerta.url }}" class="text-decoration-none">
                             <div class="alert-item mb-3 p-3 rounded position-relative"
                                  style="background: linear-gradient(135deg,
@@ -439,16 +443,12 @@
                                                 <i class="fas fa-boxes me-1"></i>
                                             {% elif alerta.tipo == 'presupuesto_vencer' %}
                                                 <i class="fas fa-file-invoice-dollar me-1"></i>
-                                            {% elif alerta.tipo == 'obra_demorada' %}
-                                                <i class="fas fa-building me-1"></i>
-                                            {% elif alerta.tipo == 'etapa_demorada' %}
-                                                <i class="fas fa-clock me-1"></i>
-                                            {% elif alerta.tipo == 'tarea_vencida' %}
-                                                <i class="fas fa-tasks me-1"></i>
-                                            {% elif alerta.tipo == 'sobrecosto' %}
-                                                <i class="fas fa-chart-line me-1"></i>
                                             {% elif alerta.tipo == 'sin_fichada' %}
                                                 <i class="fas fa-user-clock me-1"></i>
+                                            {% elif alerta.tipo == 'liquidacion_mo' %}
+                                                <i class="fas fa-hand-holding-usd me-1"></i>
+                                            {% else %}
+                                                <i class="fas fa-bell me-1"></i>
                                             {% endif %}
                                             {{ alerta.titulo }}
                                         </div>
