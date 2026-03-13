@@ -167,6 +167,43 @@
             </div>
         </div>
 
+        <!-- Etapas Demoradas -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock text-warning me-2"></i>Etapas Demoradas
+                        <span class="badge bg-warning ms-2">{{ (alertas_etapas|default([]))|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if alertas_etapas %}
+                        {% for alerta in alertas_etapas %}
+                        <a href="{{ alerta.url }}" class="text-decoration-none">
+                            <div class="alert-item mb-2 p-3 rounded"
+                                 style="background: linear-gradient(135deg, {% if alerta.severidad == 'critica' %}#dc3545, #c82333{% elif alerta.severidad == 'alta' %}#fd7e14, #e65100{% else %}#ffc107, #e0a800{% endif %});">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-grow-1 text-white">
+                                        <div class="fw-bold mb-1"><i class="fas fa-clock me-1"></i>{{ alerta.titulo }}</div>
+                                        <div class="small">{{ alerta.descripcion }}</div>
+                                    </div>
+                                    <span class="badge bg-white text-{% if alerta.severidad == 'critica' %}danger{% elif alerta.severidad == 'alta' %}warning{% else %}secondary{% endif %}">
+                                        {{ alerta.severidad }}
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                            <p class="mb-0">No hay etapas demoradas</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         <!-- Tareas Vencidas -->
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm h-100">

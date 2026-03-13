@@ -223,7 +223,8 @@ def dashboard():
                          items_stock_bajo=items_stock_bajo,
                          obras_vencimiento=obras_vencimiento,
                          charts_enabled=CHARTS_ENABLED,
-                         show_reports_banner=show_reports_banner)
+                         show_reports_banner=show_reports_banner,
+                         fecha_hoy=date.today())
 
 
 @reportes_bp.route('/alertas')
@@ -234,6 +235,7 @@ def ver_alertas():
         obtener_alertas_stock_bajo,
         obtener_alertas_presupuestos_vencer,
         obtener_alertas_obras_demoradas,
+        obtener_alertas_etapas_demoradas,
         obtener_alertas_tareas_vencidas,
         obtener_alertas_tareas_en_riesgo,
         obtener_alertas_sobrecosto,
@@ -249,6 +251,7 @@ def ver_alertas():
     alertas_stock = obtener_alertas_stock_bajo(org_id, limite=20)
     alertas_presupuestos = obtener_alertas_presupuestos_vencer(org_id, limite=20)
     alertas_obras = obtener_alertas_obras_demoradas(org_id, limite=20)
+    alertas_etapas = obtener_alertas_etapas_demoradas(org_id, limite=20)
     alertas_tareas = obtener_alertas_tareas_vencidas(org_id, limite=20)
     alertas_en_riesgo = obtener_alertas_tareas_en_riesgo(org_id, limite=20)
     alertas_sobrecosto = obtener_alertas_sobrecosto(org_id, limite=20)
@@ -258,6 +261,7 @@ def ver_alertas():
                          alertas_stock=alertas_stock,
                          alertas_presupuestos=alertas_presupuestos,
                          alertas_obras=alertas_obras,
+                         alertas_etapas=alertas_etapas,
                          alertas_tareas=alertas_tareas,
                          alertas_en_riesgo=alertas_en_riesgo,
                          alertas_sobrecosto=alertas_sobrecosto,

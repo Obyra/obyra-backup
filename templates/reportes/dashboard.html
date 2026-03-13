@@ -149,9 +149,18 @@
                                     <span class="badge bg-success">{{ obra.estado.title() }}</span>
                                 </div>
                                 <div class="col-md-3 text-end">
-                                    <div class="fw-bold">${{ obra.presupuesto_total|default(0)|round(0) }}K</div>
-                                    {% if obra.costo_real and obra.costo_real > obra.presupuesto_total %}
-                                        <small class="text-danger">Sobrecosto</small>
+                                    {% set presupuesto = obra.presupuesto_total|default(0)|float %}
+                                    {% set costo = obra.costo_real|default(0)|float %}
+                                    <div class="small text-muted">Presupuesto</div>
+                                    <div class="fw-bold">${{ "{:,.0f}".format(presupuesto) }}</div>
+                                    <div class="small text-muted mt-1">Gastado</div>
+                                    <div class="fw-bold {% if costo > presupuesto and presupuesto > 0 %}text-danger{% elif costo > 0 %}text-success{% endif %}">
+                                        ${{ "{:,.0f}".format(costo) }}
+                                    </div>
+                                    {% if presupuesto > 0 and costo > presupuesto %}
+                                        <span class="badge bg-danger mt-1">Sobrecosto {{ "%.0f"|format(((costo - presupuesto) / presupuesto) * 100) }}%</span>
+                                    {% elif presupuesto > 0 and costo > 0 %}
+                                        <small class="text-muted">{{ "%.0f"|format((costo / presupuesto) * 100) }}% del presupuesto</small>
                                     {% endif %}
                                 </div>
                                 <div class="col-md-3">
@@ -159,6 +168,17 @@
                                         <div class="progress-bar bg-primary" style="width: {{ obra.progreso or 0 }}%"></div>
                                     </div>
                                     <small class="text-muted">{{ obra.progreso or 0 }}% completado</small>
+                                    {% set ns = namespace(tiene_demora=false) %}
+                                    {% for etapa in obra.etapas.all() if etapa.estado in ['en_curso', 'pendiente'] and etapa.fecha_fin_estimada and etapa.fecha_fin_estimada < fecha_hoy %}
+                                        {% set ns.tiene_demora = true %}
+                                    {% endfor %}
+                                    {% if ns.tiene_demora %}
+                                    <div class="mt-1">
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Etapa demorada
+                                        </span>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -362,6 +382,8 @@
                                                 <i class="fas fa-file-invoice-dollar me-1"></i>
                                             {% elif alerta.tipo == 'obra_demorada' %}
                                                 <i class="fas fa-building me-1"></i>
+                                            {% elif alerta.tipo == 'etapa_demorada' %}
+                                                <i class="fas fa-clock me-1"></i>
                                             {% elif alerta.tipo == 'tarea_vencida' %}
                                                 <i class="fas fa-tasks me-1"></i>
                                             {% elif alerta.tipo == 'sobrecosto' %}

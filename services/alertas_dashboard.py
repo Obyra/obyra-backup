@@ -266,6 +266,52 @@ def obtener_alertas_tareas_en_riesgo(org_id, limite=5):
     return alertas[:limite]
 
 
+def obtener_alertas_etapas_demoradas(org_id, limite=5):
+    """
+    Obtiene etapas de obra que estan demoradas (fecha fin estimada ya paso
+    y la etapa sigue pendiente o en_curso).
+    """
+    from models import EtapaObra, Obra
+
+    hoy = date.today()
+
+    etapas = db.session.query(EtapaObra).join(
+        Obra, EtapaObra.obra_id == Obra.id
+    ).filter(
+        Obra.organizacion_id == org_id,
+        Obra.estado.in_(['planificacion', 'en_curso']),
+        EtapaObra.estado.in_(['pendiente', 'en_curso']),
+        EtapaObra.fecha_fin_estimada.isnot(None),
+        EtapaObra.fecha_fin_estimada < hoy
+    ).order_by(EtapaObra.fecha_fin_estimada).limit(limite).all()
+
+    alertas = []
+    for etapa in etapas:
+        dias_demora = (hoy - etapa.fecha_fin_estimada).days
+        progreso = etapa.progreso if hasattr(etapa, 'progreso') and etapa.progreso else 0
+
+        if dias_demora > 14:
+            severidad = 'critica'
+        elif dias_demora > 7:
+            severidad = 'alta'
+        else:
+            severidad = 'media'
+
+        obra_nombre = etapa.obra.nombre if etapa.obra else 'Sin obra'
+
+        alertas.append({
+            'tipo': 'etapa_demorada',
+            'severidad': severidad,
+            'titulo': f'Etapa demorada: {etapa.nombre[:30]}',
+            'descripcion': f'{dias_demora} dia(s) de demora - Avance: {progreso}% - {obra_nombre[:25]}',
+            'referencia': obra_nombre[:30],
+            'url': f'/obras/{etapa.obra_id}',
+            'etapa': etapa
+        })
+
+    return alertas
+
+
 def obtener_alertas_sobrecosto(org_id, limite=5, umbral_porcentaje=10):
     """
     Obtiene obras con sobrecosto respecto al presupuesto.
@@ -391,6 +437,7 @@ def obtener_todas_alertas(org_id, limite_por_tipo=3):
     alertas.extend(obtener_alertas_stock_bajo(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_presupuestos_vencer(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_obras_demoradas(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_etapas_demoradas(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_tareas_vencidas(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_tareas_en_riesgo(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_sobrecosto(org_id, limite_por_tipo))
