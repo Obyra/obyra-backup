@@ -955,8 +955,10 @@ function confirmarUnificado() {
 }
 
 // ============================================================
-// CONFIRMAR INDIVIDUAL (un solo operario)
+// CONFIRMAR INDIVIDUAL (un solo operario) — abre modal de pago
 // ============================================================
+var _pendingPago = null; // datos temporales para el modal
+
 function confirmarIndividual(key, eIdx, oIdx, tipo) {
     var desde = document.getElementById('liq-desde').value;
     var hasta = document.getElementById('liq-hasta').value;
@@ -982,38 +984,71 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
 
     if (monto <= 0) { alert('El monto debe ser mayor a 0'); return; }
 
-    var nombre = operario.operario_nombre;
-    if (!confirm('Confirmar liquidacion individual:\n\n' + nombre + ': ' + formatARS(monto) + '\nPeriodo: ' + formatFecha(desde) + ' al ' + formatFecha(hasta))) return;
+    // Guardar datos y abrir modal
+    _pendingPago = { key, operario, horas, tarifa, monto, desde, hasta, notas };
+    document.getElementById('modal-pago-nombre').textContent = operario.operario_nombre;
+    document.getElementById('modal-pago-monto').textContent = formatARS(monto);
+    document.getElementById('modal-pago-periodo').textContent = formatFecha(desde) + ' al ' + formatFecha(hasta);
+    document.getElementById('modal-pago-metodo').value = 'transferencia';
+    document.getElementById('modal-pago-notas').value = '';
+    new bootstrap.Modal(document.getElementById('modalConfirmarPago')).show();
+}
+
+function ejecutarPagoIndividual() {
+    if (!_pendingPago) return;
+    var p = _pendingPago;
+    var metodo = document.getElementById('modal-pago-metodo').value;
+    var notasExtra = document.getElementById('modal-pago-notas').value;
+    var notas = p.notas ? p.notas + ' [' + p.operario.operario_nombre + ']' : p.operario.operario_nombre;
+    if (notasExtra) notas += ' — ' + notasExtra;
+
+    var btnConfirmar = document.getElementById('btn-ejecutar-pago');
+    btnConfirmar.disabled = true;
+    btnConfirmar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
 
     var items = [{
-        operario_id: operario.operario_id,
-        horas_liquidadas: horas,
-        tarifa_hora: tarifa,
-        monto: monto,
+        operario_id: p.operario.operario_id,
+        horas_liquidadas: p.horas,
+        tarifa_hora: p.tarifa,
+        monto: p.monto,
     }];
 
     fetch(`/obras/${OBRA_ID}/liquidacion-mo/confirmar-y-pagar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, metodo_pago: 'transferencia', notas: notas ? notas + ' [' + nombre + ']' : nombre })
+        body: JSON.stringify({ periodo_desde: p.desde, periodo_hasta: p.hasta, items: items, metodo_pago: metodo, notas: notas })
     })
     .then(r => r.json())
     .then(data => {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarPago')).hide();
+        btnConfirmar.disabled = false;
+        btnConfirmar.innerHTML = '<i class="fas fa-check-circle me-1"></i>Confirmar Pago';
+
         if (data.ok) {
-            alert('Pago confirmado: ' + nombre + ' — ' + formatARS(monto) + '\nCosto real de la obra actualizado.');
             // Marcar fila como liquidada
-            var row = document.getElementById('oprow-' + key) || document.querySelector(`[id$="${key}"]`);
-            document.getElementById('monto-' + key).value = 0;
-            document.getElementById('monto-' + key).disabled = true;
-            var btn = document.querySelector(`button[onclick*="confirmarIndividual('${key}'"]`);
-            if (btn) { btn.innerHTML = '<i class="fas fa-check-double"></i>'; btn.disabled = true; btn.classList.replace('btn-success','btn-secondary'); }
+            document.getElementById('monto-' + p.key).value = 0;
+            document.getElementById('monto-' + p.key).disabled = true;
+            var btn = document.getElementById('btn-pagar-' + p.key);
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-check-double me-2"></i>PAGADO — ' + p.operario.operario_nombre;
+                btn.disabled = true;
+                btn.classList.replace('btn-success', 'btn-secondary');
+            }
             recalcTotales();
             cargarHistorialLiq();
+            alert('Pago confirmado: ' + p.operario.operario_nombre + ' — ' + formatARS(p.monto) + '\nMetodo: ' + metodo + '\nCosto real de la obra actualizado.');
         } else {
             alert(data.error || 'Error al confirmar liquidacion');
         }
+        _pendingPago = null;
     })
-    .catch(err => alert('Error: ' + err.message));
+    .catch(err => {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarPago')).hide();
+        btnConfirmar.disabled = false;
+        btnConfirmar.innerHTML = '<i class="fas fa-check-circle me-1"></i>Confirmar Pago';
+        alert('Error: ' + err.message);
+        _pendingPago = null;
+    });
 }
 
 // ============================================================
@@ -1162,4 +1197,42 @@ document.addEventListener('DOMContentLoaded', function() {
     cargarHistorialLiq();
 });
 </script>
+
+<!-- Modal Confirmar Pago Individual -->
+<div class="modal fade" id="modalConfirmarPago" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-money-bill-wave me-2"></i>Confirmar Liquidacion</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <h4 class="fw-bold mb-1" id="modal-pago-nombre"></h4>
+                    <div class="fs-2 fw-bold text-success" id="modal-pago-monto"></div>
+                    <small class="text-muted" id="modal-pago-periodo"></small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Metodo de pago</label>
+                    <select class="form-select" id="modal-pago-metodo">
+                        <option value="transferencia">Transferencia bancaria</option>
+                        <option value="efectivo">Efectivo</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="mercadopago">MercadoPago</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas (opcional)</label>
+                    <input type="text" class="form-control" id="modal-pago-notas" placeholder="Ej: Quincena marzo, recibo N...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success fw-bold px-4" id="btn-ejecutar-pago" onclick="ejecutarPagoIndividual()">
+                    <i class="fas fa-check-circle me-1"></i>Confirmar Pago
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
