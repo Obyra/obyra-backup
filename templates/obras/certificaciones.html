@@ -1095,7 +1095,12 @@ function cargarHistorialLiq() {
                             <strong>${formatFecha(liq.periodo_desde)} → ${formatFecha(liq.periodo_hasta)}</strong>
                             <span class="badge bg-${estadoBadge} ms-2">${liq.estado}</span>
                         </div>
-                        <strong class="fs-5">${formatARS(liq.monto_total || 0)}</strong>
+                        <div class="d-flex align-items-center gap-2">
+                            <strong class="fs-5">${formatARS(liq.monto_total || 0)}</strong>
+                            <a href="/obras/liquidacion-mo/${liq.id}/recibo-pdf" target="_blank" class="btn btn-sm btn-outline-success" title="Descargar recibo PDF completo">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
+                        </div>
                     </div>
                     <div class="small text-muted mt-1">
                         <i class="fas fa-user me-1"></i>${liq.created_by} &middot;
@@ -1130,6 +1135,7 @@ function cargarHistorialLiq() {
                     </button>`;
                 } else {
                     html += '<i class="fas fa-check-circle text-success"></i>';
+                    html += ` <a href="/obras/liquidacion-mo/item/${item.id}/recibo-pdf" target="_blank" class="btn btn-sm btn-outline-success ms-1" title="Descargar recibo PDF"><i class="fas fa-file-pdf"></i></a>`;
                     if (item.comprobante_url) {
                         html += ` <a href="${item.comprobante_url}" target="_blank" class="btn btn-sm btn-outline-info"><i class="fas fa-file"></i></a>`;
                     }

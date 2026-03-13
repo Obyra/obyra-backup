@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+    @page { size: A4; margin: 2cm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #333; line-height: 1.5; }
+    .header { border-bottom: 3px solid #2e7d32; padding-bottom: 15px; margin-bottom: 20px; }
+    .header h1 { color: #2e7d32; font-size: 22px; margin: 0; }
+    .header .subtitle { color: #666; font-size: 13px; margin-top: 4px; }
+    .org-name { font-size: 16px; font-weight: bold; color: #333; }
+    .info-grid { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    .info-box { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 16px; width: 48%; }
+    .info-box .label { font-size: 10px; text-transform: uppercase; color: #888; letter-spacing: 0.5px; }
+    .info-box .value { font-size: 14px; font-weight: bold; color: #333; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    th { background: #2e7d32; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    .monto-total { background: #e8f5e9; border: 2px solid #2e7d32; border-radius: 8px; padding: 15px 20px; text-align: center; margin: 20px 0; }
+    .monto-total .label { font-size: 12px; color: #666; text-transform: uppercase; }
+    .monto-total .amount { font-size: 28px; font-weight: bold; color: #2e7d32; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+    .badge-pagado { background: #c8e6c9; color: #2e7d32; }
+    .badge-pendiente { background: #fff3e0; color: #e65100; }
+    .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 10px; color: #999; text-align: center; }
+    .firma-section { margin-top: 50px; display: flex; justify-content: space-between; }
+    .firma-box { width: 40%; text-align: center; border-top: 1px solid #333; padding-top: 8px; font-size: 11px; }
+    .text-end { text-align: right; }
+    .text-center { text-align: center; }
+    .fw-bold { font-weight: bold; }
+    .detalle { font-size: 11px; color: #666; margin-top: 15px; padding: 10px; background: #fafafa; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <h1>RECIBO DE PAGO</h1>
+            <div class="subtitle">Liquidacion de Mano de Obra</div>
+        </div>
+        <div style="text-align: right;">
+            {% if organizacion %}
+            <div class="org-name">{{ organizacion.nombre }}</div>
+            {% endif %}
+            <div style="font-size: 11px; color: #666;">Generado: {{ fecha_generacion }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="info-grid">
+    <div class="info-box">
+        <div class="label">Obra</div>
+        <div class="value">{{ obra.nombre }}</div>
+        {% if obra.direccion %}
+        <div style="font-size: 11px; color: #666;">{{ obra.direccion }}</div>
+        {% endif %}
+    </div>
+    <div class="info-box">
+        <div class="label">Periodo</div>
+        <div class="value">{{ liquidacion.periodo_desde.strftime('%d/%m/%Y') }} al {{ liquidacion.periodo_hasta.strftime('%d/%m/%Y') }}</div>
+        <div style="font-size: 11px; color: #666;">
+            Estado: <span class="badge {% if liquidacion.estado == 'pagado' %}badge-pagado{% else %}badge-pendiente{% endif %}">{{ liquidacion.estado }}</span>
+        </div>
+    </div>
+</div>
+
+{% if item %}
+{# Recibo individual de un operario #}
+<table>
+    <thead>
+        <tr>
+            <th>Operario</th>
+            <th class="text-center">Horas Liquidadas</th>
+            <th class="text-end">Tarifa/Hora</th>
+            <th class="text-end">Monto</th>
+            <th class="text-center">Metodo de Pago</th>
+            <th class="text-center">Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="fw-bold">{{ item.operario.nombre_completo if item.operario else 'N/A' }}</td>
+            <td class="text-center">{{ "%.2f"|format(item.horas_liquidadas|float) }}h</td>
+            <td class="text-end">${{ "{:,.2f}".format(item.tarifa_hora|float) }}</td>
+            <td class="text-end fw-bold">${{ "{:,.2f}".format(item.monto|float) }}</td>
+            <td class="text-center">{{ item.metodo_pago or '-' }}</td>
+            <td class="text-center">
+                <span class="badge {% if item.estado == 'pagado' %}badge-pagado{% else %}badge-pendiente{% endif %}">{{ item.estado }}</span>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="monto-total">
+    <div class="label">Total Pagado</div>
+    <div class="amount">${{ "{:,.2f}".format(item.monto|float) }}</div>
+</div>
+
+{% if item.fecha_pago %}
+<div class="detalle">
+    <strong>Fecha de pago:</strong> {{ item.fecha_pago.strftime('%d/%m/%Y') }}<br>
+    {% if item.metodo_pago %}<strong>Metodo:</strong> {{ item.metodo_pago }}<br>{% endif %}
+    {% if item.notas %}<strong>Notas:</strong> {{ item.notas }}<br>{% endif %}
+</div>
+{% endif %}
+
+{% elif items %}
+{# Recibo de toda la liquidacion (todos los operarios) #}
+<table>
+    <thead>
+        <tr>
+            <th>Operario</th>
+            <th class="text-center">H. Avance</th>
+            <th class="text-center">H. Fichadas</th>
+            <th class="text-center">H. Liquidadas</th>
+            <th class="text-end">Tarifa/h</th>
+            <th class="text-end">Monto</th>
+            <th class="text-center">Metodo</th>
+            <th class="text-center">Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% set total_monto = namespace(val=0) %}
+        {% for it in items %}
+        {% set total_monto.val = total_monto.val + (it.monto|float) %}
+        <tr>
+            <td class="fw-bold">{{ it.operario.nombre_completo if it.operario else 'N/A' }}</td>
+            <td class="text-center">{{ "%.1f"|format(it.horas_avance|float) }}h</td>
+            <td class="text-center">{{ "%.1f"|format(it.horas_fichadas|float) }}h</td>
+            <td class="text-center fw-bold">{{ "%.2f"|format(it.horas_liquidadas|float) }}h</td>
+            <td class="text-end">${{ "{:,.0f}".format(it.tarifa_hora|float) }}</td>
+            <td class="text-end fw-bold">${{ "{:,.2f}".format(it.monto|float) }}</td>
+            <td class="text-center">{{ it.metodo_pago or '-' }}</td>
+            <td class="text-center">
+                <span class="badge {% if it.estado == 'pagado' %}badge-pagado{% else %}badge-pendiente{% endif %}">{{ it.estado }}</span>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="monto-total">
+    <div class="label">Total Liquidacion</div>
+    <div class="amount">${{ "{:,.2f}".format(total_monto.val) }}</div>
+</div>
+{% endif %}
+
+{% if liquidacion.notas %}
+<div class="detalle">
+    <strong>Notas:</strong> {{ liquidacion.notas }}
+</div>
+{% endif %}
+
+<div class="firma-section">
+    <div class="firma-box">
+        Firma del Responsable
+    </div>
+    <div class="firma-box">
+        Firma del Operario / Receptor
+    </div>
+</div>
+
+<div class="footer">
+    Documento generado automaticamente por OBYRA &mdash; {{ fecha_generacion }}
+    {% if organizacion %} &mdash; {{ organizacion.nombre }}{% endif %}
+</div>
+
+</body>
+</html>

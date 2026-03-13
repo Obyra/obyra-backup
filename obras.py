@@ -4444,6 +4444,76 @@ def confirmar_y_pagar_liquidacion(obra_id):
         return jsonify(ok=False, error=str(e)), 500
 
 
+@obras_bp.route('/liquidacion-mo/item/<int:item_id>/recibo-pdf')
+@login_required
+def recibo_liquidacion_pdf(item_id):
+    """Genera PDF de recibo de pago de un item de liquidación."""
+    from models.templates import LiquidacionMOItem
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        flash('La exportacion a PDF no esta disponible.', 'warning')
+        return redirect(request.referrer or url_for('index'))
+
+    item = LiquidacionMOItem.query.get_or_404(item_id)
+    liq = item.liquidacion
+    obra = liq.obra
+    org = obra.organizacion if hasattr(obra, 'organizacion') else None
+
+    html_content = render_template('obras/recibo_liquidacion_pdf.html',
+        item=item,
+        liquidacion=liq,
+        obra=obra,
+        organizacion=org,
+        fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'),
+    )
+
+    import io
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_content).write_pdf(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    nombre_op = item.operario.nombre_completo if item.operario else 'operario'
+    nombre_safe = nombre_op.replace(' ', '_')[:30]
+    filename = f"recibo_{nombre_safe}_{liq.periodo_desde.strftime('%Y%m%d')}.pdf"
+
+    return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+
+@obras_bp.route('/liquidacion-mo/<int:liq_id>/recibo-pdf')
+@login_required
+def recibo_liquidacion_completa_pdf(liq_id):
+    """Genera PDF de recibo de toda una liquidación (todos los operarios)."""
+    from models.templates import LiquidacionMO as LiqMO
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        flash('La exportacion a PDF no esta disponible.', 'warning')
+        return redirect(request.referrer or url_for('index'))
+
+    liq = LiqMO.query.get_or_404(liq_id)
+    obra = liq.obra
+    org = obra.organizacion if hasattr(obra, 'organizacion') else None
+    items = liq.items.all()
+
+    html_content = render_template('obras/recibo_liquidacion_pdf.html',
+        item=None,
+        items=items,
+        liquidacion=liq,
+        obra=obra,
+        organizacion=org,
+        fecha_generacion=datetime.now().strftime('%d/%m/%Y %H:%M'),
+    )
+
+    import io
+    pdf_buffer = io.BytesIO()
+    HTML(string=html_content).write_pdf(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    filename = f"liquidacion_{liq.periodo_desde.strftime('%Y%m%d')}_{liq.periodo_hasta.strftime('%Y%m%d')}.pdf"
+    return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+
 @obras_bp.route('/liquidacion-mo/item/<int:item_id>/pagar', methods=['POST'])
 @csrf.exempt
 @login_required
