@@ -619,10 +619,10 @@ function renderUnificado() {
                            value="${op.monto_default}" step="100" min="0" oninput="recalcTotales()" style="max-width:120px;">
                 </td>
             </tr>
-            <tr class="border-bottom" style="background:#f0faf0;">
-                <td colspan="8" class="text-end py-2">
-                    <button class="btn btn-success btn-sm fw-bold px-4" onclick="confirmarIndividual('${key}', ${eIdx}, ${oIdx}, 'etapa')">
-                        <i class="fas fa-money-bill-wave me-1"></i>PAGAR a ${op.operario_nombre.split(' ')[0]} — ${formatARS(op.monto_default)}
+            <tr class="border-bottom" style="background:#e8f5e9;">
+                <td colspan="8" class="text-end py-2 pe-3">
+                    <button class="btn btn-success fw-bold px-4 py-2" id="btn-pagar-${key}" onclick="confirmarIndividual('${key}', ${eIdx}, ${oIdx}, 'etapa')">
+                        <i class="fas fa-check-circle me-2"></i>CONFIRMAR LIQUIDACION — ${op.operario_nombre} — ${formatARS(op.monto_default)}
                     </button>
                 </td>
             </tr>
@@ -693,10 +693,10 @@ function renderUnificado() {
                            value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;">
                 </td>
             </tr>
-            <tr style="background:#f0faf0;">
-                <td colspan="6" class="text-end py-2">
-                    <button class="btn btn-success btn-sm fw-bold px-4" onclick="confirmarIndividual('${key}', 0, ${sIdx}, 'sinEtapa')">
-                        <i class="fas fa-money-bill-wave me-1"></i>PAGAR a ${op.operario_nombre.split(' ')[0]} — ${formatARS(op.monto_default)}
+            <tr style="background:#e8f5e9;">
+                <td colspan="6" class="text-end py-2 pe-3">
+                    <button class="btn btn-success fw-bold px-4 py-2" id="btn-pagar-${key}" onclick="confirmarIndividual('${key}', 0, ${sIdx}, 'sinEtapa')">
+                        <i class="fas fa-check-circle me-2"></i>CONFIRMAR LIQUIDACION — ${op.operario_nombre} — ${formatARS(op.monto_default)}
                     </button>
                 </td>
             </tr>`;
