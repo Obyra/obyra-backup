@@ -912,26 +912,39 @@ def detalle(id):
     ).join(ItemInventario, UsoInventario.item_id == ItemInventario.id
     ).filter(UsoInventario.obra_id == obra.id).scalar() or Decimal('0')
 
-    # 2. Costo de mano de obra (horas trabajadas * costo por hora)
-    horas_trabajadas = db.session.query(
-        func.coalesce(func.sum(TareaAvance.horas), 0)
-    ).join(TareaEtapa, TareaAvance.tarea_id == TareaEtapa.id
-    ).join(EtapaObra, TareaEtapa.etapa_id == EtapaObra.id
-    ).filter(
-        EtapaObra.obra_id == obra.id,
-        TareaAvance.status == 'aprobado'
+    # 2. Costo de mano de obra desde liquidaciones pagadas (costo REAL)
+    from models.templates import LiquidacionMO as LiqMO, LiquidacionMOItem
+    costo_mo_pagado = db.session.query(
+        func.coalesce(func.sum(LiquidacionMOItem.monto), 0)
+    ).join(LiqMO).filter(
+        LiqMO.obra_id == obra.id,
+        LiquidacionMOItem.estado == 'pagado'
     ).scalar() or Decimal('0')
 
-    costo_hora = Decimal('5000')  # $5000 ARS por hora
-    costo_mano_obra = Decimal(str(horas_trabajadas)) * costo_hora
+    horas_pagadas = db.session.query(
+        func.coalesce(func.sum(LiquidacionMOItem.horas_liquidadas), 0)
+    ).join(LiqMO).filter(
+        LiqMO.obra_id == obra.id,
+        LiquidacionMOItem.estado == 'pagado'
+    ).scalar() or Decimal('0')
+
+    costo_mano_obra = Decimal(str(costo_mo_pagado))
+    horas_trabajadas = Decimal(str(horas_pagadas))
+    costo_hora = (costo_mano_obra / horas_trabajadas).quantize(Decimal('1')) if horas_trabajadas > 0 else Decimal('0')
 
     # Datos para el template
+    # Actualizar costo_real de la obra con datos reales
+    costo_real_calc = float(Decimal(str(costo_materiales)) + costo_mano_obra)
+    if obra.costo_real != costo_real_calc:
+        obra.costo_real = costo_real_calc
+        db.session.commit()
+
     costos_desglosados = {
         'materiales': float(costo_materiales),
         'mano_obra': float(costo_mano_obra),
         'horas_trabajadas': float(horas_trabajadas),
         'costo_hora': float(costo_hora),
-        'total': float(Decimal(str(costo_materiales)) + costo_mano_obra)
+        'total': costo_real_calc
     }
 
     # Detectar desfase en fechas de etapas (para banner de recalcular)
@@ -4357,6 +4370,77 @@ def crear_liquidacion_mo(obra_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception("Error creando liquidación MO")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/<int:obra_id>/liquidacion-mo/confirmar-y-pagar', methods=['POST'])
+@csrf.exempt
+@login_required
+def confirmar_y_pagar_liquidacion(obra_id):
+    """Crea liquidación + marca como pagado + actualiza costo_real en un solo paso."""
+    from services.liquidacion_mo import crear_liquidacion, registrar_pago_item
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'pm', 'administrador', 'project_manager'}):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    try:
+        desde = date.fromisoformat(data['periodo_desde'])
+        hasta = date.fromisoformat(data['periodo_hasta'])
+        items_data = data.get('items', [])
+        metodo_pago = data.get('metodo_pago', 'transferencia')
+        if not items_data:
+            return jsonify(ok=False, error='Debe incluir al menos un operario'), 400
+
+        # 1. Crear liquidación (sin commit aún)
+        liq = crear_liquidacion(obra_id, desde, hasta, items_data, notas=data.get('notas'), commit=False)
+        db.session.flush()
+
+        # 2. Marcar cada item como pagado y actualizar costo_real
+        for item in liq.items.all():
+            item.estado = 'pagado'
+            item.metodo_pago = metodo_pago
+            item.fecha_pago = date.today()
+            item.pagado_por_id = current_user.id
+            item.pagado_at = datetime.utcnow()
+
+        liq.estado = 'pagado'
+
+        # 3. Recalcular costo_real de la obra
+        from services.liquidacion_mo import _decimal
+        from models.templates import LiquidacionMOItem, LiquidacionMO as LiqMO
+        obra = Obra.query.get(obra_id)
+
+        costo_mo_pagado = _decimal(
+            db.session.query(db.func.coalesce(db.func.sum(LiquidacionMOItem.monto), 0))
+            .join(LiqMO)
+            .filter(LiqMO.obra_id == obra_id, LiquidacionMOItem.estado == 'pagado')
+            .scalar()
+        ) + _decimal(liq.monto_total)  # sumar la nueva liquidación
+
+        from models import UsoInventario
+        costo_materiales = _decimal(
+            db.session.query(
+                db.func.coalesce(db.func.sum(
+                    UsoInventario.cantidad_usada * db.func.coalesce(UsoInventario.precio_unitario_al_uso, 0)
+                ), 0)
+            ).filter(UsoInventario.obra_id == obra_id).scalar()
+        )
+        obra.costo_real = float(costo_materiales + costo_mo_pagado)
+
+        db.session.commit()
+        return jsonify(
+            ok=True,
+            liquidacion_id=liq.id,
+            monto_total=float(liq.monto_total),
+            costo_real_obra=obra.costo_real,
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error en confirmar y pagar liquidación MO")
         return jsonify(ok=False, error=str(e)), 500
 
 

@@ -907,19 +907,19 @@ function confirmarUnificado() {
     var totalMonto = items.reduce((s, i) => s + i.monto, 0);
     if (!confirm('Confirmar liquidacion por ' + formatARS(totalMonto) + '?\n\n' + items.length + ' operario(s) en el periodo ' + formatFecha(desde) + ' al ' + formatFecha(hasta))) return;
 
-    fetch(`/obras/${OBRA_ID}/liquidacion-mo`, {
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo/confirmar-y-pagar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, notas: notas })
+        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, metodo_pago: 'transferencia', notas: notas })
     })
     .then(r => r.json())
     .then(data => {
         if (data.ok) {
-            alert('Liquidacion creada exitosamente por ' + formatARS(data.monto_total || 0));
+            alert('Liquidacion confirmada y pagada por ' + formatARS(data.monto_total || 0) + '\nCosto real de la obra actualizado.');
             cargarHistorialLiq();
             document.getElementById('liq-preview').style.display = 'none';
             document.getElementById('liq-empty').style.display = 'block';
-            document.getElementById('liq-empty').innerHTML = '<div class="alert alert-success text-center"><i class="fas fa-check-circle me-1"></i>Liquidacion creada. Puede registrar los pagos en el historial de abajo.</div>';
+            document.getElementById('liq-empty').innerHTML = '<div class="alert alert-success text-center"><i class="fas fa-check-circle me-1"></i>Liquidacion confirmada y pagada. El costo real de la obra fue actualizado.</div>';
         } else {
             alert(data.error || 'Error al crear liquidacion');
         }
@@ -965,15 +965,15 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
         monto: monto,
     }];
 
-    fetch(`/obras/${OBRA_ID}/liquidacion-mo`, {
+    fetch(`/obras/${OBRA_ID}/liquidacion-mo/confirmar-y-pagar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, notas: notas ? notas + ' [' + nombre + ']' : nombre })
+        body: JSON.stringify({ periodo_desde: desde, periodo_hasta: hasta, items: items, metodo_pago: 'transferencia', notas: notas ? notas + ' [' + nombre + ']' : nombre })
     })
     .then(r => r.json())
     .then(data => {
         if (data.ok) {
-            alert('Liquidacion de ' + nombre + ' creada por ' + formatARS(monto));
+            alert('Pago confirmado: ' + nombre + ' — ' + formatARS(monto) + '\nCosto real de la obra actualizado.');
             // Marcar fila como liquidada
             var row = document.getElementById('oprow-' + key) || document.querySelector(`[id$="${key}"]`);
             document.getElementById('monto-' + key).value = 0;
@@ -983,7 +983,7 @@ function confirmarIndividual(key, eIdx, oIdx, tipo) {
             recalcTotales();
             cargarHistorialLiq();
         } else {
-            alert(data.error || 'Error al crear liquidacion');
+            alert(data.error || 'Error al confirmar liquidacion');
         }
     })
     .catch(err => alert('Error: ' + err.message));
