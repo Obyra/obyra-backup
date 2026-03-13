@@ -22,7 +22,7 @@ matplotlib.use('Agg')  # Non-interactive backend
 from datetime import datetime, timedelta
 import logging
 
-from models import Event, Obra, Presupuesto, Usuario, Organizacion, db
+from models import Event, Obra, Presupuesto, Usuario, Organizacion, OrgMembership, db
 from sqlalchemy import func, desc
 from extensions import csrf
 
@@ -364,12 +364,14 @@ def calculate_kpis_v2(org_id, fecha_desde, fecha_hasta, project_ids):
         Obra.progreso.isnot(None)
     ).scalar() or 0
     
-    # Personal activo (excluir super administradores del sistema)
-    personal_activo = Usuario.query.filter(
-        Usuario.organizacion_id == org_id,
+    # Personal activo: contar miembros reales vía OrgMembership
+    personal_activo = db.session.query(func.count(OrgMembership.id)).join(
+        Usuario, OrgMembership.user_id == Usuario.id
+    ).filter(
+        OrgMembership.org_id == org_id,
         Usuario.activo == True,
         Usuario.is_super_admin.is_(False)
-    ).count()
+    ).scalar() or 0
     
     # Presupuestos creados en el período
     presupuestos_creados = Presupuesto.query.filter(

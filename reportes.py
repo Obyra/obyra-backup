@@ -5,7 +5,7 @@ from sqlalchemy import func, desc
 from app import db
 from models import (Obra, Usuario, Presupuesto, ItemInventario, RegistroTiempo,
                    AsignacionObra, UsoInventario, MovimientoInventario, CategoriaInventario,
-                   Organizacion)
+                   Organizacion, OrgMembership)
 from services.alerts import upsert_alert_vigencia, log_activity_vigencia, limpiar_alertas_presupuestos_confirmados
 from services.alertas_dashboard import obtener_alertas_para_dashboard, contar_alertas_por_severidad
 from services.memberships import get_current_org_id
@@ -345,12 +345,14 @@ def calcular_kpis(fecha_desde, fecha_hasta, *, org_id=None, visible_clause=None)
         Obra.progreso < 50  # Simplificado: menos del 50% se considera retrasado
     ).count()
     
-    # Personal activo (excluir super administradores del sistema)
-    personal_activo = Usuario.query.filter(
-        Usuario.organizacion_id == org_id,
+    # Personal activo: contar miembros reales de la organización vía OrgMembership
+    personal_activo = db.session.query(func.count(OrgMembership.id)).join(
+        Usuario, OrgMembership.user_id == Usuario.id
+    ).filter(
+        OrgMembership.org_id == org_id,
         Usuario.activo == True,
         Usuario.is_super_admin.is_(False)
-    ).count()
+    ).scalar() or 0
 
     # Obras con personal asignado
     obras_con_personal = db.session.query(
