@@ -616,13 +616,13 @@ function renderUnificado() {
                 </td>
                 <td class="text-end">
                     <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
-                           value="${op.monto_default}" step="100" min="0" oninput="recalcTotales()" style="max-width:120px;">
+                           value="${op.monto_default}" step="100" min="0" oninput="recalcTotales(); actualizarBtnPagar('${key}', '${op.operario_nombre}')" style="max-width:120px;">
                 </td>
             </tr>
             <tr class="border-bottom" style="background:#e8f5e9;">
                 <td colspan="8" class="text-end py-2 pe-3">
                     <button class="btn btn-success fw-bold px-4 py-2" id="btn-pagar-${key}" onclick="confirmarIndividual('${key}', ${eIdx}, ${oIdx}, 'etapa')">
-                        <i class="fas fa-check-circle me-2"></i>CONFIRMAR LIQUIDACION — ${op.operario_nombre} — ${formatARS(op.monto_default)}
+                        <i class="fas fa-check-circle me-2"></i>CONFIRMAR LIQUIDACION — ${op.operario_nombre} — <span id="btn-monto-${key}">${formatARS(op.monto_default)}</span>
                     </button>
                 </td>
             </tr>
@@ -690,13 +690,13 @@ function renderUnificado() {
                 </td>
                 <td class="text-end">
                     <input type="number" class="form-control form-control-sm text-end fw-bold liq-monto" id="monto-${key}"
-                           value="${op.monto_default}" step="100" min="0" onchange="recalcTotales()" style="max-width:120px;">
+                           value="${op.monto_default}" step="100" min="0" onchange="recalcTotales(); actualizarBtnPagar('${key}', '${op.operario_nombre}')" style="max-width:120px;">
                 </td>
             </tr>
             <tr style="background:#e8f5e9;">
                 <td colspan="6" class="text-end py-2 pe-3">
                     <button class="btn btn-success fw-bold px-4 py-2" id="btn-pagar-${key}" onclick="confirmarIndividual('${key}', 0, ${sIdx}, 'sinEtapa')">
-                        <i class="fas fa-check-circle me-2"></i>CONFIRMAR LIQUIDACION — ${op.operario_nombre} — ${formatARS(op.monto_default)}
+                        <i class="fas fa-check-circle me-2"></i>CONFIRMAR LIQUIDACION — ${op.operario_nombre} — <span id="btn-monto-${key}">${formatARS(op.monto_default)}</span>
                     </button>
                 </td>
             </tr>`;
@@ -720,6 +720,24 @@ function renderUnificado() {
         cambiarModoSE(`se${sIdx}`, sIdx);
     });
     recalcTotales();
+}
+
+// ============================================================
+// ACTUALIZAR MONTO EN BOTON PAGAR
+// ============================================================
+function actualizarBtnPagar(key, nombre) {
+    var montoEl = document.getElementById('monto-' + key);
+    var spanEl = document.getElementById('btn-monto-' + key);
+    if (montoEl && spanEl) {
+        spanEl.textContent = formatARS(parseFloat(montoEl.value) || 0);
+    }
+}
+function actualizarTodosBtnPagar() {
+    document.querySelectorAll('[id^="btn-monto-"]').forEach(function(span) {
+        var key = span.id.replace('btn-monto-', '');
+        var montoEl = document.getElementById('monto-' + key);
+        if (montoEl) span.textContent = formatARS(parseFloat(montoEl.value) || 0);
+    });
 }
 
 // ============================================================
@@ -753,6 +771,7 @@ function cambiarModo(key, eIdx, oIdx) {
         montoEl.focus();
     }
     recalcTotales();
+    actualizarTodosBtnPagar();
 }
 
 function cambiarModoSE(key, sIdx) {
@@ -772,6 +791,7 @@ function cambiarModoSE(key, sIdx) {
         detalleEl.textContent = hfi + 'h x $' + formatARS(tarifa) + ' (editable)';
     }
     recalcTotales();
+    actualizarTodosBtnPagar();
 }
 
 function recalcFromTareas(key, eIdx, oIdx) {
@@ -852,6 +872,7 @@ function recalcTotales() {
             if (stEl) stEl.textContent = formatARS(subtotal);
         });
     }
+    actualizarTodosBtnPagar();
 }
 
 // ============================================================
