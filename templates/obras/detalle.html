@@ -917,8 +917,8 @@
                             <button class="nav-link" id="tab-remitos" data-bs-toggle="tab"
                                     data-bs-target="#pane-remitos" type="button" role="tab">
                                 <i class="fas fa-truck me-1"></i>Remitos
-                                {% if obra.remitos.count() > 0 %}
-                                <span class="badge bg-info rounded-pill">{{ obra.remitos.count() }}</span>
+                                {% if remitos_count > 0 %}
+                                <span class="badge bg-info rounded-pill">{{ remitos_count }}</span>
                                 {% endif %}
                             </button>
                         </li>
@@ -1085,7 +1085,6 @@
                                 </button>
                             </div>
 
-                            {% set remitos_list = obra.remitos.all() %}
                             {% if remitos_list %}
                             <div class="table-responsive">
                                 <table class="table table-hover mb-0">

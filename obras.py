@@ -934,28 +934,28 @@ def detalle(id):
         pass
 
     # Obtener stock transferido a esta obra (desde inventario) — con eager load del item
-    from models.inventory import StockObra, ItemInventario as InvItem
-    from sqlalchemy.orm import joinedload
-    stock_obra_items = StockObra.query.options(joinedload(StockObra.item)).filter_by(obra_id=obra.id).all()
-    # Crear diccionarios para acceso rápido por item_inventario_id y por nombre
     stock_transferido = {}
     stock_transferido_por_nombre = {}
-    # Lista para matching flexible (buscar palabras del nombre de inventario en descripción del presupuesto)
     stock_transferido_lista = []
-    for stock in stock_obra_items:
-        stock_data = {
-            'cantidad_disponible': float(stock.cantidad_disponible or 0),
-            'cantidad_consumida': float(stock.cantidad_consumida or 0),
-            'item_nombre': stock.item.nombre if stock.item else '',
-            'item_nombre_lower': stock.item.nombre.lower() if stock.item and stock.item.nombre else '',
-            'item_codigo': stock.item.codigo if stock.item else '',
-            'unidad': stock.item.unidad if stock.item else ''
-        }
-        stock_transferido[stock.item_inventario_id] = stock_data
-        stock_transferido_lista.append(stock_data)
-        # También indexar por nombre (en minúsculas) para match por nombre exacto
-        if stock.item and stock.item.nombre:
-            stock_transferido_por_nombre[stock.item.nombre.lower()] = stock_data
+    try:
+        from models.inventory import StockObra, ItemInventario as InvItem
+        from sqlalchemy.orm import joinedload
+        stock_obra_items = StockObra.query.options(joinedload(StockObra.item)).filter_by(obra_id=obra.id).all()
+        for stock in stock_obra_items:
+            stock_data = {
+                'cantidad_disponible': float(stock.cantidad_disponible or 0),
+                'cantidad_consumida': float(stock.cantidad_consumida or 0),
+                'item_nombre': stock.item.nombre if stock.item else '',
+                'item_nombre_lower': stock.item.nombre.lower() if stock.item and stock.item.nombre else '',
+                'item_codigo': stock.item.codigo if stock.item else '',
+                'unidad': stock.item.unidad if stock.item else ''
+            }
+            stock_transferido[stock.item_inventario_id] = stock_data
+            stock_transferido_lista.append(stock_data)
+            if stock.item and stock.item.nombre:
+                stock_transferido_por_nombre[stock.item.nombre.lower()] = stock_data
+    except Exception:
+        pass
 
     # Calcular costos desglosados para el panel de progreso
     from sqlalchemy import func
@@ -1017,9 +1017,19 @@ def detalle(id):
             hay_desfase_fechas = True
             break
 
+    # Contar remitos de forma segura (tabla puede no existir aún en producción)
+    try:
+        remitos_count = obra.remitos.count() if hasattr(obra, 'remitos') else 0
+        remitos_list = obra.remitos.order_by(None).all() if remitos_count > 0 else []
+    except Exception:
+        remitos_count = 0
+        remitos_list = []
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
+                         remitos_count=remitos_count,
+                         remitos_list=remitos_list,
                          hay_desfase_fechas=hay_desfase_fechas,
                          etapas_con_avance=etapas_con_avance,
                          porcentaje_obra=porcentaje_obra,
