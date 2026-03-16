@@ -146,6 +146,17 @@
                                         <i class="fas fa-map-marker-alt me-1"></i>
                                         {{ obra.direccion or 'Ubicación no especificada' }}
                                     </p>
+                                    {% if encargados_obra.get(obra.id) %}
+                                    <p class="mb-1 small">
+                                        <i class="fas fa-user-tie me-1 text-primary"></i>
+                                        <strong>{{ encargados_obra[obra.id].nombre }}</strong>
+                                        <span class="badge bg-primary bg-opacity-25 text-primary ms-1">{{ encargados_obra[obra.id].rol }}</span>
+                                    </p>
+                                    {% else %}
+                                    <p class="mb-1 small text-muted">
+                                        <i class="fas fa-user-tie me-1"></i>Sin encargado asignado
+                                    </p>
+                                    {% endif %}
                                     <span class="badge bg-success">{{ obra.estado.title() }}</span>
                                 </div>
                                 <div class="col-md-3 text-end">

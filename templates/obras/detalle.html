@@ -427,7 +427,9 @@
                             <button class="nav-link btn-sm" id="maquinaria-tab" data-bs-toggle="pill" data-bs-target="#maquinaria" type="button" role="tab">
                                 <i class="fas fa-truck-loading me-1"></i>Maquinaria
                                 {% if movimientos_pendientes|length > 0 %}
-                                <span class="badge bg-danger ms-1">{{ movimientos_pendientes|length }}</span>
+                                <span class="badge bg-danger ms-1" title="En tránsito">{{ movimientos_pendientes|length }}</span>
+                                {% elif equipos_en_obra|length > 0 %}
+                                <span class="badge bg-success ms-1">{{ equipos_en_obra|length }}</span>
                                 {% endif %}
                             </button>
                         </li>
@@ -889,27 +891,38 @@
                                 {% if movimientos_pendientes|length > 0 %}
                                 <!-- Alertas de recepción pendiente -->
                                 <div class="mb-3">
-                                    <h6 class="mb-2"><i class="fas fa-truck text-warning me-2"></i>Equipos en camino a esta obra</h6>
+                                    <div class="alert alert-info py-2 mb-2">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        <strong>{{ movimientos_pendientes|length }}</strong> equipo(s) en tránsito hacia esta obra. Acepte la recepción para confirmar.
+                                    </div>
+                                    <h6 class="mb-2"><i class="fas fa-truck text-warning me-2"></i>Equipos en camino</h6>
                                     {% for mov in movimientos_pendientes %}
-                                    <div class="alert alert-warning d-flex justify-content-between align-items-center mb-2 py-2">
-                                        <div>
-                                            <strong>{{ mov.equipment.nombre }}</strong>
-                                            <span class="text-muted">({{ mov.equipment.codigo or '-' }})</span>
-                                            — {{ mov.equipment.tipo }}
-                                            {% if mov.equipment.marca %} · {{ mov.equipment.marca }}{% endif %}
-                                            <br>
-                                            <small class="text-muted">
-                                                <i class="fas fa-arrow-right me-1"></i>Desde {{ mov.origen_display }}
-                                                · {{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}
-                                                · Costo/hora: {{ "$ {:,.2f}".format(mov.equipment.costo_hora|float) if mov.equipment.costo_hora else '-' }}
-                                            </small>
+                                    <div class="card border-warning mb-2">
+                                        <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>{{ mov.equipment.nombre if mov.equipment else 'Equipo #' ~ mov.equipment_id }}</strong>
+                                                {% if mov.equipment %}
+                                                <span class="text-muted">({{ mov.equipment.codigo or '-' }})</span>
+                                                — {{ mov.equipment.tipo }}
+                                                {% if mov.equipment.marca %} · {{ mov.equipment.marca }}{% endif %}
+                                                {% endif %}
+                                                <br>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-arrow-right me-1"></i>Desde {{ mov.origen_display }}
+                                                    · {{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}
+                                                    {% if mov.equipment and mov.equipment.costo_hora %}
+                                                    · Costo/hora: ${{ "{:,.2f}".format(mov.equipment.costo_hora|float) }}
+                                                    {% endif %}
+                                                </small>
+                                            </div>
+                                            <button class="btn btn-success btn-sm" onclick="aceptarMovimiento({{ mov.id }}, '{{ mov.equipment.nombre if mov.equipment else 'Equipo' }}')">
+                                                <i class="fas fa-check me-1"></i>Aceptar Recepción
+                                            </button>
                                         </div>
-                                        <button class="btn btn-sm btn-success" onclick="aceptarMovimiento({{ mov.id }}, '{{ mov.equipment.nombre }}')">
-                                            <i class="fas fa-check me-1"></i>Aceptar
-                                        </button>
                                     </div>
                                     {% endfor %}
                                 </div>
+                                <hr>
                                 {% endif %}
 
                                 <div class="d-flex justify-content-between align-items-center mb-3">

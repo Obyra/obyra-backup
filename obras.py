@@ -1061,12 +1061,15 @@ def detalle(id):
     movimientos_pendientes = []
     try:
         from models.equipment import Equipment, EquipmentMovement
+        from sqlalchemy.orm import joinedload
         equipos_en_obra = Equipment.query.filter_by(
             company_id=obra.organizacion_id,
             ubicacion_tipo='obra',
             ubicacion_obra_id=obra.id
         ).filter(Equipment.estado != 'baja').all()
-        movimientos_pendientes = EquipmentMovement.query.filter_by(
+        movimientos_pendientes = EquipmentMovement.query.options(
+            joinedload(EquipmentMovement.equipment)
+        ).filter_by(
             company_id=obra.organizacion_id,
             destino_obra_id=obra.id,
             estado='en_transito'
@@ -1074,6 +1077,7 @@ def detalle(id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error cargando equipos en obra {obra.id}: {e}")
+        flash(f'Error al cargar maquinaria: {e}', 'warning')
 
     return render_template('obras/detalle.html',
                          obra=obra,
