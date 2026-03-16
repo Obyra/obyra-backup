@@ -423,15 +423,15 @@
                                 <i class="fas fa-warehouse me-1"></i>Stock en Obra
                             </button>
                         </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link btn-sm" id="maquinaria-tab" type="button" onclick="mostrarMaquinaria()">
+                        <li class="nav-item">
+                            <a href="javascript:void(0)" class="nav-link btn-sm" id="maquinaria-tab" onclick="event.preventDefault(); event.stopPropagation(); mostrarMaquinaria(); return false;">
                                 <i class="fas fa-truck-loading me-1"></i>Maquinaria
                                 {% if movimientos_pendientes|length > 0 %}
                                 <span class="badge bg-danger ms-1" title="En tránsito">{{ movimientos_pendientes|length }}</span>
                                 {% elif equipos_en_obra|length > 0 %}
                                 <span class="badge bg-success ms-1">{{ equipos_en_obra|length }}</span>
                                 {% endif %}
-                            </button>
+                            </a>
                         </li>
                         <li class="nav-item ms-auto" role="presentation">
                             <button class="btn btn-sm btn-primary" onclick="abrirGestionMateriales({{ obra.id }})" title="Analizar stock, reservar y solicitar compra">
@@ -4037,9 +4037,25 @@ async function actualizarTablaMateriales(obraId) {
 // ========== GESTIÓN DE STOCK EN OBRA ==========
 // Mostrar panel Maquinaria (fuera del sistema de tabs Bootstrap)
 function mostrarMaquinaria() {
-    // Ocultar tab-content de Bootstrap y mostrar panel maquinaria
-    document.getElementById('materialesTabContent').style.display = 'none';
-    document.getElementById('panelMaquinaria').style.display = 'block';
+    console.log('=== mostrarMaquinaria() ejecutado ===');
+
+    // Ocultar tab-content de Bootstrap
+    var tabContent = document.getElementById('materialesTabContent');
+    if (tabContent) tabContent.style.display = 'none';
+
+    // Desactivar todas las tab-panes activas
+    document.querySelectorAll('#materialesTabContent .tab-pane').forEach(function(p) {
+        p.classList.remove('show', 'active');
+    });
+
+    // Mostrar panel maquinaria
+    var panel = document.getElementById('panelMaquinaria');
+    if (panel) {
+        panel.style.display = 'block';
+        console.log('Panel maquinaria visible:', panel.offsetHeight, 'px');
+    } else {
+        console.error('ERROR: #panelMaquinaria no encontrado!');
+    }
 
     // Ocultar paneles auxiliares
     var panelReservas = document.getElementById('panelReservasActivas');
@@ -4048,13 +4064,13 @@ function mostrarMaquinaria() {
     if (alertasReservas) alertasReservas.style.display = 'none';
 
     // Desactivar pills de Bootstrap y activar la de maquinaria
-    document.querySelectorAll('#materialesTab button[data-bs-toggle="pill"]').forEach(function(btn) {
+    document.querySelectorAll('#materialesTab .nav-link').forEach(function(btn) {
         btn.classList.remove('active');
     });
     document.getElementById('maquinaria-tab').classList.add('active');
 
     // Scroll al contenido
-    document.getElementById('panelMaquinaria').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function aceptarMovimiento(movId, nombre) {
