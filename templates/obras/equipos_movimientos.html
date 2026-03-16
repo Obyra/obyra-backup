@@ -237,72 +237,45 @@
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Tipo *</label>
                             <select class="form-select" id="crear_tipo" required>
-                                <option value="">Seleccionar...</option>
-                                <optgroup label="Hormigon">
-                                    <option value="hormigonera">Hormigonera</option>
-                                    <option value="autohormigonera">Autohormigonera / Volqueta</option>
-                                    <option value="bomba_hormigon">Bomba de Hormigon</option>
-                                    <option value="vibrador_hormigon">Vibrador de Hormigon</option>
-                                    <option value="pulido_hormigon">Pulidora de Hormigon</option>
-                                    <option value="maquina_pisos_hormigon">Maquina para Pisos de Hormigon</option>
-                                </optgroup>
-                                <optgroup label="Compactacion y Suelos">
-                                    <option value="compactador">Compactador</option>
-                                    <option value="solado_contrapiso">Solado y Contrapiso</option>
-                                    <option value="preparacion_superficies">Preparacion de Superficies</option>
-                                    <option value="maquina_pisos">Maquina para Pisos</option>
-                                </optgroup>
-                                <optgroup label="Corte y Hierro">
-                                    <option value="corte_doblado_hierro">Corte y Doblado de Hierro</option>
-                                    <option value="mesa_corte">Mesa de Corte</option>
-                                    <option value="herramienta_corte_diamante">Herramienta de Corte por Diamantes</option>
-                                    <option value="disco_mecha_diamantada">Discos y Mechas Diamantadas</option>
-                                </optgroup>
-                                <optgroup label="Elevacion">
-                                    <option value="guinche">Guinche</option>
-                                    <option value="elevacion_materiales">Elevacion de Materiales</option>
-                                    <option value="elevacion_personas">Elevacion de Personas</option>
-                                    <option value="elevacion_movil">Elevacion Movil de Obra</option>
-                                    <option value="grua_torre">Grua Torre</option>
-                                    <option value="andamio">Andamio Tradicional / Fachada</option>
-                                </optgroup>
-                                <optgroup label="Demolicion">
-                                    <option value="martillo_demoledor">Martillo Demoledor</option>
-                                    <option value="robot_demolicion">Robot de Demolicion</option>
-                                </optgroup>
-                                <optgroup label="Herramientas">
-                                    <option value="herramienta_electrica">Herramienta Electrica</option>
-                                    <option value="herramienta_hidraulica">Herramienta Hidraulica</option>
-                                    <option value="herramienta_neumatica">Herramienta Neumatica</option>
-                                    <option value="herramienta_madera">Herramienta para Madera</option>
-                                    <option value="soldadora">Soldadora</option>
-                                </optgroup>
-                                <optgroup label="Energia e Iluminacion">
-                                    <option value="generador">Generador Electrico</option>
-                                    <option value="torre_iluminacion">Torre de Iluminacion</option>
-                                    <option value="compresor">Compresor</option>
-                                    <option value="motor_explosion">Motor a Explosion</option>
-                                </optgroup>
-                                <optgroup label="Bombeo y Proyeccion">
-                                    <option value="bomba_agua">Bomba de Agua</option>
-                                    <option value="proyeccion_bombeo">Proyeccion y Bombeo de Material</option>
-                                    <option value="proyectado_pintura">Equipo Proyectado de Pintura</option>
-                                    <option value="limpieza_alta_presion">Equipo Limpieza Alta Presion</option>
-                                </optgroup>
-                                <optgroup label="Excavacion y Movimiento">
-                                    <option value="retroexcavadora">Retroexcavadora</option>
-                                    <option value="miniexcavadora">Mini Excavadora</option>
-                                    <option value="minicargadora">Mini Cargadora</option>
-                                    <option value="zanjadora">Maquina para Zanjas y Canos</option>
-                                    <option value="camion">Camion</option>
-                                </optgroup>
-                                <optgroup label="Encofrado y Estructura">
-                                    <option value="encofrado">Encofrado</option>
-                                </optgroup>
-                                <optgroup label="Otro">
-                                    <option value="otro">Otro</option>
-                                </optgroup>
+                                <option value="">Seleccionar categoria...</option>
+                                <option value="Compactacion">Compactacion</option>
+                                <option value="Corte y Doblado de Hierro">Corte y Doblado de Hierro</option>
+                                <option value="Corte y Doblado de Hierro - Plantas CNC">Corte y Doblado de Hierro - Plantas CNC</option>
+                                <option value="Vibrado de Hormigon">Vibrado de Hormigon</option>
+                                <option value="Hormigoneras">Hormigoneras</option>
+                                <option value="Maquinas para Pisos">Maquinas para Pisos</option>
+                                <option value="Maquinas para Pisos de Hormigon">Maquinas para Pisos de Hormigon</option>
+                                <option value="Preparacion de Superficies">Preparacion de Superficies</option>
+                                <option value="Pulido de Hormigon">Pulido de Hormigon</option>
+                                <option value="Equipos de Limpieza de Alta Presion">Equipos de Limpieza de Alta Presion</option>
+                                <option value="Equipos para Proyectado de Pintura">Equipos para Proyectado de Pintura</option>
+                                <option value="Proyeccion y Bombeo de Material">Proyeccion y Bombeo de Material</option>
+                                <option value="Solado y Contrapiso">Solado y Contrapiso</option>
+                                <option value="Bombas de Hormigon">Bombas de Hormigon</option>
+                                <option value="Generadores Electricos y Torres de Iluminacion">Generadores Electricos y Torres de Iluminacion</option>
+                                <option value="Robots de Demolicion">Robots de Demolicion</option>
+                                <option value="Herramientas Electricas">Herramientas Electricas</option>
+                                <option value="Herramientas Hidraulicas">Herramientas Hidraulicas</option>
+                                <option value="Herramientas Neumaticas">Herramientas Neumaticas</option>
+                                <option value="Herramientas de Corte por Diamantes">Herramientas de Corte por Diamantes</option>
+                                <option value="Discos Profesionales y Mechas Diamantadas">Discos Profesionales y Mechas Diamantadas</option>
+                                <option value="Elevacion de Personas">Elevacion de Personas</option>
+                                <option value="Elevacion de Materiales">Elevacion de Materiales</option>
+                                <option value="Elevacion Movil de Obra">Elevacion Movil de Obra</option>
+                                <option value="Elevacion con Gruas Torres">Elevacion con Gruas Torres</option>
+                                <option value="Elevacion con Andamios Tradicionales / Fachada">Elevacion con Andamios Tradicionales / Fachada</option>
+                                <option value="Maquinas para Zanjas y Pasaje de Canos">Maquinas para Zanjas y Pasaje de Canos</option>
+                                <option value="Mesas de Corte">Mesas de Corte</option>
+                                <option value="Bombas de Agua y Productos de Fuerza">Bombas de Agua y Productos de Fuerza</option>
+                                <option value="Autohormigoneras - Volquetas - Hormigoneras Grandes">Autohormigoneras - Volquetas - Hormigoneras Grandes</option>
+                                <option value="Energia">Energia</option>
+                                <option value="Oil &amp; Gas">Oil &amp; Gas</option>
+                                <option value="Herramientas Electricas para Jardineria">Herramientas Electricas para Jardineria</option>
+                                <option value="Herramientas Electricas para Madera">Herramientas Electricas para Madera</option>
+                                <option value="Motores a Explosion">Motores a Explosion</option>
+                                <option value="__otro__">+ Crear nuevo tipo...</option>
                             </select>
+                            <input type="text" class="form-control mt-2 d-none" id="crear_tipo_custom" placeholder="Escribir nuevo tipo...">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Marca</label>
@@ -362,72 +335,45 @@
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Tipo *</label>
                             <select class="form-select" id="editar_tipo" required>
-                                <option value="">Seleccionar...</option>
-                                <optgroup label="Hormigon">
-                                    <option value="hormigonera">Hormigonera</option>
-                                    <option value="autohormigonera">Autohormigonera / Volqueta</option>
-                                    <option value="bomba_hormigon">Bomba de Hormigon</option>
-                                    <option value="vibrador_hormigon">Vibrador de Hormigon</option>
-                                    <option value="pulido_hormigon">Pulidora de Hormigon</option>
-                                    <option value="maquina_pisos_hormigon">Maquina para Pisos de Hormigon</option>
-                                </optgroup>
-                                <optgroup label="Compactacion y Suelos">
-                                    <option value="compactador">Compactador</option>
-                                    <option value="solado_contrapiso">Solado y Contrapiso</option>
-                                    <option value="preparacion_superficies">Preparacion de Superficies</option>
-                                    <option value="maquina_pisos">Maquina para Pisos</option>
-                                </optgroup>
-                                <optgroup label="Corte y Hierro">
-                                    <option value="corte_doblado_hierro">Corte y Doblado de Hierro</option>
-                                    <option value="mesa_corte">Mesa de Corte</option>
-                                    <option value="herramienta_corte_diamante">Herramienta de Corte por Diamantes</option>
-                                    <option value="disco_mecha_diamantada">Discos y Mechas Diamantadas</option>
-                                </optgroup>
-                                <optgroup label="Elevacion">
-                                    <option value="guinche">Guinche</option>
-                                    <option value="elevacion_materiales">Elevacion de Materiales</option>
-                                    <option value="elevacion_personas">Elevacion de Personas</option>
-                                    <option value="elevacion_movil">Elevacion Movil de Obra</option>
-                                    <option value="grua_torre">Grua Torre</option>
-                                    <option value="andamio">Andamio Tradicional / Fachada</option>
-                                </optgroup>
-                                <optgroup label="Demolicion">
-                                    <option value="martillo_demoledor">Martillo Demoledor</option>
-                                    <option value="robot_demolicion">Robot de Demolicion</option>
-                                </optgroup>
-                                <optgroup label="Herramientas">
-                                    <option value="herramienta_electrica">Herramienta Electrica</option>
-                                    <option value="herramienta_hidraulica">Herramienta Hidraulica</option>
-                                    <option value="herramienta_neumatica">Herramienta Neumatica</option>
-                                    <option value="herramienta_madera">Herramienta para Madera</option>
-                                    <option value="soldadora">Soldadora</option>
-                                </optgroup>
-                                <optgroup label="Energia e Iluminacion">
-                                    <option value="generador">Generador Electrico</option>
-                                    <option value="torre_iluminacion">Torre de Iluminacion</option>
-                                    <option value="compresor">Compresor</option>
-                                    <option value="motor_explosion">Motor a Explosion</option>
-                                </optgroup>
-                                <optgroup label="Bombeo y Proyeccion">
-                                    <option value="bomba_agua">Bomba de Agua</option>
-                                    <option value="proyeccion_bombeo">Proyeccion y Bombeo de Material</option>
-                                    <option value="proyectado_pintura">Equipo Proyectado de Pintura</option>
-                                    <option value="limpieza_alta_presion">Equipo Limpieza Alta Presion</option>
-                                </optgroup>
-                                <optgroup label="Excavacion y Movimiento">
-                                    <option value="retroexcavadora">Retroexcavadora</option>
-                                    <option value="miniexcavadora">Mini Excavadora</option>
-                                    <option value="minicargadora">Mini Cargadora</option>
-                                    <option value="zanjadora">Maquina para Zanjas y Canos</option>
-                                    <option value="camion">Camion</option>
-                                </optgroup>
-                                <optgroup label="Encofrado y Estructura">
-                                    <option value="encofrado">Encofrado</option>
-                                </optgroup>
-                                <optgroup label="Otro">
-                                    <option value="otro">Otro</option>
-                                </optgroup>
+                                <option value="">Seleccionar categoria...</option>
+                                <option value="Compactacion">Compactacion</option>
+                                <option value="Corte y Doblado de Hierro">Corte y Doblado de Hierro</option>
+                                <option value="Corte y Doblado de Hierro - Plantas CNC">Corte y Doblado de Hierro - Plantas CNC</option>
+                                <option value="Vibrado de Hormigon">Vibrado de Hormigon</option>
+                                <option value="Hormigoneras">Hormigoneras</option>
+                                <option value="Maquinas para Pisos">Maquinas para Pisos</option>
+                                <option value="Maquinas para Pisos de Hormigon">Maquinas para Pisos de Hormigon</option>
+                                <option value="Preparacion de Superficies">Preparacion de Superficies</option>
+                                <option value="Pulido de Hormigon">Pulido de Hormigon</option>
+                                <option value="Equipos de Limpieza de Alta Presion">Equipos de Limpieza de Alta Presion</option>
+                                <option value="Equipos para Proyectado de Pintura">Equipos para Proyectado de Pintura</option>
+                                <option value="Proyeccion y Bombeo de Material">Proyeccion y Bombeo de Material</option>
+                                <option value="Solado y Contrapiso">Solado y Contrapiso</option>
+                                <option value="Bombas de Hormigon">Bombas de Hormigon</option>
+                                <option value="Generadores Electricos y Torres de Iluminacion">Generadores Electricos y Torres de Iluminacion</option>
+                                <option value="Robots de Demolicion">Robots de Demolicion</option>
+                                <option value="Herramientas Electricas">Herramientas Electricas</option>
+                                <option value="Herramientas Hidraulicas">Herramientas Hidraulicas</option>
+                                <option value="Herramientas Neumaticas">Herramientas Neumaticas</option>
+                                <option value="Herramientas de Corte por Diamantes">Herramientas de Corte por Diamantes</option>
+                                <option value="Discos Profesionales y Mechas Diamantadas">Discos Profesionales y Mechas Diamantadas</option>
+                                <option value="Elevacion de Personas">Elevacion de Personas</option>
+                                <option value="Elevacion de Materiales">Elevacion de Materiales</option>
+                                <option value="Elevacion Movil de Obra">Elevacion Movil de Obra</option>
+                                <option value="Elevacion con Gruas Torres">Elevacion con Gruas Torres</option>
+                                <option value="Elevacion con Andamios Tradicionales / Fachada">Elevacion con Andamios Tradicionales / Fachada</option>
+                                <option value="Maquinas para Zanjas y Pasaje de Canos">Maquinas para Zanjas y Pasaje de Canos</option>
+                                <option value="Mesas de Corte">Mesas de Corte</option>
+                                <option value="Bombas de Agua y Productos de Fuerza">Bombas de Agua y Productos de Fuerza</option>
+                                <option value="Autohormigoneras - Volquetas - Hormigoneras Grandes">Autohormigoneras - Volquetas - Hormigoneras Grandes</option>
+                                <option value="Energia">Energia</option>
+                                <option value="Oil &amp; Gas">Oil &amp; Gas</option>
+                                <option value="Herramientas Electricas para Jardineria">Herramientas Electricas para Jardineria</option>
+                                <option value="Herramientas Electricas para Madera">Herramientas Electricas para Madera</option>
+                                <option value="Motores a Explosion">Motores a Explosion</option>
+                                <option value="__otro__">+ Crear nuevo tipo...</option>
                             </select>
+                            <input type="text" class="form-control mt-2 d-none" id="editar_tipo_custom" placeholder="Escribir nuevo tipo...">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Marca</label>
@@ -552,9 +498,37 @@
 <script>
 var csrfToken = '{{ csrf_token() }}';
 
+// ==================== TIPO CUSTOM ====================
+function setupTipoCustom(selectId, customId) {
+    var sel = document.getElementById(selectId);
+    var custom = document.getElementById(customId);
+    sel.addEventListener('change', function() {
+        if (sel.value === '__otro__') {
+            custom.classList.remove('d-none');
+            custom.required = true;
+            custom.focus();
+        } else {
+            custom.classList.add('d-none');
+            custom.required = false;
+            custom.value = '';
+        }
+    });
+}
+setupTipoCustom('crear_tipo', 'crear_tipo_custom');
+setupTipoCustom('editar_tipo', 'editar_tipo_custom');
+
+function getTipoValue(selectId, customId) {
+    var sel = document.getElementById(selectId);
+    if (sel.value === '__otro__') {
+        return document.getElementById(customId).value.trim();
+    }
+    return sel.value;
+}
+
 // ==================== CRUD ====================
 function abrirModalCrear() {
     document.getElementById('formCrear').reset();
+    document.getElementById('crear_tipo_custom').classList.add('d-none');
     new bootstrap.Modal(document.getElementById('modalCrear')).show();
 }
 
@@ -562,7 +536,21 @@ function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, cos
     document.getElementById('editar_id').value = id;
     document.getElementById('editar_nombre').value = nombre;
     document.getElementById('editar_codigo').value = codigo;
-    document.getElementById('editar_tipo').value = tipo;
+    // Si el tipo no esta en el select, mostrar campo custom
+    var sel = document.getElementById('editar_tipo');
+    var custom = document.getElementById('editar_tipo_custom');
+    sel.value = tipo;
+    if (!sel.value || sel.value === '') {
+        // Tipo personalizado que no esta en la lista
+        sel.value = '__otro__';
+        custom.classList.remove('d-none');
+        custom.value = tipo;
+        custom.required = true;
+    } else {
+        custom.classList.add('d-none');
+        custom.value = '';
+        custom.required = false;
+    }
     document.getElementById('editar_marca').value = marca;
     document.getElementById('editar_modelo').value = modelo;
     document.getElementById('editar_nro_serie').value = nroSerie;
@@ -574,11 +562,13 @@ function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, cos
 
 document.getElementById('formCrear').addEventListener('submit', function(e) {
     e.preventDefault();
+    var tipoVal = getTipoValue('crear_tipo', 'crear_tipo_custom');
+    if (!tipoVal) { alert('Debe seleccionar o escribir un tipo'); return; }
     var form = new FormData();
     form.append('csrf_token', csrfToken);
     form.append('nombre', document.getElementById('crear_nombre').value);
     form.append('codigo', document.getElementById('crear_codigo').value);
-    form.append('tipo', document.getElementById('crear_tipo').value);
+    form.append('tipo', tipoVal);
     form.append('marca', document.getElementById('crear_marca').value);
     form.append('modelo', document.getElementById('crear_modelo').value);
     form.append('nro_serie', document.getElementById('crear_nro_serie').value);
@@ -594,11 +584,13 @@ document.getElementById('formCrear').addEventListener('submit', function(e) {
 document.getElementById('formEditar').addEventListener('submit', function(e) {
     e.preventDefault();
     var id = document.getElementById('editar_id').value;
+    var tipoVal = getTipoValue('editar_tipo', 'editar_tipo_custom');
+    if (!tipoVal) { alert('Debe seleccionar o escribir un tipo'); return; }
     var form = new FormData();
     form.append('csrf_token', csrfToken);
     form.append('nombre', document.getElementById('editar_nombre').value);
     form.append('codigo', document.getElementById('editar_codigo').value);
-    form.append('tipo', document.getElementById('editar_tipo').value);
+    form.append('tipo', tipoVal);
     form.append('marca', document.getElementById('editar_marca').value);
     form.append('modelo', document.getElementById('editar_modelo').value);
     form.append('nro_serie', document.getElementById('editar_nro_serie').value);
