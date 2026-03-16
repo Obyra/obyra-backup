@@ -1238,6 +1238,82 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] Cotizaciones proveedor migration skipped: {e}")
 
+    # Remitos + Stock Obra tables
+    try:
+        remitos_sql = """
+        DO $$
+        BEGIN
+            -- Remitos
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='remitos') THEN
+                CREATE TABLE remitos (
+                    id SERIAL PRIMARY KEY,
+                    organizacion_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    requerimiento_id INTEGER REFERENCES requerimientos_compra(id),
+                    numero_remito VARCHAR(50) NOT NULL,
+                    proveedor VARCHAR(200) NOT NULL,
+                    fecha DATE,
+                    estado VARCHAR(30) DEFAULT 'recibido',
+                    notas TEXT,
+                    archivo_url VARCHAR(500),
+                    recibido_por_id INTEGER REFERENCES usuarios(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_remito_obra ON remitos(obra_id);
+                CREATE INDEX ix_remito_req ON remitos(requerimiento_id);
+            END IF;
+
+            -- Items de remito
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='remito_items') THEN
+                CREATE TABLE remito_items (
+                    id SERIAL PRIMARY KEY,
+                    remito_id INTEGER NOT NULL REFERENCES remitos(id) ON DELETE CASCADE,
+                    descripcion VARCHAR(300) NOT NULL,
+                    cantidad NUMERIC(10,3) NOT NULL,
+                    unidad VARCHAR(20) DEFAULT 'u',
+                    observacion VARCHAR(300)
+                );
+                CREATE INDEX ix_remito_item_remito ON remito_items(remito_id);
+            END IF;
+
+            -- Stock en obra
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='stock_obra') THEN
+                CREATE TABLE stock_obra (
+                    id SERIAL PRIMARY KEY,
+                    obra_id INTEGER NOT NULL REFERENCES obras(id),
+                    item_inventario_id INTEGER NOT NULL REFERENCES items_inventario(id),
+                    cantidad_disponible NUMERIC(12,3) DEFAULT 0,
+                    cantidad_consumida NUMERIC(12,3) DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_stock_obra_item UNIQUE (obra_id, item_inventario_id)
+                );
+                CREATE INDEX ix_stock_obra_obra ON stock_obra(obra_id);
+            END IF;
+
+            -- Movimientos de stock en obra
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='movimientos_stock_obra') THEN
+                CREATE TABLE movimientos_stock_obra (
+                    id SERIAL PRIMARY KEY,
+                    stock_obra_id INTEGER NOT NULL REFERENCES stock_obra(id) ON DELETE CASCADE,
+                    tipo VARCHAR(20) NOT NULL,
+                    cantidad NUMERIC(12,3) NOT NULL,
+                    precio_unitario NUMERIC(15,2),
+                    motivo VARCHAR(300),
+                    usuario_id INTEGER REFERENCES usuarios(id),
+                    reserva_id INTEGER,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX ix_mso_stock ON movimientos_stock_obra(stock_obra_id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(remitos_sql))
+        db.session.commit()
+        print("[OK] Remitos + Stock Obra tables migration applied")
+    except Exception as e:
+        print(f"[WARN] Remitos + Stock Obra migration skipped: {e}")
+
     # Etapa dependencies and chaining
     try:
         dep_sql = """
