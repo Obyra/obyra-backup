@@ -1292,3 +1292,74 @@ class RecepcionOCItem(db.Model):
     # Relaciones
     recepcion = db.relationship('RecepcionOC', back_populates='items')
     oc_item = db.relationship('OrdenCompraItem')
+
+
+# ============================================================
+# REMITOS
+# ============================================================
+
+class Remito(db.Model):
+    """Remito de proveedor recibido en obra."""
+    __tablename__ = 'remitos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id'), nullable=True)
+
+    numero_remito = db.Column(db.String(50), nullable=False)       # Nro del proveedor
+    proveedor = db.Column(db.String(200), nullable=False)
+    proveedor_oc_id = db.Column(db.Integer, db.ForeignKey('proveedores_oc.id'), nullable=True)
+    fecha = db.Column(db.Date, nullable=False, default=date.today)
+    estado = db.Column(db.String(20), default='recibido')          # recibido, con_observaciones, rechazado
+    recibido_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    notas = db.Column(db.Text)
+    archivo_url = db.Column(db.String(500))                        # Foto/PDF del remito físico
+
+    created_by_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    organizacion = db.relationship('Organizacion')
+    obra = db.relationship('Obra', backref=db.backref('remitos', lazy='dynamic'))
+    orden_compra = db.relationship('OrdenCompra')
+    proveedor_ref = db.relationship('ProveedorOC', foreign_keys=[proveedor_oc_id])
+    recibido_por = db.relationship('Usuario', foreign_keys=[recibido_por_id])
+    created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
+    items = db.relationship('RemitoItem', back_populates='remito',
+                            cascade='all, delete-orphan', lazy='joined')
+
+    __table_args__ = (
+        db.Index('ix_remito_obra', 'obra_id'),
+        db.Index('ix_remito_oc', 'orden_compra_id'),
+    )
+
+    @property
+    def estado_display(self):
+        return {'recibido': 'Recibido', 'con_observaciones': 'Con observaciones',
+                'rechazado': 'Rechazado'}.get(self.estado, self.estado)
+
+    @property
+    def estado_color(self):
+        return {'recibido': 'success', 'con_observaciones': 'warning',
+                'rechazado': 'danger'}.get(self.estado, 'secondary')
+
+    @property
+    def total_items(self):
+        return len(self.items)
+
+
+class RemitoItem(db.Model):
+    """Item dentro de un remito."""
+    __tablename__ = 'remito_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    remito_id = db.Column(db.Integer, db.ForeignKey('remitos.id', ondelete='CASCADE'), nullable=False)
+    descripcion = db.Column(db.String(300), nullable=False)
+    cantidad = db.Column(db.Numeric(10, 3), nullable=False)
+    unidad = db.Column(db.String(20), default='u')                # u, kg, m2, m3, ml, l, bolsa, etc.
+    observacion = db.Column(db.String(300))                        # Observación por item
+
+    # Relaciones
+    remito = db.relationship('Remito', back_populates='items')

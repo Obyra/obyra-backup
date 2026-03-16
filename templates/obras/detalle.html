@@ -913,6 +913,15 @@
                             </button>
                         </li>
                         {% endif %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-remitos" data-bs-toggle="tab"
+                                    data-bs-target="#pane-remitos" type="button" role="tab">
+                                <i class="fas fa-truck me-1"></i>Remitos
+                                {% if obra.remitos.count() > 0 %}
+                                <span class="badge bg-info rounded-pill">{{ obra.remitos.count() }}</span>
+                                {% endif %}
+                            </button>
+                        </li>
                     </ul>
                 </div>
                 <div class="card-body">
@@ -1067,9 +1076,199 @@
                         </div>
                         {% endif %}
 
+                        <!-- TAB: Remitos -->
+                        <div class="tab-pane fade" id="pane-remitos" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Remitos</h5>
+                                <button class="btn btn-sm btn-primary" onclick="document.getElementById('modal-remito').style.display='flex'">
+                                    <i class="fas fa-plus me-1"></i>Cargar Remito
+                                </button>
+                            </div>
+
+                            {% set remitos_list = obra.remitos.all() %}
+                            {% if remitos_list %}
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nro Remito</th>
+                                            <th>Proveedor</th>
+                                            <th class="text-center">Fecha</th>
+                                            <th class="text-center">Items</th>
+                                            <th class="text-center">Estado</th>
+                                            <th>Recibido por</th>
+                                            <th class="text-center">OC</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for r in remitos_list %}
+                                        <tr>
+                                            <td><strong>{{ r.numero_remito }}</strong></td>
+                                            <td>{{ r.proveedor }}</td>
+                                            <td class="text-center">{{ r.fecha.strftime('%d/%m/%Y') if r.fecha else '-' }}</td>
+                                            <td class="text-center"><span class="badge bg-secondary">{{ r.total_items }}</span></td>
+                                            <td class="text-center">
+                                                <span class="badge bg-{{ r.estado_color }}">{{ r.estado_display }}</span>
+                                            </td>
+                                            <td>{{ r.recibido_por.nombre_completo if r.recibido_por else '-' }}</td>
+                                            <td class="text-center">
+                                                {% if r.orden_compra %}
+                                                <a href="{{ url_for('ordenes_compra.detalle', id=r.orden_compra_id) }}" class="badge bg-info text-decoration-none">
+                                                    {{ r.orden_compra.numero }}
+                                                </a>
+                                                {% else %}
+                                                <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary" onclick="verRemito({{ r.id }})">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="eliminarRemito({{ r.id }}, '{{ r.numero_remito }}')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-4 text-muted">
+                                <i class="fas fa-truck fa-2x mb-2"></i>
+                                <p>No hay remitos cargados para esta obra.</p>
+                            </div>
+                            {% endif %}
+                        </div>
+
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cargar Remito -->
+<div id="modal-remito" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1050; justify-content:center; align-items:start; padding-top:60px; overflow-y:auto;">
+    <div style="background:white; border-radius:12px; width:95%; max-width:700px; max-height:85vh; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+        <div class="bg-dark text-white p-3 rounded-top d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-truck me-2"></i>Cargar Remito</h5>
+            <button class="btn btn-sm btn-outline-light" onclick="document.getElementById('modal-remito').style.display='none'">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-3">
+            <form id="form-remito">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Nro Remito *</label>
+                        <input type="text" class="form-control" id="rem-numero" placeholder="Ej: 0001-00012345" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Proveedor *</label>
+                        <input type="text" class="form-control" id="rem-proveedor" placeholder="Nombre del proveedor" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Fecha *</label>
+                        <input type="date" class="form-control" id="rem-fecha" required>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Estado</label>
+                        <select class="form-select" id="rem-estado">
+                            <option value="recibido">Recibido</option>
+                            <option value="con_observaciones">Con observaciones</option>
+                            <option value="rechazado">Rechazado</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Vinculado a OC (opcional)</label>
+                        <select class="form-select" id="rem-oc">
+                            <option value="">Sin OC</option>
+                            {% if obra.ordenes_compra %}
+                            {% for oc in obra.ordenes_compra %}
+                            <option value="{{ oc.id }}">{{ oc.numero }} - {{ oc.proveedor }}</option>
+                            {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Recibido por</label>
+                        <select class="form-select" id="rem-recibido-por">
+                            <option value="{{ current_user.id }}">{{ current_user.nombre_completo }}</option>
+                            {% for m in miembros %}
+                            {% if m.id != current_user.id %}
+                            <option value="{{ m.id }}">{{ m.nombre_completo }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Notas / Observaciones</label>
+                    <textarea class="form-control" id="rem-notas" rows="2" placeholder="Ej: Faltaron 2 bolsas de cemite..."></textarea>
+                </div>
+
+                <!-- Items -->
+                <label class="form-label fw-bold small">Items del remito:</label>
+                <div id="rem-items">
+                    <div class="row mb-2 rem-item-row">
+                        <div class="col-5">
+                            <input type="text" class="form-control form-control-sm" placeholder="Descripción" data-field="descripcion">
+                        </div>
+                        <div class="col-2">
+                            <input type="number" class="form-control form-control-sm text-center" placeholder="Cant." step="0.1" min="0.1" data-field="cantidad">
+                        </div>
+                        <div class="col-2">
+                            <select class="form-select form-select-sm" data-field="unidad">
+                                <option value="u">u</option>
+                                <option value="kg">kg</option>
+                                <option value="m2">m2</option>
+                                <option value="m3">m3</option>
+                                <option value="ml">ml</option>
+                                <option value="l">litro</option>
+                                <option value="bolsa">bolsa</option>
+                                <option value="pallet">pallet</option>
+                            </select>
+                        </div>
+                        <div class="col-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Obs." data-field="observacion">
+                        </div>
+                        <div class="col-1">
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.rem-item-row').remove()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-outline-primary btn-sm mb-3" onclick="agregarItemRemito()">
+                    <i class="fas fa-plus me-1"></i>Agregar item
+                </button>
+
+                <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-remito').style.display='none'">Cancelar</button>
+                    <button type="button" class="btn btn-success" onclick="guardarRemito()">
+                        <i class="fas fa-save me-1"></i>Guardar Remito
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ver Remito -->
+<div id="modal-ver-remito" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1050; justify-content:center; align-items:start; padding-top:60px; overflow-y:auto;">
+    <div style="background:white; border-radius:12px; width:95%; max-width:600px; max-height:85vh; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+        <div class="bg-dark text-white p-3 rounded-top d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-truck me-2"></i>Detalle Remito</h5>
+            <button class="btn btn-sm btn-outline-light" onclick="document.getElementById('modal-ver-remito').style.display='none'">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-3" id="ver-remito-body">
+            <div class="text-center text-muted py-4">Cargando...</div>
         </div>
     </div>
 </div>
@@ -4085,6 +4284,122 @@ function promptNivel(etapaId, nivelActual) {
         else alert('Error: ' + (d.error || 'desconocido'));
     });
 }
+
+// ============================================================
+// REMITOS
+// ============================================================
+
+function agregarItemRemito() {
+    var container = document.getElementById('rem-items');
+    var html = `<div class="row mb-2 rem-item-row">
+        <div class="col-5"><input type="text" class="form-control form-control-sm" placeholder="Descripción" data-field="descripcion"></div>
+        <div class="col-2"><input type="number" class="form-control form-control-sm text-center" placeholder="Cant." step="0.1" min="0.1" data-field="cantidad"></div>
+        <div class="col-2"><select class="form-select form-select-sm" data-field="unidad">
+            <option value="u">u</option><option value="kg">kg</option><option value="m2">m2</option>
+            <option value="m3">m3</option><option value="ml">ml</option><option value="l">litro</option>
+            <option value="bolsa">bolsa</option><option value="pallet">pallet</option>
+        </select></div>
+        <div class="col-2"><input type="text" class="form-control form-control-sm" placeholder="Obs." data-field="observacion"></div>
+        <div class="col-1"><button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.rem-item-row').remove()"><i class="fas fa-times"></i></button></div>
+    </div>`;
+    container.insertAdjacentHTML('beforeend', html);
+}
+
+function guardarRemito() {
+    var numero = document.getElementById('rem-numero').value.trim();
+    var proveedor = document.getElementById('rem-proveedor').value.trim();
+    var fecha = document.getElementById('rem-fecha').value;
+    if (!numero || !proveedor || !fecha) { alert('Completá número, proveedor y fecha'); return; }
+
+    var items = [];
+    document.querySelectorAll('.rem-item-row').forEach(function(row) {
+        var desc = row.querySelector('[data-field="descripcion"]').value.trim();
+        var cant = parseFloat(row.querySelector('[data-field="cantidad"]').value) || 0;
+        var unid = row.querySelector('[data-field="unidad"]').value;
+        var obs = row.querySelector('[data-field="observacion"]').value.trim();
+        if (desc && cant > 0) items.push({ descripcion: desc, cantidad: cant, unidad: unid, observacion: obs });
+    });
+
+    if (!items.length) { alert('Agregá al menos un item'); return; }
+
+    var data = {
+        numero_remito: numero,
+        proveedor: proveedor,
+        fecha: fecha,
+        estado: document.getElementById('rem-estado').value,
+        orden_compra_id: document.getElementById('rem-oc').value || null,
+        recibido_por_id: document.getElementById('rem-recibido-por').value || null,
+        notas: document.getElementById('rem-notas').value.trim(),
+        items: items,
+    };
+
+    fetch('/obras/' + window.obraId + '/remitos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.ok) {
+            alert('Remito ' + numero + ' guardado');
+            location.reload();
+        } else {
+            alert(d.error || 'Error al guardar');
+        }
+    })
+    .catch(function(e) { alert('Error de conexión'); });
+}
+
+function verRemito(id) {
+    document.getElementById('modal-ver-remito').style.display = 'flex';
+    document.getElementById('ver-remito-body').innerHTML = '<div class="text-center text-muted py-4">Cargando...</div>';
+
+    fetch('/obras/' + window.obraId + '/remitos/' + id)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { document.getElementById('ver-remito-body').innerHTML = '<p class="text-danger">Error: ' + d.error + '</p>'; return; }
+        var r = d.remito;
+        var html = '<div class="mb-3">';
+        html += '<div class="row">';
+        html += '<div class="col-6"><strong>Nro:</strong> ' + r.numero_remito + '</div>';
+        html += '<div class="col-6"><strong>Fecha:</strong> ' + r.fecha + '</div>';
+        html += '</div>';
+        html += '<div class="row mt-1">';
+        html += '<div class="col-6"><strong>Proveedor:</strong> ' + r.proveedor + '</div>';
+        html += '<div class="col-6"><strong>Estado:</strong> <span class="badge bg-' + r.estado_color + '">' + r.estado_display + '</span></div>';
+        html += '</div>';
+        if (r.recibido_por) html += '<div class="mt-1"><strong>Recibido por:</strong> ' + r.recibido_por + '</div>';
+        if (r.notas) html += '<div class="mt-1"><strong>Notas:</strong> ' + r.notas + '</div>';
+        if (r.orden_compra_numero) html += '<div class="mt-1"><strong>OC:</strong> ' + r.orden_compra_numero + '</div>';
+        html += '</div>';
+
+        html += '<table class="table table-sm mt-3"><thead class="table-light"><tr><th>Descripción</th><th class="text-center">Cantidad</th><th>Unidad</th><th>Obs.</th></tr></thead><tbody>';
+        r.items.forEach(function(it) {
+            html += '<tr><td>' + it.descripcion + '</td><td class="text-center">' + it.cantidad + '</td><td>' + it.unidad + '</td><td class="text-muted small">' + (it.observacion || '-') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+
+        document.getElementById('ver-remito-body').innerHTML = html;
+    });
+}
+
+function eliminarRemito(id, numero) {
+    if (!confirm('¿Eliminar remito ' + numero + '?')) return;
+    fetch('/obras/' + window.obraId + '/remitos/' + id, { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.ok) location.reload();
+        else alert(d.error || 'Error');
+    });
+}
+
+// Inicializar fecha del remito con hoy
+document.addEventListener('DOMContentLoaded', function() {
+    var fechaInput = document.getElementById('rem-fecha');
+    if (fechaInput && !fechaInput.value) {
+        fechaInput.value = new Date().toISOString().split('T')[0];
+    }
+});
 </script>
 {% endblock %}
 

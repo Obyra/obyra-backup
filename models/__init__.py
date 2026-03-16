@@ -104,6 +104,9 @@ from models.inventory import (
     OrdenCompraItem,
     RecepcionOC,
     RecepcionOCItem,
+    # Remitos
+    Remito,
+    RemitoItem,
 )
 
 # Equipment models

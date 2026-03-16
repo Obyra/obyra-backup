@@ -5642,6 +5642,106 @@ def wizard_create_tasks():
 # ============================================================
 # ESCALA SALARIAL UOCRA + CUADRILLAS TIPO
 # ============================================================
+# REMITOS
+# ============================================================
+
+@obras_bp.route('/<int:obra_id>/remitos', methods=['POST'])
+@csrf.exempt
+@login_required
+def crear_remito(obra_id):
+    """Crear un remito manualmente."""
+    from models.inventory import Remito, RemitoItem
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'administrador', 'pm', 'project_manager', 'jefe_obra'}):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(ok=False, error='Datos inválidos'), 400
+
+    try:
+        remito = Remito(
+            organizacion_id=current_user.organizacion_id,
+            obra_id=obra_id,
+            numero_remito=data['numero_remito'],
+            proveedor=data['proveedor'],
+            fecha=date.fromisoformat(data['fecha']),
+            estado=data.get('estado', 'recibido'),
+            orden_compra_id=int(data['orden_compra_id']) if data.get('orden_compra_id') else None,
+            recibido_por_id=int(data['recibido_por_id']) if data.get('recibido_por_id') else current_user.id,
+            notas=data.get('notas'),
+            created_by_id=current_user.id,
+        )
+        db.session.add(remito)
+        db.session.flush()
+
+        for item_data in data.get('items', []):
+            item = RemitoItem(
+                remito_id=remito.id,
+                descripcion=item_data['descripcion'],
+                cantidad=item_data['cantidad'],
+                unidad=item_data.get('unidad', 'u'),
+                observacion=item_data.get('observacion'),
+            )
+            db.session.add(item)
+
+        db.session.commit()
+        return jsonify(ok=True, id=remito.id)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error creando remito")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/<int:obra_id>/remitos/<int:remito_id>')
+@login_required
+def ver_remito(obra_id, remito_id):
+    """API: obtener detalle de un remito."""
+    from models.inventory import Remito
+    remito = Remito.query.get_or_404(remito_id)
+    return jsonify(ok=True, remito={
+        'id': remito.id,
+        'numero_remito': remito.numero_remito,
+        'proveedor': remito.proveedor,
+        'fecha': remito.fecha.strftime('%d/%m/%Y') if remito.fecha else None,
+        'estado': remito.estado,
+        'estado_display': remito.estado_display,
+        'estado_color': remito.estado_color,
+        'notas': remito.notas,
+        'recibido_por': remito.recibido_por.nombre_completo if remito.recibido_por else None,
+        'orden_compra_numero': remito.orden_compra.numero if remito.orden_compra else None,
+        'items': [{
+            'descripcion': i.descripcion,
+            'cantidad': float(i.cantidad),
+            'unidad': i.unidad,
+            'observacion': i.observacion,
+        } for i in remito.items],
+    })
+
+
+@obras_bp.route('/<int:obra_id>/remitos/<int:remito_id>', methods=['DELETE'])
+@csrf.exempt
+@login_required
+def eliminar_remito(obra_id, remito_id):
+    """Eliminar un remito."""
+    from models.inventory import Remito
+    roles = _get_roles_usuario(current_user)
+    if not (roles & {'admin', 'administrador', 'pm', 'project_manager'}):
+        return jsonify(ok=False, error='Sin permisos'), 403
+
+    remito = Remito.query.get_or_404(remito_id)
+    try:
+        db.session.delete(remito)
+        db.session.commit()
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+# ============================================================
+# ESCALA SALARIAL UOCRA + CUADRILLAS TIPO
+# ============================================================
 
 @obras_bp.route('/escala-salarial')
 @login_required
