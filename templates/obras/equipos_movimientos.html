@@ -82,7 +82,10 @@
                                     </td>
                                     <td>{{ eq.tipo }}</td>
                                     <td>
-                                        {% if eq.ubicacion_tipo == 'deposito' %}
+                                        {% if en_transito.get(eq.id) %}
+                                            <span class="badge bg-warning text-dark"><i class="fas fa-truck me-1"></i>En transito</span>
+                                            <br><small class="text-muted">→ {{ en_transito[eq.id].destino_obra.nombre if en_transito[eq.id].destino_obra else 'Deposito' }}</small>
+                                        {% elif eq.ubicacion_tipo == 'deposito' %}
                                             <span class="badge bg-light text-dark border"><i class="fas fa-warehouse me-1"></i>Deposito</span>
                                         {% else %}
                                             <span class="badge bg-success"><i class="fas fa-hard-hat me-1"></i>{{ eq.ubicacion_obra.nombre if eq.ubicacion_obra else 'Obra' }}</span>
@@ -632,9 +635,10 @@ function abrirModalTraslado(equipoId, nombre, obraActualId) {
     document.getElementById('traslado_destino').value = '';
     document.getElementById('traslado_costo').value = '0';
     document.getElementById('traslado_notas').value = '';
+    // Habilitar todas las obras (no deshabilitar ninguna)
     var options = document.getElementById('traslado_destino').options;
     for (var i = 0; i < options.length; i++) {
-        options[i].disabled = (options[i].value == obraActualId);
+        options[i].disabled = false;
     }
     new bootstrap.Modal(document.getElementById('modalTraslado')).show();
 }

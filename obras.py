@@ -6029,8 +6029,14 @@ def equipos_movimientos():
     movimientos = EquipmentMovement.query.filter_by(company_id=org_id)\
         .order_by(EquipmentMovement.fecha_movimiento.desc()).limit(50).all()
 
+    # Movimientos pendientes por equipo (para mostrar indicador en la tabla)
+    en_transito = {}
+    for mov in EquipmentMovement.query.filter_by(company_id=org_id, estado='en_transito').all():
+        en_transito[mov.equipment_id] = mov
+
     return render_template('obras/equipos_movimientos.html',
-                           equipos=equipos, obras=obras, movimientos=movimientos)
+                           equipos=equipos, obras=obras, movimientos=movimientos,
+                           en_transito=en_transito)
 
 
 @obras_bp.route('/equipos/crear', methods=['POST'])
@@ -6168,27 +6174,31 @@ def trasladar_equipo(equipo_id):
     org_id = current_user.organizacion_id
     equipo = Equipment.query.filter_by(id=equipo_id, company_id=org_id).first_or_404()
 
-    if equipo.ubicacion_tipo != 'obra':
-        return jsonify(ok=False, error='El equipo no está en una obra'), 400
-
     destino_obra_id = request.form.get('destino_obra_id', type=int)
     if not destino_obra_id:
         return jsonify(ok=False, error='Debe indicar la obra destino'), 400
-
-    if destino_obra_id == equipo.ubicacion_obra_id:
-        return jsonify(ok=False, error='El equipo ya está en esa obra'), 400
 
     obra_destino = Obra.query.filter_by(id=destino_obra_id, organizacion_id=org_id).first()
     if not obra_destino:
         return jsonify(ok=False, error='Obra destino no encontrada'), 404
 
     try:
+        # Cancelar movimientos en_transito previos del mismo equipo
+        movs_previos = EquipmentMovement.query.filter_by(
+            equipment_id=equipo.id, estado='en_transito'
+        ).all()
+        for mp in movs_previos:
+            mp.estado = 'cancelado'
+
+        origen_obra_id = equipo.ubicacion_obra_id
+        origen_tipo = equipo.ubicacion_tipo
+
         mov = EquipmentMovement(
             equipment_id=equipo.id,
             company_id=org_id,
             tipo='traslado',
-            origen_tipo='obra',
-            origen_obra_id=equipo.ubicacion_obra_id,
+            origen_tipo=origen_tipo,
+            origen_obra_id=origen_obra_id,
             destino_tipo='obra',
             destino_obra_id=destino_obra_id,
             despachado_por=current_user.id,
