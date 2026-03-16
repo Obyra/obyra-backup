@@ -424,7 +424,7 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link btn-sm" id="maquinaria-tab" data-bs-toggle="pill" data-bs-target="#maquinaria" type="button" role="tab">
+                            <button class="nav-link btn-sm" id="maquinaria-tab" type="button" onclick="mostrarMaquinaria()">
                                 <i class="fas fa-truck-loading me-1"></i>Maquinaria
                                 {% if movimientos_pendientes|length > 0 %}
                                 <span class="badge bg-danger ms-1" title="En tránsito">{{ movimientos_pendientes|length }}</span>
@@ -884,102 +884,96 @@
                             </div>
                         </div>
 
-                        <!-- Tab: Maquinaria -->
-                        <div class="tab-pane" id="maquinaria" role="tabpanel" aria-labelledby="maquinaria-tab">
-                            <div class="bg-white text-dark rounded p-3 border" style="min-height: 100px;">
+                    </div>
 
-                                <div class="alert alert-secondary py-2 mb-3">
-                                    <i class="fas fa-truck-loading me-2"></i>
-                                    <strong>Maquinaria de esta obra</strong> —
-                                    {{ equipos_en_obra|length }} equipo(s) en obra,
-                                    {{ movimientos_pendientes|length }} en tránsito
+                    <!-- Panel Maquinaria: FUERA del tab-content, controlado por JS puro -->
+                    <div id="panelMaquinaria" style="display: none;">
+                        <div class="bg-white text-dark rounded p-3 border" style="min-height: 100px;">
+
+                            {% if movimientos_pendientes|length > 0 %}
+                            <div class="mb-3">
+                                <div class="alert alert-warning py-2 mb-2">
+                                    <i class="fas fa-truck me-1"></i>
+                                    <strong>{{ movimientos_pendientes|length }}</strong> equipo(s) en tránsito hacia esta obra. Acepte la recepción para confirmar.
                                 </div>
-
-                                {% if movimientos_pendientes|length > 0 %}
-                                <!-- Alertas de recepción pendiente -->
-                                <div class="mb-3">
-                                    <div class="alert alert-info py-2 mb-2">
-                                        <i class="fas fa-info-circle me-1"></i>
-                                        <strong>{{ movimientos_pendientes|length }}</strong> equipo(s) en tránsito hacia esta obra. Acepte la recepción para confirmar.
-                                    </div>
-                                    <h6 class="mb-2"><i class="fas fa-truck text-warning me-2"></i>Equipos en camino</h6>
-                                    {% for mov in movimientos_pendientes %}
-                                    <div class="card border-warning mb-2">
-                                        <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <strong>{{ mov.equipment.nombre if mov.equipment else 'Equipo #' ~ mov.equipment_id }}</strong>
-                                                {% if mov.equipment %}
-                                                <span class="text-muted">({{ mov.equipment.codigo or '-' }})</span>
-                                                — {{ mov.equipment.tipo }}
-                                                {% if mov.equipment.marca %} · {{ mov.equipment.marca }}{% endif %}
+                                <h6 class="mb-2"><i class="fas fa-truck text-warning me-2"></i>Equipos en camino</h6>
+                                {% for mov in movimientos_pendientes %}
+                                <div class="card border-warning mb-2">
+                                    <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ mov.equipment.nombre if mov.equipment else 'Equipo #' ~ mov.equipment_id }}</strong>
+                                            {% if mov.equipment %}
+                                            <span class="text-muted">({{ mov.equipment.codigo or '-' }})</span>
+                                            — {{ mov.equipment.tipo }}
+                                            {% if mov.equipment.marca %} · {{ mov.equipment.marca }}{% endif %}
+                                            {% endif %}
+                                            <br>
+                                            <small class="text-muted">
+                                                <i class="fas fa-arrow-right me-1"></i>Desde {{ mov.origen_display }}
+                                                · {{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}
+                                                {% if mov.equipment and mov.equipment.costo_hora %}
+                                                · Costo/hora: ${{ "{:,.2f}".format(mov.equipment.costo_hora|float) }}
                                                 {% endif %}
-                                                <br>
-                                                <small class="text-muted">
-                                                    <i class="fas fa-arrow-right me-1"></i>Desde {{ mov.origen_display }}
-                                                    · {{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}
-                                                    {% if mov.equipment and mov.equipment.costo_hora %}
-                                                    · Costo/hora: ${{ "{:,.2f}".format(mov.equipment.costo_hora|float) }}
-                                                    {% endif %}
-                                                </small>
-                                            </div>
-                                            <button class="btn btn-success btn-sm" onclick="aceptarMovimiento({{ mov.id }}, '{{ mov.equipment.nombre if mov.equipment else 'Equipo' }}')">
-                                                <i class="fas fa-check me-1"></i>Aceptar Recepción
-                                            </button>
+                                            </small>
                                         </div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                <hr>
-                                {% endif %}
-
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="mb-0"><i class="fas fa-truck-loading me-2"></i>Equipos en esta Obra</h6>
-                                    <div>
-                                        <span class="badge bg-info">{{ equipos_en_obra|length }} recibidos</span>
-                                        {% if movimientos_pendientes|length > 0 %}
-                                        <span class="badge bg-warning text-dark">{{ movimientos_pendientes|length }} en camino</span>
-                                        {% endif %}
+                                        <button class="btn btn-success btn-sm" onclick="aceptarMovimiento({{ mov.id }}, '{{ mov.equipment.nombre if mov.equipment else 'Equipo' }}')">
+                                            <i class="fas fa-check me-1"></i>Aceptar Recepción
+                                        </button>
                                     </div>
                                 </div>
-
-                                {% if equipos_en_obra|length > 0 %}
-                                <div class="table-responsive">
-                                    <table class="table table-hover mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>Codigo</th>
-                                                <th>Equipo</th>
-                                                <th>Tipo</th>
-                                                <th>Costo/Hora</th>
-                                                <th>Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for eq in equipos_en_obra %}
-                                            <tr>
-                                                <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
-                                                <td>
-                                                    <strong>{{ eq.nombre }}</strong>
-                                                    {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }}</small>{% endif %}
-                                                </td>
-                                                <td>{{ eq.tipo }}</td>
-                                                <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
-                                                <td><span class="badge bg-success">En obra</span></td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {% elif movimientos_pendientes|length == 0 %}
-                                <div class="text-center py-4 text-muted">
-                                    <i class="fas fa-truck-loading fa-2x mb-2 d-block opacity-50"></i>
-                                    <p>No hay equipos asignados a esta obra</p>
-                                    <small>Despache equipos desde <a href="{{ url_for('obras.equipos_movimientos') }}">Inventario > Maquinaria</a></small>
-                                </div>
-                                {% endif %}
+                                {% endfor %}
                             </div>
+                            <hr>
+                            {% endif %}
+
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0"><i class="fas fa-truck-loading me-2"></i>Equipos en esta Obra</h6>
+                                <div>
+                                    <span class="badge bg-info">{{ equipos_en_obra|length }} en obra</span>
+                                    {% if movimientos_pendientes|length > 0 %}
+                                    <span class="badge bg-warning text-dark">{{ movimientos_pendientes|length }} en camino</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if equipos_en_obra|length > 0 %}
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Codigo</th>
+                                            <th>Equipo</th>
+                                            <th>Tipo</th>
+                                            <th>Costo/Hora</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for eq in equipos_en_obra %}
+                                        <tr>
+                                            <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
+                                            <td>
+                                                <strong>{{ eq.nombre }}</strong>
+                                                {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }}</small>{% endif %}
+                                            </td>
+                                            <td>{{ eq.tipo }}</td>
+                                            <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
+                                            <td><span class="badge bg-success">En obra</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% elif movimientos_pendientes|length == 0 %}
+                            <div class="text-center py-4 text-muted">
+                                <i class="fas fa-truck-loading fa-2x mb-2 d-block opacity-50"></i>
+                                <p>No hay equipos asignados a esta obra</p>
+                                <small>Despache equipos desde <a href="{{ url_for('obras.equipos_movimientos') }}">Inventario > Maquinaria</a></small>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
+
                 </div>
             </div>
             {% endif %}
@@ -3937,43 +3931,23 @@ document.addEventListener('DOMContentLoaded', function() {
     cargarReservas({{ obra.id }});
     cargarStockObra({{ obra.id }});
 
-    // Manejar switch de tabs de Materiales/Maquinaria
+    // Manejar switch de tabs — ocultar panel reservas en stockobra
     var materialesTabs = document.querySelectorAll('#materialesTab button[data-bs-toggle="pill"]');
     var panelReservas = document.getElementById('panelReservasActivas');
     var alertasReservas = document.getElementById('alertasReservas');
     materialesTabs.forEach(function(tab) {
         tab.addEventListener('shown.bs.tab', function(e) {
             var target = e.target.getAttribute('data-bs-target');
-            // Ocultar panel de reservas y alertas en tabs que no son de materiales
             if (panelReservas) {
-                panelReservas.style.display = (target === '#maquinaria' || target === '#stockobra') ? 'none' : '';
+                panelReservas.style.display = (target === '#stockobra') ? 'none' : '';
             }
             if (alertasReservas) {
-                alertasReservas.style.display = (target === '#maquinaria' || target === '#stockobra') ? 'none' : '';
+                alertasReservas.style.display = (target === '#stockobra') ? 'none' : '';
             }
-        });
-
-        // Forzar activación del tab-pane al hacer click
-        tab.addEventListener('click', function(e) {
-            var target = this.getAttribute('data-bs-target');
-            if (!target) return;
-            // Desactivar todos los panes y activar el correcto
-            setTimeout(function() {
-                var pane = document.querySelector(target);
-                if (pane && !pane.classList.contains('active')) {
-                    console.log('Forzando activación de tab:', target);
-                    document.querySelectorAll('#materialesTabContent > .tab-pane').forEach(function(p) {
-                        p.classList.remove('show', 'active');
-                        p.style.display = 'none';
-                    });
-                    pane.classList.add('show', 'active');
-                    pane.style.display = 'block';
-                }
-                // Scroll al contenido del tab
-                if (pane) {
-                    pane.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-            }, 150);
+            // Al volver a un tab normal, ocultar panel maquinaria
+            document.getElementById('panelMaquinaria').style.display = 'none';
+            document.getElementById('materialesTabContent').style.display = '';
+            document.getElementById('maquinaria-tab').classList.remove('active');
         });
     });
 });
@@ -4061,6 +4035,28 @@ async function actualizarTablaMateriales(obraId) {
 }
 
 // ========== GESTIÓN DE STOCK EN OBRA ==========
+// Mostrar panel Maquinaria (fuera del sistema de tabs Bootstrap)
+function mostrarMaquinaria() {
+    // Ocultar tab-content de Bootstrap y mostrar panel maquinaria
+    document.getElementById('materialesTabContent').style.display = 'none';
+    document.getElementById('panelMaquinaria').style.display = 'block';
+
+    // Ocultar paneles auxiliares
+    var panelReservas = document.getElementById('panelReservasActivas');
+    var alertasReservas = document.getElementById('alertasReservas');
+    if (panelReservas) panelReservas.style.display = 'none';
+    if (alertasReservas) alertasReservas.style.display = 'none';
+
+    // Desactivar pills de Bootstrap y activar la de maquinaria
+    document.querySelectorAll('#materialesTab button[data-bs-toggle="pill"]').forEach(function(btn) {
+        btn.classList.remove('active');
+    });
+    document.getElementById('maquinaria-tab').classList.add('active');
+
+    // Scroll al contenido
+    document.getElementById('panelMaquinaria').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function aceptarMovimiento(movId, nombre) {
     if (!confirm('Confirmar recepcion de "' + nombre + '"?')) return;
     var form = new FormData();

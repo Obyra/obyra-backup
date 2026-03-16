@@ -158,7 +158,7 @@
         </div>
     </div>
 
-    <!-- Historial de movimientos -->
+    <!-- Historial de movimientos agrupado por equipo -->
     <div class="row">
         <div class="col-12">
             <div class="card shadow-sm">
@@ -166,57 +166,87 @@
                     <h5 class="mb-0"><i class="fas fa-history text-info me-2"></i>Historial de Movimientos</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Equipo</th>
-                                    <th>Tipo</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Estado</th>
-                                    <th>Notas</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for mov in movimientos %}
-                                <tr>
-                                    <td><small>{{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}</small></td>
-                                    <td><strong>{{ mov.equipment.nombre }}</strong></td>
-                                    <td>
-                                        {% if mov.tipo == 'despacho' %}
-                                            <span class="badge bg-primary"><i class="fas fa-arrow-right me-1"></i>Despacho</span>
-                                        {% elif mov.tipo == 'traslado' %}
-                                            <span class="badge bg-warning text-dark"><i class="fas fa-exchange-alt me-1"></i>Traslado</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary"><i class="fas fa-undo me-1"></i>Devolucion</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ mov.origen_display }}</td>
-                                    <td>{{ mov.destino_display }}</td>
-                                    <td>
-                                        {% if mov.estado == 'recibido' %}
-                                            <span class="badge bg-success">Recibido</span>
-                                        {% elif mov.estado == 'en_transito' %}
-                                            <span class="badge bg-info">En transito</span>
-                                        {% else %}
-                                            <span class="badge bg-danger">Cancelado</span>
-                                        {% endif %}
-                                    </td>
-                                    <td><small class="text-muted">{{ mov.notas or '-' }}</small></td>
-                                </tr>
-                                {% endfor %}
-                                {% if not movimientos %}
-                                <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">
-                                        No hay movimientos registrados aun.
-                                    </td>
-                                </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
+                    {% if not movimientos %}
+                    <div class="text-center text-muted py-4">
+                        No hay movimientos registrados aún.
                     </div>
+                    {% else %}
+                    {# Agrupar movimientos por equipo #}
+                    {% set ns = namespace(equipos_vistos=[], grupos={}) %}
+                    {% for mov in movimientos %}
+                        {% set eid = mov.equipment_id %}
+                        {% if eid not in ns.equipos_vistos %}
+                            {% set _ = ns.equipos_vistos.append(eid) %}
+                        {% endif %}
+                    {% endfor %}
+
+                    <div class="accordion" id="historialMovimientos">
+                        {% for equipo in equipos %}
+                        {% set equipo_movs = movimientos|selectattr('equipment_id', 'equalto', equipo.id)|list %}
+                        {% if equipo_movs|length > 0 %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingEq{{ equipo.id }}">
+                                <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEq{{ equipo.id }}">
+                                    <div class="d-flex align-items-center w-100">
+                                        <span class="badge bg-secondary me-2">{{ equipo.codigo or 'S/C' }}</span>
+                                        <strong class="me-2">{{ equipo.nombre }}</strong>
+                                        <small class="text-muted me-2">{{ equipo.tipo }}</small>
+                                        {% if equipo.marca %}<small class="text-muted me-2">· {{ equipo.marca }}</small>{% endif %}
+                                        <span class="badge bg-info ms-auto me-3">{{ equipo_movs|length }} movimiento(s)</span>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapseEq{{ equipo.id }}" class="accordion-collapse collapse" data-bs-parent="#historialMovimientos">
+                                <div class="accordion-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover table-sm mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Fecha</th>
+                                                    <th>Tipo</th>
+                                                    <th>Origen</th>
+                                                    <th>Destino</th>
+                                                    <th>Estado</th>
+                                                    <th>Notas</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for mov in equipo_movs %}
+                                                <tr>
+                                                    <td><small>{{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}</small></td>
+                                                    <td>
+                                                        {% if mov.tipo == 'despacho' %}
+                                                            <span class="badge bg-primary"><i class="fas fa-arrow-right me-1"></i>Despacho</span>
+                                                        {% elif mov.tipo == 'traslado' %}
+                                                            <span class="badge bg-warning text-dark"><i class="fas fa-exchange-alt me-1"></i>Traslado</span>
+                                                        {% else %}
+                                                            <span class="badge bg-secondary"><i class="fas fa-undo me-1"></i>Devolución</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ mov.origen_display }}</td>
+                                                    <td>{{ mov.destino_display }}</td>
+                                                    <td>
+                                                        {% if mov.estado == 'recibido' %}
+                                                            <span class="badge bg-success">Recibido</span>
+                                                        {% elif mov.estado == 'en_transito' %}
+                                                            <span class="badge bg-info">En tránsito</span>
+                                                        {% else %}
+                                                            <span class="badge bg-danger">Cancelado</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td><small class="text-muted">{{ mov.notas or '-' }}</small></td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
