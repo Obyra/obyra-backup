@@ -596,6 +596,15 @@ def crear():
 @obras_bp.route('/<int:id>')
 @login_required
 def detalle(id):
+    try:
+        return _detalle_impl(id)
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        current_app.logger.error(f"Error en detalle obra {id}: {tb}")
+        return f"<pre>Error en obra {id}:\n{tb}</pre>", 500
+
+def _detalle_impl(id):
     roles = _get_roles_usuario(current_user)
     if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras') and 'operario' not in roles:
         flash('No tienes permisos para ver obras.', 'danger')
