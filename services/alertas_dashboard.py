@@ -443,6 +443,7 @@ def obtener_todas_alertas(org_id, limite_por_tipo=3):
     alertas.extend(obtener_alertas_sobrecosto(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_fichadas(org_id, limite_por_tipo))
     alertas.extend(obtener_alertas_liquidaciones_pendientes(org_id, limite_por_tipo))
+    alertas.extend(obtener_alertas_equipos_transito(org_id, limite_por_tipo))
 
     # Ordenar por severidad
     orden_severidad = {'critica': 0, 'alta': 1, 'media': 2, 'baja': 3}
@@ -524,5 +525,36 @@ def obtener_alertas_liquidaciones_pendientes(org_id, limite=5):
             'icono': 'fas fa-hand-holding-usd',
             'color': 'warning',
         }]
+    except Exception:
+        return []
+
+
+def obtener_alertas_equipos_transito(org_id, limite=5):
+    """Alertas de equipos en tránsito pendientes de recepción."""
+    try:
+        from models.equipment import EquipmentMovement
+        from models import Obra
+
+        pendientes = EquipmentMovement.query.filter_by(
+            company_id=org_id,
+            estado='en_transito'
+        ).order_by(EquipmentMovement.fecha_movimiento.desc()).limit(limite).all()
+
+        alertas = []
+        for mov in pendientes:
+            destino = mov.destino_obra.nombre if mov.destino_obra else 'Deposito'
+            obra_id = mov.destino_obra_id
+            alertas.append({
+                'tipo': 'equipo_transito',
+                'severidad': 'media',
+                'icono': 'fas fa-truck',
+                'titulo': f'{mov.equipment.nombre} en transito',
+                'descripcion': f'Equipo {mov.equipment.nombre} ({mov.equipment.codigo or "-"}) despachado a {destino}, pendiente de recepcion',
+                'obra_id': obra_id,
+                'obra_nombre': destino,
+                'fecha': mov.fecha_movimiento,
+                'color': 'info',
+            })
+        return alertas
     except Exception:
         return []

@@ -312,7 +312,7 @@
 
             <!-- Alertas de Obra: etapas y tareas demoradas -->
             {% set alertas_demora = [] %}
-            {% for a in alertas_dashboard if a.tipo in ['etapa_demorada', 'tarea_vencida', 'tarea_en_riesgo', 'obra_demorada', 'sobrecosto'] %}
+            {% for a in alertas_dashboard if a.tipo in ['etapa_demorada', 'tarea_vencida', 'tarea_en_riesgo', 'obra_demorada', 'sobrecosto', 'equipo_transito'] %}
                 {% if alertas_demora.append(a) %}{% endif %}
             {% endfor %}
             {% if alertas_demora %}
@@ -342,6 +342,8 @@
                                         <i class="fas fa-building text-danger"></i>
                                     {% elif alerta.tipo == 'sobrecosto' %}
                                         <i class="fas fa-chart-line text-danger"></i>
+                                    {% elif alerta.tipo == 'equipo_transito' %}
+                                        <i class="fas fa-truck text-info"></i>
                                     {% endif %}
                                 </div>
                             </div>

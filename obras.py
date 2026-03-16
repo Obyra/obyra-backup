@@ -1056,6 +1056,24 @@ def detalle(id):
     except Exception:
         db.session.rollback()
 
+    # Equipos en esta obra + movimientos pendientes de recepción
+    equipos_en_obra = []
+    movimientos_pendientes = []
+    try:
+        from models.equipment import Equipment, EquipmentMovement
+        equipos_en_obra = Equipment.query.filter_by(
+            company_id=obra.organizacion_id,
+            ubicacion_tipo='obra',
+            ubicacion_obra_id=obra.id
+        ).filter(Equipment.estado != 'baja').all()
+        movimientos_pendientes = EquipmentMovement.query.filter_by(
+            company_id=obra.organizacion_id,
+            destino_obra_id=obra.id,
+            estado='en_transito'
+        ).order_by(EquipmentMovement.fecha_movimiento.desc()).all()
+    except Exception:
+        db.session.rollback()
+
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
@@ -1086,6 +1104,8 @@ def detalle(id):
                          stock_transferido_por_nombre=stock_transferido_por_nombre,
                          stock_transferido_lista=stock_transferido_lista,
                          costos_desglosados=costos_desglosados,
+                         equipos_en_obra=equipos_en_obra,
+                         movimientos_pendientes=movimientos_pendientes,
                          wizard_budget_flag=current_app.config.get('WIZARD_BUDGET_BREAKDOWN_ENABLED', False),
                          wizard_budget_shadow=current_app.config.get('WIZARD_BUDGET_SHADOW_MODE', False))
 
@@ -6127,16 +6147,13 @@ def despachar_equipo(equipo_id):
             despachado_por=current_user.id,
             notas=request.form.get('notas', ''),
             costo_transporte=request.form.get('costo_transporte', 0, type=float),
-            estado='recibido'
+            estado='en_transito'
         )
         db.session.add(mov)
 
-        # Actualizar ubicación del equipo
-        equipo.ubicacion_tipo = 'obra'
-        equipo.ubicacion_obra_id = destino_obra_id
-
+        # La ubicación se actualiza cuando la obra acepta la recepción
         db.session.commit()
-        flash(f'Equipo "{equipo.nombre}" despachado a {obra_destino.nombre}', 'success')
+        flash(f'Equipo "{equipo.nombre}" despachado a {obra_destino.nombre} (pendiente de recepción)', 'success')
         return jsonify(ok=True)
     except Exception as e:
         db.session.rollback()
@@ -6177,15 +6194,13 @@ def trasladar_equipo(equipo_id):
             despachado_por=current_user.id,
             notas=request.form.get('notas', ''),
             costo_transporte=request.form.get('costo_transporte', 0, type=float),
-            estado='recibido'
+            estado='en_transito'
         )
         db.session.add(mov)
 
-        equipo.ubicacion_tipo = 'obra'
-        equipo.ubicacion_obra_id = destino_obra_id
-
+        # La ubicación se actualiza cuando la obra destino acepta la recepción
         db.session.commit()
-        flash(f'Equipo "{equipo.nombre}" trasladado a {obra_destino.nombre}', 'success')
+        flash(f'Equipo "{equipo.nombre}" en tránsito a {obra_destino.nombre} (pendiente de recepción)', 'success')
         return jsonify(ok=True)
     except Exception as e:
         db.session.rollback()
@@ -6253,3 +6268,29 @@ def equipos_ubicaciones_json():
         })
 
     return jsonify(ok=True, equipos=result)
+
+
+@obras_bp.route('/equipos/movimiento/<int:mov_id>/aceptar', methods=['POST'])
+@login_required
+def aceptar_movimiento(mov_id):
+    """Aceptar recepción de equipo en la obra"""
+    from models.equipment import Equipment, EquipmentMovement
+    org_id = current_user.organizacion_id
+    mov = EquipmentMovement.query.filter_by(id=mov_id, company_id=org_id, estado='en_transito').first_or_404()
+
+    try:
+        mov.estado = 'recibido'
+        mov.recibido_por = current_user.id
+        mov.fecha_llegada = datetime.utcnow()
+
+        # Actualizar ubicación del equipo
+        equipo = mov.equipment
+        equipo.ubicacion_tipo = mov.destino_tipo
+        equipo.ubicacion_obra_id = mov.destino_obra_id
+
+        db.session.commit()
+        flash(f'Equipo "{equipo.nombre}" recibido correctamente', 'success')
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500

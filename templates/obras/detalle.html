@@ -423,6 +423,14 @@
                                 <i class="fas fa-warehouse me-1"></i>Stock en Obra
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link btn-sm" id="maquinaria-tab" data-bs-toggle="pill" data-bs-target="#maquinaria" type="button" role="tab">
+                                <i class="fas fa-truck-loading me-1"></i>Maquinaria
+                                {% if movimientos_pendientes|length > 0 %}
+                                <span class="badge bg-danger ms-1">{{ movimientos_pendientes|length }}</span>
+                                {% endif %}
+                            </button>
+                        </li>
                         <li class="nav-item ms-auto" role="presentation">
                             <button class="btn btn-sm btn-primary" onclick="abrirGestionMateriales({{ obra.id }})" title="Analizar stock, reservar y solicitar compra">
                                 <i class="fas fa-boxes me-1"></i>Gestionar Materiales
@@ -861,7 +869,7 @@
                         <div class="tab-pane fade" id="stockobra" role="tabpanel">
                             <div class="bg-white text-dark rounded p-3">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="mb-0"><i class="fas fa-warehouse me-2"></i>Inventario en Sitio de Construcción</h6>
+                                    <h6 class="mb-0"><i class="fas fa-warehouse me-2"></i>Inventario en Sitio de Construccion</h6>
                                     <button class="btn btn-sm btn-outline-primary" onclick="cargarStockObra({{ obra.id }})">
                                         <i class="fas fa-sync-alt me-1"></i>Actualizar
                                     </button>
@@ -871,6 +879,76 @@
                                         <i class="fas fa-spinner fa-spin me-2"></i>Cargando stock de obra...
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab: Maquinaria -->
+                        <div class="tab-pane fade" id="maquinaria" role="tabpanel">
+                            <div class="bg-white text-dark rounded p-3">
+
+                                {% if movimientos_pendientes|length > 0 %}
+                                <!-- Alertas de recepción pendiente -->
+                                <div class="mb-3">
+                                    {% for mov in movimientos_pendientes %}
+                                    <div class="alert alert-warning d-flex justify-content-between align-items-center mb-2" id="alerta-mov-{{ mov.id }}">
+                                        <div>
+                                            <i class="fas fa-truck me-2"></i>
+                                            <strong>{{ mov.equipment.nombre }}</strong>
+                                            <span class="text-muted">
+                                                ({{ mov.equipment.codigo or '-' }})
+                                            </span>
+                                            — en transito desde
+                                            <strong>{{ mov.origen_display }}</strong>
+                                            <small class="text-muted ms-2">{{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}</small>
+                                        </div>
+                                        <button class="btn btn-sm btn-success" onclick="aceptarMovimiento({{ mov.id }}, '{{ mov.equipment.nombre }}')">
+                                            <i class="fas fa-check me-1"></i>Aceptar Recepcion
+                                        </button>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0"><i class="fas fa-truck-loading me-2"></i>Equipos en esta Obra</h6>
+                                    <span class="badge bg-info">{{ equipos_en_obra|length }} equipos</span>
+                                </div>
+
+                                {% if equipos_en_obra|length > 0 %}
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Codigo</th>
+                                                <th>Equipo</th>
+                                                <th>Tipo</th>
+                                                <th>Costo/Hora</th>
+                                                <th>Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for eq in equipos_en_obra %}
+                                            <tr>
+                                                <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
+                                                <td>
+                                                    <strong>{{ eq.nombre }}</strong>
+                                                    {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }}</small>{% endif %}
+                                                </td>
+                                                <td>{{ eq.tipo }}</td>
+                                                <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
+                                                <td><span class="badge bg-success">Activo</span></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <div class="text-center py-4 text-muted">
+                                    <i class="fas fa-truck-loading fa-2x mb-2 d-block opacity-50"></i>
+                                    <p>No hay equipos asignados a esta obra</p>
+                                    <small>Despache equipos desde <a href="{{ url_for('obras.equipos_movimientos') }}">Inventario > Maquinaria</a></small>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -3915,6 +3993,18 @@ async function actualizarTablaMateriales(obraId) {
 }
 
 // ========== GESTIÓN DE STOCK EN OBRA ==========
+function aceptarMovimiento(movId, nombre) {
+    if (!confirm('Confirmar recepcion de "' + nombre + '"?')) return;
+    var form = new FormData();
+    form.append('csrf_token', '{{ csrf_token() }}');
+    fetch('/obras/equipos/movimiento/' + movId + '/aceptar', {
+        method: 'POST', body: form
+    }).then(r => r.json()).then(data => {
+        if (data.ok) location.reload();
+        else alert(data.error || 'Error al aceptar');
+    });
+}
+
 async function cargarStockObra(obraId) {
     const container = document.getElementById('stockObraContainer');
     container.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Cargando stock de obra...</div>';
