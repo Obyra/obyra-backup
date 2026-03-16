@@ -1305,7 +1305,7 @@ class Remito(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     organizacion_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
-    orden_compra_id = db.Column(db.Integer, db.ForeignKey('ordenes_compra.id'), nullable=True)
+    requerimiento_id = db.Column(db.Integer, db.ForeignKey('requerimientos_compra.id'), nullable=True)
 
     numero_remito = db.Column(db.String(50), nullable=False)       # Nro del proveedor
     proveedor = db.Column(db.String(200), nullable=False)
@@ -1323,7 +1323,7 @@ class Remito(db.Model):
     # Relaciones
     organizacion = db.relationship('Organizacion')
     obra = db.relationship('Obra', backref=db.backref('remitos', lazy='dynamic'))
-    orden_compra = db.relationship('OrdenCompra')
+    requerimiento = db.relationship('RequerimientoCompra', backref='remitos')
     proveedor_ref = db.relationship('ProveedorOC', foreign_keys=[proveedor_oc_id])
     recibido_por = db.relationship('Usuario', foreign_keys=[recibido_por_id])
     created_by = db.relationship('Usuario', foreign_keys=[created_by_id])
@@ -1332,7 +1332,7 @@ class Remito(db.Model):
 
     __table_args__ = (
         db.Index('ix_remito_obra', 'obra_id'),
-        db.Index('ix_remito_oc', 'orden_compra_id'),
+        db.Index('ix_remito_req', 'requerimiento_id'),
     )
 
     @property

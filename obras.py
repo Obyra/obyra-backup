@@ -5667,7 +5667,7 @@ def crear_remito(obra_id):
             proveedor=data['proveedor'],
             fecha=date.fromisoformat(data['fecha']),
             estado=data.get('estado', 'recibido'),
-            orden_compra_id=int(data['orden_compra_id']) if data.get('orden_compra_id') else None,
+            requerimiento_id=int(data['requerimiento_id']) if data.get('requerimiento_id') else None,
             recibido_por_id=int(data['recibido_por_id']) if data.get('recibido_por_id') else current_user.id,
             notas=data.get('notas'),
             created_by_id=current_user.id,
@@ -5709,7 +5709,7 @@ def ver_remito(obra_id, remito_id):
         'estado_color': remito.estado_color,
         'notas': remito.notas,
         'recibido_por': remito.recibido_por.nombre_completo if remito.recibido_por else None,
-        'orden_compra_numero': remito.orden_compra.numero if remito.orden_compra else None,
+        'requerimiento_numero': remito.requerimiento.numero if remito.requerimiento else None,
         'items': [{
             'descripcion': i.descripcion,
             'cantidad': float(i.cantidad),

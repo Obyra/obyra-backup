@@ -1097,7 +1097,7 @@
                                             <th class="text-center">Items</th>
                                             <th class="text-center">Estado</th>
                                             <th>Recibido por</th>
-                                            <th class="text-center">OC</th>
+                                            <th class="text-center">Req.</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -1113,10 +1113,8 @@
                                             </td>
                                             <td>{{ r.recibido_por.nombre_completo if r.recibido_por else '-' }}</td>
                                             <td class="text-center">
-                                                {% if r.orden_compra %}
-                                                <a href="{{ url_for('ordenes_compra.detalle', id=r.orden_compra_id) }}" class="badge bg-info text-decoration-none">
-                                                    {{ r.orden_compra.numero }}
-                                                </a>
+                                                {% if r.requerimiento %}
+                                                <span class="badge bg-info">{{ r.requerimiento.numero }}</span>
                                                 {% else %}
                                                 <span class="text-muted">-</span>
                                                 {% endif %}
@@ -1184,14 +1182,12 @@
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label fw-bold small">Vinculado a OC (opcional)</label>
-                        <select class="form-select" id="rem-oc">
-                            <option value="">Sin OC</option>
-                            {% if obra.ordenes_compra %}
-                            {% for oc in obra.ordenes_compra %}
-                            <option value="{{ oc.id }}">{{ oc.numero }} - {{ oc.proveedor }}</option>
+                        <label class="form-label fw-bold small">Requerimiento (opcional)</label>
+                        <select class="form-select" id="rem-requerimiento">
+                            <option value="">Sin requerimiento</option>
+                            {% for req in obra.requerimientos_compra %}
+                            <option value="{{ req.id }}">{{ req.numero }} - {{ req.motivo[:40] }}{% if req.motivo|length > 40 %}...{% endif %}</option>
                             {% endfor %}
-                            {% endif %}
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -4327,7 +4323,7 @@ function guardarRemito() {
         proveedor: proveedor,
         fecha: fecha,
         estado: document.getElementById('rem-estado').value,
-        orden_compra_id: document.getElementById('rem-oc').value || null,
+        requerimiento_id: document.getElementById('rem-requerimiento').value || null,
         recibido_por_id: document.getElementById('rem-recibido-por').value || null,
         notas: document.getElementById('rem-notas').value.trim(),
         items: items,
@@ -4370,7 +4366,7 @@ function verRemito(id) {
         html += '</div>';
         if (r.recibido_por) html += '<div class="mt-1"><strong>Recibido por:</strong> ' + r.recibido_por + '</div>';
         if (r.notas) html += '<div class="mt-1"><strong>Notas:</strong> ' + r.notas + '</div>';
-        if (r.orden_compra_numero) html += '<div class="mt-1"><strong>OC:</strong> ' + r.orden_compra_numero + '</div>';
+        if (r.requerimiento_numero) html += '<div class="mt-1"><strong>Requerimiento:</strong> ' + r.requerimiento_numero + '</div>';
         html += '</div>';
 
         html += '<table class="table table-sm mt-3"><thead class="table-light"><tr><th>Descripción</th><th class="text-center">Cantidad</th><th>Unidad</th><th>Obs.</th></tr></thead><tbody>';
