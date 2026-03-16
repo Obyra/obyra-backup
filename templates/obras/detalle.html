@@ -3929,6 +3929,41 @@ async function liberarReserva(obraId, reservaId) {
 document.addEventListener('DOMContentLoaded', function() {
     cargarReservas({{ obra.id }});
     cargarStockObra({{ obra.id }});
+
+    // Manejar switch de tabs de Materiales/Maquinaria
+    var materialesTabs = document.querySelectorAll('#materialesTab button[data-bs-toggle="pill"]');
+    var panelReservas = document.getElementById('panelReservasActivas');
+    var alertasReservas = document.getElementById('alertasReservas');
+    materialesTabs.forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            var target = e.target.getAttribute('data-bs-target');
+            // Ocultar panel de reservas y alertas en tabs que no son de materiales
+            if (panelReservas) {
+                panelReservas.style.display = (target === '#maquinaria' || target === '#stockobra') ? 'none' : '';
+            }
+            if (alertasReservas) {
+                alertasReservas.style.display = (target === '#maquinaria' || target === '#stockobra') ? 'none' : '';
+            }
+        });
+
+        // Fallback: forzar activación del tab-pane si Bootstrap no lo hace
+        tab.addEventListener('click', function(e) {
+            var target = this.getAttribute('data-bs-target');
+            if (!target) return;
+            // Timeout para dar chance a Bootstrap de actuar primero
+            setTimeout(function() {
+                var pane = document.querySelector(target);
+                if (pane && !pane.classList.contains('show')) {
+                    // Bootstrap no activó el pane — forzar manualmente
+                    console.warn('Forzando activación de tab:', target);
+                    document.querySelectorAll('#materialesTabContent > .tab-pane').forEach(function(p) {
+                        p.classList.remove('show', 'active');
+                    });
+                    pane.classList.add('show', 'active');
+                }
+            }, 200);
+        });
+    });
 });
 
 // ========== AUTO-ACTUALIZACIÓN AL VOLVER A LA PESTAÑA ==========
