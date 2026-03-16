@@ -596,15 +596,6 @@ def crear():
 @obras_bp.route('/<int:id>')
 @login_required
 def detalle(id):
-    try:
-        return _detalle_impl(id)
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        current_app.logger.error(f"Error en detalle obra {id}: {tb}")
-        return f"<pre>Error en obra {id}:\n{tb}</pre>", 500
-
-def _detalle_impl(id):
     roles = _get_roles_usuario(current_user)
     if not getattr(current_user, 'puede_acceder_modulo', lambda _ : False)('obras') and 'operario' not in roles:
         flash('No tienes permisos para ver obras.', 'danger')
@@ -940,7 +931,7 @@ def _detalle_impl(id):
             if etapa_tipo in cuadrillas_por_etapa:
                 cuadrillas_por_etapa[alias] = cuadrillas_por_etapa[etapa_tipo]
     except Exception:
-        pass
+        db.session.rollback()
 
     # Obtener stock transferido a esta obra (desde inventario) — con eager load del item
     stock_transferido = {}
@@ -964,7 +955,7 @@ def _detalle_impl(id):
             if stock.item and stock.item.nombre:
                 stock_transferido_por_nombre[stock.item.nombre.lower()] = stock_data
     except Exception:
-        pass
+        db.session.rollback()
 
     # Calcular costos desglosados para el panel de progreso
     from sqlalchemy import func
@@ -1035,15 +1026,15 @@ def _detalle_impl(id):
         remitos_count = obra.remitos.count() if hasattr(obra, 'remitos') else 0
         remitos_list = obra.remitos.order_by(None).all() if remitos_count > 0 else []
     except Exception:
-        pass
+        db.session.rollback()
     try:
         ordenes_compra_list = list(obra.ordenes_compra) if hasattr(obra, 'ordenes_compra') else []
     except Exception:
-        pass
+        db.session.rollback()
     try:
         requerimientos_list = list(obra.requerimientos_compra) if hasattr(obra, 'requerimientos_compra') else []
     except Exception:
-        pass
+        db.session.rollback()
 
     return render_template('obras/detalle.html',
                          obra=obra,
