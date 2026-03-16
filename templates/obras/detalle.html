@@ -889,20 +889,23 @@
                                 {% if movimientos_pendientes|length > 0 %}
                                 <!-- Alertas de recepción pendiente -->
                                 <div class="mb-3">
+                                    <h6 class="mb-2"><i class="fas fa-truck text-warning me-2"></i>Equipos en camino a esta obra</h6>
                                     {% for mov in movimientos_pendientes %}
-                                    <div class="alert alert-warning d-flex justify-content-between align-items-center mb-2" id="alerta-mov-{{ mov.id }}">
+                                    <div class="alert alert-warning d-flex justify-content-between align-items-center mb-2 py-2">
                                         <div>
-                                            <i class="fas fa-truck me-2"></i>
                                             <strong>{{ mov.equipment.nombre }}</strong>
-                                            <span class="text-muted">
-                                                ({{ mov.equipment.codigo or '-' }})
-                                            </span>
-                                            — en transito desde
-                                            <strong>{{ mov.origen_display }}</strong>
-                                            <small class="text-muted ms-2">{{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}</small>
+                                            <span class="text-muted">({{ mov.equipment.codigo or '-' }})</span>
+                                            — {{ mov.equipment.tipo }}
+                                            {% if mov.equipment.marca %} · {{ mov.equipment.marca }}{% endif %}
+                                            <br>
+                                            <small class="text-muted">
+                                                <i class="fas fa-arrow-right me-1"></i>Desde {{ mov.origen_display }}
+                                                · {{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}
+                                                · Costo/hora: {{ "$ {:,.2f}".format(mov.equipment.costo_hora|float) if mov.equipment.costo_hora else '-' }}
+                                            </small>
                                         </div>
                                         <button class="btn btn-sm btn-success" onclick="aceptarMovimiento({{ mov.id }}, '{{ mov.equipment.nombre }}')">
-                                            <i class="fas fa-check me-1"></i>Aceptar Recepcion
+                                            <i class="fas fa-check me-1"></i>Aceptar
                                         </button>
                                     </div>
                                     {% endfor %}
@@ -911,7 +914,12 @@
 
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h6 class="mb-0"><i class="fas fa-truck-loading me-2"></i>Equipos en esta Obra</h6>
-                                    <span class="badge bg-info">{{ equipos_en_obra|length }} equipos</span>
+                                    <div>
+                                        <span class="badge bg-info">{{ equipos_en_obra|length }} recibidos</span>
+                                        {% if movimientos_pendientes|length > 0 %}
+                                        <span class="badge bg-warning text-dark">{{ movimientos_pendientes|length }} en camino</span>
+                                        {% endif %}
+                                    </div>
                                 </div>
 
                                 {% if equipos_en_obra|length > 0 %}
@@ -936,13 +944,13 @@
                                                 </td>
                                                 <td>{{ eq.tipo }}</td>
                                                 <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
-                                                <td><span class="badge bg-success">Activo</span></td>
+                                                <td><span class="badge bg-success">En obra</span></td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>
                                     </table>
                                 </div>
-                                {% else %}
+                                {% elif movimientos_pendientes|length == 0 %}
                                 <div class="text-center py-4 text-muted">
                                     <i class="fas fa-truck-loading fa-2x mb-2 d-block opacity-50"></i>
                                     <p>No hay equipos asignados a esta obra</p>
