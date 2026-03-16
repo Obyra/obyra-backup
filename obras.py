@@ -1071,8 +1071,9 @@ def detalle(id):
             destino_obra_id=obra.id,
             estado='en_transito'
         ).order_by(EquipmentMovement.fecha_movimiento.desc()).all()
-    except Exception:
+    except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error cargando equipos en obra {obra.id}: {e}")
 
     return render_template('obras/detalle.html',
                          obra=obra,

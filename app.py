@@ -1373,6 +1373,14 @@ with app.app_context():
         equip_sql = """
         DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='costo_hora') THEN
+                ALTER TABLE equipment ADD COLUMN costo_hora NUMERIC(12,2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='nro_serie') THEN
+                ALTER TABLE equipment ADD COLUMN nro_serie VARCHAR(100);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                           WHERE table_name='equipment' AND column_name='codigo') THEN
                 ALTER TABLE equipment ADD COLUMN codigo VARCHAR(50);
             END IF;
