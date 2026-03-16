@@ -3173,6 +3173,26 @@ def api_analizar_materiales(obra_id):
         if not materiales:
             return jsonify({'ok': False, 'error': 'No hay materiales en el presupuesto'}), 400
 
+        # Obtener cantidades ya pedidas en requerimientos de compra activos
+        ya_pedido_por_item = {}  # item_inventario_id -> cantidad total pedida
+        ya_pedido_por_desc = {}  # descripcion (lower) -> cantidad total pedida
+        try:
+            from models.inventory import RequerimientoCompra, RequerimientoCompraItem
+            reqs = RequerimientoCompra.query.filter(
+                RequerimientoCompra.obra_id == obra.id,
+                RequerimientoCompra.estado.notin_(['cancelado', 'rechazado'])
+            ).all()
+            for req in reqs:
+                for item in req.items:
+                    cant = float(item.cantidad or 0)
+                    if item.item_inventario_id:
+                        ya_pedido_por_item[item.item_inventario_id] = ya_pedido_por_item.get(item.item_inventario_id, 0) + cant
+                    if item.descripcion:
+                        key = item.descripcion.lower().strip()
+                        ya_pedido_por_desc[key] = ya_pedido_por_desc.get(key, 0) + cant
+        except Exception:
+            db.session.rollback()
+
         con_stock = []
         stock_parcial = []
         sin_stock = []
@@ -3219,6 +3239,9 @@ def api_analizar_materiales(obra_id):
             # Stock disponible = actual - reservado por otros
             stock_disponible = stock_actual - stock_reservado + ya_reservado
 
+            # Cantidad ya pedida en requerimientos
+            cant_pedida = ya_pedido_por_item.get(item_inv.id, 0) or ya_pedido_por_desc.get(item_inv.nombre.lower().strip(), 0)
+
             item_data = {
                 'item_inventario_id': item_inv.id,
                 'descripcion': item_inv.nombre,
@@ -3227,6 +3250,8 @@ def api_analizar_materiales(obra_id):
                 'cantidad_necesaria': cantidad_necesaria,
                 'stock_disponible': max(0, stock_disponible),
                 'ya_reservado': ya_reservado,
+                'ya_pedido': cant_pedida > 0,
+                'cantidad_pedida': cant_pedida,
             }
 
             if ya_reservado >= cantidad_necesaria:

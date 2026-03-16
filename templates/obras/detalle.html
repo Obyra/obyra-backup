@@ -3435,20 +3435,31 @@ function renderAnalisisMateriales(data) {
         hayReservables = true;
         hayComprables = true;
         html += '<div class="mb-3">';
-        html += '<div class="d-flex align-items-center mb-2 px-3"><span class="badge bg-warning text-dark me-2">' + data.stock_parcial.length + '</span><strong class="text-warning">Stock parcial</strong></div>';
+        html += '<div class="d-flex align-items-center justify-content-between mb-2 px-3">';
+        html += '<div><span class="badge bg-warning text-dark me-2">' + data.stock_parcial.length + '</span><strong class="text-warning">Stock parcial</strong></div>';
+        html += '<button class="btn btn-xs btn-outline-secondary" onclick="toggleAllCheckboxes(\'chk-parcial\')" style="font-size:0.7rem; padding:2px 8px;">Seleccionar/Deseleccionar todos</button>';
+        html += '</div>';
         html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
-        html += '<thead class="table-warning"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Reservar</th><th class="text-center text-danger">A pedir</th><th class="text-center">Unidad</th></tr></thead><tbody>';
+        html += '<thead class="table-warning"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Reservar</th><th class="text-center text-danger">A pedir</th><th class="text-center">Unidad</th><th class="text-center">Estado</th></tr></thead><tbody>';
         data.stock_parcial.forEach(function(m, idx) {
-            html += '<tr>';
-            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-parcial" data-idx="sp-' + idx + '" data-reservar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, cantidad: m.a_reservar}).replace(/'/g, '&#39;') + '\' data-base-comprar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, descripcion: m.descripcion, codigo: m.codigo, cantidad_planificada: m.cantidad_necesaria, cantidad_actual_obra: m.stock_disponible, tipo: 'material'}).replace(/'/g, '&#39;') + '\' checked></td>';
+            var yaPedido = m.ya_pedido || false;
+            var cantPedida = m.cantidad_pedida || 0;
+            var restaPedir = Math.max(0, m.faltante - cantPedida);
+            html += '<tr class="' + (yaPedido && restaPedir <= 0 ? 'table-light' : '') + '">';
+            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-parcial" data-idx="sp-' + idx + '" data-reservar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, cantidad: m.a_reservar}).replace(/'/g, '&#39;') + '\' data-base-comprar=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, descripcion: m.descripcion, codigo: m.codigo, cantidad_planificada: m.cantidad_necesaria, cantidad_actual_obra: m.stock_disponible, tipo: 'material'}).replace(/'/g, '&#39;') + '\'' + (yaPedido && restaPedir <= 0 ? '' : ' checked') + '></td>';
             html += '<td><strong class="small">' + m.descripcion + '</strong></td>';
             html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
             html += '<td class="text-center"><span class="badge bg-success">' + m.a_reservar + ' ' + m.unidad + '</span></td>';
-            html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-sp-' + idx + '" value="' + m.faltante + '" min="1" style="width:80px; display:inline-block;"></td>';
+            html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-sp-' + idx + '" value="' + (restaPedir > 0 ? restaPedir : m.faltante) + '" min="1" style="width:80px; display:inline-block;"></td>';
             html += '<td class="text-center"><select class="form-select form-select-sm input-unidad-pedir" id="uni-sp-' + idx + '" style="width:90px; display:inline-block;">';
             var unidades = ['u', 'kg', 'm2', 'm3', 'ml', 'l', 'bolsa', 'barra', 'rollo', 'paquete'];
             unidades.forEach(function(u) { html += '<option value="' + u + '"' + (u === m.unidad ? ' selected' : '') + '>' + u + '</option>'; });
             html += '</select></td>';
+            if (yaPedido) {
+                html += '<td class="text-center"><span class="badge bg-info">Pedido: ' + cantPedida + '</span></td>';
+            } else {
+                html += '<td class="text-center"><span class="badge bg-secondary">Nuevo</span></td>';
+            }
             html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -3458,20 +3469,31 @@ function renderAnalisisMateriales(data) {
     if (data.sin_stock.length > 0) {
         hayComprables = true;
         html += '<div class="mb-3">';
-        html += '<div class="d-flex align-items-center mb-2 px-3"><span class="badge bg-danger me-2">' + data.sin_stock.length + '</span><strong class="text-danger">Sin stock</strong></div>';
+        html += '<div class="d-flex align-items-center justify-content-between mb-2 px-3">';
+        html += '<div><span class="badge bg-danger me-2">' + data.sin_stock.length + '</span><strong class="text-danger">Sin stock</strong></div>';
+        html += '<button class="btn btn-xs btn-outline-secondary" onclick="toggleAllCheckboxes(\'chk-comprar\')" style="font-size:0.7rem; padding:2px 8px;">Seleccionar/Deseleccionar todos</button>';
+        html += '</div>';
         html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
-        html += '<thead class="table-danger"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Stock</th><th class="text-center">A pedir</th><th class="text-center">Unidad</th></tr></thead><tbody>';
+        html += '<thead class="table-danger"><tr><th class="ps-3" style="width:30px;"></th><th>Material</th><th class="text-center">Necesario</th><th class="text-center">Stock</th><th class="text-center">A pedir</th><th class="text-center">Unidad</th><th class="text-center">Estado</th></tr></thead><tbody>';
         data.sin_stock.forEach(function(m, idx) {
-            html += '<tr>';
-            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-comprar" data-idx="ss-' + idx + '" data-base=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, descripcion: m.descripcion, codigo: m.codigo, cantidad_planificada: m.cantidad_necesaria, cantidad_actual_obra: 0, tipo: 'material'}).replace(/'/g, '&#39;') + '\' checked></td>';
+            var yaPedido = m.ya_pedido || false;
+            var cantPedida = m.cantidad_pedida || 0;
+            var restaPedir = Math.max(0, m.faltante - cantPedida);
+            html += '<tr class="' + (yaPedido && restaPedir <= 0 ? 'table-light' : '') + '">';
+            html += '<td class="ps-3"><input type="checkbox" class="form-check-input chk-comprar" data-idx="ss-' + idx + '" data-base=\'' + JSON.stringify({item_inventario_id: m.item_inventario_id, descripcion: m.descripcion, codigo: m.codigo, cantidad_planificada: m.cantidad_necesaria, cantidad_actual_obra: 0, tipo: 'material'}).replace(/'/g, '&#39;') + '\'' + (yaPedido && restaPedir <= 0 ? '' : ' checked') + '></td>';
             html += '<td><strong class="small">' + m.descripcion + '</strong></td>';
             html += '<td class="text-center small">' + m.cantidad_necesaria + ' ' + m.unidad + '</td>';
             html += '<td class="text-center small text-muted">0</td>';
-            html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-ss-' + idx + '" value="' + m.faltante + '" min="1" style="width:80px; display:inline-block;"></td>';
+            html += '<td class="text-center"><input type="number" class="form-control form-control-sm text-center input-cantidad-pedir" id="cant-ss-' + idx + '" value="' + (restaPedir > 0 ? restaPedir : m.faltante) + '" min="1" style="width:80px; display:inline-block;"></td>';
             html += '<td class="text-center"><select class="form-select form-select-sm input-unidad-pedir" id="uni-ss-' + idx + '" style="width:90px; display:inline-block;">';
             var unidades = ['u', 'kg', 'm2', 'm3', 'ml', 'l', 'bolsa', 'barra', 'rollo', 'paquete'];
             unidades.forEach(function(u) { html += '<option value="' + u + '"' + (u === m.unidad ? ' selected' : '') + '>' + u + '</option>'; });
             html += '</select></td>';
+            if (yaPedido) {
+                html += '<td class="text-center"><span class="badge bg-info" title="Ya pedido en requerimiento">Pedido: ' + cantPedida + '</span></td>';
+            } else {
+                html += '<td class="text-center"><span class="badge bg-secondary">Nuevo</span></td>';
+            }
             html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -3514,6 +3536,15 @@ function renderAnalisisMateriales(data) {
     body.querySelectorAll('input[type="checkbox"]').forEach(function(chk) {
         chk.addEventListener('change', actualizarResumenGestion);
     });
+}
+
+function toggleAllCheckboxes(className) {
+    var checkboxes = document.querySelectorAll('.' + className + ':not(:disabled)');
+    // Si todos están marcados, desmarcar todos. Si alguno está desmarcado, marcar todos.
+    var todosChecked = true;
+    checkboxes.forEach(function(chk) { if (!chk.checked) todosChecked = false; });
+    checkboxes.forEach(function(chk) { chk.checked = !todosChecked; });
+    actualizarResumenGestion();
 }
 
 function actualizarResumenGestion() {
