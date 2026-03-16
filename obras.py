@@ -878,27 +878,60 @@ def detalle(id):
     cuadrillas_por_etapa = {}
     try:
         from models.budgets import CuadrillaTipo
-        tipo_obra_map = {'economica': 'economica', 'estandar': 'estandar', 'premium': 'premium'}
+        import unicodedata
         tipo_obra_actual = getattr(obra, 'tipo_obra', 'estandar') or 'estandar'
         cuadrillas = CuadrillaTipo.query.filter_by(
             organizacion_id=obra.organizacion_id,
             tipo_obra=tipo_obra_actual,
             activo=True,
         ).all()
+
+        def _normalizar(s):
+            """Quita acentos, lowercase, para matching flexible."""
+            s = s.lower().strip()
+            nfkd = unicodedata.normalize('NFKD', s)
+            return ''.join(c for c in nfkd if not unicodedata.combining(c))
+
+        # Mapeo: etapa_tipo → cuadrilla info
         for c in cuadrillas:
-            cuadrillas_por_etapa[c.etapa_tipo] = {
+            info = {
                 'nombre': c.nombre,
                 'personas': c.cantidad_personas,
                 'rendimiento': float(c.rendimiento_diario or 0),
                 'unidad': c.unidad_rendimiento,
                 'costo_diario': float(c.costo_diario),
-                'miembros': ', '.join(
-                    f"{float(m.cantidad)}x {m.rol}" if float(m.cantidad) != 1 else m.rol
+                'miembros': [
+                    {'rol': m.rol, 'cantidad': float(m.cantidad),
+                     'jornal': float(m.jornal_override or (m.escala.jornal if m.escala else 0))}
+                    for m in c.miembros
+                ],
+                'miembros_texto': ', '.join(
+                    f"{int(m.cantidad) if m.cantidad == int(m.cantidad) else float(m.cantidad)}x {m.rol}" if float(m.cantidad) != 1 else m.rol
                     for m in c.miembros
                 ),
             }
+            # Guardar por etapa_tipo y por nombre normalizado
+            cuadrillas_por_etapa[c.etapa_tipo] = info
+            cuadrillas_por_etapa[_normalizar(c.etapa_tipo)] = info
+
+        # Mapeo adicional: nombres comunes de etapas → etapa_tipo
+        ETAPA_ALIASES = {
+            'excavacion': 'excavacion', 'movimiento de suelos': 'excavacion',
+            'fundaciones': 'fundaciones', 'fundacion': 'fundaciones',
+            'estructura': 'estructura', 'hormigon armado': 'estructura',
+            'mamposteria': 'mamposteria', 'albanileria': 'mamposteria',
+            'instalacion electrica': 'instalacion_electrica', 'electrica': 'instalacion_electrica',
+            'instalacion sanitaria': 'instalacion_sanitaria', 'sanitaria': 'instalacion_sanitaria',
+            'revoques': 'revoques', 'revoque': 'revoques',
+            'pintura': 'pintura', 'pinturas': 'pintura',
+            'pisos': 'pisos', 'piso': 'pisos', 'solados': 'pisos',
+            'techos': 'techos', 'techo': 'techos', 'cubierta': 'techos',
+        }
+        for alias, etapa_tipo in ETAPA_ALIASES.items():
+            if etapa_tipo in cuadrillas_por_etapa:
+                cuadrillas_por_etapa[alias] = cuadrillas_por_etapa[etapa_tipo]
     except Exception:
-        pass  # Si no hay cuadrillas aún, no pasa nada
+        pass
 
     # Obtener stock transferido a esta obra (desde inventario) — con eager load del item
     from models.inventory import StockObra, ItemInventario as InvItem

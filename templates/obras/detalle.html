@@ -645,6 +645,10 @@
 
                                     {% for etapa_nombre in ns.etapas_orden %}
                                     {% set etapa_items = ns.etapas_vistas[etapa_nombre] %}
+                                    {# Buscar cuadrilla para esta etapa #}
+                                    {% set etapa_norm = etapa_nombre|lower|replace('ó','o')|replace('á','a')|replace('é','e')|replace('í','i')|replace('ú','u') %}
+                                    {% set cuad = cuadrillas_por_etapa.get(etapa_norm, none) if cuadrillas_por_etapa is defined else none %}
+
                                     <div class="card mb-3 border">
                                         <div class="card-header bg-dark text-white py-2">
                                             <div class="d-flex justify-content-between align-items-center">
@@ -653,6 +657,34 @@
                                                 <span class="badge bg-light text-dark">Presup: $ {{ "{:,.0f}".format(etapa_total|float) }}</span>
                                             </div>
                                         </div>
+
+                                        {# Composición de cuadrilla #}
+                                        {% if cuad %}
+                                        <div class="card-body py-2 px-3 bg-light border-bottom" style="font-size:0.85rem;">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <i class="fas fa-hard-hat text-warning me-1"></i>
+                                                    <strong>{{ cuad.nombre }}</strong>
+                                                    <span class="text-muted ms-2">({{ cuad.personas|round(0)|int }} personas)</span>
+                                                </div>
+                                                <div class="col-md-3 text-muted">
+                                                    <i class="fas fa-tachometer-alt me-1"></i>Rinde {{ cuad.rendimiento }} {{ cuad.unidad }}/dia
+                                                </div>
+                                                <div class="col-md-3 text-end">
+                                                    <span class="badge bg-primary">{{ "{:,.0f}".format(cuad.costo_diario) }}/dia</span>
+                                                </div>
+                                            </div>
+                                            <div class="mt-1">
+                                                {% for m in cuad.miembros %}
+                                                <span class="badge bg-white text-dark border me-1">
+                                                    {% if m.cantidad != 1 %}{{ m.cantidad|round(1) }}x {% endif %}{{ m.rol }}
+                                                    <small class="text-muted">({{ "{:,.0f}".format(m.jornal) }}/j)</small>
+                                                </span>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
                                         <div class="card-body p-0">
                                             <table class="table table-sm table-hover mb-0">
                                                 <thead class="table-light">
@@ -674,17 +706,10 @@
                                                     <tr>
                                                         <td>
                                                             <strong>{{ item.descripcion }}</strong>
-                                                            {% if cuadrillas_por_etapa is defined %}
-                                                                {% set cuad_info = cuadrillas_por_etapa.get(item.descripcion|lower|replace(' ', '_')|replace('cuadrilla_', ''), none) %}
-                                                                {% if cuad_info %}
-                                                                <br><small class="text-muted">
-                                                                    <i class="fas fa-users me-1"></i>{{ cuad_info.personas|round(0)|int }} pers. — {{ cuad_info.miembros }}
-                                                                    <br><i class="fas fa-tachometer-alt me-1"></i>Rinde {{ cuad_info.rendimiento }} {{ cuad_info.unidad }}/día
-                                                                    {% if cuad_info.rendimiento > 0 and planificado > 0 %}
-                                                                    → ~{{ (planificado / cuad_info.personas)|round(0)|int }} días
-                                                                    {% endif %}
-                                                                </small>
-                                                                {% endif %}
+                                                            {% if cuad and planificado > 0 and cuad.personas > 0 %}
+                                                            <br><small class="text-muted">
+                                                                ~{{ (planificado / cuad.personas)|round(0)|int }} dias con esta cuadrilla
+                                                            </small>
                                                             {% endif %}
                                                         </td>
                                                         <td class="text-center">
