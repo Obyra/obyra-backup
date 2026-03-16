@@ -5647,17 +5647,31 @@ def wizard_create_tasks():
 @login_required
 def escala_salarial():
     """Página de gestión de escala salarial UOCRA y cuadrillas."""
-    from services.cuadrillas_service import seed_escala_salarial, seed_cuadrillas_default
     roles = _get_roles_usuario(current_user)
     if not (roles & {'admin', 'administrador', 'pm', 'project_manager'}):
         flash('Sin permisos para esta sección', 'warning')
         return redirect(url_for('obras.listar'))
 
     org_id = current_user.organizacion_id
+    if not org_id:
+        flash('No tenés una organización asignada', 'warning')
+        return redirect(url_for('obras.listar'))
+
+    # Asegurar que las tablas existan
+    try:
+        db.create_all()
+    except Exception:
+        pass
+
     # Seed datos por defecto si no existen
-    seed_escala_salarial(org_id)
-    seed_cuadrillas_default(org_id)
-    db.session.commit()
+    try:
+        from services.cuadrillas_service import seed_escala_salarial, seed_cuadrillas_default
+        seed_escala_salarial(org_id)
+        seed_cuadrillas_default(org_id)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error seeding escala/cuadrillas: %s", e)
 
     return render_template('obras/escala_salarial.html')
 
@@ -5666,17 +5680,23 @@ def escala_salarial():
 @login_required
 def escala_salarial_api():
     """API: obtener escala salarial vigente."""
-    from services.cuadrillas_service import obtener_escala_vigente
-    org_id = current_user.organizacion_id
-    escalas = obtener_escala_vigente(org_id)
-    return jsonify(ok=True, items=[{
-        'id': e.id,
-        'categoria': e.categoria,
-        'descripcion': e.descripcion,
-        'jornal': float(e.jornal),
-        'tarifa_hora': float(e.tarifa_hora or 0),
-        'vigencia_desde': e.vigencia_desde.isoformat() if e.vigencia_desde else None,
-    } for e in escalas])
+    try:
+        from services.cuadrillas_service import obtener_escala_vigente
+        org_id = current_user.organizacion_id
+        if not org_id:
+            return jsonify(ok=True, items=[])
+        escalas = obtener_escala_vigente(org_id)
+        return jsonify(ok=True, items=[{
+            'id': e.id,
+            'categoria': e.categoria,
+            'descripcion': e.descripcion,
+            'jornal': float(e.jornal),
+            'tarifa_hora': float(e.tarifa_hora or 0),
+            'vigencia_desde': e.vigencia_desde.isoformat() if e.vigencia_desde else None,
+        } for e in escalas])
+    except Exception as e:
+        current_app.logger.exception("Error en escala_salarial_api")
+        return jsonify(ok=False, error=str(e)), 500
 
 
 @obras_bp.route('/escala-salarial/api', methods=['POST'])
