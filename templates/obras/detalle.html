@@ -1027,7 +1027,7 @@
                                     <i class="fas fa-plus me-1"></i>Nueva OC
                                 </a>
                             </div>
-                            {% if obra.ordenes_compra %}
+                            {% if ordenes_compra_list %}
                             <div class="table-responsive">
                                 <table class="table table-hover mb-0">
                                     <thead class="table-light">
@@ -1041,7 +1041,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for oc in obra.ordenes_compra %}
+                                        {% for oc in ordenes_compra_list %}
                                         <tr>
                                             <td><strong>{{ oc.numero }}</strong></td>
                                             <td>{{ oc.proveedor }}</td>
@@ -1184,7 +1184,7 @@
                         <label class="form-label fw-bold small">Requerimiento (opcional)</label>
                         <select class="form-select" id="rem-requerimiento">
                             <option value="">Sin requerimiento</option>
-                            {% for req in obra.requerimientos_compra %}
+                            {% for req in requerimientos_list %}
                             <option value="{{ req.id }}">{{ req.numero }} - {{ req.motivo[:40] }}{% if req.motivo|length > 40 %}...{% endif %}</option>
                             {% endfor %}
                         </select>
@@ -1194,8 +1194,8 @@
                         <select class="form-select" id="rem-recibido-por">
                             <option value="{{ current_user.id }}">{{ current_user.nombre_completo }}</option>
                             {% for m in miembros %}
-                            {% if m.id != current_user.id %}
-                            <option value="{{ m.id }}">{{ m.nombre_completo }}</option>
+                            {% if m.usuario_id != current_user.id %}
+                            <option value="{{ m.usuario_id }}">{{ m.usuario.nombre_completo if m.usuario else 'Usuario #' ~ m.usuario_id }}</option>
                             {% endif %}
                             {% endfor %}
                         </select>

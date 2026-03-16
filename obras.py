@@ -1017,19 +1017,32 @@ def detalle(id):
             hay_desfase_fechas = True
             break
 
-    # Contar remitos de forma segura (tabla puede no existir aún en producción)
+    # Cargar datos de tablas nuevas de forma segura (pueden no existir en prod)
+    remitos_count = 0
+    remitos_list = []
+    ordenes_compra_list = []
+    requerimientos_list = []
     try:
         remitos_count = obra.remitos.count() if hasattr(obra, 'remitos') else 0
         remitos_list = obra.remitos.order_by(None).all() if remitos_count > 0 else []
     except Exception:
-        remitos_count = 0
-        remitos_list = []
+        pass
+    try:
+        ordenes_compra_list = list(obra.ordenes_compra) if hasattr(obra, 'ordenes_compra') else []
+    except Exception:
+        pass
+    try:
+        requerimientos_list = list(obra.requerimientos_compra) if hasattr(obra, 'requerimientos_compra') else []
+    except Exception:
+        pass
 
     return render_template('obras/detalle.html',
                          obra=obra,
                          etapas=etapas,
                          remitos_count=remitos_count,
                          remitos_list=remitos_list,
+                         ordenes_compra_list=ordenes_compra_list,
+                         requerimientos_list=requerimientos_list,
                          hay_desfase_fechas=hay_desfase_fechas,
                          etapas_con_avance=etapas_con_avance,
                          porcentaje_obra=porcentaje_obra,
