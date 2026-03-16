@@ -8,36 +8,72 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-truck-loading me-2"></i>Equipos y Maquinaria</h2>
-                <div>
-                    <span class="badge bg-info fs-6">{{ equipos|length }} equipos registrados</span>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-info fs-6">{{ equipos|length }} equipos</span>
+                    <button class="btn btn-success" onclick="abrirModalCrear()">
+                        <i class="fas fa-plus me-1"></i>Agregar Equipo
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Ubicación actual de equipos -->
+    <!-- Resumen -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div class="card-body text-center py-3">
+                    <i class="fas fa-warehouse fa-2x mb-1"></i>
+                    <h3 class="mb-0">{{ equipos|selectattr('ubicacion_tipo', 'equalto', 'deposito')|list|length }}</h3>
+                    <small>En Deposito</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+                <div class="card-body text-center py-3">
+                    <i class="fas fa-hard-hat fa-2x mb-1"></i>
+                    <h3 class="mb-0">{{ equipos|selectattr('ubicacion_tipo', 'equalto', 'obra')|list|length }}</h3>
+                    <small>En Obras</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white;">
+                <div class="card-body text-center py-3">
+                    <i class="fas fa-wrench fa-2x mb-1"></i>
+                    <h3 class="mb-0">{{ equipos|selectattr('estado', 'equalto', 'mantenimiento')|list|length }}</h3>
+                    <small>En Mantenimiento</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de equipos -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card shadow-sm">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="fas fa-map-marker-alt text-primary me-2"></i>Ubicación Actual</h5>
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-map-marker-alt text-primary me-2"></i>Ubicacion Actual</h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Código</th>
+                                    <th>Codigo</th>
                                     <th>Equipo</th>
                                     <th>Tipo</th>
-                                    <th>Ubicación</th>
+                                    <th>Ubicacion</th>
                                     <th>Costo/Hora</th>
                                     <th>Estado</th>
-                                    <th class="text-center">Acciones</th>
+                                    <th class="text-center">Movimientos</th>
+                                    <th class="text-center">Editar</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for eq in equipos %}
+                                {% if eq.estado != 'baja' %}
                                 <tr>
                                     <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
                                     <td>
@@ -47,7 +83,7 @@
                                     <td>{{ eq.tipo }}</td>
                                     <td>
                                         {% if eq.ubicacion_tipo == 'deposito' %}
-                                            <span class="badge bg-outline-secondary border"><i class="fas fa-warehouse me-1"></i>Depósito</span>
+                                            <span class="badge bg-light text-dark border"><i class="fas fa-warehouse me-1"></i>Deposito</span>
                                         {% else %}
                                             <span class="badge bg-success"><i class="fas fa-hard-hat me-1"></i>{{ eq.ubicacion_obra.nombre if eq.ubicacion_obra else 'Obra' }}</span>
                                         {% endif %}
@@ -58,8 +94,6 @@
                                             <span class="badge bg-success">Activo</span>
                                         {% elif eq.estado == 'mantenimiento' %}
                                             <span class="badge bg-warning">Mantenimiento</span>
-                                        {% else %}
-                                            <span class="badge bg-danger">Baja</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
@@ -71,59 +105,44 @@
                                             {% else %}
                                                 <div class="btn-group btn-group-sm">
                                                     <button class="btn btn-warning" onclick="abrirModalTraslado({{ eq.id }}, '{{ eq.nombre }}', {{ eq.ubicacion_obra_id }})" title="Trasladar a otra obra">
-                                                        <i class="fas fa-exchange-alt"></i>
+                                                        <i class="fas fa-exchange-alt"></i> Trasladar
                                                     </button>
-                                                    <button class="btn btn-secondary" onclick="devolverEquipo({{ eq.id }}, '{{ eq.nombre }}')" title="Devolver al depósito">
+                                                    <button class="btn btn-outline-secondary" onclick="devolverEquipo({{ eq.id }}, '{{ eq.nombre }}')" title="Devolver al deposito">
                                                         <i class="fas fa-undo"></i>
                                                     </button>
                                                 </div>
                                             {% endif %}
+                                        {% else %}
+                                            <small class="text-muted">-</small>
                                         {% endif %}
                                     </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-info" onclick="abrirModalEditar({{ eq.id }}, '{{ eq.nombre }}', '{{ eq.codigo or '' }}', '{{ eq.tipo }}', '{{ eq.marca or '' }}', '{{ eq.modelo or '' }}', '{{ eq.nro_serie or '' }}', {{ eq.costo_hora|float if eq.costo_hora else 0 }}, {{ eq.costo_adquisicion|float if eq.costo_adquisicion else 0 }}, '{{ eq.estado }}')" title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" onclick="eliminarEquipo({{ eq.id }}, '{{ eq.nombre }}')" title="Dar de baja">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
+                                {% endif %}
                                 {% endfor %}
                                 {% if not equipos %}
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">
-                                        <i class="fas fa-truck-loading fa-2x mb-2 d-block"></i>
-                                        No hay equipos registrados. Agregue equipos desde el módulo de Equipos.
+                                    <td colspan="8" class="text-center text-muted py-5">
+                                        <i class="fas fa-truck-loading fa-3x mb-3 d-block opacity-50"></i>
+                                        <p class="mb-2">No hay equipos registrados</p>
+                                        <button class="btn btn-success" onclick="abrirModalCrear()">
+                                            <i class="fas fa-plus me-1"></i>Agregar primer equipo
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endif %}
                             </tbody>
                         </table>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Resumen por obra -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <div class="card-body text-center">
-                    <i class="fas fa-warehouse fa-2x mb-2"></i>
-                    <h3>{{ equipos|selectattr('ubicacion_tipo', 'equalto', 'deposito')|list|length }}</h3>
-                    <small>En Depósito</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
-                <div class="card-body text-center">
-                    <i class="fas fa-hard-hat fa-2x mb-2"></i>
-                    <h3>{{ equipos|selectattr('ubicacion_tipo', 'equalto', 'obra')|list|length }}</h3>
-                    <small>En Obras</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white;">
-                <div class="card-body text-center">
-                    <i class="fas fa-wrench fa-2x mb-2"></i>
-                    <h3>{{ equipos|selectattr('estado', 'equalto', 'mantenimiento')|list|length }}</h3>
-                    <small>En Mantenimiento</small>
                 </div>
             </div>
         </div>
@@ -161,7 +180,7 @@
                                         {% elif mov.tipo == 'traslado' %}
                                             <span class="badge bg-warning text-dark"><i class="fas fa-exchange-alt me-1"></i>Traslado</span>
                                         {% else %}
-                                            <span class="badge bg-secondary"><i class="fas fa-undo me-1"></i>Devolución</span>
+                                            <span class="badge bg-secondary"><i class="fas fa-undo me-1"></i>Devolucion</span>
                                         {% endif %}
                                     </td>
                                     <td>{{ mov.origen_display }}</td>
@@ -170,7 +189,7 @@
                                         {% if mov.estado == 'recibido' %}
                                             <span class="badge bg-success">Recibido</span>
                                         {% elif mov.estado == 'en_transito' %}
-                                            <span class="badge bg-info">En tránsito</span>
+                                            <span class="badge bg-info">En transito</span>
                                         {% else %}
                                             <span class="badge bg-danger">Cancelado</span>
                                         {% endif %}
@@ -181,7 +200,7 @@
                                 {% if not movimientos %}
                                 <tr>
                                     <td colspan="7" class="text-center text-muted py-4">
-                                        No hay movimientos registrados aún.
+                                        No hay movimientos registrados aun.
                                     </td>
                                 </tr>
                                 {% endif %}
@@ -194,12 +213,177 @@
     </div>
 </div>
 
+<!-- Modal Crear Equipo -->
+<div class="modal fade" id="modalCrear" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Agregar Equipo</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formCrear">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Nombre del equipo *</label>
+                            <input type="text" class="form-control" id="crear_nombre" required placeholder="Ej: Hormigonera 150L">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Codigo interno</label>
+                            <input type="text" class="form-control" id="crear_codigo" placeholder="Ej: MAQ-001">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tipo *</label>
+                            <select class="form-select" id="crear_tipo" required>
+                                <option value="">Seleccionar...</option>
+                                <option value="hormigonera">Hormigonera</option>
+                                <option value="guinche">Guinche</option>
+                                <option value="martillo">Martillo demoledor</option>
+                                <option value="compactador">Compactador</option>
+                                <option value="vibrador">Vibrador de hormigon</option>
+                                <option value="amoladora">Amoladora</option>
+                                <option value="taladro">Taladro</option>
+                                <option value="sierra">Sierra</option>
+                                <option value="soldadora">Soldadora</option>
+                                <option value="generador">Generador</option>
+                                <option value="compresor">Compresor</option>
+                                <option value="retroexcavadora">Retroexcavadora</option>
+                                <option value="miniexcavadora">Mini excavadora</option>
+                                <option value="minicargadora">Mini cargadora</option>
+                                <option value="camion">Camion</option>
+                                <option value="andamio">Andamio</option>
+                                <option value="encofrado">Encofrado</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Marca</label>
+                            <input type="text" class="form-control" id="crear_marca" placeholder="Ej: Honda, Dewalt">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Modelo</label>
+                            <input type="text" class="form-control" id="crear_modelo" placeholder="Ej: GX160">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Nro. de Serie</label>
+                            <input type="text" class="form-control" id="crear_nro_serie">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Costo por hora ($)</label>
+                            <input type="number" class="form-control" id="crear_costo_hora" step="0.01" value="0" min="0">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Costo adquisicion ($)</label>
+                            <input type="number" class="form-control" id="crear_costo_adquisicion" step="0.01" value="0" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i>Guardar Equipo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Equipo -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Equipo</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEditar">
+                <input type="hidden" id="editar_id">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Nombre *</label>
+                            <input type="text" class="form-control" id="editar_nombre" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Codigo</label>
+                            <input type="text" class="form-control" id="editar_codigo">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tipo *</label>
+                            <select class="form-select" id="editar_tipo" required>
+                                <option value="">Seleccionar...</option>
+                                <option value="hormigonera">Hormigonera</option>
+                                <option value="guinche">Guinche</option>
+                                <option value="martillo">Martillo demoledor</option>
+                                <option value="compactador">Compactador</option>
+                                <option value="vibrador">Vibrador de hormigon</option>
+                                <option value="amoladora">Amoladora</option>
+                                <option value="taladro">Taladro</option>
+                                <option value="sierra">Sierra</option>
+                                <option value="soldadora">Soldadora</option>
+                                <option value="generador">Generador</option>
+                                <option value="compresor">Compresor</option>
+                                <option value="retroexcavadora">Retroexcavadora</option>
+                                <option value="miniexcavadora">Mini excavadora</option>
+                                <option value="minicargadora">Mini cargadora</option>
+                                <option value="camion">Camion</option>
+                                <option value="andamio">Andamio</option>
+                                <option value="encofrado">Encofrado</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Marca</label>
+                            <input type="text" class="form-control" id="editar_marca">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Modelo</label>
+                            <input type="text" class="form-control" id="editar_modelo">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Nro. Serie</label>
+                            <input type="text" class="form-control" id="editar_nro_serie">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Costo/hora ($)</label>
+                            <input type="number" class="form-control" id="editar_costo_hora" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Costo adquisicion ($)</label>
+                            <input type="number" class="form-control" id="editar_costo_adquisicion" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" id="editar_estado">
+                                <option value="activo">Activo</option>
+                                <option value="mantenimiento">Mantenimiento</option>
+                                <option value="baja">Baja</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info text-white"><i class="fas fa-save me-1"></i>Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Despachar -->
 <div class="modal fade" id="modalDespacho" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="fas fa-arrow-right me-2"></i>Despachar Equipo a Obra</h5>
+                <h5 class="modal-title"><i class="fas fa-arrow-right me-2"></i>Despachar a Obra</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form id="formDespacho">
@@ -274,6 +458,80 @@
 </div>
 
 <script>
+var csrfToken = '{{ csrf_token() }}';
+
+// ==================== CRUD ====================
+function abrirModalCrear() {
+    document.getElementById('formCrear').reset();
+    new bootstrap.Modal(document.getElementById('modalCrear')).show();
+}
+
+function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, costoHora, costoAdq, estado) {
+    document.getElementById('editar_id').value = id;
+    document.getElementById('editar_nombre').value = nombre;
+    document.getElementById('editar_codigo').value = codigo;
+    document.getElementById('editar_tipo').value = tipo;
+    document.getElementById('editar_marca').value = marca;
+    document.getElementById('editar_modelo').value = modelo;
+    document.getElementById('editar_nro_serie').value = nroSerie;
+    document.getElementById('editar_costo_hora').value = costoHora;
+    document.getElementById('editar_costo_adquisicion').value = costoAdq;
+    document.getElementById('editar_estado').value = estado;
+    new bootstrap.Modal(document.getElementById('modalEditar')).show();
+}
+
+document.getElementById('formCrear').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var form = new FormData();
+    form.append('csrf_token', csrfToken);
+    form.append('nombre', document.getElementById('crear_nombre').value);
+    form.append('codigo', document.getElementById('crear_codigo').value);
+    form.append('tipo', document.getElementById('crear_tipo').value);
+    form.append('marca', document.getElementById('crear_marca').value);
+    form.append('modelo', document.getElementById('crear_modelo').value);
+    form.append('nro_serie', document.getElementById('crear_nro_serie').value);
+    form.append('costo_hora', document.getElementById('crear_costo_hora').value);
+    form.append('costo_adquisicion', document.getElementById('crear_costo_adquisicion').value);
+    fetch('/obras/equipos/crear', { method: 'POST', body: form })
+        .then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+            else alert(data.error || 'Error al crear equipo');
+        });
+});
+
+document.getElementById('formEditar').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var id = document.getElementById('editar_id').value;
+    var form = new FormData();
+    form.append('csrf_token', csrfToken);
+    form.append('nombre', document.getElementById('editar_nombre').value);
+    form.append('codigo', document.getElementById('editar_codigo').value);
+    form.append('tipo', document.getElementById('editar_tipo').value);
+    form.append('marca', document.getElementById('editar_marca').value);
+    form.append('modelo', document.getElementById('editar_modelo').value);
+    form.append('nro_serie', document.getElementById('editar_nro_serie').value);
+    form.append('costo_hora', document.getElementById('editar_costo_hora').value);
+    form.append('costo_adquisicion', document.getElementById('editar_costo_adquisicion').value);
+    form.append('estado', document.getElementById('editar_estado').value);
+    fetch('/obras/equipos/' + id + '/editar', { method: 'POST', body: form })
+        .then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+            else alert(data.error || 'Error al editar');
+        });
+});
+
+function eliminarEquipo(id, nombre) {
+    if (!confirm('Dar de baja "' + nombre + '"? El equipo no se elimina, queda con estado Baja.')) return;
+    var form = new FormData();
+    form.append('csrf_token', csrfToken);
+    fetch('/obras/equipos/' + id + '/eliminar', { method: 'POST', body: form })
+        .then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+            else alert(data.error || 'Error');
+        });
+}
+
+// ==================== MOVIMIENTOS ====================
 function abrirModalDespacho(equipoId, nombre) {
     document.getElementById('despacho_equipo_id').value = equipoId;
     document.getElementById('despacho_equipo_nombre').textContent = nombre;
@@ -290,7 +548,6 @@ function abrirModalTraslado(equipoId, nombre, obraActualId) {
     document.getElementById('traslado_destino').value = '';
     document.getElementById('traslado_costo').value = '0';
     document.getElementById('traslado_notas').value = '';
-    // Deshabilitar la obra actual en el select
     var options = document.getElementById('traslado_destino').options;
     for (var i = 0; i < options.length; i++) {
         options[i].disabled = (options[i].value == obraActualId);
@@ -299,50 +556,44 @@ function abrirModalTraslado(equipoId, nombre, obraActualId) {
 }
 
 function devolverEquipo(equipoId, nombre) {
-    if (!confirm('¿Devolver "' + nombre + '" al depósito?')) return;
+    if (!confirm('Devolver "' + nombre + '" al deposito?')) return;
     var form = new FormData();
-    form.append('csrf_token', '{{ csrf_token() }}');
-    fetch('/obras/equipos/' + equipoId + '/devolver', {
-        method: 'POST',
-        body: form
-    }).then(r => r.json()).then(data => {
-        if (data.ok) location.reload();
-        else alert(data.error || 'Error al devolver');
-    });
+    form.append('csrf_token', csrfToken);
+    fetch('/obras/equipos/' + equipoId + '/devolver', { method: 'POST', body: form })
+        .then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+            else alert(data.error || 'Error al devolver');
+        });
 }
 
 document.getElementById('formDespacho').addEventListener('submit', function(e) {
     e.preventDefault();
     var equipoId = document.getElementById('despacho_equipo_id').value;
     var form = new FormData();
-    form.append('csrf_token', '{{ csrf_token() }}');
+    form.append('csrf_token', csrfToken);
     form.append('destino_obra_id', document.getElementById('despacho_destino').value);
     form.append('costo_transporte', document.getElementById('despacho_costo').value);
     form.append('notas', document.getElementById('despacho_notas').value);
-    fetch('/obras/equipos/' + equipoId + '/despachar', {
-        method: 'POST',
-        body: form
-    }).then(r => r.json()).then(data => {
-        if (data.ok) location.reload();
-        else alert(data.error || 'Error al despachar');
-    });
+    fetch('/obras/equipos/' + equipoId + '/despachar', { method: 'POST', body: form })
+        .then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+            else alert(data.error || 'Error al despachar');
+        });
 });
 
 document.getElementById('formTraslado').addEventListener('submit', function(e) {
     e.preventDefault();
     var equipoId = document.getElementById('traslado_equipo_id').value;
     var form = new FormData();
-    form.append('csrf_token', '{{ csrf_token() }}');
+    form.append('csrf_token', csrfToken);
     form.append('destino_obra_id', document.getElementById('traslado_destino').value);
     form.append('costo_transporte', document.getElementById('traslado_costo').value);
     form.append('notas', document.getElementById('traslado_notas').value);
-    fetch('/obras/equipos/' + equipoId + '/trasladar', {
-        method: 'POST',
-        body: form
-    }).then(r => r.json()).then(data => {
-        if (data.ok) location.reload();
-        else alert(data.error || 'Error al trasladar');
-    });
+    fetch('/obras/equipos/' + equipoId + '/trasladar', { method: 'POST', body: form })
+        .then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+            else alert(data.error || 'Error al trasladar');
+        });
 });
 </script>
 {% endblock %}

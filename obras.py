@@ -5992,7 +5992,7 @@ def cuadrillas_guardar():
 
 
 # =============================================================================
-# MOVIMIENTOS DE EQUIPOS - Despacho / Traslado / Devolución
+# MAQUINARIA - CRUD + Movimientos
 # =============================================================================
 
 @obras_bp.route('/equipos/movimientos', methods=['GET'])
@@ -6011,6 +6011,89 @@ def equipos_movimientos():
 
     return render_template('obras/equipos_movimientos.html',
                            equipos=equipos, obras=obras, movimientos=movimientos)
+
+
+@obras_bp.route('/equipos/crear', methods=['POST'])
+@login_required
+def crear_equipo():
+    """Crear nuevo equipo/maquinaria"""
+    from models.equipment import Equipment
+    org_id = current_user.organizacion_id
+
+    nombre = request.form.get('nombre', '').strip()
+    if not nombre:
+        return jsonify(ok=False, error='El nombre es obligatorio'), 400
+
+    tipo = request.form.get('tipo', '').strip()
+    if not tipo:
+        return jsonify(ok=False, error='El tipo es obligatorio'), 400
+
+    try:
+        equipo = Equipment(
+            company_id=org_id,
+            nombre=nombre,
+            codigo=request.form.get('codigo', '').strip() or None,
+            tipo=tipo,
+            marca=request.form.get('marca', '').strip() or None,
+            modelo=request.form.get('modelo', '').strip() or None,
+            nro_serie=request.form.get('nro_serie', '').strip() or None,
+            costo_hora=request.form.get('costo_hora', 0, type=float),
+            costo_adquisicion=request.form.get('costo_adquisicion', 0, type=float),
+            estado='activo',
+            ubicacion_tipo='deposito',
+        )
+        db.session.add(equipo)
+        db.session.commit()
+        flash(f'Equipo "{nombre}" creado exitosamente', 'success')
+        return jsonify(ok=True, id=equipo.id)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/equipos/<int:equipo_id>/editar', methods=['POST'])
+@login_required
+def editar_equipo(equipo_id):
+    """Editar equipo existente"""
+    from models.equipment import Equipment
+    org_id = current_user.organizacion_id
+    equipo = Equipment.query.filter_by(id=equipo_id, company_id=org_id).first_or_404()
+
+    try:
+        equipo.nombre = request.form.get('nombre', equipo.nombre).strip()
+        equipo.codigo = request.form.get('codigo', '').strip() or equipo.codigo
+        equipo.tipo = request.form.get('tipo', equipo.tipo).strip()
+        equipo.marca = request.form.get('marca', '').strip() or equipo.marca
+        equipo.modelo = request.form.get('modelo', '').strip() or equipo.modelo
+        equipo.nro_serie = request.form.get('nro_serie', '').strip() or equipo.nro_serie
+        equipo.costo_hora = request.form.get('costo_hora', type=float) or equipo.costo_hora
+        equipo.costo_adquisicion = request.form.get('costo_adquisicion', type=float) or equipo.costo_adquisicion
+        equipo.estado = request.form.get('estado', equipo.estado)
+
+        db.session.commit()
+        flash(f'Equipo "{equipo.nombre}" actualizado', 'success')
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/equipos/<int:equipo_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_equipo(equipo_id):
+    """Dar de baja un equipo"""
+    from models.equipment import Equipment
+    org_id = current_user.organizacion_id
+    equipo = Equipment.query.filter_by(id=equipo_id, company_id=org_id).first_or_404()
+
+    try:
+        equipo.estado = 'baja'
+        db.session.commit()
+        flash(f'Equipo "{equipo.nombre}" dado de baja', 'warning')
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
 
 
 @obras_bp.route('/equipos/<int:equipo_id>/despachar', methods=['POST'])

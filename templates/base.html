@@ -135,6 +135,12 @@
                                 <i class="fas fa-truck me-2"></i>Proveedores
                             </a></li>
                             {% endif %}
+                            {% if has_endpoint('obras.equipos_movimientos') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('obras.equipos_movimientos') }}">
+                                <i class="fas fa-truck-loading me-2"></i>Maquinaria
+                            </a></li>
+                            {% endif %}
                             {% if current_user.rol == 'administrador' and has_endpoint('inventario.categorias') %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('inventario.categorias') }}">
@@ -161,15 +167,6 @@
                             <li><a class="dropdown-item" href="{{ url_for('equipos.rendimiento') }}">Rendimiento</a></li>
                             {% endif %}
                         </ul>
-                    </li>
-                    {% endif %}
-
-                    {# 5b. Maquinaria #}
-                    {% if has_endpoint('obras.equipos_movimientos') %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('obras.equipos_movimientos') }}">
-                            <i class="fas fa-truck-loading me-1"></i>Maquinaria
-                        </a>
                     </li>
                     {% endif %}
 
