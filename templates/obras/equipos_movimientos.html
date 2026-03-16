@@ -91,7 +91,14 @@
                                             <span class="badge bg-success"><i class="fas fa-hard-hat me-1"></i>{{ eq.ubicacion_obra.nombre if eq.ubicacion_obra else 'Obra' }}</span>
                                         {% endif %}
                                     </td>
-                                    <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
+                                    <td>
+                                        {% if eq.costo_hora %}
+                                            <strong>$ {{ "{:,.2f}".format(eq.costo_hora|float) }}</strong>
+                                            {% if eq.costo_hora_usd %}
+                                                <br><small class="text-success">USD {{ "{:,.2f}".format(eq.costo_hora_usd|float) }}</small>
+                                            {% endif %}
+                                        {% else %}-{% endif %}
+                                    </td>
                                     <td>
                                         {% if eq.estado == 'activo' %}
                                             <span class="badge bg-success">Activo</span>
@@ -121,7 +128,7 @@
                                     </td>
                                     <td class="text-center">
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-info" onclick="abrirModalEditar({{ eq.id }}, '{{ eq.nombre }}', '{{ eq.codigo or '' }}', '{{ eq.tipo }}', '{{ eq.marca or '' }}', '{{ eq.modelo or '' }}', '{{ eq.nro_serie or '' }}', {{ eq.costo_hora|float if eq.costo_hora else 0 }}, {{ eq.costo_adquisicion|float if eq.costo_adquisicion else 0 }}, '{{ eq.estado }}')" title="Editar">
+                                            <button class="btn btn-outline-info" onclick="abrirModalEditar({{ eq.id }}, '{{ eq.nombre }}', '{{ eq.codigo or '' }}', '{{ eq.tipo }}', '{{ eq.marca or '' }}', '{{ eq.modelo or '' }}', '{{ eq.nro_serie or '' }}', {{ eq.costo_hora|float if eq.costo_hora else 0 }}, {{ eq.costo_adquisicion|float if eq.costo_adquisicion else 0 }}, '{{ eq.estado }}', '{{ eq.moneda or "ARS" }}')" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <button class="btn btn-outline-danger" onclick="eliminarEquipo({{ eq.id }}, '{{ eq.nombre }}')" title="Dar de baja">
@@ -290,19 +297,31 @@
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">Nro. de Serie</label>
                             <input type="text" class="form-control" id="crear_nro_serie">
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">Costo por hora ($)</label>
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label">Moneda</label>
+                            <select class="form-select" id="crear_moneda">
+                                <option value="ARS">$ ARS</option>
+                                <option value="USD">USD</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Costo por hora</label>
                             <input type="number" class="form-control" id="crear_costo_hora" step="0.01" value="0" min="0">
                         </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label">Costo adquisicion ($)</label>
+                            <label class="form-label">Costo adquisicion</label>
                             <input type="number" class="form-control" id="crear_costo_adquisicion" step="0.01" value="0" min="0">
                         </div>
                     </div>
+                    {% if cotizacion_usd %}
+                    <div class="alert alert-info py-2 mb-0">
+                        <small><i class="fas fa-info-circle me-1"></i>Cotizacion USD/ARS: <strong>$ {{ "{:,.2f}".format(cotizacion_usd) }}</strong> (Banco Nacion). La conversion se realiza automaticamente.</small>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -392,12 +411,19 @@
                             <label class="form-label">Nro. Serie</label>
                             <input type="text" class="form-control" id="editar_nro_serie">
                         </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Costo/hora ($)</label>
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label">Moneda</label>
+                            <select class="form-select" id="editar_moneda">
+                                <option value="ARS">$ ARS</option>
+                                <option value="USD">USD</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label">Costo/hora</label>
                             <input type="number" class="form-control" id="editar_costo_hora" step="0.01" min="0">
                         </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Costo adquisicion ($)</label>
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label">Adquisicion</label>
                             <input type="number" class="form-control" id="editar_costo_adquisicion" step="0.01" min="0">
                         </div>
                         <div class="col-md-3 mb-3">
@@ -535,7 +561,7 @@ function abrirModalCrear() {
     new bootstrap.Modal(document.getElementById('modalCrear')).show();
 }
 
-function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, costoHora, costoAdq, estado) {
+function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, costoHora, costoAdq, estado, moneda) {
     document.getElementById('editar_id').value = id;
     document.getElementById('editar_nombre').value = nombre;
     document.getElementById('editar_codigo').value = codigo;
@@ -560,6 +586,7 @@ function abrirModalEditar(id, nombre, codigo, tipo, marca, modelo, nroSerie, cos
     document.getElementById('editar_costo_hora').value = costoHora;
     document.getElementById('editar_costo_adquisicion').value = costoAdq;
     document.getElementById('editar_estado').value = estado;
+    document.getElementById('editar_moneda').value = moneda || 'ARS';
     new bootstrap.Modal(document.getElementById('modalEditar')).show();
 }
 
@@ -575,6 +602,7 @@ document.getElementById('formCrear').addEventListener('submit', function(e) {
     form.append('marca', document.getElementById('crear_marca').value);
     form.append('modelo', document.getElementById('crear_modelo').value);
     form.append('nro_serie', document.getElementById('crear_nro_serie').value);
+    form.append('moneda', document.getElementById('crear_moneda').value);
     form.append('costo_hora', document.getElementById('crear_costo_hora').value);
     form.append('costo_adquisicion', document.getElementById('crear_costo_adquisicion').value);
     fetch('/obras/equipos/crear', { method: 'POST', body: form })
@@ -597,6 +625,7 @@ document.getElementById('formEditar').addEventListener('submit', function(e) {
     form.append('marca', document.getElementById('editar_marca').value);
     form.append('modelo', document.getElementById('editar_modelo').value);
     form.append('nro_serie', document.getElementById('editar_nro_serie').value);
+    form.append('moneda', document.getElementById('editar_moneda').value);
     form.append('costo_hora', document.getElementById('editar_costo_hora').value);
     form.append('costo_adquisicion', document.getElementById('editar_costo_adquisicion').value);
     form.append('estado', document.getElementById('editar_estado').value);

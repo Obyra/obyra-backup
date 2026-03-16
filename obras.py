@@ -6034,9 +6034,26 @@ def equipos_movimientos():
     for mov in EquipmentMovement.query.filter_by(company_id=org_id, estado='en_transito').all():
         en_transito[mov.equipment_id] = mov
 
+    cotizacion_usd = _get_cotizacion_usd()
+
     return render_template('obras/equipos_movimientos.html',
                            equipos=equipos, obras=obras, movimientos=movimientos,
-                           en_transito=en_transito)
+                           en_transito=en_transito, cotizacion_usd=cotizacion_usd)
+
+
+def _get_cotizacion_usd():
+    """Obtener cotización USD/ARS más reciente del Banco Nación"""
+    try:
+        from models.budgets import ExchangeRate
+        rate = ExchangeRate.query.filter(
+            ExchangeRate.base_currency == 'USD',
+            ExchangeRate.quote_currency == 'ARS'
+        ).order_by(ExchangeRate.as_of_date.desc(), ExchangeRate.id.desc()).first()
+        if rate and rate.sell_rate:
+            return float(rate.sell_rate)
+    except Exception:
+        pass
+    return None
 
 
 @obras_bp.route('/equipos/crear', methods=['POST'])
@@ -6054,6 +6071,24 @@ def crear_equipo():
     if not tipo:
         return jsonify(ok=False, error='El tipo es obligatorio'), 400
 
+    moneda = request.form.get('moneda', 'ARS')
+    costo_hora = request.form.get('costo_hora', 0, type=float)
+    costo_adquisicion = request.form.get('costo_adquisicion', 0, type=float)
+
+    # Auto-conversión USD ↔ ARS
+    cotizacion = _get_cotizacion_usd()
+    costo_hora_usd = None
+    costo_adquisicion_usd = None
+
+    if moneda == 'USD' and cotizacion:
+        costo_hora_usd = costo_hora
+        costo_hora = round(costo_hora * cotizacion, 2)  # Convertir a ARS
+        costo_adquisicion_usd = costo_adquisicion
+        costo_adquisicion = round(costo_adquisicion * cotizacion, 2)
+    elif moneda == 'ARS' and cotizacion:
+        costo_hora_usd = round(costo_hora / cotizacion, 2) if costo_hora else None
+        costo_adquisicion_usd = round(costo_adquisicion / cotizacion, 2) if costo_adquisicion else None
+
     try:
         equipo = Equipment(
             company_id=org_id,
@@ -6063,8 +6098,11 @@ def crear_equipo():
             marca=request.form.get('marca', '').strip() or None,
             modelo=request.form.get('modelo', '').strip() or None,
             nro_serie=request.form.get('nro_serie', '').strip() or None,
-            costo_hora=request.form.get('costo_hora', 0, type=float),
-            costo_adquisicion=request.form.get('costo_adquisicion', 0, type=float),
+            costo_hora=costo_hora,
+            costo_hora_usd=costo_hora_usd,
+            costo_adquisicion=costo_adquisicion,
+            costo_adquisicion_usd=costo_adquisicion_usd,
+            moneda=moneda,
             estado='activo',
             ubicacion_tipo='deposito',
         )
@@ -6092,9 +6130,27 @@ def editar_equipo(equipo_id):
         equipo.marca = request.form.get('marca', '').strip() or equipo.marca
         equipo.modelo = request.form.get('modelo', '').strip() or equipo.modelo
         equipo.nro_serie = request.form.get('nro_serie', '').strip() or equipo.nro_serie
-        equipo.costo_hora = request.form.get('costo_hora', type=float) or equipo.costo_hora
-        equipo.costo_adquisicion = request.form.get('costo_adquisicion', type=float) or equipo.costo_adquisicion
         equipo.estado = request.form.get('estado', equipo.estado)
+
+        moneda = request.form.get('moneda', equipo.moneda or 'ARS')
+        costo_hora = request.form.get('costo_hora', type=float) or 0
+        costo_adquisicion = request.form.get('costo_adquisicion', type=float) or 0
+
+        cotizacion = _get_cotizacion_usd()
+        if moneda == 'USD' and cotizacion:
+            equipo.costo_hora_usd = costo_hora
+            equipo.costo_hora = round(costo_hora * cotizacion, 2)
+            equipo.costo_adquisicion_usd = costo_adquisicion
+            equipo.costo_adquisicion = round(costo_adquisicion * cotizacion, 2)
+        elif moneda == 'ARS' and cotizacion:
+            equipo.costo_hora = costo_hora
+            equipo.costo_hora_usd = round(costo_hora / cotizacion, 2) if costo_hora else None
+            equipo.costo_adquisicion = costo_adquisicion
+            equipo.costo_adquisicion_usd = round(costo_adquisicion / cotizacion, 2) if costo_adquisicion else None
+        else:
+            equipo.costo_hora = costo_hora
+            equipo.costo_adquisicion = costo_adquisicion
+        equipo.moneda = moneda
 
         db.session.commit()
         flash(f'Equipo "{equipo.nombre}" actualizado', 'success')

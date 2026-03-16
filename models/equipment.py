@@ -17,8 +17,11 @@ class Equipment(db.Model):
     marca = db.Column(db.String(100))
     modelo = db.Column(db.String(100))
     nro_serie = db.Column(db.String(100))
-    costo_hora = db.Column(db.Numeric(12, 2), default=0)
+    costo_hora = db.Column(db.Numeric(12, 2), default=0)  # En la moneda indicada
+    costo_hora_usd = db.Column(db.Numeric(12, 2))  # Costo hora en USD (si moneda=ARS, se calcula)
     costo_adquisicion = db.Column(db.Numeric(15, 2), default=0)  # Valor de compra
+    costo_adquisicion_usd = db.Column(db.Numeric(15, 2))  # Adquisición en USD
+    moneda = db.Column(db.String(3), default='ARS')  # ARS o USD
     vida_util_anios = db.Column(db.Integer)  # Para calcular amortización
     estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado'), default='activo')
     # Ubicación actual: 'deposito' o ID de obra

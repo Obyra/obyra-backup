@@ -1392,6 +1392,18 @@ with app.app_context():
                           WHERE table_name='equipment' AND column_name='ubicacion_obra_id') THEN
                 ALTER TABLE equipment ADD COLUMN ubicacion_obra_id INTEGER REFERENCES obras(id);
             END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='moneda') THEN
+                ALTER TABLE equipment ADD COLUMN moneda VARCHAR(3) DEFAULT 'ARS';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='costo_hora_usd') THEN
+                ALTER TABLE equipment ADD COLUMN costo_hora_usd NUMERIC(12,2);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='costo_adquisicion_usd') THEN
+                ALTER TABLE equipment ADD COLUMN costo_adquisicion_usd NUMERIC(15,2);
+            END IF;
             IF NOT EXISTS (SELECT 1 FROM information_schema.tables
                           WHERE table_name='equipment_movement') THEN
                 CREATE TABLE equipment_movement (
