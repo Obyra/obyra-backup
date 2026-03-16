@@ -12,19 +12,27 @@ class Equipment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
     nombre = db.Column(db.String(200), nullable=False)
+    codigo = db.Column(db.String(50))  # Código interno: MAQ-001, GRU-003, etc.
     tipo = db.Column(db.String(100), nullable=False)  # hormigonera, guinche, martillo, etc.
     marca = db.Column(db.String(100))
     modelo = db.Column(db.String(100))
     nro_serie = db.Column(db.String(100))
     costo_hora = db.Column(db.Numeric(12, 2), default=0)
+    costo_adquisicion = db.Column(db.Numeric(15, 2), default=0)  # Valor de compra
+    vida_util_anios = db.Column(db.Integer)  # Para calcular amortización
     estado = db.Column(db.Enum('activo', 'baja', 'mantenimiento', name='equipment_estado'), default='activo')
+    # Ubicación actual: 'deposito' o ID de obra
+    ubicacion_tipo = db.Column(db.String(20), default='deposito')  # deposito, obra
+    ubicacion_obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relaciones
     company = db.relationship('Organizacion', backref='equipments')
+    ubicacion_obra = db.relationship('Obra', foreign_keys=[ubicacion_obra_id])
     assignments = db.relationship('EquipmentAssignment', back_populates='equipment', cascade='all, delete-orphan')
     usages = db.relationship('EquipmentUsage', back_populates='equipment', cascade='all, delete-orphan')
     maintenance_tasks = db.relationship('MaintenanceTask', back_populates='equipment', cascade='all, delete-orphan')
+    movimientos = db.relationship('EquipmentMovement', back_populates='equipment', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Equipment {self.nombre}>'
@@ -128,6 +136,70 @@ class MaintenanceAttachment(db.Model):
 
     def __repr__(self):
         return f'<MaintenanceAttachment {self.filename}>'
+
+
+# =============================================================================
+# MOVIMIENTOS DE EQUIPOS - Circuito Depósito ↔ Obra ↔ Obra
+# =============================================================================
+
+class EquipmentMovement(db.Model):
+    """Registro de movimientos de equipos entre depósito y obras"""
+    __tablename__ = 'equipment_movement'
+
+    id = db.Column(db.Integer, primary_key=True)
+    equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('organizaciones.id'), nullable=False)
+
+    # Tipo: despacho (depósito→obra), traslado (obra→obra), devolucion (obra→depósito)
+    tipo = db.Column(db.String(20), nullable=False)  # despacho, traslado, devolucion
+
+    # Origen
+    origen_tipo = db.Column(db.String(20), nullable=False)  # deposito, obra
+    origen_obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+
+    # Destino
+    destino_tipo = db.Column(db.String(20), nullable=False)  # deposito, obra
+    destino_obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+
+    # Fechas
+    fecha_movimiento = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    fecha_llegada = db.Column(db.DateTime)  # Cuando se confirma recepción
+
+    # Estado del movimiento
+    estado = db.Column(db.String(20), default='en_transito')  # en_transito, recibido, cancelado
+
+    # Responsables
+    despachado_por = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    recibido_por = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+
+    # Observaciones
+    notas = db.Column(db.Text)
+    costo_transporte = db.Column(db.Numeric(12, 2), default=0)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    equipment = db.relationship('Equipment', back_populates='movimientos')
+    company = db.relationship('Organizacion')
+    origen_obra = db.relationship('Obra', foreign_keys=[origen_obra_id], backref='equipos_despachados')
+    destino_obra = db.relationship('Obra', foreign_keys=[destino_obra_id], backref='equipos_recibidos')
+    despachador = db.relationship('Usuario', foreign_keys=[despachado_por])
+    receptor = db.relationship('Usuario', foreign_keys=[recibido_por])
+
+    def __repr__(self):
+        return f'<EquipmentMovement {self.equipment.nombre} {self.tipo}>'
+
+    @property
+    def origen_display(self):
+        if self.origen_tipo == 'deposito':
+            return 'Depósito Central'
+        return self.origen_obra.nombre if self.origen_obra else 'Obra desconocida'
+
+    @property
+    def destino_display(self):
+        if self.destino_tipo == 'deposito':
+            return 'Depósito Central'
+        return self.destino_obra.nombre if self.destino_obra else 'Obra desconocida'
 
 
 # =============================================================================

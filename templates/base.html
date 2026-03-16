@@ -164,6 +164,15 @@
                     </li>
                     {% endif %}
 
+                    {# 5b. Maquinaria #}
+                    {% if has_endpoint('obras.equipos_movimientos') %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('obras.equipos_movimientos') }}">
+                            <i class="fas fa-truck-loading me-1"></i>Maquinaria
+                        </a>
+                    </li>
+                    {% endif %}
+
                     <!-- Marketplaces - DESHABILITADO TEMPORALMENTE -->
                     <!-- TODO: Reactivar cuando esté listo para desarrollo
                     {% if current_user.puede_acceder_modulo('marketplaces') and has_endpoint('marketplaces.index') %}

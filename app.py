@@ -1368,6 +1368,63 @@ with app.app_context():
     except Exception as e:
         print(f"[WARN] max_obras migration skipped: {e}")
 
+    # Equipment: nuevos campos + tabla equipment_movement
+    try:
+        equip_sql = """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='codigo') THEN
+                ALTER TABLE equipment ADD COLUMN codigo VARCHAR(50);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='costo_adquisicion') THEN
+                ALTER TABLE equipment ADD COLUMN costo_adquisicion NUMERIC(15,2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='vida_util_anios') THEN
+                ALTER TABLE equipment ADD COLUMN vida_util_anios INTEGER;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='ubicacion_tipo') THEN
+                ALTER TABLE equipment ADD COLUMN ubicacion_tipo VARCHAR(20) DEFAULT 'deposito';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='equipment' AND column_name='ubicacion_obra_id') THEN
+                ALTER TABLE equipment ADD COLUMN ubicacion_obra_id INTEGER REFERENCES obras(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                          WHERE table_name='equipment_movement') THEN
+                CREATE TABLE equipment_movement (
+                    id SERIAL PRIMARY KEY,
+                    equipment_id INTEGER NOT NULL REFERENCES equipment(id),
+                    company_id INTEGER NOT NULL REFERENCES organizaciones(id),
+                    tipo VARCHAR(20) NOT NULL,
+                    origen_tipo VARCHAR(20) NOT NULL,
+                    origen_obra_id INTEGER REFERENCES obras(id),
+                    destino_tipo VARCHAR(20) NOT NULL,
+                    destino_obra_id INTEGER REFERENCES obras(id),
+                    fecha_movimiento TIMESTAMP NOT NULL DEFAULT NOW(),
+                    fecha_llegada TIMESTAMP,
+                    estado VARCHAR(20) DEFAULT 'en_transito',
+                    despachado_por INTEGER NOT NULL REFERENCES usuarios(id),
+                    recibido_por INTEGER REFERENCES usuarios(id),
+                    notas TEXT,
+                    costo_transporte NUMERIC(12,2) DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX idx_eqmov_equipment ON equipment_movement(equipment_id);
+                CREATE INDEX idx_eqmov_company ON equipment_movement(company_id);
+                CREATE INDEX idx_eqmov_destino ON equipment_movement(destino_obra_id);
+            END IF;
+        END $$;
+        """
+        db.session.execute(text(equip_sql))
+        db.session.commit()
+        print("[OK] Equipment movement migration applied")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Equipment movement migration skipped: {e}")
+
     # RBAC tables and seeding
     try:
         from models import RoleModule, UserModule, seed_default_role_permissions

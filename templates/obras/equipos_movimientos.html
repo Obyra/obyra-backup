@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}Equipos y Maquinaria - OBYRA IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-truck-loading me-2"></i>Equipos y Maquinaria</h2>
+                <div>
+                    <span class="badge bg-info fs-6">{{ equipos|length }} equipos registrados</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ubicación actual de equipos -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-map-marker-alt text-primary me-2"></i>Ubicación Actual</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Equipo</th>
+                                    <th>Tipo</th>
+                                    <th>Ubicación</th>
+                                    <th>Costo/Hora</th>
+                                    <th>Estado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for eq in equipos %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ eq.codigo or '-' }}</span></td>
+                                    <td>
+                                        <strong>{{ eq.nombre }}</strong>
+                                        {% if eq.marca %}<br><small class="text-muted">{{ eq.marca }} {{ eq.modelo or '' }}</small>{% endif %}
+                                    </td>
+                                    <td>{{ eq.tipo }}</td>
+                                    <td>
+                                        {% if eq.ubicacion_tipo == 'deposito' %}
+                                            <span class="badge bg-outline-secondary border"><i class="fas fa-warehouse me-1"></i>Depósito</span>
+                                        {% else %}
+                                            <span class="badge bg-success"><i class="fas fa-hard-hat me-1"></i>{{ eq.ubicacion_obra.nombre if eq.ubicacion_obra else 'Obra' }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ "$ {:,.2f}".format(eq.costo_hora|float) if eq.costo_hora else '-' }}</td>
+                                    <td>
+                                        {% if eq.estado == 'activo' %}
+                                            <span class="badge bg-success">Activo</span>
+                                        {% elif eq.estado == 'mantenimiento' %}
+                                            <span class="badge bg-warning">Mantenimiento</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Baja</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if eq.estado == 'activo' %}
+                                            {% if eq.ubicacion_tipo == 'deposito' %}
+                                                <button class="btn btn-sm btn-primary" onclick="abrirModalDespacho({{ eq.id }}, '{{ eq.nombre }}')" title="Despachar a obra">
+                                                    <i class="fas fa-arrow-right"></i> Despachar
+                                                </button>
+                                            {% else %}
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-warning" onclick="abrirModalTraslado({{ eq.id }}, '{{ eq.nombre }}', {{ eq.ubicacion_obra_id }})" title="Trasladar a otra obra">
+                                                        <i class="fas fa-exchange-alt"></i>
+                                                    </button>
+                                                    <button class="btn btn-secondary" onclick="devolverEquipo({{ eq.id }}, '{{ eq.nombre }}')" title="Devolver al depósito">
+                                                        <i class="fas fa-undo"></i>
+                                                    </button>
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not equipos %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        <i class="fas fa-truck-loading fa-2x mb-2 d-block"></i>
+                                        No hay equipos registrados. Agregue equipos desde el módulo de Equipos.
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumen por obra -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div class="card-body text-center">
+                    <i class="fas fa-warehouse fa-2x mb-2"></i>
+                    <h3>{{ equipos|selectattr('ubicacion_tipo', 'equalto', 'deposito')|list|length }}</h3>
+                    <small>En Depósito</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+                <div class="card-body text-center">
+                    <i class="fas fa-hard-hat fa-2x mb-2"></i>
+                    <h3>{{ equipos|selectattr('ubicacion_tipo', 'equalto', 'obra')|list|length }}</h3>
+                    <small>En Obras</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white;">
+                <div class="card-body text-center">
+                    <i class="fas fa-wrench fa-2x mb-2"></i>
+                    <h3>{{ equipos|selectattr('estado', 'equalto', 'mantenimiento')|list|length }}</h3>
+                    <small>En Mantenimiento</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historial de movimientos -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-history text-info me-2"></i>Historial de Movimientos</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Equipo</th>
+                                    <th>Tipo</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Estado</th>
+                                    <th>Notas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mov in movimientos %}
+                                <tr>
+                                    <td><small>{{ mov.fecha_movimiento.strftime('%d/%m/%Y %H:%M') }}</small></td>
+                                    <td><strong>{{ mov.equipment.nombre }}</strong></td>
+                                    <td>
+                                        {% if mov.tipo == 'despacho' %}
+                                            <span class="badge bg-primary"><i class="fas fa-arrow-right me-1"></i>Despacho</span>
+                                        {% elif mov.tipo == 'traslado' %}
+                                            <span class="badge bg-warning text-dark"><i class="fas fa-exchange-alt me-1"></i>Traslado</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="fas fa-undo me-1"></i>Devolución</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ mov.origen_display }}</td>
+                                    <td>{{ mov.destino_display }}</td>
+                                    <td>
+                                        {% if mov.estado == 'recibido' %}
+                                            <span class="badge bg-success">Recibido</span>
+                                        {% elif mov.estado == 'en_transito' %}
+                                            <span class="badge bg-info">En tránsito</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Cancelado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small class="text-muted">{{ mov.notas or '-' }}</small></td>
+                                </tr>
+                                {% endfor %}
+                                {% if not movimientos %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        No hay movimientos registrados aún.
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Despachar -->
+<div class="modal fade" id="modalDespacho" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-arrow-right me-2"></i>Despachar Equipo a Obra</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formDespacho">
+                <div class="modal-body">
+                    <input type="hidden" id="despacho_equipo_id">
+                    <p>Equipo: <strong id="despacho_equipo_nombre"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label">Obra destino *</label>
+                        <select class="form-select" id="despacho_destino" required>
+                            <option value="">Seleccionar obra...</option>
+                            {% for obra in obras %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Costo de transporte ($)</label>
+                        <input type="number" class="form-control" id="despacho_costo" step="0.01" value="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas</label>
+                        <textarea class="form-control" id="despacho_notas" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-arrow-right me-1"></i>Despachar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Trasladar -->
+<div class="modal fade" id="modalTraslado" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Trasladar Equipo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formTraslado">
+                <div class="modal-body">
+                    <input type="hidden" id="traslado_equipo_id">
+                    <input type="hidden" id="traslado_obra_actual">
+                    <p>Equipo: <strong id="traslado_equipo_nombre"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label">Obra destino *</label>
+                        <select class="form-select" id="traslado_destino" required>
+                            <option value="">Seleccionar obra...</option>
+                            {% for obra in obras %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Costo de transporte ($)</label>
+                        <input type="number" class="form-control" id="traslado_costo" step="0.01" value="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas</label>
+                        <textarea class="form-control" id="traslado_notas" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning"><i class="fas fa-exchange-alt me-1"></i>Trasladar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function abrirModalDespacho(equipoId, nombre) {
+    document.getElementById('despacho_equipo_id').value = equipoId;
+    document.getElementById('despacho_equipo_nombre').textContent = nombre;
+    document.getElementById('despacho_destino').value = '';
+    document.getElementById('despacho_costo').value = '0';
+    document.getElementById('despacho_notas').value = '';
+    new bootstrap.Modal(document.getElementById('modalDespacho')).show();
+}
+
+function abrirModalTraslado(equipoId, nombre, obraActualId) {
+    document.getElementById('traslado_equipo_id').value = equipoId;
+    document.getElementById('traslado_equipo_nombre').textContent = nombre;
+    document.getElementById('traslado_obra_actual').value = obraActualId;
+    document.getElementById('traslado_destino').value = '';
+    document.getElementById('traslado_costo').value = '0';
+    document.getElementById('traslado_notas').value = '';
+    // Deshabilitar la obra actual en el select
+    var options = document.getElementById('traslado_destino').options;
+    for (var i = 0; i < options.length; i++) {
+        options[i].disabled = (options[i].value == obraActualId);
+    }
+    new bootstrap.Modal(document.getElementById('modalTraslado')).show();
+}
+
+function devolverEquipo(equipoId, nombre) {
+    if (!confirm('¿Devolver "' + nombre + '" al depósito?')) return;
+    var form = new FormData();
+    form.append('csrf_token', '{{ csrf_token() }}');
+    fetch('/obras/equipos/' + equipoId + '/devolver', {
+        method: 'POST',
+        body: form
+    }).then(r => r.json()).then(data => {
+        if (data.ok) location.reload();
+        else alert(data.error || 'Error al devolver');
+    });
+}
+
+document.getElementById('formDespacho').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var equipoId = document.getElementById('despacho_equipo_id').value;
+    var form = new FormData();
+    form.append('csrf_token', '{{ csrf_token() }}');
+    form.append('destino_obra_id', document.getElementById('despacho_destino').value);
+    form.append('costo_transporte', document.getElementById('despacho_costo').value);
+    form.append('notas', document.getElementById('despacho_notas').value);
+    fetch('/obras/equipos/' + equipoId + '/despachar', {
+        method: 'POST',
+        body: form
+    }).then(r => r.json()).then(data => {
+        if (data.ok) location.reload();
+        else alert(data.error || 'Error al despachar');
+    });
+});
+
+document.getElementById('formTraslado').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var equipoId = document.getElementById('traslado_equipo_id').value;
+    var form = new FormData();
+    form.append('csrf_token', '{{ csrf_token() }}');
+    form.append('destino_obra_id', document.getElementById('traslado_destino').value);
+    form.append('costo_transporte', document.getElementById('traslado_costo').value);
+    form.append('notas', document.getElementById('traslado_notas').value);
+    fetch('/obras/equipos/' + equipoId + '/trasladar', {
+        method: 'POST',
+        body: form
+    }).then(r => r.json()).then(data => {
+        if (data.ok) location.reload();
+        else alert(data.error || 'Error al trasladar');
+    });
+});
+</script>
+{% endblock %}

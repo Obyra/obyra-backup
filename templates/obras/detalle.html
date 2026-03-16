@@ -320,9 +320,18 @@
                             <small><i class="fas fa-hard-hat text-info me-1"></i>Mano de obra:</small>
                             <small class="fw-bold">{{ "$ {:,.2f}".format(costos_desglosados.mano_obra) }}</small>
                         </div>
-                        <div class="d-flex justify-content-between align-items-center text-muted" style="font-size: 0.75rem;">
+                        <div class="d-flex justify-content-between align-items-center text-muted mb-1" style="font-size: 0.75rem;">
                             <small>({{ "%.1f"|format(costos_desglosados.horas_trabajadas) }} hs × {{ "$ {:,.0f}".format(costos_desglosados.costo_hora) }}/h)</small>
                         </div>
+                        {% if costos_desglosados.maquinaria is defined and costos_desglosados.maquinaria > 0 %}
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small><i class="fas fa-truck-loading text-success me-1"></i>Maquinaria:</small>
+                            <small class="fw-bold">{{ "$ {:,.2f}".format(costos_desglosados.maquinaria) }}</small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center text-muted" style="font-size: 0.75rem;">
+                            <small>({{ "%.1f"|format(costos_desglosados.horas_maquinaria) }} hs de uso aprobado)</small>
+                        </div>
+                        {% endif %}
                     </div>
                     {% endif %}
 

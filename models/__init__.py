@@ -116,6 +116,7 @@ from models.equipment import (
     EquipmentUsage,
     MaintenanceTask,
     MaintenanceAttachment,
+    EquipmentMovement,
 )
 
 # Supplier models
@@ -288,6 +289,7 @@ __all__ = [
     'EquipmentUsage',
     'MaintenanceTask',
     'MaintenanceAttachment',
+    'EquipmentMovement',
     # Suppliers
     'Proveedor',
     'CategoriaProveedor',

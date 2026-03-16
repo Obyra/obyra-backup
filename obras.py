@@ -991,9 +991,27 @@ def detalle(id):
     horas_trabajadas = Decimal(str(horas_pagadas))
     costo_hora = (costo_mano_obra / horas_trabajadas).quantize(Decimal('1')) if horas_trabajadas > 0 else Decimal('0')
 
+    # 3. Costo de maquinaria desde uso aprobado (horas × costo_hora del equipo)
+    costo_maquinaria = Decimal('0')
+    horas_maquinaria = Decimal('0')
+    try:
+        from models.equipment import EquipmentUsage, Equipment
+        maq_data = db.session.query(
+            func.coalesce(func.sum(EquipmentUsage.horas * Equipment.costo_hora), 0),
+            func.coalesce(func.sum(EquipmentUsage.horas), 0)
+        ).join(Equipment).filter(
+            EquipmentUsage.project_id == obra.id,
+            EquipmentUsage.estado == 'aprobado'
+        ).first()
+        if maq_data:
+            costo_maquinaria = Decimal(str(maq_data[0] or 0))
+            horas_maquinaria = Decimal(str(maq_data[1] or 0))
+    except Exception:
+        db.session.rollback()
+
     # Datos para el template
-    # Actualizar costo_real de la obra con datos reales
-    costo_real_calc = float(Decimal(str(costo_materiales)) + costo_mano_obra)
+    # Actualizar costo_real de la obra con datos reales (materiales + MO + maquinaria)
+    costo_real_calc = float(Decimal(str(costo_materiales)) + costo_mano_obra + costo_maquinaria)
     if obra.costo_real != costo_real_calc:
         obra.costo_real = costo_real_calc
         db.session.commit()
@@ -1003,6 +1021,8 @@ def detalle(id):
         'mano_obra': float(costo_mano_obra),
         'horas_trabajadas': float(horas_trabajadas),
         'costo_hora': float(costo_hora),
+        'maquinaria': float(costo_maquinaria),
+        'horas_maquinaria': float(horas_maquinaria),
         'total': costo_real_calc
     }
 
@@ -5969,3 +5989,184 @@ def cuadrillas_guardar():
     except Exception as e:
         db.session.rollback()
         return jsonify(ok=False, error=str(e)), 500
+
+
+# =============================================================================
+# MOVIMIENTOS DE EQUIPOS - Despacho / Traslado / Devolución
+# =============================================================================
+
+@obras_bp.route('/equipos/movimientos', methods=['GET'])
+@login_required
+def equipos_movimientos():
+    """Panel de ubicación y movimientos de equipos"""
+    from models.equipment import Equipment, EquipmentMovement
+    org_id = current_user.organizacion_id
+
+    equipos = Equipment.query.filter_by(company_id=org_id).order_by(Equipment.nombre).all()
+    obras = Obra.query.filter_by(organizacion_id=org_id, estado='en_curso').order_by(Obra.nombre).all()
+
+    # Últimos movimientos
+    movimientos = EquipmentMovement.query.filter_by(company_id=org_id)\
+        .order_by(EquipmentMovement.fecha_movimiento.desc()).limit(50).all()
+
+    return render_template('obras/equipos_movimientos.html',
+                           equipos=equipos, obras=obras, movimientos=movimientos)
+
+
+@obras_bp.route('/equipos/<int:equipo_id>/despachar', methods=['POST'])
+@login_required
+def despachar_equipo(equipo_id):
+    """Despacho: Depósito → Obra"""
+    from models.equipment import Equipment, EquipmentMovement
+    org_id = current_user.organizacion_id
+    equipo = Equipment.query.filter_by(id=equipo_id, company_id=org_id).first_or_404()
+
+    if equipo.ubicacion_tipo != 'deposito':
+        return jsonify(ok=False, error='El equipo no está en depósito'), 400
+
+    destino_obra_id = request.form.get('destino_obra_id', type=int)
+    if not destino_obra_id:
+        return jsonify(ok=False, error='Debe indicar la obra destino'), 400
+
+    obra_destino = Obra.query.filter_by(id=destino_obra_id, organizacion_id=org_id).first()
+    if not obra_destino:
+        return jsonify(ok=False, error='Obra destino no encontrada'), 404
+
+    try:
+        mov = EquipmentMovement(
+            equipment_id=equipo.id,
+            company_id=org_id,
+            tipo='despacho',
+            origen_tipo='deposito',
+            origen_obra_id=None,
+            destino_tipo='obra',
+            destino_obra_id=destino_obra_id,
+            despachado_por=current_user.id,
+            notas=request.form.get('notas', ''),
+            costo_transporte=request.form.get('costo_transporte', 0, type=float),
+            estado='recibido'
+        )
+        db.session.add(mov)
+
+        # Actualizar ubicación del equipo
+        equipo.ubicacion_tipo = 'obra'
+        equipo.ubicacion_obra_id = destino_obra_id
+
+        db.session.commit()
+        flash(f'Equipo "{equipo.nombre}" despachado a {obra_destino.nombre}', 'success')
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/equipos/<int:equipo_id>/trasladar', methods=['POST'])
+@login_required
+def trasladar_equipo(equipo_id):
+    """Traslado: Obra → Obra"""
+    from models.equipment import Equipment, EquipmentMovement
+    org_id = current_user.organizacion_id
+    equipo = Equipment.query.filter_by(id=equipo_id, company_id=org_id).first_or_404()
+
+    if equipo.ubicacion_tipo != 'obra':
+        return jsonify(ok=False, error='El equipo no está en una obra'), 400
+
+    destino_obra_id = request.form.get('destino_obra_id', type=int)
+    if not destino_obra_id:
+        return jsonify(ok=False, error='Debe indicar la obra destino'), 400
+
+    if destino_obra_id == equipo.ubicacion_obra_id:
+        return jsonify(ok=False, error='El equipo ya está en esa obra'), 400
+
+    obra_destino = Obra.query.filter_by(id=destino_obra_id, organizacion_id=org_id).first()
+    if not obra_destino:
+        return jsonify(ok=False, error='Obra destino no encontrada'), 404
+
+    try:
+        mov = EquipmentMovement(
+            equipment_id=equipo.id,
+            company_id=org_id,
+            tipo='traslado',
+            origen_tipo='obra',
+            origen_obra_id=equipo.ubicacion_obra_id,
+            destino_tipo='obra',
+            destino_obra_id=destino_obra_id,
+            despachado_por=current_user.id,
+            notas=request.form.get('notas', ''),
+            costo_transporte=request.form.get('costo_transporte', 0, type=float),
+            estado='recibido'
+        )
+        db.session.add(mov)
+
+        equipo.ubicacion_tipo = 'obra'
+        equipo.ubicacion_obra_id = destino_obra_id
+
+        db.session.commit()
+        flash(f'Equipo "{equipo.nombre}" trasladado a {obra_destino.nombre}', 'success')
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/equipos/<int:equipo_id>/devolver', methods=['POST'])
+@login_required
+def devolver_equipo(equipo_id):
+    """Devolución: Obra → Depósito"""
+    from models.equipment import Equipment, EquipmentMovement
+    org_id = current_user.organizacion_id
+    equipo = Equipment.query.filter_by(id=equipo_id, company_id=org_id).first_or_404()
+
+    if equipo.ubicacion_tipo != 'obra':
+        return jsonify(ok=False, error='El equipo ya está en depósito'), 400
+
+    try:
+        mov = EquipmentMovement(
+            equipment_id=equipo.id,
+            company_id=org_id,
+            tipo='devolucion',
+            origen_tipo='obra',
+            origen_obra_id=equipo.ubicacion_obra_id,
+            destino_tipo='deposito',
+            destino_obra_id=None,
+            despachado_por=current_user.id,
+            notas=request.form.get('notas', ''),
+            costo_transporte=request.form.get('costo_transporte', 0, type=float),
+            estado='recibido'
+        )
+        db.session.add(mov)
+
+        equipo.ubicacion_tipo = 'deposito'
+        equipo.ubicacion_obra_id = None
+
+        db.session.commit()
+        flash(f'Equipo "{equipo.nombre}" devuelto al depósito', 'success')
+        return jsonify(ok=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@obras_bp.route('/equipos/ubicaciones-json', methods=['GET'])
+@login_required
+def equipos_ubicaciones_json():
+    """API: ubicación actual de todos los equipos"""
+    from models.equipment import Equipment
+    org_id = current_user.organizacion_id
+    equipos = Equipment.query.filter_by(company_id=org_id, estado='activo').all()
+
+    result = []
+    for eq in equipos:
+        result.append({
+            'id': eq.id,
+            'nombre': eq.nombre,
+            'codigo': eq.codigo,
+            'tipo': eq.tipo,
+            'ubicacion_tipo': eq.ubicacion_tipo,
+            'ubicacion_obra_id': eq.ubicacion_obra_id,
+            'ubicacion_obra_nombre': eq.ubicacion_obra.nombre if eq.ubicacion_obra else None,
+            'costo_hora': float(eq.costo_hora) if eq.costo_hora else 0,
+            'estado': eq.estado,
+        })
+
+    return jsonify(ok=True, equipos=result)
