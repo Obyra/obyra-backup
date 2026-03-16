@@ -885,8 +885,15 @@
                         </div>
 
                         <!-- Tab: Maquinaria -->
-                        <div class="tab-pane fade" id="maquinaria" role="tabpanel">
-                            <div class="bg-white text-dark rounded p-3">
+                        <div class="tab-pane" id="maquinaria" role="tabpanel" aria-labelledby="maquinaria-tab">
+                            <div class="bg-white text-dark rounded p-3 border" style="min-height: 100px;">
+
+                                <div class="alert alert-secondary py-2 mb-3">
+                                    <i class="fas fa-truck-loading me-2"></i>
+                                    <strong>Maquinaria de esta obra</strong> —
+                                    {{ equipos_en_obra|length }} equipo(s) en obra,
+                                    {{ movimientos_pendientes|length }} en tránsito
+                                </div>
 
                                 {% if movimientos_pendientes|length > 0 %}
                                 <!-- Alertas de recepción pendiente -->
@@ -3946,22 +3953,27 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Fallback: forzar activación del tab-pane si Bootstrap no lo hace
+        // Forzar activación del tab-pane al hacer click
         tab.addEventListener('click', function(e) {
             var target = this.getAttribute('data-bs-target');
             if (!target) return;
-            // Timeout para dar chance a Bootstrap de actuar primero
+            // Desactivar todos los panes y activar el correcto
             setTimeout(function() {
                 var pane = document.querySelector(target);
-                if (pane && !pane.classList.contains('show')) {
-                    // Bootstrap no activó el pane — forzar manualmente
-                    console.warn('Forzando activación de tab:', target);
+                if (pane && !pane.classList.contains('active')) {
+                    console.log('Forzando activación de tab:', target);
                     document.querySelectorAll('#materialesTabContent > .tab-pane').forEach(function(p) {
                         p.classList.remove('show', 'active');
+                        p.style.display = 'none';
                     });
                     pane.classList.add('show', 'active');
+                    pane.style.display = 'block';
                 }
-            }, 200);
+                // Scroll al contenido del tab
+                if (pane) {
+                    pane.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }, 150);
         });
     });
 });
